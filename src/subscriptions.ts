@@ -56,7 +56,11 @@ export class SubscriptionManager {
   }
 
   private ensureSubscription(): void {
-    if (!this.wsClient || this.wsClient.readyState !== WebSocket.OPEN) {
+    if (
+      !this.wsClient ||
+      (this.wsClient.readyState !== WebSocket.OPEN &&
+        this.wsClient.readyState !== WebSocket.CONNECTING)
+    ) {
       this.startSubscription();
     }
   }
@@ -66,8 +70,12 @@ export class SubscriptionManager {
       throw new Error('Must be authenticated to subscribe');
     }
 
-    if (this.wsClient && this.wsClient.readyState === WebSocket.OPEN) {
-      return; // Already connected
+    if (
+      this.wsClient &&
+      (this.wsClient.readyState === WebSocket.OPEN ||
+        this.wsClient.readyState === WebSocket.CONNECTING)
+    ) {
+      return; // Already connected or connecting
     }
 
     const wsUrl = this.wsEndpoint;
