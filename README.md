@@ -5,12 +5,12 @@ Client SDK for Crowded Kingdoms GraphQL API with UDP proxy support.
 ## Installation
 
 ```bash
-npm install crowdyjs
+npm install @crowdedkingdomstudios/crowdyjs
 ```
 
 For local development:
 ```bash
-npm link crowdyjs
+npm link @crowdedkingdomstudios/crowdyjs
 ```
 
 ## Usage
@@ -18,7 +18,7 @@ npm link crowdyjs
 ### Basic Setup
 
 ```javascript
-import { CrowdyClient } from 'crowdyjs';
+import { CrowdyClient } from '@crowdedkingdomstudios/crowdyjs';
 
 const client = new CrowdyClient({
   graphqlEndpoint: 'http://localhost:3000/graphql',
@@ -126,7 +126,7 @@ unsubscribe2();
 ### Complete Example
 
 ```javascript
-import { CrowdyClient } from 'crowdyjs';
+import { CrowdyClient } from '@crowdedkingdomstudios/crowdyjs';
 
 const client = new CrowdyClient({
   graphqlEndpoint: 'http://localhost:3000/graphql',

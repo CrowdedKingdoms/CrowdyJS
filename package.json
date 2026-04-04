@@ -1,5 +1,5 @@
 {
-  "name": "crowdyjs",
+  "name": "@crowdedkingdomstudios/crowdyjs",
   "version": "1.0.0",
   "description": "Client SDK for Crowded Kingdoms GraphQL API with UDP proxy support",
   "type": "module",
@@ -17,7 +17,11 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "keywords": [
     "crowded-kingdoms",
@@ -28,10 +32,6 @@
   ],
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "graphql": "^16.8.1",
-    "graphql-ws": "^5.14.2"
-  },
   "devDependencies": {
     "@types/node": "^22.10.7",
     "typescript": "^5.7.3"
