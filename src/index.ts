@@ -31,6 +31,7 @@ export type {
   ClientTextNotification,
   ClientEventNotification,
   ServerEventNotification,
+  GenericErrorResponse,
   UdpNotification,
   // Handlers
   ActorUpdateHandler,
@@ -41,6 +42,7 @@ export type {
   ClientTextHandler,
   ClientEventHandler,
   ServerEventHandler,
+  GenericErrorHandler,
   UnsubscribeFn,
 } from './types.js';
 

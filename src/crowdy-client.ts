@@ -21,6 +21,7 @@ import type {
   ClientTextHandler,
   ClientEventHandler,
   ServerEventHandler,
+  GenericErrorHandler,
   UnsubscribeFn,
 } from './types.js';
 
@@ -123,6 +124,10 @@ export class CrowdyClient {
 
   onServerEvent(handler: ServerEventHandler): UnsubscribeFn {
     return this.subscriptions.onServerEvent(handler);
+  }
+
+  onGenericError(handler: GenericErrorHandler): UnsubscribeFn {
+    return this.subscriptions.onGenericError(handler);
   }
 
   // Cleanup

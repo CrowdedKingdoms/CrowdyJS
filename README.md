@@ -67,7 +67,6 @@ const base64State = btoa(String.fromCharCode(...new Uint8Array(stateBuffer)));
 // Send update
 await client.sendActorUpdate({
   mapId: '1',
-  modId: '0',
   chunk: { x: '0', y: '0', z: '0' },
   uuid: 'your-32-byte-uuid',
   state: base64State,
@@ -150,7 +149,6 @@ const unsubscribe = client.onActorUpdate((notification) => {
 setInterval(async () => {
   await client.sendActorUpdate({
     mapId: '1',
-    modId: '0',
     chunk: { x: '0', y: '0', z: '0' },
     uuid: 'your-uuid',
     state: 'base64-state-data',

@@ -175,10 +175,8 @@ export class GraphQLClient {
   }
 
   async sendActorUpdate(input: ActorUpdateRequestInput): Promise<boolean> {
-    // Ensure all BigInt fields are strings for GraphQL
     const normalizedInput = {
       mapId: String(Number(input.mapId)),
-      modId: String(Number(input.modId)),
       chunk: {
         x: String(Number(input.chunk.x)),
         y: String(Number(input.chunk.y)),
@@ -186,6 +184,9 @@ export class GraphQLClient {
       },
       uuid: String(input.uuid),
       state: String(input.state),
+      distance: input.distance ?? 8,
+      decayRate: input.decayRate ?? 1,
+      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
     };
 
     const data = await this.query<{ sendActorUpdate: boolean }>(
@@ -202,15 +203,18 @@ export class GraphQLClient {
   async sendVoxelUpdate(input: VoxelUpdateRequestInput): Promise<boolean> {
     const normalizedInput = {
       mapId: String(Number(input.mapId)),
-      modId: String(Number(input.modId)),
       chunk: {
         x: String(Number(input.chunk.x)),
         y: String(Number(input.chunk.y)),
         z: String(Number(input.chunk.z)),
       },
+      uuid: String(input.uuid),
       voxel: input.voxel,
       voxelType: input.voxelType,
       voxelState: String(input.voxelState),
+      distance: input.distance ?? 8,
+      decayRate: input.decayRate ?? 0,
+      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
     };
 
     const data = await this.query<{ sendVoxelUpdate: boolean }>(
@@ -227,7 +231,6 @@ export class GraphQLClient {
   async sendAudioPacket(input: ClientAudioPacketInput): Promise<boolean> {
     const normalizedInput = {
       mapId: String(Number(input.mapId)),
-      modId: String(Number(input.modId)),
       chunk: {
         x: String(Number(input.chunk.x)),
         y: String(Number(input.chunk.y)),
@@ -235,6 +238,9 @@ export class GraphQLClient {
       },
       uuid: String(input.uuid),
       audioData: String(input.audioData),
+      distance: input.distance ?? 1,
+      decayRate: input.decayRate ?? 0,
+      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
     };
 
     const data = await this.query<{ sendAudioPacket: boolean }>(
@@ -251,7 +257,6 @@ export class GraphQLClient {
   async sendTextPacket(input: ClientTextPacketInput): Promise<boolean> {
     const normalizedInput = {
       mapId: String(Number(input.mapId)),
-      modId: String(Number(input.modId)),
       chunk: {
         x: String(Number(input.chunk.x)),
         y: String(Number(input.chunk.y)),
@@ -259,6 +264,9 @@ export class GraphQLClient {
       },
       uuid: String(input.uuid),
       text: String(input.text),
+      distance: input.distance ?? 1,
+      decayRate: input.decayRate ?? 0,
+      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
     };
 
     const data = await this.query<{ sendTextPacket: boolean }>(
@@ -275,7 +283,6 @@ export class GraphQLClient {
   async sendClientEvent(input: ClientEventNotificationInput): Promise<boolean> {
     const normalizedInput = {
       mapId: String(Number(input.mapId)),
-      modId: String(Number(input.modId)),
       chunk: {
         x: String(Number(input.chunk.x)),
         y: String(Number(input.chunk.y)),
@@ -284,6 +291,9 @@ export class GraphQLClient {
       uuid: String(input.uuid),
       eventType: input.eventType,
       state: String(input.state),
+      distance: input.distance ?? 8,
+      decayRate: input.decayRate ?? 0,
+      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
     };
 
     const data = await this.query<{ sendClientEvent: boolean }>(

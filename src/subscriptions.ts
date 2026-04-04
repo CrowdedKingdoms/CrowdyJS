@@ -12,6 +12,7 @@ import type {
   ClientTextHandler,
   ClientEventHandler,
   ServerEventHandler,
+  GenericErrorHandler,
   UnsubscribeFn,
 } from './types.js';
 
@@ -24,6 +25,7 @@ type HandlerMap = {
   ClientTextNotification: ClientTextHandler[];
   ClientEventNotification: ClientEventHandler[];
   ServerEventNotification: ServerEventHandler[];
+  GenericErrorResponse: GenericErrorHandler[];
 };
 
 export class SubscriptionManager {
@@ -36,6 +38,7 @@ export class SubscriptionManager {
     ClientTextNotification: [],
     ClientEventNotification: [],
     ServerEventNotification: [],
+    GenericErrorResponse: [],
   };
 
   private wsClient: WebSocket | null = null;
@@ -105,7 +108,6 @@ export class SubscriptionManager {
                     chunkZ
                     uuid
                     state
-                    modId
                   }
                   ... on ActorUpdateResponse {
                     mapId
@@ -113,31 +115,27 @@ export class SubscriptionManager {
                     chunkY
                     chunkZ
                     uuid
-                    errorCode
-                    modId
+                    sequenceNumber
                   }
                   ... on VoxelUpdateNotification {
                     mapId
                     chunkX
                     chunkY
                     chunkZ
+                    uuid
                     voxelX
                     voxelY
                     voxelZ
                     voxelType
                     voxelState
-                    modId
                   }
                   ... on VoxelUpdateResponse {
                     mapId
                     chunkX
                     chunkY
                     chunkZ
-                    voxelX
-                    voxelY
-                    voxelZ
-                    errorCode
-                    modId
+                    uuid
+                    sequenceNumber
                   }
                   ... on ClientAudioNotification {
                     mapId
@@ -146,7 +144,6 @@ export class SubscriptionManager {
                     chunkZ
                     uuid
                     audioData
-                    modId
                   }
                   ... on ClientTextNotification {
                     mapId
@@ -155,7 +152,6 @@ export class SubscriptionManager {
                     chunkZ
                     uuid
                     text
-                    modId
                   }
                   ... on ClientEventNotification {
                     mapId
@@ -165,7 +161,6 @@ export class SubscriptionManager {
                     uuid
                     eventType
                     state
-                    modId
                   }
                   ... on ServerEventNotification {
                     mapId
@@ -175,7 +170,10 @@ export class SubscriptionManager {
                     uuid
                     eventType
                     state
-                    modId
+                  }
+                  ... on GenericErrorResponse {
+                    sequenceNumber
+                    errorCode
                   }
                 }
               }`,
@@ -369,6 +367,18 @@ export class SubscriptionManager {
       const index = this.handlers.ServerEventNotification.indexOf(handler);
       if (index > -1) {
         this.handlers.ServerEventNotification.splice(index, 1);
+      }
+      this.checkIfShouldUnsubscribe();
+    };
+  }
+
+  onGenericError(handler: GenericErrorHandler): UnsubscribeFn {
+    this.handlers.GenericErrorResponse.push(handler);
+    this.ensureSubscription();
+    return () => {
+      const index = this.handlers.GenericErrorResponse.indexOf(handler);
+      if (index > -1) {
+        this.handlers.GenericErrorResponse.splice(index, 1);
       }
       this.checkIfShouldUnsubscribe();
     };

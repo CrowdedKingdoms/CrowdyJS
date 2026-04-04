@@ -94,48 +94,59 @@ export interface UdpProxyConnectionStatus {
 // Actor Update Request
 export interface ActorUpdateRequestInput {
   mapId: BigInt;
-  modId: BigInt;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   state: string; // Base64-encoded 96-byte binary data
+  distance?: number;
+  decayRate?: number;
+  sequenceNumber?: number;
 }
 
 // Voxel Update Request
 export interface VoxelUpdateRequestInput {
   mapId: BigInt;
-  modId: BigInt;
   chunk: ChunkCoordinatesInput;
+  uuid: string;
   voxel: VoxelCoordinatesInput;
   voxelType: number;
   voxelState: string; // Base64-encoded 24-byte binary data
+  distance?: number;
+  decayRate?: number;
+  sequenceNumber?: number;
 }
 
 // Client Audio Packet
 export interface ClientAudioPacketInput {
   mapId: BigInt;
-  modId: BigInt;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   audioData: string; // Base64-encoded compressed audio
+  distance?: number;
+  decayRate?: number;
+  sequenceNumber?: number;
 }
 
 // Client Text Packet
 export interface ClientTextPacketInput {
   mapId: BigInt;
-  modId: BigInt;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   text: string;
+  distance?: number;
+  decayRate?: number;
+  sequenceNumber?: number;
 }
 
 // Client Event Notification
 export interface ClientEventNotificationInput {
   mapId: BigInt;
-  modId: BigInt;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   eventType: number;
   state: string; // Base64-encoded event state
+  distance?: number;
+  decayRate?: number;
+  sequenceNumber?: number;
 }
 
 // Notification Types (from GraphQL union)
@@ -147,7 +158,6 @@ export interface ActorUpdateNotification {
   chunkZ: BigInt;
   uuid: string;
   state: string; // Base64-encoded 96-byte binary data
-  modId: BigInt;
 }
 
 export interface ActorUpdateResponse {
@@ -157,8 +167,7 @@ export interface ActorUpdateResponse {
   chunkY: BigInt;
   chunkZ: BigInt;
   uuid: string;
-  errorCode: UdpErrorCode;
-  modId: BigInt;
+  sequenceNumber: number;
 }
 
 export interface VoxelUpdateNotification {
@@ -167,12 +176,12 @@ export interface VoxelUpdateNotification {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  uuid: string;
   voxelX: number;
   voxelY: number;
   voxelZ: number;
   voxelType: number;
   voxelState: string; // Base64-encoded 24-byte binary data
-  modId: BigInt;
 }
 
 export interface VoxelUpdateResponse {
@@ -181,11 +190,8 @@ export interface VoxelUpdateResponse {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
-  voxelX: number;
-  voxelY: number;
-  voxelZ: number;
-  errorCode: UdpErrorCode;
-  modId: BigInt;
+  uuid: string;
+  sequenceNumber: number;
 }
 
 export interface ClientAudioNotification {
@@ -196,7 +202,6 @@ export interface ClientAudioNotification {
   chunkZ: BigInt;
   uuid: string;
   audioData: string; // Base64-encoded compressed audio
-  modId: BigInt;
 }
 
 export interface ClientTextNotification {
@@ -207,7 +212,6 @@ export interface ClientTextNotification {
   chunkZ: BigInt;
   uuid: string;
   text: string;
-  modId: BigInt;
 }
 
 export interface ClientEventNotification {
@@ -219,7 +223,6 @@ export interface ClientEventNotification {
   uuid: string;
   eventType: number;
   state: string; // Base64-encoded event state
-  modId: BigInt;
 }
 
 export interface ServerEventNotification {
@@ -231,7 +234,12 @@ export interface ServerEventNotification {
   uuid: string;
   eventType: number;
   state: string; // Base64-encoded event state
-  modId: BigInt;
+}
+
+export interface GenericErrorResponse {
+  __typename: 'GenericErrorResponse';
+  sequenceNumber: number;
+  errorCode: UdpErrorCode;
 }
 
 // Union type for all notifications
@@ -243,7 +251,8 @@ export type UdpNotification =
   | ClientAudioNotification
   | ClientTextNotification
   | ClientEventNotification
-  | ServerEventNotification;
+  | ServerEventNotification
+  | GenericErrorResponse;
 
 // Client Configuration
 export interface CrowdyClientConfig {
@@ -261,6 +270,7 @@ export type ClientAudioHandler = (notification: ClientAudioNotification) => void
 export type ClientTextHandler = (notification: ClientTextNotification) => void;
 export type ClientEventHandler = (notification: ClientEventNotification) => void;
 export type ServerEventHandler = (notification: ServerEventNotification) => void;
+export type GenericErrorHandler = (response: GenericErrorResponse) => void;
 
 // Unsubscribe function
 export type UnsubscribeFn = () => void;
