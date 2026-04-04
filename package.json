@@ -26,7 +26,7 @@
   "keywords": [
     "crowded-kingdoms",
     "graphql",
-    "udp-proxy",
+    "game-api",
     "multiplayer",
     "sdk"
   ],
@@ -34,7 +34,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.7",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "ws": "^8.20.0"
   }
 }
-

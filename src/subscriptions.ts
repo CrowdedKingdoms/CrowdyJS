@@ -81,27 +81,26 @@ export class SubscriptionManager {
     const wsUrl = this.wsEndpoint;
     this.subscriptionId = 'udp-notifications-' + Date.now();
 
-    this.wsClient = new WebSocket(wsUrl, 'graphql-ws');
+    const ws = new WebSocket(wsUrl, 'graphql-ws');
+    this.wsClient = ws;
 
-    this.wsClient.onopen = () => {
-      // Send connection_init message with authorization
-      this.wsClient!.send(
+    ws.onopen = () => {
+      ws.send(
         JSON.stringify({
           type: 'connection_init',
           payload: {
             authorization: `Bearer ${this.token}`,
-            Authorization: `Bearer ${this.token}`, // Some servers expect capitalized
+            Authorization: `Bearer ${this.token}`,
           },
         })
       );
     };
 
-    this.wsClient.onmessage = (event) => {
+    ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
 
         if (message.type === 'connection_ack') {
-          // Subscribe to udpNotifications
           const startMessage = {
             id: this.subscriptionId,
             type: 'start',
@@ -187,17 +186,14 @@ export class SubscriptionManager {
               }`,
             },
           };
-          this.wsClient!.send(JSON.stringify(startMessage));
+          ws.send(JSON.stringify(startMessage));
         } else if (message.type === 'connection_error') {
           console.error('Connection error:', message.payload);
           const errorMsg =
             message.payload?.message || 'Connection rejected - check authorization token';
-          // Notify all handlers of error? Or just log?
           console.error('WebSocket connection error:', errorMsg);
         } else if (message.type === 'data') {
-          // Handle null values (subscription is active but no notification yet)
           if (message.payload?.data?.udpNotifications === null) {
-            // Don't call handlers for null values - subscription is working, just no data yet
             return;
           }
 
@@ -223,44 +219,41 @@ export class SubscriptionManager {
             : 'WebSocket error';
           console.error('WebSocket error:', errorMsg);
         } else if (message.type === 'ping') {
-          // Respond to ping with pong (graphql-ws protocol keepalive)
-          this.wsClient!.send(
-            JSON.stringify({
-              type: 'pong',
-            })
-          );
+          ws.send(JSON.stringify({ type: 'pong' }));
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
       }
     };
 
-    this.wsClient.onerror = (error) => {
+    ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
 
-    this.wsClient.onclose = (event) => {
+    ws.onclose = (event) => {
       if (event.code !== 1000) {
         console.warn(`WebSocket closed unexpectedly: ${event.reason || event.code}`);
       }
-      this.wsClient = null;
+      if (this.wsClient === ws) {
+        this.wsClient = null;
+      }
     };
 
-    // Store unsubscribe function
     this.wsUnsubscribe = () => {
-      if (this.wsClient && this.wsClient.readyState === WebSocket.OPEN) {
-        // Send stop message before closing
+      if (ws.readyState === WebSocket.OPEN) {
         if (this.subscriptionId) {
-          this.wsClient.send(
+          ws.send(
             JSON.stringify({
               id: this.subscriptionId,
               type: 'stop',
             })
           );
         }
-        this.wsClient.close();
+        ws.close();
       }
-      this.wsClient = null;
+      if (this.wsClient === ws) {
+        this.wsClient = null;
+      }
       this.wsUnsubscribe = null;
     };
   }
