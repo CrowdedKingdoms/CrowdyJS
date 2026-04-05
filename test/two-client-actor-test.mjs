@@ -76,7 +76,8 @@ async function run() {
 
   // ---- 2. Subscribe (auto-opens UDP proxy) ----
   console.log('\n--- Register subscriptions (all at once) ---');
-  const received = {
+  const receivedByA = { actorUpdates: [] };
+  const receivedByB = {
     actorUpdates: [],
     actorResponses: [],
     voxelUpdates: [],
@@ -86,27 +87,27 @@ async function run() {
   const unsubs = [];
   try {
     unsubs.push(clientA.onActorUpdate((n) => {
-      received.actorUpdates.push(n);
+      receivedByA.actorUpdates.push(n);
     }));
     console.log('  Client A registered: onActorUpdate');
 
     unsubs.push(clientB.onActorUpdate((n) => {
-      received.actorUpdates.push(n);
+      receivedByB.actorUpdates.push(n);
     }));
     console.log('  Client B registered: onActorUpdate');
 
     unsubs.push(clientB.onActorUpdateResponse((r) => {
-      received.actorResponses.push(r);
+      receivedByB.actorResponses.push(r);
     }));
     console.log('  Client B registered: onActorUpdateResponse');
 
     unsubs.push(clientB.onVoxelUpdate((n) => {
-      received.voxelUpdates.push(n);
+      receivedByB.voxelUpdates.push(n);
     }));
     console.log('  Client B registered: onVoxelUpdate');
 
     unsubs.push(clientB.onGenericError((e) => {
-      received.genericErrors.push(e);
+      receivedByB.genericErrors.push(e);
     }));
     console.log('  Client B registered: onGenericError');
 
@@ -129,7 +130,7 @@ async function run() {
       chunk: CHUNK,
       distance: 8,
       uuid: TEST_UUID_A,
-      state: '',
+      state: 'AA==',
       sequenceNumber: 1,
     });
     console.log(`  Client A registered in chunk: ${regA}`);
@@ -145,7 +146,7 @@ async function run() {
       chunk: CHUNK,
       distance: 8,
       uuid: TEST_UUID_B,
-      state: '',
+      state: 'AA==',
       sequenceNumber: 1,
     });
     console.log(`  Client B registered in chunk: ${regB}`);
@@ -186,16 +187,22 @@ async function run() {
 
   // ---- Results ----
   console.log('\n--- Results ---');
-  console.log(`  Actor updates sent:          ${sendSuccessCount}`);
-  console.log(`  Actor updates received by B: ${received.actorUpdates.length}`);
-  console.log(`  Actor responses received:    ${received.actorResponses.length}`);
-  console.log(`  Generic errors received:     ${received.genericErrors.length}`);
+  console.log(`  Actor updates sent by A:     ${sendSuccessCount}`);
+  console.log(`  Actor updates received by A: ${receivedByA.actorUpdates.length}`);
+  console.log(`  Actor updates received by B: ${receivedByB.actorUpdates.length}`);
+  console.log(`  Actor responses received:    ${receivedByB.actorResponses.length}`);
+  console.log(`  Generic errors received:     ${receivedByB.genericErrors.length}`);
 
-  assert(received.actorUpdates.length > 0, 'Client B received at least one actor update');
+  // B should receive A's updates (game server fans out to other clients in range)
+  assert(receivedByB.actorUpdates.length > 0, 'Client B received at least one actor update from A');
 
-  if (received.actorUpdates.length > 0) {
-    const sample = received.actorUpdates[0];
-    console.log('\n  Sample notification:');
+  // Find an update from A (skip any registration notifications from B itself)
+  const updatesFromA = receivedByB.actorUpdates.filter((n) => n.uuid === TEST_UUID_A);
+  assert(updatesFromA.length > 0, 'Client B received at least one update with A\'s uuid');
+
+  if (updatesFromA.length > 0) {
+    const sample = updatesFromA[0];
+    console.log('\n  Sample notification (from A, received by B):');
     console.log(`    __typename:      ${sample.__typename}`);
     console.log(`    mapId:           ${sample.mapId}`);
     console.log(`    uuid:            ${sample.uuid}`);
@@ -205,16 +212,15 @@ async function run() {
     console.log(`    sequenceNumber:  ${sample.sequenceNumber}`);
     console.log(`    epochMillis:     ${sample.epochMillis}`);
     assert(sample.__typename === 'ActorUpdateNotification', 'Notification has correct __typename');
-    assert(sample.uuid === TEST_UUID_A, 'Notification has correct uuid');
     assert(sample.distance != null, 'Notification includes distance');
     assert(sample.decayRate != null, 'Notification includes decayRate');
     assert(sample.sequenceNumber != null, 'Notification includes sequenceNumber');
     assert(sample.epochMillis != null, 'Notification includes epochMillis');
   }
 
-  if (received.genericErrors.length > 0) {
+  if (receivedByB.genericErrors.length > 0) {
     console.log('\n  Generic errors received:');
-    received.genericErrors.forEach((e) => {
+    receivedByB.genericErrors.forEach((e) => {
       console.log(`    errorCode: ${e.errorCode}, sequenceNumber: ${e.sequenceNumber}`);
     });
   }

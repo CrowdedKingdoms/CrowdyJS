@@ -57,7 +57,8 @@ const unsubError = client.onGenericError((error) => {
 ### Register in a Chunk
 
 Before other clients can receive your updates, you must send at least one
-actor update with an empty state so the game server knows your chunk position:
+actor update so the game server knows your chunk position. Use a minimal
+base64 payload (the server requires a non-empty `state`):
 
 ```javascript
 const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee'; // 32 bytes UTF-8
@@ -67,7 +68,7 @@ await client.sendActorUpdate({
   chunk: { x: 0, y: 0, z: 0 },
   distance: 8,
   uuid: MY_UUID,
-  state: '',
+  state: 'AA==',              // minimal base64 payload for registration
   sequenceNumber: 1,
 });
 ```
@@ -135,7 +136,7 @@ await client.sendActorUpdate({
   chunk: { x: 0, y: 0, z: 0 },
   distance: 8,
   uuid: MY_UUID,
-  state: '',
+  state: 'AA==',
   sequenceNumber: 1,
 });
 
