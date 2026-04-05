@@ -29,98 +29,84 @@ const client = new CrowdyClient({
 ### Authentication
 
 ```javascript
-// Login
 const authResponse = await client.login(email, password);
 console.log('Logged in as:', authResponse.user.email);
 
-// Register
+// Or register a new account
 const authResponse = await client.register(email, password, gamertag);
 ```
 
-### UDP Proxy Connection
+### Subscribe to Notifications
+
+Subscribing to any notification type automatically opens a UDP proxy session
+to the game server -- no explicit `connectUdpProxy()` call is needed.
 
 ```javascript
-// Connect to UDP proxy
-const status = await client.connectUdpProxy();
-console.log('Connected to server:', status.serverIp6);
+const unsubActorUpdate = client.onActorUpdate((notification) => {
+  console.log('Actor update from:', notification.uuid);
+  console.log('  state:', notification.state);
+  console.log('  sequenceNumber:', notification.sequenceNumber);
+  console.log('  epochMillis:', notification.epochMillis);
+});
 
-// Check connection status
-const status = await client.getConnectionStatus();
-
-// Disconnect
-await client.disconnectUdpProxy();
+const unsubError = client.onGenericError((error) => {
+  console.error('Error:', error.errorCode);
+});
 ```
 
-### Sending Actor Updates
+### Register in a Chunk
+
+Before other clients can receive your updates, you must send at least one
+actor update with an empty state so the game server knows your chunk position:
 
 ```javascript
-// Create 96-byte binary state (position, rotation, velocity, etc.)
-const stateBuffer = new ArrayBuffer(96);
-const view = new DataView(stateBuffer);
-view.setFloat32(0, x, true); // position x
-view.setFloat32(4, y, true); // position y
-// ... populate rest of state
+const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee'; // 32 bytes UTF-8
 
-// Convert to base64
+await client.sendActorUpdate({
+  mapId: 0,
+  chunk: { x: 0, y: 0, z: 0 },
+  distance: 8,
+  uuid: MY_UUID,
+  state: '',
+  sequenceNumber: 1,
+});
+```
+
+### Send Actor Updates
+
+```javascript
 const base64State = btoa(String.fromCharCode(...new Uint8Array(stateBuffer)));
 
-// Send update
 await client.sendActorUpdate({
-  mapId: '1',
-  chunk: { x: '0', y: '0', z: '0' },
-  uuid: 'your-32-byte-uuid',
+  mapId: 0,
+  chunk: { x: 0, y: 0, z: 0 },
+  distance: 8,
+  decayRate: 0,
+  uuid: MY_UUID,
   state: base64State,
+  sequenceNumber: 2,
 });
 ```
 
 ### Type-Specific Subscription Handlers
 
-The SDK provides type-specific handlers so you don't need to switch on `__typename`:
+The SDK provides type-specific handlers so you don't need to switch on `__typename`.
+All spatial notifications include the uniform header fields: `mapId`, `chunkX`,
+`chunkY`, `chunkZ`, `distance`, `decayRate`, `uuid`, `sequenceNumber`, `epochMillis`.
 
 ```javascript
-// Actor update notifications
-const unsubscribe1 = client.onActorUpdate((notification) => {
-  // notification is typed as ActorUpdateNotification
-  console.log('Actor updated:', notification.uuid);
-});
-
-// Actor update responses (from your own requests)
-const unsubscribe2 = client.onActorUpdateResponse((response) => {
-  // response is typed as ActorUpdateResponse
-  if (response.errorCode === 'NO_ERROR') {
-    console.log('Update successful');
-  }
-});
-
-// Voxel updates
-const unsubscribe3 = client.onVoxelUpdate((notification) => {
-  // notification is typed as VoxelUpdateNotification
-});
-
-// Client audio (voice chat)
-const unsubscribe4 = client.onClientAudio((notification) => {
-  // notification is typed as ClientAudioNotification
-});
-
-// Client text (chat messages)
-const unsubscribe5 = client.onClientText((notification) => {
-  // notification is typed as ClientTextNotification
-});
-
-// Client events
-const unsubscribe6 = client.onClientEvent((notification) => {
-  // notification is typed as ClientEventNotification
-});
-
-// Server events
-const unsubscribe7 = client.onServerEvent((notification) => {
-  // notification is typed as ServerEventNotification
-});
+const unsub1 = client.onActorUpdate((n) => { /* ActorUpdateNotification */ });
+const unsub2 = client.onActorUpdateResponse((n) => { /* ActorUpdateResponse */ });
+const unsub3 = client.onVoxelUpdate((n) => { /* VoxelUpdateNotification */ });
+const unsub4 = client.onVoxelUpdateResponse((n) => { /* VoxelUpdateResponse */ });
+const unsub5 = client.onClientAudio((n) => { /* ClientAudioNotification */ });
+const unsub6 = client.onClientText((n) => { /* ClientTextNotification */ });
+const unsub7 = client.onClientEvent((n) => { /* ClientEventNotification */ });
+const unsub8 = client.onServerEvent((n) => { /* ServerEventNotification */ });
+const unsub9 = client.onGenericError((e) => { /* GenericErrorResponse */ });
 
 // Unsubscribe when done
-unsubscribe1();
-unsubscribe2();
-// ... etc
+unsub1();
 ```
 
 ### Complete Example
@@ -133,25 +119,36 @@ const client = new CrowdyClient({
   wsEndpoint: 'ws://localhost:3000/graphql',
 });
 
-// Login
+const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
+
+// 1. Login
 await client.login('user@example.com', 'password');
 
-// Connect to UDP proxy
-await client.connectUdpProxy();
-
-// Subscribe to actor updates
+// 2. Subscribe (auto-opens UDP proxy session)
 const unsubscribe = client.onActorUpdate((notification) => {
-  console.log('Actor update:', notification.uuid);
-  // Handle the update...
+  console.log('Actor update:', notification.uuid, notification.epochMillis);
 });
 
-// Send actor updates
+// 3. Register in chunk
+await client.sendActorUpdate({
+  mapId: 0,
+  chunk: { x: 0, y: 0, z: 0 },
+  distance: 8,
+  uuid: MY_UUID,
+  state: '',
+  sequenceNumber: 1,
+});
+
+// 4. Send updates
+let seq = 2;
 setInterval(async () => {
   await client.sendActorUpdate({
-    mapId: '1',
-    chunk: { x: '0', y: '0', z: '0' },
-    uuid: 'your-uuid',
+    mapId: 0,
+    chunk: { x: 0, y: 0, z: 0 },
+    distance: 8,
+    uuid: MY_UUID,
     state: 'base64-state-data',
+    sequenceNumber: seq++ % 256,
   });
 }, 100);
 
@@ -186,7 +183,7 @@ new CrowdyClient(config?: CrowdyClientConfig)
 - `getAuthToken(): string | null`
 
 **UDP Proxy:**
-- `connectUdpProxy(): Promise<UdpProxyConnectionStatus>`
+- `connectUdpProxy(): Promise<UdpProxyConnectionStatus>` -- optional; subscriptions and mutations auto-open the session
 - `disconnectUdpProxy(): Promise<boolean>`
 - `getConnectionStatus(): Promise<UdpProxyConnectionStatus>`
 
@@ -198,14 +195,15 @@ new CrowdyClient(config?: CrowdyClientConfig)
 - `sendClientEvent(input: ClientEventNotificationInput): Promise<boolean>`
 
 **Subscriptions:**
-- `onActorUpdate(handler: ActorUpdateHandler): UnsubscribeFn`
-- `onActorUpdateResponse(handler: ActorUpdateResponseHandler): UnsubscribeFn`
-- `onVoxelUpdate(handler: VoxelUpdateHandler): UnsubscribeFn`
-- `onVoxelUpdateResponse(handler: VoxelUpdateResponseHandler): UnsubscribeFn`
-- `onClientAudio(handler: ClientAudioHandler): UnsubscribeFn`
-- `onClientText(handler: ClientTextHandler): UnsubscribeFn`
-- `onClientEvent(handler: ClientEventHandler): UnsubscribeFn`
-- `onServerEvent(handler: ServerEventHandler): UnsubscribeFn`
+- `onActorUpdate(handler): UnsubscribeFn`
+- `onActorUpdateResponse(handler): UnsubscribeFn`
+- `onVoxelUpdate(handler): UnsubscribeFn`
+- `onVoxelUpdateResponse(handler): UnsubscribeFn`
+- `onClientAudio(handler): UnsubscribeFn`
+- `onClientText(handler): UnsubscribeFn`
+- `onClientEvent(handler): UnsubscribeFn`
+- `onServerEvent(handler): UnsubscribeFn`
+- `onGenericError(handler): UnsubscribeFn`
 
 **Cleanup:**
 - `close(): void` - Closes all subscriptions and cleans up

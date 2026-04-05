@@ -1,13 +1,17 @@
 /**
  * Two-client actor update replication test.
  *
- * Requires a running server at localhost:3000/graphql and two test accounts.
+ * Follows the authoritative connection lifecycle:
+ *   1. Login
+ *   2. Subscribe to udpNotifications (auto-opens UDP proxy)
+ *   3. Register in chunk (sendActorUpdate with empty state)
+ *   4. Send actor updates
  *
  * Usage:
- *   node test/two-client-actor-test.mjs <email1> <pass1> <email2> <pass2>
+ *   node test/two-client-actor-test.mjs <email1> <pass1> <email2> <pass2> [httpEndpoint]
  *
- * Example:
- *   node test/two-client-actor-test.mjs alice@test.com pw1 bob@test.com pw2
+ * The WebSocket endpoint is derived automatically (https->wss, http->ws).
+ * Defaults to http://localhost:3000/graphql if no endpoint is given.
  */
 
 import WebSocket from 'ws';
@@ -15,17 +19,25 @@ globalThis.WebSocket = WebSocket;
 
 import { CrowdyClient } from '../dist/index.js';
 
-const [email1, pass1, email2, pass2] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const email1 = args[0];
+const pass1 = args[1];
+const email2 = args[2];
+const pass2 = args[3];
+const ENDPOINT = args[4] || 'http://localhost:3000/graphql';
+const WS_ENDPOINT = ENDPOINT.replace(/^http/, 'ws');
+
 if (!email1 || !pass1 || !email2 || !pass2) {
-  console.error('Usage: node test/two-client-actor-test.mjs <email1> <pass1> <email2> <pass2>');
+  console.error('Usage: node test/two-client-actor-test.mjs <email1> <pass1> <email2> <pass2> [httpEndpoint]');
   process.exit(1);
 }
 
-const ENDPOINT = 'http://localhost:3000/graphql';
-const WS_ENDPOINT = 'ws://localhost:3000/graphql';
-const MAP_ID = '1';
-const CHUNK = { x: '0', y: '0', z: '0' };
-const TEST_UUID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+console.log(`Endpoint:    ${ENDPOINT}`);
+console.log(`WS Endpoint: ${WS_ENDPOINT}`);
+const MAP_ID = 0;
+const CHUNK = { x: 0, y: 0, z: 0 };
+const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
+const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
 
 function makeBase64State() {
   const buf = new Uint8Array(96);
@@ -37,107 +49,190 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+let passed = 0;
+let failed = 0;
+
+function assert(condition, label) {
+  if (condition) {
+    console.log(`  PASS: ${label}`);
+    passed++;
+  } else {
+    console.error(`  FAIL: ${label}`);
+    failed++;
+  }
+}
+
 async function run() {
   const clientA = new CrowdyClient({ graphqlEndpoint: ENDPOINT, wsEndpoint: WS_ENDPOINT });
   const clientB = new CrowdyClient({ graphqlEndpoint: ENDPOINT, wsEndpoint: WS_ENDPOINT });
 
-  // --- Step 1: Login both clients ---
-  console.log('[1] Logging in client A...');
+  // ---- 1. Login ----
+  console.log('\n--- Login ---');
   const authA = await clientA.login(email1, pass1);
-  console.log('    Client A logged in as:', authA.user.email);
+  console.log(`Client A logged in: ${authA.user.email}`);
 
-  console.log('[2] Logging in client B...');
   const authB = await clientB.login(email2, pass2);
-  console.log('    Client B logged in as:', authB.user.email);
+  console.log(`Client B logged in: ${authB.user.email}`);
 
-  // --- Step 2: Connect UDP proxy on both ---
-  console.log('[3] Connecting client A to UDP proxy...');
-  const statusA = await clientA.connectUdpProxy();
-  console.log('    Client A connected:', statusA.connected);
+  // ---- 2. Subscribe (auto-opens UDP proxy) ----
+  console.log('\n--- Register subscriptions (all at once) ---');
+  const received = {
+    actorUpdates: [],
+    actorResponses: [],
+    voxelUpdates: [],
+    genericErrors: [],
+  };
 
-  console.log('[4] Connecting client B to UDP proxy...');
-  const statusB = await clientB.connectUdpProxy();
-  console.log('    Client B connected:', statusB.connected);
+  const unsubs = [];
+  try {
+    unsubs.push(clientA.onActorUpdate((n) => {
+      received.actorUpdates.push(n);
+    }));
+    console.log('  Client A registered: onActorUpdate');
 
-  // --- Step 3: Subscribe client B to actor updates ---
-  let receivedCount = 0;
-  const receivedUpdates = [];
+    unsubs.push(clientB.onActorUpdate((n) => {
+      received.actorUpdates.push(n);
+    }));
+    console.log('  Client B registered: onActorUpdate');
 
-  console.log('[5] Client B subscribing to actor updates...');
-  const unsub = clientB.onActorUpdate((notification) => {
-    receivedCount++;
-    receivedUpdates.push(notification);
-    console.log(`    [B] Received actor update #${receivedCount}: uuid=${notification.uuid}`);
-  });
+    unsubs.push(clientB.onActorUpdateResponse((r) => {
+      received.actorResponses.push(r);
+    }));
+    console.log('  Client B registered: onActorUpdateResponse');
 
-  const unsubResponse = clientB.onActorUpdateResponse((response) => {
-    console.log(`    [B] Received actor update response: uuid=${response.uuid}, seq=${response.sequenceNumber}`);
-  });
+    unsubs.push(clientB.onVoxelUpdate((n) => {
+      received.voxelUpdates.push(n);
+    }));
+    console.log('  Client B registered: onVoxelUpdate');
 
-  const unsubError = clientB.onGenericError((err) => {
-    console.error(`    [B] Received generic error: code=${err.errorCode}, seq=${err.sequenceNumber}`);
-  });
+    unsubs.push(clientB.onGenericError((e) => {
+      received.genericErrors.push(e);
+    }));
+    console.log('  Client B registered: onGenericError');
 
-  // Give the WebSocket time to connect and subscribe
-  console.log('[6] Waiting for subscription to establish...');
+    console.log('  All handlers registered without error');
+    assert(true, 'No InvalidStateError when registering multiple handlers');
+  } catch (err) {
+    console.error(`  ERROR during handler registration: ${err.message}`);
+    assert(false, `No InvalidStateError when registering multiple handlers (got: ${err.message})`);
+  }
+
+  // Wait for WebSocket subscriptions to fully connect
+  console.log('\n--- Waiting for subscription WebSocket... ---');
   await sleep(2000);
 
-  // --- Step 4: Client A sends actor updates ---
-  const SEND_COUNT = 5;
-  console.log(`[7] Client A sending ${SEND_COUNT} actor updates...`);
+  // ---- 3. Register both clients in the chunk ----
+  console.log('\n--- Register actors in chunk ---');
+  try {
+    const regA = await clientA.sendActorUpdate({
+      mapId: MAP_ID,
+      chunk: CHUNK,
+      distance: 8,
+      uuid: TEST_UUID_A,
+      state: '',
+      sequenceNumber: 1,
+    });
+    console.log(`  Client A registered in chunk: ${regA}`);
+    assert(regA, 'Client A registration sent');
+  } catch (err) {
+    console.error(`  Client A registration failed: ${err.message}`);
+    assert(false, `Client A registration (got: ${err.message})`);
+  }
 
+  try {
+    const regB = await clientB.sendActorUpdate({
+      mapId: MAP_ID,
+      chunk: CHUNK,
+      distance: 8,
+      uuid: TEST_UUID_B,
+      state: '',
+      sequenceNumber: 1,
+    });
+    console.log(`  Client B registered in chunk: ${regB}`);
+    assert(regB, 'Client B registration sent');
+  } catch (err) {
+    console.error(`  Client B registration failed: ${err.message}`);
+    assert(false, `Client B registration (got: ${err.message})`);
+  }
+
+  await sleep(1000);
+
+  // ---- 4. Send actor updates from A ----
+  console.log('\n--- Client A sends actor updates ---');
+  const SEND_COUNT = 5;
+  let sendSuccessCount = 0;
   for (let i = 0; i < SEND_COUNT; i++) {
-    const state = makeBase64State();
     try {
       const result = await clientA.sendActorUpdate({
         mapId: MAP_ID,
         chunk: CHUNK,
-        uuid: TEST_UUID,
-        state,
+        distance: 8,
+        uuid: TEST_UUID_A,
+        state: makeBase64State(),
+        sequenceNumber: i + 2,
       });
-      console.log(`    [A] Sent update ${i + 1}/${SEND_COUNT}, result: ${result}`);
+      if (result) sendSuccessCount++;
+      console.log(`  Sent ${i + 1}/${SEND_COUNT}: ${result}`);
     } catch (err) {
-      console.error(`    [A] Failed to send update ${i + 1}:`, err.message);
+      console.error(`  Send ${i + 1} failed: ${err.message}`);
     }
     await sleep(200);
   }
+  assert(sendSuccessCount === SEND_COUNT, `All ${SEND_COUNT} actor updates sent successfully`);
 
-  // --- Step 5: Wait for notifications ---
-  console.log('[8] Waiting for notifications to arrive...');
+  // ---- Wait for notifications ----
+  console.log('\n--- Waiting for notifications... ---');
   await sleep(3000);
 
-  // --- Results ---
-  console.log('\n=== RESULTS ===');
-  console.log(`Updates sent by A:     ${SEND_COUNT}`);
-  console.log(`Updates received by B: ${receivedCount}`);
+  // ---- Results ----
+  console.log('\n--- Results ---');
+  console.log(`  Actor updates sent:          ${sendSuccessCount}`);
+  console.log(`  Actor updates received by B: ${received.actorUpdates.length}`);
+  console.log(`  Actor responses received:    ${received.actorResponses.length}`);
+  console.log(`  Generic errors received:     ${received.genericErrors.length}`);
 
-  if (receivedCount > 0) {
-    console.log('\nSample received update:');
-    console.log(JSON.stringify(receivedUpdates[0], null, 2));
+  assert(received.actorUpdates.length > 0, 'Client B received at least one actor update');
+
+  if (received.actorUpdates.length > 0) {
+    const sample = received.actorUpdates[0];
+    console.log('\n  Sample notification:');
+    console.log(`    __typename:      ${sample.__typename}`);
+    console.log(`    mapId:           ${sample.mapId}`);
+    console.log(`    uuid:            ${sample.uuid}`);
+    console.log(`    chunkX:          ${sample.chunkX}`);
+    console.log(`    distance:        ${sample.distance}`);
+    console.log(`    decayRate:       ${sample.decayRate}`);
+    console.log(`    sequenceNumber:  ${sample.sequenceNumber}`);
+    console.log(`    epochMillis:     ${sample.epochMillis}`);
+    assert(sample.__typename === 'ActorUpdateNotification', 'Notification has correct __typename');
+    assert(sample.uuid === TEST_UUID_A, 'Notification has correct uuid');
+    assert(sample.distance != null, 'Notification includes distance');
+    assert(sample.decayRate != null, 'Notification includes decayRate');
+    assert(sample.sequenceNumber != null, 'Notification includes sequenceNumber');
+    assert(sample.epochMillis != null, 'Notification includes epochMillis');
   }
 
-  if (receivedCount === 0) {
-    console.log('\nWARNING: No updates received. Possible issues:');
-    console.log('  - WebSocket subscription may not have connected');
-    console.log('  - Server may not be routing notifications');
-    console.log('  - Check server logs for errors');
+  if (received.genericErrors.length > 0) {
+    console.log('\n  Generic errors received:');
+    received.genericErrors.forEach((e) => {
+      console.log(`    errorCode: ${e.errorCode}, sequenceNumber: ${e.sequenceNumber}`);
+    });
   }
 
-  // --- Cleanup ---
-  console.log('\n[9] Cleaning up...');
-  unsub();
-  unsubResponse();
-  unsubError();
+  // ---- Cleanup ----
+  console.log('\n--- Cleanup ---');
+  unsubs.forEach((fn) => fn());
   await clientA.disconnectUdpProxy();
   await clientB.disconnectUdpProxy();
   clientA.close();
   clientB.close();
 
-  console.log('[10] Done.');
-  process.exit(receivedCount > 0 ? 0 : 1);
+  // ---- Summary ----
+  console.log(`\n=== ${passed} passed, ${failed} failed ===`);
+  process.exit(failed > 0 ? 1 : 0);
 }
 
 run().catch((err) => {
-  console.error('Test failed with error:', err);
+  console.error('\nTest crashed:', err);
   process.exit(1);
 });

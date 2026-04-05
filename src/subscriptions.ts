@@ -81,7 +81,7 @@ export class SubscriptionManager {
     const wsUrl = this.wsEndpoint;
     this.subscriptionId = 'udp-notifications-' + Date.now();
 
-    const ws = new WebSocket(wsUrl, 'graphql-ws');
+    const ws = new WebSocket(wsUrl, 'graphql-transport-ws');
     this.wsClient = ws;
 
     ws.onopen = () => {
@@ -89,7 +89,6 @@ export class SubscriptionManager {
         JSON.stringify({
           type: 'connection_init',
           payload: {
-            authorization: `Bearer ${this.token}`,
             Authorization: `Bearer ${this.token}`,
           },
         })
@@ -98,101 +97,31 @@ export class SubscriptionManager {
 
     ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data);
+        const message = JSON.parse(typeof event.data === 'string' ? event.data : '');
 
         if (message.type === 'connection_ack') {
-          const startMessage = {
+          const subscribeMessage = {
             id: this.subscriptionId,
-            type: 'start',
+            type: 'subscribe',
             payload: {
               query: `subscription {
                 udpNotifications {
                   __typename
-                  ... on ActorUpdateNotification {
-                    mapId
-                    chunkX
-                    chunkY
-                    chunkZ
-                    uuid
-                    state
-                  }
-                  ... on ActorUpdateResponse {
-                    mapId
-                    chunkX
-                    chunkY
-                    chunkZ
-                    uuid
-                    sequenceNumber
-                  }
-                  ... on VoxelUpdateNotification {
-                    mapId
-                    chunkX
-                    chunkY
-                    chunkZ
-                    uuid
-                    voxelX
-                    voxelY
-                    voxelZ
-                    voxelType
-                    voxelState
-                  }
-                  ... on VoxelUpdateResponse {
-                    mapId
-                    chunkX
-                    chunkY
-                    chunkZ
-                    uuid
-                    sequenceNumber
-                  }
-                  ... on ClientAudioNotification {
-                    mapId
-                    chunkX
-                    chunkY
-                    chunkZ
-                    uuid
-                    audioData
-                  }
-                  ... on ClientTextNotification {
-                    mapId
-                    chunkX
-                    chunkY
-                    chunkZ
-                    uuid
-                    text
-                  }
-                  ... on ClientEventNotification {
-                    mapId
-                    chunkX
-                    chunkY
-                    chunkZ
-                    uuid
-                    eventType
-                    state
-                  }
-                  ... on ServerEventNotification {
-                    mapId
-                    chunkX
-                    chunkY
-                    chunkZ
-                    uuid
-                    eventType
-                    state
-                  }
-                  ... on GenericErrorResponse {
-                    sequenceNumber
-                    errorCode
-                  }
+                  ... on ActorUpdateNotification { mapId chunkX chunkY chunkZ distance decayRate uuid state sequenceNumber epochMillis }
+                  ... on VoxelUpdateNotification { mapId chunkX chunkY chunkZ distance decayRate uuid voxelX voxelY voxelZ voxelType voxelState sequenceNumber epochMillis }
+                  ... on GenericErrorResponse { sequenceNumber errorCode }
+                  ... on ActorUpdateResponse { mapId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
+                  ... on VoxelUpdateResponse { mapId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
+                  ... on ClientAudioNotification { mapId chunkX chunkY chunkZ distance decayRate uuid audioData sequenceNumber epochMillis }
+                  ... on ClientTextNotification { mapId chunkX chunkY chunkZ distance decayRate uuid text sequenceNumber epochMillis }
+                  ... on ClientEventNotification { mapId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
+                  ... on ServerEventNotification { mapId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
                 }
               }`,
             },
           };
-          ws.send(JSON.stringify(startMessage));
-        } else if (message.type === 'connection_error') {
-          console.error('Connection error:', message.payload);
-          const errorMsg =
-            message.payload?.message || 'Connection rejected - check authorization token';
-          console.error('WebSocket connection error:', errorMsg);
-        } else if (message.type === 'data') {
+          ws.send(JSON.stringify(subscribeMessage));
+        } else if (message.type === 'next') {
           if (message.payload?.data?.udpNotifications === null) {
             return;
           }
@@ -211,13 +140,12 @@ export class SubscriptionManager {
             console.error('Subscription error:', errorMsg);
           }
         } else if (message.type === 'error') {
-          console.error('WebSocket error message:', message.payload);
-          const errorMsg = message.payload?.message
-            ? Array.isArray(message.payload.message)
-              ? message.payload.message.join(', ')
-              : String(message.payload.message)
-            : 'WebSocket error';
-          console.error('WebSocket error:', errorMsg);
+          console.error('Subscription error:', message.payload);
+        } else if (message.type === 'complete') {
+          // Server ended the subscription
+          if (this.wsClient === ws) {
+            this.wsClient = null;
+          }
         } else if (message.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong' }));
         }
@@ -245,7 +173,7 @@ export class SubscriptionManager {
           ws.send(
             JSON.stringify({
               id: this.subscriptionId,
-              type: 'stop',
+              type: 'complete',
             })
           );
         }

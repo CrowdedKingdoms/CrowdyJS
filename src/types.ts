@@ -13,9 +13,9 @@ export interface ChunkCoordinates {
 }
 
 export interface ChunkCoordinatesInput {
-  x: BigInt;
-  y: BigInt;
-  z: BigInt;
+  x: number;
+  y: number;
+  z: number;
 }
 
 // Voxel coordinates
@@ -93,10 +93,10 @@ export interface UdpProxyConnectionStatus {
 
 // Actor Update Request
 export interface ActorUpdateRequestInput {
-  mapId: BigInt;
+  mapId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
-  state: string; // Base64-encoded 96-byte binary data
+  state: string;
   distance?: number;
   decayRate?: number;
   sequenceNumber?: number;
@@ -104,12 +104,12 @@ export interface ActorUpdateRequestInput {
 
 // Voxel Update Request
 export interface VoxelUpdateRequestInput {
-  mapId: BigInt;
+  mapId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   voxel: VoxelCoordinatesInput;
   voxelType: number;
-  voxelState: string; // Base64-encoded 24-byte binary data
+  voxelState: string;
   distance?: number;
   decayRate?: number;
   sequenceNumber?: number;
@@ -117,10 +117,10 @@ export interface VoxelUpdateRequestInput {
 
 // Client Audio Packet
 export interface ClientAudioPacketInput {
-  mapId: BigInt;
+  mapId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
-  audioData: string; // Base64-encoded compressed audio
+  audioData: string;
   distance?: number;
   decayRate?: number;
   sequenceNumber?: number;
@@ -128,7 +128,7 @@ export interface ClientAudioPacketInput {
 
 // Client Text Packet
 export interface ClientTextPacketInput {
-  mapId: BigInt;
+  mapId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   text: string;
@@ -139,25 +139,34 @@ export interface ClientTextPacketInput {
 
 // Client Event Notification
 export interface ClientEventNotificationInput {
-  mapId: BigInt;
+  mapId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   eventType: number;
-  state: string; // Base64-encoded event state
+  state: string;
   distance?: number;
   decayRate?: number;
   sequenceNumber?: number;
 }
 
 // Notification Types (from GraphQL union)
+//
+// All spatial types share a uniform header:
+//   mapId, chunkX/Y/Z, distance, decayRate, uuid, sequenceNumber, epochMillis
+// Only GenericErrorResponse has a minimal 3-field format.
+
 export interface ActorUpdateNotification {
   __typename: 'ActorUpdateNotification';
   mapId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  distance: number;
+  decayRate: number;
   uuid: string;
-  state: string; // Base64-encoded 96-byte binary data
+  state: string;
+  sequenceNumber: number;
+  epochMillis: BigInt;
 }
 
 export interface ActorUpdateResponse {
@@ -166,8 +175,11 @@ export interface ActorUpdateResponse {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  distance: number;
+  decayRate: number;
   uuid: string;
   sequenceNumber: number;
+  epochMillis: BigInt;
 }
 
 export interface VoxelUpdateNotification {
@@ -176,12 +188,16 @@ export interface VoxelUpdateNotification {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  distance: number;
+  decayRate: number;
   uuid: string;
   voxelX: number;
   voxelY: number;
   voxelZ: number;
   voxelType: number;
-  voxelState: string; // Base64-encoded 24-byte binary data
+  voxelState: string;
+  sequenceNumber: number;
+  epochMillis: BigInt;
 }
 
 export interface VoxelUpdateResponse {
@@ -190,8 +206,11 @@ export interface VoxelUpdateResponse {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  distance: number;
+  decayRate: number;
   uuid: string;
   sequenceNumber: number;
+  epochMillis: BigInt;
 }
 
 export interface ClientAudioNotification {
@@ -200,8 +219,12 @@ export interface ClientAudioNotification {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  distance: number;
+  decayRate: number;
   uuid: string;
-  audioData: string; // Base64-encoded compressed audio
+  audioData: string;
+  sequenceNumber: number;
+  epochMillis: BigInt;
 }
 
 export interface ClientTextNotification {
@@ -210,8 +233,12 @@ export interface ClientTextNotification {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  distance: number;
+  decayRate: number;
   uuid: string;
   text: string;
+  sequenceNumber: number;
+  epochMillis: BigInt;
 }
 
 export interface ClientEventNotification {
@@ -220,9 +247,13 @@ export interface ClientEventNotification {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  distance: number;
+  decayRate: number;
   uuid: string;
   eventType: number;
-  state: string; // Base64-encoded event state
+  state: string;
+  sequenceNumber: number;
+  epochMillis: BigInt;
 }
 
 export interface ServerEventNotification {
@@ -231,9 +262,13 @@ export interface ServerEventNotification {
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
+  distance: number;
+  decayRate: number;
   uuid: string;
   eventType: number;
-  state: string; // Base64-encoded event state
+  state: string;
+  sequenceNumber: number;
+  epochMillis: BigInt;
 }
 
 export interface GenericErrorResponse {

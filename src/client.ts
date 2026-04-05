@@ -135,7 +135,7 @@ export class GraphQLClient {
     const data = await this.query<{ connectUdpProxy: UdpProxyConnectionStatus }>(
       `
       mutation ConnectUdpProxy {
-        connectUdpProxy(input: { _placeholder: true }) {
+        connectUdpProxy {
           connected
           serverIp6
           serverClientPort
@@ -176,17 +176,17 @@ export class GraphQLClient {
 
   async sendActorUpdate(input: ActorUpdateRequestInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(Number(input.mapId)),
+      mapId: String(input.mapId),
       chunk: {
-        x: String(Number(input.chunk.x)),
-        y: String(Number(input.chunk.y)),
-        z: String(Number(input.chunk.z)),
+        x: String(input.chunk.x),
+        y: String(input.chunk.y),
+        z: String(input.chunk.z),
       },
       uuid: String(input.uuid),
       state: String(input.state),
       distance: input.distance ?? 8,
-      decayRate: input.decayRate ?? 1,
-      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
+      decayRate: input.decayRate ?? 0,
+      sequenceNumber: input.sequenceNumber ?? 0,
     };
 
     const data = await this.query<{ sendActorUpdate: boolean }>(
@@ -202,11 +202,11 @@ export class GraphQLClient {
 
   async sendVoxelUpdate(input: VoxelUpdateRequestInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(Number(input.mapId)),
+      mapId: String(input.mapId),
       chunk: {
-        x: String(Number(input.chunk.x)),
-        y: String(Number(input.chunk.y)),
-        z: String(Number(input.chunk.z)),
+        x: String(input.chunk.x),
+        y: String(input.chunk.y),
+        z: String(input.chunk.z),
       },
       uuid: String(input.uuid),
       voxel: input.voxel,
@@ -214,7 +214,7 @@ export class GraphQLClient {
       voxelState: String(input.voxelState),
       distance: input.distance ?? 8,
       decayRate: input.decayRate ?? 0,
-      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
+      sequenceNumber: input.sequenceNumber ?? 0,
     };
 
     const data = await this.query<{ sendVoxelUpdate: boolean }>(
@@ -230,17 +230,17 @@ export class GraphQLClient {
 
   async sendAudioPacket(input: ClientAudioPacketInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(Number(input.mapId)),
+      mapId: String(input.mapId),
       chunk: {
-        x: String(Number(input.chunk.x)),
-        y: String(Number(input.chunk.y)),
-        z: String(Number(input.chunk.z)),
+        x: String(input.chunk.x),
+        y: String(input.chunk.y),
+        z: String(input.chunk.z),
       },
       uuid: String(input.uuid),
       audioData: String(input.audioData),
       distance: input.distance ?? 1,
       decayRate: input.decayRate ?? 0,
-      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
+      sequenceNumber: input.sequenceNumber ?? 0,
     };
 
     const data = await this.query<{ sendAudioPacket: boolean }>(
@@ -256,17 +256,17 @@ export class GraphQLClient {
 
   async sendTextPacket(input: ClientTextPacketInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(Number(input.mapId)),
+      mapId: String(input.mapId),
       chunk: {
-        x: String(Number(input.chunk.x)),
-        y: String(Number(input.chunk.y)),
-        z: String(Number(input.chunk.z)),
+        x: String(input.chunk.x),
+        y: String(input.chunk.y),
+        z: String(input.chunk.z),
       },
       uuid: String(input.uuid),
       text: String(input.text),
       distance: input.distance ?? 1,
       decayRate: input.decayRate ?? 0,
-      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
+      sequenceNumber: input.sequenceNumber ?? 0,
     };
 
     const data = await this.query<{ sendTextPacket: boolean }>(
@@ -282,18 +282,18 @@ export class GraphQLClient {
 
   async sendClientEvent(input: ClientEventNotificationInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(Number(input.mapId)),
+      mapId: String(input.mapId),
       chunk: {
-        x: String(Number(input.chunk.x)),
-        y: String(Number(input.chunk.y)),
-        z: String(Number(input.chunk.z)),
+        x: String(input.chunk.x),
+        y: String(input.chunk.y),
+        z: String(input.chunk.z),
       },
       uuid: String(input.uuid),
       eventType: input.eventType,
       state: String(input.state),
       distance: input.distance ?? 8,
       decayRate: input.decayRate ?? 0,
-      ...(input.sequenceNumber != null && { sequenceNumber: input.sequenceNumber }),
+      sequenceNumber: input.sequenceNumber ?? 0,
     };
 
     const data = await this.query<{ sendClientEvent: boolean }>(
