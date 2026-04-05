@@ -1,8 +1,9 @@
 # CrowdyJS SDK
 
 Client SDK for the Crowded Kingdoms GraphQL API with UDP proxy support.
-Handles authentication, real-time subscriptions, and all game-server
-communication through a single `CrowdyClient` instance.
+Handles authentication, real-time subscriptions, and all repilcation-server
+communication through a single `CrowdyClient` instance. Users should still 
+directly access the CK GraphQL API for other functions beyond replication.
 
 ## Installation
 
@@ -95,11 +96,25 @@ When all handlers are removed the WebSocket is closed automatically.
 
 Before other clients can see you, send an initial actor update so the game
 server knows which chunk you occupy. Use a minimal base64 payload (the
-server requires a non-empty `state`):
+server requires a non-empty `state`).
+
+#### Generating a UUID
+
+Every client must create its own UUID as a **random 32-byte UTF-8 string**.
+This ensures each client produces a globally unique identifier without
+relying on a central registry.
 
 ```javascript
-const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee'; // exactly 32 bytes UTF-8
+// Node.js
+const MY_UUID = crypto.randomBytes(32).toString('hex').slice(0, 32);
 
+// Browser
+const MY_UUID = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+  .map((b) => b.toString(16).padStart(2, '0'))
+  .join('');
+```
+
+```javascript
 await client.sendActorUpdate({
   mapId: 0,
   chunk: { x: 0, y: 0, z: 0 },
@@ -110,7 +125,7 @@ await client.sendActorUpdate({
 });
 ```
 
-Every client in the same chunk must do this. After registration, the game
+Every actor in every client must do this. After registration, the game
 server fans out subsequent updates to all registered clients in range.
 
 ### 4. Send Actor Updates
@@ -160,7 +175,7 @@ All spatial notification types share a uniform header:
 | `chunkZ` | `string` | Chunk Z coordinate |
 | `distance` | `number` | Replication distance (0-8) |
 | `decayRate` | `number` | Delivery decay (0-5) |
-| `uuid` | `string` | 32-byte sender UUID |
+| `uuid` | `string` | Random 32-byte UTF-8 sender UUID |
 | `sequenceNumber` | `number` | uint8 (0-255), wraps |
 | `epochMillis` | `string` | Server UTC timestamp in ms |
 
@@ -191,7 +206,7 @@ All mutation inputs share these fields:
 |-------|------|----------|---------|-------------|
 | `mapId` | `number` | yes | -- | Map / chunk-W coordinate |
 | `chunk` | `{ x, y, z }` | yes | -- | Chunk coordinates (numbers) |
-| `uuid` | `string` | yes | -- | Your 32-byte UUID |
+| `uuid` | `string` | yes | -- | Random 32-byte UTF-8 string (see [Generating a UUID](#generating-a-uuid)) |
 | `distance` | `number` | no | `8` | Replication range (0-8 chunks, Chebyshev) |
 | `decayRate` | `number` | no | `0` | Delivery decay (see table below) |
 | `sequenceNumber` | `number` | no | `0` | uint8 (0-255) for correlation |
@@ -253,7 +268,7 @@ const client = new CrowdyClient({
   wsEndpoint: 'wss://your-server.com/graphql',
 });
 
-const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
+const MY_UUID = crypto.randomBytes(32).toString('hex').slice(0, 32);
 
 // 1. Login
 await client.login('user@example.com', 'password');
