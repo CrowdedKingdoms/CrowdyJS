@@ -2,7 +2,12 @@
  * CrowdyJS SDK - Client SDK for Crowded Kingdoms GraphQL API
  */
 
-export const VERSION = '1.0.3';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require('../package.json') as { version: string };
+
+export { VERSION };
 console.log(`CrowdyJS v${VERSION}`);
 
 export { CrowdyClient } from './crowdy-client.js';
