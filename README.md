@@ -1,6 +1,8 @@
 # CrowdyJS SDK
 
-Client SDK for Crowded Kingdoms GraphQL API with UDP proxy support.
+Client SDK for the Crowded Kingdoms GraphQL API with UDP proxy support.
+Handles authentication, real-time subscriptions, and all game-server
+communication through a single `CrowdyClient` instance.
 
 ## Installation
 
@@ -8,74 +10,120 @@ Client SDK for Crowded Kingdoms GraphQL API with UDP proxy support.
 npm install @crowdedkingdomstudios/crowdyjs
 ```
 
-For local development:
+### Node.js
+
+The SDK uses the browser-native `WebSocket` API. In Node.js you need a
+polyfill such as the `ws` package:
+
 ```bash
-npm link @crowdedkingdomstudios/crowdyjs
+npm install ws
 ```
 
-## Usage
+```javascript
+import WebSocket from 'ws';
+globalThis.WebSocket = WebSocket;
+```
 
-### Basic Setup
+Place this **before** importing `CrowdyClient`.
+
+### Browser
+
+No extra setup needed -- the SDK uses the built-in `WebSocket`.
+
+## Quick Start
 
 ```javascript
 import { CrowdyClient } from '@crowdedkingdomstudios/crowdyjs';
 
 const client = new CrowdyClient({
-  graphqlEndpoint: 'http://localhost:3000/graphql',
-  wsEndpoint: 'ws://localhost:3000/graphql',
+  graphqlEndpoint: 'https://your-server.com/graphql',
+  wsEndpoint: 'wss://your-server.com/graphql',
 });
 ```
 
-### Authentication
+If omitted, both endpoints default to `localhost:3000/graphql`.
 
-```javascript
-const authResponse = await client.login(email, password);
-console.log('Logged in as:', authResponse.user.email);
+## Connection Lifecycle
 
-// Or register a new account
-const authResponse = await client.register(email, password, gamertag);
+The SDK follows a four-step lifecycle that matches the server protocol:
+
+```
+1. Login         -->  obtain a game token
+2. Subscribe     -->  auto-opens UDP proxy session
+3. Register      -->  tell the game server your chunk position
+4. Send updates  -->  replicated to other clients in range
 ```
 
-### Subscribe to Notifications
-
-Subscribing to any notification type automatically opens a UDP proxy session
-to the game server -- no explicit `connectUdpProxy()` call is needed.
+### 1. Login
 
 ```javascript
-const unsubActorUpdate = client.onActorUpdate((notification) => {
-  console.log('Actor update from:', notification.uuid);
-  console.log('  state:', notification.state);
-  console.log('  sequenceNumber:', notification.sequenceNumber);
-  console.log('  epochMillis:', notification.epochMillis);
-});
+const auth = await client.login('user@example.com', 'password');
+// auth.token      -- 64-char hex game token (set automatically)
+// auth.user.email -- logged-in user
+```
 
-const unsubError = client.onGenericError((error) => {
-  console.error('Error:', error.errorCode);
+Or register a new account:
+
+```javascript
+const auth = await client.register('user@example.com', 'password', 'MyGamertag');
+```
+
+### 2. Subscribe to Notifications
+
+Register one or more notification handlers. The first handler automatically
+opens a WebSocket subscription and a UDP proxy session to the game server --
+no explicit `connectUdpProxy()` call is needed.
+
+```javascript
+const unsub = client.onActorUpdate((notification) => {
+  console.log('Actor:', notification.uuid);
+  console.log('State:', notification.state);
+  console.log('Chunk:', notification.chunkX, notification.chunkY, notification.chunkZ);
+  console.log('Time:', notification.epochMillis);
 });
 ```
 
-### Register in a Chunk
-
-Before other clients can receive your updates, you must send at least one
-actor update so the game server knows your chunk position. Use a minimal
-base64 payload (the server requires a non-empty `state`):
+Handlers are unsubscribed by calling the returned function:
 
 ```javascript
-const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee'; // 32 bytes UTF-8
+unsub(); // stop receiving ActorUpdateNotification
+```
+
+When all handlers are removed the WebSocket is closed automatically.
+
+### 3. Register in a Chunk
+
+Before other clients can see you, send an initial actor update so the game
+server knows which chunk you occupy. Use a minimal base64 payload (the
+server requires a non-empty `state`):
+
+```javascript
+const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee'; // exactly 32 bytes UTF-8
 
 await client.sendActorUpdate({
   mapId: 0,
   chunk: { x: 0, y: 0, z: 0 },
   distance: 8,
   uuid: MY_UUID,
-  state: 'AA==',              // minimal base64 payload for registration
+  state: 'AA==',            // minimal base64 payload for registration
   sequenceNumber: 1,
 });
 ```
 
-### Send Actor Updates
+Every client in the same chunk must do this. After registration, the game
+server fans out subsequent updates to all registered clients in range.
+
+### 4. Send Actor Updates
 
 ```javascript
+// Build your binary state and base64-encode it
+const stateBuffer = new ArrayBuffer(96);
+const view = new DataView(stateBuffer);
+view.setFloat32(0, posX, true);
+view.setFloat32(4, posY, true);
+view.setFloat32(8, posZ, true);
+// ... fill remaining fields
+
 const base64State = btoa(String.fromCharCode(...new Uint8Array(stateBuffer)));
 
 await client.sendActorUpdate({
@@ -89,35 +137,120 @@ await client.sendActorUpdate({
 });
 ```
 
-### Type-Specific Subscription Handlers
-
-The SDK provides type-specific handlers so you don't need to switch on `__typename`.
-All spatial notifications include the uniform header fields: `mapId`, `chunkX`,
-`chunkY`, `chunkZ`, `distance`, `decayRate`, `uuid`, `sequenceNumber`, `epochMillis`.
+### 5. Disconnect
 
 ```javascript
-const unsub1 = client.onActorUpdate((n) => { /* ActorUpdateNotification */ });
-const unsub2 = client.onActorUpdateResponse((n) => { /* ActorUpdateResponse */ });
-const unsub3 = client.onVoxelUpdate((n) => { /* VoxelUpdateNotification */ });
-const unsub4 = client.onVoxelUpdateResponse((n) => { /* VoxelUpdateResponse */ });
-const unsub5 = client.onClientAudio((n) => { /* ClientAudioNotification */ });
-const unsub6 = client.onClientText((n) => { /* ClientTextNotification */ });
-const unsub7 = client.onClientEvent((n) => { /* ClientEventNotification */ });
-const unsub8 = client.onServerEvent((n) => { /* ServerEventNotification */ });
-const unsub9 = client.onGenericError((e) => { /* GenericErrorResponse */ });
-
-// Unsubscribe when done
-unsub1();
+await client.disconnectUdpProxy(); // release the UDP session
+client.close();                    // close WebSocket + clear state
 ```
 
-### Complete Example
+Unsubscribing from notifications stops delivery but does **not** release
+the UDP session. Call `disconnectUdpProxy()` explicitly, or the server
+will release it after 30 seconds of inactivity.
+
+## Subscription Handlers
+
+All spatial notification types share a uniform header:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mapId` | `string` | Map / chunk-W coordinate |
+| `chunkX` | `string` | Chunk X coordinate |
+| `chunkY` | `string` | Chunk Y coordinate |
+| `chunkZ` | `string` | Chunk Z coordinate |
+| `distance` | `number` | Replication distance (0-8) |
+| `decayRate` | `number` | Delivery decay (0-5) |
+| `uuid` | `string` | 32-byte sender UUID |
+| `sequenceNumber` | `number` | uint8 (0-255), wraps |
+| `epochMillis` | `string` | Server UTC timestamp in ms |
+
+Each handler receives a fully-typed notification object:
 
 ```javascript
+client.onActorUpdate((n) => { /* n: ActorUpdateNotification -- adds: state */ });
+client.onActorUpdateResponse((n) => { /* n: ActorUpdateResponse */ });
+client.onVoxelUpdate((n) => { /* n: VoxelUpdateNotification -- adds: voxelX/Y/Z, voxelType, voxelState */ });
+client.onVoxelUpdateResponse((n) => { /* n: VoxelUpdateResponse */ });
+client.onClientAudio((n) => { /* n: ClientAudioNotification -- adds: audioData */ });
+client.onClientText((n) => { /* n: ClientTextNotification -- adds: text */ });
+client.onClientEvent((n) => { /* n: ClientEventNotification -- adds: eventType, state */ });
+client.onServerEvent((n) => { /* n: ServerEventNotification -- adds: eventType, state */ });
+client.onGenericError((e) => { /* e: GenericErrorResponse -- sequenceNumber, errorCode only */ });
+```
+
+`GenericErrorResponse` is the only type without the spatial header; it has
+just `sequenceNumber` and `errorCode`.
+
+## Input Parameters
+
+### Common fields
+
+All mutation inputs share these fields:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `mapId` | `number` | yes | -- | Map / chunk-W coordinate |
+| `chunk` | `{ x, y, z }` | yes | -- | Chunk coordinates (numbers) |
+| `uuid` | `string` | yes | -- | Your 32-byte UUID |
+| `distance` | `number` | no | `8` | Replication range (0-8 chunks, Chebyshev) |
+| `decayRate` | `number` | no | `0` | Delivery decay (see table below) |
+| `sequenceNumber` | `number` | no | `0` | uint8 (0-255) for correlation |
+
+### `decayRate` values
+
+| Value | Name | Behavior |
+|-------|------|----------|
+| 0 | None | All clients within `distance` receive every message |
+| 1 | Exponential | Each ring receives half the messages of the previous ring |
+| 2 | Linear 50% | Furthest ring receives 50% of messages |
+| 3 | Linear 25% | Furthest ring receives 25% of messages |
+| 4 | Linear 10% | Furthest ring receives 10% of messages |
+| 5 | Linear 5% | Furthest ring receives 5% of messages |
+
+### `sendActorUpdate`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | `string` | Base64-encoded binary state (must be non-empty) |
+
+### `sendVoxelUpdate`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `voxel` | `{ x, y, z }` | Voxel position within the chunk |
+| `voxelType` | `number` | Voxel type ID |
+| `voxelState` | `string` | Base64-encoded voxel state |
+
+### `sendAudioPacket`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `audioData` | `string` | Base64-encoded compressed audio |
+
+### `sendTextPacket`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | `string` | Chat message text |
+
+### `sendClientEvent`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `eventType` | `number` | Custom event type ID |
+| `state` | `string` | Base64-encoded event state |
+
+## Complete Example
+
+```javascript
+import WebSocket from 'ws';
+globalThis.WebSocket = WebSocket;
+
 import { CrowdyClient } from '@crowdedkingdomstudios/crowdyjs';
 
 const client = new CrowdyClient({
-  graphqlEndpoint: 'http://localhost:3000/graphql',
-  wsEndpoint: 'ws://localhost:3000/graphql',
+  graphqlEndpoint: 'https://your-server.com/graphql',
+  wsEndpoint: 'wss://your-server.com/graphql',
 });
 
 const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
@@ -126,8 +259,13 @@ const MY_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
 await client.login('user@example.com', 'password');
 
 // 2. Subscribe (auto-opens UDP proxy session)
-const unsubscribe = client.onActorUpdate((notification) => {
-  console.log('Actor update:', notification.uuid, notification.epochMillis);
+const unsubActors = client.onActorUpdate((n) => {
+  console.log(`Actor ${n.uuid} at chunk (${n.chunkX},${n.chunkY},${n.chunkZ})`);
+  console.log(`  state=${n.state} seq=${n.sequenceNumber} t=${n.epochMillis}`);
+});
+
+const unsubErrors = client.onGenericError((e) => {
+  console.error(`Error: ${e.errorCode} (seq ${e.sequenceNumber})`);
 });
 
 // 3. Register in chunk
@@ -140,78 +278,99 @@ await client.sendActorUpdate({
   sequenceNumber: 1,
 });
 
-// 4. Send updates
+// 4. Send updates in a loop
 let seq = 2;
-setInterval(async () => {
+const interval = setInterval(async () => {
+  const buf = new Uint8Array(96);
+  crypto.getRandomValues(buf);
+  const state = btoa(String.fromCharCode(...buf));
+
   await client.sendActorUpdate({
     mapId: 0,
     chunk: { x: 0, y: 0, z: 0 },
     distance: 8,
     uuid: MY_UUID,
-    state: 'base64-state-data',
+    state,
     sequenceNumber: seq++ % 256,
   });
 }, 100);
 
-// Cleanup
-unsubscribe();
+// 5. Cleanup
+clearInterval(interval);
+unsubActors();
+unsubErrors();
 await client.disconnectUdpProxy();
 client.close();
 ```
 
 ## API Reference
 
-### CrowdyClient
-
-Main client class for interacting with the API.
-
-#### Constructor
+### Constructor
 
 ```typescript
 new CrowdyClient(config?: CrowdyClientConfig)
 ```
 
-**Config options:**
-- `graphqlEndpoint?: string` - GraphQL HTTP endpoint (default: `http://localhost:3000/graphql`)
-- `wsEndpoint?: string` - WebSocket endpoint (default: `ws://localhost:3000/graphql`)
-- `timeout?: number` - Request timeout in ms (default: `60000`)
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `graphqlEndpoint` | `string` | `http://localhost:3000/graphql` | HTTP endpoint for mutations/queries |
+| `wsEndpoint` | `string` | `ws://localhost:3000/graphql` | WebSocket endpoint for subscriptions |
+| `timeout` | `number` | `60000` | HTTP request timeout in ms |
 
-#### Methods
+### Authentication
 
-**Authentication:**
-- `login(email: string, password: string): Promise<AuthResponse>`
-- `register(email: string, password: string, gamertag?: string): Promise<AuthResponse>`
-- `getAuthToken(): string | null`
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `login(email, password)` | `Promise<AuthResponse>` | Login and store the game token |
+| `register(email, password, gamertag?)` | `Promise<AuthResponse>` | Register and store the game token |
+| `getAuthToken()` | `string \| null` | Get the current game token |
 
-**UDP Proxy:**
-- `connectUdpProxy(): Promise<UdpProxyConnectionStatus>` -- optional; subscriptions and mutations auto-open the session
-- `disconnectUdpProxy(): Promise<boolean>`
-- `getConnectionStatus(): Promise<UdpProxyConnectionStatus>`
+### UDP Proxy
 
-**Sending Updates:**
-- `sendActorUpdate(input: ActorUpdateRequestInput): Promise<boolean>`
-- `sendVoxelUpdate(input: VoxelUpdateRequestInput): Promise<boolean>`
-- `sendAudioPacket(input: ClientAudioPacketInput): Promise<boolean>`
-- `sendTextPacket(input: ClientTextPacketInput): Promise<boolean>`
-- `sendClientEvent(input: ClientEventNotificationInput): Promise<boolean>`
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `connectUdpProxy()` | `Promise<UdpProxyConnectionStatus>` | Explicitly open a UDP session (optional) |
+| `disconnectUdpProxy()` | `Promise<boolean>` | Release the UDP session |
+| `getConnectionStatus()` | `Promise<UdpProxyConnectionStatus>` | Check if a UDP session is active |
 
-**Subscriptions:**
-- `onActorUpdate(handler): UnsubscribeFn`
-- `onActorUpdateResponse(handler): UnsubscribeFn`
-- `onVoxelUpdate(handler): UnsubscribeFn`
-- `onVoxelUpdateResponse(handler): UnsubscribeFn`
-- `onClientAudio(handler): UnsubscribeFn`
-- `onClientText(handler): UnsubscribeFn`
-- `onClientEvent(handler): UnsubscribeFn`
-- `onServerEvent(handler): UnsubscribeFn`
-- `onGenericError(handler): UnsubscribeFn`
+### Mutations
 
-**Cleanup:**
-- `close(): void` - Closes all subscriptions and cleans up
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `sendActorUpdate(input)` | `Promise<boolean>` | Send an actor state update |
+| `sendVoxelUpdate(input)` | `Promise<boolean>` | Modify a voxel in a chunk |
+| `sendAudioPacket(input)` | `Promise<boolean>` | Send voice audio data |
+| `sendTextPacket(input)` | `Promise<boolean>` | Send chat text |
+| `sendClientEvent(input)` | `Promise<boolean>` | Send a custom event |
 
-## TypeScript Support
+### Subscriptions
 
-The SDK is written in TypeScript and includes full type definitions. All notification types are properly typed, so you get full IDE autocomplete and type safety.
+| Method | Handler receives | Description |
+|--------|-----------------|-------------|
+| `onActorUpdate(handler)` | `ActorUpdateNotification` | Another client's actor state |
+| `onActorUpdateResponse(handler)` | `ActorUpdateResponse` | Server ack for your actor update |
+| `onVoxelUpdate(handler)` | `VoxelUpdateNotification` | A voxel was modified |
+| `onVoxelUpdateResponse(handler)` | `VoxelUpdateResponse` | Server ack for your voxel update |
+| `onClientAudio(handler)` | `ClientAudioNotification` | Voice audio from another client |
+| `onClientText(handler)` | `ClientTextNotification` | Chat text from another client |
+| `onClientEvent(handler)` | `ClientEventNotification` | Custom event from another client |
+| `onServerEvent(handler)` | `ServerEventNotification` | Event from the game server |
+| `onGenericError(handler)` | `GenericErrorResponse` | Error from the server |
+
+All subscription methods return an `UnsubscribeFn` -- call it to remove
+the handler.
+
+### Cleanup
+
+| Method | Description |
+|--------|-------------|
+| `close()` | Close the WebSocket, remove all handlers, clear auth state |
+
+## TypeScript
+
+The SDK is written in TypeScript and ships type declarations. All
+notification interfaces, input types, and handler signatures are fully
+typed for IDE autocomplete and compile-time safety.
 
 ## License
 
