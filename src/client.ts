@@ -176,7 +176,7 @@ export class GraphQLClient {
 
   async sendActorUpdate(input: ActorUpdateRequestInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(input.mapId),
+      appId: String(input.appId),
       chunk: {
         x: String(input.chunk.x),
         y: String(input.chunk.y),
@@ -202,7 +202,7 @@ export class GraphQLClient {
 
   async sendVoxelUpdate(input: VoxelUpdateRequestInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(input.mapId),
+      appId: String(input.appId),
       chunk: {
         x: String(input.chunk.x),
         y: String(input.chunk.y),
@@ -230,7 +230,7 @@ export class GraphQLClient {
 
   async sendAudioPacket(input: ClientAudioPacketInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(input.mapId),
+      appId: String(input.appId),
       chunk: {
         x: String(input.chunk.x),
         y: String(input.chunk.y),
@@ -256,7 +256,7 @@ export class GraphQLClient {
 
   async sendTextPacket(input: ClientTextPacketInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(input.mapId),
+      appId: String(input.appId),
       chunk: {
         x: String(input.chunk.x),
         y: String(input.chunk.y),
@@ -282,7 +282,7 @@ export class GraphQLClient {
 
   async sendClientEvent(input: ClientEventNotificationInput): Promise<boolean> {
     const normalizedInput = {
-      mapId: String(input.mapId),
+      appId: String(input.appId),
       chunk: {
         x: String(input.chunk.x),
         y: String(input.chunk.y),

@@ -34,7 +34,7 @@ if (!email1 || !pass1 || !email2 || !pass2) {
 
 console.log(`Endpoint:    ${ENDPOINT}`);
 console.log(`WS Endpoint: ${WS_ENDPOINT}`);
-const MAP_ID = 0;
+const APP_ID = 0;
 const CHUNK = { x: 0, y: 0, z: 0 };
 const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
 const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
@@ -126,7 +126,7 @@ async function run() {
   console.log('\n--- Register actors in chunk ---');
   try {
     const regA = await clientA.sendActorUpdate({
-      mapId: MAP_ID,
+      appId: APP_ID,
       chunk: CHUNK,
       distance: 8,
       uuid: TEST_UUID_A,
@@ -142,7 +142,7 @@ async function run() {
 
   try {
     const regB = await clientB.sendActorUpdate({
-      mapId: MAP_ID,
+      appId: APP_ID,
       chunk: CHUNK,
       distance: 8,
       uuid: TEST_UUID_B,
@@ -165,7 +165,7 @@ async function run() {
   for (let i = 0; i < SEND_COUNT; i++) {
     try {
       const result = await clientA.sendActorUpdate({
-        mapId: MAP_ID,
+        appId: APP_ID,
         chunk: CHUNK,
         distance: 8,
         uuid: TEST_UUID_A,
@@ -204,7 +204,7 @@ async function run() {
     const sample = updatesFromA[0];
     console.log('\n  Sample notification (from A, received by B):');
     console.log(`    __typename:      ${sample.__typename}`);
-    console.log(`    mapId:           ${sample.mapId}`);
+    console.log(`    appId:           ${sample.appId}`);
     console.log(`    uuid:            ${sample.uuid}`);
     console.log(`    chunkX:          ${sample.chunkX}`);
     console.log(`    distance:        ${sample.distance}`);

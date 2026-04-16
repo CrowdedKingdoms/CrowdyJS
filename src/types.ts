@@ -39,9 +39,9 @@ export enum UdpErrorCode {
   BAD_PASSWORD = 'BAD_PASSWORD',
   EMAIL_ALREADY_EXISTS = 'EMAIL_ALREADY_EXISTS',
   INVALID_TOKEN = 'INVALID_TOKEN',
-  MAP_NOT_FOUND = 'MAP_NOT_FOUND',
+  APP_NOT_FOUND = 'APP_NOT_FOUND',
   UNAUTHORIZED = 'UNAUTHORIZED',
-  MAP_NOT_LOADED = 'MAP_NOT_LOADED',
+  APP_NOT_LOADED = 'APP_NOT_LOADED',
   EMAIL_TOO_SHORT = 'EMAIL_TOO_SHORT',
   EMAIL_TOO_LONG = 'EMAIL_TOO_LONG',
   PASSWORD_TOO_SHORT = 'PASSWORD_TOO_SHORT',
@@ -51,7 +51,7 @@ export enum UdpErrorCode {
   INVALID_REQUEST = 'INVALID_REQUEST',
   EMAIL_INVALID = 'EMAIL_INVALID',
   INVALID_TOKEN_LENGTH = 'INVALID_TOKEN_LENGTH',
-  INVALID_MAP_ID = 'INVALID_MAP_ID',
+  INVALID_APP_ID = 'INVALID_APP_ID',
   CHUNK_NOT_FOUND = 'CHUNK_NOT_FOUND',
   USER_NOT_AUTHENTICATED = 'USER_NOT_AUTHENTICATED',
   INVALID_STATE_DATA = 'INVALID_STATE_DATA',
@@ -67,7 +67,7 @@ export enum UdpErrorCode {
 // User types
 export interface User {
   userId: BigInt;
-  email: string;
+  email?: string;
   gamertag?: string;
   disambiguation?: string;
   state?: string;
@@ -75,6 +75,9 @@ export interface User {
   createdAt: string;
   grantEarlyAccess: boolean;
   grantEarlyAccessOverride: boolean;
+  orgId?: BigInt;
+  externalId?: string;
+  userType: string;
 }
 
 export interface AuthResponse {
@@ -93,7 +96,7 @@ export interface UdpProxyConnectionStatus {
 
 // Actor Update Request
 export interface ActorUpdateRequestInput {
-  mapId: number;
+  appId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   state: string;
@@ -104,7 +107,7 @@ export interface ActorUpdateRequestInput {
 
 // Voxel Update Request
 export interface VoxelUpdateRequestInput {
-  mapId: number;
+  appId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   voxel: VoxelCoordinatesInput;
@@ -117,7 +120,7 @@ export interface VoxelUpdateRequestInput {
 
 // Client Audio Packet
 export interface ClientAudioPacketInput {
-  mapId: number;
+  appId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   audioData: string;
@@ -128,7 +131,7 @@ export interface ClientAudioPacketInput {
 
 // Client Text Packet
 export interface ClientTextPacketInput {
-  mapId: number;
+  appId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   text: string;
@@ -139,7 +142,7 @@ export interface ClientTextPacketInput {
 
 // Client Event Notification
 export interface ClientEventNotificationInput {
-  mapId: number;
+  appId: number;
   chunk: ChunkCoordinatesInput;
   uuid: string;
   eventType: number;
@@ -152,12 +155,12 @@ export interface ClientEventNotificationInput {
 // Notification Types (from GraphQL union)
 //
 // All spatial types share a uniform header:
-//   mapId, chunkX/Y/Z, distance, decayRate, uuid, sequenceNumber, epochMillis
+//   appId, chunkX/Y/Z, distance, decayRate, uuid, sequenceNumber, epochMillis
 // Only GenericErrorResponse has a minimal 3-field format.
 
 export interface ActorUpdateNotification {
   __typename: 'ActorUpdateNotification';
-  mapId: BigInt;
+  appId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
@@ -171,7 +174,7 @@ export interface ActorUpdateNotification {
 
 export interface ActorUpdateResponse {
   __typename: 'ActorUpdateResponse';
-  mapId: BigInt;
+  appId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
@@ -184,7 +187,7 @@ export interface ActorUpdateResponse {
 
 export interface VoxelUpdateNotification {
   __typename: 'VoxelUpdateNotification';
-  mapId: BigInt;
+  appId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
@@ -202,7 +205,7 @@ export interface VoxelUpdateNotification {
 
 export interface VoxelUpdateResponse {
   __typename: 'VoxelUpdateResponse';
-  mapId: BigInt;
+  appId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
@@ -215,7 +218,7 @@ export interface VoxelUpdateResponse {
 
 export interface ClientAudioNotification {
   __typename: 'ClientAudioNotification';
-  mapId: BigInt;
+  appId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
@@ -229,7 +232,7 @@ export interface ClientAudioNotification {
 
 export interface ClientTextNotification {
   __typename: 'ClientTextNotification';
-  mapId: BigInt;
+  appId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
@@ -243,7 +246,7 @@ export interface ClientTextNotification {
 
 export interface ClientEventNotification {
   __typename: 'ClientEventNotification';
-  mapId: BigInt;
+  appId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;
@@ -258,7 +261,7 @@ export interface ClientEventNotification {
 
 export interface ServerEventNotification {
   __typename: 'ServerEventNotification';
-  mapId: BigInt;
+  appId: BigInt;
   chunkX: BigInt;
   chunkY: BigInt;
   chunkZ: BigInt;

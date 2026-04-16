@@ -116,7 +116,7 @@ const MY_UUID = Array.from(crypto.getRandomValues(new Uint8Array(16)))
 
 ```javascript
 await client.sendActorUpdate({
-  mapId: 0,
+  appId: 0,
   chunk: { x: 0, y: 0, z: 0 },
   distance: 8,
   uuid: MY_UUID,
@@ -142,7 +142,7 @@ view.setFloat32(8, posZ, true);
 const base64State = btoa(String.fromCharCode(...new Uint8Array(stateBuffer)));
 
 await client.sendActorUpdate({
-  mapId: 0,
+  appId: 0,
   chunk: { x: 0, y: 0, z: 0 },
   distance: 8,
   decayRate: 0,
@@ -169,7 +169,7 @@ All spatial notification types share a uniform header:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `mapId` | `string` | Map / chunk-W coordinate |
+| `appId` | `string` | App ID (tenant / world identifier) |
 | `chunkX` | `string` | Chunk X coordinate |
 | `chunkY` | `string` | Chunk Y coordinate |
 | `chunkZ` | `string` | Chunk Z coordinate |
@@ -204,7 +204,7 @@ All mutation inputs share these fields:
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `mapId` | `number` | yes | -- | Map / chunk-W coordinate |
+| `appId` | `number` | yes | -- | App ID (tenant / world identifier) |
 | `chunk` | `{ x, y, z }` | yes | -- | Chunk coordinates (numbers) |
 | `uuid` | `string` | yes | -- | Random 32-byte UTF-8 string (see [Generating a UUID](#generating-a-uuid)) |
 | `distance` | `number` | no | `8` | Replication range (0-8 chunks, Chebyshev) |
@@ -285,7 +285,7 @@ const unsubErrors = client.onGenericError((e) => {
 
 // 3. Register in chunk
 await client.sendActorUpdate({
-  mapId: 0,
+  appId: 0,
   chunk: { x: 0, y: 0, z: 0 },
   distance: 8,
   uuid: MY_UUID,
@@ -301,7 +301,7 @@ const interval = setInterval(async () => {
   const state = btoa(String.fromCharCode(...buf));
 
   await client.sendActorUpdate({
-    mapId: 0,
+    appId: 0,
     chunk: { x: 0, y: 0, z: 0 },
     distance: 8,
     uuid: MY_UUID,

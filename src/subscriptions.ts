@@ -107,15 +107,15 @@ export class SubscriptionManager {
               query: `subscription {
                 udpNotifications {
                   __typename
-                  ... on ActorUpdateNotification { mapId chunkX chunkY chunkZ distance decayRate uuid state sequenceNumber epochMillis }
-                  ... on VoxelUpdateNotification { mapId chunkX chunkY chunkZ distance decayRate uuid voxelX voxelY voxelZ voxelType voxelState sequenceNumber epochMillis }
+                  ... on ActorUpdateNotification { appId chunkX chunkY chunkZ distance decayRate uuid state sequenceNumber epochMillis }
+                  ... on VoxelUpdateNotification { appId chunkX chunkY chunkZ distance decayRate uuid voxelX voxelY voxelZ voxelType voxelState sequenceNumber epochMillis }
                   ... on GenericErrorResponse { sequenceNumber errorCode }
-                  ... on ActorUpdateResponse { mapId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
-                  ... on VoxelUpdateResponse { mapId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
-                  ... on ClientAudioNotification { mapId chunkX chunkY chunkZ distance decayRate uuid audioData sequenceNumber epochMillis }
-                  ... on ClientTextNotification { mapId chunkX chunkY chunkZ distance decayRate uuid text sequenceNumber epochMillis }
-                  ... on ClientEventNotification { mapId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
-                  ... on ServerEventNotification { mapId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
+                  ... on ActorUpdateResponse { appId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
+                  ... on VoxelUpdateResponse { appId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
+                  ... on ClientAudioNotification { appId chunkX chunkY chunkZ distance decayRate uuid audioData sequenceNumber epochMillis }
+                  ... on ClientTextNotification { appId chunkX chunkY chunkZ distance decayRate uuid text sequenceNumber epochMillis }
+                  ... on ClientEventNotification { appId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
+                  ... on ServerEventNotification { appId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
                 }
               }`,
             },
