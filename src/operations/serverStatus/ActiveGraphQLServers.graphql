@@ -1,0 +1,10 @@
+query ActiveGraphQLServers {
+  activeGraphQLServers {
+    graphqlServerId
+    ip4
+    ip6
+    status
+    createdAt
+    updatedAt
+  }
+}

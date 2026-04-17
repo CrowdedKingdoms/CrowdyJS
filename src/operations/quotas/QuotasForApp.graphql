@@ -1,0 +1,14 @@
+query QuotasForApp($appId: BigInt!) {
+  quotasForApp(appId: $appId) {
+    quotaId
+    orgId
+    appId
+    tierId
+    metric
+    limitValue
+    period
+    actionOnExceed
+    createdAt
+    updatedAt
+  }
+}

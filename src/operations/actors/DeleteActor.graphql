@@ -1,0 +1,7 @@
+mutation DeleteActor($uuid: String!) {
+  deleteActor(uuid: $uuid) {
+    uuid
+    appId
+    userId
+  }
+}

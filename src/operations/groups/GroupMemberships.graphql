@@ -1,0 +1,10 @@
+query GroupMemberships($groupId: BigInt!) {
+  groupMemberships(groupId: $groupId) {
+    groupMembershipId
+    groupId
+    userId
+    memberType
+    createdBy
+    createdAt
+  }
+}

@@ -1,0 +1,16 @@
+mutation UpdateChunkLods($input: UpdateChunkLodsInput!) {
+  updateChunkLods(input: $input) {
+    chunkId
+    appId
+    coordinates {
+      x
+      y
+      z
+    }
+    lods {
+      level
+      data
+    }
+    updatedAt
+  }
+}

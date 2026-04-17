@@ -1,0 +1,19 @@
+mutation Login($input: LoginUserInput!) {
+  login(loginUserInput: $input) {
+    token
+    gameTokenId
+    user {
+      userId
+      email
+      gamertag
+      disambiguation
+      isConfirmed
+      createdAt
+      grantEarlyAccess
+      grantEarlyAccessOverride
+      orgId
+      externalId
+      userType
+    }
+  }
+}

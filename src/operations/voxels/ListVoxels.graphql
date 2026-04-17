@@ -1,0 +1,20 @@
+query ListVoxels($input: ListVoxelsInput!) {
+  listVoxels(input: $input) {
+    voxelUpdateId
+    appId
+    coordinates {
+      x
+      y
+      z
+    }
+    location {
+      x
+      y
+      z
+    }
+    voxelType
+    state
+    createdBy
+    createdAt
+  }
+}

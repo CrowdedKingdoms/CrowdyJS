@@ -1,0 +1,15 @@
+query Users {
+  users {
+    userId
+    email
+    gamertag
+    disambiguation
+    isConfirmed
+    createdAt
+    grantEarlyAccess
+    grantEarlyAccessOverride
+    orgId
+    externalId
+    userType
+  }
+}

@@ -1,0 +1,14 @@
+query MyAppAccess($appId: BigInt!) {
+  myAppAccess(appId: $appId) {
+    appUserAccessId
+    appId
+    userId
+    tierId
+    status
+    grantedBy
+    subscriptionId
+    expiresAt
+    createdAt
+    updatedAt
+  }
+}

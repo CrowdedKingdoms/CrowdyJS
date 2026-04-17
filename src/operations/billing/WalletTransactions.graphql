@@ -1,0 +1,14 @@
+query WalletTransactions($orgId: BigInt!, $limit: Int, $offset: Int) {
+  walletTransactions(orgId: $orgId, limit: $limit, offset: $offset) {
+    transactionId
+    walletId
+    orgId
+    amountCents
+    balanceAfter
+    transactionType
+    description
+    referenceId
+    appId
+    createdAt
+  }
+}

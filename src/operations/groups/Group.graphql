@@ -1,0 +1,8 @@
+query Group($id: BigInt!) {
+  group(id: $id) {
+    groupId
+    name
+    createdBy
+    createdAt
+  }
+}

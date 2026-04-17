@@ -1,0 +1,8 @@
+mutation UpdateGamertag($input: UpdateGamertagInput!) {
+  updateGamertag(input: $input) {
+    userId
+    gamertag
+    disambiguation
+    userType
+  }
+}

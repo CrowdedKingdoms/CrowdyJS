@@ -1,0 +1,10 @@
+query OrgMembers($orgId: BigInt!) {
+  orgMembers(orgId: $orgId) {
+    orgMemberId
+    orgId
+    userId
+    status
+    createdAt
+    updatedAt
+  }
+}

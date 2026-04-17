@@ -1,0 +1,10 @@
+query WalletBalance($orgId: BigInt!) {
+  walletBalance(orgId: $orgId) {
+    walletId
+    orgId
+    balanceCents
+    currency
+    createdAt
+    updatedAt
+  }
+}

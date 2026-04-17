@@ -1,0 +1,12 @@
+mutation SetAppBudget($orgId: BigInt!, $appId: BigInt!, $monthlyLimitCents: BigInt!) {
+  setAppBudget(orgId: $orgId, appId: $appId, monthlyLimitCents: $monthlyLimitCents) {
+    appBudgetId
+    orgId
+    appId
+    monthlyLimitCents
+    currentMonthUsageCents
+    periodStart
+    createdAt
+    updatedAt
+  }
+}

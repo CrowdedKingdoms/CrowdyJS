@@ -1,0 +1,19 @@
+mutation Register($input: RegisterUserInput!) {
+  register(registerUserInput: $input) {
+    token
+    gameTokenId
+    user {
+      userId
+      email
+      gamertag
+      disambiguation
+      isConfirmed
+      createdAt
+      grantEarlyAccess
+      grantEarlyAccessOverride
+      orgId
+      externalId
+      userType
+    }
+  }
+}
