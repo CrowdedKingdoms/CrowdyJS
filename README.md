@@ -389,11 +389,209 @@ the handler.
 |--------|-------------|
 | `close()` | Close the WebSocket, remove all handlers, clear auth state |
 
+## Domain APIs
+
+In addition to the replication-focused methods documented above, the
+client exposes a set of typed *domain wrappers* that cover the rest of
+the Crowded Kingdoms GraphQL API. Each wrapper is mounted on the
+`CrowdyClient` instance and uses the same auth token / base URL as the
+replication API. Operation inputs and return shapes are generated from
+the live `schema.gql` via `graphql-codegen`, so they stay in lockstep
+with the server.
+
+```javascript
+const client = new CrowdyClient({ graphqlEndpoint: '...' });
+await client.auth.login({ email, password });
+```
+
+### `client.auth` -- authentication & session lifecycle
+
+```javascript
+await client.auth.register({ email, password, gamertag });
+await client.auth.login({ email, password });
+await client.auth.confirmEmail('...token...');
+await client.auth.requestPasswordReset('user@example.com');
+await client.auth.resetPassword({ token: '...', newPassword: '...' });
+await client.auth.resendConfirmationEmail('user@example.com');
+await client.auth.changePassword('old', 'new');
+await client.auth.logout();
+await client.auth.logoutAllDevices();
+```
+
+The legacy shortcuts `client.login(email, password)` and
+`client.register(email, password, gamertag?)` are kept for backwards
+compatibility and delegate to `client.auth`.
+
+### `client.users` -- user directory & profile
+
+```javascript
+const me   = await client.users.me();
+const u    = await client.users.byId('123');
+const all  = await client.users.list();
+const list = await client.users.byGamertag('Gandalf');
+const list2 = await client.users.byEmail('a@b.c');
+
+await client.users.updateGamertag({ gamertag: 'Newname', disambiguation: '0001' });
+await client.users.updateUserState({ state: 'base64...' });
+```
+
+### `client.orgs` -- organizations / studios
+
+```javascript
+const org = await client.orgs.create({ name: 'Acme', slug: 'acme' });
+const byId   = await client.orgs.byId(org.orgId);
+const bySlug = await client.orgs.bySlug('acme');
+const members = await client.orgs.members(org.orgId);
+
+await client.orgs.inviteMember({ orgId: org.orgId, userId: '42' });
+const token = await client.orgs.createOrgToken({ orgId: org.orgId, label: 'CI' });
+```
+
+### `client.appAccess` -- app access tiers and grants
+
+```javascript
+const tiers = await client.appAccess.listTiers(appId);
+const mine  = await client.appAccess.myAccess(appId);
+
+await client.appAccess.createTier({ appId, name: 'Pro', isFree: false, tierOrder: 2 });
+await client.appAccess.grant({ appId, userId: '42', tierId });
+await client.appAccess.revoke(appId, '42');
+```
+
+### `client.billing` -- wallets & app budgets
+
+```javascript
+const wallet = await client.billing.balance(orgId);
+const txns   = await client.billing.transactions({ orgId, limit: 50, offset: 0 });
+const budget = await client.billing.appBudget(orgId, appId);
+
+await client.billing.setAppBudget({ orgId, appId, monthlyLimitCents: '5000' });
+```
+
+### `client.quotas` -- per-org / per-app service quotas
+
+```javascript
+const orgQ = await client.quotas.byOrg(orgId);
+const appQ = await client.quotas.byApp(appId);
+
+const q = await client.quotas.set({
+  orgId,
+  appId,
+  metric: 'voxel_updates',
+  limitValue: '1000000',
+  period: 'month',
+});
+await client.quotas.delete(q.quotaId);
+```
+
+### `client.chunks` -- chunk + LOD queries and admin mutations
+
+```javascript
+const chunk    = await client.chunks.get({ appId, coordinates: { x: '0', y: '0', z: '0' } });
+const lods     = await client.chunks.getLods({ appId, coordinates, lodLevels: [0, 1, 2] });
+const nearby   = await client.chunks.byDistance({ appId, centerCoordinate: coordinates, maxDistance: 4 });
+const voxels   = await client.chunks.voxelList({ appId, coordinates });
+
+await client.chunks.update({ appId, coordinates, voxels: '...base64...' });
+await client.chunks.updateState({ appId, coordinates, chunkState: '...' });
+await client.chunks.updateLods({ appId, coordinates, lods: [{ level: 0, data: '...' }] });
+```
+
+### `client.voxels` -- voxel queries, history, rollback
+
+```javascript
+await client.voxels.list({ appId, coordinates });
+await client.voxels.listByDistance({ appId, centerCoordinate: coordinates, maxDistance: 2 });
+await client.voxels.update({ appId, coordinates, location, voxelType: 5, state: '...' });
+await client.voxels.history({ appId, userId: '42', limit: 100 });
+await client.voxels.rollback({ appId, userId: '42', from, to, dryRun: true });
+```
+
+### `client.actors` -- persisted actors (CRUD)
+
+```javascript
+const a = await client.actors.create({
+  appId, uuid: '...', chunk: { x: '0', y: '0', z: '0' },
+});
+await client.actors.get(a.uuid);
+await client.actors.list({ appId });
+await client.actors.batchLookup({ uuids: [a.uuid] });
+await client.actors.update(a.uuid, { publicState: '...' });
+await client.actors.updateState(a.uuid, { publicState: '...' });
+await client.actors.delete(a.uuid);
+```
+
+For high-frequency replication, continue to use the existing
+`client.sendActorUpdate(...)` UDP path -- it is unchanged.
+
+### `client.teleport`
+
+```javascript
+const result = await client.teleport.request({
+  appId,
+  chunkAddress: { x: '0', y: '0', z: '0' },
+  voxelAddress: { x: 0, y: 0, z: 0 },
+  UUID: '...',
+});
+```
+
+### `client.state` -- per-user, per-app state
+
+```javascript
+await client.state.update({ appId, state: 'base64...' });
+await client.state.getOne(appId);
+await client.state.getAll();
+await client.state.delete(appId);
+```
+
+### `client.serverStatus`
+
+```javascript
+await client.serverStatus.serverWithLeastClients();
+await client.serverStatus.listAll();
+await client.serverStatus.listActiveGraphqlServers();
+await client.serverStatus.versionInfo();
+```
+
+### `client.groups`
+
+```javascript
+const g = await client.groups.create({ name: 'Mages' });
+await client.groups.list();
+await client.groups.byId(g.groupId);
+await client.groups.memberships(g.groupId);
+await client.groups.userMemberships('42');
+await client.groups.update(g.groupId, { name: 'Wizards' });
+```
+
+### `client.apps`
+
+The current schema does not expose direct CRUD for the App entity --
+apps are provisioned out of band. `client.apps` exists as a stable
+namespace for future additions; in the meantime use `client.appAccess`,
+`client.state`, `client.billing`, `client.chunks`, and `client.voxels`
+for app-scoped functionality.
+
+## Codegen
+
+Operations live as `.graphql` files under `src/operations/<domain>/`.
+After editing them or pulling a new schema, regenerate the typed
+documents:
+
+```bash
+npm run codegen        # one-shot
+npm run codegen:watch  # watch mode
+```
+
+`npm run build` runs codegen automatically via `prebuild`.
+
 ## TypeScript
 
 The SDK is written in TypeScript and ships type declarations. All
 notification interfaces, input types, and handler signatures are fully
-typed for IDE autocomplete and compile-time safety.
+typed for IDE autocomplete and compile-time safety. Schema-derived
+input/output types (e.g. `CreateOrganizationInput`, `Organization`,
+`AppBudget`) are re-exported from the package root.
 
 ## License
 
