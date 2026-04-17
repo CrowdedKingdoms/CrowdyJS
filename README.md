@@ -1,9 +1,19 @@
 # CrowdyJS SDK
 
 Client SDK for the Crowded Kingdoms GraphQL API with UDP proxy support.
-Handles authentication, real-time subscriptions, and all repilcation-server
-communication through a single `CrowdyClient` instance. Users should still 
+Handles authentication, real-time subscriptions, and all replication-server
+communication through a single `CrowdyClient` instance. Users should still
 directly access the CK GraphQL API for other functions beyond replication.
+
+> **Which integration path is this?** CrowdyJS uses the **GraphQL UDP
+> proxy** path (Path B in the integration guide), which is the right
+> choice for browsers and JS/TS apps that cannot open raw UDP sockets.
+> Native UDP-capable clients (Unreal Engine, native desktop/mobile)
+> should instead use the **direct-UDP** path (Path A) -- authenticate
+> via this same GraphQL API, query `serverWithLeastClients`, then send
+> spatial messages directly over UDP to the assigned buddy server. See
+> the [server integration guide](https://github.com/CrowdedKingdoms/) for
+> details on both paths.
 
 ## Links 
 
