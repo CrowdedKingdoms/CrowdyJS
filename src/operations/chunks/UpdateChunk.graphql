@@ -1,0 +1,14 @@
+mutation UpdateChunk($input: ChunkUpdateInput!) {
+  updateChunk(input: $input) {
+    chunkId
+    appId
+    coordinates {
+      x
+      y
+      z
+    }
+    voxels
+    chunkState
+    updatedAt
+  }
+}

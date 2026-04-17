@@ -1,0 +1,25 @@
+query GetChunksByDistance($input: GetChunksByDistanceInput!) {
+  getChunksByDistance(input: $input) {
+    limit
+    skip
+    chunks {
+      chunkId
+      appId
+      coordinates {
+        x
+        y
+        z
+      }
+      voxels
+      owner
+      createdAt
+      updatedAt
+      chunkState
+      cdnUploadedAt
+      lods {
+        level
+        data
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+query Actor($uuid: String!) {
+  actor(uuid: $uuid) {
+    uuid
+    appId
+    userId
+    avatarId
+    chunk {
+      x
+      y
+      z
+    }
+    privateState
+    publicState
+    createdAt
+  }
+}

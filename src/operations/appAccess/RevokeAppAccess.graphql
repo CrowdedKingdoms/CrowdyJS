@@ -1,0 +1,14 @@
+mutation RevokeAppAccess($appId: BigInt!, $userId: BigInt!) {
+  revokeAppAccess(appId: $appId, userId: $userId) {
+    appUserAccessId
+    appId
+    userId
+    tierId
+    status
+    grantedBy
+    subscriptionId
+    expiresAt
+    createdAt
+    updatedAt
+  }
+}

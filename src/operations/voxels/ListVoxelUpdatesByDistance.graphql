@@ -1,0 +1,31 @@
+query ListVoxelUpdatesByDistance($input: ListVoxelUpdatesByDistanceInput!) {
+  listVoxelUpdatesByDistance(input: $input) {
+    centerCoordinate {
+      x
+      y
+      z
+    }
+    limit
+    skip
+    chunks {
+      coordinates {
+        x
+        y
+        z
+      }
+      voxels {
+        voxelUpdateId
+        appId
+        location {
+          x
+          y
+          z
+        }
+        voxelType
+        state
+        createdBy
+        createdAt
+      }
+    }
+  }
+}

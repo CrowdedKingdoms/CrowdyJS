@@ -1,0 +1,11 @@
+query OrganizationBySlug($slug: String!) {
+  organizationBySlug(slug: $slug) {
+    orgId
+    name
+    slug
+    ownerUserId
+    status
+    createdAt
+    updatedAt
+  }
+}

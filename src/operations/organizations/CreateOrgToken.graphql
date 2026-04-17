@@ -1,0 +1,11 @@
+mutation CreateOrgToken($input: CreateOrgTokenInput!) {
+  createOrgToken(input: $input) {
+    orgTokenId
+    orgId
+    label
+    isActive
+    expiresAt
+    createdAt
+    updatedAt
+  }
+}

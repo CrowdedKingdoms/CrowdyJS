@@ -1,0 +1,14 @@
+query ServerWithLeastClients {
+  serverWithLeastClients {
+    serverId
+    ip4
+    ip6
+    clientPort
+    status
+    peers
+    clients
+    cpuPeakPct
+    updatedAt
+    createdAt
+  }
+}

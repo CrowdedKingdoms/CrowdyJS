@@ -1,0 +1,8 @@
+mutation UpdateGroup($id: BigInt!, $input: UpdateGroupInput!) {
+  updateGroup(id: $id, updateGroupInput: $input) {
+    groupId
+    name
+    createdBy
+    createdAt
+  }
+}

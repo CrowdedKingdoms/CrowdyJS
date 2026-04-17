@@ -1,0 +1,27 @@
+query GetVoxelList($input: GetVoxelListInput!) {
+  getVoxelList(input: $input) {
+    coordinates {
+      x
+      y
+      z
+    }
+    voxels {
+      voxelUpdateId
+      appId
+      coordinates {
+        x
+        y
+        z
+      }
+      location {
+        x
+        y
+        z
+      }
+      voxelType
+      state
+      createdBy
+      createdAt
+    }
+  }
+}

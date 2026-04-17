@@ -1,0 +1,8 @@
+mutation CreateGroup($input: CreateGroupInput!) {
+  createGroup(createGroupInput: $input) {
+    groupId
+    name
+    createdBy
+    createdAt
+  }
+}

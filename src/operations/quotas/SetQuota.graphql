@@ -1,0 +1,14 @@
+mutation SetQuota($input: SetQuotaInput!) {
+  setQuota(input: $input) {
+    quotaId
+    orgId
+    appId
+    tierId
+    metric
+    limitValue
+    period
+    actionOnExceed
+    createdAt
+    updatedAt
+  }
+}

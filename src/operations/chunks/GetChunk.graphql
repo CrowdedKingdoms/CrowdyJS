@@ -1,0 +1,30 @@
+query GetChunk($input: GetChunkInput!) {
+  getChunk(input: $input) {
+    chunkId
+    appId
+    coordinates {
+      x
+      y
+      z
+    }
+    voxels
+    voxelStates {
+      voxelCoord {
+        x
+        y
+        z
+      }
+      voxelType
+      state
+    }
+    owner
+    createdAt
+    updatedAt
+    chunkState
+    cdnUploadedAt
+    lods {
+      level
+      data
+    }
+  }
+}

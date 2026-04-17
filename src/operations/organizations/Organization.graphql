@@ -1,0 +1,11 @@
+query Organization($id: BigInt!) {
+  organization(id: $id) {
+    orgId
+    name
+    slug
+    ownerUserId
+    status
+    createdAt
+    updatedAt
+  }
+}

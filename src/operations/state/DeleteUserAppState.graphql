@@ -1,0 +1,9 @@
+mutation DeleteUserAppState($appId: BigInt!) {
+  deleteUserAppState(appId: $appId) {
+    userId
+    appId
+    state
+    createdAt
+    updatedAt
+  }
+}

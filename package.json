@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdomstudios/crowdyjs",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Client SDK for Crowded Kingdoms GraphQL API with UDP proxy support",
   "type": "module",
   "main": "dist/index.js",
@@ -16,6 +16,9 @@
     "README.md"
   ],
   "scripts": {
+    "codegen": "graphql-codegen --config codegen.ts",
+    "codegen:watch": "graphql-codegen --config codegen.ts --watch",
+    "prebuild": "npm run codegen",
     "build": "tsc",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
@@ -34,8 +37,16 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@graphql-codegen/cli": "^6.3.0",
+    "@graphql-codegen/typed-document-node": "^6.1.8",
+    "@graphql-codegen/typescript": "^5.0.10",
+    "@graphql-codegen/typescript-operations": "^5.1.0",
     "@types/node": "^22.10.7",
     "typescript": "^5.7.3",
     "ws": "^8.20.0"
+  },
+  "dependencies": {
+    "@graphql-typed-document-node/core": "^3.2.0",
+    "graphql": "^16.13.2"
   }
 }

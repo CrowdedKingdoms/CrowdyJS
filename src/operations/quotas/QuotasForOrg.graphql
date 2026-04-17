@@ -1,0 +1,14 @@
+query QuotasForOrg($orgId: BigInt!) {
+  quotasForOrg(orgId: $orgId) {
+    quotaId
+    orgId
+    appId
+    tierId
+    metric
+    limitValue
+    period
+    actionOnExceed
+    createdAt
+    updatedAt
+  }
+}

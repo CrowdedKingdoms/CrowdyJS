@@ -1,0 +1,16 @@
+query BatchLookupActors($input: BatchActorLookupInput!) {
+  batchLookupActors(input: $input) {
+    uuid
+    appId
+    userId
+    avatarId
+    chunk {
+      x
+      y
+      z
+    }
+    privateState
+    publicState
+    createdAt
+  }
+}

@@ -1,0 +1,16 @@
+query GetChunkLods($input: GetChunkLodsInput!) {
+  getChunkLods(input: $input) {
+    chunkId
+    appId
+    coordinates {
+      x
+      y
+      z
+    }
+    lods {
+      level
+      data
+    }
+    updatedAt
+  }
+}

@@ -1,0 +1,8 @@
+mutation ConnectUdpProxy {
+  connectUdpProxy {
+    connected
+    serverIp6
+    serverClientPort
+    lastMessageTime
+  }
+}

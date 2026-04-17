@@ -1,0 +1,9 @@
+mutation UpdateActorState($uuid: String!, $input: UpdateActorStateInput!) {
+  updateActorState(uuid: $uuid, input: $input) {
+    uuid
+    appId
+    userId
+    privateState
+    publicState
+  }
+}

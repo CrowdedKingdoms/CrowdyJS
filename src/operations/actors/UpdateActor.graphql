@@ -1,0 +1,16 @@
+mutation UpdateActor($uuid: String!, $input: UpdateActorInput!) {
+  updateActor(uuid: $uuid, input: $input) {
+    uuid
+    appId
+    userId
+    avatarId
+    chunk {
+      x
+      y
+      z
+    }
+    privateState
+    publicState
+    createdAt
+  }
+}

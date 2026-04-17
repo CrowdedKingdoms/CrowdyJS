@@ -1,0 +1,3 @@
+mutation DeleteQuota($quotaId: BigInt!) {
+  deleteQuota(quotaId: $quotaId)
+}

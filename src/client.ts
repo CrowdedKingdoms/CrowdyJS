@@ -1,6 +1,15 @@
 /**
- * Core GraphQL client for HTTP queries and mutations
+ * Core GraphQL client for HTTP queries and mutations.
+ *
+ * Supports both:
+ *  - Legacy raw `query()` calls (string + variables) used by the original
+ *    replication API (sendActorUpdate etc.) -- kept for backwards compat.
+ *  - Typed `request<TResult, TVars>(document, variables)` calls that accept a
+ *    `TypedDocumentNode` produced by `@graphql-codegen/typed-document-node`.
  */
+
+import { print } from 'graphql';
+import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 
 import type {
   AuthResponse,
@@ -28,6 +37,22 @@ export class GraphQLClient {
 
   getAuthToken(): string | null {
     return this.token;
+  }
+
+  getEndpoint(): string {
+    return this.graphqlEndpoint;
+  }
+
+  /**
+   * Execute a typed GraphQL operation produced by codegen.
+   * Returns the typed result (the `data` payload).
+   */
+  async request<TResult, TVariables>(
+    document: TypedDocumentNode<TResult, TVariables>,
+    variables?: TVariables
+  ): Promise<TResult> {
+    const queryStr = print(document);
+    return this.query<TResult>(queryStr, (variables ?? {}) as Record<string, any>);
   }
 
   async query<T = any>(query: string, variables: Record<string, any> = {}): Promise<T> {
@@ -307,4 +332,3 @@ export class GraphQLClient {
     return data.sendClientEvent;
   }
 }
-

@@ -1,0 +1,12 @@
+query AppBudget($orgId: BigInt!, $appId: BigInt!) {
+  appBudget(orgId: $orgId, appId: $appId) {
+    appBudgetId
+    orgId
+    appId
+    monthlyLimitCents
+    currentMonthUsageCents
+    periodStart
+    createdAt
+    updatedAt
+  }
+}

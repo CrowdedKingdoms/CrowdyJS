@@ -1,0 +1,34 @@
+query VoxelUpdateHistory(
+  $appId: BigInt!
+  $userId: BigInt
+  $from: DateTime
+  $to: DateTime
+  $limit: Int
+  $offset: Int
+) {
+  voxelUpdateHistory(
+    appId: $appId
+    userId: $userId
+    from: $from
+    to: $to
+    limit: $limit
+    offset: $offset
+  ) {
+    id
+    appId
+    coordinates {
+      x
+      y
+      z
+    }
+    location {
+      x
+      y
+      z
+    }
+    oldVoxelType
+    newVoxelType
+    changedBy
+    changedAt
+  }
+}

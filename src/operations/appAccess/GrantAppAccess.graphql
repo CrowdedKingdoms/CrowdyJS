@@ -1,0 +1,14 @@
+mutation GrantAppAccess($input: GrantAppAccessInput!) {
+  grantAppAccess(input: $input) {
+    appUserAccessId
+    appId
+    userId
+    tierId
+    status
+    grantedBy
+    subscriptionId
+    expiresAt
+    createdAt
+    updatedAt
+  }
+}

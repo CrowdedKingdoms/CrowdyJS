@@ -1,0 +1,9 @@
+mutation UpdateUserAppState($input: CreateUserAppStateInput!) {
+  updateUserAppState(input: $input) {
+    userId
+    appId
+    state
+    createdAt
+    updatedAt
+  }
+}
