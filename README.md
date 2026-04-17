@@ -5,6 +5,14 @@ Handles authentication, real-time subscriptions, and all repilcation-server
 communication through a single `CrowdyClient` instance. Users should still 
 directly access the CK GraphQL API for other functions beyond replication.
 
+## Links 
+
+- [NPM](https://www.npmjs.com/package/@crowdedkingdomstudios/crowdyjs)  
+- [GitHub](https://github.com/CrowdedKingdoms/CrowdyJS)  
+- [Discord](https://discord.gg/crowdedkingdoms)
+- [YouTube](https://www.youtube.com/@CrowdedKingdoms)
+
+
 ## Installation
 
 ```bash
