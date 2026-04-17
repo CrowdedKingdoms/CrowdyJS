@@ -114,21 +114,21 @@ export type AppAccessTier = {
   isDefault: Scalars['Boolean']['output'];
   isFree: Scalars['Boolean']['output'];
   name: Scalars['String']['output'];
-  priceCents: Maybe<Scalars['String']['output']>;
+  priceCents: Maybe<Scalars['BigInt']['output']>;
   status: Scalars['String']['output'];
-  tierId: Scalars['ID']['output'];
+  tierId: Scalars['BigInt']['output'];
   tierOrder: Scalars['Float']['output'];
   updatedAt: Scalars['DateTime']['output'];
 };
 
 export type AppBudget = {
   __typename?: 'AppBudget';
-  appBudgetId: Scalars['ID']['output'];
-  appId: Scalars['ID']['output'];
+  appBudgetId: Scalars['BigInt']['output'];
+  appId: Scalars['BigInt']['output'];
   createdAt: Scalars['DateTime']['output'];
-  currentMonthUsageCents: Scalars['String']['output'];
-  monthlyLimitCents: Maybe<Scalars['String']['output']>;
-  orgId: Scalars['ID']['output'];
+  currentMonthUsageCents: Scalars['BigInt']['output'];
+  monthlyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  orgId: Scalars['BigInt']['output'];
   periodStart: Scalars['DateTime']['output'];
   updatedAt: Scalars['DateTime']['output'];
 };
@@ -136,13 +136,13 @@ export type AppBudget = {
 export type AppUserAccess = {
   __typename?: 'AppUserAccess';
   appId: Scalars['BigInt']['output'];
-  appUserAccessId: Scalars['ID']['output'];
+  appUserAccessId: Scalars['BigInt']['output'];
   createdAt: Scalars['DateTime']['output'];
   expiresAt: Maybe<Scalars['DateTime']['output']>;
   grantedBy: Scalars['String']['output'];
   status: Scalars['String']['output'];
   subscriptionId: Maybe<Scalars['String']['output']>;
-  tierId: Maybe<Scalars['ID']['output']>;
+  tierId: Maybe<Scalars['BigInt']['output']>;
   updatedAt: Scalars['DateTime']['output'];
   userId: Scalars['BigInt']['output'];
 };
@@ -414,10 +414,6 @@ export type CreateGridResponse = {
   grid: Maybe<Grid>;
 };
 
-export type CreateGroupInput = {
-  name: Scalars['String']['input'];
-};
-
 export type CreateOrgTokenInput = {
   label?: InputMaybe<Scalars['String']['input']>;
   orgId: Scalars['BigInt']['input'];
@@ -508,34 +504,6 @@ export type Grid = {
   low_chunk: ChunkCoordinates;
 };
 
-export type Group = {
-  __typename?: 'Group';
-  createdAt: Scalars['DateTime']['output'];
-  createdBy: Scalars['ID']['output'];
-  groupId: Scalars['ID']['output'];
-  name: Scalars['String']['output'];
-};
-
-/** The type of membership a user has in a group */
-export enum GroupMemberType {
-  Admin = 'ADMIN',
-  Member = 'MEMBER',
-  Moderator = 'MODERATOR',
-  None = 'NONE',
-  Owner = 'OWNER',
-  SuperAdmin = 'SUPER_ADMIN'
-}
-
-export type GroupMembership = {
-  __typename?: 'GroupMembership';
-  createdAt: Scalars['DateTime']['output'];
-  createdBy: Scalars['ID']['output'];
-  groupId: Scalars['ID']['output'];
-  groupMembershipId: Scalars['ID']['output'];
-  memberType: GroupMemberType;
-  userId: Scalars['ID']['output'];
-};
-
 export type InviteOrgMemberInput = {
   orgId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
@@ -582,7 +550,6 @@ export type Mutation = {
   createActor: Actor;
   createAvatar: Avatar;
   createGrid: CreateGridResponse;
-  createGroup: Group;
   createOrgToken: OrgToken;
   createOrganization: Organization;
   createPaymentLink: PaymentLinkOutput;
@@ -624,7 +591,6 @@ export type Mutation = {
   updateChunkLods: Maybe<Chunk>;
   updateChunkState: Maybe<Chunk>;
   updateGamertag: User;
-  updateGroup: Group;
   updateUserAppState: UserAppState;
   updateUserState: User;
   updateVoxel: Voxel;
@@ -664,11 +630,6 @@ export type MutationCreateAvatarArgs = {
 
 export type MutationCreateGridArgs = {
   input: CreateGridInput;
-};
-
-
-export type MutationCreateGroupArgs = {
-  createGroupInput: CreateGroupInput;
 };
 
 
@@ -839,12 +800,6 @@ export type MutationUpdateGamertagArgs = {
 };
 
 
-export type MutationUpdateGroupArgs = {
-  id: Scalars['BigInt']['input'];
-  updateGroupInput: UpdateGroupInput;
-};
-
-
 export type MutationUpdateUserAppStateArgs = {
   input: CreateUserAppStateInput;
 };
@@ -862,11 +817,11 @@ export type MutationUpdateVoxelArgs = {
 export type OrgMember = {
   __typename?: 'OrgMember';
   createdAt: Scalars['DateTime']['output'];
-  orgId: Scalars['ID']['output'];
-  orgMemberId: Scalars['ID']['output'];
+  orgId: Scalars['BigInt']['output'];
+  orgMemberId: Scalars['BigInt']['output'];
   status: Scalars['String']['output'];
   updatedAt: Scalars['DateTime']['output'];
-  userId: Scalars['ID']['output'];
+  userId: Scalars['BigInt']['output'];
 };
 
 export type OrgToken = {
@@ -875,27 +830,27 @@ export type OrgToken = {
   expiresAt: Maybe<Scalars['DateTime']['output']>;
   isActive: Scalars['Boolean']['output'];
   label: Maybe<Scalars['String']['output']>;
-  orgId: Scalars['ID']['output'];
-  orgTokenId: Scalars['ID']['output'];
+  orgId: Scalars['BigInt']['output'];
+  orgTokenId: Scalars['BigInt']['output'];
   updatedAt: Scalars['DateTime']['output'];
 };
 
 export type OrgWallet = {
   __typename?: 'OrgWallet';
-  balanceCents: Scalars['String']['output'];
+  balanceCents: Scalars['BigInt']['output'];
   createdAt: Scalars['DateTime']['output'];
   currency: Scalars['String']['output'];
-  orgId: Scalars['ID']['output'];
+  orgId: Scalars['BigInt']['output'];
   updatedAt: Scalars['DateTime']['output'];
-  walletId: Scalars['ID']['output'];
+  walletId: Scalars['BigInt']['output'];
 };
 
 export type Organization = {
   __typename?: 'Organization';
   createdAt: Scalars['DateTime']['output'];
   name: Scalars['String']['output'];
-  orgId: Scalars['ID']['output'];
-  ownerUserId: Scalars['ID']['output'];
+  orgId: Scalars['BigInt']['output'];
+  ownerUserId: Scalars['BigInt']['output'];
   slug: Scalars['String']['output'];
   status: Scalars['String']['output'];
   updatedAt: Scalars['DateTime']['output'];
@@ -936,9 +891,6 @@ export type Query = {
   getVoxelList: ChunkVoxelResponse;
   /** Returns all registered GraphQL servers */
   graphqlServers: Array<GraphQlServer>;
-  group: Group;
-  groupMemberships: Array<GroupMembership>;
-  groups: Array<Group>;
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   listVoxels: Array<Voxel>;
   me: Maybe<User>;
@@ -959,7 +911,6 @@ export type Query = {
   userAppState: Maybe<UserAppState>;
   userAppStates: Array<UserAppState>;
   userAvatars: Array<Avatar>;
-  userGroupMemberships: Array<GroupMembership>;
   users: Array<User>;
   usersByEmail: Array<User>;
   usersByGamertag: Array<User>;
@@ -1022,16 +973,6 @@ export type QueryGetVoxelListArgs = {
 };
 
 
-export type QueryGroupArgs = {
-  id: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGroupMembershipsArgs = {
-  groupId: Scalars['BigInt']['input'];
-};
-
-
 export type QueryListVoxelUpdatesByDistanceArgs = {
   input: ListVoxelUpdatesByDistanceInput;
 };
@@ -1083,11 +1024,6 @@ export type QueryUserAppStateArgs = {
 
 
 export type QueryUserAvatarsArgs = {
-  userId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryUserGroupMembershipsArgs = {
   userId: Scalars['BigInt']['input'];
 };
 
@@ -1223,14 +1159,14 @@ export type ServerVersionInfo = {
 export type ServiceQuota = {
   __typename?: 'ServiceQuota';
   actionOnExceed: Scalars['String']['output'];
-  appId: Maybe<Scalars['ID']['output']>;
+  appId: Maybe<Scalars['BigInt']['output']>;
   createdAt: Scalars['DateTime']['output'];
-  limitValue: Scalars['String']['output'];
+  limitValue: Scalars['BigInt']['output'];
   metric: Scalars['String']['output'];
-  orgId: Maybe<Scalars['ID']['output']>;
+  orgId: Maybe<Scalars['BigInt']['output']>;
   period: Scalars['String']['output'];
-  quotaId: Scalars['ID']['output'];
-  tierId: Maybe<Scalars['ID']['output']>;
+  quotaId: Scalars['BigInt']['output'];
+  tierId: Maybe<Scalars['BigInt']['output']>;
   updatedAt: Scalars['DateTime']['output'];
 };
 
@@ -1351,11 +1287,6 @@ export type UpdateGamertagInput = {
   gamertag: Scalars['String']['input'];
 };
 
-export type UpdateGroupInput = {
-  description?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type UpdateUserStateInput = {
   state?: InputMaybe<Scalars['String']['input']>;
 };
@@ -1386,11 +1317,11 @@ export type User = {
 
 export type UserAppState = {
   __typename?: 'UserAppState';
-  appId: Scalars['ID']['output'];
+  appId: Scalars['BigInt']['output'];
   createdAt: Scalars['DateTime']['output'];
   state: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['DateTime']['output'];
-  userId: Scalars['ID']['output'];
+  userId: Scalars['BigInt']['output'];
 };
 
 export type UserDonationData = {
@@ -1556,16 +1487,16 @@ export type VoxelUpdatesByDistanceResponse = {
 
 export type WalletTransaction = {
   __typename?: 'WalletTransaction';
-  amountCents: Scalars['String']['output'];
-  appId: Maybe<Scalars['ID']['output']>;
-  balanceAfter: Scalars['String']['output'];
+  amountCents: Scalars['BigInt']['output'];
+  appId: Maybe<Scalars['BigInt']['output']>;
+  balanceAfter: Scalars['BigInt']['output'];
   createdAt: Scalars['DateTime']['output'];
   description: Maybe<Scalars['String']['output']>;
-  orgId: Scalars['ID']['output'];
+  orgId: Scalars['BigInt']['output'];
   referenceId: Maybe<Scalars['String']['output']>;
-  transactionId: Scalars['ID']['output'];
+  transactionId: Scalars['BigInt']['output'];
   transactionType: Scalars['String']['output'];
-  walletId: Scalars['ID']['output'];
+  walletId: Scalars['BigInt']['output'];
 };
 
 export type ActorQueryVariables = Exact<{
@@ -1796,47 +1727,6 @@ export type UpdateChunkStateMutationVariables = Exact<{
 
 
 export type UpdateChunkStateMutation = { __typename?: 'Mutation', updateChunkState: { __typename?: 'Chunk', chunkId: string, appId: string, chunkState: string | null, updatedAt: string, coordinates: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string } } | null };
-
-export type CreateGroupMutationVariables = Exact<{
-  input: CreateGroupInput;
-}>;
-
-
-export type CreateGroupMutation = { __typename?: 'Mutation', createGroup: { __typename?: 'Group', groupId: string, name: string, createdBy: string, createdAt: string } };
-
-export type GroupQueryVariables = Exact<{
-  id: Scalars['BigInt']['input'];
-}>;
-
-
-export type GroupQuery = { __typename?: 'Query', group: { __typename?: 'Group', groupId: string, name: string, createdBy: string, createdAt: string } };
-
-export type GroupMembershipsQueryVariables = Exact<{
-  groupId: Scalars['BigInt']['input'];
-}>;
-
-
-export type GroupMembershipsQuery = { __typename?: 'Query', groupMemberships: Array<{ __typename?: 'GroupMembership', groupMembershipId: string, groupId: string, userId: string, memberType: GroupMemberType, createdBy: string, createdAt: string }> };
-
-export type GroupsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type GroupsQuery = { __typename?: 'Query', groups: Array<{ __typename?: 'Group', groupId: string, name: string, createdBy: string, createdAt: string }> };
-
-export type UpdateGroupMutationVariables = Exact<{
-  id: Scalars['BigInt']['input'];
-  input: UpdateGroupInput;
-}>;
-
-
-export type UpdateGroupMutation = { __typename?: 'Mutation', updateGroup: { __typename?: 'Group', groupId: string, name: string, createdBy: string, createdAt: string } };
-
-export type UserGroupMembershipsQueryVariables = Exact<{
-  userId: Scalars['BigInt']['input'];
-}>;
-
-
-export type UserGroupMembershipsQuery = { __typename?: 'Query', userGroupMemberships: Array<{ __typename?: 'GroupMembership', groupMembershipId: string, groupId: string, userId: string, memberType: GroupMemberType, createdBy: string, createdAt: string }> };
 
 export type CreateOrgTokenMutationVariables = Exact<{
   input: CreateOrgTokenInput;
@@ -2094,12 +1984,6 @@ export const GetVoxelListDocument = {"kind":"Document","definitions":[{"kind":"O
 export const UpdateChunkDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunk"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ChunkUpdateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunk"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"voxels"}},{"kind":"Field","name":{"kind":"Name","value":"chunkState"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkMutation, UpdateChunkMutationVariables>;
 export const UpdateChunkLodsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunkLods"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateChunkLodsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunkLods"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lods"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"data"}}]}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkLodsMutation, UpdateChunkLodsMutationVariables>;
 export const UpdateChunkStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunkState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateChunkStateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunkState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"chunkState"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkStateMutation, UpdateChunkStateMutationVariables>;
-export const CreateGroupDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateGroup"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateGroupInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createGroup"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"createGroupInput"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CreateGroupMutation, CreateGroupMutationVariables>;
-export const GroupDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Group"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"group"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<GroupQuery, GroupQueryVariables>;
-export const GroupMembershipsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GroupMemberships"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"groupId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupMemberships"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"groupId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"groupId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupMembershipId"}},{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"memberType"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<GroupMembershipsQuery, GroupMembershipsQueryVariables>;
-export const GroupsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Groups"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groups"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<GroupsQuery, GroupsQueryVariables>;
-export const UpdateGroupDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateGroup"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateGroupInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateGroup"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"updateGroupInput"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<UpdateGroupMutation, UpdateGroupMutationVariables>;
-export const UserGroupMembershipsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"UserGroupMemberships"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userGroupMemberships"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupMembershipId"}},{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"memberType"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<UserGroupMembershipsQuery, UserGroupMembershipsQueryVariables>;
 export const CreateOrgTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrgToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrgTokenInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgTokenId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateOrgTokenMutation, CreateOrgTokenMutationVariables>;
 export const CreateOrganizationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrganization"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrganizationInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrganization"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateOrganizationMutation, CreateOrganizationMutationVariables>;
 export const InviteOrgMemberDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"InviteOrgMember"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"InviteOrgMemberInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"inviteOrgMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgMemberId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<InviteOrgMemberMutation, InviteOrgMemberMutationVariables>;

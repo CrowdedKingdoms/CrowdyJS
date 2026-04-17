@@ -18,7 +18,6 @@ import { ActorsAPI } from './domains/actors.js';
 import { TeleportAPI } from './domains/teleport.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
-import { GroupsAPI } from './domains/groups.js';
 
 import type {
   CrowdyClientConfig,
@@ -59,7 +58,6 @@ export class CrowdyClient {
   readonly teleport: TeleportAPI;
   readonly state: StateAPI;
   readonly serverStatus: ServerStatusAPI;
-  readonly groups: GroupsAPI;
 
   constructor(config: CrowdyClientConfig = {}) {
     this.client = new GraphQLClient({
@@ -84,7 +82,6 @@ export class CrowdyClient {
     this.teleport = new TeleportAPI(this.client);
     this.state = new StateAPI(this.client);
     this.serverStatus = new ServerStatusAPI(this.client);
-    this.groups = new GroupsAPI(this.client);
   }
 
   // -------------------------------------------------------------------------

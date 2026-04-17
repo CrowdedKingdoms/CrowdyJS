@@ -72,7 +72,6 @@ export { ActorsAPI } from './domains/actors.js';
 export { TeleportAPI } from './domains/teleport.js';
 export { StateAPI } from './domains/state.js';
 export { ServerStatusAPI } from './domains/serverStatus.js';
-export { GroupsAPI } from './domains/groups.js';
 
 // -----------------------------------------------------------------------------
 // Re-export generated GraphQL types (inputs, outputs, enums, query/mutation
@@ -93,8 +92,6 @@ export type {
   UpdateActorInput,
   ActorFilterInput,
   BatchActorLookupInput,
-  CreateGroupInput,
-  UpdateGroupInput,
   CreateUserAppStateInput,
   UpdateUserStateInput,
   UpdateAvatarStateInput,
@@ -141,8 +138,6 @@ export type {
   AvatarDto,
   TeleportResponse,
   UserAppState,
-  Group,
-  GroupMembership,
   ServerStatus,
   GraphQlServer,
   ServerVersionInfo,
@@ -153,7 +148,6 @@ export type {
 
 // Re-export schema enums as values (so consumers can switch on them).
 export {
-  GroupMemberType,
   PaymentLinkType,
   ServerState,
 } from './generated/graphql.js';

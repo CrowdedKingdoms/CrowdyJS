@@ -552,17 +552,6 @@ await client.serverStatus.listActiveGraphqlServers();
 await client.serverStatus.versionInfo();
 ```
 
-### `client.groups`
-
-```javascript
-const g = await client.groups.create({ name: 'Mages' });
-await client.groups.list();
-await client.groups.byId(g.groupId);
-await client.groups.memberships(g.groupId);
-await client.groups.userMemberships('42');
-await client.groups.update(g.groupId, { name: 'Wizards' });
-```
-
 ### `client.apps`
 
 The current schema does not expose direct CRUD for the App entity --

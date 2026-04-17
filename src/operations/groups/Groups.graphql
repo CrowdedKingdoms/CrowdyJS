@@ -1,8 +1,0 @@
-query Groups {
-  groups {
-    groupId
-    name
-    createdBy
-    createdAt
-  }
-}
