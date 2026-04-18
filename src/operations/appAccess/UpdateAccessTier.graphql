@@ -1,0 +1,16 @@
+mutation UpdateAccessTier($tierId: BigInt!, $input: UpdateAccessTierInput!) {
+  updateAccessTier(tierId: $tierId, input: $input) {
+    tierId
+    appId
+    name
+    tierOrder
+    isFree
+    isDefault
+    priceCents
+    currency
+    billingPeriod
+    description
+    status
+    updatedAt
+  }
+}

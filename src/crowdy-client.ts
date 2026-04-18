@@ -1,7 +1,12 @@
 /**
- * Main CrowdyClient class - public API for the SDK
+ * Public surface of the SDK. Construct one `CrowdyClient` per session and
+ * access everything via the typed sub-clients (`client.auth`, `client.udp`,
+ * `client.orgs`, ...). The legacy `client.login()` / `client.sendActorUpdate`
+ * shortcuts are gone - use `client.auth.login()` / `client.udp.sendActorUpdate()`
+ * instead.
  */
 
+import { AuthState } from './auth-state.js';
 import { GraphQLClient } from './client.js';
 import { SubscriptionManager } from './subscriptions.js';
 
@@ -12,39 +17,29 @@ import { AppsAPI } from './domains/apps.js';
 import { AppAccessAPI } from './domains/appAccess.js';
 import { BillingAPI } from './domains/billing.js';
 import { QuotasAPI } from './domains/quotas.js';
+import { PaymentsAPI } from './domains/payments.js';
 import { ChunksAPI } from './domains/chunks.js';
 import { VoxelsAPI } from './domains/voxels.js';
 import { ActorsAPI } from './domains/actors.js';
 import { TeleportAPI } from './domains/teleport.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
+import { UdpAPI } from './domains/udp.js';
 
-import type {
-  CrowdyClientConfig,
-  AuthResponse,
-  UdpProxyConnectionStatus,
-  ActorUpdateRequestInput,
-  VoxelUpdateRequestInput,
-  ClientAudioPacketInput,
-  ClientTextPacketInput,
-  ClientEventNotificationInput,
-  ActorUpdateHandler,
-  ActorUpdateResponseHandler,
-  VoxelUpdateHandler,
-  VoxelUpdateResponseHandler,
-  ClientAudioHandler,
-  ClientTextHandler,
-  ClientEventHandler,
-  ServerEventHandler,
-  GenericErrorHandler,
-  UnsubscribeFn,
-} from './types.js';
+export interface CrowdyClientConfig {
+  graphqlEndpoint?: string;
+  wsEndpoint?: string;
+  timeout?: number;
+}
 
 export class CrowdyClient {
-  private client: GraphQLClient;
-  private subscriptions: SubscriptionManager;
+  // Internal infrastructure (kept private; tests can poke via the auth
+  // sub-client's `setToken` / `getToken` for token rehydration).
+  private readonly authState: AuthState;
+  private readonly client: GraphQLClient;
+  private readonly subscriptions: SubscriptionManager;
 
-  // Domain wrappers (typed via codegen)
+  // Domain wrappers - the canonical surface area.
   readonly auth: AuthAPI;
   readonly users: UsersAPI;
   readonly orgs: OrganizationsAPI;
@@ -52,139 +47,46 @@ export class CrowdyClient {
   readonly appAccess: AppAccessAPI;
   readonly billing: BillingAPI;
   readonly quotas: QuotasAPI;
+  readonly payments: PaymentsAPI;
   readonly chunks: ChunksAPI;
   readonly voxels: VoxelsAPI;
   readonly actors: ActorsAPI;
   readonly teleport: TeleportAPI;
   readonly state: StateAPI;
   readonly serverStatus: ServerStatusAPI;
+  readonly udp: UdpAPI;
 
   constructor(config: CrowdyClientConfig = {}) {
-    this.client = new GraphQLClient({
-      graphqlEndpoint: config.graphqlEndpoint,
-      timeout: config.timeout,
-    });
+    this.authState = new AuthState();
+    this.client = new GraphQLClient(
+      { graphqlEndpoint: config.graphqlEndpoint, timeout: config.timeout },
+      this.authState,
+    );
+    this.subscriptions = new SubscriptionManager(
+      { wsEndpoint: config.wsEndpoint },
+      this.authState,
+    );
 
-    this.subscriptions = new SubscriptionManager({
-      wsEndpoint: config.wsEndpoint,
-    });
-
-    this.auth = new AuthAPI(this.client, this.subscriptions);
+    this.auth = new AuthAPI(this.client, this.authState);
     this.users = new UsersAPI(this.client);
     this.orgs = new OrganizationsAPI(this.client);
-    this.apps = new AppsAPI();
+    this.apps = new AppsAPI(this.client);
     this.appAccess = new AppAccessAPI(this.client);
     this.billing = new BillingAPI(this.client);
     this.quotas = new QuotasAPI(this.client);
+    this.payments = new PaymentsAPI(this.client);
     this.chunks = new ChunksAPI(this.client);
     this.voxels = new VoxelsAPI(this.client);
     this.actors = new ActorsAPI(this.client);
     this.teleport = new TeleportAPI(this.client);
     this.state = new StateAPI(this.client);
     this.serverStatus = new ServerStatusAPI(this.client);
+    this.udp = new UdpAPI(this.client, this.subscriptions);
   }
 
-  // -------------------------------------------------------------------------
-  // Authentication shortcuts (kept for backwards compatibility)
-  // -------------------------------------------------------------------------
-  async login(email: string, password: string): Promise<AuthResponse> {
-    const response = await this.client.login(email, password);
-    this.subscriptions.setAuthToken(response.token);
-    return response;
-  }
-
-  async register(email: string, password: string, gamertag?: string): Promise<AuthResponse> {
-    const response = await this.client.register(email, password, gamertag);
-    this.subscriptions.setAuthToken(response.token);
-    return response;
-  }
-
-  getAuthToken(): string | null {
-    return this.client.getAuthToken();
-  }
-
-  // -------------------------------------------------------------------------
-  // UDP Proxy
-  // -------------------------------------------------------------------------
-  async connectUdpProxy(): Promise<UdpProxyConnectionStatus> {
-    return this.client.connectUdpProxy();
-  }
-
-  async disconnectUdpProxy(): Promise<boolean> {
-    return this.client.disconnectUdpProxy();
-  }
-
-  async getConnectionStatus(): Promise<UdpProxyConnectionStatus> {
-    return this.client.getConnectionStatus();
-  }
-
-  // -------------------------------------------------------------------------
-  // Replication mutations (UDP fast path) -- unchanged
-  // -------------------------------------------------------------------------
-  async sendActorUpdate(input: ActorUpdateRequestInput): Promise<boolean> {
-    return this.client.sendActorUpdate(input);
-  }
-
-  async sendVoxelUpdate(input: VoxelUpdateRequestInput): Promise<boolean> {
-    return this.client.sendVoxelUpdate(input);
-  }
-
-  async sendAudioPacket(input: ClientAudioPacketInput): Promise<boolean> {
-    return this.client.sendAudioPacket(input);
-  }
-
-  async sendTextPacket(input: ClientTextPacketInput): Promise<boolean> {
-    return this.client.sendTextPacket(input);
-  }
-
-  async sendClientEvent(input: ClientEventNotificationInput): Promise<boolean> {
-    return this.client.sendClientEvent(input);
-  }
-
-  // -------------------------------------------------------------------------
-  // Type-specific subscription handlers -- unchanged
-  // -------------------------------------------------------------------------
-  onActorUpdate(handler: ActorUpdateHandler): UnsubscribeFn {
-    return this.subscriptions.onActorUpdate(handler);
-  }
-
-  onActorUpdateResponse(handler: ActorUpdateResponseHandler): UnsubscribeFn {
-    return this.subscriptions.onActorUpdateResponse(handler);
-  }
-
-  onVoxelUpdate(handler: VoxelUpdateHandler): UnsubscribeFn {
-    return this.subscriptions.onVoxelUpdate(handler);
-  }
-
-  onVoxelUpdateResponse(handler: VoxelUpdateResponseHandler): UnsubscribeFn {
-    return this.subscriptions.onVoxelUpdateResponse(handler);
-  }
-
-  onClientAudio(handler: ClientAudioHandler): UnsubscribeFn {
-    return this.subscriptions.onClientAudio(handler);
-  }
-
-  onClientText(handler: ClientTextHandler): UnsubscribeFn {
-    return this.subscriptions.onClientText(handler);
-  }
-
-  onClientEvent(handler: ClientEventHandler): UnsubscribeFn {
-    return this.subscriptions.onClientEvent(handler);
-  }
-
-  onServerEvent(handler: ServerEventHandler): UnsubscribeFn {
-    return this.subscriptions.onServerEvent(handler);
-  }
-
-  onGenericError(handler: GenericErrorHandler): UnsubscribeFn {
-    return this.subscriptions.onGenericError(handler);
-  }
-
-  // -------------------------------------------------------------------------
-  // Cleanup
-  // -------------------------------------------------------------------------
+  /** Closes the WebSocket and clears the in-memory auth token. */
   close(): void {
     this.subscriptions.close();
-    this.client.setAuthToken(null);
+    this.authState.setToken(null);
   }
 }

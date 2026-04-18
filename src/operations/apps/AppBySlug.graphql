@@ -1,0 +1,19 @@
+query AppBySlug($orgSlug: String!, $appSlug: String!) {
+  appBySlug(orgSlug: $orgSlug, appSlug: $appSlug) {
+    appId
+    orgId
+    name
+    slug
+    description
+    visibility
+    status
+    metadata
+    createdAt
+    updatedAt
+    org {
+      orgId
+      slug
+      name
+    }
+  }
+}

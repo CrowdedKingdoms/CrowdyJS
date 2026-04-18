@@ -1,0 +1,24 @@
+query AppUserAccessByApp(
+  $appId: BigInt!
+  $status: String
+  $limit: Int
+  $offset: Int
+) {
+  appUserAccessByApp(
+    appId: $appId
+    status: $status
+    limit: $limit
+    offset: $offset
+  ) {
+    appUserAccessId
+    appId
+    userId
+    tierId
+    status
+    grantedBy
+    subscriptionId
+    expiresAt
+    createdAt
+    updatedAt
+  }
+}

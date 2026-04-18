@@ -1,0 +1,10 @@
+mutation UpdateOrgToken($orgTokenId: BigInt!, $input: UpdateOrgTokenInput!) {
+  updateOrgToken(orgTokenId: $orgTokenId, input: $input) {
+    orgTokenId
+    label
+    isActive
+    expiresAt
+    revokedAt
+    updatedAt
+  }
+}

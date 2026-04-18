@@ -1,0 +1,22 @@
+query EffectiveQuota(
+  $metric: String!
+  $orgId: BigInt
+  $appId: BigInt
+  $tierId: BigInt
+) {
+  effectiveQuota(
+    metric: $metric
+    orgId: $orgId
+    appId: $appId
+    tierId: $tierId
+  ) {
+    quotaId
+    orgId
+    appId
+    tierId
+    metric
+    limitValue
+    period
+    actionOnExceed
+  }
+}

@@ -1,0 +1,3 @@
+mutation ForceLogoutUser($userId: BigInt!) {
+  forceLogoutUser(userId: $userId)
+}

@@ -1,0 +1,7 @@
+mutation ArchiveAccessTier($tierId: BigInt!) {
+  archiveAccessTier(tierId: $tierId) {
+    tierId
+    status
+    updatedAt
+  }
+}

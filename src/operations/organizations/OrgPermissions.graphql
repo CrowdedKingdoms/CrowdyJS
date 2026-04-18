@@ -1,0 +1,7 @@
+query OrgPermissions {
+  orgPermissions {
+    permissionKey
+    description
+    category
+  }
+}

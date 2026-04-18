@@ -1,0 +1,6 @@
+mutation UpdateUserType($userId: BigInt!, $value: String!) {
+  updateUserType(userId: $userId, value: $value) {
+    userId
+    userType
+  }
+}

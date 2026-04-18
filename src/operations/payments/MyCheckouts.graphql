@@ -1,0 +1,27 @@
+query MyCheckouts($limit: Int, $offset: Int) {
+  myCheckouts(limit: $limit, offset: $offset) {
+    items {
+      checkoutId
+      userId
+      provider
+      purpose
+      status
+      amountCents
+      currency
+      externalId
+      externalUrl
+      orgId
+      appId
+      tierId
+      error
+      createdAt
+      completedAt
+      expiresAt
+    }
+    pageInfo {
+      totalCount
+      limit
+      offset
+    }
+  }
+}

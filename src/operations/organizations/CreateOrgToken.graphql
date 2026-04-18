@@ -2,10 +2,10 @@ mutation CreateOrgToken($input: CreateOrgTokenInput!) {
   createOrgToken(input: $input) {
     orgTokenId
     orgId
+    token
     label
     isActive
     expiresAt
     createdAt
-    updatedAt
   }
 }

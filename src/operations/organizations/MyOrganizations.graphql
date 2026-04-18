@@ -1,0 +1,22 @@
+query MyOrganizations {
+  myOrganizations {
+    org {
+      orgId
+      slug
+      name
+      ownerUserId
+      status
+      createdAt
+      updatedAt
+    }
+    permissions
+    roles {
+      orgRoleId
+      orgId
+      roleName
+      isSystem
+      permissions
+    }
+    joinedAt
+  }
+}

@@ -1,0 +1,20 @@
+mutation CreateCheckout($input: CreateCheckoutInput!) {
+  createCheckout(input: $input) {
+    checkoutId
+    userId
+    provider
+    purpose
+    status
+    amountCents
+    currency
+    externalId
+    externalUrl
+    orgId
+    appId
+    tierId
+    error
+    createdAt
+    completedAt
+    expiresAt
+  }
+}

@@ -1,0 +1,3 @@
+mutation SendVoxelUpdate($input: VoxelUpdateRequestInput!) {
+  sendVoxelUpdate(input: $input)
+}

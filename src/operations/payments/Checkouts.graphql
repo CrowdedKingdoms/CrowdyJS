@@ -1,0 +1,26 @@
+query Checkouts($filter: CheckoutFilterInput, $limit: Int, $offset: Int) {
+  checkouts(filter: $filter, limit: $limit, offset: $offset) {
+    items {
+      checkoutId
+      userId
+      provider
+      purpose
+      status
+      amountCents
+      currency
+      externalId
+      externalUrl
+      orgId
+      appId
+      tierId
+      createdAt
+      completedAt
+      expiresAt
+    }
+    pageInfo {
+      totalCount
+      limit
+      offset
+    }
+  }
+}

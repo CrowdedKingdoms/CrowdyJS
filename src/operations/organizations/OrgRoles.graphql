@@ -1,0 +1,10 @@
+query OrgRoles($orgId: BigInt!) {
+  orgRoles(orgId: $orgId) {
+    orgRoleId
+    orgId
+    roleName
+    isSystem
+    permissions
+    description
+  }
+}

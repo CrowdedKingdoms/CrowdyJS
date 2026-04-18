@@ -1,0 +1,10 @@
+mutation CreateOrgRole($input: CreateOrgRoleInput!) {
+  createOrgRole(input: $input) {
+    orgRoleId
+    orgId
+    roleName
+    isSystem
+    permissions
+    description
+  }
+}

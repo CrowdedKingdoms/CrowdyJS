@@ -1,8 +1,6 @@
-mutation Register($input: RegisterUserInput!) {
-  register(registerUserInput: $input) {
-    token
-    gameTokenId
-    user {
+query UsersPaginated($query: String, $limit: Int, $offset: Int) {
+  usersPaginated(query: $query, limit: $limit, offset: $offset) {
+    items {
       userId
       email
       gamertag
@@ -15,6 +13,11 @@ mutation Register($input: RegisterUserInput!) {
       externalId
       userType
       isSuperAdmin
+    }
+    pageInfo {
+      totalCount
+      limit
+      offset
     }
   }
 }

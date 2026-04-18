@@ -1,0 +1,12 @@
+mutation UpdateOrgMemberRoles(
+  $orgId: BigInt!
+  $userId: BigInt!
+  $roleIds: [BigInt!]!
+) {
+  updateOrgMemberRoles(orgId: $orgId, userId: $userId, roleIds: $roleIds) {
+    orgMemberId
+    orgId
+    userId
+    status
+  }
+}

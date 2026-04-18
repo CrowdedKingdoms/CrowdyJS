@@ -1,0 +1,6 @@
+mutation SetSuperAdmin($userId: BigInt!, $value: Boolean!) {
+  setSuperAdmin(userId: $userId, value: $value) {
+    userId
+    isSuperAdmin
+  }
+}

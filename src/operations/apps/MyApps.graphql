@@ -1,0 +1,19 @@
+query MyApps {
+  myApps {
+    appId
+    orgId
+    name
+    slug
+    description
+    visibility
+    status
+    metadata
+    createdAt
+    updatedAt
+    org {
+      orgId
+      slug
+      name
+    }
+  }
+}

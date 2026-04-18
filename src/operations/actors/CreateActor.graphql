@@ -14,3 +14,4 @@ mutation CreateActor($input: CreateActorInput!) {
     createdAt
   }
 }
+

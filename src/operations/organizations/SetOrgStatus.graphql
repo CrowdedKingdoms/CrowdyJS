@@ -1,0 +1,7 @@
+mutation SetOrgStatus($orgId: BigInt!, $status: String!) {
+  setOrgStatus(orgId: $orgId, status: $status) {
+    orgId
+    status
+    updatedAt
+  }
+}

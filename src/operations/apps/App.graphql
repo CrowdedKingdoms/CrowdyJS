@@ -1,0 +1,19 @@
+query App($appId: BigInt!) {
+  app(appId: $appId) {
+    appId
+    orgId
+    name
+    slug
+    description
+    visibility
+    status
+    metadata
+    createdAt
+    updatedAt
+    org {
+      orgId
+      slug
+      name
+    }
+  }
+}

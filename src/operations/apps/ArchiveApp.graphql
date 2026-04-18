@@ -1,0 +1,7 @@
+mutation ArchiveApp($appId: BigInt!) {
+  archiveApp(appId: $appId) {
+    appId
+    status
+    updatedAt
+  }
+}

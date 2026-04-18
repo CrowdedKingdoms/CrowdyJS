@@ -1,0 +1,13 @@
+mutation CreateApp($input: CreateAppInput!) {
+  createApp(input: $input) {
+    appId
+    orgId
+    name
+    slug
+    description
+    visibility
+    status
+    metadata
+    createdAt
+  }
+}

@@ -1,0 +1,30 @@
+query MarketplaceApps(
+  $filter: AppMarketplaceFilterInput
+  $limit: Int
+  $offset: Int
+) {
+  apps(filter: $filter, limit: $limit, offset: $offset) {
+    items {
+      appId
+      orgId
+      name
+      slug
+      description
+      visibility
+      status
+      metadata
+      createdAt
+      updatedAt
+      org {
+        orgId
+        slug
+        name
+      }
+    }
+    pageInfo {
+      totalCount
+      limit
+      offset
+    }
+  }
+}

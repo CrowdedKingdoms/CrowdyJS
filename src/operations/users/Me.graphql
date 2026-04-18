@@ -12,5 +12,6 @@ query Me {
     orgId
     externalId
     userType
+    isSuperAdmin
   }
 }

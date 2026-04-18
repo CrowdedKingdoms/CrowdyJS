@@ -1,0 +1,10 @@
+mutation UpdateOrgRole($orgRoleId: BigInt!, $input: UpdateOrgRoleInput!) {
+  updateOrgRole(orgRoleId: $orgRoleId, input: $input) {
+    orgRoleId
+    orgId
+    roleName
+    isSystem
+    permissions
+    description
+  }
+}

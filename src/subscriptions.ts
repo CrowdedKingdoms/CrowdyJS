@@ -1,7 +1,15 @@
 /**
- * WebSocket subscription manager with type-specific handlers
+ * WebSocket subscription manager for the udpNotifications stream.
+ *
+ * Owns one shared `graphql-transport-ws` socket and dispatches incoming
+ * `udpNotifications` payloads to per-typename handler arrays. Reads its
+ * bearer token from `AuthState` so HTTP and WS auth can never drift.
+ *
+ * Public API is now `subscribe(handlers)` which returns an unsubscribe
+ * function; the per-handler `onActorUpdate` etc. shims are gone.
  */
 
+import { AuthState } from './auth-state.js';
 import type {
   UdpNotification,
   ActorUpdateHandler,
@@ -16,43 +24,55 @@ import type {
   UnsubscribeFn,
 } from './types.js';
 
-type HandlerMap = {
-  ActorUpdateNotification: ActorUpdateHandler[];
-  ActorUpdateResponse: ActorUpdateResponseHandler[];
-  VoxelUpdateNotification: VoxelUpdateHandler[];
-  VoxelUpdateResponse: VoxelUpdateResponseHandler[];
-  ClientAudioNotification: ClientAudioHandler[];
-  ClientTextNotification: ClientTextHandler[];
-  ClientEventNotification: ClientEventHandler[];
-  ServerEventNotification: ServerEventHandler[];
-  GenericErrorResponse: GenericErrorHandler[];
-};
+export interface UdpNotificationHandlers {
+  onActorUpdate?: ActorUpdateHandler;
+  onActorUpdateResponse?: ActorUpdateResponseHandler;
+  onVoxelUpdate?: VoxelUpdateHandler;
+  onVoxelUpdateResponse?: VoxelUpdateResponseHandler;
+  onClientAudio?: ClientAudioHandler;
+  onClientText?: ClientTextHandler;
+  onClientEvent?: ClientEventHandler;
+  onServerEvent?: ServerEventHandler;
+  onGenericError?: GenericErrorHandler;
+}
+
+interface RegisteredSubscription {
+  id: string;
+  handlers: UdpNotificationHandlers;
+}
+
+export interface SubscriptionManagerConfig {
+  wsEndpoint?: string;
+}
 
 export class SubscriptionManager {
-  private handlers: HandlerMap = {
-    ActorUpdateNotification: [],
-    ActorUpdateResponse: [],
-    VoxelUpdateNotification: [],
-    VoxelUpdateResponse: [],
-    ClientAudioNotification: [],
-    ClientTextNotification: [],
-    ClientEventNotification: [],
-    ServerEventNotification: [],
-    GenericErrorResponse: [],
-  };
-
+  private readonly wsEndpoint: string;
+  private readonly authState: AuthState;
   private wsClient: WebSocket | null = null;
   private wsUnsubscribe: (() => void) | null = null;
   private subscriptionId: string | null = null;
-  private wsEndpoint: string;
-  private token: string | null = null;
+  private subscribers = new Map<string, RegisteredSubscription>();
+  private nextSubscriberId = 1;
 
-  constructor(config: { wsEndpoint?: string } = {}) {
+  constructor(config: SubscriptionManagerConfig = {}, authState: AuthState) {
     this.wsEndpoint = config.wsEndpoint || 'ws://localhost:3000/graphql';
+    this.authState = authState;
   }
 
-  setAuthToken(token: string | null): void {
-    this.token = token;
+  /**
+   * Register handlers for the udpNotifications stream. The first call opens
+   * the shared socket (provided we have a token); subsequent calls reuse it.
+   * The returned function detaches just this set of handlers and closes the
+   * socket once the last subscriber leaves.
+   */
+  subscribe(handlers: UdpNotificationHandlers): UnsubscribeFn {
+    const id = `s${this.nextSubscriberId++}`;
+    this.subscribers.set(id, { id, handlers });
+    this.ensureSubscription();
+    return () => {
+      this.subscribers.delete(id);
+      this.checkIfShouldUnsubscribe();
+    };
   }
 
   private ensureSubscription(): void {
@@ -66,22 +86,13 @@ export class SubscriptionManager {
   }
 
   private startSubscription(): void {
-    if (!this.token) {
+    const token = this.authState.getToken();
+    if (!token) {
       throw new Error('Must be authenticated to subscribe');
     }
 
-    if (
-      this.wsClient &&
-      (this.wsClient.readyState === WebSocket.OPEN ||
-        this.wsClient.readyState === WebSocket.CONNECTING)
-    ) {
-      return; // Already connected or connecting
-    }
-
-    const wsUrl = this.wsEndpoint;
-    this.subscriptionId = 'udp-notifications-' + Date.now();
-
-    const ws = new WebSocket(wsUrl, 'graphql-transport-ws');
+    this.subscriptionId = `udp-notifications-${Date.now()}`;
+    const ws = new WebSocket(this.wsEndpoint, 'graphql-transport-ws');
     this.wsClient = ws;
 
     ws.onopen = () => {
@@ -89,63 +100,39 @@ export class SubscriptionManager {
         JSON.stringify({
           type: 'connection_init',
           payload: {
-            Authorization: `Bearer ${this.token}`,
+            Authorization: `Bearer ${token}`,
           },
-        })
+        }),
       );
     };
 
     ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(typeof event.data === 'string' ? event.data : '');
+        const message = JSON.parse(
+          typeof event.data === 'string' ? event.data : '',
+        );
 
         if (message.type === 'connection_ack') {
-          const subscribeMessage = {
-            id: this.subscriptionId,
-            type: 'subscribe',
-            payload: {
-              query: `subscription {
-                udpNotifications {
-                  __typename
-                  ... on ActorUpdateNotification { appId chunkX chunkY chunkZ distance decayRate uuid state sequenceNumber epochMillis }
-                  ... on VoxelUpdateNotification { appId chunkX chunkY chunkZ distance decayRate uuid voxelX voxelY voxelZ voxelType voxelState sequenceNumber epochMillis }
-                  ... on GenericErrorResponse { sequenceNumber errorCode }
-                  ... on ActorUpdateResponse { appId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
-                  ... on VoxelUpdateResponse { appId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
-                  ... on ClientAudioNotification { appId chunkX chunkY chunkZ distance decayRate uuid audioData sequenceNumber epochMillis }
-                  ... on ClientTextNotification { appId chunkX chunkY chunkZ distance decayRate uuid text sequenceNumber epochMillis }
-                  ... on ClientEventNotification { appId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
-                  ... on ServerEventNotification { appId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
-                }
-              }`,
-            },
-          };
-          ws.send(JSON.stringify(subscribeMessage));
+          ws.send(
+            JSON.stringify({
+              id: this.subscriptionId,
+              type: 'subscribe',
+              payload: { query: UDP_NOTIFICATIONS_QUERY },
+            }),
+          );
         } else if (message.type === 'next') {
-          if (message.payload?.data?.udpNotifications === null) {
-            return;
-          }
-
-          if (message.payload?.data?.udpNotifications) {
-            const notification = message.payload.data.udpNotifications as UdpNotification;
-            this.handleNotification(notification);
+          if (message.payload?.data?.udpNotifications === null) return;
+          const notification = message.payload?.data
+            ?.udpNotifications as UdpNotification | undefined;
+          if (notification) {
+            this.dispatch(notification);
           } else if (message.payload?.errors) {
             console.error('Subscription errors:', message.payload.errors);
-            const firstError = message.payload.errors[0];
-            const errorMsg = firstError?.message
-              ? Array.isArray(firstError.message)
-                ? firstError.message.join(', ')
-                : String(firstError.message)
-              : firstError?.extensions?.message || 'Unknown subscription error';
-            console.error('Subscription error:', errorMsg);
           }
         } else if (message.type === 'error') {
           console.error('Subscription error:', message.payload);
         } else if (message.type === 'complete') {
-          // Server ended the subscription
-          if (this.wsClient === ws) {
-            this.wsClient = null;
-          }
+          if (this.wsClient === ws) this.wsClient = null;
         } else if (message.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong' }));
         }
@@ -160,11 +147,11 @@ export class SubscriptionManager {
 
     ws.onclose = (event) => {
       if (event.code !== 1000) {
-        console.warn(`WebSocket closed unexpectedly: ${event.reason || event.code}`);
+        console.warn(
+          `WebSocket closed unexpectedly: ${event.reason || event.code}`,
+        );
       }
-      if (this.wsClient === ws) {
-        this.wsClient = null;
-      }
+      if (this.wsClient === ws) this.wsClient = null;
     };
 
     this.wsUnsubscribe = () => {
@@ -174,164 +161,87 @@ export class SubscriptionManager {
             JSON.stringify({
               id: this.subscriptionId,
               type: 'complete',
-            })
+            }),
           );
         }
         ws.close();
       }
-      if (this.wsClient === ws) {
-        this.wsClient = null;
-      }
+      if (this.wsClient === ws) this.wsClient = null;
       this.wsUnsubscribe = null;
     };
   }
 
-  private handleNotification(notification: UdpNotification): void {
+  private dispatch(notification: UdpNotification): void {
     const type = notification.__typename;
     if (!type) {
       console.warn('Received notification without __typename:', notification);
       return;
     }
-
-    const handlers = this.handlers[type as keyof HandlerMap];
-    if (handlers && handlers.length > 0) {
-      handlers.forEach((handler) => {
-        try {
-          handler(notification as any);
-        } catch (error) {
-          console.error(`Error in handler for ${type}:`, error);
+    // Snapshot the subscribers list so handlers that mutate the registry
+    // (e.g. by calling close()) don't affect this dispatch loop.
+    for (const sub of [...this.subscribers.values()]) {
+      try {
+        switch (type) {
+          case 'ActorUpdateNotification':
+            sub.handlers.onActorUpdate?.(notification as any);
+            break;
+          case 'ActorUpdateResponse':
+            sub.handlers.onActorUpdateResponse?.(notification as any);
+            break;
+          case 'VoxelUpdateNotification':
+            sub.handlers.onVoxelUpdate?.(notification as any);
+            break;
+          case 'VoxelUpdateResponse':
+            sub.handlers.onVoxelUpdateResponse?.(notification as any);
+            break;
+          case 'ClientAudioNotification':
+            sub.handlers.onClientAudio?.(notification as any);
+            break;
+          case 'ClientTextNotification':
+            sub.handlers.onClientText?.(notification as any);
+            break;
+          case 'ClientEventNotification':
+            sub.handlers.onClientEvent?.(notification as any);
+            break;
+          case 'ServerEventNotification':
+            sub.handlers.onServerEvent?.(notification as any);
+            break;
+          case 'GenericErrorResponse':
+            sub.handlers.onGenericError?.(notification as any);
+            break;
         }
-      });
+      } catch (error) {
+        console.error(`Handler for ${type} threw:`, error);
+      }
     }
   }
 
-  onActorUpdate(handler: ActorUpdateHandler): UnsubscribeFn {
-    this.handlers.ActorUpdateNotification.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.ActorUpdateNotification.indexOf(handler);
-      if (index > -1) {
-        this.handlers.ActorUpdateNotification.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
-  onActorUpdateResponse(handler: ActorUpdateResponseHandler): UnsubscribeFn {
-    this.handlers.ActorUpdateResponse.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.ActorUpdateResponse.indexOf(handler);
-      if (index > -1) {
-        this.handlers.ActorUpdateResponse.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
-  onVoxelUpdate(handler: VoxelUpdateHandler): UnsubscribeFn {
-    this.handlers.VoxelUpdateNotification.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.VoxelUpdateNotification.indexOf(handler);
-      if (index > -1) {
-        this.handlers.VoxelUpdateNotification.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
-  onVoxelUpdateResponse(handler: VoxelUpdateResponseHandler): UnsubscribeFn {
-    this.handlers.VoxelUpdateResponse.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.VoxelUpdateResponse.indexOf(handler);
-      if (index > -1) {
-        this.handlers.VoxelUpdateResponse.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
-  onClientAudio(handler: ClientAudioHandler): UnsubscribeFn {
-    this.handlers.ClientAudioNotification.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.ClientAudioNotification.indexOf(handler);
-      if (index > -1) {
-        this.handlers.ClientAudioNotification.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
-  onClientText(handler: ClientTextHandler): UnsubscribeFn {
-    this.handlers.ClientTextNotification.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.ClientTextNotification.indexOf(handler);
-      if (index > -1) {
-        this.handlers.ClientTextNotification.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
-  onClientEvent(handler: ClientEventHandler): UnsubscribeFn {
-    this.handlers.ClientEventNotification.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.ClientEventNotification.indexOf(handler);
-      if (index > -1) {
-        this.handlers.ClientEventNotification.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
-  onServerEvent(handler: ServerEventHandler): UnsubscribeFn {
-    this.handlers.ServerEventNotification.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.ServerEventNotification.indexOf(handler);
-      if (index > -1) {
-        this.handlers.ServerEventNotification.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
-  onGenericError(handler: GenericErrorHandler): UnsubscribeFn {
-    this.handlers.GenericErrorResponse.push(handler);
-    this.ensureSubscription();
-    return () => {
-      const index = this.handlers.GenericErrorResponse.indexOf(handler);
-      if (index > -1) {
-        this.handlers.GenericErrorResponse.splice(index, 1);
-      }
-      this.checkIfShouldUnsubscribe();
-    };
-  }
-
   private checkIfShouldUnsubscribe(): void {
-    // Check if any handlers are still registered
-    const hasHandlers = Object.values(this.handlers).some((handlers) => handlers.length > 0);
-    if (!hasHandlers && this.wsUnsubscribe) {
+    if (this.subscribers.size === 0 && this.wsUnsubscribe) {
       this.wsUnsubscribe();
       this.wsUnsubscribe = null;
     }
   }
 
   close(): void {
-    // Clear all handlers
-    Object.keys(this.handlers).forEach((key) => {
-      this.handlers[key as keyof HandlerMap] = [];
-    });
-
-    // Close WebSocket if open
+    this.subscribers.clear();
     if (this.wsUnsubscribe) {
       this.wsUnsubscribe();
     }
   }
 }
 
+const UDP_NOTIFICATIONS_QUERY = `subscription {
+  udpNotifications {
+    __typename
+    ... on ActorUpdateNotification { appId chunkX chunkY chunkZ distance decayRate uuid state sequenceNumber epochMillis }
+    ... on VoxelUpdateNotification { appId chunkX chunkY chunkZ distance decayRate uuid voxelX voxelY voxelZ voxelType voxelState sequenceNumber epochMillis }
+    ... on GenericErrorResponse { sequenceNumber errorCode }
+    ... on ActorUpdateResponse { appId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
+    ... on VoxelUpdateResponse { appId chunkX chunkY chunkZ distance decayRate uuid sequenceNumber epochMillis }
+    ... on ClientAudioNotification { appId chunkX chunkY chunkZ distance decayRate uuid audioData sequenceNumber epochMillis }
+    ... on ClientTextNotification { appId chunkX chunkY chunkZ distance decayRate uuid text sequenceNumber epochMillis }
+    ... on ClientEventNotification { appId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
+    ... on ServerEventNotification { appId chunkX chunkY chunkZ distance decayRate uuid eventType state sequenceNumber epochMillis }
+  }
+}`;

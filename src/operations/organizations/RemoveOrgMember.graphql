@@ -1,0 +1,3 @@
+mutation RemoveOrgMember($orgId: BigInt!, $userId: BigInt!) {
+  removeOrgMember(orgId: $orgId, userId: $userId)
+}

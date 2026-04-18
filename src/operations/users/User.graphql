@@ -12,5 +12,6 @@ query User($id: BigInt!) {
     orgId
     externalId
     userType
+    isSuperAdmin
   }
 }

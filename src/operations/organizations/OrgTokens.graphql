@@ -1,0 +1,13 @@
+query OrgTokens($orgId: BigInt!) {
+  orgTokens(orgId: $orgId) {
+    orgTokenId
+    orgId
+    label
+    isActive
+    lastUsedAt
+    revokedAt
+    expiresAt
+    createdAt
+    updatedAt
+  }
+}

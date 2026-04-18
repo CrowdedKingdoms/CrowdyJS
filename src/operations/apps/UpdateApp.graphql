@@ -1,0 +1,13 @@
+mutation UpdateApp($appId: BigInt!, $input: UpdateAppInput!) {
+  updateApp(appId: $appId, input: $input) {
+    appId
+    orgId
+    name
+    slug
+    description
+    visibility
+    status
+    metadata
+    updatedAt
+  }
+}

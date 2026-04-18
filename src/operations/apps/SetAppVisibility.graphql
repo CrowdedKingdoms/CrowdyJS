@@ -1,0 +1,7 @@
+mutation SetAppVisibility($appId: BigInt!, $visibility: AppVisibility!) {
+  setAppVisibility(appId: $appId, visibility: $visibility) {
+    appId
+    visibility
+    updatedAt
+  }
+}

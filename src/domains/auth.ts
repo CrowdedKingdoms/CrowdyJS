@@ -1,5 +1,5 @@
 import type { GraphQLClient } from '../client.js';
-import type { SubscriptionManager } from '../subscriptions.js';
+import type { AuthState } from '../auth-state.js';
 
 import {
   LoginDocument,
@@ -25,45 +25,59 @@ import {
 } from '../generated/graphql.js';
 
 /**
- * Authentication-related operations.
+ * Authentication operations. Exposed as `client.auth.<method>`.
  *
- * Exposed on the client as `client.auth.<method>`. The legacy
- * `client.login()` / `client.register()` shortcuts continue to work and
- * delegate here.
+ * `login` / `register` write the returned token into the shared `AuthState`
+ * so the WebSocket subscription manager picks it up automatically. `logout`
+ * / `logoutAllDevices` clear it.
  */
 export class AuthAPI {
-  constructor(private gql: GraphQLClient, private subs: SubscriptionManager) {}
+  constructor(
+    private gql: GraphQLClient,
+    private authState: AuthState,
+  ) {}
 
   async login(input: LoginMutationVariables['input']): Promise<LoginMutation['login']> {
     const data = await this.gql.request(LoginDocument, { input });
     if (data.login?.token) {
-      this.gql.setAuthToken(data.login.token);
-      this.subs.setAuthToken(data.login.token);
+      this.authState.setToken(data.login.token);
     }
     return data.login;
   }
 
   async register(
-    input: RegisterMutationVariables['input']
+    input: RegisterMutationVariables['input'],
   ): Promise<RegisterMutation['register']> {
     const data = await this.gql.request(RegisterDocument, { input });
     if (data.register?.token) {
-      this.gql.setAuthToken(data.register.token);
-      this.subs.setAuthToken(data.register.token);
+      this.authState.setToken(data.register.token);
     }
     return data.register;
   }
 
   async logout(): Promise<LogoutMutation['logout']> {
     const data = await this.gql.request(LogoutDocument, undefined);
-    this.gql.setAuthToken(null);
+    this.authState.setToken(null);
     return data.logout;
   }
 
   async logoutAllDevices(): Promise<LogoutAllDevicesMutation['logoutAllDevices']> {
     const data = await this.gql.request(LogoutAllDevicesDocument, undefined);
-    this.gql.setAuthToken(null);
+    this.authState.setToken(null);
     return data.logoutAllDevices;
+  }
+
+  /**
+   * Manual token override - lets callers seed an existing session token
+   * (e.g. on app reload) or stamp out the in-memory token without firing
+   * a logout mutation. Pass `null` to clear.
+   */
+  setToken(token: string | null): void {
+    this.authState.setToken(token);
+  }
+
+  getToken(): string | null {
+    return this.authState.getToken();
   }
 
   async confirmEmail(token: ConfirmEmailMutationVariables['token']): Promise<boolean> {
@@ -72,19 +86,21 @@ export class AuthAPI {
   }
 
   async requestPasswordReset(
-    email: RequestPasswordResetMutationVariables['email']
+    email: RequestPasswordResetMutationVariables['email'],
   ): Promise<boolean> {
     const data = await this.gql.request(RequestPasswordResetDocument, { email });
     return data.requestPasswordReset;
   }
 
-  async resetPassword(input: ResetPasswordMutationVariables['input']): Promise<boolean> {
+  async resetPassword(
+    input: ResetPasswordMutationVariables['input'],
+  ): Promise<boolean> {
     const data = await this.gql.request(ResetPasswordDocument, { input });
     return data.resetPassword;
   }
 
   async resendConfirmationEmail(
-    email: ResendConfirmationEmailMutationVariables['email']
+    email: ResendConfirmationEmailMutationVariables['email'],
   ): Promise<boolean> {
     const data = await this.gql.request(ResendConfirmationEmailDocument, { email });
     return data.resendConfirmationEmail;
@@ -92,7 +108,7 @@ export class AuthAPI {
 
   async changePassword(
     currentPassword: string,
-    newPassword: string
+    newPassword: string,
   ): Promise<boolean> {
     const vars: ChangePasswordMutationVariables = { currentPassword, newPassword };
     const data = await this.gql.request(ChangePasswordDocument, vars);

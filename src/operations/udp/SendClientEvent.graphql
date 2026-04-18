@@ -1,0 +1,3 @@
+mutation SendClientEvent($input: ClientEventNotificationInput!) {
+  sendClientEvent(input: $input)
+}

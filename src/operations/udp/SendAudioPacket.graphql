@@ -1,0 +1,3 @@
+mutation SendAudioPacket($input: ClientAudioPacketInput!) {
+  sendAudioPacket(input: $input)
+}
