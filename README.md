@@ -170,6 +170,33 @@ Unsubscribing from notifications stops delivery but does **not** release
 the UDP session. Call `disconnectUdpProxy()` explicitly, or the server
 will release it after 30 seconds of inactivity.
 
+## Request / Notification Mapping
+
+Every accepted spatial request is fanned out by the game server as a
+notification to all clients in range, **including the sender**. Treat
+your own arrival as the round-trip echo for that send (correlate by
+`uuid` + `sequenceNumber`).
+
+| Mutation (you send)         | Notification (everyone in range receives) |
+|-----------------------------|-------------------------------------------|
+| `sendActorUpdate(...)`      | `ActorUpdateNotification`                 |
+| `sendVoxelUpdate(...)`      | `VoxelUpdateNotification`                 |
+| `sendAudioPacket(...)`      | `ClientAudioNotification`                 |
+| `sendTextPacket(...)`       | `ClientTextNotification`                  |
+| `sendClientEvent(...)`      | `ClientEventNotification`                 |
+| *(generic spatial)*         | *(generic spatial)*                       |
+
+`ServerEventNotification` is server-originated (no matching client
+mutation). `GenericErrorResponse` carries failures for any of the above
+— correlate to the offending send via `sequenceNumber`. The legacy
+`ActorUpdateResponse` and `VoxelUpdateResponse` ack types are retired
+on the wire; rely on the self-fanout notification (and
+`GenericErrorResponse` for failures) instead.
+
+> *Generic spatial* refers to wire type `GENERIC_SPATIAL_1` (an arbitrary
+> client-defined payload routed through the same spatial fan-out as the
+> typed messages above). It is not currently exposed by this SDK.
+
 ## Subscription Handlers
 
 All spatial notification types share a uniform header:
