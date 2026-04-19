@@ -352,6 +352,213 @@ await client.disconnectUdpProxy();
 client.close();
 ```
 
+## Building a Real-Time Game
+
+The Quick Start above is enough to send and receive packets. Once you wire
+the SDK into an actual game these patterns will save you a lot of debugging
+time. They distill the lessons learned building the reference Phaser demo
+in this monorepo.
+
+### Decouple the network from the render loop
+
+Browsers throttle `requestAnimationFrame` aggressively when the tab is
+backgrounded — often to ~1 fps or fully paused. If your `sendActorUpdate`
+cadence is driven by the render loop, your character will appear frozen
+to other players the moment a user switches tabs. Drive sends with
+`setInterval` (which keeps firing in background tabs):
+
+```javascript
+const SEND_INTERVAL_MS = 100; // 10 Hz
+const sendId = setInterval(async () => {
+  await client.sendActorUpdate({
+    appId, chunk: getCurrentChunk(),
+    uuid: MY_UUID,
+    state: encodeLocalPose(),
+    sequenceNumber: nextSeq(),
+  });
+}, SEND_INTERVAL_MS);
+```
+
+Apply incoming notifications **inside the WS callback**, not buffered for
+the next frame. That keeps your data model in sync with real network
+arrivals even while the render loop is paused:
+
+```javascript
+client.onActorUpdate((notification) => {
+  registry.applyRemote(notification, performance.now()); // synchronous
+});
+```
+
+The renderer should treat the registry as a *view source* — sprites
+interpolate toward registry-held targets each frame, but the registry
+itself is mutated only by the network layer.
+
+### Verify the round-trip with self-fanout
+
+The game server fans out every accepted actor update to all clients in
+the chunk, **including the sender**. Use your own arrival as the WS
+round-trip echo (correlate by `uuid` + `sequenceNumber`):
+
+```javascript
+let lastSendAt = null, lastSendSeq = null;
+let lastEchoAt = null, lastEchoSeq = null;
+
+async function sendOnce() {
+  const seq = nextSeq();
+  const ok = await client.sendActorUpdate({ /* ... */, sequenceNumber: seq });
+  if (ok) { lastSendAt = performance.now(); lastSendSeq = seq; }
+}
+
+client.onActorUpdate((n) => {
+  if (n.uuid === MY_UUID) {
+    lastEchoAt = performance.now();
+    lastEchoSeq = n.sequenceNumber;
+    return;          // don't render ourselves as a remote
+  }
+  registry.applyRemote(n);
+});
+```
+
+`ActorUpdateResponse` is retired on the wire — the self-uuid notification
+is the canonical ack. `GenericErrorResponse` carries failures (correlate
+via `sequenceNumber`).
+
+### Keep the UDP session alive
+
+The server times the UDP proxy session out after **30 s** of inactivity in
+either direction. A 10 Hz send loop trivially keeps it warm. If your
+sender pauses (e.g. no local input → no diff to send), the next mutation
+will lazily re-establish via `ensureUdpProxyConnection` — `connectUdpProxy()`
+is idempotent. There is no need for a separate keepalive.
+
+### Detect and recover from connection drops
+
+The SDK does not auto-reconnect a dropped WebSocket: `onclose` only nulls
+the internal client. Track wall-clock arrival time of *any* notification
+and force a fresh subscription if it goes silent:
+
+```javascript
+let lastNotificationAt = performance.now();
+function bumpActivity() { lastNotificationAt = performance.now(); }
+
+// Wire bumpActivity into every handler you register (actor, voxel, text,
+// audio, event, server event, error). Or wrap your subscribe call.
+client.onActorUpdate((n) => { bumpActivity(); /* ... */ });
+client.onGenericError((e) => { bumpActivity(); /* ... */ });
+
+setInterval(() => {
+  if (performance.now() - lastNotificationAt > 8000) {
+    forceResubscribe();    // see below
+  }
+}, 1000);
+```
+
+To force a fresh subscription, call your unsubscribe handles and
+`subscribe()` again — the SDK opens a new WebSocket on a fresh subscribe.
+Then send one `sendActorUpdate` to re-register your chunk position so
+others see you immediately.
+
+```javascript
+function forceResubscribe() {
+  unsubAll();
+  unsubAll = installSubscriptions(); // re-registers handlers
+  void client.sendActorUpdate({ /* re-register */ });
+}
+```
+
+### Visibility-driven heal
+
+Browsers sometimes kill the WebSocket while a tab is hidden. Listen for
+`visibilitychange` and trigger a heal on return. Pause your stale-actor
+reaper (next section) while hidden so you don't drop remotes during a
+period when you couldn't have heard from them anyway.
+
+```javascript
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    pauseReaper('tab_hidden');
+    return;
+  }
+  forceResubscribe();
+  resumeReaperWithGrace('tab_hidden', 5000);
+});
+```
+
+### Track presence with timestamps
+
+There is no live "who is in this chunk" query — `client.actors.list({ chunk })`
+returns the persisted DB roster, not the live UDP set. Each remote actor's
+presence is inferred from the last notification you saw from them:
+
+```javascript
+const remotes = new Map(); // uuid -> { firstSeenAt, lastUpdateAt, pose }
+
+client.onActorUpdate((n) => {
+  if (n.uuid === MY_UUID) return;
+  const now = performance.now();
+  const existing = remotes.get(n.uuid);
+  if (!existing) {
+    remotes.set(n.uuid, { firstSeenAt: now, lastUpdateAt: now, pose: decode(n.state) });
+  } else {
+    existing.lastUpdateAt = now;
+    existing.pose = decode(n.state);
+  }
+});
+```
+
+Periodically reap remotes that stopped sending. **Suspend reaping while
+the tab is hidden or the WS is unhealthy** — otherwise you will evict
+remotes simply because you couldn't have heard from them.
+
+```javascript
+const STALE_TIMEOUT_MS = 10_000;
+setInterval(() => {
+  if (document.hidden || isWsStale()) return;
+  const now = performance.now();
+  for (const [uuid, r] of remotes) {
+    if (now - r.lastUpdateAt > STALE_TIMEOUT_MS) remotes.delete(uuid);
+  }
+}, 3000);
+```
+
+Grant a grace window after every heal (visibility return, force-resubscribe)
+before reaping resumes — that lets remotes re-broadcast on their own
+cadence first.
+
+### Suggested module layout
+
+A clean separation makes the rest much easier:
+
+```
+GameSession (singleton, lives above your scenes / views)
+├── ActorRegistry       data + emitter; mutated only in WS callbacks
+├── ActorSender         setInterval sends; reads pose from your game
+├── NetworkHealth       visibility / WS-stale monitor + heal
+└── (uses) CrowdyClient
+```
+
+Sprites and HUD become *views* over `ActorRegistry`. Scene shutdown only
+destroys sprites; the singleton session and registry persist, so revisiting
+the scene (or returning from a hidden tab) does not lose presence state.
+Recreating sprites on scene re-entry walks the existing registry entries.
+
+### Diagnostics worth logging
+
+When something goes wrong, these are the values you'll wish you had:
+
+- `sendCount`, `lastSendAt`, `lastSendSeq` — your local sender's history.
+- `echoCount`, `lastEchoAt`, `lastEchoSeq`, `msSinceLastEcho` — the WS
+  round-trip via self-fanout. If `echoCount` flatlines while `sendCount`
+  climbs, the WS path is wedged.
+- `notificationsByType` — map of `__typename` to arrival count. Useful for
+  confirming what the server is actually emitting.
+- Per-remote `lastUpdateAt` / `msSinceUpdate`.
+- `visibilityState`, `hidden`, `lastWsResubscribeAt`, `reaperPaused`.
+
+Expose them on a global handle (e.g. `window.__MYGAME_NET__.snapshot()`)
+during development — a structured JSON snapshot is far easier to triage
+than a wall of streaming logs.
+
 ## API Reference
 
 ### Constructor
@@ -378,8 +585,8 @@ new CrowdyClient(config?: CrowdyClientConfig)
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `connectUdpProxy()` | `Promise<UdpProxyConnectionStatus>` | Explicitly open a UDP session (optional) |
-| `disconnectUdpProxy()` | `Promise<boolean>` | Release the UDP session |
+| `connectUdpProxy()` | `Promise<UdpProxyConnectionStatus>` | Open a UDP session (idempotent: returns the existing status if one is open). Optional — `udpNotifications` and any `send*` mutation also create a session lazily. |
+| `disconnectUdpProxy()` | `Promise<boolean>` | Release the UDP session and complete the current `udpNotifications` stream. To force a fresh socket: call `disconnectUdpProxy()` then `connectUdpProxy()`. |
 | `getConnectionStatus()` | `Promise<UdpProxyConnectionStatus>` | Check if a UDP session is active |
 
 ### Mutations

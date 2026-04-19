@@ -665,7 +665,7 @@ export type Mutation = {
   archiveApp: App;
   changePassword: Scalars['Boolean']['output'];
   confirmEmail: Scalars['Boolean']['output'];
-  /** Open or replace the UDP proxy session for this game token: binds a socket and selects the game server with the fewest clients. Optional: send mutations and udpNotifications also create a session when none exists. Any existing session for this token is closed first. */
+  /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
   connectUdpProxy: UdpProxyConnectionStatus;
   createAccessTier: AppAccessTier;
   createActor: Actor;
