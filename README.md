@@ -356,8 +356,7 @@ client.close();
 
 The Quick Start above is enough to send and receive packets. Once you wire
 the SDK into an actual game these patterns will save you a lot of debugging
-time. They distill the lessons learned building the reference Phaser demo
-in this monorepo.
+time. 
 
 ### Decouple the network from the render loop
 
