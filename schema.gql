@@ -1,0 +1,1639 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type Avatar {
+  avatarId: ID!
+  userId: BigInt!
+  name: String!
+  publicState: String
+  privateState: String
+  createdAt: DateTime!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type ChunkCoordinates {
+  x: BigInt!
+  y: BigInt!
+  z: BigInt!
+}
+
+type VoxelCoordinates {
+  x: Int!
+  y: Int!
+  z: Int!
+}
+
+type Actor {
+  uuid: ID!
+  appId: BigInt!
+  userId: BigInt!
+  avatarId: BigInt
+  chunk: ChunkCoordinates!
+  privateState: String
+  publicState: String
+  createdAt: DateTime!
+}
+
+type User {
+  userId: BigInt!
+  email: String
+  gamertag: String
+  disambiguation: String
+  state: String
+  isConfirmed: Boolean!
+  createdAt: DateTime!
+  grantEarlyAccess: Boolean!
+  grantEarlyAccessOverride: Boolean!
+  orgId: BigInt
+  externalId: String
+  userType: String!
+  isSuperAdmin: Boolean!
+
+  """
+  The current user's effective permission keys on the given org. Empty if not a member. Always full set if super admin.
+  """
+  permissionsForOrg(orgId: BigInt!): [String!]!
+}
+
+type UserAppState {
+  userId: BigInt!
+  appId: BigInt!
+  state: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type UserDonationData {
+  totalAmountCents: String!
+  currency: String!
+}
+
+type UserPropertyTokenData {
+  available: String!
+  inUse: String!
+  total: String!
+}
+
+type FreePlayWindowInfo {
+  isCurrentlyActive: Boolean!
+  description: String!
+  nextWindowStart: String
+}
+
+type PageInfo {
+  totalCount: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type UsersPage {
+  items: [User!]!
+  pageInfo: PageInfo!
+}
+
+type AvatarDTO {
+  avatarId: ID!
+  userId: ID!
+  name: String!
+  publicState: String
+  privateState: String
+  createdAt: DateTime!
+}
+
+type AuthResponse {
+  token: String!
+  gameTokenId: String!
+  user: User!
+}
+
+type Organization {
+  orgId: BigInt!
+  name: String!
+  slug: String!
+  ownerUserId: BigInt!
+  status: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type OrgMember {
+  orgMemberId: BigInt!
+  orgId: BigInt!
+  userId: BigInt!
+  status: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type OrgToken {
+  orgTokenId: BigInt!
+  orgId: BigInt!
+  label: String
+  isActive: Boolean!
+  expiresAt: DateTime
+  lastUsedAt: DateTime
+  revokedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type OrgRole {
+  orgRoleId: BigInt!
+  orgId: BigInt!
+  roleName: String!
+  description: String
+  isSystem: Boolean!
+  createdAt: DateTime!
+  permissions: [String!]!
+}
+
+"""
+Represents one user's membership in one organization. Bundles the org, the union of permissions across the user's assigned roles, and the role list itself - so the UI can render an org dashboard without a follow-up round trip.
+"""
+type OrgMembership {
+  org: Organization!
+  permissions: [String!]!
+  roles: [OrgRole!]!
+  joinedAt: DateTime!
+}
+
+type TeleportResponse {
+  success: Boolean!
+  errorCode: UdpErrorCode!
+}
+
+"""
+Error codes returned by UDP game servers in response messages. NO_ERROR (0) indicates success, all other values indicate various error conditions.
+"""
+enum UdpErrorCode {
+  NO_ERROR
+  UNKNOWN_ERROR
+  EMAIL_NOT_FOUND
+  BAD_PASSWORD
+  EMAIL_ALREADY_EXISTS
+  INVALID_TOKEN
+  APP_NOT_FOUND
+  UNAUTHORIZED
+  APP_NOT_LOADED
+  EMAIL_TOO_SHORT
+  EMAIL_TOO_LONG
+  PASSWORD_TOO_SHORT
+  PASSWORD_TOO_LONG
+  GAME_TOKEN_WRONG_SIZE
+  NAME_TOO_LONG
+  INVALID_REQUEST
+  EMAIL_INVALID
+  INVALID_TOKEN_LENGTH
+  INVALID_APP_ID
+  CHUNK_NOT_FOUND
+  USER_NOT_AUTHENTICATED
+  INVALID_STATE_DATA
+  USER_NOT_APP_ADMIN
+  GRID_OUTSIDE_ASSIGNMENT
+  NO_MATCHING_GRID_ASSIGNMENT
+  INVALID_GRID_COORDINATES
+  GRID_ALREADY_EXISTS
+  GRID_OVERLAPS_EXISTING
+  GAMERTAG_ALREADY_EXISTS
+}
+
+type ServerStatus {
+  serverId: ID!
+  ip4: String!
+  ip6: String!
+  clientPort: Int!
+  status: ServerState!
+  peers: Int!
+  clients: Int!
+  cpuPeakPct: Float
+  clientRecvMsgsPerSec: Float
+  clientRecvBytesPerSec: Float
+  clientSendMsgsPerSec: Float
+  clientSendBytesPerSec: Float
+  peerRecvMsgsPerSec: Float
+  peerRecvBytesPerSec: Float
+  peerSendMsgsPerSec: Float
+  peerSendBytesPerSec: Float
+  clientSendIndividualMsgsPerSec: Float
+  updatedAt: DateTime!
+  createdAt: DateTime!
+}
+
+"""The current state of the server"""
+enum ServerState {
+  Starting
+  ReadyForClients
+  Stopping
+  Offline
+}
+
+type GraphQLServer {
+  graphqlServerId: ID!
+  ip4: String
+  ip6: String
+  status: ServerState!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type VersionInfo {
+  """Major version number"""
+  major: Int!
+
+  """Minor version number"""
+  minor: Int!
+
+  """Patch version number"""
+  patch: Int!
+
+  """Build number"""
+  build: Int!
+}
+
+type ServerVersionInfo {
+  """Current server version"""
+  serverVersion: VersionInfo!
+
+  """Minimum accepted client version"""
+  minimumClientVersion: VersionInfo!
+}
+
+type VoxelState {
+  voxelCoord: VoxelCoordinates!
+  voxelType: Int!
+  state: String
+}
+
+type LodData {
+  level: Int!
+  data: String!
+}
+
+type Chunk {
+  chunkId: ID!
+  appId: ID!
+  coordinates: ChunkCoordinates!
+  voxels: String
+  voxelStates: [VoxelState!]!
+  owner: ID
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  chunkState: String
+  cdnUploadedAt: DateTime
+  lods: [LodData!]
+}
+
+type Voxel {
+  voxelUpdateId: BigInt!
+  appId: BigInt!
+  coordinates: ChunkCoordinates!
+  location: VoxelCoordinates!
+  voxelType: Int!
+  state: String
+  createdBy: BigInt!
+  createdAt: DateTime!
+}
+
+type ChunkVoxelResponse {
+  coordinates: ChunkCoordinates!
+  voxels: [Voxel!]!
+}
+
+type ChunkLodsResponse {
+  chunkId: ID!
+  appId: ID!
+  coordinates: ChunkCoordinates!
+  lods: [LodData!]!
+  updatedAt: DateTime!
+}
+
+type ChunksByDistanceResponse {
+  chunks: [Chunk!]!
+  limit: Int
+  skip: Int
+}
+
+type OrgPermission {
+  permissionKey: ID!
+  description: String
+  category: String
+}
+
+"""
+Returned exactly once - on org token creation. The plaintext `token` field is never re-emitted. Future listings show metadata only via the `OrgToken` type.
+"""
+type OrgTokenWithSecret {
+  orgTokenId: BigInt!
+  orgId: BigInt!
+
+  """The plaintext token. Save it now; it is not stored."""
+  token: String!
+  label: String
+  isActive: Boolean!
+  expiresAt: DateTime
+  createdAt: DateTime!
+}
+
+type AppAccessTier {
+  tierId: BigInt!
+  appId: BigInt!
+  name: String!
+  tierOrder: Float!
+  isFree: Boolean!
+  isDefault: Boolean!
+  priceCents: BigInt
+  currency: String
+  billingPeriod: String
+  description: String
+  status: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type AppUserAccess {
+  appUserAccessId: BigInt!
+  appId: BigInt!
+  userId: BigInt!
+  tierId: BigInt
+  status: String!
+  grantedBy: String!
+  subscriptionId: String
+  expiresAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type OrgWallet {
+  walletId: BigInt!
+  orgId: BigInt!
+  balanceCents: BigInt!
+  currency: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type WalletTransaction {
+  transactionId: BigInt!
+  walletId: BigInt!
+  orgId: BigInt!
+  amountCents: BigInt!
+  balanceAfter: BigInt!
+  transactionType: String!
+  description: String
+  referenceId: String
+  appId: BigInt
+  createdAt: DateTime!
+}
+
+type AppBudget {
+  appBudgetId: BigInt!
+  orgId: BigInt!
+  appId: BigInt!
+  monthlyLimitCents: BigInt
+  currentMonthUsageCents: BigInt!
+  periodStart: DateTime!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ServiceQuota {
+  quotaId: BigInt!
+  orgId: BigInt
+  appId: BigInt
+  tierId: BigInt
+  metric: String!
+  limitValue: BigInt!
+  period: String!
+  actionOnExceed: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ChunkVoxelUpdatesResponse {
+  coordinates: ChunkCoordinates!
+  voxels: [Voxel!]!
+}
+
+type VoxelUpdatesByDistanceResponse {
+  chunks: [ChunkVoxelUpdatesResponse!]!
+  centerCoordinate: ChunkCoordinates!
+  limit: Int
+  skip: Int
+}
+
+type VoxelUpdateHistoryEvent {
+  id: BigInt!
+  appId: BigInt!
+  coordinates: ChunkCoordinates!
+  location: VoxelCoordinates!
+  oldVoxelType: Int
+  newVoxelType: Int
+  changedBy: BigInt
+  changedAt: DateTime!
+}
+
+type RollbackVoxelEventResult {
+  appId: BigInt!
+  coordinates: ChunkCoordinates!
+  location: VoxelCoordinates!
+  fromVoxelType: Int
+  toVoxelType: Int
+  plannedAction: String!
+  applied: Boolean!
+  reason: String
+}
+
+type Grid {
+  grid_id: BigInt!
+  app_id: BigInt!
+  low_chunk: ChunkCoordinates!
+  high_chunk: ChunkCoordinates!
+  created_at: DateTime!
+}
+
+type CreateGridResponse {
+  grid: Grid
+  error: UdpErrorCode!
+}
+
+type App {
+  appId: BigInt!
+  orgId: BigInt!
+  name: String!
+  slug: String
+  description: String
+  visibility: AppVisibility!
+  status: AppStatus!
+  metadata: String
+  state: String
+  createdBy: BigInt!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  org: Organization
+}
+
+"""
+PUBLIC = listed in marketplace, UNLISTED = direct link only, PRIVATE = members only
+"""
+enum AppVisibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+"""
+DRAFT = invisible to non-members, LIVE = purchasable/playable, ARCHIVED = read-only
+"""
+enum AppStatus {
+  DRAFT
+  LIVE
+  ARCHIVED
+}
+
+type AppsPage {
+  items: [App!]!
+  pageInfo: PageInfo!
+}
+
+type Checkout {
+  checkoutId: BigInt!
+  userId: BigInt!
+  provider: PaymentProvider!
+  purpose: CheckoutPurpose!
+  status: CheckoutStatus!
+  amountCents: BigInt
+  currency: String
+
+  """Stripe Checkout Session id, PayPal Order id, etc."""
+  externalId: String!
+
+  """URL to redirect the user to."""
+  externalUrl: String!
+  orgId: BigInt
+  appId: BigInt
+  tierId: BigInt
+  error: String
+  createdAt: DateTime!
+  completedAt: DateTime
+  expiresAt: DateTime
+}
+
+"""External payment processor for a checkout."""
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+}
+
+"""
+Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens.
+"""
+enum CheckoutPurpose {
+  ORG_WALLET_TOPUP
+  APP_ACCESS_PURCHASE
+  DONATION
+  PROPERTY_TOKENS
+}
+
+"""
+Lifecycle state of a Checkout. Updated by webhook reconciliation, not by the redirect URL.
+"""
+enum CheckoutStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  EXPIRED
+  CANCELED
+}
+
+type CheckoutsPage {
+  items: [Checkout!]!
+  pageInfo: PageInfo!
+}
+
+"""
+UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md.
+"""
+type UdpProxyConnectionStatus {
+  """
+  Whether the user is currently connected to a UDP game server through the proxy.
+  """
+  connected: Boolean!
+
+  """The IPv6 address of the UDP game server (only present when connected)."""
+  serverIp6: String
+
+  """
+  The client port of the UDP game server (only present when connected). This is the port that native clients would connect to directly.
+  """
+  serverClientPort: Int
+
+  """
+  Timestamp of the last message received from the UDP server (only present when connected). Used to detect connection health.
+  """
+  lastMessageTime: DateTime
+}
+
+"""
+BigInt custom scalar type. Input should be a string representation of a BigInt.
+"""
+scalar BigInt
+
+type Query {
+  me: User
+  user(id: BigInt!): User
+  myDonationData: UserDonationData!
+  myPropertyTokens: UserPropertyTokenData!
+  freePlayWindowInfo: FreePlayWindowInfo!
+
+  """
+  Super admin only. Paginated user search; replaces the old `users`/`usersByGamertag`/`usersByEmail` triple. `query` is matched ILIKE-prefix against email, gamertag, disambiguation, and exact user_id.
+  """
+  usersPaginated(query: String, limit: Int = 50, offset: Int = 0): UsersPage!
+  userAvatars(userId: BigInt!): [Avatar!]!
+  avatar(id: BigInt!): Avatar!
+  actor(uuid: String!): Actor!
+  actors(filter: ActorFilterInput): [Actor!]!
+  batchLookupActors(input: BatchActorLookupInput!): [Actor!]!
+  userAppState(appId: BigInt!): UserAppState
+  userAppStates: [UserAppState!]!
+  myAvatars: [AvatarDTO!]!
+
+  """
+  Returns a random server from the lowest 20% of servers by client count to distribute load evenly
+  """
+  serverWithLeastClients: ServerStatus!
+
+  """Returns all registered GraphQL servers"""
+  graphqlServers: [GraphQLServer!]!
+
+  """Returns only active (ReadyForClients) GraphQL servers"""
+  activeGraphQLServers: [GraphQLServer!]!
+
+  """
+  Returns version information for the server and minimum client version requirements
+  """
+  versionInfo: ServerVersionInfo!
+  getChunk(input: GetChunkInput!): Chunk
+  getChunkLods(input: GetChunkLodsInput!): ChunkLodsResponse
+  getVoxelList(input: GetVoxelListInput!): ChunkVoxelResponse!
+  getChunksByDistance(input: GetChunksByDistanceInput!): ChunksByDistanceResponse!
+  organization(id: BigInt!): Organization
+  organizationBySlug(slug: String!): Organization
+  myOrganizations: [OrgMembership!]!
+
+  """
+  The full seed list of permission keys. Used by the UI to render role editors.
+  """
+  orgPermissions: [OrgPermission!]!
+  orgMembers(orgId: BigInt!): [OrgMember!]!
+  orgRoles(orgId: BigInt!): [OrgRole!]!
+  memberRoles(orgMemberId: BigInt!): [OrgRole!]!
+  orgTokens(orgId: BigInt!): [OrgToken!]!
+
+  """
+  Public listing of access tiers for an app. Used by the marketplace app detail page.
+  """
+  appAccessTiers(appId: BigInt!): [AppAccessTier!]!
+  myAppAccess(appId: BigInt!): AppUserAccess
+  appUserAccessByApp(appId: BigInt!, status: String, limit: Int = 50, offset: Int = 0): [AppUserAccess!]!
+  walletBalance(orgId: BigInt!): OrgWallet!
+  walletTransactions(orgId: BigInt!, limit: Int, offset: Int): [WalletTransaction!]!
+  appBudget(orgId: BigInt!, appId: BigInt!): AppBudget
+  appBudgets(orgId: BigInt!): [AppBudget!]!
+  quotasForOrg(orgId: BigInt!): [ServiceQuota!]!
+  quotasForApp(appId: BigInt!): [ServiceQuota!]!
+
+  """
+  The most-specific quota that applies to (orgId, appId, tierId, metric). Walks tier -> app -> org -> free_tier_defaults. Returns null if nothing matches.
+  """
+  effectiveQuota(metric: String!, orgId: BigInt, appId: BigInt, tierId: BigInt): ServiceQuota
+  listVoxels(input: ListVoxelsInput!): [Voxel!]!
+  listVoxelUpdatesByDistance(input: ListVoxelUpdatesByDistanceInput!): VoxelUpdatesByDistanceResponse!
+  voxelUpdateHistory(appId: BigInt!, userId: BigInt, from: DateTime, to: DateTime, limit: Int, offset: Int): [VoxelUpdateHistoryEvent!]!
+
+  """
+  Public marketplace listing. Returns visibility=PUBLIC + status=LIVE only. No auth required.
+  """
+  apps(filter: AppMarketplaceFilterInput, limit: Int = 50, offset: Int = 0): AppsPage!
+  appBySlug(orgSlug: String!, appSlug: String!): App
+  app(appId: BigInt!): App
+
+  """Apps the caller can see: org member OR active app_user_access."""
+  myApps: [App!]!
+  appsForOrg(orgSlug: String!): [App!]!
+  myCheckouts(limit: Int = 50, offset: Int = 0): CheckoutsPage!
+
+  """Super admin only. Cross-tenant payments audit."""
+  checkouts(filter: CheckoutFilterInput, limit: Int = 50, offset: Int = 0): CheckoutsPage!
+
+  """
+  UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
+  """
+  udpProxyConnectionStatus: UdpProxyConnectionStatus!
+}
+
+input ActorFilterInput {
+  appId: BigInt
+  avatarId: BigInt
+  uuid: String
+  chunk: ChunkCoordinatesInput
+}
+
+input ChunkCoordinatesInput {
+  x: BigInt!
+  y: BigInt!
+  z: BigInt!
+}
+
+input BatchActorLookupInput {
+  uuids: [String!]!
+}
+
+input GetChunkInput {
+  appId: BigInt!
+  coordinates: ChunkCoordinatesInput!
+  requestedLodLevels: [Int!]
+  includeAllLods: Boolean
+}
+
+input GetChunkLodsInput {
+  appId: BigInt!
+  coordinates: ChunkCoordinatesInput!
+  lodLevels: [Int!]!
+}
+
+input GetVoxelListInput {
+  appId: BigInt!
+  coordinates: ChunkCoordinatesInput!
+}
+
+input GetChunksByDistanceInput {
+  appId: BigInt!
+  centerCoordinate: ChunkCoordinatesInput!
+  maxDistance: Int!
+  limit: Int
+  skip: Int
+}
+
+input ListVoxelsInput {
+  appId: BigInt!
+  coordinates: ChunkCoordinatesInput!
+  since: DateTime
+}
+
+input ListVoxelUpdatesByDistanceInput {
+  appId: BigInt!
+  centerCoordinate: ChunkCoordinatesInput!
+  maxDistance: Int!
+  limit: Int
+  skip: Int
+  since: DateTime
+}
+
+input AppMarketplaceFilterInput {
+  query: String
+  orgSlug: String
+}
+
+input CheckoutFilterInput {
+  provider: PaymentProvider
+  purpose: CheckoutPurpose
+  status: CheckoutStatus
+  userId: BigInt
+  orgId: BigInt
+  appId: BigInt
+}
+
+type Mutation {
+  updateGamertag(input: UpdateGamertagInput!): User!
+  setSuperAdmin(userId: BigInt!, value: Boolean!): User!
+  setEarlyAccessOverride(userId: BigInt!, value: Boolean!): User!
+  updateUserType(userId: BigInt!, value: String!): User!
+  forceLogoutUser(userId: BigInt!): Boolean!
+
+  """
+  Soft-deletes the caller's account: anonymizes PII, revokes sessions. Wallet, voxel, and donation history stays intact via FK.
+  """
+  deleteMyAccount: Boolean!
+  createAvatar(input: CreateAvatarInput!): Avatar!
+  updateAvatar(id: BigInt!, input: UpdateAvatarInput!): Avatar!
+  deleteAvatar(id: BigInt!): Avatar!
+  createActor(input: CreateActorInput!): Actor!
+  updateActor(uuid: String!, input: UpdateActorInput!): Actor!
+  deleteActor(uuid: String!): Actor!
+  updateUserState(input: UpdateUserStateInput!): User!
+  updateAvatarState(id: BigInt!, input: UpdateAvatarStateInput!): Avatar!
+  updateActorState(uuid: String!, input: UpdateActorStateInput!): Actor!
+  updateUserAppState(input: CreateUserAppStateInput!): UserAppState!
+  deleteUserAppState(appId: BigInt!): UserAppState!
+  login(loginUserInput: LoginUserInput!): AuthResponse!
+  register(registerUserInput: RegisterUserInput!): AuthResponse!
+  confirmEmail(token: String!): Boolean!
+  requestPasswordReset(email: String!): Boolean!
+  resetPassword(resetPasswordInput: ResetPasswordInput!): Boolean!
+  resendConfirmationEmail(email: String!): Boolean!
+  logout: Boolean!
+  changePassword(currentPassword: String!, newPassword: String!): Boolean!
+  logoutAllDevices: Boolean!
+  teleportRequest(input: TeleportRequestInput!): TeleportResponse!
+  updateChunk(input: ChunkUpdateInput!): Chunk!
+  updateChunkState(input: UpdateChunkStateInput!): Chunk
+  updateChunkLods(input: UpdateChunkLodsInput!): Chunk
+  createOrganization(input: CreateOrganizationInput!): Organization!
+
+  """Super admin only. Used to freeze/unfreeze orgs platform-wide."""
+  setOrgStatus(orgId: BigInt!, status: String!): Organization!
+
+  """
+  Returns the plaintext token exactly once. Save it; subsequent queries only show metadata.
+  """
+  createOrgToken(input: CreateOrgTokenInput!): OrgTokenWithSecret!
+  updateOrgToken(orgTokenId: BigInt!, input: UpdateOrgTokenInput!): OrgToken!
+  revokeOrgToken(orgTokenId: BigInt!): Boolean!
+  inviteOrgMember(input: InviteOrgMemberInput!): OrgMember!
+  removeOrgMember(orgId: BigInt!, userId: BigInt!): Boolean!
+  updateOrgMemberRoles(orgId: BigInt!, userId: BigInt!, roleIds: [BigInt!]!): OrgMember!
+  createOrgRole(input: CreateOrgRoleInput!): OrgRole!
+  updateOrgRole(orgRoleId: BigInt!, input: UpdateOrgRoleInput!): OrgRole!
+  deleteOrgRole(orgRoleId: BigInt!): Boolean!
+  createAccessTier(input: CreateAccessTierInput!): AppAccessTier!
+  updateAccessTier(tierId: BigInt!, input: UpdateAccessTierInput!): AppAccessTier!
+  archiveAccessTier(tierId: BigInt!): AppAccessTier!
+  grantAppAccess(input: GrantAppAccessInput!): AppUserAccess!
+  revokeAppAccess(appId: BigInt!, userId: BigInt!): AppUserAccess!
+  setAppBudget(orgId: BigInt!, appId: BigInt!, monthlyLimitCents: BigInt!): AppBudget!
+  setQuota(input: SetQuotaInput!): ServiceQuota!
+  deleteQuota(quotaId: BigInt!): Boolean!
+  updateVoxel(input: UpdateVoxelInput!): Voxel!
+
+  """
+  Reverts every voxel edit by `userId` in `appId` between `from` and `to`. Gated by the org permission `manage_apps`. Defaults to dryRun=true; pass dryRun=false to apply.
+  """
+  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]!
+  createGrid(input: CreateGridInput!): CreateGridResponse!
+  createApp(input: CreateAppInput!): App!
+  updateApp(appId: BigInt!, input: UpdateAppInput!): App!
+  archiveApp(appId: BigInt!): App!
+
+  """Super admin only. Used to take down or relist apps platform-wide."""
+  setAppVisibility(appId: BigInt!, visibility: AppVisibility!): App!
+
+  """
+  Creates a Checkout row, opens the provider session, and returns the row with externalUrl set. Redirect the user to externalUrl. Status starts PENDING and updates via webhook.
+  """
+  createCheckout(input: CreateCheckoutInput!): Checkout!
+
+  """
+  Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first.
+  """
+  connectUdpProxy(input: ConnectUdpProxyInput): UdpProxyConnectionStatus!
+
+  """
+  Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout).
+  """
+  disconnectUdpProxy: Boolean!
+
+  """
+  Send an actor update to the game server. Opens a UDP proxy session automatically if none exists. Responses and GenericErrorResponse are delivered on udpNotifications.
+  """
+  sendActorUpdate(input: ActorUpdateRequestInput!): Boolean!
+
+  """
+  Send a voxel update to the game server. Opens a UDP proxy session automatically if none exists; responses arrive on udpNotifications.
+  """
+  sendVoxelUpdate(input: VoxelUpdateRequestInput!): Boolean!
+
+  """
+  Send a voice audio packet to the game server. Opens a UDP proxy session automatically if none exists; notifications arrive on udpNotifications.
+  """
+  sendAudioPacket(input: ClientAudioPacketInput!): Boolean!
+
+  """
+  Send a text (chat) packet to the game server. Opens a UDP proxy session automatically if none exists; notifications arrive on udpNotifications.
+  """
+  sendTextPacket(input: ClientTextPacketInput!): Boolean!
+
+  """
+  Send a client event to the game server. Opens a UDP proxy session automatically if none exists; related notifications arrive on udpNotifications.
+  """
+  sendClientEvent(input: ClientEventNotificationInput!): Boolean!
+}
+
+input UpdateGamertagInput {
+  gamertag: String!
+  disambiguation: String!
+}
+
+input CreateAvatarInput {
+  name: String
+}
+
+input UpdateAvatarInput {
+  name: String
+}
+
+input CreateActorInput {
+  appId: BigInt!
+  avatarId: BigInt
+  uuid: String!
+  chunk: ChunkCoordinatesInput!
+  privateState: String
+  publicState: String
+}
+
+input UpdateActorInput {
+  appId: BigInt
+  avatarId: BigInt
+  chunk: ChunkCoordinatesInput
+  privateState: String
+  publicState: String
+}
+
+input UpdateUserStateInput {
+  state: String
+}
+
+input UpdateAvatarStateInput {
+  publicState: String
+  privateState: String
+}
+
+input UpdateActorStateInput {
+  privateState: String
+  publicState: String
+}
+
+input CreateUserAppStateInput {
+  appId: BigInt!
+  state: String
+}
+
+input LoginUserInput {
+  email: String!
+  password: String!
+}
+
+input RegisterUserInput {
+  email: String!
+  password: String!
+  gamertag: String
+}
+
+input ResetPasswordInput {
+  token: String!
+  newPassword: String!
+}
+
+input TeleportRequestInput {
+  appId: BigInt!
+  chunkAddress: ChunkCoordinatesInput!
+  voxelAddress: VoxelCoordinatesInput!
+  UUID: String!
+}
+
+input VoxelCoordinatesInput {
+  x: Int!
+  y: Int!
+  z: Int!
+}
+
+input ChunkUpdateInput {
+  appId: BigInt!
+  coordinates: ChunkCoordinatesInput!
+  voxels: String
+  voxelStates: [VoxelStateInput!]
+}
+
+input VoxelStateInput {
+  voxelCoord: VoxelCoordinatesInput!
+  voxelType: Int!
+  state: String
+}
+
+input UpdateChunkStateInput {
+  appId: BigInt!
+  coordinates: ChunkCoordinatesInput!
+  chunkState: String
+}
+
+input UpdateChunkLodsInput {
+  appId: BigInt!
+  coordinates: ChunkCoordinatesInput!
+  lods: [LodDataInput!]!
+}
+
+input LodDataInput {
+  level: Int!
+  data: String!
+}
+
+input CreateOrganizationInput {
+  name: String!
+  slug: String!
+}
+
+input CreateOrgTokenInput {
+  orgId: BigInt!
+  label: String
+  expiresAt: DateTime
+}
+
+input UpdateOrgTokenInput {
+  label: String
+  expiresAt: DateTime
+  isActive: Boolean
+}
+
+input InviteOrgMemberInput {
+  orgId: BigInt!
+  userId: BigInt!
+}
+
+input CreateOrgRoleInput {
+  orgId: BigInt!
+  roleName: String!
+  description: String
+  permissions: [String!]!
+}
+
+input UpdateOrgRoleInput {
+  roleName: String
+  description: String
+  permissions: [String!]
+}
+
+input CreateAccessTierInput {
+  appId: BigInt!
+  name: String!
+  tierOrder: Int
+  isFree: Boolean
+  isDefault: Boolean
+  description: String
+}
+
+input UpdateAccessTierInput {
+  name: String
+  tierOrder: Int
+  isFree: Boolean
+  isDefault: Boolean
+  priceCents: BigInt
+  currency: String
+  billingPeriod: String
+  description: String
+  stripePriceId: String
+  paypalPlanId: String
+}
+
+input GrantAppAccessInput {
+  appId: BigInt!
+  userId: BigInt!
+  tierId: BigInt
+  grantedBy: String
+}
+
+input SetQuotaInput {
+  orgId: BigInt
+  appId: BigInt
+  tierId: BigInt
+  metric: String!
+  limitValue: BigInt!
+  period: String
+  actionOnExceed: String
+}
+
+input UpdateVoxelInput {
+  appId: BigInt!
+  coordinates: ChunkCoordinatesInput!
+  location: VoxelCoordinatesInput!
+  voxelType: Float!
+  state: String
+}
+
+input RollbackVoxelUpdatesInput {
+  appId: BigInt!
+  userId: BigInt!
+  from: DateTime!
+  to: DateTime!
+  dryRun: Boolean! = true
+}
+
+input CreateGridInput {
+  app_id: BigInt!
+  corner1: ChunkCoordinatesInput!
+  corner2: ChunkCoordinatesInput!
+}
+
+input CreateAppInput {
+  orgId: BigInt!
+  name: String!
+  slug: String!
+  description: String
+  visibility: AppVisibility
+  status: AppStatus
+  metadata: String
+}
+
+input UpdateAppInput {
+  name: String
+  description: String
+  visibility: AppVisibility
+  status: AppStatus
+  metadata: String
+}
+
+input CreateCheckoutInput {
+  provider: PaymentProvider!
+  purpose: CheckoutPurpose!
+  orgId: BigInt
+  appId: BigInt
+  tierId: BigInt
+  amountCents: BigInt
+  currency: String = "usd"
+  successUrl: String
+  cancelUrl: String
+}
+
+"""
+Input for connecting to the UDP proxy. The server automatically selects the UDP game server with the least number of clients. This input type exists only because GraphQL requires input types to have at least one field - the _placeholder field can be ignored.
+"""
+input ConnectUdpProxyInput {
+  """
+  Placeholder field (can be ignored). GraphQL requires input types to have at least one field.
+  """
+  _placeholder: Boolean = true
+}
+
+"""
+Input for sending an actor update request to the UDP game server. This updates the state of an actor (player character or NPC) in a specific chunk.
+"""
+input ActorUpdateRequestInput {
+  """The ID of the app where the actor is located."""
+  appId: BigInt!
+
+  """
+  The chunk coordinates where the actor is located. A chunk is a 16x16x16 voxel cube.
+  """
+  chunk: ChunkCoordinatesInput!
+
+  """
+  A unique identifier for the actor. Must be exactly 32 bytes when encoded as UTF-8. This is typically a client-generated UUID.
+  """
+  uuid: String!
+
+  """
+  The actor state data, base64-encoded. May be an empty string for registration-only updates (no state payload).
+  """
+  state: String!
+
+  """
+  Chunk replication distance (0-8). Defaults to 8 for actor updates. Clamped to 0-8.
+  """
+  distance: Int
+
+  """
+  Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 1 (exponential) for actor updates.
+  """
+  decayRate: Int
+
+  """
+  Client's sequence number for this message (0-255, wraps). Used to match error responses.
+  """
+  sequenceNumber: Int
+}
+
+"""
+Input for sending a voxel update request to the UDP game server. This updates a single voxel (block) in a specific chunk. Voxel coordinates are relative to the chunk.
+"""
+input VoxelUpdateRequestInput {
+  """The ID of the app where the voxel is located."""
+  appId: BigInt!
+
+  """
+  The chunk coordinates containing the voxel. A chunk is a 16x16x16 voxel cube.
+  """
+  chunk: ChunkCoordinatesInput!
+
+  """
+  A unique identifier for this voxel update. Must be exactly 32 bytes when encoded as UTF-8.
+  """
+  uuid: String!
+
+  """
+  The voxel coordinates within the chunk. Values must be between -32768 and 32767 (int16 range).
+  """
+  voxel: VoxelCoordinatesInput!
+
+  """
+  The new voxel type ID. This determines the appearance and properties of the voxel.
+  """
+  voxelType: Int!
+
+  """The voxel state data, base64-encoded."""
+  voxelState: String!
+
+  """
+  Chunk replication distance (0-8). Defaults to 8 for voxel updates. Clamped to 0-8.
+  """
+  distance: Int
+
+  """
+  Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for voxel updates.
+  """
+  decayRate: Int
+
+  """
+  Client's sequence number for this message (0-255, wraps). Used to match error responses.
+  """
+  sequenceNumber: Int
+}
+
+"""
+Input for sending a client audio packet (voice chat) to the UDP game server. The audio data is compressed and will be broadcast to nearby players.
+"""
+input ClientAudioPacketInput {
+  """The ID of the app where the audio is being sent from."""
+  appId: BigInt!
+
+  """The chunk coordinates where the audio source is located."""
+  chunk: ChunkCoordinatesInput!
+
+  """
+  A unique identifier for the audio source (typically the player UUID). Must be exactly 32 bytes when encoded as UTF-8.
+  """
+  uuid: String!
+
+  """The compressed audio data, base64-encoded."""
+  audioData: String!
+
+  """
+  Chunk replication distance (0-8). Defaults to 1 for audio packets. Clamped to 0-8.
+  """
+  distance: Int
+
+  """
+  Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for audio packets.
+  """
+  decayRate: Int
+
+  """
+  Client's sequence number for this message (0-255, wraps). Used to match error responses.
+  """
+  sequenceNumber: Int
+}
+
+"""
+Input for sending a text message (chat) to the UDP game server. The text will be broadcast to nearby players in the same chunk.
+"""
+input ClientTextPacketInput {
+  """The ID of the app where the text message is being sent from."""
+  appId: BigInt!
+
+  """The chunk coordinates where the text message source is located."""
+  chunk: ChunkCoordinatesInput!
+
+  """
+  A unique identifier for the text source (typically the player UUID). Must be exactly 32 bytes when encoded as UTF-8.
+  """
+  uuid: String!
+
+  """
+  The text message content, encoded as UTF-8. This will be displayed to nearby players.
+  """
+  text: String!
+
+  """
+  Chunk replication distance (0-8). Defaults to 8 for text packets. Clamped to 0-8.
+  """
+  distance: Int
+
+  """
+  Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for text packets.
+  """
+  decayRate: Int
+
+  """
+  Client's sequence number for this message (0-255, wraps). Used to match error responses.
+  """
+  sequenceNumber: Int
+}
+
+"""
+Input for sending a client event notification to the UDP game server. Events are custom game events that can be used for various gameplay mechanics. The event type and state format are defined by the client/mod.
+"""
+input ClientEventNotificationInput {
+  """The ID of the app where the event is occurring."""
+  appId: BigInt!
+
+  """The chunk coordinates where the event is located."""
+  chunk: ChunkCoordinatesInput!
+
+  """
+  A unique identifier for the object controlling this event. Must be exactly 32 bytes when encoded as UTF-8.
+  """
+  uuid: String!
+
+  """
+  The event type ID (uint16, 0-65535). This is a client-defined enum that determines how the event should be processed.
+  """
+  eventType: Int!
+
+  """
+  The event state data, base64-encoded. The format is defined by the event type and is currently only processed by clients.
+  """
+  state: String!
+
+  """
+  Chunk replication distance (0-8). Defaults to 8 for events. Clamped to 0-8.
+  """
+  distance: Int
+
+  """
+  Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for events.
+  """
+  decayRate: Int
+
+  """
+  Client's sequence number for this message (0-255, wraps). Used to match error responses.
+  """
+  sequenceNumber: Int
+}
+
+type Subscription {
+  """
+  Downlink from the game server (responses, notifications, GenericErrorResponse). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Requires a game token—without one, yields a single null then ends. Connection failures may yield null. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session.
+  """
+  udpNotifications: UdpNotification
+}
+
+"""
+All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed.
+"""
+union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | GenericErrorResponse
+
+"""
+Response from the UDP game server for an actor update request. Received via the udpNotifications subscription.
+"""
+type ActorUpdateResponse {
+  """The ID of the app where the actor update was processed."""
+  appId: BigInt!
+
+  """The X coordinate of the chunk where the actor is located."""
+  chunkX: BigInt!
+
+  """The Y coordinate of the chunk where the actor is located."""
+  chunkY: BigInt!
+
+  """The Z coordinate of the chunk where the actor is located."""
+  chunkZ: BigInt!
+
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+
+  """The unique identifier of the actor that was updated."""
+  uuid: String!
+
+  """
+  The sequence number echoed back from the request, used to correlate responses.
+  """
+  sequenceNumber: Int!
+
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when an actor (player or NPC) state is updated by another client or the server. Received via the udpNotifications subscription.
+"""
+type ActorUpdateNotification {
+  """The ID of the app where the actor is located."""
+  appId: BigInt!
+
+  """The X coordinate of the chunk where the actor is located."""
+  chunkX: BigInt!
+
+  """The Y coordinate of the chunk where the actor is located."""
+  chunkY: BigInt!
+
+  """The Z coordinate of the chunk where the actor is located."""
+  chunkZ: BigInt!
+
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+
+  """The unique identifier of the actor that was updated."""
+  uuid: String!
+
+  """
+  The actor state data, base64-encoded. Decode this to get the full ActorState containing position, rotation, velocity, animation flags, etc.
+  """
+  state: String!
+
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Response from the UDP game server for a voxel update request. Received via the udpNotifications subscription.
+"""
+type VoxelUpdateResponse {
+  """The ID of the app where the voxel update was processed."""
+  appId: BigInt!
+
+  """The X coordinate of the chunk containing the voxel."""
+  chunkX: BigInt!
+
+  """The Y coordinate of the chunk containing the voxel."""
+  chunkY: BigInt!
+
+  """The Z coordinate of the chunk containing the voxel."""
+  chunkZ: BigInt!
+
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+
+  """The unique identifier for this voxel update."""
+  uuid: String!
+
+  """
+  The sequence number echoed back from the request, used to correlate responses.
+  """
+  sequenceNumber: Int!
+
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when a voxel (block) is updated by another client or the server. Received via the udpNotifications subscription.
+"""
+type VoxelUpdateNotification {
+  """The ID of the app where the voxel is located."""
+  appId: BigInt!
+
+  """The X coordinate of the chunk containing the voxel."""
+  chunkX: BigInt!
+
+  """The Y coordinate of the chunk containing the voxel."""
+  chunkY: BigInt!
+
+  """The Z coordinate of the chunk containing the voxel."""
+  chunkZ: BigInt!
+
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+
+  """The unique identifier for this voxel update."""
+  uuid: String!
+
+  """The X coordinate of the voxel within the chunk."""
+  voxelX: Int!
+
+  """The Y coordinate of the voxel within the chunk."""
+  voxelY: Int!
+
+  """The Z coordinate of the voxel within the chunk."""
+  voxelZ: Int!
+
+  """The voxel type ID that was set."""
+  voxelType: Int!
+
+  """The voxel state data, base64-encoded."""
+  voxelState: String!
+
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when another client sends an audio packet (voice chat). Received via the udpNotifications subscription.
+"""
+type ClientAudioNotification {
+  """The ID of the app where the audio is coming from."""
+  appId: BigInt!
+
+  """The X coordinate of the chunk where the audio source is located."""
+  chunkX: BigInt!
+
+  """The Y coordinate of the chunk where the audio source is located."""
+  chunkY: BigInt!
+
+  """The Z coordinate of the chunk where the audio source is located."""
+  chunkZ: BigInt!
+
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+
+  """
+  The unique identifier of the audio source (typically the player UUID sending the audio).
+  """
+  uuid: String!
+
+  """The compressed audio data, base64-encoded."""
+  audioData: String!
+
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when another client sends a text message (chat). Received via the udpNotifications subscription.
+"""
+type ClientTextNotification {
+  """The ID of the app where the text message is coming from."""
+  appId: BigInt!
+
+  """The X coordinate of the chunk where the text source is located."""
+  chunkX: BigInt!
+
+  """The Y coordinate of the chunk where the text source is located."""
+  chunkY: BigInt!
+
+  """The Z coordinate of the chunk where the text source is located."""
+  chunkZ: BigInt!
+
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+
+  """
+  The unique identifier of the text source (typically the player UUID sending the message).
+  """
+  uuid: String!
+
+  """The text message content, UTF-8 encoded. Display this to the user."""
+  text: String!
+
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when another client sends a custom event. Received via the udpNotifications subscription.
+"""
+type ClientEventNotification {
+  """The ID of the app where the event is occurring."""
+  appId: BigInt!
+
+  """The X coordinate of the chunk where the event is located."""
+  chunkX: BigInt!
+
+  """The Y coordinate of the chunk where the event is located."""
+  chunkY: BigInt!
+
+  """The Z coordinate of the chunk where the event is located."""
+  chunkZ: BigInt!
+
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+
+  """The unique identifier of the object controlling this event."""
+  uuid: String!
+
+  """
+  The event type ID (uint16). This determines how the event should be processed.
+  """
+  eventType: Int!
+
+  """
+  The event state data, base64-encoded. The format is defined by the event type.
+  """
+  state: String!
+
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when the server sends a custom event. Received via the udpNotifications subscription.
+"""
+type ServerEventNotification {
+  """The ID of the app where the event is occurring."""
+  appId: BigInt!
+
+  """The X coordinate of the chunk where the event is located."""
+  chunkX: BigInt!
+
+  """The Y coordinate of the chunk where the event is located."""
+  chunkY: BigInt!
+
+  """The Z coordinate of the chunk where the event is located."""
+  chunkZ: BigInt!
+
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+
+  """The unique identifier of the object controlling this event."""
+  uuid: String!
+
+  """
+  The event type ID (uint16). This determines how the event should be processed.
+  """
+  eventType: Int!
+
+  """
+  The event state data, base64-encoded. The format is defined by the event type.
+  """
+  state: String!
+
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Generic error response from the UDP game server. Uses the sequence number to match the original request that failed.
+"""
+type GenericErrorResponse {
+  """
+  The sequence number from the original request, used to correlate this error with the request that caused it.
+  """
+  sequenceNumber: Int!
+
+  """Error code indicating the reason for the failure."""
+  errorCode: UdpErrorCode!
+}
