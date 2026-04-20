@@ -16,6 +16,8 @@
     "README.md"
   ],
   "scripts": {
+    "sync-schema": "node scripts/sync-schema.mjs",
+    "precodegen": "npm run sync-schema",
     "codegen": "graphql-codegen --config codegen.ts",
     "codegen:watch": "graphql-codegen --config codegen.ts --watch",
     "prebuild": "npm run codegen",
