@@ -36,6 +36,14 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CrowdedKingdoms/CrowdyJS.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CrowdedKingdoms/CrowdyJS/issues"
+  },
+  "homepage": "https://github.com/CrowdedKingdoms/CrowdyJS#readme",
   "devDependencies": {
     "@graphql-codegen/cli": "^6.3.0",
     "@graphql-codegen/typed-document-node": "^6.1.8",
