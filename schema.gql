@@ -579,6 +579,167 @@ type UdpProxyConnectionStatus {
 }
 
 """
+Startup contract for browser game clients. Fetch this after login to initialize protocol/version checks and UDP proxy state in one round trip.
+"""
+type GameClientBootstrap {
+  appId: BigInt!
+  me: User!
+  versionInfo: ServerVersionInfo!
+  udpProxyConnectionStatus: UdpProxyConnectionStatus!
+
+  """GraphQL WebSocket subprotocol expected by udpNotifications."""
+  realtimeProtocol: String!
+
+  """GraphQL subscription field that carries UDP proxy notifications."""
+  subscriptionName: String!
+  maxReplicationDistance: Int!
+  maxDecayRate: Int!
+  sequenceNumberModulo: Int!
+}
+
+type CksEnvironment {
+  id: String!
+  orgId: BigInt!
+  slug: String!
+  displayName: String!
+  primaryCloud: String!
+  primaryRegion: String!
+  status: String!
+  subdomainHandle: String
+  desiredEnvironmentVersion: String
+  observedEnvironmentVersion: String
+  databaseFlavor: String
+  graphqlFlavor: String
+  udpBuddyFlavor: String
+  billingStatus: String!
+  billingGraceDeadline: DateTime
+  suspendedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type CksEnvironmentComponent {
+  id: String!
+  environmentId: String!
+  kind: String!
+  desiredVersion: String
+  desiredSpecJson: String
+  observedVersion: String
+  observedSpecJson: String
+  status: String
+  lastObservedAt: DateTime
+}
+
+type CksEnvironmentChangeOrder {
+  id: String!
+  environmentId: String!
+  kind: String!
+  payloadJson: String!
+  requestedBy: BigInt
+  status: String!
+  claimedBy: String
+  claimedAt: DateTime
+  finishedAt: DateTime
+  error: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type CksEnvironmentAudit {
+  id: String!
+  environmentId: String!
+  action: String!
+  payloadJson: String
+  createdAt: DateTime!
+}
+
+type CksEnvironmentSecretValue {
+  id: String!
+  environmentId: String!
+  name: String!
+  kind: String
+  sealedCiphertextBase64: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type CksEnvironmentVersion {
+  version: String!
+  releasedAt: DateTime!
+  status: String!
+  notes: String
+}
+
+type CksOvhDatacenter {
+  region: String!
+  name: String
+  continent: String
+  status: String!
+  isAvailable: Boolean!
+  syncedAt: DateTime!
+}
+
+type CksOvhFlavor {
+  flavorName: String!
+  flavorType: String
+  vcpus: Int
+  ramMb: Int
+  diskGb: Int
+  quotaAvailable: Int
+  rawHourlyCostCents: BigInt
+  customerHourlyPriceCents: BigInt
+  currency: String!
+  syncedAt: DateTime!
+}
+
+type CksEnvironmentQuote {
+  datacenter: String!
+  databaseFlavor: String!
+  graphqlFlavor: String!
+  udpBuddyFlavor: String!
+  hourlyCostCents: BigInt!
+  firstDayReserveCents: BigInt!
+  walletBalanceCents: BigInt!
+  availableBalanceCents: BigInt!
+  currency: String!
+  canCreate: Boolean!
+}
+
+type CksEnvironmentOutput {
+  id: String!
+  environmentId: String!
+  componentKind: String!
+  name: String!
+  label: String!
+  value: String!
+  valueKind: String!
+}
+
+type CksEnvironmentBillingResource {
+  id: String!
+  environmentId: String!
+  provider: String!
+  resourceId: String!
+  resourceName: String
+  componentKind: String!
+  region: String!
+  flavorName: String
+  status: String!
+  customerHourlyPriceCents: BigInt
+  observedAt: DateTime!
+}
+
+type CksEnvironmentDetail {
+  environment: CksEnvironment!
+  components: [CksEnvironmentComponent!]!
+  changeOrders: [CksEnvironmentChangeOrder!]!
+  audit: [CksEnvironmentAudit!]!
+  secrets: [CksEnvironmentSecretValue!]!
+  outputs: [CksEnvironmentOutput!]!
+  billingResources: [CksEnvironmentBillingResource!]!
+}
+
+"""
 BigInt custom scalar type. Input should be a string representation of a BigInt.
 """
 scalar BigInt
@@ -675,6 +836,17 @@ type Query {
   UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
   """
   udpProxyConnectionStatus: UdpProxyConnectionStatus!
+
+  """
+  Single startup payload for browser game clients: current user, version requirements, UDP proxy status, realtime protocol details, and spatial send limits.
+  """
+  gameClientBootstrap(appId: BigInt!): GameClientBootstrap!
+  orgEnvironments(orgId: BigInt!): [CksEnvironment!]!
+  orgEnvironment(orgId: BigInt!, slug: String!): CksEnvironmentDetail
+  environmentVersions: [CksEnvironmentVersion!]!
+  environmentDatacenters: [CksOvhDatacenter!]!
+  environmentFlavors(datacenter: String!): [CksOvhFlavor!]!
+  environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote!
 }
 
 input ActorFilterInput {
@@ -747,6 +919,14 @@ input CheckoutFilterInput {
   userId: BigInt
   orgId: BigInt
   appId: BigInt
+}
+
+input EnvironmentQuoteInput {
+  orgId: BigInt!
+  datacenter: String!
+  databaseFlavor: String!
+  graphqlFlavor: String!
+  udpBuddyFlavor: String!
 }
 
 type Mutation {
@@ -831,7 +1011,7 @@ type Mutation {
   """
   Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first.
   """
-  connectUdpProxy(input: ConnectUdpProxyInput): UdpProxyConnectionStatus!
+  connectUdpProxy: UdpProxyConnectionStatus!
 
   """
   Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout).
@@ -862,6 +1042,9 @@ type Mutation {
   Send a client event to the game server. Opens a UDP proxy session automatically if none exists; related notifications arrive on udpNotifications.
   """
   sendClientEvent(input: ClientEventNotificationInput!): Boolean!
+  createEnvironment(input: CreateEnvironmentInput!): CksEnvironmentDetail!
+  destroyEnvironment(input: DestroyEnvironmentInput!): CksEnvironmentChangeOrder!
+  resumeEnvironment(input: ResumeEnvironmentInput!): CksEnvironmentChangeOrder!
 }
 
 input UpdateGamertagInput {
@@ -933,7 +1116,7 @@ input TeleportRequestInput {
   appId: BigInt!
   chunkAddress: ChunkCoordinatesInput!
   voxelAddress: VoxelCoordinatesInput!
-  UUID: String!
+  uuid: String!
 }
 
 input VoxelCoordinatesInput {
@@ -1063,7 +1246,7 @@ input RollbackVoxelUpdatesInput {
 }
 
 input CreateGridInput {
-  app_id: BigInt!
+  appId: BigInt!
   corner1: ChunkCoordinatesInput!
   corner2: ChunkCoordinatesInput!
 }
@@ -1096,16 +1279,6 @@ input CreateCheckoutInput {
   currency: String = "usd"
   successUrl: String
   cancelUrl: String
-}
-
-"""
-Input for connecting to the UDP proxy. The server automatically selects the UDP game server with the least number of clients. This input type exists only because GraphQL requires input types to have at least one field - the _placeholder field can be ignored.
-"""
-input ConnectUdpProxyInput {
-  """
-  Placeholder field (can be ignored). GraphQL requires input types to have at least one field.
-  """
-  _placeholder: Boolean = true
 }
 
 """
@@ -1303,9 +1476,30 @@ input ClientEventNotificationInput {
   sequenceNumber: Int
 }
 
+input CreateEnvironmentInput {
+  orgId: BigInt!
+  displayName: String!
+  slug: String!
+  x25519PublicKeyBase64: String!
+  datacenter: String!
+  databaseFlavor: String!
+  graphqlFlavor: String!
+  udpBuddyFlavor: String!
+}
+
+input DestroyEnvironmentInput {
+  orgId: BigInt!
+  slug: String!
+}
+
+input ResumeEnvironmentInput {
+  orgId: BigInt!
+  slug: String!
+}
+
 type Subscription {
   """
-  Downlink from the game server (responses, notifications, GenericErrorResponse). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Requires a game token—without one, yields a single null then ends. Connection failures may yield null. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session.
+  Downlink from the game server (responses, notifications, GenericErrorResponse, and RealtimeConnectionEvent). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Connection failures are delivered as RealtimeConnectionEvent. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session.
   """
   udpNotifications: UdpNotification
 }
@@ -1313,7 +1507,7 @@ type Subscription {
 """
 All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed.
 """
-union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | GenericErrorResponse
+union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | GenericErrorResponse | RealtimeConnectionEvent
 
 """
 Response from the UDP game server for an actor update request. Received via the udpNotifications subscription.
@@ -1636,4 +1830,14 @@ type GenericErrorResponse {
 
   """Error code indicating the reason for the failure."""
   errorCode: UdpErrorCode!
+}
+
+"""
+SDK-facing realtime lifecycle event emitted on udpNotifications when the subscription cannot open a UDP proxy session.
+"""
+type RealtimeConnectionEvent {
+  status: String!
+  code: String!
+  message: String!
+  retryable: Boolean!
 }

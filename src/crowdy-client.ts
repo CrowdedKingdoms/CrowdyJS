@@ -9,6 +9,9 @@
 import { AuthState } from './auth-state.js';
 import { GraphQLClient } from './client.js';
 import { SubscriptionManager } from './subscriptions.js';
+import type { CrowdyLogger } from './logger.js';
+import type { TokenStore } from './session.js';
+import { WorldClient } from './world.js';
 
 import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
@@ -27,17 +30,27 @@ import { ServerStatusAPI } from './domains/serverStatus.js';
 import { UdpAPI } from './domains/udp.js';
 
 export interface CrowdyClientConfig {
+  httpUrl?: string;
+  wsUrl?: string;
   graphqlEndpoint?: string;
   wsEndpoint?: string;
   timeout?: number;
+  tokenStore?: TokenStore;
+  logger?: CrowdyLogger;
+  realtime?: {
+    retryAttempts?: number;
+    retryInitialDelayMs?: number;
+    retryMaxDelayMs?: number;
+    waitTimeoutMs?: number;
+  };
 }
 
 export class CrowdyClient {
   // Internal infrastructure (kept private; tests can poke via the auth
   // sub-client's `setToken` / `getToken` for token rehydration).
-  private readonly authState: AuthState;
-  private readonly client: GraphQLClient;
-  private readonly subscriptions: SubscriptionManager;
+  readonly session: AuthState;
+  readonly graphql: GraphQLClient;
+  readonly realtime: SubscriptionManager;
 
   // Domain wrappers - the canonical surface area.
   readonly auth: AuthAPI;
@@ -57,36 +70,54 @@ export class CrowdyClient {
   readonly udp: UdpAPI;
 
   constructor(config: CrowdyClientConfig = {}) {
-    this.authState = new AuthState();
-    this.client = new GraphQLClient(
-      { graphqlEndpoint: config.graphqlEndpoint, timeout: config.timeout },
-      this.authState,
+    this.session = new AuthState(config.tokenStore);
+    this.graphql = new GraphQLClient(
+      {
+        httpUrl: config.httpUrl,
+        graphqlEndpoint: config.graphqlEndpoint,
+        timeout: config.timeout,
+        logger: config.logger,
+      },
+      this.session,
     );
-    this.subscriptions = new SubscriptionManager(
-      { wsEndpoint: config.wsEndpoint },
-      this.authState,
+    this.realtime = new SubscriptionManager(
+      {
+        wsUrl: config.wsUrl,
+        wsEndpoint: config.wsEndpoint,
+        logger: config.logger,
+        ...config.realtime,
+      },
+      this.session,
     );
 
-    this.auth = new AuthAPI(this.client, this.authState);
-    this.users = new UsersAPI(this.client);
-    this.orgs = new OrganizationsAPI(this.client);
-    this.apps = new AppsAPI(this.client);
-    this.appAccess = new AppAccessAPI(this.client);
-    this.billing = new BillingAPI(this.client);
-    this.quotas = new QuotasAPI(this.client);
-    this.payments = new PaymentsAPI(this.client);
-    this.chunks = new ChunksAPI(this.client);
-    this.voxels = new VoxelsAPI(this.client);
-    this.actors = new ActorsAPI(this.client);
-    this.teleport = new TeleportAPI(this.client);
-    this.state = new StateAPI(this.client);
-    this.serverStatus = new ServerStatusAPI(this.client);
-    this.udp = new UdpAPI(this.client, this.subscriptions);
+    this.auth = new AuthAPI(this.graphql, this.session);
+    this.users = new UsersAPI(this.graphql);
+    this.orgs = new OrganizationsAPI(this.graphql);
+    this.apps = new AppsAPI(this.graphql);
+    this.appAccess = new AppAccessAPI(this.graphql);
+    this.billing = new BillingAPI(this.graphql);
+    this.quotas = new QuotasAPI(this.graphql);
+    this.payments = new PaymentsAPI(this.graphql);
+    this.chunks = new ChunksAPI(this.graphql);
+    this.voxels = new VoxelsAPI(this.graphql);
+    this.actors = new ActorsAPI(this.graphql);
+    this.teleport = new TeleportAPI(this.graphql);
+    this.state = new StateAPI(this.graphql);
+    this.serverStatus = new ServerStatusAPI(this.graphql);
+    this.udp = new UdpAPI(this.graphql, this.realtime);
+  }
+
+  world(appId: string): WorldClient {
+    return new WorldClient(appId, this.udp);
   }
 
   /** Closes the WebSocket and clears the in-memory auth token. */
   close(): void {
-    this.subscriptions.close();
-    this.authState.setToken(null);
+    this.realtime.close();
+    this.session.setToken(null);
   }
+}
+
+export function createCrowdyClient(config: CrowdyClientConfig = {}): CrowdyClient {
+  return new CrowdyClient(config);
 }

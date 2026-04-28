@@ -9,23 +9,37 @@
 
 import { print } from 'graphql';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
-import { AuthState } from './auth-state.js';
+import type { SessionStore } from './session.js';
+import type { CrowdyLogger } from './logger.js';
+import { silentLogger } from './logger.js';
+import {
+  CrowdyError,
+  CrowdyGraphQLError,
+  CrowdyHttpError,
+  CrowdyNetworkError,
+  CrowdyTimeoutError,
+  type CrowdyGraphQLErrorPayload,
+} from './errors.js';
 
 export interface GraphQLClientConfig {
+  httpUrl?: string;
   graphqlEndpoint?: string;
   timeout?: number;
+  logger?: CrowdyLogger;
 }
 
 export class GraphQLClient {
   private readonly graphqlEndpoint: string;
   private readonly timeout: number;
-  private readonly authState: AuthState;
+  private readonly session: SessionStore;
+  private readonly logger: CrowdyLogger;
 
-  constructor(config: GraphQLClientConfig = {}, authState: AuthState) {
+  constructor(config: GraphQLClientConfig = {}, session: SessionStore) {
     this.graphqlEndpoint =
-      config.graphqlEndpoint || 'http://localhost:3000/graphql';
+      config.httpUrl || config.graphqlEndpoint || 'http://localhost:3000/graphql';
     this.timeout = config.timeout || 60000;
-    this.authState = authState;
+    this.session = session;
+    this.logger = config.logger ?? silentLogger;
   }
 
   getEndpoint(): string {
@@ -39,9 +53,14 @@ export class GraphQLClient {
   async request<TResult, TVariables>(
     document: TypedDocumentNode<TResult, TVariables>,
     variables?: TVariables,
+    options: { signal?: AbortSignal } = {},
   ): Promise<TResult> {
     const queryStr = print(document);
-    return this.query<TResult>(queryStr, (variables ?? {}) as Record<string, any>);
+    return this.query<TResult>(
+      queryStr,
+      (variables ?? {}) as Record<string, unknown>,
+      options,
+    );
   }
 
   /**
@@ -51,11 +70,13 @@ export class GraphQLClient {
    */
   async query<T = any>(
     query: string,
-    variables: Record<string, any> = {},
+    variables: Record<string, unknown> = {},
+    options: { signal?: AbortSignal } = {},
   ): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-    const token = this.authState.getToken();
+    const token = this.session.getToken();
+    const signal = options.signal ?? controller.signal;
 
     try {
       const requestBody = { query, variables };
@@ -66,38 +87,38 @@ export class GraphQLClient {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(requestBody),
-        signal: controller.signal,
+        signal,
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(
-          `HTTP error! status: ${response.status}, body: ${errorText}`,
-        );
+        throw new CrowdyHttpError(response.status, errorText);
       }
 
       const result = await response.json();
 
       if (result.errors) {
-        const error = result.errors[0];
-        const errorMessage = Array.isArray(error.message)
-          ? error.message.join(', ')
-          : error.message;
-        throw new Error(errorMessage);
+        throw new CrowdyGraphQLError(result.errors as CrowdyGraphQLErrorPayload[]);
       }
 
       return result.data;
     } catch (error) {
       clearTimeout(timeoutId);
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Request timeout exceeded when trying to connect');
+        throw new CrowdyTimeoutError(this.timeout);
       }
-      if (error instanceof Error) {
+      if (error instanceof CrowdyError) {
         throw error;
       }
-      throw new Error(`Network error: ${error}`);
+      if (error instanceof Error) {
+        throw new CrowdyNetworkError(error);
+      }
+      this.logger.error?.('GraphQL request failed', error);
+      throw new CrowdyNetworkError(error);
     }
   }
 }
+
+export { GraphQLClient as GraphQLTransport };

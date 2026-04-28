@@ -337,6 +337,160 @@ export type ChunksByDistanceResponse = {
   skip: Maybe<Scalars['Int']['output']>;
 };
 
+export type CksEnvironment = {
+  __typename?: 'CksEnvironment';
+  billingGraceDeadline: Maybe<Scalars['DateTime']['output']>;
+  billingStatus: Scalars['String']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  databaseFlavor: Maybe<Scalars['String']['output']>;
+  desiredEnvironmentVersion: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  graphqlFlavor: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  observedEnvironmentVersion: Maybe<Scalars['String']['output']>;
+  orgId: Scalars['BigInt']['output'];
+  primaryCloud: Scalars['String']['output'];
+  primaryRegion: Scalars['String']['output'];
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  subdomainHandle: Maybe<Scalars['String']['output']>;
+  suspendedAt: Maybe<Scalars['DateTime']['output']>;
+  udpBuddyFlavor: Maybe<Scalars['String']['output']>;
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+export type CksEnvironmentAudit = {
+  __typename?: 'CksEnvironmentAudit';
+  action: Scalars['String']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  environmentId: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  payloadJson: Maybe<Scalars['String']['output']>;
+};
+
+export type CksEnvironmentBillingResource = {
+  __typename?: 'CksEnvironmentBillingResource';
+  componentKind: Scalars['String']['output'];
+  customerHourlyPriceCents: Maybe<Scalars['BigInt']['output']>;
+  environmentId: Scalars['String']['output'];
+  flavorName: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  observedAt: Scalars['DateTime']['output'];
+  provider: Scalars['String']['output'];
+  region: Scalars['String']['output'];
+  resourceId: Scalars['String']['output'];
+  resourceName: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+};
+
+export type CksEnvironmentChangeOrder = {
+  __typename?: 'CksEnvironmentChangeOrder';
+  claimedAt: Maybe<Scalars['DateTime']['output']>;
+  claimedBy: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  environmentId: Scalars['String']['output'];
+  error: Maybe<Scalars['String']['output']>;
+  finishedAt: Maybe<Scalars['DateTime']['output']>;
+  id: Scalars['String']['output'];
+  kind: Scalars['String']['output'];
+  payloadJson: Scalars['String']['output'];
+  requestedBy: Maybe<Scalars['BigInt']['output']>;
+  status: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+export type CksEnvironmentComponent = {
+  __typename?: 'CksEnvironmentComponent';
+  desiredSpecJson: Maybe<Scalars['String']['output']>;
+  desiredVersion: Maybe<Scalars['String']['output']>;
+  environmentId: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  kind: Scalars['String']['output'];
+  lastObservedAt: Maybe<Scalars['DateTime']['output']>;
+  observedSpecJson: Maybe<Scalars['String']['output']>;
+  observedVersion: Maybe<Scalars['String']['output']>;
+  status: Maybe<Scalars['String']['output']>;
+};
+
+export type CksEnvironmentDetail = {
+  __typename?: 'CksEnvironmentDetail';
+  audit: Array<CksEnvironmentAudit>;
+  billingResources: Array<CksEnvironmentBillingResource>;
+  changeOrders: Array<CksEnvironmentChangeOrder>;
+  components: Array<CksEnvironmentComponent>;
+  environment: CksEnvironment;
+  outputs: Array<CksEnvironmentOutput>;
+  secrets: Array<CksEnvironmentSecretValue>;
+};
+
+export type CksEnvironmentOutput = {
+  __typename?: 'CksEnvironmentOutput';
+  componentKind: Scalars['String']['output'];
+  environmentId: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  label: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  value: Scalars['String']['output'];
+  valueKind: Scalars['String']['output'];
+};
+
+export type CksEnvironmentQuote = {
+  __typename?: 'CksEnvironmentQuote';
+  availableBalanceCents: Scalars['BigInt']['output'];
+  canCreate: Scalars['Boolean']['output'];
+  currency: Scalars['String']['output'];
+  databaseFlavor: Scalars['String']['output'];
+  datacenter: Scalars['String']['output'];
+  firstDayReserveCents: Scalars['BigInt']['output'];
+  graphqlFlavor: Scalars['String']['output'];
+  hourlyCostCents: Scalars['BigInt']['output'];
+  udpBuddyFlavor: Scalars['String']['output'];
+  walletBalanceCents: Scalars['BigInt']['output'];
+};
+
+export type CksEnvironmentSecretValue = {
+  __typename?: 'CksEnvironmentSecretValue';
+  createdAt: Scalars['DateTime']['output'];
+  environmentId: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  kind: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  sealedCiphertextBase64: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+export type CksEnvironmentVersion = {
+  __typename?: 'CksEnvironmentVersion';
+  notes: Maybe<Scalars['String']['output']>;
+  releasedAt: Scalars['DateTime']['output'];
+  status: Scalars['String']['output'];
+  version: Scalars['String']['output'];
+};
+
+export type CksOvhDatacenter = {
+  __typename?: 'CksOvhDatacenter';
+  continent: Maybe<Scalars['String']['output']>;
+  isAvailable: Scalars['Boolean']['output'];
+  name: Maybe<Scalars['String']['output']>;
+  region: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  syncedAt: Scalars['DateTime']['output'];
+};
+
+export type CksOvhFlavor = {
+  __typename?: 'CksOvhFlavor';
+  currency: Scalars['String']['output'];
+  customerHourlyPriceCents: Maybe<Scalars['BigInt']['output']>;
+  diskGb: Maybe<Scalars['Int']['output']>;
+  flavorName: Scalars['String']['output'];
+  flavorType: Maybe<Scalars['String']['output']>;
+  quotaAvailable: Maybe<Scalars['Int']['output']>;
+  ramMb: Maybe<Scalars['Int']['output']>;
+  rawHourlyCostCents: Maybe<Scalars['BigInt']['output']>;
+  syncedAt: Scalars['DateTime']['output'];
+  vcpus: Maybe<Scalars['Int']['output']>;
+};
+
 /** Notification received when another client sends an audio packet (voice chat). Received via the udpNotifications subscription. */
 export type ClientAudioNotification = {
   __typename?: 'ClientAudioNotification';
@@ -470,12 +624,6 @@ export type ClientTextPacketInput = {
   uuid: Scalars['String']['input'];
 };
 
-/** Input for connecting to the UDP proxy. The server automatically selects the UDP game server with the least number of clients. This input type exists only because GraphQL requires input types to have at least one field - the _placeholder field can be ignored. */
-export type ConnectUdpProxyInput = {
-  /** Placeholder field (can be ignored). GraphQL requires input types to have at least one field. */
-  _placeholder?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
 export type CreateAccessTierInput = {
   appId: Scalars['BigInt']['input'];
   description?: InputMaybe<Scalars['String']['input']>;
@@ -520,8 +668,19 @@ export type CreateCheckoutInput = {
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
+export type CreateEnvironmentInput = {
+  databaseFlavor: Scalars['String']['input'];
+  datacenter: Scalars['String']['input'];
+  displayName: Scalars['String']['input'];
+  graphqlFlavor: Scalars['String']['input'];
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+  udpBuddyFlavor: Scalars['String']['input'];
+  x25519PublicKeyBase64: Scalars['String']['input'];
+};
+
 export type CreateGridInput = {
-  app_id: Scalars['BigInt']['input'];
+  appId: Scalars['BigInt']['input'];
   corner1: ChunkCoordinatesInput;
   corner2: ChunkCoordinatesInput;
 };
@@ -555,11 +714,40 @@ export type CreateUserAppStateInput = {
   state?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type DestroyEnvironmentInput = {
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+};
+
+export type EnvironmentQuoteInput = {
+  databaseFlavor: Scalars['String']['input'];
+  datacenter: Scalars['String']['input'];
+  graphqlFlavor: Scalars['String']['input'];
+  orgId: Scalars['BigInt']['input'];
+  udpBuddyFlavor: Scalars['String']['input'];
+};
+
 export type FreePlayWindowInfo = {
   __typename?: 'FreePlayWindowInfo';
   description: Scalars['String']['output'];
   isCurrentlyActive: Scalars['Boolean']['output'];
   nextWindowStart: Maybe<Scalars['String']['output']>;
+};
+
+/** Startup contract for browser game clients. Fetch this after login to initialize protocol/version checks and UDP proxy state in one round trip. */
+export type GameClientBootstrap = {
+  __typename?: 'GameClientBootstrap';
+  appId: Scalars['BigInt']['output'];
+  maxDecayRate: Scalars['Int']['output'];
+  maxReplicationDistance: Scalars['Int']['output'];
+  me: User;
+  /** GraphQL WebSocket subprotocol expected by udpNotifications. */
+  realtimeProtocol: Scalars['String']['output'];
+  sequenceNumberModulo: Scalars['Int']['output'];
+  /** GraphQL subscription field that carries UDP proxy notifications. */
+  subscriptionName: Scalars['String']['output'];
+  udpProxyConnectionStatus: UdpProxyConnectionStatus;
+  versionInfo: ServerVersionInfo;
 };
 
 /** Generic error response from the UDP game server. Uses the sequence number to match the original request that failed. */
@@ -673,6 +861,7 @@ export type Mutation = {
   createAvatar: Avatar;
   /** Creates a Checkout row, opens the provider session, and returns the row with externalUrl set. Redirect the user to externalUrl. Status starts PENDING and updates via webhook. */
   createCheckout: Checkout;
+  createEnvironment: CksEnvironmentDetail;
   createGrid: CreateGridResponse;
   createOrgRole: OrgRole;
   /** Returns the plaintext token exactly once. Save it; subsequent queries only show metadata. */
@@ -685,6 +874,7 @@ export type Mutation = {
   deleteOrgRole: Scalars['Boolean']['output'];
   deleteQuota: Scalars['Boolean']['output'];
   deleteUserAppState: UserAppState;
+  destroyEnvironment: CksEnvironmentChangeOrder;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
   forceLogoutUser: Scalars['Boolean']['output'];
@@ -698,6 +888,7 @@ export type Mutation = {
   requestPasswordReset: Scalars['Boolean']['output'];
   resendConfirmationEmail: Scalars['Boolean']['output'];
   resetPassword: Scalars['Boolean']['output'];
+  resumeEnvironment: CksEnvironmentChangeOrder;
   revokeAppAccess: AppUserAccess;
   revokeOrgToken: Scalars['Boolean']['output'];
   /** Reverts every voxel edit by `userId` in `appId` between `from` and `to`. Gated by the org permission `manage_apps`. Defaults to dryRun=true; pass dryRun=false to apply. */
@@ -762,11 +953,6 @@ export type MutationConfirmEmailArgs = {
 };
 
 
-export type MutationConnectUdpProxyArgs = {
-  input?: InputMaybe<ConnectUdpProxyInput>;
-};
-
-
 export type MutationCreateAccessTierArgs = {
   input: CreateAccessTierInput;
 };
@@ -789,6 +975,11 @@ export type MutationCreateAvatarArgs = {
 
 export type MutationCreateCheckoutArgs = {
   input: CreateCheckoutInput;
+};
+
+
+export type MutationCreateEnvironmentArgs = {
+  input: CreateEnvironmentInput;
 };
 
 
@@ -837,6 +1028,11 @@ export type MutationDeleteUserAppStateArgs = {
 };
 
 
+export type MutationDestroyEnvironmentArgs = {
+  input: DestroyEnvironmentInput;
+};
+
+
 export type MutationForceLogoutUserArgs = {
   userId: Scalars['BigInt']['input'];
 };
@@ -880,6 +1076,11 @@ export type MutationResendConfirmationEmailArgs = {
 
 export type MutationResetPasswordArgs = {
   resetPasswordInput: ResetPasswordInput;
+};
+
+
+export type MutationResumeEnvironmentArgs = {
+  input: ResumeEnvironmentInput;
 };
 
 
@@ -1179,7 +1380,13 @@ export type Query = {
   checkouts: CheckoutsPage;
   /** The most-specific quota that applies to (orgId, appId, tierId, metric). Walks tier -> app -> org -> free_tier_defaults. Returns null if nothing matches. */
   effectiveQuota: Maybe<ServiceQuota>;
+  environmentDatacenters: Array<CksOvhDatacenter>;
+  environmentFlavors: Array<CksOvhFlavor>;
+  environmentQuote: CksEnvironmentQuote;
+  environmentVersions: Array<CksEnvironmentVersion>;
   freePlayWindowInfo: FreePlayWindowInfo;
+  /** Single startup payload for browser game clients: current user, version requirements, UDP proxy status, realtime protocol details, and spatial send limits. */
+  gameClientBootstrap: GameClientBootstrap;
   getChunk: Maybe<Chunk>;
   getChunkLods: Maybe<ChunkLodsResponse>;
   getChunksByDistance: ChunksByDistanceResponse;
@@ -1198,6 +1405,8 @@ export type Query = {
   myDonationData: UserDonationData;
   myOrganizations: Array<OrgMembership>;
   myPropertyTokens: UserPropertyTokenData;
+  orgEnvironment: Maybe<CksEnvironmentDetail>;
+  orgEnvironments: Array<CksEnvironment>;
   orgMembers: Array<OrgMember>;
   /** The full seed list of permission keys. Used by the UI to render role editors. */
   orgPermissions: Array<OrgPermission>;
@@ -1307,6 +1516,21 @@ export type QueryEffectiveQuotaArgs = {
 };
 
 
+export type QueryEnvironmentFlavorsArgs = {
+  datacenter: Scalars['String']['input'];
+};
+
+
+export type QueryEnvironmentQuoteArgs = {
+  input: EnvironmentQuoteInput;
+};
+
+
+export type QueryGameClientBootstrapArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryGetChunkArgs = {
   input: GetChunkInput;
 };
@@ -1350,6 +1574,17 @@ export type QueryMyAppAccessArgs = {
 export type QueryMyCheckoutsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryOrgEnvironmentArgs = {
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+};
+
+
+export type QueryOrgEnvironmentsArgs = {
+  orgId: Scalars['BigInt']['input'];
 };
 
 
@@ -1431,6 +1666,15 @@ export type QueryWalletTransactionsArgs = {
   orgId: Scalars['BigInt']['input'];
 };
 
+/** SDK-facing realtime lifecycle event emitted on udpNotifications when the subscription cannot open a UDP proxy session. */
+export type RealtimeConnectionEvent = {
+  __typename?: 'RealtimeConnectionEvent';
+  code: Scalars['String']['output'];
+  message: Scalars['String']['output'];
+  retryable: Scalars['Boolean']['output'];
+  status: Scalars['String']['output'];
+};
+
 export type RegisterUserInput = {
   email: Scalars['String']['input'];
   gamertag?: InputMaybe<Scalars['String']['input']>;
@@ -1440,6 +1684,11 @@ export type RegisterUserInput = {
 export type ResetPasswordInput = {
   newPassword: Scalars['String']['input'];
   token: Scalars['String']['input'];
+};
+
+export type ResumeEnvironmentInput = {
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
 };
 
 export type RollbackVoxelEventResult = {
@@ -1554,14 +1803,14 @@ export type SetQuotaInput = {
 
 export type Subscription = {
   __typename?: 'Subscription';
-  /** Downlink from the game server (responses, notifications, GenericErrorResponse). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Requires a game token—without one, yields a single null then ends. Connection failures may yield null. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session. */
+  /** Downlink from the game server (responses, notifications, GenericErrorResponse, and RealtimeConnectionEvent). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Connection failures are delivered as RealtimeConnectionEvent. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session. */
   udpNotifications: Maybe<UdpNotification>;
 };
 
 export type TeleportRequestInput = {
-  UUID: Scalars['String']['input'];
   appId: Scalars['BigInt']['input'];
   chunkAddress: ChunkCoordinatesInput;
+  uuid: Scalars['String']['input'];
   voxelAddress: VoxelCoordinatesInput;
 };
 
@@ -1605,7 +1854,7 @@ export enum UdpErrorCode {
 }
 
 /** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. */
-export type UdpNotification = ActorUpdateNotification | ActorUpdateResponse | ClientAudioNotification | ClientEventNotification | ClientTextNotification | GenericErrorResponse | ServerEventNotification | VoxelUpdateNotification | VoxelUpdateResponse;
+export type UdpNotification = ActorUpdateNotification | ActorUpdateResponse | ClientAudioNotification | ClientEventNotification | ClientTextNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | VoxelUpdateNotification | VoxelUpdateResponse;
 
 /** UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md. */
 export type UdpProxyConnectionStatus = {
@@ -2440,6 +2689,13 @@ export type ActiveGraphQlServersQueryVariables = Exact<{ [key: string]: never; }
 
 export type ActiveGraphQlServersQuery = { __typename?: 'Query', activeGraphQLServers: Array<{ __typename?: 'GraphQLServer', graphqlServerId: string, ip4: string | null, ip6: string | null, status: ServerState, createdAt: string, updatedAt: string }> };
 
+export type GameClientBootstrapQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type GameClientBootstrapQuery = { __typename?: 'Query', gameClientBootstrap: { __typename?: 'GameClientBootstrap', appId: string, realtimeProtocol: string, subscriptionName: string, maxReplicationDistance: number, maxDecayRate: number, sequenceNumberModulo: number, udpProxyConnectionStatus: { __typename?: 'UdpProxyConnectionStatus', connected: boolean, serverIp6: string | null, serverClientPort: number | null, lastMessageTime: string | null }, versionInfo: { __typename?: 'ServerVersionInfo', serverVersion: { __typename?: 'VersionInfo', major: number, minor: number, patch: number, build: number }, minimumClientVersion: { __typename?: 'VersionInfo', major: number, minor: number, patch: number, build: number } }, me: { __typename?: 'User', userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, state: string | null, isConfirmed: boolean, createdAt: string, grantEarlyAccess: boolean, grantEarlyAccessOverride: boolean, orgId: string | null, externalId: string | null, userType: string, isSuperAdmin: boolean } } };
+
 export type GraphqlServersQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -2532,6 +2788,22 @@ export type SendVoxelUpdateMutationVariables = Exact<{
 
 
 export type SendVoxelUpdateMutation = { __typename?: 'Mutation', sendVoxelUpdate: boolean };
+
+export type UdpNotificationsSubscriptionVariables = Exact<{ [key: string]: never; }>;
+
+
+export type UdpNotificationsSubscription = { __typename?: 'Subscription', udpNotifications:
+    | { __typename: 'ActorUpdateNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, state: string, sequenceNumber: number, epochMillis: string }
+    | { __typename: 'ActorUpdateResponse', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, sequenceNumber: number, epochMillis: string }
+    | { __typename: 'ClientAudioNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, audioData: string, sequenceNumber: number, epochMillis: string }
+    | { __typename: 'ClientEventNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, eventType: number, state: string, sequenceNumber: number, epochMillis: string }
+    | { __typename: 'ClientTextNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, text: string, sequenceNumber: number, epochMillis: string }
+    | { __typename: 'GenericErrorResponse', sequenceNumber: number, errorCode: UdpErrorCode }
+    | { __typename: 'RealtimeConnectionEvent', status: string, code: string, message: string, retryable: boolean }
+    | { __typename: 'ServerEventNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, eventType: number, state: string, sequenceNumber: number, epochMillis: string }
+    | { __typename: 'VoxelUpdateNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, voxelX: number, voxelY: number, voxelZ: number, voxelType: number, voxelState: string, sequenceNumber: number, epochMillis: string }
+    | { __typename: 'VoxelUpdateResponse', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, sequenceNumber: number, epochMillis: string }
+   | null };
 
 export type UdpProxyConnectionStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -2722,6 +2994,7 @@ export const QuotasForAppDocument = {"kind":"Document","definitions":[{"kind":"O
 export const QuotasForOrgDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"QuotasForOrg"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotasForOrg"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotaId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"metric"}},{"kind":"Field","name":{"kind":"Name","value":"limitValue"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<QuotasForOrgQuery, QuotasForOrgQueryVariables>;
 export const SetQuotaDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetQuota"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetQuotaInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setQuota"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotaId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"metric"}},{"kind":"Field","name":{"kind":"Name","value":"limitValue"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SetQuotaMutation, SetQuotaMutationVariables>;
 export const ActiveGraphQlServersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ActiveGraphQLServers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activeGraphQLServers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"graphqlServerId"}},{"kind":"Field","name":{"kind":"Name","value":"ip4"}},{"kind":"Field","name":{"kind":"Name","value":"ip6"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ActiveGraphQlServersQuery, ActiveGraphQlServersQueryVariables>;
+export const GameClientBootstrapDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameClientBootstrap"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameClientBootstrap"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"realtimeProtocol"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionName"}},{"kind":"Field","name":{"kind":"Name","value":"maxReplicationDistance"}},{"kind":"Field","name":{"kind":"Name","value":"maxDecayRate"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumberModulo"}},{"kind":"Field","name":{"kind":"Name","value":"udpProxyConnectionStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connected"}},{"kind":"Field","name":{"kind":"Name","value":"serverIp6"}},{"kind":"Field","name":{"kind":"Name","value":"serverClientPort"}},{"kind":"Field","name":{"kind":"Name","value":"lastMessageTime"}}]}},{"kind":"Field","name":{"kind":"Name","value":"versionInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverVersion"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"major"}},{"kind":"Field","name":{"kind":"Name","value":"minor"}},{"kind":"Field","name":{"kind":"Name","value":"patch"}},{"kind":"Field","name":{"kind":"Name","value":"build"}}]}},{"kind":"Field","name":{"kind":"Name","value":"minimumClientVersion"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"major"}},{"kind":"Field","name":{"kind":"Name","value":"minor"}},{"kind":"Field","name":{"kind":"Name","value":"patch"}},{"kind":"Field","name":{"kind":"Name","value":"build"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"me"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"gamertag"}},{"kind":"Field","name":{"kind":"Name","value":"disambiguation"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"isConfirmed"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"grantEarlyAccess"}},{"kind":"Field","name":{"kind":"Name","value":"grantEarlyAccessOverride"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"userType"}},{"kind":"Field","name":{"kind":"Name","value":"isSuperAdmin"}}]}}]}}]}}]} as unknown as DocumentNode<GameClientBootstrapQuery, GameClientBootstrapQueryVariables>;
 export const GraphqlServersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GraphqlServers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"graphqlServers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"graphqlServerId"}},{"kind":"Field","name":{"kind":"Name","value":"ip4"}},{"kind":"Field","name":{"kind":"Name","value":"ip6"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<GraphqlServersQuery, GraphqlServersQueryVariables>;
 export const ServerWithLeastClientsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ServerWithLeastClients"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverWithLeastClients"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverId"}},{"kind":"Field","name":{"kind":"Name","value":"ip4"}},{"kind":"Field","name":{"kind":"Name","value":"ip6"}},{"kind":"Field","name":{"kind":"Name","value":"clientPort"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"peers"}},{"kind":"Field","name":{"kind":"Name","value":"clients"}},{"kind":"Field","name":{"kind":"Name","value":"cpuPeakPct"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ServerWithLeastClientsQuery, ServerWithLeastClientsQueryVariables>;
 export const VersionInfoDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"VersionInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverVersion"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"major"}},{"kind":"Field","name":{"kind":"Name","value":"minor"}},{"kind":"Field","name":{"kind":"Name","value":"patch"}},{"kind":"Field","name":{"kind":"Name","value":"build"}}]}},{"kind":"Field","name":{"kind":"Name","value":"minimumClientVersion"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"major"}},{"kind":"Field","name":{"kind":"Name","value":"minor"}},{"kind":"Field","name":{"kind":"Name","value":"patch"}},{"kind":"Field","name":{"kind":"Name","value":"build"}}]}}]}}]}}]} as unknown as DocumentNode<VersionInfoQuery, VersionInfoQueryVariables>;
@@ -2737,6 +3010,7 @@ export const SendAudioPacketDocument = {"kind":"Document","definitions":[{"kind"
 export const SendClientEventDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendClientEvent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ClientEventNotificationInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendClientEvent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<SendClientEventMutation, SendClientEventMutationVariables>;
 export const SendTextPacketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendTextPacket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ClientTextPacketInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendTextPacket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<SendTextPacketMutation, SendTextPacketMutationVariables>;
 export const SendVoxelUpdateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendVoxelUpdate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"VoxelUpdateRequestInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendVoxelUpdate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<SendVoxelUpdateMutation, SendVoxelUpdateMutationVariables>;
+export const UdpNotificationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"UdpNotifications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"udpNotifications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ActorUpdateNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ActorUpdateResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"VoxelUpdateNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"voxelX"}},{"kind":"Field","name":{"kind":"Name","value":"voxelY"}},{"kind":"Field","name":{"kind":"Name","value":"voxelZ"}},{"kind":"Field","name":{"kind":"Name","value":"voxelType"}},{"kind":"Field","name":{"kind":"Name","value":"voxelState"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"VoxelUpdateResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientAudioNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"audioData"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientTextNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"text"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientEventNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ServerEventNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GenericErrorResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"RealtimeConnectionEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}}]}}]}}]}}]} as unknown as DocumentNode<UdpNotificationsSubscription, UdpNotificationsSubscriptionVariables>;
 export const UdpProxyConnectionStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"UdpProxyConnectionStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"udpProxyConnectionStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connected"}},{"kind":"Field","name":{"kind":"Name","value":"serverIp6"}},{"kind":"Field","name":{"kind":"Name","value":"serverClientPort"}},{"kind":"Field","name":{"kind":"Name","value":"lastMessageTime"}}]}}]}}]} as unknown as DocumentNode<UdpProxyConnectionStatusQuery, UdpProxyConnectionStatusQueryVariables>;
 export const DeleteMyAccountDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteMyAccount"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteMyAccount"}}]}}]} as unknown as DocumentNode<DeleteMyAccountMutation, DeleteMyAccountMutationVariables>;
 export const ForceLogoutUserDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ForceLogoutUser"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"forceLogoutUser"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}]}]}}]} as unknown as DocumentNode<ForceLogoutUserMutation, ForceLogoutUserMutationVariables>;

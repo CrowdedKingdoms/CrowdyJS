@@ -1,0 +1,115 @@
+subscription UdpNotifications {
+  udpNotifications {
+    __typename
+    ... on ActorUpdateNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      state
+      sequenceNumber
+      epochMillis
+    }
+    ... on ActorUpdateResponse {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      sequenceNumber
+      epochMillis
+    }
+    ... on VoxelUpdateNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      voxelX
+      voxelY
+      voxelZ
+      voxelType
+      voxelState
+      sequenceNumber
+      epochMillis
+    }
+    ... on VoxelUpdateResponse {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      sequenceNumber
+      epochMillis
+    }
+    ... on ClientAudioNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      audioData
+      sequenceNumber
+      epochMillis
+    }
+    ... on ClientTextNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      text
+      sequenceNumber
+      epochMillis
+    }
+    ... on ClientEventNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      eventType
+      state
+      sequenceNumber
+      epochMillis
+    }
+    ... on ServerEventNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      eventType
+      state
+      sequenceNumber
+      epochMillis
+    }
+    ... on GenericErrorResponse {
+      sequenceNumber
+      errorCode
+    }
+    ... on RealtimeConnectionEvent {
+      status
+      code
+      message
+      retryable
+    }
+  }
+}

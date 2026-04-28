@@ -68,10 +68,10 @@ async function run() {
 
   // ---- 1. Login ----
   console.log('\n--- Login ---');
-  const authA = await clientA.login(email1, pass1);
+  const authA = await clientA.auth.login({ email: email1, password: pass1 });
   console.log(`Client A logged in: ${authA.user.email}`);
 
-  const authB = await clientB.login(email2, pass2);
+  const authB = await clientB.auth.login({ email: email2, password: pass2 });
   console.log(`Client B logged in: ${authB.user.email}`);
 
   // ---- 2. Subscribe (auto-opens UDP proxy) ----
@@ -86,28 +86,38 @@ async function run() {
 
   const unsubs = [];
   try {
-    unsubs.push(clientA.onActorUpdate((n) => {
-      receivedByA.actorUpdates.push(n);
+    unsubs.push(clientA.udp.subscribe({
+      actorUpdate: (n) => {
+        receivedByA.actorUpdates.push(n);
+      },
     }));
     console.log('  Client A registered: onActorUpdate');
 
-    unsubs.push(clientB.onActorUpdate((n) => {
-      receivedByB.actorUpdates.push(n);
+    unsubs.push(clientB.udp.subscribe({
+      actorUpdate: (n) => {
+        receivedByB.actorUpdates.push(n);
+      },
     }));
     console.log('  Client B registered: onActorUpdate');
 
-    unsubs.push(clientB.onActorUpdateResponse((r) => {
-      receivedByB.actorResponses.push(r);
+    unsubs.push(clientB.udp.subscribe({
+      actorUpdateResponse: (r) => {
+        receivedByB.actorResponses.push(r);
+      },
     }));
     console.log('  Client B registered: onActorUpdateResponse');
 
-    unsubs.push(clientB.onVoxelUpdate((n) => {
-      receivedByB.voxelUpdates.push(n);
+    unsubs.push(clientB.udp.subscribe({
+      voxelUpdate: (n) => {
+        receivedByB.voxelUpdates.push(n);
+      },
     }));
     console.log('  Client B registered: onVoxelUpdate');
 
-    unsubs.push(clientB.onGenericError((e) => {
-      receivedByB.genericErrors.push(e);
+    unsubs.push(clientB.udp.subscribe({
+      genericError: (e) => {
+        receivedByB.genericErrors.push(e);
+      },
     }));
     console.log('  Client B registered: onGenericError');
 
@@ -125,7 +135,7 @@ async function run() {
   // ---- 3. Register both clients in the chunk ----
   console.log('\n--- Register actors in chunk ---');
   try {
-    const regA = await clientA.sendActorUpdate({
+    const regA = await clientA.udp.sendActorUpdate({
       appId: APP_ID,
       chunk: CHUNK,
       distance: 8,
@@ -141,7 +151,7 @@ async function run() {
   }
 
   try {
-    const regB = await clientB.sendActorUpdate({
+    const regB = await clientB.udp.sendActorUpdate({
       appId: APP_ID,
       chunk: CHUNK,
       distance: 8,
@@ -164,7 +174,7 @@ async function run() {
   let sendSuccessCount = 0;
   for (let i = 0; i < SEND_COUNT; i++) {
     try {
-      const result = await clientA.sendActorUpdate({
+      const result = await clientA.udp.sendActorUpdate({
         appId: APP_ID,
         chunk: CHUNK,
         distance: 8,
@@ -228,8 +238,8 @@ async function run() {
   // ---- Cleanup ----
   console.log('\n--- Cleanup ---');
   unsubs.forEach((fn) => fn());
-  await clientA.disconnectUdpProxy();
-  await clientB.disconnectUdpProxy();
+  await clientA.udp.disconnect();
+  await clientB.udp.disconnect();
   clientA.close();
   clientB.close();
 

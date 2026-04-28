@@ -9,6 +9,9 @@ import {
   type ActiveGraphQlServersQuery,
   VersionInfoDocument,
   type VersionInfoQuery,
+  GameClientBootstrapDocument,
+  type GameClientBootstrapQuery,
+  type GameClientBootstrapQueryVariables,
 } from '../generated/graphql.js';
 
 /**
@@ -42,5 +45,12 @@ export class ServerStatusAPI {
   async versionInfo(): Promise<VersionInfoQuery['versionInfo']> {
     const data = await this.gql.request(VersionInfoDocument, undefined);
     return data.versionInfo;
+  }
+
+  async gameClientBootstrap(
+    appId: GameClientBootstrapQueryVariables['appId'],
+  ): Promise<GameClientBootstrapQuery['gameClientBootstrap']> {
+    const data = await this.gql.request(GameClientBootstrapDocument, { appId });
+    return data.gameClientBootstrap;
   }
 }

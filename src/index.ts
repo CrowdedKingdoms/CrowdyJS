@@ -13,15 +13,50 @@
  *   const unsub = client.udp.subscribe({ onActorUpdate: (n) => { ... } });
  */
 
-import { createRequire } from 'node:module';
+export const VERSION = '3.0.0';
 
-const require = createRequire(import.meta.url);
-const { version: VERSION } = require('../package.json') as { version: string };
-
-export { VERSION };
-console.log(`CrowdyJS v${VERSION}`);
-
-export { CrowdyClient, type CrowdyClientConfig } from './crowdy-client.js';
+export {
+  CrowdyClient,
+  createCrowdyClient,
+  type CrowdyClientConfig,
+} from './crowdy-client.js';
+export {
+  BrowserLocalStorageTokenStore,
+  SessionStore,
+  type SessionListener,
+  type TokenStore,
+} from './session.js';
+export {
+  GraphQLClient,
+  GraphQLTransport,
+  type GraphQLClientConfig,
+} from './client.js';
+export {
+  RealtimeClient,
+  type RealtimeConfig,
+  type RealtimeStatus,
+  type SpatialNotification,
+  type UdpNotification,
+  type UdpNotificationHandlers,
+} from './realtime.js';
+export { WorldClient, ActorClient, type ActorOptions } from './world.js';
+export {
+  CrowdyError,
+  CrowdyGraphQLError,
+  CrowdyHttpError,
+  CrowdyNetworkError,
+  CrowdyProtocolError,
+  CrowdyRealtimeError,
+  CrowdyTimeoutError,
+} from './errors.js';
+export {
+  SequenceAllocator,
+  decodeBase64,
+  encodeBase64,
+  generateCrowdyUuid,
+  validateChunkCoordinates,
+  validateCrowdyUuid,
+} from './utils.js';
 
 // -----------------------------------------------------------------------------
 // Hand-written types kept ONLY for the subscription notification union and
@@ -41,7 +76,6 @@ export type {
   ClientEventNotification,
   ServerEventNotification,
   GenericErrorResponse,
-  UdpNotification,
   ActorUpdateHandler,
   ActorUpdateResponseHandler,
   VoxelUpdateHandler,
@@ -55,7 +89,6 @@ export type {
 } from './types.js';
 
 export { UdpErrorCode } from './types.js';
-export type { UdpNotificationHandlers } from './subscriptions.js';
 
 // -----------------------------------------------------------------------------
 // Domain wrappers (exported so consumers can reference the API surface in
@@ -93,6 +126,8 @@ export type {
   ClientTextPacketInput,
   ClientEventNotificationInput,
   UdpProxyConnectionStatus,
+  RealtimeConnectionEvent,
+  GameClientBootstrap,
 
   // Inputs
   LoginUserInput,
@@ -174,6 +209,7 @@ export type {
   VersionInfo,
   PageInfo,
   UsersPage,
+  UdpNotificationsSubscription,
 
   // Scalars passthrough
   Scalars,

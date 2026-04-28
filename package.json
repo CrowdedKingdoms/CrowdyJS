@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdomstudios/crowdyjs",
-  "version": "2.1.2",
+  "version": "3.0.0",
   "description": "Client SDK for Crowded Kingdoms GraphQL API with UDP proxy support",
   "type": "module",
   "main": "dist/index.js",
@@ -9,19 +9,26 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./generated": {
+      "import": "./dist/generated/graphql.js",
+      "types": "./dist/generated/graphql.d.ts"
     }
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "MIGRATION.md"
   ],
   "scripts": {
     "sync-schema": "node scripts/sync-schema.mjs",
     "precodegen": "npm run sync-schema",
     "codegen": "graphql-codegen --config codegen.ts",
+    "check:schema": "npm run codegen && git diff --exit-code schema.gql src/generated/graphql.ts",
     "codegen:watch": "graphql-codegen --config codegen.ts --watch",
     "prebuild": "npm run codegen",
     "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"
@@ -57,6 +64,7 @@
   },
   "dependencies": {
     "@graphql-typed-document-node/core": "^3.2.0",
-    "graphql": "^16.13.2"
+    "graphql": "^16.13.2",
+    "graphql-ws": "^6.0.8"
   }
 }

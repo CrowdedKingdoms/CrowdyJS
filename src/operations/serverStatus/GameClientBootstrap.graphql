@@ -1,0 +1,45 @@
+query GameClientBootstrap($appId: BigInt!) {
+  gameClientBootstrap(appId: $appId) {
+    appId
+    realtimeProtocol
+    subscriptionName
+    maxReplicationDistance
+    maxDecayRate
+    sequenceNumberModulo
+    udpProxyConnectionStatus {
+      connected
+      serverIp6
+      serverClientPort
+      lastMessageTime
+    }
+    versionInfo {
+      serverVersion {
+        major
+        minor
+        patch
+        build
+      }
+      minimumClientVersion {
+        major
+        minor
+        patch
+        build
+      }
+    }
+    me {
+      userId
+      email
+      gamertag
+      disambiguation
+      state
+      isConfirmed
+      createdAt
+      grantEarlyAccess
+      grantEarlyAccessOverride
+      orgId
+      externalId
+      userType
+      isSuperAdmin
+    }
+  }
+}
