@@ -236,7 +236,15 @@ type GraphQLServer {
   graphqlServerId: ID!
   ip4: String
   ip6: String
+  runtimeServerId: String
+  providerInstanceId: String
+  publicIp4: String
+  publicIp6: String
+  apiPort: Int!
   status: ServerState!
+  cpuUsagePct: Float
+  memoryUsagePct: Float
+  loadAverage1m: Float
   createdAt: DateTime!
   updatedAt: DateTime!
 }
@@ -350,6 +358,7 @@ type AppAccessTier {
   currency: String
   billingPeriod: String
   description: String
+  permissionKeys: [String!]!
   status: String!
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -461,6 +470,22 @@ type CreateGridResponse {
   error: UdpErrorCode!
 }
 
+type GridUserPermissions {
+  appId: BigInt!
+  gridId: BigInt!
+  userId: BigInt!
+  permissionKeys: [String!]!
+}
+
+type NearbyGridPermissions {
+  appId: BigInt!
+  gridId: BigInt!
+  userId: BigInt!
+  lowChunk: ChunkCoordinates!
+  highChunk: ChunkCoordinates!
+  permissionKeys: [String!]!
+}
+
 type App {
   appId: BigInt!
   orgId: BigInt!
@@ -550,6 +575,22 @@ enum CheckoutStatus {
   CANCELED
 }
 
+type PaymentEventRecord {
+  eventId: BigInt!
+  provider: PaymentProvider!
+  externalEventId: String!
+  eventType: String!
+  checkoutId: BigInt
+  processedAt: DateTime
+  error: String
+  createdAt: DateTime!
+}
+
+type PaymentEventsPage {
+  items: [PaymentEventRecord!]!
+  pageInfo: PageInfo!
+}
+
 type CheckoutsPage {
   items: [Checkout!]!
   pageInfo: PageInfo!
@@ -611,6 +652,12 @@ type CksEnvironment {
   databaseFlavor: String
   graphqlFlavor: String
   udpBuddyFlavor: String
+  graphqlMinServers: Int!
+  graphqlMaxServers: Int!
+  udpBuddyMinServers: Int!
+  udpBuddyMaxServers: Int!
+  graphqlLoadBalancerCount: Int!
+  graphqlLoadBalancerFlavor: String
   billingStatus: String!
   billingGraceDeadline: DateTime
   suspendedAt: DateTime
@@ -673,12 +720,21 @@ type CksEnvironmentVersion {
 type CksOvhDatacenter {
   region: String!
   name: String
+  city: String
   continent: String
   status: String!
   isAvailable: Boolean!
   syncedAt: DateTime!
+
+  """
+  Number of customer-selectable instances in this datacenter after availability, pricing, and admin visibility filters.
+  """
+  selectableInstanceCount: Int!
 }
 
+"""
+Customer-selectable catalog instance flavor. Hidden, unavailable, or unpriced rows are omitted from environmentFlavors.
+"""
 type CksOvhFlavor {
   flavorName: String!
   flavorType: String
@@ -687,8 +743,20 @@ type CksOvhFlavor {
   diskGb: Int
   quotaAvailable: Int
   rawHourlyCostCents: BigInt
-  customerHourlyPriceCents: BigInt
+
+  """
+  Customer hourly price in cents. Non-null for every flavor returned from environmentFlavors.
+  """
+  customerHourlyPriceCents: BigInt!
+
+  """
+  Customer monthly reference price in cents. Display-only until monthly billing is implemented.
+  """
+  customerMonthlyPriceCents: BigInt
   currency: String!
+  availabilityStatus: String!
+  pricingSource: String
+  pricingMode: String!
   syncedAt: DateTime!
 }
 
@@ -697,6 +765,12 @@ type CksEnvironmentQuote {
   databaseFlavor: String!
   graphqlFlavor: String!
   udpBuddyFlavor: String!
+  graphqlMinServers: Int!
+  graphqlMaxServers: Int!
+  udpBuddyMinServers: Int!
+  udpBuddyMaxServers: Int!
+  graphqlLoadBalancerCount: Int!
+  graphqlLoadBalancerFlavor: String!
   hourlyCostCents: BigInt!
   firstDayReserveCents: BigInt!
   walletBalanceCents: BigInt!
@@ -726,6 +800,7 @@ type CksEnvironmentBillingResource {
   flavorName: String
   status: String!
   customerHourlyPriceCents: BigInt
+  currency: String!
   observedAt: DateTime!
 }
 
@@ -800,6 +875,11 @@ type Query {
   Public listing of access tiers for an app. Used by the marketplace app detail page.
   """
   appAccessTiers(appId: BigInt!): [AppAccessTier!]!
+
+  """
+  Runtime permission keys that can be granted through app tiers or grid permissions.
+  """
+  runtimePermissions: [String!]!
   myAppAccess(appId: BigInt!): AppUserAccess
   appUserAccessByApp(appId: BigInt!, status: String, limit: Int = 50, offset: Int = 0): [AppUserAccess!]!
   walletBalance(orgId: BigInt!): OrgWallet!
@@ -813,6 +893,8 @@ type Query {
   The most-specific quota that applies to (orgId, appId, tierId, metric). Walks tier -> app -> org -> free_tier_defaults. Returns null if nothing matches.
   """
   effectiveQuota(metric: String!, orgId: BigInt, appId: BigInt, tierId: BigInt): ServiceQuota
+  gridUserPermissions(appId: BigInt!, gridId: BigInt!, userId: BigInt!): GridUserPermissions!
+  nearbyGridPermissions(input: NearbyGridPermissionsInput!): [NearbyGridPermissions!]!
   listVoxels(input: ListVoxelsInput!): [Voxel!]!
   listVoxelUpdatesByDistance(input: ListVoxelUpdatesByDistanceInput!): VoxelUpdatesByDistanceResponse!
   voxelUpdateHistory(appId: BigInt!, userId: BigInt, from: DateTime, to: DateTime, limit: Int, offset: Int): [VoxelUpdateHistoryEvent!]!
@@ -832,6 +914,9 @@ type Query {
   """Super admin only. Cross-tenant payments audit."""
   checkouts(filter: CheckoutFilterInput, limit: Int = 50, offset: Int = 0): CheckoutsPage!
 
+  """Super admin only. Inbound payment webhook audit log."""
+  paymentEvents(limit: Int = 50, offset: Int = 0): PaymentEventsPage!
+
   """
   UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
   """
@@ -844,8 +929,20 @@ type Query {
   orgEnvironments(orgId: BigInt!): [CksEnvironment!]!
   orgEnvironment(orgId: BigInt!, slug: String!): CksEnvironmentDetail
   environmentVersions: [CksEnvironmentVersion!]!
+
+  """
+  OVH datacenters that have at least one customer-priced instance flavor available for customer selection.
+  """
   environmentDatacenters: [CksOvhDatacenter!]!
+
+  """
+  Customer-selectable instance flavors in the datacenter with current availability and customer pricing.
+  """
   environmentFlavors(datacenter: String!): [CksOvhFlavor!]!
+
+  """
+  Pricing quote for the selected flavors. Fails if any flavor is unavailable, hidden, or lacks customer pricing.
+  """
   environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote!
 }
 
@@ -924,9 +1021,31 @@ input CheckoutFilterInput {
 input EnvironmentQuoteInput {
   orgId: BigInt!
   datacenter: String!
+
+  """
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  """
   databaseFlavor: String!
+
+  """
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  """
   graphqlFlavor: String!
+
+  """
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  """
   udpBuddyFlavor: String!
+  graphqlMinServers: Int!
+  graphqlMaxServers: Int!
+  udpBuddyMinServers: Int!
+  udpBuddyMaxServers: Int!
+  graphqlLoadBalancerCount: Int!
+
+  """
+  Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price.
+  """
+  graphqlLoadBalancerFlavor: String!
 }
 
 type Mutation {
@@ -996,6 +1115,8 @@ type Mutation {
   """
   rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]!
   createGrid(input: CreateGridInput!): CreateGridResponse!
+  grantGridPermissions(input: GrantGridPermissionsInput!): GridUserPermissions!
+  revokeGridPermissions(input: RevokeGridPermissionsInput!): GridUserPermissions!
   createApp(input: CreateAppInput!): App!
   updateApp(appId: BigInt!, input: UpdateAppInput!): App!
   archiveApp(appId: BigInt!): App!
@@ -1042,9 +1163,14 @@ type Mutation {
   Send a client event to the game server. Opens a UDP proxy session automatically if none exists; related notifications arrive on udpNotifications.
   """
   sendClientEvent(input: ClientEventNotificationInput!): Boolean!
+
+  """
+  Creates an environment only if each selected instance flavor is available and customer-priced in the catalog (same rule as environmentQuote). Use environmentFlavors / environmentDatacenters for valid options.
+  """
   createEnvironment(input: CreateEnvironmentInput!): CksEnvironmentDetail!
   destroyEnvironment(input: DestroyEnvironmentInput!): CksEnvironmentChangeOrder!
   resumeEnvironment(input: ResumeEnvironmentInput!): CksEnvironmentChangeOrder!
+  updateEnvironmentScaling(input: UpdateEnvironmentScalingInput!): CksEnvironmentChangeOrder!
 }
 
 input UpdateGamertagInput {
@@ -1197,6 +1323,7 @@ input CreateAccessTierInput {
   isFree: Boolean
   isDefault: Boolean
   description: String
+  permissionKeys: [String!]
 }
 
 input UpdateAccessTierInput {
@@ -1210,6 +1337,7 @@ input UpdateAccessTierInput {
   description: String
   stripePriceId: String
   paypalPlanId: String
+  permissionKeys: [String!]
 }
 
 input GrantAppAccessInput {
@@ -1249,6 +1377,28 @@ input CreateGridInput {
   appId: BigInt!
   corner1: ChunkCoordinatesInput!
   corner2: ChunkCoordinatesInput!
+}
+
+input GrantGridPermissionsInput {
+  appId: BigInt!
+  gridId: BigInt!
+  userId: BigInt!
+  permissionKeys: [String!]!
+  expiresAt: DateTime
+}
+
+input RevokeGridPermissionsInput {
+  appId: BigInt!
+  gridId: BigInt!
+  userId: BigInt!
+  permissionKeys: [String!]
+}
+
+input NearbyGridPermissionsInput {
+  appId: BigInt!
+  userId: BigInt!
+  lowChunk: ChunkCoordinatesInput!
+  highChunk: ChunkCoordinatesInput!
 }
 
 input CreateAppInput {
@@ -1482,9 +1632,31 @@ input CreateEnvironmentInput {
   slug: String!
   x25519PublicKeyBase64: String!
   datacenter: String!
+
+  """
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  """
   databaseFlavor: String!
+
+  """
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  """
   graphqlFlavor: String!
+
+  """
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  """
   udpBuddyFlavor: String!
+  graphqlMinServers: Int!
+  graphqlMaxServers: Int!
+  udpBuddyMinServers: Int!
+  udpBuddyMaxServers: Int!
+  graphqlLoadBalancerCount: Int!
+
+  """
+  Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price.
+  """
+  graphqlLoadBalancerFlavor: String!
 }
 
 input DestroyEnvironmentInput {
@@ -1495,6 +1667,21 @@ input DestroyEnvironmentInput {
 input ResumeEnvironmentInput {
   orgId: BigInt!
   slug: String!
+}
+
+input UpdateEnvironmentScalingInput {
+  orgId: BigInt!
+  slug: String!
+  graphqlMinServers: Int!
+  graphqlMaxServers: Int!
+  udpBuddyMinServers: Int!
+  udpBuddyMaxServers: Int!
+  graphqlLoadBalancerCount: Int!
+
+  """
+  Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price.
+  """
+  graphqlLoadBalancerFlavor: String!
 }
 
 type Subscription {

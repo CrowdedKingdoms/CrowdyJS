@@ -10,6 +10,7 @@ query AppAccessTiers($appId: BigInt!) {
     currency
     billingPeriod
     description
+    permissionKeys
     status
     createdAt
     updatedAt

@@ -131,6 +131,7 @@ export type AppAccessTier = {
   isDefault: Scalars['Boolean']['output'];
   isFree: Scalars['Boolean']['output'];
   name: Scalars['String']['output'];
+  permissionKeys: Array<Scalars['String']['output']>;
   priceCents: Maybe<Scalars['BigInt']['output']>;
   status: Scalars['String']['output'];
   tierId: Scalars['BigInt']['output'];
@@ -346,6 +347,10 @@ export type CksEnvironment = {
   desiredEnvironmentVersion: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
   graphqlFlavor: Maybe<Scalars['String']['output']>;
+  graphqlLoadBalancerCount: Scalars['Int']['output'];
+  graphqlLoadBalancerFlavor: Maybe<Scalars['String']['output']>;
+  graphqlMaxServers: Scalars['Int']['output'];
+  graphqlMinServers: Scalars['Int']['output'];
   id: Scalars['String']['output'];
   observedEnvironmentVersion: Maybe<Scalars['String']['output']>;
   orgId: Scalars['BigInt']['output'];
@@ -356,6 +361,8 @@ export type CksEnvironment = {
   subdomainHandle: Maybe<Scalars['String']['output']>;
   suspendedAt: Maybe<Scalars['DateTime']['output']>;
   udpBuddyFlavor: Maybe<Scalars['String']['output']>;
+  udpBuddyMaxServers: Scalars['Int']['output'];
+  udpBuddyMinServers: Scalars['Int']['output'];
   updatedAt: Scalars['DateTime']['output'];
 };
 
@@ -371,6 +378,7 @@ export type CksEnvironmentAudit = {
 export type CksEnvironmentBillingResource = {
   __typename?: 'CksEnvironmentBillingResource';
   componentKind: Scalars['String']['output'];
+  currency: Scalars['String']['output'];
   customerHourlyPriceCents: Maybe<Scalars['BigInt']['output']>;
   environmentId: Scalars['String']['output'];
   flavorName: Maybe<Scalars['String']['output']>;
@@ -443,8 +451,14 @@ export type CksEnvironmentQuote = {
   datacenter: Scalars['String']['output'];
   firstDayReserveCents: Scalars['BigInt']['output'];
   graphqlFlavor: Scalars['String']['output'];
+  graphqlLoadBalancerCount: Scalars['Int']['output'];
+  graphqlLoadBalancerFlavor: Scalars['String']['output'];
+  graphqlMaxServers: Scalars['Int']['output'];
+  graphqlMinServers: Scalars['Int']['output'];
   hourlyCostCents: Scalars['BigInt']['output'];
   udpBuddyFlavor: Scalars['String']['output'];
+  udpBuddyMaxServers: Scalars['Int']['output'];
+  udpBuddyMinServers: Scalars['Int']['output'];
   walletBalanceCents: Scalars['BigInt']['output'];
 };
 
@@ -469,21 +483,31 @@ export type CksEnvironmentVersion = {
 
 export type CksOvhDatacenter = {
   __typename?: 'CksOvhDatacenter';
+  city: Maybe<Scalars['String']['output']>;
   continent: Maybe<Scalars['String']['output']>;
   isAvailable: Scalars['Boolean']['output'];
   name: Maybe<Scalars['String']['output']>;
   region: Scalars['String']['output'];
+  /** Number of customer-selectable instances in this datacenter after availability, pricing, and admin visibility filters. */
+  selectableInstanceCount: Scalars['Int']['output'];
   status: Scalars['String']['output'];
   syncedAt: Scalars['DateTime']['output'];
 };
 
+/** Customer-selectable catalog instance flavor. Hidden, unavailable, or unpriced rows are omitted from environmentFlavors. */
 export type CksOvhFlavor = {
   __typename?: 'CksOvhFlavor';
+  availabilityStatus: Scalars['String']['output'];
   currency: Scalars['String']['output'];
-  customerHourlyPriceCents: Maybe<Scalars['BigInt']['output']>;
+  /** Customer hourly price in cents. Non-null for every flavor returned from environmentFlavors. */
+  customerHourlyPriceCents: Scalars['BigInt']['output'];
+  /** Customer monthly reference price in cents. Display-only until monthly billing is implemented. */
+  customerMonthlyPriceCents: Maybe<Scalars['BigInt']['output']>;
   diskGb: Maybe<Scalars['Int']['output']>;
   flavorName: Scalars['String']['output'];
   flavorType: Maybe<Scalars['String']['output']>;
+  pricingMode: Scalars['String']['output'];
+  pricingSource: Maybe<Scalars['String']['output']>;
   quotaAvailable: Maybe<Scalars['Int']['output']>;
   ramMb: Maybe<Scalars['Int']['output']>;
   rawHourlyCostCents: Maybe<Scalars['BigInt']['output']>;
@@ -630,6 +654,7 @@ export type CreateAccessTierInput = {
   isDefault?: InputMaybe<Scalars['Boolean']['input']>;
   isFree?: InputMaybe<Scalars['Boolean']['input']>;
   name: Scalars['String']['input'];
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
   tierOrder?: InputMaybe<Scalars['Int']['input']>;
 };
 
@@ -669,13 +694,23 @@ export type CreateCheckoutInput = {
 };
 
 export type CreateEnvironmentInput = {
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   databaseFlavor: Scalars['String']['input'];
   datacenter: Scalars['String']['input'];
   displayName: Scalars['String']['input'];
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   graphqlFlavor: Scalars['String']['input'];
+  graphqlLoadBalancerCount: Scalars['Int']['input'];
+  /** Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price. */
+  graphqlLoadBalancerFlavor: Scalars['String']['input'];
+  graphqlMaxServers: Scalars['Int']['input'];
+  graphqlMinServers: Scalars['Int']['input'];
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   udpBuddyFlavor: Scalars['String']['input'];
+  udpBuddyMaxServers: Scalars['Int']['input'];
+  udpBuddyMinServers: Scalars['Int']['input'];
   x25519PublicKeyBase64: Scalars['String']['input'];
 };
 
@@ -720,11 +755,21 @@ export type DestroyEnvironmentInput = {
 };
 
 export type EnvironmentQuoteInput = {
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   databaseFlavor: Scalars['String']['input'];
   datacenter: Scalars['String']['input'];
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   graphqlFlavor: Scalars['String']['input'];
+  graphqlLoadBalancerCount: Scalars['Int']['input'];
+  /** Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price. */
+  graphqlLoadBalancerFlavor: Scalars['String']['input'];
+  graphqlMaxServers: Scalars['Int']['input'];
+  graphqlMinServers: Scalars['Int']['input'];
   orgId: Scalars['BigInt']['input'];
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   udpBuddyFlavor: Scalars['String']['input'];
+  udpBuddyMaxServers: Scalars['Int']['input'];
+  udpBuddyMinServers: Scalars['Int']['input'];
 };
 
 export type FreePlayWindowInfo = {
@@ -792,12 +837,28 @@ export type GrantAppAccessInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+export type GrantGridPermissionsInput = {
+  appId: Scalars['BigInt']['input'];
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  gridId: Scalars['BigInt']['input'];
+  permissionKeys: Array<Scalars['String']['input']>;
+  userId: Scalars['BigInt']['input'];
+};
+
 export type GraphQlServer = {
   __typename?: 'GraphQLServer';
+  apiPort: Scalars['Int']['output'];
+  cpuUsagePct: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['DateTime']['output'];
   graphqlServerId: Scalars['ID']['output'];
   ip4: Maybe<Scalars['String']['output']>;
   ip6: Maybe<Scalars['String']['output']>;
+  loadAverage1m: Maybe<Scalars['Float']['output']>;
+  memoryUsagePct: Maybe<Scalars['Float']['output']>;
+  providerInstanceId: Maybe<Scalars['String']['output']>;
+  publicIp4: Maybe<Scalars['String']['output']>;
+  publicIp6: Maybe<Scalars['String']['output']>;
+  runtimeServerId: Maybe<Scalars['String']['output']>;
   status: ServerState;
   updatedAt: Scalars['DateTime']['output'];
 };
@@ -809,6 +870,14 @@ export type Grid = {
   grid_id: Scalars['BigInt']['output'];
   high_chunk: ChunkCoordinates;
   low_chunk: ChunkCoordinates;
+};
+
+export type GridUserPermissions = {
+  __typename?: 'GridUserPermissions';
+  appId: Scalars['BigInt']['output'];
+  gridId: Scalars['BigInt']['output'];
+  permissionKeys: Array<Scalars['String']['output']>;
+  userId: Scalars['BigInt']['output'];
 };
 
 export type InviteOrgMemberInput = {
@@ -861,6 +930,7 @@ export type Mutation = {
   createAvatar: Avatar;
   /** Creates a Checkout row, opens the provider session, and returns the row with externalUrl set. Redirect the user to externalUrl. Status starts PENDING and updates via webhook. */
   createCheckout: Checkout;
+  /** Creates an environment only if each selected instance flavor is available and customer-priced in the catalog (same rule as environmentQuote). Use environmentFlavors / environmentDatacenters for valid options. */
   createEnvironment: CksEnvironmentDetail;
   createGrid: CreateGridResponse;
   createOrgRole: OrgRole;
@@ -879,6 +949,7 @@ export type Mutation = {
   disconnectUdpProxy: Scalars['Boolean']['output'];
   forceLogoutUser: Scalars['Boolean']['output'];
   grantAppAccess: AppUserAccess;
+  grantGridPermissions: GridUserPermissions;
   inviteOrgMember: OrgMember;
   login: AuthResponse;
   logout: Scalars['Boolean']['output'];
@@ -890,6 +961,7 @@ export type Mutation = {
   resetPassword: Scalars['Boolean']['output'];
   resumeEnvironment: CksEnvironmentChangeOrder;
   revokeAppAccess: AppUserAccess;
+  revokeGridPermissions: GridUserPermissions;
   revokeOrgToken: Scalars['Boolean']['output'];
   /** Reverts every voxel edit by `userId` in `appId` between `from` and `to`. Gated by the org permission `manage_apps`. Defaults to dryRun=true; pass dryRun=false to apply. */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
@@ -921,6 +993,7 @@ export type Mutation = {
   updateChunk: Chunk;
   updateChunkLods: Maybe<Chunk>;
   updateChunkState: Maybe<Chunk>;
+  updateEnvironmentScaling: CksEnvironmentChangeOrder;
   updateGamertag: User;
   updateOrgMemberRoles: OrgMember;
   updateOrgRole: OrgRole;
@@ -1043,6 +1116,11 @@ export type MutationGrantAppAccessArgs = {
 };
 
 
+export type MutationGrantGridPermissionsArgs = {
+  input: GrantGridPermissionsInput;
+};
+
+
 export type MutationInviteOrgMemberArgs = {
   input: InviteOrgMemberInput;
 };
@@ -1087,6 +1165,11 @@ export type MutationResumeEnvironmentArgs = {
 export type MutationRevokeAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeGridPermissionsArgs = {
+  input: RevokeGridPermissionsInput;
 };
 
 
@@ -1217,6 +1300,11 @@ export type MutationUpdateChunkStateArgs = {
 };
 
 
+export type MutationUpdateEnvironmentScalingArgs = {
+  input: UpdateEnvironmentScalingInput;
+};
+
+
 export type MutationUpdateGamertagArgs = {
   input: UpdateGamertagInput;
 };
@@ -1259,6 +1347,23 @@ export type MutationUpdateUserTypeArgs = {
 
 export type MutationUpdateVoxelArgs = {
   input: UpdateVoxelInput;
+};
+
+export type NearbyGridPermissions = {
+  __typename?: 'NearbyGridPermissions';
+  appId: Scalars['BigInt']['output'];
+  gridId: Scalars['BigInt']['output'];
+  highChunk: ChunkCoordinates;
+  lowChunk: ChunkCoordinates;
+  permissionKeys: Array<Scalars['String']['output']>;
+  userId: Scalars['BigInt']['output'];
+};
+
+export type NearbyGridPermissionsInput = {
+  appId: Scalars['BigInt']['input'];
+  highChunk: ChunkCoordinatesInput;
+  lowChunk: ChunkCoordinatesInput;
+  userId: Scalars['BigInt']['input'];
 };
 
 export type OrgMember = {
@@ -1352,6 +1457,24 @@ export type PageInfo = {
   totalCount: Scalars['Int']['output'];
 };
 
+export type PaymentEventRecord = {
+  __typename?: 'PaymentEventRecord';
+  checkoutId: Maybe<Scalars['BigInt']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  error: Maybe<Scalars['String']['output']>;
+  eventId: Scalars['BigInt']['output'];
+  eventType: Scalars['String']['output'];
+  externalEventId: Scalars['String']['output'];
+  processedAt: Maybe<Scalars['DateTime']['output']>;
+  provider: PaymentProvider;
+};
+
+export type PaymentEventsPage = {
+  __typename?: 'PaymentEventsPage';
+  items: Array<PaymentEventRecord>;
+  pageInfo: PageInfo;
+};
+
 /** External payment processor for a checkout. */
 export enum PaymentProvider {
   Paypal = 'PAYPAL',
@@ -1380,8 +1503,11 @@ export type Query = {
   checkouts: CheckoutsPage;
   /** The most-specific quota that applies to (orgId, appId, tierId, metric). Walks tier -> app -> org -> free_tier_defaults. Returns null if nothing matches. */
   effectiveQuota: Maybe<ServiceQuota>;
+  /** OVH datacenters that have at least one customer-priced instance flavor available for customer selection. */
   environmentDatacenters: Array<CksOvhDatacenter>;
+  /** Customer-selectable instance flavors in the datacenter with current availability and customer pricing. */
   environmentFlavors: Array<CksOvhFlavor>;
+  /** Pricing quote for the selected flavors. Fails if any flavor is unavailable, hidden, or lacks customer pricing. */
   environmentQuote: CksEnvironmentQuote;
   environmentVersions: Array<CksEnvironmentVersion>;
   freePlayWindowInfo: FreePlayWindowInfo;
@@ -1393,6 +1519,7 @@ export type Query = {
   getVoxelList: ChunkVoxelResponse;
   /** Returns all registered GraphQL servers */
   graphqlServers: Array<GraphQlServer>;
+  gridUserPermissions: GridUserPermissions;
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   listVoxels: Array<Voxel>;
   me: Maybe<User>;
@@ -1405,6 +1532,7 @@ export type Query = {
   myDonationData: UserDonationData;
   myOrganizations: Array<OrgMembership>;
   myPropertyTokens: UserPropertyTokenData;
+  nearbyGridPermissions: Array<NearbyGridPermissions>;
   orgEnvironment: Maybe<CksEnvironmentDetail>;
   orgEnvironments: Array<CksEnvironment>;
   orgMembers: Array<OrgMember>;
@@ -1414,8 +1542,12 @@ export type Query = {
   orgTokens: Array<OrgToken>;
   organization: Maybe<Organization>;
   organizationBySlug: Maybe<Organization>;
+  /** Super admin only. Inbound payment webhook audit log. */
+  paymentEvents: PaymentEventsPage;
   quotasForApp: Array<ServiceQuota>;
   quotasForOrg: Array<ServiceQuota>;
+  /** Runtime permission keys that can be granted through app tiers or grid permissions. */
+  runtimePermissions: Array<Scalars['String']['output']>;
   /** Returns a random server from the lowest 20% of servers by client count to distribute load evenly */
   serverWithLeastClients: ServerStatus;
   /** UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy. */
@@ -1551,6 +1683,13 @@ export type QueryGetVoxelListArgs = {
 };
 
 
+export type QueryGridUserPermissionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryListVoxelUpdatesByDistanceArgs = {
   input: ListVoxelUpdatesByDistanceInput;
 };
@@ -1574,6 +1713,11 @@ export type QueryMyAppAccessArgs = {
 export type QueryMyCheckoutsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryNearbyGridPermissionsArgs = {
+  input: NearbyGridPermissionsInput;
 };
 
 
@@ -1610,6 +1754,12 @@ export type QueryOrganizationArgs = {
 
 export type QueryOrganizationBySlugArgs = {
   slug: Scalars['String']['input'];
+};
+
+
+export type QueryPaymentEventsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -1689,6 +1839,13 @@ export type ResetPasswordInput = {
 export type ResumeEnvironmentInput = {
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
+};
+
+export type RevokeGridPermissionsInput = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
+  userId: Scalars['BigInt']['input'];
 };
 
 export type RollbackVoxelEventResult = {
@@ -1877,6 +2034,7 @@ export type UpdateAccessTierInput = {
   isFree?: InputMaybe<Scalars['Boolean']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   paypalPlanId?: InputMaybe<Scalars['String']['input']>;
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
   priceCents?: InputMaybe<Scalars['BigInt']['input']>;
   stripePriceId?: InputMaybe<Scalars['String']['input']>;
   tierOrder?: InputMaybe<Scalars['Int']['input']>;
@@ -1922,6 +2080,18 @@ export type UpdateChunkStateInput = {
   appId: Scalars['BigInt']['input'];
   chunkState?: InputMaybe<Scalars['String']['input']>;
   coordinates: ChunkCoordinatesInput;
+};
+
+export type UpdateEnvironmentScalingInput = {
+  graphqlLoadBalancerCount: Scalars['Int']['input'];
+  /** Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price. */
+  graphqlLoadBalancerFlavor: Scalars['String']['input'];
+  graphqlMaxServers: Scalars['Int']['input'];
+  graphqlMinServers: Scalars['Int']['input'];
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+  udpBuddyMaxServers: Scalars['Int']['input'];
+  udpBuddyMinServers: Scalars['Int']['input'];
 };
 
 export type UpdateGamertagInput = {
@@ -2223,7 +2393,7 @@ export type AppAccessTiersQueryVariables = Exact<{
 }>;
 
 
-export type AppAccessTiersQuery = { __typename?: 'Query', appAccessTiers: Array<{ __typename?: 'AppAccessTier', tierId: string, appId: string, name: string, tierOrder: number, isFree: boolean, isDefault: boolean, priceCents: string | null, currency: string | null, billingPeriod: string | null, description: string | null, status: string, createdAt: string, updatedAt: string }> };
+export type AppAccessTiersQuery = { __typename?: 'Query', appAccessTiers: Array<{ __typename?: 'AppAccessTier', tierId: string, appId: string, name: string, tierOrder: number, isFree: boolean, isDefault: boolean, priceCents: string | null, currency: string | null, billingPeriod: string | null, description: string | null, permissionKeys: Array<string>, status: string, createdAt: string, updatedAt: string }> };
 
 export type AppUserAccessByAppQueryVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -2247,7 +2417,7 @@ export type CreateAccessTierMutationVariables = Exact<{
 }>;
 
 
-export type CreateAccessTierMutation = { __typename?: 'Mutation', createAccessTier: { __typename?: 'AppAccessTier', tierId: string, appId: string, name: string, tierOrder: number, isFree: boolean, isDefault: boolean, priceCents: string | null, currency: string | null, billingPeriod: string | null, description: string | null, status: string, createdAt: string, updatedAt: string } };
+export type CreateAccessTierMutation = { __typename?: 'Mutation', createAccessTier: { __typename?: 'AppAccessTier', tierId: string, appId: string, name: string, tierOrder: number, isFree: boolean, isDefault: boolean, priceCents: string | null, currency: string | null, billingPeriod: string | null, description: string | null, permissionKeys: Array<string>, status: string, createdAt: string, updatedAt: string } };
 
 export type GrantAppAccessMutationVariables = Exact<{
   input: GrantAppAccessInput;
@@ -2277,7 +2447,7 @@ export type UpdateAccessTierMutationVariables = Exact<{
 }>;
 
 
-export type UpdateAccessTierMutation = { __typename?: 'Mutation', updateAccessTier: { __typename?: 'AppAccessTier', tierId: string, appId: string, name: string, tierOrder: number, isFree: boolean, isDefault: boolean, priceCents: string | null, currency: string | null, billingPeriod: string | null, description: string | null, status: string, updatedAt: string } };
+export type UpdateAccessTierMutation = { __typename?: 'Mutation', updateAccessTier: { __typename?: 'AppAccessTier', tierId: string, appId: string, name: string, tierOrder: number, isFree: boolean, isDefault: boolean, priceCents: string | null, currency: string | null, billingPeriod: string | null, description: string | null, permissionKeys: Array<string>, status: string, updatedAt: string } };
 
 export type AppQueryVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -2929,14 +3099,14 @@ export const CreateActorDocument = {"kind":"Document","definitions":[{"kind":"Op
 export const DeleteActorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteActor"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteActor"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}}]}}]}}]} as unknown as DocumentNode<DeleteActorMutation, DeleteActorMutationVariables>;
 export const UpdateActorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateActor"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateActorInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateActor"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"chunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<UpdateActorMutation, UpdateActorMutationVariables>;
 export const UpdateActorStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateActorState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateActorStateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateActorState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}}]}}]}}]} as unknown as DocumentNode<UpdateActorStateMutation, UpdateActorStateMutationVariables>;
-export const AppAccessTiersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppAccessTiers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appAccessTiers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tierOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isFree"}},{"kind":"Field","name":{"kind":"Name","value":"isDefault"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"billingPeriod"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppAccessTiersQuery, AppAccessTiersQueryVariables>;
+export const AppAccessTiersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppAccessTiers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appAccessTiers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tierOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isFree"}},{"kind":"Field","name":{"kind":"Name","value":"isDefault"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"billingPeriod"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissionKeys"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppAccessTiersQuery, AppAccessTiersQueryVariables>;
 export const AppUserAccessByAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppUserAccessByApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUserAccessByApp"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUserAccessId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedBy"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionId"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppUserAccessByAppQuery, AppUserAccessByAppQueryVariables>;
 export const ArchiveAccessTierDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ArchiveAccessTier"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"archiveAccessTier"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tierId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ArchiveAccessTierMutation, ArchiveAccessTierMutationVariables>;
-export const CreateAccessTierDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateAccessTier"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAccessTierInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAccessTier"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tierOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isFree"}},{"kind":"Field","name":{"kind":"Name","value":"isDefault"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"billingPeriod"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateAccessTierMutation, CreateAccessTierMutationVariables>;
+export const CreateAccessTierDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateAccessTier"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAccessTierInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAccessTier"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tierOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isFree"}},{"kind":"Field","name":{"kind":"Name","value":"isDefault"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"billingPeriod"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissionKeys"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateAccessTierMutation, CreateAccessTierMutationVariables>;
 export const GrantAppAccessDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GrantAppAccess"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"GrantAppAccessInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"grantAppAccess"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUserAccessId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedBy"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionId"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<GrantAppAccessMutation, GrantAppAccessMutationVariables>;
 export const MyAppAccessDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyAppAccess"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myAppAccess"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUserAccessId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedBy"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionId"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<MyAppAccessQuery, MyAppAccessQueryVariables>;
 export const RevokeAppAccessDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RevokeAppAccess"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"revokeAppAccess"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUserAccessId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedBy"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionId"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<RevokeAppAccessMutation, RevokeAppAccessMutationVariables>;
-export const UpdateAccessTierDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAccessTier"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAccessTierInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAccessTier"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tierId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tierOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isFree"}},{"kind":"Field","name":{"kind":"Name","value":"isDefault"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"billingPeriod"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAccessTierMutation, UpdateAccessTierMutationVariables>;
+export const UpdateAccessTierDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAccessTier"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAccessTierInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAccessTier"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tierId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tierOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isFree"}},{"kind":"Field","name":{"kind":"Name","value":"isDefault"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"billingPeriod"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissionKeys"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAccessTierMutation, UpdateAccessTierMutationVariables>;
 export const AppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"App"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"app"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<AppQuery, AppQueryVariables>;
 export const AppBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgSlug"}}},{"kind":"Argument","name":{"kind":"Name","value":"appSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appSlug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<AppBySlugQuery, AppBySlugQueryVariables>;
 export const AppsForOrgDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppsForOrg"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appsForOrg"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgSlug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppsForOrgQuery, AppsForOrgQueryVariables>;
