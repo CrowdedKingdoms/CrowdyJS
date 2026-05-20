@@ -493,74 +493,6 @@ type CksEnvironmentDetail {
   billingResources: [CksEnvironmentBillingResource!]!
 }
 
-type ChunkCoordinates {
-  x: BigInt!
-  y: BigInt!
-  z: BigInt!
-}
-
-type Grid {
-  grid_id: BigInt!
-  app_id: BigInt!
-  low_chunk: ChunkCoordinates!
-  high_chunk: ChunkCoordinates!
-  created_at: DateTime!
-}
-
-type CreateGridResponse {
-  grid: Grid
-  error: ErrorType!
-}
-
-"""The type of error that can occur in the application"""
-enum ErrorType {
-  NO_ERROR
-  UNKNOWN_ERROR
-  EMAIL_NOT_FOUND
-  BAD_PASSWORD
-  EMAIL_ALREADY_EXISTS
-  INVALID_TOKEN
-  APP_NOT_FOUND
-  UNAUTHORIZED
-  APP_NOT_LOADED
-  EMAIL_TOO_SHORT
-  EMAIL_TOO_LONG
-  PASSWORD_TOO_SHORT
-  PASSWORD_TOO_LONG
-  GAME_TOKEN_WRONG_SIZE
-  NAME_TOO_LONG
-  INVALID_REQUEST
-  EMAIL_INVALID
-  INVALID_TOKEN_LENGTH
-  INVALID_APP_ID
-  CHUNK_NOT_FOUND
-  USER_NOT_AUTHENTICATED
-  INVALID_STATE_DATA
-  USER_NOT_APP_ADMIN
-  GRID_OUTSIDE_ASSIGNMENT
-  NO_MATCHING_GRID_ASSIGNMENT
-  INVALID_GRID_COORDINATES
-  GRID_ALREADY_EXISTS
-  GRID_OVERLAPS_EXISTING
-  GAMERTAG_ALREADY_EXISTS
-}
-
-type GridUserPermissions {
-  appId: BigInt!
-  gridId: BigInt!
-  userId: BigInt!
-  permissionKeys: [String!]!
-}
-
-type NearbyGridPermissions {
-  appId: BigInt!
-  gridId: BigInt!
-  userId: BigInt!
-  lowChunk: ChunkCoordinates!
-  highChunk: ChunkCoordinates!
-  permissionKeys: [String!]!
-}
-
 type GraphQLServer {
   graphqlServerId: ID!
   """Logical kind of GraphQL service: 'management-api' or 'game-api'."""
@@ -735,6 +667,12 @@ type CpOperatorUser {
   createdAt: DateTime!
 }
 
+type ChunkCoordinates {
+  x: BigInt!
+  y: BigInt!
+  z: BigInt!
+}
+
 """
 BigInt custom scalar type. Input should be a string representation of a BigInt.
 """
@@ -810,8 +748,6 @@ type Query {
   Pricing quote for the selected flavors. Fails if any flavor is unavailable, hidden, or lacks customer pricing.
   """
   environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote!
-  gridUserPermissions(appId: BigInt!, gridId: BigInt!, userId: BigInt!): GridUserPermissions!
-  nearbyGridPermissions(input: NearbyGridPermissionsInput!): [NearbyGridPermissions!]!
   """Returns all registered GraphQL servers"""
   graphqlServers: [GraphQLServer!]!
   """Returns only active (ReadyForClients) GraphQL servers"""
@@ -897,19 +833,6 @@ input EnvironmentQuoteInput {
   loadBalancerCount: Int!
 }
 
-input NearbyGridPermissionsInput {
-  appId: BigInt!
-  userId: BigInt!
-  lowChunk: ChunkCoordinatesInput!
-  highChunk: ChunkCoordinatesInput!
-}
-
-input ChunkCoordinatesInput {
-  x: BigInt!
-  y: BigInt!
-  z: BigInt!
-}
-
 type Mutation {
   login(loginUserInput: LoginUserInput!): AuthResponse!
   register(registerUserInput: RegisterUserInput!): AuthResponse!
@@ -976,9 +899,6 @@ type Mutation {
   destroyEnvironment(input: DestroyEnvironmentInput!): CksEnvironmentChangeOrder!
   resumeEnvironment(input: ResumeEnvironmentInput!): CksEnvironmentChangeOrder!
   updateEnvironmentScaling(input: UpdateEnvironmentScalingInput!): CksEnvironmentChangeOrder!
-  createGrid(input: CreateGridInput!): CreateGridResponse!
-  grantGridPermissions(input: GrantGridPermissionsInput!): GridUserPermissions!
-  revokeGridPermissions(input: RevokeGridPermissionsInput!): GridUserPermissions!
   setEnvironmentDeletionProtection(environmentId: String!, enabled: Boolean!): Boolean!
   putCpSecret(environmentId: String!, name: String!, plaintext: String!, kind: String): CpSecretRow!
   deleteCpSecret(environmentId: String!, name: String!): Boolean!
@@ -1212,27 +1132,6 @@ input UpdateEnvironmentScalingInput {
   Caddy LB flavor (in front of the game-api fleet). When omitted the existing value is preserved.
   """
   caddyFlavor: String
-}
-
-input CreateGridInput {
-  appId: BigInt!
-  corner1: ChunkCoordinatesInput!
-  corner2: ChunkCoordinatesInput!
-}
-
-input GrantGridPermissionsInput {
-  appId: BigInt!
-  gridId: BigInt!
-  userId: BigInt!
-  permissionKeys: [String!]!
-  expiresAt: DateTime
-}
-
-input RevokeGridPermissionsInput {
-  appId: BigInt!
-  gridId: BigInt!
-  userId: BigInt!
-  permissionKeys: [String!]
 }
 
 type Avatar {
@@ -1471,6 +1370,12 @@ input ActorFilterInput {
   avatarId: BigInt
   uuid: String
   chunk: ChunkCoordinatesInput
+}
+
+input ChunkCoordinatesInput {
+  x: BigInt!
+  y: BigInt!
+  z: BigInt!
 }
 
 input BatchActorLookupInput {

@@ -857,18 +857,6 @@ export type CreateEnvironmentInput = {
   x25519PublicKeyBase64: Scalars['String']['input'];
 };
 
-export type CreateGridInput = {
-  appId: Scalars['BigInt']['input'];
-  corner1: ChunkCoordinatesInput;
-  corner2: ChunkCoordinatesInput;
-};
-
-export type CreateGridResponse = {
-  __typename?: 'CreateGridResponse';
-  error: ErrorType;
-  grid: Maybe<Grid>;
-};
-
 export type CreateOrgRoleInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   orgId: Scalars['BigInt']['input'];
@@ -914,39 +902,6 @@ export type EnvironmentQuoteInput = {
   udpBuddyMaxServers: Scalars['Int']['input'];
   udpBuddyMinServers: Scalars['Int']['input'];
 };
-
-/** The type of error that can occur in the application */
-export enum ErrorType {
-  AppNotFound = 'APP_NOT_FOUND',
-  AppNotLoaded = 'APP_NOT_LOADED',
-  BadPassword = 'BAD_PASSWORD',
-  ChunkNotFound = 'CHUNK_NOT_FOUND',
-  EmailAlreadyExists = 'EMAIL_ALREADY_EXISTS',
-  EmailInvalid = 'EMAIL_INVALID',
-  EmailNotFound = 'EMAIL_NOT_FOUND',
-  EmailTooLong = 'EMAIL_TOO_LONG',
-  EmailTooShort = 'EMAIL_TOO_SHORT',
-  GamertagAlreadyExists = 'GAMERTAG_ALREADY_EXISTS',
-  GameTokenWrongSize = 'GAME_TOKEN_WRONG_SIZE',
-  GridAlreadyExists = 'GRID_ALREADY_EXISTS',
-  GridOutsideAssignment = 'GRID_OUTSIDE_ASSIGNMENT',
-  GridOverlapsExisting = 'GRID_OVERLAPS_EXISTING',
-  InvalidAppId = 'INVALID_APP_ID',
-  InvalidGridCoordinates = 'INVALID_GRID_COORDINATES',
-  InvalidRequest = 'INVALID_REQUEST',
-  InvalidStateData = 'INVALID_STATE_DATA',
-  InvalidToken = 'INVALID_TOKEN',
-  InvalidTokenLength = 'INVALID_TOKEN_LENGTH',
-  NameTooLong = 'NAME_TOO_LONG',
-  NoError = 'NO_ERROR',
-  NoMatchingGridAssignment = 'NO_MATCHING_GRID_ASSIGNMENT',
-  PasswordTooLong = 'PASSWORD_TOO_LONG',
-  PasswordTooShort = 'PASSWORD_TOO_SHORT',
-  Unauthorized = 'UNAUTHORIZED',
-  UnknownError = 'UNKNOWN_ERROR',
-  UserNotAppAdmin = 'USER_NOT_APP_ADMIN',
-  UserNotAuthenticated = 'USER_NOT_AUTHENTICATED'
-}
 
 export type FreePlayWindowInfo = {
   __typename?: 'FreePlayWindowInfo';
@@ -1013,14 +968,6 @@ export type GrantAppAccessInput = {
   userId: Scalars['BigInt']['input'];
 };
 
-export type GrantGridPermissionsInput = {
-  appId: Scalars['BigInt']['input'];
-  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
-  gridId: Scalars['BigInt']['input'];
-  permissionKeys: Array<Scalars['String']['input']>;
-  userId: Scalars['BigInt']['input'];
-};
-
 export type GraphQlServer = {
   __typename?: 'GraphQLServer';
   apiPort: Scalars['Int']['output'];
@@ -1039,23 +986,6 @@ export type GraphQlServer = {
   runtimeServerId: Maybe<Scalars['String']['output']>;
   status: ServerState;
   updatedAt: Scalars['DateTime']['output'];
-};
-
-export type Grid = {
-  __typename?: 'Grid';
-  app_id: Scalars['BigInt']['output'];
-  created_at: Scalars['DateTime']['output'];
-  grid_id: Scalars['BigInt']['output'];
-  high_chunk: ChunkCoordinates;
-  low_chunk: ChunkCoordinates;
-};
-
-export type GridUserPermissions = {
-  __typename?: 'GridUserPermissions';
-  appId: Scalars['BigInt']['output'];
-  gridId: Scalars['BigInt']['output'];
-  permissionKeys: Array<Scalars['String']['output']>;
-  userId: Scalars['BigInt']['output'];
 };
 
 export type InviteOrgMemberInput = {
@@ -1112,7 +1042,6 @@ export type Mutation = {
   createCheckout: Checkout;
   /** Creates an environment only if each selected instance flavor is available and customer-priced in the catalog (same rule as environmentQuote). Use environmentFlavors / environmentDatacenters for valid options. */
   createEnvironment: CksEnvironmentDetail;
-  createGrid: CreateGridResponse;
   createOrgRole: OrgRole;
   /** Returns the plaintext token exactly once. Save it; subsequent queries only show metadata. */
   createOrgToken: OrgTokenWithSecret;
@@ -1130,7 +1059,6 @@ export type Mutation = {
   disconnectUdpProxy: Scalars['Boolean']['output'];
   forceLogoutUser: Scalars['Boolean']['output'];
   grantAppAccess: AppUserAccess;
-  grantGridPermissions: GridUserPermissions;
   inviteOrgMember: OrgMember;
   login: AuthResponse;
   logout: Scalars['Boolean']['output'];
@@ -1144,7 +1072,6 @@ export type Mutation = {
   resetPassword: Scalars['Boolean']['output'];
   resumeEnvironment: CksEnvironmentChangeOrder;
   revokeAppAccess: AppUserAccess;
-  revokeGridPermissions: GridUserPermissions;
   revokeOrgToken: Scalars['Boolean']['output'];
   /** Reverts every voxel edit by `userId` in `appId` between `from` and `to`. Gated by the org permission `manage_apps`. Defaults to dryRun=true; pass dryRun=false to apply. */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
@@ -1247,11 +1174,6 @@ export type MutationCreateEnvironmentArgs = {
 };
 
 
-export type MutationCreateGridArgs = {
-  input: CreateGridInput;
-};
-
-
 export type MutationCreateOrgRoleArgs = {
   input: CreateOrgRoleInput;
 };
@@ -1310,11 +1232,6 @@ export type MutationForceLogoutUserArgs = {
 
 export type MutationGrantAppAccessArgs = {
   input: GrantAppAccessInput;
-};
-
-
-export type MutationGrantGridPermissionsArgs = {
-  input: GrantGridPermissionsInput;
 };
 
 
@@ -1378,11 +1295,6 @@ export type MutationResumeEnvironmentArgs = {
 export type MutationRevokeAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationRevokeGridPermissionsArgs = {
-  input: RevokeGridPermissionsInput;
 };
 
 
@@ -1574,23 +1486,6 @@ export type MutationUpdateVoxelArgs = {
   input: UpdateVoxelInput;
 };
 
-export type NearbyGridPermissions = {
-  __typename?: 'NearbyGridPermissions';
-  appId: Scalars['BigInt']['output'];
-  gridId: Scalars['BigInt']['output'];
-  highChunk: ChunkCoordinates;
-  lowChunk: ChunkCoordinates;
-  permissionKeys: Array<Scalars['String']['output']>;
-  userId: Scalars['BigInt']['output'];
-};
-
-export type NearbyGridPermissionsInput = {
-  appId: Scalars['BigInt']['input'];
-  highChunk: ChunkCoordinatesInput;
-  lowChunk: ChunkCoordinatesInput;
-  userId: Scalars['BigInt']['input'];
-};
-
 export type OrgMember = {
   __typename?: 'OrgMember';
   createdAt: Scalars['DateTime']['output'];
@@ -1753,7 +1648,6 @@ export type Query = {
   getVoxelList: ChunkVoxelResponse;
   /** Returns all registered GraphQL servers */
   graphqlServers: Array<GraphQlServer>;
-  gridUserPermissions: GridUserPermissions;
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   listVoxels: Array<Voxel>;
   me: Maybe<User>;
@@ -1766,7 +1660,6 @@ export type Query = {
   myDonationData: UserDonationData;
   myOrganizations: Array<OrgMembership>;
   myPropertyTokens: UserPropertyTokenData;
-  nearbyGridPermissions: Array<NearbyGridPermissions>;
   operatorUsers: Array<CpOperatorUser>;
   orgEnvironment: Maybe<CksEnvironmentDetail>;
   orgEnvironments: Array<CksEnvironment>;
@@ -1957,13 +1850,6 @@ export type QueryGetVoxelListArgs = {
 };
 
 
-export type QueryGridUserPermissionsArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  userId: Scalars['BigInt']['input'];
-};
-
-
 export type QueryListVoxelUpdatesByDistanceArgs = {
   input: ListVoxelUpdatesByDistanceInput;
 };
@@ -1987,11 +1873,6 @@ export type QueryMyAppAccessArgs = {
 export type QueryMyCheckoutsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryNearbyGridPermissionsArgs = {
-  input: NearbyGridPermissionsInput;
 };
 
 
@@ -2113,13 +1994,6 @@ export type ResetPasswordInput = {
 export type ResumeEnvironmentInput = {
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
-};
-
-export type RevokeGridPermissionsInput = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
-  userId: Scalars['BigInt']['input'];
 };
 
 export type RollbackVoxelEventResult = {
