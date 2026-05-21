@@ -667,12 +667,6 @@ type CpOperatorUser {
   createdAt: DateTime!
 }
 
-type ChunkCoordinates {
-  x: BigInt!
-  y: BigInt!
-  z: BigInt!
-}
-
 """
 BigInt custom scalar type. Input should be a string representation of a BigInt.
 """
@@ -1141,6 +1135,12 @@ type Avatar {
   publicState: String
   privateState: String
   createdAt: DateTime!
+}
+
+type ChunkCoordinates {
+  x: BigInt!
+  y: BigInt!
+  z: BigInt!
 }
 
 type VoxelCoordinates {
