@@ -344,16 +344,16 @@ export type CksEnvironment = {
   __typename?: 'CksEnvironment';
   billingGraceDeadline: Maybe<Scalars['DateTime']['output']>;
   billingStatus: Scalars['String']['output'];
+  caddyFlavor: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
   databaseFlavor: Maybe<Scalars['String']['output']>;
   desiredEnvironmentVersion: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
-  graphqlFlavor: Maybe<Scalars['String']['output']>;
-  graphqlLoadBalancerCount: Scalars['Int']['output'];
-  graphqlLoadBalancerFlavor: Maybe<Scalars['String']['output']>;
-  graphqlMaxServers: Scalars['Int']['output'];
-  graphqlMinServers: Scalars['Int']['output'];
+  gameApiFlavor: Maybe<Scalars['String']['output']>;
+  gameApiMaxServers: Scalars['Int']['output'];
+  gameApiMinServers: Scalars['Int']['output'];
   id: Scalars['String']['output'];
+  loadBalancerCount: Scalars['Int']['output'];
   observedEnvironmentVersion: Maybe<Scalars['String']['output']>;
   orgId: Scalars['BigInt']['output'];
   primaryCloud: Scalars['String']['output'];
@@ -447,17 +447,17 @@ export type CksEnvironmentOutput = {
 export type CksEnvironmentQuote = {
   __typename?: 'CksEnvironmentQuote';
   availableBalanceCents: Scalars['BigInt']['output'];
+  caddyFlavor: Scalars['String']['output'];
   canCreate: Scalars['Boolean']['output'];
   currency: Scalars['String']['output'];
   databaseFlavor: Scalars['String']['output'];
   datacenter: Scalars['String']['output'];
   firstDayReserveCents: Scalars['BigInt']['output'];
-  graphqlFlavor: Scalars['String']['output'];
-  graphqlLoadBalancerCount: Scalars['Int']['output'];
-  graphqlLoadBalancerFlavor: Scalars['String']['output'];
-  graphqlMaxServers: Scalars['Int']['output'];
-  graphqlMinServers: Scalars['Int']['output'];
+  gameApiFlavor: Scalars['String']['output'];
+  gameApiMaxServers: Scalars['Int']['output'];
+  gameApiMinServers: Scalars['Int']['output'];
   hourlyCostCents: Scalars['BigInt']['output'];
+  loadBalancerCount: Scalars['Int']['output'];
   udpBuddyFlavor: Scalars['String']['output'];
   udpBuddyMaxServers: Scalars['Int']['output'];
   udpBuddyMinServers: Scalars['Int']['output'];
@@ -650,6 +650,146 @@ export type ClientTextPacketInput = {
   uuid: Scalars['String']['input'];
 };
 
+/** Operator-facing view of cks_environments. */
+export type CpAdminEnvironment = {
+  __typename?: 'CpAdminEnvironment';
+  createdAt: Scalars['DateTime']['output'];
+  deletionProtectionEnabled: Scalars['Boolean']['output'];
+  deletionProtectionSetAt: Maybe<Scalars['DateTime']['output']>;
+  deletionProtectionSetByEmail: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  orgId: Maybe<Scalars['String']['output']>;
+  primaryCloud: Scalars['String']['output'];
+  primaryRegion: Scalars['String']['output'];
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  subdomainHandle: Maybe<Scalars['String']['output']>;
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+export type CpAdminEnvironmentsPage = {
+  __typename?: 'CpAdminEnvironmentsPage';
+  page: Scalars['Int']['output'];
+  pageSize: Scalars['Int']['output'];
+  rows: Array<CpAdminEnvironment>;
+  total: Scalars['Int']['output'];
+};
+
+export type CpAuditEntry = {
+  __typename?: 'CpAuditEntry';
+  action: Scalars['String']['output'];
+  actorKind: Scalars['String']['output'];
+  actorUserId: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  entityId: Maybe<Scalars['String']['output']>;
+  entityKind: Maybe<Scalars['String']['output']>;
+  environmentId: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  payloadJson: Maybe<Scalars['String']['output']>;
+};
+
+export type CpChangeOrder = {
+  __typename?: 'CpChangeOrder';
+  claimedAt: Maybe<Scalars['DateTime']['output']>;
+  claimedBy: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  environmentId: Scalars['String']['output'];
+  error: Maybe<Scalars['String']['output']>;
+  finishedAt: Maybe<Scalars['DateTime']['output']>;
+  id: Scalars['ID']['output'];
+  kind: Scalars['String']['output'];
+  /** JSON-encoded payload */
+  payloadJson: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+export type CpChangeOrderDetail = {
+  __typename?: 'CpChangeOrderDetail';
+  order: CpChangeOrder;
+  steps: Array<CpStepRow>;
+  tasks: Array<CpTaskRow>;
+};
+
+export type CpChangeOrdersPage = {
+  __typename?: 'CpChangeOrdersPage';
+  page: Scalars['Int']['output'];
+  pageSize: Scalars['Int']['output'];
+  rows: Array<CpChangeOrder>;
+  total: Scalars['Int']['output'];
+};
+
+export type CpEnvSecretRow = {
+  __typename?: 'CpEnvSecretRow';
+  createdAt: Scalars['DateTime']['output'];
+  environmentId: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  kind: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  rotatedAt: Maybe<Scalars['DateTime']['output']>;
+};
+
+export type CpOperatorUser = {
+  __typename?: 'CpOperatorUser';
+  createdAt: Scalars['DateTime']['output'];
+  email: Maybe<Scalars['String']['output']>;
+  gamertag: Maybe<Scalars['String']['output']>;
+  isOperator: Scalars['Boolean']['output'];
+  isSuperAdmin: Scalars['Boolean']['output'];
+  userId: Scalars['ID']['output'];
+};
+
+export type CpSecretRow = {
+  __typename?: 'CpSecretRow';
+  createdAt: Scalars['DateTime']['output'];
+  environmentId: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  kind: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  rotatedAt: Maybe<Scalars['DateTime']['output']>;
+};
+
+export type CpStepRow = {
+  __typename?: 'CpStepRow';
+  attempt: Scalars['Int']['output'];
+  claimedBy: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  error: Maybe<Scalars['String']['output']>;
+  finishedAt: Maybe<Scalars['DateTime']['output']>;
+  handleJson: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  idempotencyKey: Maybe<Scalars['String']['output']>;
+  intentJson: Maybe<Scalars['String']['output']>;
+  kind: Scalars['String']['output'];
+  ordinal: Scalars['Int']['output'];
+  outputJson: Maybe<Scalars['String']['output']>;
+  payloadJson: Maybe<Scalars['String']['output']>;
+  recheckAt: Maybe<Scalars['DateTime']['output']>;
+  startedAt: Maybe<Scalars['DateTime']['output']>;
+  status: Scalars['String']['output'];
+  taskId: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+export type CpTaskRow = {
+  __typename?: 'CpTaskRow';
+  changeOrderId: Scalars['String']['output'];
+  /** JSON-encoded context */
+  contextJson: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  dependsOn: Array<Scalars['String']['output']>;
+  environmentId: Maybe<Scalars['String']['output']>;
+  error: Maybe<Scalars['String']['output']>;
+  finishedAt: Maybe<Scalars['DateTime']['output']>;
+  id: Scalars['ID']['output'];
+  kind: Scalars['String']['output'];
+  ordinal: Scalars['Int']['output'];
+  startedAt: Maybe<Scalars['DateTime']['output']>;
+  status: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+};
+
 export type CreateAccessTierInput = {
   appId: Scalars['BigInt']['input'];
   description?: InputMaybe<Scalars['String']['input']>;
@@ -696,17 +836,18 @@ export type CreateCheckoutInput = {
 };
 
 export type CreateEnvironmentInput = {
+  appIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. */
+  caddyFlavor: Scalars['String']['input'];
   /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   databaseFlavor: Scalars['String']['input'];
   datacenter: Scalars['String']['input'];
   displayName: Scalars['String']['input'];
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
-  graphqlFlavor: Scalars['String']['input'];
-  graphqlLoadBalancerCount: Scalars['Int']['input'];
-  /** Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price. */
-  graphqlLoadBalancerFlavor: Scalars['String']['input'];
-  graphqlMaxServers: Scalars['Int']['input'];
-  graphqlMinServers: Scalars['Int']['input'];
+  /** Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. */
+  gameApiFlavor: Scalars['String']['input'];
+  gameApiMaxServers: Scalars['Int']['input'];
+  gameApiMinServers: Scalars['Int']['input'];
+  loadBalancerCount: Scalars['Int']['input'];
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
   /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
@@ -714,18 +855,6 @@ export type CreateEnvironmentInput = {
   udpBuddyMaxServers: Scalars['Int']['input'];
   udpBuddyMinServers: Scalars['Int']['input'];
   x25519PublicKeyBase64: Scalars['String']['input'];
-};
-
-export type CreateGridInput = {
-  appId: Scalars['BigInt']['input'];
-  corner1: ChunkCoordinatesInput;
-  corner2: ChunkCoordinatesInput;
-};
-
-export type CreateGridResponse = {
-  __typename?: 'CreateGridResponse';
-  error: UdpErrorCode;
-  grid: Maybe<Grid>;
 };
 
 export type CreateOrgRoleInput = {
@@ -757,16 +886,16 @@ export type DestroyEnvironmentInput = {
 };
 
 export type EnvironmentQuoteInput = {
+  /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. */
+  caddyFlavor: Scalars['String']['input'];
   /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   databaseFlavor: Scalars['String']['input'];
   datacenter: Scalars['String']['input'];
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
-  graphqlFlavor: Scalars['String']['input'];
-  graphqlLoadBalancerCount: Scalars['Int']['input'];
-  /** Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price. */
-  graphqlLoadBalancerFlavor: Scalars['String']['input'];
-  graphqlMaxServers: Scalars['Int']['input'];
-  graphqlMinServers: Scalars['Int']['input'];
+  /** Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. */
+  gameApiFlavor: Scalars['String']['input'];
+  gameApiMaxServers: Scalars['Int']['input'];
+  gameApiMinServers: Scalars['Int']['input'];
+  loadBalancerCount: Scalars['Int']['input'];
   orgId: Scalars['BigInt']['input'];
   /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   udpBuddyFlavor: Scalars['String']['input'];
@@ -839,14 +968,6 @@ export type GrantAppAccessInput = {
   userId: Scalars['BigInt']['input'];
 };
 
-export type GrantGridPermissionsInput = {
-  appId: Scalars['BigInt']['input'];
-  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
-  gridId: Scalars['BigInt']['input'];
-  permissionKeys: Array<Scalars['String']['input']>;
-  userId: Scalars['BigInt']['input'];
-};
-
 export type GraphQlServer = {
   __typename?: 'GraphQLServer';
   apiPort: Scalars['Int']['output'];
@@ -855,6 +976,8 @@ export type GraphQlServer = {
   graphqlServerId: Scalars['ID']['output'];
   ip4: Maybe<Scalars['String']['output']>;
   ip6: Maybe<Scalars['String']['output']>;
+  /** Logical kind of GraphQL service: 'management-api' or 'game-api'. */
+  kind: Maybe<Scalars['String']['output']>;
   loadAverage1m: Maybe<Scalars['Float']['output']>;
   memoryUsagePct: Maybe<Scalars['Float']['output']>;
   providerInstanceId: Maybe<Scalars['String']['output']>;
@@ -863,23 +986,6 @@ export type GraphQlServer = {
   runtimeServerId: Maybe<Scalars['String']['output']>;
   status: ServerState;
   updatedAt: Scalars['DateTime']['output'];
-};
-
-export type Grid = {
-  __typename?: 'Grid';
-  app_id: Scalars['BigInt']['output'];
-  created_at: Scalars['DateTime']['output'];
-  grid_id: Scalars['BigInt']['output'];
-  high_chunk: ChunkCoordinates;
-  low_chunk: ChunkCoordinates;
-};
-
-export type GridUserPermissions = {
-  __typename?: 'GridUserPermissions';
-  appId: Scalars['BigInt']['output'];
-  gridId: Scalars['BigInt']['output'];
-  permissionKeys: Array<Scalars['String']['output']>;
-  userId: Scalars['BigInt']['output'];
 };
 
 export type InviteOrgMemberInput = {
@@ -922,6 +1028,8 @@ export type Mutation = {
   __typename?: 'Mutation';
   archiveAccessTier: AppAccessTier;
   archiveApp: App;
+  /** Captures an approved PayPal order after the hosted checkout redirects back. Wallet credit still reconciles through PayPal webhooks. */
+  capturePaypalCheckout: Checkout;
   changePassword: Scalars['Boolean']['output'];
   confirmEmail: Scalars['Boolean']['output'];
   /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
@@ -934,13 +1042,13 @@ export type Mutation = {
   createCheckout: Checkout;
   /** Creates an environment only if each selected instance flavor is available and customer-priced in the catalog (same rule as environmentQuote). Use environmentFlavors / environmentDatacenters for valid options. */
   createEnvironment: CksEnvironmentDetail;
-  createGrid: CreateGridResponse;
   createOrgRole: OrgRole;
   /** Returns the plaintext token exactly once. Save it; subsequent queries only show metadata. */
   createOrgToken: OrgTokenWithSecret;
   createOrganization: Organization;
   deleteActor: Actor;
   deleteAvatar: Avatar;
+  deleteCpSecret: Scalars['Boolean']['output'];
   /** Soft-deletes the caller's account: anonymizes PII, revokes sessions. Wallet, voxel, and donation history stays intact via FK. */
   deleteMyAccount: Scalars['Boolean']['output'];
   deleteOrgRole: Scalars['Boolean']['output'];
@@ -951,11 +1059,12 @@ export type Mutation = {
   disconnectUdpProxy: Scalars['Boolean']['output'];
   forceLogoutUser: Scalars['Boolean']['output'];
   grantAppAccess: AppUserAccess;
-  grantGridPermissions: GridUserPermissions;
   inviteOrgMember: OrgMember;
   login: AuthResponse;
   logout: Scalars['Boolean']['output'];
   logoutAllDevices: Scalars['Boolean']['output'];
+  putCpEnvSecret: CpEnvSecretRow;
+  putCpSecret: CpSecretRow;
   register: AuthResponse;
   removeOrgMember: Scalars['Boolean']['output'];
   requestPasswordReset: Scalars['Boolean']['output'];
@@ -963,7 +1072,6 @@ export type Mutation = {
   resetPassword: Scalars['Boolean']['output'];
   resumeEnvironment: CksEnvironmentChangeOrder;
   revokeAppAccess: AppUserAccess;
-  revokeGridPermissions: GridUserPermissions;
   revokeOrgToken: Scalars['Boolean']['output'];
   /** Reverts every voxel edit by `userId` in `appId` between `from` and `to`. Gated by the org permission `manage_apps`. Defaults to dryRun=true; pass dryRun=false to apply. */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
@@ -981,6 +1089,9 @@ export type Mutation = {
   /** Super admin only. Used to take down or relist apps platform-wide. */
   setAppVisibility: App;
   setEarlyAccessOverride: User;
+  setEnvironmentDeletionProtection: Scalars['Boolean']['output'];
+  /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
+  setOperator: User;
   /** Super admin only. Used to freeze/unfreeze orgs platform-wide. */
   setOrgStatus: Organization;
   setQuota: ServiceQuota;
@@ -1014,6 +1125,11 @@ export type MutationArchiveAccessTierArgs = {
 
 export type MutationArchiveAppArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationCapturePaypalCheckoutArgs = {
+  orderId: Scalars['String']['input'];
 };
 
 
@@ -1058,11 +1174,6 @@ export type MutationCreateEnvironmentArgs = {
 };
 
 
-export type MutationCreateGridArgs = {
-  input: CreateGridInput;
-};
-
-
 export type MutationCreateOrgRoleArgs = {
   input: CreateOrgRoleInput;
 };
@@ -1085,6 +1196,12 @@ export type MutationDeleteActorArgs = {
 
 export type MutationDeleteAvatarArgs = {
   id: Scalars['BigInt']['input'];
+};
+
+
+export type MutationDeleteCpSecretArgs = {
+  environmentId: Scalars['String']['input'];
+  name: Scalars['String']['input'];
 };
 
 
@@ -1118,11 +1235,6 @@ export type MutationGrantAppAccessArgs = {
 };
 
 
-export type MutationGrantGridPermissionsArgs = {
-  input: GrantGridPermissionsInput;
-};
-
-
 export type MutationInviteOrgMemberArgs = {
   input: InviteOrgMemberInput;
 };
@@ -1130,6 +1242,22 @@ export type MutationInviteOrgMemberArgs = {
 
 export type MutationLoginArgs = {
   loginUserInput: LoginUserInput;
+};
+
+
+export type MutationPutCpEnvSecretArgs = {
+  environmentId: Scalars['String']['input'];
+  kind?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  plaintext: Scalars['String']['input'];
+};
+
+
+export type MutationPutCpSecretArgs = {
+  environmentId: Scalars['String']['input'];
+  kind?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  plaintext: Scalars['String']['input'];
 };
 
 
@@ -1167,11 +1295,6 @@ export type MutationResumeEnvironmentArgs = {
 export type MutationRevokeAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationRevokeGridPermissionsArgs = {
-  input: RevokeGridPermissionsInput;
 };
 
 
@@ -1224,6 +1347,18 @@ export type MutationSetAppVisibilityArgs = {
 
 
 export type MutationSetEarlyAccessOverrideArgs = {
+  userId: Scalars['BigInt']['input'];
+  value: Scalars['Boolean']['input'];
+};
+
+
+export type MutationSetEnvironmentDeletionProtectionArgs = {
+  enabled: Scalars['Boolean']['input'];
+  environmentId: Scalars['String']['input'];
+};
+
+
+export type MutationSetOperatorArgs = {
   userId: Scalars['BigInt']['input'];
   value: Scalars['Boolean']['input'];
 };
@@ -1351,23 +1486,6 @@ export type MutationUpdateVoxelArgs = {
   input: UpdateVoxelInput;
 };
 
-export type NearbyGridPermissions = {
-  __typename?: 'NearbyGridPermissions';
-  appId: Scalars['BigInt']['output'];
-  gridId: Scalars['BigInt']['output'];
-  highChunk: ChunkCoordinates;
-  lowChunk: ChunkCoordinates;
-  permissionKeys: Array<Scalars['String']['output']>;
-  userId: Scalars['BigInt']['output'];
-};
-
-export type NearbyGridPermissionsInput = {
-  appId: Scalars['BigInt']['input'];
-  highChunk: ChunkCoordinatesInput;
-  lowChunk: ChunkCoordinatesInput;
-  userId: Scalars['BigInt']['input'];
-};
-
 export type OrgMember = {
   __typename?: 'OrgMember';
   createdAt: Scalars['DateTime']['output'];
@@ -1408,8 +1526,10 @@ export type OrgRole = {
 export type OrgToken = {
   __typename?: 'OrgToken';
   createdAt: Scalars['DateTime']['output'];
+  environmentId: Maybe<Scalars['String']['output']>;
   expiresAt: Maybe<Scalars['DateTime']['output']>;
   isActive: Scalars['Boolean']['output'];
+  kind: Scalars['String']['output'];
   label: Maybe<Scalars['String']['output']>;
   lastUsedAt: Maybe<Scalars['DateTime']['output']>;
   orgId: Scalars['BigInt']['output'];
@@ -1503,6 +1623,13 @@ export type Query = {
   batchLookupActors: Array<Actor>;
   /** Super admin only. Cross-tenant payments audit. */
   checkouts: CheckoutsPage;
+  cpAudit: Array<CpAuditEntry>;
+  cpChangeOrder: Maybe<CpChangeOrderDetail>;
+  cpChangeOrders: CpChangeOrdersPage;
+  cpEnvSecrets: Array<CpEnvSecretRow>;
+  cpEnvironment: Maybe<CpAdminEnvironment>;
+  cpEnvironments: CpAdminEnvironmentsPage;
+  cpSecrets: Array<CpSecretRow>;
   /** The most-specific quota that applies to (orgId, appId, tierId, metric). Walks tier -> app -> org -> free_tier_defaults. Returns null if nothing matches. */
   effectiveQuota: Maybe<ServiceQuota>;
   /** OVH datacenters that have at least one customer-priced instance flavor available for customer selection. */
@@ -1521,7 +1648,6 @@ export type Query = {
   getVoxelList: ChunkVoxelResponse;
   /** Returns all registered GraphQL servers */
   graphqlServers: Array<GraphQlServer>;
-  gridUserPermissions: GridUserPermissions;
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   listVoxels: Array<Voxel>;
   me: Maybe<User>;
@@ -1534,7 +1660,7 @@ export type Query = {
   myDonationData: UserDonationData;
   myOrganizations: Array<OrgMembership>;
   myPropertyTokens: UserPropertyTokenData;
-  nearbyGridPermissions: Array<NearbyGridPermissions>;
+  operatorUsers: Array<CpOperatorUser>;
   orgEnvironment: Maybe<CksEnvironmentDetail>;
   orgEnvironments: Array<CksEnvironment>;
   orgMembers: Array<OrgMember>;
@@ -1642,6 +1768,45 @@ export type QueryCheckoutsArgs = {
 };
 
 
+export type QueryCpAuditArgs = {
+  environmentId?: InputMaybe<Scalars['String']['input']>;
+  limit?: Scalars['Int']['input'];
+};
+
+
+export type QueryCpChangeOrderArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type QueryCpChangeOrdersArgs = {
+  environmentId?: InputMaybe<Scalars['String']['input']>;
+  page?: Scalars['Int']['input'];
+  pageSize?: Scalars['Int']['input'];
+};
+
+
+export type QueryCpEnvSecretsArgs = {
+  environmentId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryCpEnvironmentArgs = {
+  slug: Scalars['String']['input'];
+};
+
+
+export type QueryCpEnvironmentsArgs = {
+  page?: Scalars['Int']['input'];
+  pageSize?: Scalars['Int']['input'];
+};
+
+
+export type QueryCpSecretsArgs = {
+  environmentId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type QueryEffectiveQuotaArgs = {
   appId?: InputMaybe<Scalars['BigInt']['input']>;
   metric: Scalars['String']['input'];
@@ -1685,13 +1850,6 @@ export type QueryGetVoxelListArgs = {
 };
 
 
-export type QueryGridUserPermissionsArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  userId: Scalars['BigInt']['input'];
-};
-
-
 export type QueryListVoxelUpdatesByDistanceArgs = {
   input: ListVoxelUpdatesByDistanceInput;
 };
@@ -1715,11 +1873,6 @@ export type QueryMyAppAccessArgs = {
 export type QueryMyCheckoutsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryNearbyGridPermissionsArgs = {
-  input: NearbyGridPermissionsInput;
 };
 
 
@@ -1841,13 +1994,6 @@ export type ResetPasswordInput = {
 export type ResumeEnvironmentInput = {
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
-};
-
-export type RevokeGridPermissionsInput = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
-  userId: Scalars['BigInt']['input'];
 };
 
 export type RollbackVoxelEventResult = {
@@ -2085,11 +2231,11 @@ export type UpdateChunkStateInput = {
 };
 
 export type UpdateEnvironmentScalingInput = {
-  graphqlLoadBalancerCount: Scalars['Int']['input'];
-  /** Flavor name from environmentFlavors(datacenter) for GraphQL software load balancer VMs; must have a published hourly price. */
-  graphqlLoadBalancerFlavor: Scalars['String']['input'];
-  graphqlMaxServers: Scalars['Int']['input'];
-  graphqlMinServers: Scalars['Int']['input'];
+  /** Caddy LB flavor (in front of the game-api fleet). When omitted the existing value is preserved. */
+  caddyFlavor?: InputMaybe<Scalars['String']['input']>;
+  gameApiMaxServers: Scalars['Int']['input'];
+  gameApiMinServers: Scalars['Int']['input'];
+  loadBalancerCount: Scalars['Int']['input'];
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
   udpBuddyMaxServers: Scalars['Int']['input'];
@@ -2135,6 +2281,8 @@ export type User = {
   grantEarlyAccess: Scalars['Boolean']['output'];
   grantEarlyAccessOverride: Scalars['Boolean']['output'];
   isConfirmed: Scalars['Boolean']['output'];
+  /** Company-employee flag that grants access to control-plane / operator features. Independent from is_super_admin. */
+  isOperator: Scalars['Boolean']['output'];
   isSuperAdmin: Scalars['Boolean']['output'];
   orgId: Maybe<Scalars['BigInt']['output']>;
   /** The current user's effective permission keys on the given org. Empty if not a member. Always full set if super admin. */

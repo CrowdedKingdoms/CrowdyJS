@@ -1,14 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-test('package import is silent and exposes v3 browser APIs', async () => {
+test('package import is silent and exposes v4 browser APIs', async () => {
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => logs.push(args);
   try {
     const sdk = await import('../dist/index.js');
-    assert.equal(sdk.VERSION, '3.0.0');
+    const pkg = await import('../package.json', { with: { type: 'json' } });
+    // VERSION constant must stay in lockstep with the published package
+    // version so consumers reading `client.session` / `sdk.VERSION` don't
+    // get a different number than their `npm ls` output.
+    assert.equal(sdk.VERSION, pkg.default.version);
     assert.equal(typeof sdk.createCrowdyClient, 'function');
+    assert.equal(typeof sdk.CrowdyClient, 'function');
     assert.equal(typeof sdk.RealtimeClient, 'function');
     assert.equal(typeof sdk.SequenceAllocator, 'function');
   } finally {

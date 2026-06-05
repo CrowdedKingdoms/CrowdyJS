@@ -36,7 +36,9 @@ export class GraphQLClient {
 
   constructor(config: GraphQLClientConfig = {}, session: SessionStore) {
     this.graphqlEndpoint =
-      config.httpUrl || config.graphqlEndpoint || 'http://localhost:3000/graphql';
+      config.graphqlEndpoint ||
+      config.httpUrl ||
+      'http://localhost:3000/graphql';
     this.timeout = config.timeout || 60000;
     this.session = session;
     this.logger = config.logger ?? silentLogger;

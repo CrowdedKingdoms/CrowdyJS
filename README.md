@@ -1,8 +1,6 @@
-# CrowdyJS SDK
+# CrowdyJS
 
-Browser-first SDK for Crowded Kingdoms game clients. CrowdyJS wraps the
-`cks-management-api` identity surface and the `cks-game-api` world / UDP-proxy
-surface behind one typed client with a single shared `AuthState`.
+The official browser-first TypeScript SDK for **Crowded Kingdoms**. CrowdyJS gives you one typed client that handles auth, the world/replication GraphQL API, and the UDP proxy subscription stream behind a single shared session.
 
 ## Install
 
@@ -10,29 +8,72 @@ surface behind one typed client with a single shared `AuthState`.
 npm install @crowdedkingdomstudios/crowdyjs
 ```
 
-CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`,
-`crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must provide
-browser-compatible globals when they open realtime connections.
+CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must provide browser-compatible globals when opening realtime connections.
 
-## Two-endpoint architecture
+## Quick start
 
-After the management/game-api split the SDK fans out to two GraphQL servers:
+```ts
+import {
+  BrowserLocalStorageTokenStore,
+  createCrowdyClient,
+} from '@crowdedkingdomstudios/crowdyjs';
 
-| sub-client | targets | use |
-|---|---|---|
-| `client.auth`, `client.users` | **cks-management-api** (`managementUrl`) | login / register / logout / password / email / `me` / `updateGamertag` — anything that mints or reads identity. |
-| `client.chunks`, `client.voxels`, `client.actors`, `client.teleport`, `client.state`, `client.serverStatus`, `client.udp` | **cks-game-api** (`httpUrl` / `wsUrl`) | world data, UDP proxy subscriptions, the game-client bootstrap. |
+const client = createCrowdyClient({
+  // Game API (world data + UDP proxy)
+  httpUrl: 'https://game.example.com',
+  wsUrl: 'wss://game.example.com',
+  // Management API (login, register, profile)
+  managementUrl: 'https://management.example.com',
+  tokenStore: new BrowserLocalStorageTokenStore(),
+  realtime: {
+    retryAttempts: 8,
+    waitTimeoutMs: 5000,
+  },
+});
 
-Both endpoints share a single `AuthState`, so once `client.auth.login()` returns,
-every subsequent SDK call (against either endpoint) carries the Bearer token
-automatically.
+// Restore a previous session if there is one, otherwise log in.
+await client.session.restore();
+if (!client.session.getToken()) {
+  await client.auth.login({ email: 'player@example.com', password: 'secret' });
+}
 
-### Per-app routing in split mode
+// Fetch the per-app bootstrap (version requirements, UDP availability, spatial limits).
+const bootstrap = await client.serverStatus.gameClientBootstrap('1');
+console.log(bootstrap.versionInfo.minimumClientVersion);
+```
 
-After the greenfield-only DB split (see
-[`/db-split-decisions.md`](../db-split-decisions.md)) each split-mode app
-lives behind its own `cks-game-api` deployment with its own URL. Apps return
-a new `gameApiUrl` field on the management API:
+Both endpoints share a single `AuthState`, so once `client.auth.login()` returns, every subsequent SDK call (against either endpoint) carries the bearer token automatically.
+
+If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-compat with the single-endpoint deployment.
+
+## Sub-clients at a glance
+
+| Sub-client | What it does |
+|---|---|
+| `client.auth` | Register, log in, log out, password reset, email confirmation. |
+| `client.users` | `me`, `updateGamertag`, profile reads. |
+| `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
+| `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
+| `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes. |
+| `client.teleport` | Teleport requests. |
+| `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
+| `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
+| `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
+
+Auth and user reads always target `managementUrl`. Everything else targets `httpUrl` / `wsUrl`.
+
+## Game-loop lifecycle
+
+1. Authenticate with `client.auth.login()` or restore a previous token through `client.session.restore()`.
+2. Subscribe to UDP proxy notifications with `client.udp.subscribe()` (the SDK will open the realtime socket on demand).
+3. Join a chunk by sending an initial actor update.
+4. Send actor, voxel, text, audio, and client-event updates through `client.udp` or the higher-level `client.world(appId)` helpers.
+5. Call `client.udp.disconnect()` when leaving the world.
+6. Call `client.close()` when disposing the SDK instance.
+
+## Per-app routing
+
+When a player is about to join an app, query its routing fields on the management API first:
 
 ```graphql
 query AppForRouting($id: BigInt!) {
@@ -44,70 +85,20 @@ query AppForRouting($id: BigInt!) {
 }
 ```
 
-Clients should:
+If `splitMode && gameApiUrl`, the app lives behind its own Game API deployment. Build a **second** `CrowdyClient` with `httpUrl: gameApiUrl` (and the matching `wsUrl`) **sharing the same `tokenStore` as the first client**, then drive gameplay through that client. Apps without `splitMode` keep working against the default `httpUrl` you configured.
 
-1. Build a `CrowdyClient` against the management URL only (no `httpUrl`).
-2. Query `app(id: ...)` for the app the player is about to play.
-3. If `splitMode && gameApiUrl`, construct a **second** `CrowdyClient` with
-   `httpUrl: gameApiUrl` (and the matching `wsUrl`) **sharing the same
-   `tokenStore`**, then drive gameplay through that client. Pre-split apps
-   (`splitMode === false`) keep working against the legacy single
-   deployment URL.
-
-## Quick Start
-
-```ts
-import {
-  BrowserLocalStorageTokenStore,
-  createCrowdyClient,
-} from '@crowdedkingdomstudios/crowdyjs';
-
-const client = createCrowdyClient({
-  // game-api
-  httpUrl: 'https://dev-game-api.crowdedkingdoms.com',
-  wsUrl: 'wss://dev-game-api.crowdedkingdoms.com',
-  // management-api (login, register, me, ...)
-  managementUrl: 'https://dev-management-api.crowdedkingdoms.com',
-  tokenStore: new BrowserLocalStorageTokenStore(),
-  realtime: {
-    retryAttempts: 8,
-    waitTimeoutMs: 5000,
-  },
-});
-
-await client.session.restore();
-
-if (!client.session.getToken()) {
-  await client.auth.login({ email: 'player@example.com', password: 'secret' });
-}
-
-const bootstrap = await client.serverStatus.gameClientBootstrap('1');
-console.log(bootstrap.versionInfo.minimumClientVersion);
-```
-
-If `managementUrl` is omitted, the SDK falls back to `httpUrl` for
-backwards-compat with the legacy single-endpoint deployment. New code should
-always set it explicitly.
-
-## Game Loop Lifecycle
-
-1. Authenticate with `client.auth.login()` or restore a previous token through
-   `client.session.restore()`.
-2. Subscribe to UDP proxy notifications with `client.udp.subscribe()` or
-   `client.realtime.connect()`.
-3. Join a chunk by sending an initial actor update.
-4. Send actor, voxel, text, audio, and client-event updates through `client.udp`
-   or the higher-level `client.world(appId)` helpers.
-5. Call `client.udp.disconnect()` when leaving the world, then `client.close()`
-   when disposing the SDK instance.
-
-## Realtime Notifications
+## Realtime notifications
 
 ```ts
 const unsubscribe = client.udp.subscribe({
   actorUpdate: (event) => {
     console.log(event.uuid, event.state);
   },
+  voxelUpdate: (event) => { /* ... */ },
+  clientText: (event) => { /* ... */ },
+  clientAudio: (event) => { /* ... */ },
+  clientEvent: (event) => { /* ... */ },
+  serverEvent: (event) => { /* ... */ },
   genericError: (event) => {
     console.warn(event.sequenceNumber, event.errorCode);
   },
@@ -122,20 +113,21 @@ const unsubscribe = client.udp.subscribe({
 client.realtime.onStatus((status) => {
   console.log('realtime:', status);
 });
+
+// Later:
+unsubscribe();
 ```
 
-The SDK uses the `graphql-transport-ws` protocol through `graphql-ws`, reconnects
-with backoff, re-reads the current token before reconnecting, and resubscribes to
-the generated `UdpNotifications` document.
+The SDK uses the `graphql-transport-ws` protocol through `graphql-ws`, reconnects with backoff, re-reads the current token before reconnecting, and resubscribes automatically.
 
-## Raw UDP Sends
+## Spatial sends
 
 ```ts
 const response = await client.udp.sendActorUpdateAndWait({
   appId: '1',
   chunk: { x: '0', y: '0', z: '0' },
   uuid: '0123456789abcdef0123456789abcdef',
-  state: 'AA==',
+  state: 'AA==',           // base64-encoded payload
   distance: 8,
   decayRate: 1,
 });
@@ -143,12 +135,9 @@ const response = await client.udp.sendActorUpdateAndWait({
 console.log(response.__typename, response.sequenceNumber);
 ```
 
-The plain `sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`,
-`sendTextPacket`, and `sendClientEvent` methods return the GraphQL mutation
-result immediately. The `AndWait` variants allocate a `sequenceNumber` when one
-is missing and wait for either a matching notification or `GenericErrorResponse`.
+The plain `sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, and `sendClientEvent` methods return the GraphQL mutation result immediately. The `AndWait` variants allocate a `sequenceNumber` when one is missing and wait for either a matching notification or `GenericErrorResponse`.
 
-## World Helpers
+## World helpers
 
 ```ts
 const world = client.world('1');
@@ -159,27 +148,39 @@ await actor.sendState('AA==');
 await actor.sendText('hello nearby players');
 ```
 
-The world helpers are convenience wrappers for browser games. Advanced callers
-can always use `client.udp.*` with generated GraphQL input types.
+The world helpers are thin wrappers over `client.udp.*` with the appId pre-bound — convenient for browser games. Advanced callers can always use `client.udp.*` with the generated GraphQL input types directly.
 
 ## Errors
 
-Transport and protocol failures use structured error classes:
+Transport and protocol failures throw structured error classes:
 
-- `CrowdyHttpError`
-- `CrowdyGraphQLError`
-- `CrowdyNetworkError`
-- `CrowdyTimeoutError`
-- `CrowdyRealtimeError`
-- `CrowdyProtocolError`
+- `CrowdyHttpError` — non-2xx response from a GraphQL endpoint.
+- `CrowdyGraphQLError` — preserves every GraphQL error including `path` and `extensions.code`.
+- `CrowdyNetworkError` — network-level failure (DNS, TLS, connection refused).
+- `CrowdyTimeoutError` — request or `AndWait` timed out.
+- `CrowdyRealtimeError` — realtime subscription couldn't be established or was dropped.
+- `CrowdyProtocolError` — server response failed schema validation.
 
-`CrowdyGraphQLError` preserves every GraphQL error, including `path` and
-`extensions.code`.
+## Auth notes
 
-## Low-Level GraphQL Access
+- Use `client.auth.setToken(token)` if you need to seed a token externally (e.g. when restoring auth from a non-default storage).
+- `client.session.restore()` reads from the configured `tokenStore`. `BrowserLocalStorageTokenStore` is provided; bring your own for SSR or Node usage.
+- A single `AuthState` is observed by both the HTTP client and the realtime socket, so HTTP and WebSocket auth can never drift.
 
-Game-client methods are first-class, but generated operations are still
-available through the transport escape hatch:
+## What's NOT in CrowdyJS
+
+CrowdyJS focuses on the **game-client surface**: auth, world data, UDP proxy, profile reads. The following operations are **not** exposed by the SDK and should be called against the management GraphQL API directly (with a server-side token, typically from a studio backend):
+
+- Org / app / billing / payments / quotas operations
+- Access-tier and runtime-permission administration
+- Game-token issuance / revocation
+- Marketplace and catalog management
+
+The SDK is intentionally scoped to client-side, end-user-facing flows.
+
+## Low-level GraphQL access
+
+Game-client methods are first-class, but generated operation documents are also available through a transport escape hatch:
 
 ```ts
 import { VersionInfoDocument } from '@crowdedkingdomstudios/crowdyjs/generated';
@@ -187,30 +188,12 @@ import { VersionInfoDocument } from '@crowdedkingdomstudios/crowdyjs/generated';
 const data = await client.graphql.request(VersionInfoDocument);
 ```
 
-Most consumers should prefer the methods on `client.auth`, `client.users`,
-`client.udp`, `client.serverStatus`, and `client.world()`. Org / app / billing /
-payments / quotas operations are not in the SDK; consume `cks-management-api`
-directly (the management UI does, via Apollo).
+Most consumers should prefer the typed methods on `client.auth`, `client.users`, `client.udp`, `client.serverStatus`, and `client.world()`.
 
-## Development
+## Migration
 
-```bash
-npm install
-npm run codegen
-npm run build
-npm test
-```
+See [MIGRATION.md](MIGRATION.md) for breaking changes between SDK majors.
 
-`npm run codegen` reads `./schema.gql`, which after the split should be the
-**union** of `cks-management-api/schema.gql` (for `client.auth` / `client.users`
-operation types) and `cks-game-api/schema.gql` (for every other sub-client).
-Until a proper merge tool is wired in, the workflow is:
+## License
 
-```bash
-cat ../cks-management-api/schema.gql ../cks-game-api/schema.gql > schema.gql
-# de-dupe shared scalar / enum definitions by hand or via a merge tool
-npm run codegen
-```
-
-`npm run check:schema` fails if the committed SDL or generated types drift from
-the schema.
+MIT

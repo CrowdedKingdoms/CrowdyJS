@@ -121,13 +121,18 @@ export class CrowdyClient {
       this.session,
     );
 
+    const managementGraphqlEndpoint =
+      config.managementGraphqlEndpoint ??
+      (config.managementUrl
+        ? `${config.managementUrl.replace(/\/$/, '')}/graphql`
+        : config.graphqlEndpoint);
+
     // Management-api client. Falls back to game-api endpoint if the caller
     // hasn't configured `managementUrl` yet (single-endpoint legacy mode).
     this.management = new GraphQLClient(
       {
         httpUrl: config.managementUrl ?? config.httpUrl,
-        graphqlEndpoint:
-          config.managementGraphqlEndpoint ?? config.graphqlEndpoint,
+        graphqlEndpoint: managementGraphqlEndpoint,
         timeout: config.timeout,
         logger: config.logger,
       },
