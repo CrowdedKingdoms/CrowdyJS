@@ -135,4 +135,27 @@ export class ActorClient {
       state,
     });
   }
+
+  /**
+   * Send a direct message to a single other actor, identified by its UUID and
+   * the chunk it currently occupies (the sender must know the target's chunk).
+   * Only that one actor receives it. Fire-and-forget: there is no echo to the
+   * sender, so this resolves to the send acknowledgement, not a notification.
+   */
+  async sendToActor(
+    targetUuid: string,
+    payload: string,
+    targetChunk: ChunkCoordinatesInput,
+    options: { sequenceNumber?: number } = {},
+  ): Promise<boolean> {
+    validateCrowdyUuid(targetUuid);
+    validateChunkCoordinates(targetChunk);
+    return this.udp.sendSingleActorMessage({
+      appId: this.appId,
+      chunk: targetChunk,
+      targetUuid,
+      payload,
+      sequenceNumber: options.sequenceNumber,
+    });
+  }
 }
