@@ -1,12 +1,12 @@
 // Headless two-client repro for the phaser-demo multi-tab issue.
-// Drives two simulated clients through the real crowdyJS SDK against a
+// Drives two simulated clients through the real CrowdyJS SDK against a
 // running web-api on http://localhost:3000/graphql, both registered in
 // the same chunk, both sending actor updates at 10 Hz. After RUN_MS it
 // prints a structured summary so we can see whether each client is
 // actually receiving the other's notifications over the WS.
 //
-// Run from the crowdyJS directory (so `ws` resolves):
-//   cd /Users/michaelmarshall/dev/michaelmarshall/crowded-kingdoms/crowdyJS
+// Run from the CrowdyJS directory (so `ws` resolves):
+//   cd /Users/michaelmarshall/dev/michaelmarshall/crowded-kingdoms/CrowdyJS
 //   node /tmp/repro-two-clients.mjs
 
 import { webcrypto } from "node:crypto";
@@ -17,7 +17,7 @@ if (typeof globalThis.crypto === "undefined") globalThis.crypto = webcrypto;
 globalThis.WebSocket = WebSocket;
 
 const SDK_URL = new URL(
-  "file:///Users/michaelmarshall/dev/michaelmarshall/crowded-kingdoms/crowdyJS/dist/index.js",
+  "file:///Users/michaelmarshall/dev/michaelmarshall/crowded-kingdoms/CrowdyJS/dist/index.js",
 );
 const { CrowdyClient } = await import(SDK_URL.href);
 

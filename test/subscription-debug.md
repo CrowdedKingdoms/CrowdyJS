@@ -57,7 +57,7 @@ The pub/sub pipeline between `sendActorUpdate` and the `udpNotifications` subscr
 
 ## Reproducing
 
-Run from the crowdyJS SDK repo:
+Run from the CrowdyJS SDK repo:
 
 ```bash
 node test/two-client-actor-test.mjs \
