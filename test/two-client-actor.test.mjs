@@ -43,6 +43,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
+import { entitleUserForApp } from './entitle.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
 globalThis.WebSocket = WebSocket;
@@ -55,6 +56,10 @@ const REQUIRED_ENV = [
   'CROWDY_TEST_PASSWORD_1',
   'CROWDY_TEST_EMAIL_2',
   'CROWDY_TEST_PASSWORD_2',
+  // Always-on enforcement: registered users are entitled via DB (mirrors the
+  // open-by-default provisioning). Same vars as the buddy python tests.
+  'MGMT_DB_PASSWORD',
+  'DB_WRITER_PASSWORD',
 ];
 
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
@@ -135,6 +140,11 @@ test(
       );
       assert.ok(authB?.token, 'Client B authenticated and returned a token');
 
+      // Always-on enforcement: entitle both players to the app (app access +
+      // world-spanning grid grant) so their spatial traffic is authorized.
+      await entitleUserForApp(APP_ID, authA.user.userId);
+      await entitleUserForApp(APP_ID, authB.user.userId);
+
       // 2. Subscribe (opens UDP proxy implicitly via WS). Handler names match
       //    the SDK's UdpNotificationHandlers (actorUpdate / genericError).
       const receivedByB = { actorUpdates: [], genericErrors: [] };
@@ -150,25 +160,31 @@ test(
 
       // 3. Register both clients in the same chunk so distance-based fanout
       //    includes both of them.
-      const regA = await clientA.udp.sendActorUpdate({
-        appId: APP_ID,
-        chunk: CHUNK,
-        distance: 8,
-        uuid: TEST_UUID_A,
-        state: 'AA==',
-        sequenceNumber: 1,
-      });
-      assert.ok(regA, 'Client A registered in chunk');
-
-      const regB = await clientB.udp.sendActorUpdate({
-        appId: APP_ID,
-        chunk: CHUNK,
-        distance: 8,
-        uuid: TEST_UUID_B,
-        state: 'AA==',
-        sequenceNumber: 1,
-      });
-      assert.ok(regB, 'Client B registered in chunk');
+      // The first spatial message to a new chunk is dropped while the server
+      // loads that region's grid permissions, so register, wait, register again.
+      const registerBoth = async () => {
+        const regA = await clientA.udp.sendActorUpdate({
+          appId: APP_ID,
+          chunk: CHUNK,
+          distance: 8,
+          uuid: TEST_UUID_A,
+          state: 'AA==',
+          sequenceNumber: 1,
+        });
+        assert.ok(regA, 'Client A registered in chunk');
+        const regB = await clientB.udp.sendActorUpdate({
+          appId: APP_ID,
+          chunk: CHUNK,
+          distance: 8,
+          uuid: TEST_UUID_B,
+          state: 'AA==',
+          sequenceNumber: 1,
+        });
+        assert.ok(regB, 'Client B registered in chunk');
+      };
+      await registerBoth();
+      await sleep(1000);
+      await registerBoth();
 
       await sleep(1000);
 

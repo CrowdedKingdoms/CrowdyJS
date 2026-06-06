@@ -23,6 +23,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
+import { entitleUserForApp } from './entitle.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
 globalThis.WebSocket = WebSocket;
@@ -37,6 +38,10 @@ const REQUIRED_ENV = [
   'CROWDY_TEST_PASSWORD_2',
   'CROWDY_TEST_EMAIL_3',
   'CROWDY_TEST_PASSWORD_3',
+  // Permissions are always enforced, so registered users must be entitled via DB
+  // (mirrors the open-by-default provisioning). Same vars as the buddy py tests.
+  'MGMT_DB_PASSWORD',
+  'DB_WRITER_PASSWORD',
 ];
 
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
@@ -109,6 +114,12 @@ test(
       );
       assert.ok(authC?.token, 'Client C authenticated');
 
+      // Always-on enforcement: entitle every player to the app (app access +
+      // world-spanning grid grant) so their spatial traffic is authorized.
+      for (const auth of [authA, authB, authC]) {
+        await entitleUserForApp(APP_ID, auth.user.userId);
+      }
+
       // B (target) and C (bystander) both subscribe and record single-actor messages.
       const receivedByB = { single: [], errors: [] };
       const receivedByC = { single: [], errors: [] };
@@ -127,22 +138,28 @@ test(
 
       await sleep(2000);
 
-      // All three register their actors in the same chunk.
-      for (const [client, uuid] of [
-        [clientA, TEST_UUID_A],
-        [clientB, TEST_UUID_B],
-        [clientC, TEST_UUID_C],
-      ]) {
-        const ok = await client.udp.sendActorUpdate({
-          appId: APP_ID,
-          chunk: CHUNK,
-          distance: 8,
-          uuid,
-          state: 'AA==',
-          sequenceNumber: 1,
-        });
-        assert.ok(ok, `actor ${uuid} registered`);
-      }
+      // All three register their actors in the same chunk. The first spatial
+      // message to a new chunk is dropped while the server loads that region's
+      // grid permissions, so register, wait for the load, then register again.
+      const registerAll = async () => {
+        for (const [client, uuid] of [
+          [clientA, TEST_UUID_A],
+          [clientB, TEST_UUID_B],
+          [clientC, TEST_UUID_C],
+        ]) {
+          await client.udp.sendActorUpdate({
+            appId: APP_ID,
+            chunk: CHUNK,
+            distance: 8,
+            uuid,
+            state: 'AA==',
+            sequenceNumber: 1,
+          });
+        }
+      };
+      await registerAll();
+      await sleep(1000);
+      await registerAll();
 
       await sleep(1000);
 
