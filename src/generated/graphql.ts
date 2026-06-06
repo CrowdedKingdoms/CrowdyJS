@@ -27,6 +27,7 @@ export type Actor = {
   createdAt: Scalars['DateTime']['output'];
   privateState: Maybe<Scalars['String']['output']>;
   publicState: Maybe<Scalars['String']['output']>;
+  updatedAt: Scalars['DateTime']['output'];
   userId: Scalars['BigInt']['output'];
   uuid: Scalars['ID']['output'];
 };
@@ -141,6 +142,15 @@ export type AppAccessTier = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+export type AppAvatarState = {
+  __typename?: 'AppAvatarState';
+  appId: Scalars['BigInt']['output'];
+  avatarId: Scalars['BigInt']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  state: Maybe<Scalars['String']['output']>;
+  updatedAt: Scalars['DateTime']['output'];
+};
+
 export type AppBudget = {
   __typename?: 'AppBudget';
   appBudgetId: Scalars['BigInt']['output'];
@@ -151,6 +161,18 @@ export type AppBudget = {
   orgId: Scalars['BigInt']['output'];
   periodStart: Scalars['DateTime']['output'];
   updatedAt: Scalars['DateTime']['output'];
+};
+
+export type AppGroupPolicy = {
+  __typename?: 'AppGroupPolicy';
+  appId: Scalars['BigInt']['output'];
+  /** admin | member | anyone */
+  creationPolicy: Scalars['String']['output'];
+  /** open | request | invite | admin */
+  defaultMembershipPolicy: Scalars['String']['output'];
+  groupType: Scalars['String']['output'];
+  maxGroupsPerUser: Maybe<Scalars['Int']['output']>;
+  maxMembers: Maybe<Scalars['Int']['output']>;
 };
 
 export type AppMarketplaceFilterInput = {
@@ -164,6 +186,27 @@ export enum AppStatus {
   Draft = 'DRAFT',
   Live = 'LIVE'
 }
+
+export type AppUsageRollupRow = {
+  __typename?: 'AppUsageRollupRow';
+  appId: Scalars['String']['output'];
+  appName: Scalars['String']['output'];
+  appSlug: Scalars['String']['output'];
+  graphqlRecvBytes: Scalars['String']['output'];
+  graphqlSendBytes: Scalars['String']['output'];
+  replicationRecvBytes: Scalars['String']['output'];
+  replicationSendBytes: Scalars['String']['output'];
+};
+
+export type AppUsageSummary = {
+  __typename?: 'AppUsageSummary';
+  appId: Scalars['String']['output'];
+  graphqlRecvBytes: Scalars['String']['output'];
+  graphqlSendBytes: Scalars['String']['output'];
+  replicationRecvBytes: Scalars['String']['output'];
+  replicationSendBytes: Scalars['String']['output'];
+  topGraphqlOperations: Array<GraphqlOperationUsageRow>;
+};
 
 export type AppUserAccess = {
   __typename?: 'AppUserAccess';
@@ -190,6 +233,16 @@ export type AppsPage = {
   __typename?: 'AppsPage';
   items: Array<App>;
   pageInfo: PageInfo;
+};
+
+export type AssignGroupToGridInput = {
+  appId: Scalars['BigInt']['input'];
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  gridId: Scalars['BigInt']['input'];
+  groupId: Scalars['BigInt']['input'];
+  /** Optional: scope the grant to members holding this group role. Omit to grant to all members of the group. */
+  groupRoleId?: InputMaybe<Scalars['BigInt']['input']>;
+  permissionKeys: Array<Scalars['String']['input']>;
 };
 
 export type AuthResponse = {
@@ -221,6 +274,17 @@ export type AvatarDto = {
 
 export type BatchActorLookupInput = {
   uuids: Array<Scalars['String']['input']>;
+};
+
+export type BuddyLiveRates = {
+  __typename?: 'BuddyLiveRates';
+  clientRecvMbitPerSec: Scalars['Float']['output'];
+  clientRecvMsgsPerSec: Scalars['Float']['output'];
+  clientSendMbitPerSec: Scalars['Float']['output'];
+  clientSendMsgsPerSec: Scalars['Float']['output'];
+  clients: Scalars['Float']['output'];
+  serverId: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
 };
 
 export type Checkout = {
@@ -340,6 +404,64 @@ export type ChunksByDistanceResponse = {
   skip: Maybe<Scalars['Int']['output']>;
 };
 
+export type CksBuddyHealth = {
+  __typename?: 'CksBuddyHealth';
+  clientPort: Maybe<Scalars['Int']['output']>;
+  clients: Maybe<Scalars['Int']['output']>;
+  /** Seconds since server_status.updated_at (game DB heartbeat). */
+  heartbeatAgeSec: Maybe<Scalars['Float']['output']>;
+  ip4: Maybe<Scalars['String']['output']>;
+  /** True when heartbeat is missing or older than the staleness threshold (~30s). Game-api rejects assignment when age > ~11s. */
+  isStale: Scalars['Boolean']['output'];
+  /** False when no server_status row exists for this environment. */
+  registered: Scalars['Boolean']['output'];
+  status: Maybe<Scalars['String']['output']>;
+  /** Operator-facing hint when multiplayer assignment may fail. */
+  troubleshootingHint: Scalars['String']['output'];
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
+};
+
+export type CksDeployProgress = {
+  __typename?: 'CksDeployProgress';
+  /** Redeploy is allowed (failed deploy or stuck order cleared) */
+  canRetry: Scalars['Boolean']['output'];
+  changeOrderId: Scalars['String']['output'];
+  changeOrderStatus: Scalars['String']['output'];
+  currentStepKind: Maybe<Scalars['String']['output']>;
+  currentTaskKind: Maybe<Scalars['String']['output']>;
+  error: Maybe<Scalars['String']['output']>;
+  /** True when the deploy failed but the change order was left in_progress */
+  isStuck: Scalars['Boolean']['output'];
+  targetVersion: Maybe<Scalars['String']['output']>;
+  tasks: Array<CksDeployProgressTask>;
+  tasksFailed: Scalars['Int']['output'];
+  tasksInProgress: Scalars['Int']['output'];
+  tasksPending: Scalars['Int']['output'];
+  tasksSucceeded: Scalars['Int']['output'];
+  tasksTotal: Scalars['Int']['output'];
+};
+
+export type CksDeployProgressStep = {
+  __typename?: 'CksDeployProgressStep';
+  attempt: Scalars['Int']['output'];
+  error: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  kind: Scalars['String']['output'];
+  /** Human-readable step label for the org UI */
+  label: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
+export type CksDeployProgressTask = {
+  __typename?: 'CksDeployProgressTask';
+  error: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  kind: Scalars['String']['output'];
+  label: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  steps: Array<CksDeployProgressStep>;
+};
+
 export type CksEnvironment = {
   __typename?: 'CksEnvironment';
   billingGraceDeadline: Maybe<Scalars['DateTime']['output']>;
@@ -426,8 +548,12 @@ export type CksEnvironmentDetail = {
   __typename?: 'CksEnvironmentDetail';
   audit: Array<CksEnvironmentAudit>;
   billingResources: Array<CksEnvironmentBillingResource>;
+  /** Buddy UDP server heartbeat from mirrored server_status. Null when env is destroyed or management DB has no row. */
+  buddyHealth: Maybe<CksBuddyHealth>;
   changeOrders: Array<CksEnvironmentChangeOrder>;
   components: Array<CksEnvironmentComponent>;
+  /** Live deploy task/step progress for the active or most recent failed deploy */
+  deployProgress: Maybe<CksDeployProgress>;
   environment: CksEnvironment;
   outputs: Array<CksEnvironmentOutput>;
   secrets: Array<CksEnvironmentSecretValue>;
@@ -477,6 +603,8 @@ export type CksEnvironmentSecretValue = {
 
 export type CksEnvironmentVersion = {
   __typename?: 'CksEnvironmentVersion';
+  /** Pinned cks-game-api git tag from the ingested manifest. */
+  gameApiGitTag: Maybe<Scalars['String']['output']>;
   notes: Maybe<Scalars['String']['output']>;
   releasedAt: Scalars['DateTime']['output'];
   status: Scalars['String']['output'];
@@ -689,6 +817,17 @@ export type CpAuditEntry = {
   payloadJson: Maybe<Scalars['String']['output']>;
 };
 
+export type CpBuddyLiveRates = {
+  __typename?: 'CpBuddyLiveRates';
+  clientRecvMbitPerSec: Scalars['Float']['output'];
+  clientRecvMsgsPerSec: Scalars['Float']['output'];
+  clientSendMbitPerSec: Scalars['Float']['output'];
+  clientSendMsgsPerSec: Scalars['Float']['output'];
+  clients: Scalars['Float']['output'];
+  serverId: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+};
+
 export type CpChangeOrder = {
   __typename?: 'CpChangeOrder';
   claimedAt: Maybe<Scalars['DateTime']['output']>;
@@ -730,6 +869,36 @@ export type CpEnvSecretRow = {
   rotatedAt: Maybe<Scalars['DateTime']['output']>;
 };
 
+/** Operator-facing view of one ingested (or git-only pending) environment release manifest. */
+export type CpEnvironmentVersionRow = {
+  __typename?: 'CpEnvironmentVersionRow';
+  buddyVersion: Maybe<Scalars['String']['output']>;
+  gameApiGitTag: Maybe<Scalars['String']['output']>;
+  /** True when a row exists in cks_environment_versions. */
+  inDb: Scalars['Boolean']['output'];
+  /** True when releases/<version>.yaml exists on the configured git ref. */
+  inGit: Scalars['Boolean']['output'];
+  ingestedAt: Scalars['DateTime']['output'];
+  /** True when this ingested available release is what org redeploy targets (newest available, or ENVIRONMENT_DEFAULT_VERSION). */
+  isLatestAvailable: Scalars['Boolean']['output'];
+  notes: Maybe<Scalars['String']['output']>;
+  releasedAt: Scalars['DateTime']['output'];
+  sourceCommit: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+  version: Scalars['String']['output'];
+};
+
+/** Operator release manifest list merged from git and cks_environment_versions. */
+export type CpEnvironmentVersionsPage = {
+  __typename?: 'CpEnvironmentVersionsPage';
+  /** False when GitHub manifest listing failed (e.g. invalid GITHUB_PAT). Rows may still come from the database. */
+  gitSourceAvailable: Scalars['Boolean']['output'];
+  /** Version org redeploy resolves to when no explicit version is passed. */
+  latestAvailableVersion: Maybe<Scalars['String']['output']>;
+  rows: Array<CpEnvironmentVersionRow>;
+};
+
 export type CpOperatorUser = {
   __typename?: 'CpOperatorUser';
   createdAt: Scalars['DateTime']['output'];
@@ -738,6 +907,32 @@ export type CpOperatorUser = {
   isOperator: Scalars['Boolean']['output'];
   isSuperAdmin: Scalars['Boolean']['output'];
   userId: Scalars['ID']['output'];
+};
+
+export type CpOvhCatalogRow = {
+  __typename?: 'CpOvhCatalogRow';
+  customerHourlyPriceCents: Maybe<Scalars['String']['output']>;
+  customerPricingMode: Scalars['String']['output'];
+  diskGb: Maybe<Scalars['Int']['output']>;
+  flavorName: Scalars['String']['output'];
+  inboundBandwidth: Maybe<Scalars['Int']['output']>;
+  outboundBandwidth: Maybe<Scalars['Int']['output']>;
+  ovhHourlyPriceCents: Maybe<Scalars['String']['output']>;
+  quotaAvailable: Maybe<Scalars['Int']['output']>;
+  ramMb: Maybe<Scalars['Int']['output']>;
+  region: Scalars['String']['output'];
+  vcpus: Maybe<Scalars['Int']['output']>;
+};
+
+/** Result of publishing an environment release from a game-api tag. */
+export type CpPublishEnvironmentReleaseResult = {
+  __typename?: 'CpPublishEnvironmentReleaseResult';
+  /** True when releases/vX.Y.Z.yaml was committed to the manifest git ref. */
+  committedToGit: Scalars['Boolean']['output'];
+  /** Set when ingest succeeded but the GitHub manifest commit failed. */
+  gitCommitError: Maybe<Scalars['String']['output']>;
+  schemaChanged: Scalars['Boolean']['output'];
+  version: CpEnvironmentVersionRow;
 };
 
 export type CpSecretRow = {
@@ -788,6 +983,56 @@ export type CpTaskRow = {
   startedAt: Maybe<Scalars['DateTime']['output']>;
   status: Scalars['String']['output'];
   updatedAt: Scalars['DateTime']['output'];
+};
+
+/** cks-game-api tag on GitHub that is not yet pinned by any available environment release. */
+export type CpUnreleasedGameApiTag = {
+  __typename?: 'CpUnreleasedGameApiTag';
+  /** Environment version that Publish & ingest would create (v0.1.N+1). */
+  proposedEnvironmentVersion: Scalars['String']['output'];
+  /** True when create-schema.sql differs between this tag and the current deploy-target game-api pin. */
+  schemaChanged: Scalars['Boolean']['output'];
+  tag: Scalars['String']['output'];
+  /** ISO timestamp when the tag was created on GitHub. */
+  taggedAt: Maybe<Scalars['String']['output']>;
+};
+
+/** Game-api tags eligible for one-click environment release publish. */
+export type CpUnreleasedGameApiTagsPage = {
+  __typename?: 'CpUnreleasedGameApiTagsPage';
+  /** gameApiGitTag on the current org deploy target, if any. */
+  currentDeployTargetGameApiTag: Maybe<Scalars['String']['output']>;
+  /** False when GitHub tag listing failed (e.g. invalid GITHUB_PAT). */
+  gitSourceAvailable: Scalars['Boolean']['output'];
+  tags: Array<CpUnreleasedGameApiTag>;
+};
+
+export type CpUsageMinuteRow = {
+  __typename?: 'CpUsageMinuteRow';
+  minute: Scalars['DateTime']['output'];
+  recvBytes: Scalars['String']['output'];
+  recvMsgs: Maybe<Scalars['String']['output']>;
+  sendBytes: Scalars['String']['output'];
+  sendMsgs: Maybe<Scalars['String']['output']>;
+};
+
+export type CpUsageRatePeaks = {
+  __typename?: 'CpUsageRatePeaks';
+  avgSendMbitPerSec: Scalars['Float']['output'];
+  avgSendMsgsPerSec: Scalars['Float']['output'];
+  peakSendMbitPerSec: Scalars['Float']['output'];
+  peakSendMsgsPerSec: Scalars['Float']['output'];
+  sampleMinutes: Scalars['Float']['output'];
+};
+
+export type CpUsageSummary = {
+  __typename?: 'CpUsageSummary';
+  buddyLive: Maybe<CpBuddyLiveRates>;
+  environmentSlug: Scalars['String']['output'];
+  graphql: Array<CpUsageMinuteRow>;
+  orgId: Maybe<Scalars['String']['output']>;
+  replication: Array<CpUsageMinuteRow>;
+  replicationRates: CpUsageRatePeaks;
 };
 
 export type CreateAccessTierInput = {
@@ -849,12 +1094,32 @@ export type CreateEnvironmentInput = {
   gameApiMinServers: Scalars['Int']['input'];
   loadBalancerCount: Scalars['Int']['input'];
   orgId: Scalars['BigInt']['input'];
-  slug: Scalars['String']['input'];
+  /** Optional explicit slug for scripts/E2E. When omitted, the API generates an opaque e-{12} slug. */
+  slug?: InputMaybe<Scalars['String']['input']>;
   /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
   udpBuddyFlavor: Scalars['String']['input'];
   udpBuddyMaxServers: Scalars['Int']['input'];
   udpBuddyMinServers: Scalars['Int']['input'];
   x25519PublicKeyBase64: Scalars['String']['input'];
+};
+
+export type CreateGridInput = {
+  appId: Scalars['BigInt']['input'];
+  corner1: ChunkCoordinatesInput;
+  corner2: ChunkCoordinatesInput;
+};
+
+export type CreateGridResponse = {
+  __typename?: 'CreateGridResponse';
+  error: UdpErrorCode;
+  grid: Maybe<Grid>;
+};
+
+export type CreateGroupRoleInput = {
+  groupId: Scalars['BigInt']['input'];
+  permissions?: InputMaybe<Array<Scalars['String']['input']>>;
+  rank?: InputMaybe<Scalars['Int']['input']>;
+  roleName: Scalars['String']['input'];
 };
 
 export type CreateOrgRoleInput = {
@@ -873,6 +1138,14 @@ export type CreateOrgTokenInput = {
 export type CreateOrganizationInput = {
   name: Scalars['String']['input'];
   slug: Scalars['String']['input'];
+};
+
+export type CreateTeamInput = {
+  appId: Scalars['BigInt']['input'];
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** open | request | invite | admin. Defaults to the app policy. */
+  membershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
 };
 
 export type CreateUserAppStateInput = {
@@ -903,6 +1176,28 @@ export type EnvironmentQuoteInput = {
   udpBuddyMinServers: Scalars['Int']['input'];
 };
 
+export type EnvironmentUsageRollupRow = {
+  __typename?: 'EnvironmentUsageRollupRow';
+  displayName: Scalars['String']['output'];
+  environmentId: Scalars['String']['output'];
+  environmentSlug: Scalars['String']['output'];
+  graphqlRecvBytes: Scalars['String']['output'];
+  graphqlSendBytes: Scalars['String']['output'];
+  replicationRecvBytes: Scalars['String']['output'];
+  replicationSendBytes: Scalars['String']['output'];
+};
+
+export type EnvironmentUsageSummary = {
+  __typename?: 'EnvironmentUsageSummary';
+  buddyLive: Maybe<BuddyLiveRates>;
+  environmentId: Scalars['String']['output'];
+  environmentSlug: Scalars['String']['output'];
+  graphql: Array<UsageMinuteRow>;
+  orgId: Scalars['String']['output'];
+  replication: Array<UsageMinuteRow>;
+  replicationRates: UsageRatePeaks;
+};
+
 export type FreePlayWindowInfo = {
   __typename?: 'FreePlayWindowInfo';
   description: Scalars['String']['output'];
@@ -924,6 +1219,17 @@ export type GameClientBootstrap = {
   subscriptionName: Scalars['String']['output'];
   udpProxyConnectionStatus: UdpProxyConnectionStatus;
   versionInfo: ServerVersionInfo;
+};
+
+/** The elected host user of a game (app). Election is deterministic across all cks-game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy (cks-udp-api); liveness (updated_at) is owned by game-api's actorHeartbeat mutation. */
+export type GameHost = {
+  __typename?: 'GameHost';
+  /** How many actors the host user currently owns in this app (always >= 1 when this object is returned). */
+  actorCount: Scalars['Int']['output'];
+  /** Timestamp of the host's earliest still-connected actor (`MIN(actors.created_at)` for the host's group). Used as the primary election ordering key. */
+  earliestActorJoinedAt: Scalars['DateTime']['output'];
+  /** The user_id of the elected host. Stable while this user has at least one fresh row in `actors` for the app; the next-oldest user takes over automatically once the current host stops heartbeating (its rows age past HOST_ACTOR_FRESHNESS_SECONDS) or Buddy idle-evicts its last row. */
+  hostUserId: Scalars['BigInt']['output'];
 };
 
 /** Generic error response from the UDP game server. Uses the sequence number to match the original request that failed. */
@@ -968,6 +1274,14 @@ export type GrantAppAccessInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+export type GrantGridPermissionsInput = {
+  appId: Scalars['BigInt']['input'];
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  gridId: Scalars['BigInt']['input'];
+  permissionKeys: Array<Scalars['String']['input']>;
+  userId: Scalars['BigInt']['input'];
+};
+
 export type GraphQlServer = {
   __typename?: 'GraphQLServer';
   apiPort: Scalars['Int']['output'];
@@ -986,6 +1300,99 @@ export type GraphQlServer = {
   runtimeServerId: Maybe<Scalars['String']['output']>;
   status: ServerState;
   updatedAt: Scalars['DateTime']['output'];
+};
+
+export type GraphqlOperationUsageRow = {
+  __typename?: 'GraphqlOperationUsageRow';
+  operationName: Scalars['String']['output'];
+  recvBytes: Scalars['String']['output'];
+  sendBytes: Scalars['String']['output'];
+  totalOps: Scalars['String']['output'];
+};
+
+export type Grid = {
+  __typename?: 'Grid';
+  app_id: Scalars['BigInt']['output'];
+  created_at: Scalars['DateTime']['output'];
+  grid_id: Scalars['BigInt']['output'];
+  high_chunk: ChunkCoordinates;
+  low_chunk: ChunkCoordinates;
+};
+
+export type GridGroupGrant = {
+  __typename?: 'GridGroupGrant';
+  appId: Scalars['BigInt']['output'];
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  gridId: Scalars['BigInt']['output'];
+  groupId: Scalars['BigInt']['output'];
+  /** Null means the grant applies to all members of the group. */
+  groupRoleId: Maybe<Scalars['BigInt']['output']>;
+  permissionKey: Scalars['String']['output'];
+};
+
+export type GridPermissionLimits = {
+  __typename?: 'GridPermissionLimits';
+  appId: Scalars['BigInt']['output'];
+  gridId: Scalars['BigInt']['output'];
+  /** The permission keys this grid is limited to. Empty means no limit (every active grid permission is allowed). */
+  permissionKeys: Array<Scalars['String']['output']>;
+};
+
+export type GridUserPermissions = {
+  __typename?: 'GridUserPermissions';
+  appId: Scalars['BigInt']['output'];
+  gridId: Scalars['BigInt']['output'];
+  permissionKeys: Array<Scalars['String']['output']>;
+  userId: Scalars['BigInt']['output'];
+};
+
+export type Group = {
+  __typename?: 'Group';
+  appId: Scalars['BigInt']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  description: Maybe<Scalars['String']['output']>;
+  groupId: Scalars['BigInt']['output'];
+  groupType: Scalars['String']['output'];
+  membershipPolicy: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  ownerUserId: Maybe<Scalars['BigInt']['output']>;
+  status: Scalars['String']['output'];
+};
+
+export type GroupMember = {
+  __typename?: 'GroupMember';
+  createdAt: Scalars['DateTime']['output'];
+  groupId: Scalars['BigInt']['output'];
+  groupMemberId: Scalars['BigInt']['output'];
+  roles: Array<GroupRole>;
+  status: Scalars['String']['output'];
+  userId: Scalars['BigInt']['output'];
+};
+
+export type GroupMembership = {
+  __typename?: 'GroupMembership';
+  group: Group;
+  joinedAt: Scalars['DateTime']['output'];
+  permissions: Array<Scalars['String']['output']>;
+  roles: Array<GroupRole>;
+};
+
+export type GroupRole = {
+  __typename?: 'GroupRole';
+  createdAt: Scalars['DateTime']['output'];
+  groupId: Scalars['BigInt']['output'];
+  groupRoleId: Scalars['BigInt']['output'];
+  isSystem: Scalars['Boolean']['output'];
+  permissions: Array<Scalars['String']['output']>;
+  rank: Scalars['Int']['output'];
+  roleName: Scalars['String']['output'];
+};
+
+export type IngestEnvironmentVersionInput = {
+  force?: Scalars['Boolean']['input'];
+  notes?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  version: Scalars['String']['input'];
 };
 
 export type InviteOrgMemberInput = {
@@ -1026,8 +1433,13 @@ export type LoginUserInput = {
 
 export type Mutation = {
   __typename?: 'Mutation';
+  /** Liveness heartbeat for the authenticated user's actors in an app. Refreshes actors.updated_at for every actor row the user owns so the user stays host-eligible, then returns the freshly-elected host (same shape as the gameHost query) so a client can fold its poll and heartbeat into one round-trip. Call on an interval shorter than HOST_ACTOR_FRESHNESS_SECONDS. Only refreshes rows that already exist (created by Buddy on chunk entry); returns null when no fresh actors exist for the app. */
+  actorHeartbeat: Maybe<GameHost>;
+  /** Add a user to a team or approve a pending request (manage_members). */
+  addTeamMember: GroupMember;
   archiveAccessTier: AppAccessTier;
   archiveApp: App;
+  assignGroupToGrid: Array<GridGroupGrant>;
   /** Captures an approved PayPal order after the hosted checkout redirects back. Wallet credit still reconciles through PayPal webhooks. */
   capturePaypalCheckout: Checkout;
   changePassword: Scalars['Boolean']['output'];
@@ -1042,10 +1454,15 @@ export type Mutation = {
   createCheckout: Checkout;
   /** Creates an environment only if each selected instance flavor is available and customer-priced in the catalog (same rule as environmentQuote). Use environmentFlavors / environmentDatacenters for valid options. */
   createEnvironment: CksEnvironmentDetail;
+  createGrid: CreateGridResponse;
   createOrgRole: OrgRole;
   /** Returns the plaintext token exactly once. Save it; subsequent queries only show metadata. */
   createOrgToken: OrgTokenWithSecret;
   createOrganization: Organization;
+  /** Create a team. Allowed per the app team policy (admin | member | anyone). The creator becomes the owner with a system leader role. */
+  createTeam: Group;
+  /** Create a team role (manage_roles). */
+  createTeamRole: GroupRole;
   deleteActor: Actor;
   deleteAvatar: Avatar;
   deleteCpSecret: Scalars['Boolean']['output'];
@@ -1053,25 +1470,48 @@ export type Mutation = {
   deleteMyAccount: Scalars['Boolean']['output'];
   deleteOrgRole: Scalars['Boolean']['output'];
   deleteQuota: Scalars['Boolean']['output'];
+  /** Delete a team (manage_group). */
+  deleteTeam: Scalars['Boolean']['output'];
+  /** Delete a non-system team role (manage_roles). */
+  deleteTeamRole: Scalars['Boolean']['output'];
   deleteUserAppState: UserAppState;
   destroyEnvironment: CksEnvironmentChangeOrder;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
   forceLogoutUser: Scalars['Boolean']['output'];
   grantAppAccess: AppUserAccess;
+  grantGridPermissions: GridUserPermissions;
+  ingestEnvironmentVersion: CpEnvironmentVersionRow;
   inviteOrgMember: OrgMember;
+  /** Join a team. Honors the team membership policy (open -> active, request -> pending, otherwise rejected). */
+  joinTeam: GroupMember;
+  /** Leave a team. */
+  leaveTeam: Scalars['Boolean']['output'];
   login: AuthResponse;
   logout: Scalars['Boolean']['output'];
   logoutAllDevices: Scalars['Boolean']['output'];
+  publishEnvironmentReleaseFromGameApiTag: CpPublishEnvironmentReleaseResult;
+  /** Permanently deletes a destroyed environment record from the platform. Cloud resources must already be torn down via destroyEnvironment. */
+  purgeEnvironment: Scalars['Boolean']['output'];
   putCpEnvSecret: CpEnvSecretRow;
   putCpSecret: CpSecretRow;
+  /** Redeploys the environment to the latest available release version (or the configured default), reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. */
+  redeployEnvironment: CksEnvironmentChangeOrder;
   register: AuthResponse;
   removeOrgMember: Scalars['Boolean']['output'];
+  /** Remove a member from a team (manage_members; members may remove themselves). */
+  removeTeamMember: Scalars['Boolean']['output'];
   requestPasswordReset: Scalars['Boolean']['output'];
+  /** Request to join a request-only team (creates a pending membership a manager can approve). */
+  requestToJoinTeam: GroupMember;
   resendConfirmationEmail: Scalars['Boolean']['output'];
   resetPassword: Scalars['Boolean']['output'];
+  /** SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale; does not replace cks-udp-api pool fixes. */
+  restartEnvironmentServices: CksEnvironmentChangeOrder;
   resumeEnvironment: CksEnvironmentChangeOrder;
   revokeAppAccess: AppUserAccess;
+  revokeGridPermissions: GridUserPermissions;
+  revokeGroupFromGrid: Array<GridGroupGrant>;
   revokeOrgToken: Scalars['Boolean']['output'];
   /** Reverts every voxel edit by `userId` in `appId` between `from` and `to`. Gated by the org permission `manage_apps`. Defaults to dryRun=true; pass dryRun=false to apply. */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
@@ -1090,18 +1530,25 @@ export type Mutation = {
   setAppVisibility: App;
   setEarlyAccessOverride: User;
   setEnvironmentDeletionProtection: Scalars['Boolean']['output'];
+  setGridPermissionLimits: GridPermissionLimits;
   /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
   setOperator: User;
   /** Super admin only. Used to freeze/unfreeze orgs platform-wide. */
   setOrgStatus: Organization;
   setQuota: ServiceQuota;
   setSuperAdmin: User;
+  /** Replace a member's roles (manage_roles). */
+  setTeamMemberRoles: GroupMember;
+  /** Set who may create teams in an app and the default membership policy for new teams (requires manage_apps). */
+  setTeamPolicy: AppGroupPolicy;
   teleportRequest: TeleportResponse;
   updateAccessTier: AppAccessTier;
   updateActor: Actor;
   updateActorState: Actor;
   updateApp: App;
   updateAvatar: Avatar;
+  /** Set an avatar's per-app state. Only the avatar's owner may write; all players can read it. */
+  updateAvatarAppState: AppAvatarState;
   updateAvatarState: Avatar;
   updateChunk: Chunk;
   updateChunkLods: Maybe<Chunk>;
@@ -1111,10 +1558,26 @@ export type Mutation = {
   updateOrgMemberRoles: OrgMember;
   updateOrgRole: OrgRole;
   updateOrgToken: OrgToken;
+  /** Update team name/description/membership policy (manage_group). */
+  updateTeam: Group;
+  /** Update a team role (manage_roles). */
+  updateTeamRole: GroupRole;
   updateUserAppState: UserAppState;
   updateUserState: User;
   updateUserType: User;
   updateVoxel: Voxel;
+  yankEnvironmentVersion: Scalars['Boolean']['output'];
+};
+
+
+export type MutationActorHeartbeatArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationAddTeamMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
 };
 
 
@@ -1125,6 +1588,11 @@ export type MutationArchiveAccessTierArgs = {
 
 export type MutationArchiveAppArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationAssignGroupToGridArgs = {
+  input: AssignGroupToGridInput;
 };
 
 
@@ -1174,6 +1642,11 @@ export type MutationCreateEnvironmentArgs = {
 };
 
 
+export type MutationCreateGridArgs = {
+  input: CreateGridInput;
+};
+
+
 export type MutationCreateOrgRoleArgs = {
   input: CreateOrgRoleInput;
 };
@@ -1186,6 +1659,16 @@ export type MutationCreateOrgTokenArgs = {
 
 export type MutationCreateOrganizationArgs = {
   input: CreateOrganizationInput;
+};
+
+
+export type MutationCreateTeamArgs = {
+  input: CreateTeamInput;
+};
+
+
+export type MutationCreateTeamRoleArgs = {
+  input: CreateGroupRoleInput;
 };
 
 
@@ -1215,6 +1698,16 @@ export type MutationDeleteQuotaArgs = {
 };
 
 
+export type MutationDeleteTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationDeleteTeamRoleArgs = {
+  groupRoleId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationDeleteUserAppStateArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -1235,13 +1728,43 @@ export type MutationGrantAppAccessArgs = {
 };
 
 
+export type MutationGrantGridPermissionsArgs = {
+  input: GrantGridPermissionsInput;
+};
+
+
+export type MutationIngestEnvironmentVersionArgs = {
+  input: IngestEnvironmentVersionInput;
+};
+
+
 export type MutationInviteOrgMemberArgs = {
   input: InviteOrgMemberInput;
 };
 
 
+export type MutationJoinTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationLeaveTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationLoginArgs = {
   loginUserInput: LoginUserInput;
+};
+
+
+export type MutationPublishEnvironmentReleaseFromGameApiTagArgs = {
+  input: PublishEnvironmentReleaseFromGameApiTagInput;
+};
+
+
+export type MutationPurgeEnvironmentArgs = {
+  input: PurgeEnvironmentInput;
 };
 
 
@@ -1261,6 +1784,11 @@ export type MutationPutCpSecretArgs = {
 };
 
 
+export type MutationRedeployEnvironmentArgs = {
+  input: RedeployEnvironmentInput;
+};
+
+
 export type MutationRegisterArgs = {
   registerUserInput: RegisterUserInput;
 };
@@ -1272,8 +1800,19 @@ export type MutationRemoveOrgMemberArgs = {
 };
 
 
+export type MutationRemoveTeamMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationRequestPasswordResetArgs = {
   email: Scalars['String']['input'];
+};
+
+
+export type MutationRequestToJoinTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
 };
 
 
@@ -1287,6 +1826,11 @@ export type MutationResetPasswordArgs = {
 };
 
 
+export type MutationRestartEnvironmentServicesArgs = {
+  input: RestartEnvironmentServicesInput;
+};
+
+
 export type MutationResumeEnvironmentArgs = {
   input: ResumeEnvironmentInput;
 };
@@ -1295,6 +1839,16 @@ export type MutationResumeEnvironmentArgs = {
 export type MutationRevokeAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeGridPermissionsArgs = {
+  input: RevokeGridPermissionsInput;
+};
+
+
+export type MutationRevokeGroupFromGridArgs = {
+  input: RevokeGroupFromGridInput;
 };
 
 
@@ -1358,6 +1912,11 @@ export type MutationSetEnvironmentDeletionProtectionArgs = {
 };
 
 
+export type MutationSetGridPermissionLimitsArgs = {
+  input: SetGridPermissionLimitsInput;
+};
+
+
 export type MutationSetOperatorArgs = {
   userId: Scalars['BigInt']['input'];
   value: Scalars['Boolean']['input'];
@@ -1378,6 +1937,16 @@ export type MutationSetQuotaArgs = {
 export type MutationSetSuperAdminArgs = {
   userId: Scalars['BigInt']['input'];
   value: Scalars['Boolean']['input'];
+};
+
+
+export type MutationSetTeamMemberRolesArgs = {
+  input: SetMemberRolesInput;
+};
+
+
+export type MutationSetTeamPolicyArgs = {
+  input: SetTeamPolicyInput;
 };
 
 
@@ -1413,6 +1982,11 @@ export type MutationUpdateAppArgs = {
 export type MutationUpdateAvatarArgs = {
   id: Scalars['BigInt']['input'];
   input: UpdateAvatarInput;
+};
+
+
+export type MutationUpdateAvatarAppStateArgs = {
+  input: UpdateAvatarAppStateInput;
 };
 
 
@@ -1466,6 +2040,16 @@ export type MutationUpdateOrgTokenArgs = {
 };
 
 
+export type MutationUpdateTeamArgs = {
+  input: UpdateTeamInput;
+};
+
+
+export type MutationUpdateTeamRoleArgs = {
+  input: UpdateGroupRoleInput;
+};
+
+
 export type MutationUpdateUserAppStateArgs = {
   input: CreateUserAppStateInput;
 };
@@ -1484,6 +2068,28 @@ export type MutationUpdateUserTypeArgs = {
 
 export type MutationUpdateVoxelArgs = {
   input: UpdateVoxelInput;
+};
+
+
+export type MutationYankEnvironmentVersionArgs = {
+  version: Scalars['String']['input'];
+};
+
+export type NearbyGridPermissions = {
+  __typename?: 'NearbyGridPermissions';
+  appId: Scalars['BigInt']['output'];
+  gridId: Scalars['BigInt']['output'];
+  highChunk: ChunkCoordinates;
+  lowChunk: ChunkCoordinates;
+  permissionKeys: Array<Scalars['String']['output']>;
+  userId: Scalars['BigInt']['output'];
+};
+
+export type NearbyGridPermissionsInput = {
+  appId: Scalars['BigInt']['input'];
+  highChunk: ChunkCoordinatesInput;
+  lowChunk: ChunkCoordinatesInput;
+  userId: Scalars['BigInt']['input'];
 };
 
 export type OrgMember = {
@@ -1603,6 +2209,18 @@ export enum PaymentProvider {
   Stripe = 'STRIPE'
 }
 
+export type PublishEnvironmentReleaseFromGameApiTagInput = {
+  /** Overwrite an existing environment version row if it already exists. */
+  force?: Scalars['Boolean']['input'];
+  /** cks-game-api semver tag (e.g. v0.6.20). */
+  gameApiTag: Scalars['String']['input'];
+};
+
+export type PurgeEnvironmentInput = {
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+};
+
 export type Query = {
   __typename?: 'Query';
   /** Returns only active (ReadyForClients) GraphQL servers */
@@ -1615,11 +2233,19 @@ export type Query = {
   appBudget: Maybe<AppBudget>;
   appBudgets: Array<AppBudget>;
   appBySlug: Maybe<App>;
+  /** Top GraphQL operations by bytes for an app in the time range. */
+  appGraphqlOperations: Array<GraphqlOperationUsageRow>;
+  /** Replication and GraphQL totals plus top operations for one app. */
+  appUsageSummary: AppUsageSummary;
   appUserAccessByApp: Array<AppUserAccess>;
   /** Public marketplace listing. Returns visibility=PUBLIC + status=LIVE only. No auth required. */
   apps: AppsPage;
   appsForOrg: Array<App>;
   avatar: Avatar;
+  /** Read one avatar's per-app state (public to all players). */
+  avatarAppState: Maybe<AppAvatarState>;
+  /** Batch-read per-app state for many avatars (public to all players). */
+  avatarAppStates: Array<AppAvatarState>;
   batchLookupActors: Array<Actor>;
   /** Super admin only. Cross-tenant payments audit. */
   checkouts: CheckoutsPage;
@@ -1628,8 +2254,12 @@ export type Query = {
   cpChangeOrders: CpChangeOrdersPage;
   cpEnvSecrets: Array<CpEnvSecretRow>;
   cpEnvironment: Maybe<CpAdminEnvironment>;
+  cpEnvironmentVersions: CpEnvironmentVersionsPage;
   cpEnvironments: CpAdminEnvironmentsPage;
+  cpOvhCatalogSummary: Array<CpOvhCatalogRow>;
   cpSecrets: Array<CpSecretRow>;
+  cpUnreleasedGameApiTags: CpUnreleasedGameApiTagsPage;
+  cpUsageSummary: CpUsageSummary;
   /** The most-specific quota that applies to (orgId, appId, tierId, metric). Walks tier -> app -> org -> free_tier_defaults. Returns null if nothing matches. */
   effectiveQuota: Maybe<ServiceQuota>;
   /** OVH datacenters that have at least one customer-priced instance flavor available for customer selection. */
@@ -1638,16 +2268,25 @@ export type Query = {
   environmentFlavors: Array<CksOvhFlavor>;
   /** Pricing quote for the selected flavors. Fails if any flavor is unavailable, hidden, or lacks customer pricing. */
   environmentQuote: CksEnvironmentQuote;
+  /** Per-app usage totals for apps linked to an environment. */
+  environmentUsageByApp: Array<AppUsageRollupRow>;
+  /** Per-minute replication and GraphQL usage for apps linked to an environment. Observability only. */
+  environmentUsageSummary: EnvironmentUsageSummary;
   environmentVersions: Array<CksEnvironmentVersion>;
   freePlayWindowInfo: FreePlayWindowInfo;
   /** Single startup payload for browser game clients: current user, version requirements, UDP proxy status, realtime protocol details, and spatial send limits. */
   gameClientBootstrap: GameClientBootstrap;
+  /** Returns the single elected host user for an app (game). Deterministic across all cks-game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
+  gameHost: Maybe<GameHost>;
   getChunk: Maybe<Chunk>;
   getChunkLods: Maybe<ChunkLodsResponse>;
   getChunksByDistance: ChunksByDistanceResponse;
   getVoxelList: ChunkVoxelResponse;
   /** Returns all registered GraphQL servers */
   graphqlServers: Array<GraphQlServer>;
+  gridGroupGrants: Array<GridGroupGrant>;
+  gridPermissionLimits: GridPermissionLimits;
+  gridUserPermissions: GridUserPermissions;
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   listVoxels: Array<Voxel>;
   me: Maybe<User>;
@@ -1660,6 +2299,9 @@ export type Query = {
   myDonationData: UserDonationData;
   myOrganizations: Array<OrgMembership>;
   myPropertyTokens: UserPropertyTokenData;
+  /** The caller's teams in an app, with their roles and effective team permissions. */
+  myTeams: Array<GroupMembership>;
+  nearbyGridPermissions: Array<NearbyGridPermissions>;
   operatorUsers: Array<CpOperatorUser>;
   orgEnvironment: Maybe<CksEnvironmentDetail>;
   orgEnvironments: Array<CksEnvironment>;
@@ -1668,6 +2310,8 @@ export type Query = {
   orgPermissions: Array<OrgPermission>;
   orgRoles: Array<OrgRole>;
   orgTokens: Array<OrgToken>;
+  /** Aggregate usage totals per environment in an organization. */
+  orgUsageByEnvironment: Array<EnvironmentUsageRollupRow>;
   organization: Maybe<Organization>;
   organizationBySlug: Maybe<Organization>;
   /** Super admin only. Inbound payment webhook audit log. */
@@ -1678,11 +2322,22 @@ export type Query = {
   runtimePermissions: Array<Scalars['String']['output']>;
   /** Returns a random server from the lowest 20% of servers by client count to distribute load evenly */
   serverWithLeastClients: ServerStatus;
+  /** Fetch one team by id. */
+  team: Group;
+  /** List the members of a team. */
+  teamMembers: Array<GroupMember>;
+  /** The current team creation/membership policy for an app. */
+  teamPolicy: AppGroupPolicy;
+  /** List the roles of a team. */
+  teamRoles: Array<GroupRole>;
+  /** List active teams in an app. */
+  teams: Array<Group>;
   /** UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy. */
   udpProxyConnectionStatus: UdpProxyConnectionStatus;
   user: Maybe<User>;
   userAppState: Maybe<UserAppState>;
   userAppStates: Array<UserAppState>;
+  /** Avatars owned by a user. Non-owners receive public state only (private_state is stripped). */
   userAvatars: Array<Avatar>;
   /** Super admin only. Paginated user search; replaces the old `users`/`usersByGamertag`/`usersByEmail` triple. `query` is matched ILIKE-prefix against email, gamertag, disambiguation, and exact user_id. */
   usersPaginated: UsersPage;
@@ -1731,6 +2386,22 @@ export type QueryAppBySlugArgs = {
 };
 
 
+export type QueryAppGraphqlOperationsArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  since: Scalars['DateTime']['input'];
+};
+
+
+export type QueryAppUsageSummaryArgs = {
+  appId: Scalars['BigInt']['input'];
+  operationLimit?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  since: Scalars['DateTime']['input'];
+};
+
+
 export type QueryAppUserAccessByAppArgs = {
   appId: Scalars['BigInt']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -1753,6 +2424,18 @@ export type QueryAppsForOrgArgs = {
 
 export type QueryAvatarArgs = {
   id: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAvatarAppStateArgs = {
+  appId: Scalars['BigInt']['input'];
+  avatarId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAvatarAppStatesArgs = {
+  appId: Scalars['BigInt']['input'];
+  avatarIds: Array<Scalars['BigInt']['input']>;
 };
 
 
@@ -1802,8 +2485,19 @@ export type QueryCpEnvironmentsArgs = {
 };
 
 
+export type QueryCpOvhCatalogSummaryArgs = {
+  region?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type QueryCpSecretsArgs = {
   environmentId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryCpUsageSummaryArgs = {
+  environmentSlug: Scalars['String']['input'];
+  since: Scalars['DateTime']['input'];
 };
 
 
@@ -1825,7 +2519,26 @@ export type QueryEnvironmentQuoteArgs = {
 };
 
 
+export type QueryEnvironmentUsageByAppArgs = {
+  environmentSlug: Scalars['String']['input'];
+  orgId: Scalars['BigInt']['input'];
+  since: Scalars['DateTime']['input'];
+};
+
+
+export type QueryEnvironmentUsageSummaryArgs = {
+  environmentSlug: Scalars['String']['input'];
+  orgId: Scalars['BigInt']['input'];
+  since: Scalars['DateTime']['input'];
+};
+
+
 export type QueryGameClientBootstrapArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGameHostArgs = {
   appId: Scalars['BigInt']['input'];
 };
 
@@ -1847,6 +2560,26 @@ export type QueryGetChunksByDistanceArgs = {
 
 export type QueryGetVoxelListArgs = {
   input: GetVoxelListInput;
+};
+
+
+export type QueryGridGroupGrantsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridPermissionLimitsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridUserPermissionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
 };
 
 
@@ -1876,6 +2609,16 @@ export type QueryMyCheckoutsArgs = {
 };
 
 
+export type QueryMyTeamsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryNearbyGridPermissionsArgs = {
+  input: NearbyGridPermissionsInput;
+};
+
+
 export type QueryOrgEnvironmentArgs = {
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
@@ -1902,6 +2645,12 @@ export type QueryOrgTokensArgs = {
 };
 
 
+export type QueryOrgUsageByEnvironmentArgs = {
+  orgId: Scalars['BigInt']['input'];
+  since: Scalars['DateTime']['input'];
+};
+
+
 export type QueryOrganizationArgs = {
   id: Scalars['BigInt']['input'];
 };
@@ -1925,6 +2674,31 @@ export type QueryQuotasForAppArgs = {
 
 export type QueryQuotasForOrgArgs = {
   orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamMembersArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamRolesArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamsArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -1980,6 +2754,18 @@ export type RealtimeConnectionEvent = {
   status: Scalars['String']['output'];
 };
 
+/** full = replace VMs. services = update in place on existing runtime servers. Omit for automatic routing. */
+export enum RedeployDeployMode {
+  Full = 'FULL',
+  Services = 'SERVICES'
+}
+
+export type RedeployEnvironmentInput = {
+  deployMode?: InputMaybe<RedeployDeployMode>;
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+};
+
 export type RegisterUserInput = {
   email: Scalars['String']['input'];
   gamertag?: InputMaybe<Scalars['String']['input']>;
@@ -1991,9 +2777,30 @@ export type ResetPasswordInput = {
   token: Scalars['String']['input'];
 };
 
+export type RestartEnvironmentServicesInput = {
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+};
+
 export type ResumeEnvironmentInput = {
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
+};
+
+export type RevokeGridPermissionsInput = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
+  userId: Scalars['BigInt']['input'];
+};
+
+export type RevokeGroupFromGridInput = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  groupId: Scalars['BigInt']['input'];
+  groupRoleId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional subset of keys to revoke. Omit to revoke all of the group/role grants on this grid. */
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
 export type RollbackVoxelEventResult = {
@@ -2096,6 +2903,19 @@ export type ServiceQuota = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+export type SetGridPermissionLimitsInput = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  /** The whitelist of permission keys allowed on this grid. Empty array removes all limits (every active grid permission becomes grantable again). */
+  permissionKeys: Array<Scalars['String']['input']>;
+};
+
+export type SetMemberRolesInput = {
+  groupId: Scalars['BigInt']['input'];
+  roleIds: Array<Scalars['BigInt']['input']>;
+  userId: Scalars['BigInt']['input'];
+};
+
 export type SetQuotaInput = {
   actionOnExceed?: InputMaybe<Scalars['String']['input']>;
   appId?: InputMaybe<Scalars['BigInt']['input']>;
@@ -2104,6 +2924,16 @@ export type SetQuotaInput = {
   orgId?: InputMaybe<Scalars['BigInt']['input']>;
   period?: InputMaybe<Scalars['String']['input']>;
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+export type SetTeamPolicyInput = {
+  appId: Scalars['BigInt']['input'];
+  /** admin | member | anyone. Who may create teams in this app. */
+  creationPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** open | request | invite | admin. Default membership policy for new teams. */
+  defaultMembershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  maxGroupsPerUser?: InputMaybe<Scalars['Int']['input']>;
+  maxMembers?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type Subscription = {
@@ -2209,6 +3039,13 @@ export type UpdateAppInput = {
   visibility?: InputMaybe<AppVisibility>;
 };
 
+export type UpdateAvatarAppStateInput = {
+  appId: Scalars['BigInt']['input'];
+  avatarId: Scalars['BigInt']['input'];
+  /** Base64-encoded binary state. Null clears it. */
+  state?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type UpdateAvatarInput = {
   name?: InputMaybe<Scalars['String']['input']>;
 };
@@ -2247,6 +3084,13 @@ export type UpdateGamertagInput = {
   gamertag: Scalars['String']['input'];
 };
 
+export type UpdateGroupRoleInput = {
+  groupRoleId: Scalars['BigInt']['input'];
+  permissions?: InputMaybe<Array<Scalars['String']['input']>>;
+  rank?: InputMaybe<Scalars['Int']['input']>;
+  roleName?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type UpdateOrgRoleInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   permissions?: InputMaybe<Array<Scalars['String']['input']>>;
@@ -2259,6 +3103,13 @@ export type UpdateOrgTokenInput = {
   label?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type UpdateTeamInput = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  groupId: Scalars['BigInt']['input'];
+  membershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type UpdateUserStateInput = {
   state?: InputMaybe<Scalars['String']['input']>;
 };
@@ -2269,6 +3120,24 @@ export type UpdateVoxelInput = {
   location: VoxelCoordinatesInput;
   state?: InputMaybe<Scalars['String']['input']>;
   voxelType: Scalars['Float']['input'];
+};
+
+export type UsageMinuteRow = {
+  __typename?: 'UsageMinuteRow';
+  minute: Scalars['DateTime']['output'];
+  recvBytes: Scalars['String']['output'];
+  recvMsgs: Maybe<Scalars['String']['output']>;
+  sendBytes: Scalars['String']['output'];
+  sendMsgs: Maybe<Scalars['String']['output']>;
+};
+
+export type UsageRatePeaks = {
+  __typename?: 'UsageRatePeaks';
+  avgSendMbitPerSec: Scalars['Float']['output'];
+  avgSendMsgsPerSec: Scalars['Float']['output'];
+  peakSendMbitPerSec: Scalars['Float']['output'];
+  peakSendMsgsPerSec: Scalars['Float']['output'];
+  sampleMinutes: Scalars['Float']['output'];
 };
 
 export type User = {

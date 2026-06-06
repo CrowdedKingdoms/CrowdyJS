@@ -12,20 +12,25 @@
  * point it at the URLs the management UI returned for that env after the
  * deploy completed:
  *
- *   CROWDY_MANAGEMENT_URL='http://40.160.10.31:3001/graphql' \
- *   CROWDY_HTTP_URL='https://game.<handle>.cks-env.com/graphql' \
- *   CROWDY_WS_URL='wss://game.<handle>.cks-env.com/graphql' \
+ *   CROWDY_MANAGEMENT_URL='http://127.0.0.1:3001' \
+ *   CROWDY_HTTP_URL='http://127.0.0.1:3000/graphql' \
+ *   CROWDY_WS_URL='ws://127.0.0.1:3000/graphql' \
  *   CROWDY_TEST_APP_ID='1' \
- *   CROWDY_TEST_EMAIL_1='player-a@cks-env.com' \
+ *   CROWDY_TEST_EMAIL_1='player-a@example.com' \
  *   CROWDY_TEST_PASSWORD_1='...' \
- *   CROWDY_TEST_EMAIL_2='player-b@cks-env.com' \
+ *   CROWDY_TEST_EMAIL_2='player-b@example.com' \
  *   CROWDY_TEST_PASSWORD_2='...' \
  *   npm test
  *
+ * The two players are provisioned on demand: the test registers each email via
+ * the public management-api `auth.register`, falling back to `auth.login` when
+ * the account already exists, so it is fully black-box (no DB access).
+ *
  * Required env vars (all of them or skip):
- *   CROWDY_MANAGEMENT_URL  full mgmt-api GraphQL endpoint (incl. /graphql)
+ *   CROWDY_MANAGEMENT_URL  management-api BASE url (root, no /graphql; the SDK
+ *                          appends /graphql for the management endpoint)
  *   CROWDY_HTTP_URL        full game-api GraphQL endpoint (incl. /graphql)
- *   CROWDY_WS_URL          full game-api WS endpoint (wss://.../graphql)
+ *   CROWDY_WS_URL          full game-api WS endpoint (ws[s]://.../graphql)
  *   CROWDY_TEST_EMAIL_1, CROWDY_TEST_PASSWORD_1
  *   CROWDY_TEST_EMAIL_2, CROWDY_TEST_PASSWORD_2
  *
@@ -75,6 +80,21 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Black-box provisioning: register the account (public management-api), or log
+ * in if it already exists from a previous run. Both return an AuthResponse with
+ * a `token` usable against game-api.
+ */
+async function registerOrLogin(client, email, password) {
+  try {
+    const reg = await client.auth.register({ email, password });
+    if (reg?.token) return reg;
+  } catch {
+    /* already registered - fall through to login */
+  }
+  return client.auth.login({ email, password });
+}
+
 test(
   'two-client actor replication against a deployed env',
   { skip: skipReason, timeout: 60_000 },
@@ -100,25 +120,28 @@ test(
     const cleanup = [];
 
     try {
-      // 1. Login
-      const authA = await clientA.auth.login({
-        email: process.env.CROWDY_TEST_EMAIL_1,
-        password: process.env.CROWDY_TEST_PASSWORD_1,
-      });
-      assert.ok(authA?.token, 'Client A login returned a token');
+      // 1. Provision + authenticate both players via the public management-api
+      const authA = await registerOrLogin(
+        clientA,
+        process.env.CROWDY_TEST_EMAIL_1,
+        process.env.CROWDY_TEST_PASSWORD_1,
+      );
+      assert.ok(authA?.token, 'Client A authenticated and returned a token');
 
-      const authB = await clientB.auth.login({
-        email: process.env.CROWDY_TEST_EMAIL_2,
-        password: process.env.CROWDY_TEST_PASSWORD_2,
-      });
-      assert.ok(authB?.token, 'Client B login returned a token');
+      const authB = await registerOrLogin(
+        clientB,
+        process.env.CROWDY_TEST_EMAIL_2,
+        process.env.CROWDY_TEST_PASSWORD_2,
+      );
+      assert.ok(authB?.token, 'Client B authenticated and returned a token');
 
-      // 2. Subscribe (opens UDP proxy implicitly via WS)
+      // 2. Subscribe (opens UDP proxy implicitly via WS). Handler names match
+      //    the SDK's UdpNotificationHandlers (actorUpdate / genericError).
       const receivedByB = { actorUpdates: [], genericErrors: [] };
       cleanup.push(
         clientB.udp.subscribe({
-          onActorUpdate: (n) => receivedByB.actorUpdates.push(n),
-          onGenericError: (e) => receivedByB.genericErrors.push(e),
+          actorUpdate: (n) => receivedByB.actorUpdates.push(n),
+          genericError: (e) => receivedByB.genericErrors.push(e),
         }),
       );
 

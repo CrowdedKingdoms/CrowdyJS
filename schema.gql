@@ -320,6 +320,44 @@ type CheckoutsPage {
   pageInfo: PageInfo!
 }
 
+type CksDeployProgressStep {
+  id: String!
+  kind: String!
+  """Human-readable step label for the org UI"""
+  label: String!
+  status: String!
+  attempt: Int!
+  error: String
+}
+
+type CksDeployProgressTask {
+  id: String!
+  kind: String!
+  label: String!
+  status: String!
+  error: String
+  steps: [CksDeployProgressStep!]!
+}
+
+type CksDeployProgress {
+  changeOrderId: String!
+  changeOrderStatus: String!
+  targetVersion: String
+  error: String
+  tasksTotal: Int!
+  tasksSucceeded: Int!
+  tasksFailed: Int!
+  tasksInProgress: Int!
+  tasksPending: Int!
+  currentTaskKind: String
+  currentStepKind: String
+  """True when the deploy failed but the change order was left in_progress"""
+  isStuck: Boolean!
+  """Redeploy is allowed (failed deploy or stuck order cleared)"""
+  canRetry: Boolean!
+  tasks: [CksDeployProgressTask!]!
+}
+
 type CksEnvironment {
   id: String!
   orgId: BigInt!
@@ -397,6 +435,8 @@ type CksEnvironmentVersion {
   releasedAt: DateTime!
   status: String!
   notes: String
+  """Pinned cks-game-api git tag from the ingested manifest."""
+  gameApiGitTag: String
 }
 
 type CksOvhDatacenter {
@@ -483,14 +523,112 @@ type CksEnvironmentBillingResource {
   observedAt: DateTime!
 }
 
+type CksBuddyHealth {
+  """False when no server_status row exists for this environment."""
+  registered: Boolean!
+  ip4: String
+  clientPort: Int
+  status: String
+  clients: Int
+  updatedAt: DateTime
+  """Seconds since server_status.updated_at (game DB heartbeat)."""
+  heartbeatAgeSec: Float
+  """
+  True when heartbeat is missing or older than the staleness threshold (~30s). Game-api rejects assignment when age > ~11s.
+  """
+  isStale: Boolean!
+  """Operator-facing hint when multiplayer assignment may fail."""
+  troubleshootingHint: String!
+}
+
 type CksEnvironmentDetail {
   environment: CksEnvironment!
+  """
+  Buddy UDP server heartbeat from mirrored server_status. Null when env is destroyed or management DB has no row.
+  """
+  buddyHealth: CksBuddyHealth
   components: [CksEnvironmentComponent!]!
   changeOrders: [CksEnvironmentChangeOrder!]!
   audit: [CksEnvironmentAudit!]!
   secrets: [CksEnvironmentSecretValue!]!
   outputs: [CksEnvironmentOutput!]!
   billingResources: [CksEnvironmentBillingResource!]!
+  """
+  Live deploy task/step progress for the active or most recent failed deploy
+  """
+  deployProgress: CksDeployProgress
+}
+
+type UsageMinuteRow {
+  minute: DateTime!
+  recvBytes: String!
+  sendBytes: String!
+  recvMsgs: String
+  sendMsgs: String
+}
+
+type UsageRatePeaks {
+  peakSendMsgsPerSec: Float!
+  peakSendMbitPerSec: Float!
+  avgSendMsgsPerSec: Float!
+  avgSendMbitPerSec: Float!
+  sampleMinutes: Float!
+}
+
+type BuddyLiveRates {
+  serverId: String!
+  clientSendMsgsPerSec: Float!
+  clientSendMbitPerSec: Float!
+  clientRecvMsgsPerSec: Float!
+  clientRecvMbitPerSec: Float!
+  clients: Float!
+  updatedAt: DateTime!
+}
+
+type EnvironmentUsageSummary {
+  environmentSlug: String!
+  environmentId: String!
+  orgId: String!
+  replication: [UsageMinuteRow!]!
+  graphql: [UsageMinuteRow!]!
+  replicationRates: UsageRatePeaks!
+  buddyLive: BuddyLiveRates
+}
+
+type AppUsageRollupRow {
+  appId: String!
+  appSlug: String!
+  appName: String!
+  replicationSendBytes: String!
+  replicationRecvBytes: String!
+  graphqlSendBytes: String!
+  graphqlRecvBytes: String!
+}
+
+type EnvironmentUsageRollupRow {
+  environmentId: String!
+  environmentSlug: String!
+  displayName: String!
+  replicationSendBytes: String!
+  replicationRecvBytes: String!
+  graphqlSendBytes: String!
+  graphqlRecvBytes: String!
+}
+
+type GraphqlOperationUsageRow {
+  operationName: String!
+  totalOps: String!
+  sendBytes: String!
+  recvBytes: String!
+}
+
+type AppUsageSummary {
+  appId: String!
+  replicationSendBytes: String!
+  replicationRecvBytes: String!
+  graphqlSendBytes: String!
+  graphqlRecvBytes: String!
+  topGraphqlOperations: [GraphqlOperationUsageRow!]!
 }
 
 type GraphQLServer {
@@ -667,6 +805,125 @@ type CpOperatorUser {
   createdAt: DateTime!
 }
 
+type CpOvhCatalogRow {
+  region: String!
+  flavorName: String!
+  vcpus: Int
+  ramMb: Int
+  diskGb: Int
+  inboundBandwidth: Int
+  outboundBandwidth: Int
+  ovhHourlyPriceCents: String
+  customerHourlyPriceCents: String
+  customerPricingMode: String!
+  quotaAvailable: Int
+}
+
+type CpUsageMinuteRow {
+  minute: DateTime!
+  recvBytes: String!
+  sendBytes: String!
+  recvMsgs: String
+  sendMsgs: String
+}
+
+type CpUsageRatePeaks {
+  peakSendMsgsPerSec: Float!
+  peakSendMbitPerSec: Float!
+  avgSendMsgsPerSec: Float!
+  avgSendMbitPerSec: Float!
+  sampleMinutes: Float!
+}
+
+type CpBuddyLiveRates {
+  serverId: String!
+  clientSendMsgsPerSec: Float!
+  clientSendMbitPerSec: Float!
+  clientRecvMsgsPerSec: Float!
+  clientRecvMbitPerSec: Float!
+  clients: Float!
+  updatedAt: DateTime!
+}
+
+type CpUsageSummary {
+  environmentSlug: String!
+  orgId: String
+  replication: [CpUsageMinuteRow!]!
+  graphql: [CpUsageMinuteRow!]!
+  replicationRates: CpUsageRatePeaks!
+  buddyLive: CpBuddyLiveRates
+}
+
+"""
+Operator-facing view of one ingested (or git-only pending) environment release manifest.
+"""
+type CpEnvironmentVersionRow {
+  version: String!
+  releasedAt: DateTime!
+  status: String!
+  notes: String
+  sourceCommit: String
+  gameApiGitTag: String
+  buddyVersion: String
+  ingestedAt: DateTime!
+  updatedAt: DateTime!
+  """True when releases/<version>.yaml exists on the configured git ref."""
+  inGit: Boolean!
+  """True when a row exists in cks_environment_versions."""
+  inDb: Boolean!
+  """
+  True when this ingested available release is what org redeploy targets (newest available, or ENVIRONMENT_DEFAULT_VERSION).
+  """
+  isLatestAvailable: Boolean!
+}
+
+"""
+Operator release manifest list merged from git and cks_environment_versions.
+"""
+type CpEnvironmentVersionsPage {
+  rows: [CpEnvironmentVersionRow!]!
+  """Version org redeploy resolves to when no explicit version is passed."""
+  latestAvailableVersion: String
+  """
+  False when GitHub manifest listing failed (e.g. invalid GITHUB_PAT). Rows may still come from the database.
+  """
+  gitSourceAvailable: Boolean!
+}
+
+"""
+cks-game-api tag on GitHub that is not yet pinned by any available environment release.
+"""
+type CpUnreleasedGameApiTag {
+  tag: String!
+  """ISO timestamp when the tag was created on GitHub."""
+  taggedAt: String
+  """Environment version that Publish & ingest would create (v0.1.N+1)."""
+  proposedEnvironmentVersion: String!
+  """
+  True when create-schema.sql differs between this tag and the current deploy-target game-api pin.
+  """
+  schemaChanged: Boolean!
+}
+
+"""Game-api tags eligible for one-click environment release publish."""
+type CpUnreleasedGameApiTagsPage {
+  tags: [CpUnreleasedGameApiTag!]!
+  """gameApiGitTag on the current org deploy target, if any."""
+  currentDeployTargetGameApiTag: String
+  """False when GitHub tag listing failed (e.g. invalid GITHUB_PAT)."""
+  gitSourceAvailable: Boolean!
+}
+
+"""Result of publishing an environment release from a game-api tag."""
+type CpPublishEnvironmentReleaseResult {
+  version: CpEnvironmentVersionRow!
+  schemaChanged: Boolean!
+  """True when releases/vX.Y.Z.yaml was committed to the manifest git ref."""
+  committedToGit: Boolean!
+  """Set when ingest succeeded but the GitHub manifest commit failed."""
+  gitCommitError: String
+}
+
 """
 BigInt custom scalar type. Input should be a string representation of a BigInt.
 """
@@ -742,6 +999,18 @@ type Query {
   Pricing quote for the selected flavors. Fails if any flavor is unavailable, hidden, or lacks customer pricing.
   """
   environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote!
+  """
+  Per-minute replication and GraphQL usage for apps linked to an environment. Observability only.
+  """
+  environmentUsageSummary(orgId: BigInt!, environmentSlug: String!, since: DateTime!): EnvironmentUsageSummary!
+  """Aggregate usage totals per environment in an organization."""
+  orgUsageByEnvironment(orgId: BigInt!, since: DateTime!): [EnvironmentUsageRollupRow!]!
+  """Per-app usage totals for apps linked to an environment."""
+  environmentUsageByApp(orgId: BigInt!, environmentSlug: String!, since: DateTime!): [AppUsageRollupRow!]!
+  """Top GraphQL operations by bytes for an app in the time range."""
+  appGraphqlOperations(orgId: BigInt!, appId: BigInt!, since: DateTime!, limit: Int = 20): [GraphqlOperationUsageRow!]!
+  """Replication and GraphQL totals plus top operations for one app."""
+  appUsageSummary(orgId: BigInt!, appId: BigInt!, since: DateTime!, operationLimit: Int = 20): AppUsageSummary!
   """Returns all registered GraphQL servers"""
   graphqlServers: [GraphQLServer!]!
   """Returns only active (ReadyForClients) GraphQL servers"""
@@ -757,12 +1026,23 @@ type Query {
   cpAudit(environmentId: String, limit: Int! = 200): [CpAuditEntry!]!
   cpSecrets(environmentId: String): [CpSecretRow!]!
   cpEnvSecrets(environmentId: String): [CpEnvSecretRow!]!
+  cpOvhCatalogSummary(region: String): [CpOvhCatalogRow!]!
+  cpUsageSummary(environmentSlug: String!, since: DateTime!): CpUsageSummary!
+  cpUnreleasedGameApiTags: CpUnreleasedGameApiTagsPage!
+  cpEnvironmentVersions: CpEnvironmentVersionsPage!
   operatorUsers: [CpOperatorUser!]!
+  """
+  Avatars owned by a user. Non-owners receive public state only (private_state is stripped).
+  """
   userAvatars(userId: BigInt!): [Avatar!]!
   avatar(id: BigInt!): Avatar!
   actor(uuid: String!): Actor!
   actors(filter: ActorFilterInput): [Actor!]!
   batchLookupActors(input: BatchActorLookupInput!): [Actor!]!
+  """Read one avatar's per-app state (public to all players)."""
+  avatarAppState(appId: BigInt!, avatarId: BigInt!): AppAvatarState
+  """Batch-read per-app state for many avatars (public to all players)."""
+  avatarAppStates(appId: BigInt!, avatarIds: [BigInt!]!): [AppAvatarState!]!
   userAppState(appId: BigInt!): UserAppState
   userAppStates: [UserAppState!]!
   myAvatars: [AvatarDTO!]!
@@ -770,6 +1050,10 @@ type Query {
   Returns a random server from the lowest 20% of servers by client count to distribute load evenly
   """
   serverWithLeastClients: ServerStatus!
+  """
+  Returns the single elected host user for an app (game). Deterministic across all cks-game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1.
+  """
+  gameHost(appId: BigInt!): GameHost
   getChunk(input: GetChunkInput!): Chunk
   getChunkLods(input: GetChunkLodsInput!): ChunkLodsResponse
   getVoxelList(input: GetVoxelListInput!): ChunkVoxelResponse!
@@ -777,6 +1061,24 @@ type Query {
   listVoxels(input: ListVoxelsInput!): [Voxel!]!
   listVoxelUpdatesByDistance(input: ListVoxelUpdatesByDistanceInput!): VoxelUpdatesByDistanceResponse!
   voxelUpdateHistory(appId: BigInt!, userId: BigInt, from: DateTime, to: DateTime, limit: Int, offset: Int): [VoxelUpdateHistoryEvent!]!
+  gridUserPermissions(appId: BigInt!, gridId: BigInt!, userId: BigInt!): GridUserPermissions!
+  nearbyGridPermissions(input: NearbyGridPermissionsInput!): [NearbyGridPermissions!]!
+  gridPermissionLimits(appId: BigInt!, gridId: BigInt!): GridPermissionLimits!
+  gridGroupGrants(appId: BigInt!, gridId: BigInt!, groupId: BigInt!): [GridGroupGrant!]!
+  """
+  The caller's teams in an app, with their roles and effective team permissions.
+  """
+  myTeams(appId: BigInt!): [GroupMembership!]!
+  """List active teams in an app."""
+  teams(appId: BigInt!): [Group!]!
+  """Fetch one team by id."""
+  team(groupId: BigInt!): Group!
+  """List the members of a team."""
+  teamMembers(groupId: BigInt!): [GroupMember!]!
+  """List the roles of a team."""
+  teamRoles(groupId: BigInt!): [GroupRole!]!
+  """The current team creation/membership policy for an app."""
+  teamPolicy(appId: BigInt!): AppGroupPolicy!
   """
   UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
   """
@@ -891,12 +1193,27 @@ type Mutation {
   """
   createEnvironment(input: CreateEnvironmentInput!): CksEnvironmentDetail!
   destroyEnvironment(input: DestroyEnvironmentInput!): CksEnvironmentChangeOrder!
+  """
+  Permanently deletes a destroyed environment record from the platform. Cloud resources must already be torn down via destroyEnvironment.
+  """
+  purgeEnvironment(input: PurgeEnvironmentInput!): Boolean!
   resumeEnvironment(input: ResumeEnvironmentInput!): CksEnvironmentChangeOrder!
   updateEnvironmentScaling(input: UpdateEnvironmentScalingInput!): CksEnvironmentChangeOrder!
+  """
+  Redeploys the environment to the latest available release version (or the configured default), reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed.
+  """
+  redeployEnvironment(input: RedeployEnvironmentInput!): CksEnvironmentChangeOrder!
+  """
+  SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale; does not replace cks-udp-api pool fixes.
+  """
+  restartEnvironmentServices(input: RestartEnvironmentServicesInput!): CksEnvironmentChangeOrder!
   setEnvironmentDeletionProtection(environmentId: String!, enabled: Boolean!): Boolean!
   putCpSecret(environmentId: String!, name: String!, plaintext: String!, kind: String): CpSecretRow!
   deleteCpSecret(environmentId: String!, name: String!): Boolean!
   putCpEnvSecret(environmentId: String!, name: String!, plaintext: String!, kind: String): CpEnvSecretRow!
+  ingestEnvironmentVersion(input: IngestEnvironmentVersionInput!): CpEnvironmentVersionRow!
+  publishEnvironmentReleaseFromGameApiTag(input: PublishEnvironmentReleaseFromGameApiTagInput!): CpPublishEnvironmentReleaseResult!
+  yankEnvironmentVersion(version: String!): Boolean!
   createAvatar(input: CreateAvatarInput!): Avatar!
   updateAvatar(id: BigInt!, input: UpdateAvatarInput!): Avatar!
   deleteAvatar(id: BigInt!): Avatar!
@@ -905,10 +1222,18 @@ type Mutation {
   deleteActor(uuid: String!): Actor!
   updateUserState(input: UpdateUserStateInput!): User!
   updateAvatarState(id: BigInt!, input: UpdateAvatarStateInput!): Avatar!
+  """
+  Set an avatar's per-app state. Only the avatar's owner may write; all players can read it.
+  """
+  updateAvatarAppState(input: UpdateAvatarAppStateInput!): AppAvatarState!
   updateActorState(uuid: String!, input: UpdateActorStateInput!): Actor!
   updateUserAppState(input: CreateUserAppStateInput!): UserAppState!
   deleteUserAppState(appId: BigInt!): UserAppState!
   teleportRequest(input: TeleportRequestInput!): TeleportResponse!
+  """
+  Liveness heartbeat for the authenticated user's actors in an app. Refreshes actors.updated_at for every actor row the user owns so the user stays host-eligible, then returns the freshly-elected host (same shape as the gameHost query) so a client can fold its poll and heartbeat into one round-trip. Call on an interval shorter than HOST_ACTOR_FRESHNESS_SECONDS. Only refreshes rows that already exist (created by Buddy on chunk entry); returns null when no fresh actors exist for the app.
+  """
+  actorHeartbeat(appId: BigInt!): GameHost
   updateChunk(input: ChunkUpdateInput!): Chunk!
   updateChunkState(input: UpdateChunkStateInput!): Chunk
   updateChunkLods(input: UpdateChunkLodsInput!): Chunk
@@ -917,6 +1242,48 @@ type Mutation {
   Reverts every voxel edit by `userId` in `appId` between `from` and `to`. Gated by the org permission `manage_apps`. Defaults to dryRun=true; pass dryRun=false to apply.
   """
   rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]!
+  createGrid(input: CreateGridInput!): CreateGridResponse!
+  grantGridPermissions(input: GrantGridPermissionsInput!): GridUserPermissions!
+  revokeGridPermissions(input: RevokeGridPermissionsInput!): GridUserPermissions!
+  setGridPermissionLimits(input: SetGridPermissionLimitsInput!): GridPermissionLimits!
+  assignGroupToGrid(input: AssignGroupToGridInput!): [GridGroupGrant!]!
+  revokeGroupFromGrid(input: RevokeGroupFromGridInput!): [GridGroupGrant!]!
+  """
+  Set who may create teams in an app and the default membership policy for new teams (requires manage_apps).
+  """
+  setTeamPolicy(input: SetTeamPolicyInput!): AppGroupPolicy!
+  """
+  Create a team. Allowed per the app team policy (admin | member | anyone). The creator becomes the owner with a system leader role.
+  """
+  createTeam(input: CreateTeamInput!): Group!
+  """Update team name/description/membership policy (manage_group)."""
+  updateTeam(input: UpdateTeamInput!): Group!
+  """Delete a team (manage_group)."""
+  deleteTeam(groupId: BigInt!): Boolean!
+  """
+  Join a team. Honors the team membership policy (open -> active, request -> pending, otherwise rejected).
+  """
+  joinTeam(groupId: BigInt!): GroupMember!
+  """
+  Request to join a request-only team (creates a pending membership a manager can approve).
+  """
+  requestToJoinTeam(groupId: BigInt!): GroupMember!
+  """Leave a team."""
+  leaveTeam(groupId: BigInt!): Boolean!
+  """Add a user to a team or approve a pending request (manage_members)."""
+  addTeamMember(groupId: BigInt!, userId: BigInt!): GroupMember!
+  """
+  Remove a member from a team (manage_members; members may remove themselves).
+  """
+  removeTeamMember(groupId: BigInt!, userId: BigInt!): Boolean!
+  """Replace a member's roles (manage_roles)."""
+  setTeamMemberRoles(input: SetMemberRolesInput!): GroupMember!
+  """Create a team role (manage_roles)."""
+  createTeamRole(input: CreateGroupRoleInput!): GroupRole!
+  """Update a team role (manage_roles)."""
+  updateTeamRole(input: UpdateGroupRoleInput!): GroupRole!
+  """Delete a non-system team role (manage_roles)."""
+  deleteTeamRole(groupRoleId: BigInt!): Boolean!
   """
   Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first.
   """
@@ -1077,7 +1444,10 @@ input CreateCheckoutInput {
 input CreateEnvironmentInput {
   orgId: BigInt!
   displayName: String!
-  slug: String!
+  """
+  Optional explicit slug for scripts/E2E. When omitted, the API generates an opaque e-{12} slug.
+  """
+  slug: String
   x25519PublicKeyBase64: String!
   datacenter: String!
   """
@@ -1109,6 +1479,11 @@ input DestroyEnvironmentInput {
   slug: String!
 }
 
+input PurgeEnvironmentInput {
+  orgId: BigInt!
+  slug: String!
+}
+
 input ResumeEnvironmentInput {
   orgId: BigInt!
   slug: String!
@@ -1126,6 +1501,39 @@ input UpdateEnvironmentScalingInput {
   Caddy LB flavor (in front of the game-api fleet). When omitted the existing value is preserved.
   """
   caddyFlavor: String
+}
+
+input RedeployEnvironmentInput {
+  orgId: BigInt!
+  slug: String!
+  deployMode: RedeployDeployMode
+}
+
+"""
+full = replace VMs. services = update in place on existing runtime servers. Omit for automatic routing.
+"""
+enum RedeployDeployMode {
+  FULL
+  SERVICES
+}
+
+input RestartEnvironmentServicesInput {
+  orgId: BigInt!
+  slug: String!
+}
+
+input IngestEnvironmentVersionInput {
+  version: String!
+  force: Boolean! = false
+  status: String
+  notes: String
+}
+
+input PublishEnvironmentReleaseFromGameApiTagInput {
+  """cks-game-api semver tag (e.g. v0.6.20)."""
+  gameApiTag: String!
+  """Overwrite an existing environment version row if it already exists."""
+  force: Boolean! = false
 }
 
 type Avatar {
@@ -1158,6 +1566,15 @@ type Actor {
   privateState: String
   publicState: String
   createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type AppAvatarState {
+  appId: BigInt!
+  avatarId: BigInt!
+  state: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
 }
 
 type UserAppState {
@@ -1237,6 +1654,24 @@ type ServerStatus {
   clientSendIndividualMsgsPerSec: Float
   updatedAt: DateTime!
   createdAt: DateTime!
+}
+
+"""
+The elected host user of a game (app). Election is deterministic across all cks-game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy (cks-udp-api); liveness (updated_at) is owned by game-api's actorHeartbeat mutation.
+"""
+type GameHost {
+  """
+  The user_id of the elected host. Stable while this user has at least one fresh row in `actors` for the app; the next-oldest user takes over automatically once the current host stops heartbeating (its rows age past HOST_ACTOR_FRESHNESS_SECONDS) or Buddy idle-evicts its last row.
+  """
+  hostUserId: BigInt!
+  """
+  How many actors the host user currently owns in this app (always >= 1 when this object is returned).
+  """
+  actorCount: Int!
+  """
+  Timestamp of the host's earliest still-connected actor (`MIN(actors.created_at)` for the host's group). Used as the primary election ordering key.
+  """
+  earliestActorJoinedAt: DateTime!
 }
 
 type VoxelState {
@@ -1365,6 +1800,103 @@ type GameClientBootstrap {
   sequenceNumberModulo: Int!
 }
 
+type Grid {
+  grid_id: BigInt!
+  app_id: BigInt!
+  low_chunk: ChunkCoordinates!
+  high_chunk: ChunkCoordinates!
+  created_at: DateTime!
+}
+
+type CreateGridResponse {
+  grid: Grid
+  error: UdpErrorCode!
+}
+
+type GridUserPermissions {
+  appId: BigInt!
+  gridId: BigInt!
+  userId: BigInt!
+  permissionKeys: [String!]!
+}
+
+type NearbyGridPermissions {
+  appId: BigInt!
+  gridId: BigInt!
+  userId: BigInt!
+  lowChunk: ChunkCoordinates!
+  highChunk: ChunkCoordinates!
+  permissionKeys: [String!]!
+}
+
+type GridPermissionLimits {
+  appId: BigInt!
+  gridId: BigInt!
+  """
+  The permission keys this grid is limited to. Empty means no limit (every active grid permission is allowed).
+  """
+  permissionKeys: [String!]!
+}
+
+type GridGroupGrant {
+  appId: BigInt!
+  gridId: BigInt!
+  groupId: BigInt!
+  """Null means the grant applies to all members of the group."""
+  groupRoleId: BigInt
+  permissionKey: String!
+  expiresAt: DateTime
+}
+
+type GroupRole {
+  groupRoleId: BigInt!
+  groupId: BigInt!
+  roleName: String!
+  rank: Int!
+  isSystem: Boolean!
+  permissions: [String!]!
+  createdAt: DateTime!
+}
+
+type Group {
+  groupId: BigInt!
+  appId: BigInt!
+  groupType: String!
+  name: String!
+  description: String
+  ownerUserId: BigInt
+  membershipPolicy: String!
+  status: String!
+  createdAt: DateTime!
+}
+
+type GroupMember {
+  groupMemberId: BigInt!
+  groupId: BigInt!
+  userId: BigInt!
+  status: String!
+  roles: [GroupRole!]!
+  createdAt: DateTime!
+}
+
+type AppGroupPolicy {
+  appId: BigInt!
+  groupType: String!
+  """admin | member | anyone"""
+  creationPolicy: String!
+  """open | request | invite | admin"""
+  defaultMembershipPolicy: String!
+  maxMembers: Int
+  maxGroupsPerUser: Int
+}
+
+type GroupMembership {
+  group: Group!
+  roles: [GroupRole!]!
+  permissions: [String!]!
+  joinedAt: DateTime!
+}
+
 input ActorFilterInput {
   appId: BigInt
   avatarId: BigInt
@@ -1423,6 +1955,13 @@ input ListVoxelUpdatesByDistanceInput {
   since: DateTime
 }
 
+input NearbyGridPermissionsInput {
+  appId: BigInt!
+  userId: BigInt!
+  lowChunk: ChunkCoordinatesInput!
+  highChunk: ChunkCoordinatesInput!
+}
+
 input CreateAvatarInput {
   name: String
 }
@@ -1455,6 +1994,13 @@ input UpdateUserStateInput {
 input UpdateAvatarStateInput {
   publicState: String
   privateState: String
+}
+
+input UpdateAvatarAppStateInput {
+  appId: BigInt!
+  avatarId: BigInt!
+  """Base64-encoded binary state. Null clears it."""
+  state: String
 }
 
 input UpdateActorStateInput {
@@ -1524,6 +2070,106 @@ input RollbackVoxelUpdatesInput {
   from: DateTime!
   to: DateTime!
   dryRun: Boolean! = true
+}
+
+input CreateGridInput {
+  appId: BigInt!
+  corner1: ChunkCoordinatesInput!
+  corner2: ChunkCoordinatesInput!
+}
+
+input GrantGridPermissionsInput {
+  appId: BigInt!
+  gridId: BigInt!
+  userId: BigInt!
+  permissionKeys: [String!]!
+  expiresAt: DateTime
+}
+
+input RevokeGridPermissionsInput {
+  appId: BigInt!
+  gridId: BigInt!
+  userId: BigInt!
+  permissionKeys: [String!]
+}
+
+input SetGridPermissionLimitsInput {
+  appId: BigInt!
+  gridId: BigInt!
+  """
+  The whitelist of permission keys allowed on this grid. Empty array removes all limits (every active grid permission becomes grantable again).
+  """
+  permissionKeys: [String!]!
+}
+
+input AssignGroupToGridInput {
+  appId: BigInt!
+  gridId: BigInt!
+  groupId: BigInt!
+  """
+  Optional: scope the grant to members holding this group role. Omit to grant to all members of the group.
+  """
+  groupRoleId: BigInt
+  permissionKeys: [String!]!
+  expiresAt: DateTime
+}
+
+input RevokeGroupFromGridInput {
+  appId: BigInt!
+  gridId: BigInt!
+  groupId: BigInt!
+  groupRoleId: BigInt
+  """
+  Optional subset of keys to revoke. Omit to revoke all of the group/role grants on this grid.
+  """
+  permissionKeys: [String!]
+}
+
+input SetTeamPolicyInput {
+  appId: BigInt!
+  """admin | member | anyone. Who may create teams in this app."""
+  creationPolicy: String
+  """
+  open | request | invite | admin. Default membership policy for new teams.
+  """
+  defaultMembershipPolicy: String
+  maxMembers: Int
+  maxGroupsPerUser: Int
+}
+
+input CreateTeamInput {
+  appId: BigInt!
+  name: String!
+  description: String
+  """open | request | invite | admin. Defaults to the app policy."""
+  membershipPolicy: String
+}
+
+input UpdateTeamInput {
+  groupId: BigInt!
+  name: String
+  description: String
+  membershipPolicy: String
+}
+
+input SetMemberRolesInput {
+  groupId: BigInt!
+  userId: BigInt!
+  roleIds: [BigInt!]!
+}
+
+input CreateGroupRoleInput {
+  groupId: BigInt!
+  roleName: String!
+  permissions: [String!]
+  rank: Int
+}
+
+input UpdateGroupRoleInput {
+  groupRoleId: BigInt!
+  roleName: String
+  permissions: [String!]
+  rank: Int
 }
 
 """
