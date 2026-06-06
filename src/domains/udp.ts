@@ -20,6 +20,8 @@ import {
   type SendTextPacketMutationVariables,
   SendClientEventDocument,
   type SendClientEventMutationVariables,
+  SendSingleActorMessageDocument,
+  type SendSingleActorMessageMutationVariables,
 } from '../generated/graphql.js';
 import type { SpatialNotification } from '../realtime.js';
 import { SequenceAllocator } from '../utils.js';
@@ -142,6 +144,22 @@ export class UdpAPI {
     const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
     await this.sendClientEvent(request);
     return wait;
+  }
+
+  /**
+   * Send a direct actor-to-actor message, delivered only to the actor whose
+   * UUID matches `input.targetUuid` (the sender must know that actor's chunk).
+   * Fire-and-forget: the sender receives no echo, so there is no
+   * `sendSingleActorMessageAndWait` variant. The target receives a
+   * `SingleActorMessageNotification` on its `udpNotifications` subscription.
+   */
+  async sendSingleActorMessage(
+    input: SendSingleActorMessageMutationVariables['input'],
+  ): Promise<boolean> {
+    const data = await this.gql.request(SendSingleActorMessageDocument, {
+      input,
+    });
+    return data.sendSingleActorMessage;
   }
 
   /**

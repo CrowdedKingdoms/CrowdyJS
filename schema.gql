@@ -1312,6 +1312,10 @@ type Mutation {
   Send a client event to the game server. Opens a UDP proxy session automatically if none exists; related notifications arrive on udpNotifications.
   """
   sendClientEvent(input: ClientEventNotificationInput!): Boolean!
+  """
+  Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (not broadcast to nearby actors). The sender must know the destination actor’s chunk. Opens a UDP proxy session automatically if none exists; the target receives a SingleActorMessageNotification on udpNotifications. The sender receives no echo.
+  """
+  sendSingleActorMessage(input: SingleActorMessageInput!): Boolean!
 }
 
 input LoginUserInput {
@@ -2334,6 +2338,30 @@ input ClientEventNotificationInput {
   sequenceNumber: Int
 }
 
+"""
+Input for sending an actor-to-actor message: a message delivered only to the single actor identified by targetUuid. It is spatially routed (the sender must know the destination actor’s chunk), but unlike normal spatial messages it is NOT broadcast to other nearby actors and has no distance/decay.
+"""
+input SingleActorMessageInput {
+  """The ID of the app the destination actor belongs to."""
+  appId: BigInt!
+  """
+  The chunk coordinates of the DESTINATION actor (where the target currently is). The sender must know this.
+  """
+  chunk: ChunkCoordinatesInput!
+  """
+  The DESTINATION actor’s UUID. The message is delivered only to the client that owns this actor. Must be exactly 32 bytes when encoded as UTF-8.
+  """
+  targetUuid: String!
+  """
+  The message payload, base64-encoded. Opaque to the server; the sender’s identity (if needed) must be embedded here by the application.
+  """
+  payload: String!
+  """
+  Client's sequence number for this message (0-255, wraps). Used to match error responses.
+  """
+  sequenceNumber: Int
+}
+
 type Subscription {
   """
   Downlink from the game server (responses, notifications, GenericErrorResponse, and RealtimeConnectionEvent). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Connection failures are delivered as RealtimeConnectionEvent. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session.
@@ -2344,7 +2372,7 @@ type Subscription {
 """
 All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed.
 """
-union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | GenericErrorResponse | RealtimeConnectionEvent
+union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | GenericErrorResponse | RealtimeConnectionEvent
 
 """
 Response from the UDP game server for an actor update request. Received via the udpNotifications subscription.
@@ -2574,6 +2602,32 @@ type ServerEventNotification {
   The event state data, base64-encoded. The format is defined by the event type.
   """
   state: String!
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when another actor sends you a direct actor-to-actor message (SINGLE_ACTOR_MESSAGE). Delivered only to the targeted actor via the udpNotifications subscription.
+"""
+type SingleActorMessageNotification {
+  """The ID of the app the message was sent within."""
+  appId: BigInt!
+  """The X coordinate of the destination chunk."""
+  chunkX: BigInt!
+  """The Y coordinate of the destination chunk."""
+  chunkY: BigInt!
+  """The Z coordinate of the destination chunk."""
+  chunkZ: BigInt!
+  """
+  The destination actor’s UUID (your own actor’s UUID, echoed from the message).
+  """
+  uuid: String!
+  """
+  The message payload, base64-encoded. Opaque to the server; decode per your application protocol.
+  """
+  payload: String!
   """The sender's sequence number for this message (0-255)."""
   sequenceNumber: Int!
   """Server-generated epoch milliseconds timestamp."""

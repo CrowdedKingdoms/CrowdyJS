@@ -101,6 +101,16 @@ subscription UdpNotifications {
       sequenceNumber
       epochMillis
     }
+    ... on SingleActorMessageNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      uuid
+      payload
+      sequenceNumber
+      epochMillis
+    }
     ... on GenericErrorResponse {
       sequenceNumber
       errorCode

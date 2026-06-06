@@ -95,10 +95,14 @@ const unsubscribe = client.udp.subscribe({
     console.log(event.uuid, event.state);
   },
   voxelUpdate: (event) => { /* ... */ },
-  clientText: (event) => { /* ... */ },
-  clientAudio: (event) => { /* ... */ },
+  text: (event) => { /* ... */ },
+  audio: (event) => { /* ... */ },
   clientEvent: (event) => { /* ... */ },
   serverEvent: (event) => { /* ... */ },
+  singleActorMessage: (event) => {
+    // A direct actor-to-actor message addressed to you.
+    console.log(event.uuid, event.payload); // payload is base64
+  },
   genericError: (event) => {
     console.warn(event.sequenceNumber, event.errorCode);
   },
@@ -137,6 +141,21 @@ console.log(response.__typename, response.sequenceNumber);
 
 The plain `sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, and `sendClientEvent` methods return the GraphQL mutation result immediately. The `AndWait` variants allocate a `sequenceNumber` when one is missing and wait for either a matching notification or `GenericErrorResponse`.
 
+### Actor-to-actor messages
+
+```ts
+// Delivered only to the actor whose UUID matches `targetUuid`; you must know
+// that actor's current chunk. Fire-and-forget — the sender gets no echo, so
+// there is no `AndWait` variant. The target receives a
+// `SingleActorMessageNotification` on its subscription.
+await client.udp.sendSingleActorMessage({
+  appId: '1',
+  chunk: { x: '7', y: '1', z: '2' }, // the TARGET actor's chunk
+  targetUuid: '0123456789abcdef0123456789abcdef',
+  payload: 'aGVsbG8=', // base64; embed sender identity here if you need it
+});
+```
+
 ## World helpers
 
 ```ts
@@ -146,6 +165,13 @@ const actor = world.actor();
 await actor.join({ x: '0', y: '0', z: '0' });
 await actor.sendState('AA==');
 await actor.sendText('hello nearby players');
+
+// Direct message to one other actor (you supply its UUID + current chunk):
+await actor.sendToActor(
+  '0123456789abcdef0123456789abcdef',
+  'aGVsbG8=', // base64 payload
+  { x: '7', y: '1', z: '2' },
+);
 ```
 
 The world helpers are thin wrappers over `client.udp.*` with the appId pre-bound — convenient for browser games. Advanced callers can always use `client.udp.*` with the generated GraphQL input types directly.
