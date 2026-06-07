@@ -9,6 +9,9 @@ query App($appId: BigInt!) {
     status
     metadata
     splitMode
+    deploymentTarget
+    runtimeStatus
+    runtimeDenialReason
     gameApiUrl
     createdAt
     updatedAt

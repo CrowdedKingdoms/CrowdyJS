@@ -118,6 +118,7 @@ export { UdpErrorCode } from './types.js';
 export { AuthAPI } from './domains/auth.js';
 export { UsersAPI } from './domains/users.js';
 export { AppsAPI, type AppRoute } from './domains/apps.js';
+export { PlatformAPI, type PlatformConfig } from './domains/platform.js';
 export { ChunksAPI } from './domains/chunks.js';
 export { VoxelsAPI } from './domains/voxels.js';
 export { ActorsAPI } from './domains/actors.js';
