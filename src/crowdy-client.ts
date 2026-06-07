@@ -31,6 +31,7 @@ import { WorldClient } from './world.js';
 import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
 import { AppsAPI } from './domains/apps.js';
+import { PlatformAPI } from './domains/platform.js';
 import { ChunksAPI } from './domains/chunks.js';
 import { VoxelsAPI } from './domains/voxels.js';
 import { ActorsAPI } from './domains/actors.js';
@@ -89,6 +90,8 @@ export class CrowdyClient {
   readonly auth: AuthAPI;
   readonly users: UsersAPI;
   readonly apps: AppsAPI;
+  /** Public platform discovery (shared game-api URL, free app quota). */
+  readonly platform: PlatformAPI;
 
   // Game (game-api).
   readonly chunks: ChunksAPI;
@@ -144,6 +147,7 @@ export class CrowdyClient {
     this.auth = new AuthAPI(this.management, this.session);
     this.users = new UsersAPI(this.management);
     this.apps = new AppsAPI(this.management);
+    this.platform = new PlatformAPI(this.management);
 
     this.chunks = new ChunksAPI(this.graphql);
     this.voxels = new VoxelsAPI(this.graphql);

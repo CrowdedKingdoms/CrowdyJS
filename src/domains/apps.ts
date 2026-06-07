@@ -13,11 +13,12 @@
  *   await baseClient.auth.login({ email, password });
  *
  *   const route = await baseClient.apps.routeFor(appId);
- *   if (route.splitMode && route.gameApiUrl) {
+ *   if (route.gameApiUrl) {
+ *     // Set for both dedicated (split-mode) AND shared-environment apps.
  *     const perAppClient = createCrowdyClient({
  *       managementUrl: 'https://api.example.com',
  *       httpUrl: route.gameApiUrl,
- *       wsUrl: route.gameApiUrl.replace(/^https?/, 'wss'),
+ *       wsUrl: route.gameApiUrl.replace(/^http/, 'ws'),
  *       tokenStore: baseClient.session.tokenStore,
  *     });
  *     // drive gameplay through perAppClient
@@ -44,6 +45,16 @@ import {
 export interface AppRoute {
   appId: string;
   splitMode: boolean;
+  /**
+   * 'none' (draft), 'shared' (the shared game-api), or 'dedicated' (a
+   * per-tenant environment). Populated once the schema/codegen expose it.
+   */
+  deploymentTarget: string | null;
+  /**
+   * The game-api URL to route gameplay to. Set for BOTH dedicated (split-mode)
+   * and shared-environment apps. When non-null, build a game-api client
+   * against it; when null, fall back to the constructor `httpUrl`.
+   */
   gameApiUrl: string | null;
 }
 
@@ -54,6 +65,8 @@ function appRouteFromAppRow(row: unknown): AppRoute | null {
   return {
     appId: r.appId,
     splitMode: typeof r.splitMode === 'boolean' ? r.splitMode : false,
+    deploymentTarget:
+      typeof r.deploymentTarget === 'string' ? r.deploymentTarget : null,
     gameApiUrl:
       typeof r.gameApiUrl === 'string' && r.gameApiUrl ? r.gameApiUrl : null,
   };
@@ -104,6 +117,7 @@ export class AppsAPI {
       appRouteFromAppRow(row) ?? {
         appId,
         splitMode: false,
+        deploymentTarget: null,
         gameApiUrl: null,
       }
     );
