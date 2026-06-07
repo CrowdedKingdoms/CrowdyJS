@@ -1,0 +1,16 @@
+mutation AddChannelMember($groupId: BigInt!, $userId: BigInt!) {
+  addChannelMember(groupId: $groupId, userId: $userId) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}

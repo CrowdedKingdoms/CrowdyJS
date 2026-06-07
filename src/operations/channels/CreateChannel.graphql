@@ -1,0 +1,14 @@
+mutation CreateChannel($input: CreateChannelInput!) {
+  createChannel(input: $input) {
+    groupId
+    appId
+    groupType
+    name
+    description
+    ownerUserId
+    membershipPolicy
+    status
+    defaultRoleId
+    createdAt
+  }
+}

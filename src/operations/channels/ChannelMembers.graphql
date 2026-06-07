@@ -1,0 +1,16 @@
+query ChannelMembers($groupId: BigInt!) {
+  channelMembers(groupId: $groupId) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}

@@ -1,0 +1,11 @@
+mutation CreateChannelRole($input: CreateGroupRoleInput!) {
+  createChannelRole(input: $input) {
+    groupRoleId
+    groupId
+    roleName
+    rank
+    isSystem
+    permissions
+    createdAt
+  }
+}

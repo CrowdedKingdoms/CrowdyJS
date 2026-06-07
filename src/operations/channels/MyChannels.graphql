@@ -1,0 +1,25 @@
+query MyChannels($appId: BigInt!) {
+  myChannels(appId: $appId) {
+    group {
+      groupId
+      appId
+      groupType
+      name
+      description
+      ownerUserId
+      membershipPolicy
+      status
+      defaultRoleId
+      createdAt
+    }
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+    permissions
+    joinedAt
+  }
+}

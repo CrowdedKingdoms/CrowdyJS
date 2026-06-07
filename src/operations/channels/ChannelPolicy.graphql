@@ -1,0 +1,10 @@
+query ChannelPolicy($appId: BigInt!) {
+  channelPolicy(appId: $appId) {
+    appId
+    groupType
+    creationPolicy
+    defaultMembershipPolicy
+    maxMembers
+    maxGroupsPerUser
+  }
+}

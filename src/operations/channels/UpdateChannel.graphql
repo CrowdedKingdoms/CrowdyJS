@@ -1,0 +1,14 @@
+mutation UpdateChannel($input: UpdateChannelInput!) {
+  updateChannel(input: $input) {
+    groupId
+    appId
+    groupType
+    name
+    description
+    ownerUserId
+    membershipPolicy
+    status
+    defaultRoleId
+    createdAt
+  }
+}

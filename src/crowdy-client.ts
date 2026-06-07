@@ -37,6 +37,7 @@ import { ActorsAPI } from './domains/actors.js';
 import { TeleportAPI } from './domains/teleport.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
+import { ChannelsAPI } from './domains/channels.js';
 import { UdpAPI } from './domains/udp.js';
 
 export interface CrowdyClientConfig {
@@ -96,6 +97,7 @@ export class CrowdyClient {
   readonly teleport: TeleportAPI;
   readonly state: StateAPI;
   readonly serverStatus: ServerStatusAPI;
+  readonly channels: ChannelsAPI;
   readonly udp: UdpAPI;
 
   constructor(config: CrowdyClientConfig = {}) {
@@ -149,6 +151,7 @@ export class CrowdyClient {
     this.teleport = new TeleportAPI(this.graphql);
     this.state = new StateAPI(this.graphql);
     this.serverStatus = new ServerStatusAPI(this.graphql);
+    this.channels = new ChannelsAPI(this.graphql);
     this.udp = new UdpAPI(this.graphql, this.realtime);
   }
 

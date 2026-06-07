@@ -1,0 +1,10 @@
+mutation SetChannelPolicy($input: SetChannelPolicyInput!) {
+  setChannelPolicy(input: $input) {
+    appId
+    groupType
+    creationPolicy
+    defaultMembershipPolicy
+    maxMembers
+    maxGroupsPerUser
+  }
+}

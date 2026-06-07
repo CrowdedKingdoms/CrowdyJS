@@ -22,6 +22,8 @@ import {
   type SendClientEventMutationVariables,
   SendSingleActorMessageDocument,
   type SendSingleActorMessageMutationVariables,
+  SendChannelMessageDocument,
+  type SendChannelMessageMutationVariables,
 } from '../generated/graphql.js';
 import type { SpatialNotification } from '../realtime.js';
 import { SequenceAllocator } from '../utils.js';
@@ -160,6 +162,20 @@ export class UdpAPI {
       input,
     });
     return data.sendSingleActorMessage;
+  }
+
+  /**
+   * Publish a message to a channel. Delivered to every active member of the
+   * channel (regardless of location) as a `ChannelMessageNotification` on their
+   * `udpNotifications` subscription. Requires the channel `send_messages`
+   * permission; the server drops the message otherwise. Fire-and-forget: the
+   * sender receives no echo.
+   */
+  async sendChannelMessage(
+    input: SendChannelMessageMutationVariables['input'],
+  ): Promise<boolean> {
+    const data = await this.gql.request(SendChannelMessageDocument, { input });
+    return data.sendChannelMessage;
   }
 
   /**

@@ -1,0 +1,14 @@
+query Channel($groupId: BigInt!) {
+  channel(groupId: $groupId) {
+    groupId
+    appId
+    groupType
+    name
+    description
+    ownerUserId
+    membershipPolicy
+    status
+    defaultRoleId
+    createdAt
+  }
+}

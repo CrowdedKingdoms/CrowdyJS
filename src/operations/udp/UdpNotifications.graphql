@@ -111,6 +111,13 @@ subscription UdpNotifications {
       sequenceNumber
       epochMillis
     }
+    ... on ChannelMessageNotification {
+      channelId
+      uuid
+      payload
+      sequenceNumber
+      epochMillis
+    }
     ... on GenericErrorResponse {
       sequenceNumber
       errorCode

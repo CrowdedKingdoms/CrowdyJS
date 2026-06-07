@@ -1,0 +1,16 @@
+mutation JoinChannel($groupId: BigInt!) {
+  joinChannel(groupId: $groupId) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}

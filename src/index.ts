@@ -124,6 +124,7 @@ export { ActorsAPI } from './domains/actors.js';
 export { TeleportAPI } from './domains/teleport.js';
 export { StateAPI } from './domains/state.js';
 export { ServerStatusAPI } from './domains/serverStatus.js';
+export { ChannelsAPI } from './domains/channels.js';
 export { UdpAPI } from './domains/udp.js';
 
 // -----------------------------------------------------------------------------

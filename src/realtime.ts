@@ -36,6 +36,7 @@ export interface UdpNotificationHandlers {
   clientEvent?: (notification: Extract<UdpNotification, { __typename?: 'ClientEventNotification' }>) => void;
   serverEvent?: (notification: Extract<UdpNotification, { __typename?: 'ServerEventNotification' }>) => void;
   singleActorMessage?: (notification: Extract<UdpNotification, { __typename?: 'SingleActorMessageNotification' }>) => void;
+  channelMessage?: (notification: Extract<UdpNotification, { __typename?: 'ChannelMessageNotification' }>) => void;
   genericError?: (notification: Extract<UdpNotification, { __typename?: 'GenericErrorResponse' }>) => void;
   connectionEvent?: (notification: Extract<UdpNotification, { __typename?: 'RealtimeConnectionEvent' }>) => void;
   error?: (error: CrowdyRealtimeError) => void;
@@ -299,6 +300,9 @@ export class RealtimeClient {
             break;
           case 'SingleActorMessageNotification':
             handlers.singleActorMessage?.(notification);
+            break;
+          case 'ChannelMessageNotification':
+            handlers.channelMessage?.(notification);
             break;
           case 'GenericErrorResponse':
             handlers.genericError?.(notification);

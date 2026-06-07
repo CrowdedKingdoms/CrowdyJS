@@ -134,6 +134,36 @@ type OrgTokenWithSecret {
   createdAt: DateTime!
 }
 
+type AppAccessTier {
+  tierId: BigInt!
+  appId: BigInt!
+  name: String!
+  tierOrder: Float!
+  isFree: Boolean!
+  isDefault: Boolean!
+  priceCents: BigInt
+  currency: String
+  billingPeriod: String
+  description: String
+  permissionKeys: [String!]!
+  status: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type AppUserAccess {
+  appUserAccessId: BigInt!
+  appId: BigInt!
+  userId: BigInt!
+  tierId: BigInt
+  status: String!
+  grantedBy: String!
+  subscriptionId: String
+  expiresAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
 type App {
   appId: BigInt!
   orgId: BigInt!
@@ -173,36 +203,6 @@ enum AppStatus {
 type AppsPage {
   items: [App!]!
   pageInfo: PageInfo!
-}
-
-type AppAccessTier {
-  tierId: BigInt!
-  appId: BigInt!
-  name: String!
-  tierOrder: Float!
-  isFree: Boolean!
-  isDefault: Boolean!
-  priceCents: BigInt
-  currency: String
-  billingPeriod: String
-  description: String
-  permissionKeys: [String!]!
-  status: String!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-type AppUserAccess {
-  appUserAccessId: BigInt!
-  appId: BigInt!
-  userId: BigInt!
-  tierId: BigInt
-  status: String!
-  grantedBy: String!
-  subscriptionId: String
-  expiresAt: DateTime
-  createdAt: DateTime!
-  updatedAt: DateTime!
 }
 
 type OrgWallet {
@@ -1080,6 +1080,20 @@ type Query {
   """The current team creation/membership policy for an app."""
   teamPolicy(appId: BigInt!): AppGroupPolicy!
   """
+  The caller's channels in an app, with their roles and effective channel permissions.
+  """
+  myChannels(appId: BigInt!): [GroupMembership!]!
+  """List active channels in an app."""
+  channels(appId: BigInt!): [Group!]!
+  """Fetch one channel by id."""
+  channel(groupId: BigInt!): Group!
+  """List the members of a channel."""
+  channelMembers(groupId: BigInt!): [GroupMember!]!
+  """List the roles of a channel."""
+  channelRoles(groupId: BigInt!): [GroupRole!]!
+  """The current channel creation/membership policy for an app."""
+  channelPolicy(appId: BigInt!): AppGroupPolicy!
+  """
   UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
   """
   udpProxyConnectionStatus: UdpProxyConnectionStatus!
@@ -1285,6 +1299,44 @@ type Mutation {
   """Delete a non-system team role (manage_roles)."""
   deleteTeamRole(groupRoleId: BigInt!): Boolean!
   """
+  Set who may create channels in an app and the default membership policy for new channels (requires manage_apps).
+  """
+  setChannelPolicy(input: SetChannelPolicyInput!): AppGroupPolicy!
+  """
+  Create a channel. Allowed per the app channel policy (admin | member | anyone). The creator becomes the owner with a system leader role. When membersCanSend is true (default), a default member role granting send_messages is created and auto-assigned to joiners.
+  """
+  createChannel(input: CreateChannelInput!): Group!
+  """Update channel name/description/membership policy (manage_group)."""
+  updateChannel(input: UpdateChannelInput!): Group!
+  """Delete a channel (manage_group)."""
+  deleteChannel(groupId: BigInt!): Boolean!
+  """
+  Join a channel. Honors the channel membership policy (open -> active, request -> pending, otherwise rejected).
+  """
+  joinChannel(groupId: BigInt!): GroupMember!
+  """
+  Request to join a request-only channel (creates a pending membership a manager can approve).
+  """
+  requestToJoinChannel(groupId: BigInt!): GroupMember!
+  """Leave a channel."""
+  leaveChannel(groupId: BigInt!): Boolean!
+  """Add a user to a channel or approve a pending request (manage_members)."""
+  addChannelMember(groupId: BigInt!, userId: BigInt!): GroupMember!
+  """
+  Remove a member from a channel (manage_members; members may remove themselves).
+  """
+  removeChannelMember(groupId: BigInt!, userId: BigInt!): Boolean!
+  """
+  Replace a member's channel roles (manage_roles). Re-pushes the member's effective send permission to Buddy.
+  """
+  setChannelMemberRoles(input: SetMemberRolesInput!): GroupMember!
+  """Create a channel role (manage_roles)."""
+  createChannelRole(input: CreateGroupRoleInput!): GroupRole!
+  """Update a channel role (manage_roles)."""
+  updateChannelRole(input: UpdateGroupRoleInput!): GroupRole!
+  """Delete a non-system channel role (manage_roles)."""
+  deleteChannelRole(groupRoleId: BigInt!): Boolean!
+  """
   Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first.
   """
   connectUdpProxy: UdpProxyConnectionStatus!
@@ -1316,6 +1368,10 @@ type Mutation {
   Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (not broadcast to nearby actors). The sender must know the destination actor’s chunk. Opens a UDP proxy session automatically if none exists; the target receives a SingleActorMessageNotification on udpNotifications. The sender receives no echo.
   """
   sendSingleActorMessage(input: SingleActorMessageInput!): Boolean!
+  """
+  Publish a message to a channel. Delivered to every active member of the channel via udpNotifications (ChannelMessageNotification). Requires the channel send_messages permission; the server drops the message otherwise. Opens a UDP proxy session automatically if none exists. The sender receives no echo.
+  """
+  sendChannelMessage(input: ChannelMessageInput!): Boolean!
 }
 
 input LoginUserInput {
@@ -1871,6 +1927,10 @@ type Group {
   ownerUserId: BigInt
   membershipPolicy: String!
   status: String!
+  """
+  Optional role auto-assigned to every new member (e.g. a channel "member" role granting send_messages). Null means new members get no role by default.
+  """
+  defaultRoleId: BigInt
   createdAt: DateTime!
 }
 
@@ -2176,6 +2236,37 @@ input UpdateGroupRoleInput {
   rank: Int
 }
 
+input SetChannelPolicyInput {
+  appId: BigInt!
+  """admin | member | anyone. Who may create channels in this app."""
+  creationPolicy: String
+  """
+  open | request | invite | admin. Default membership policy for new channels.
+  """
+  defaultMembershipPolicy: String
+  maxMembers: Int
+  maxGroupsPerUser: Int
+}
+
+input CreateChannelInput {
+  appId: BigInt!
+  name: String!
+  description: String
+  """open | request | invite | admin. Defaults to the app policy."""
+  membershipPolicy: String
+  """
+  When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel).
+  """
+  membersCanSend: Boolean
+}
+
+input UpdateChannelInput {
+  groupId: BigInt!
+  name: String
+  description: String
+  membershipPolicy: String
+}
+
 """
 Input for sending an actor update request to the UDP game server. This updates the state of an actor (player character or NPC) in a specific chunk.
 """
@@ -2362,6 +2453,26 @@ input SingleActorMessageInput {
   sequenceNumber: Int
 }
 
+"""
+Input for publishing a message to a channel. Delivered to every active member of the channel (regardless of location), not chunk-routed. The sender must have the channel send_messages permission.
+"""
+input ChannelMessageInput {
+  """The channel id (groups.group_id) to publish to."""
+  channelId: BigInt!
+  """
+  The sender's actor UUID (your own actor's UUID). Must be exactly 32 bytes when encoded as UTF-8.
+  """
+  uuid: String!
+  """
+  The message payload, base64-encoded. Opaque to the server; decode per your application protocol. Max 1024 bytes.
+  """
+  payload: String!
+  """
+  Client's sequence number for this message (0-255, wraps). Used to match error responses.
+  """
+  sequenceNumber: Int
+}
+
 type Subscription {
   """
   Downlink from the game server (responses, notifications, GenericErrorResponse, and RealtimeConnectionEvent). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Connection failures are delivered as RealtimeConnectionEvent. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session.
@@ -2372,7 +2483,7 @@ type Subscription {
 """
 All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed.
 """
-union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | GenericErrorResponse | RealtimeConnectionEvent
+union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | ChannelMessageNotification | GenericErrorResponse | RealtimeConnectionEvent
 
 """
 Response from the UDP game server for an actor update request. Received via the udpNotifications subscription.
@@ -2623,6 +2734,24 @@ type SingleActorMessageNotification {
   """
   The destination actor’s UUID (your own actor’s UUID, echoed from the message).
   """
+  uuid: String!
+  """
+  The message payload, base64-encoded. Opaque to the server; decode per your application protocol.
+  """
+  payload: String!
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when a message is published to a channel you are a member of. Delivered over the udpNotifications subscription to every active channel member.
+"""
+type ChannelMessageNotification {
+  """The channel id (groups.group_id) the message was sent to."""
+  channelId: BigInt!
+  """The sending actor's UUID."""
   uuid: String!
   """
   The message payload, base64-encoded. Opaque to the server; decode per your application protocol.

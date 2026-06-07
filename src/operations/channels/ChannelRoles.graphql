@@ -1,0 +1,11 @@
+query ChannelRoles($groupId: BigInt!) {
+  channelRoles(groupId: $groupId) {
+    groupRoleId
+    groupId
+    roleName
+    rank
+    isSystem
+    permissions
+    createdAt
+  }
+}

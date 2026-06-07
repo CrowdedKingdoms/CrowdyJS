@@ -1,0 +1,11 @@
+mutation UpdateChannelRole($input: UpdateGroupRoleInput!) {
+  updateChannelRole(input: $input) {
+    groupRoleId
+    groupId
+    roleName
+    rank
+    isSystem
+    permissions
+    createdAt
+  }
+}
