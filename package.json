@@ -28,7 +28,7 @@
     "codegen:watch": "graphql-codegen --config codegen.ts --watch",
     "prebuild": "npm run codegen",
     "build": "tsc",
-    "test": "npm run build && node --test test/*.test.mjs",
+    "test": "npm run build && node --test --test-concurrency=1 test/*.test.mjs",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"
