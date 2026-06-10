@@ -1,0 +1,177 @@
+fragment GmSessionFields on GmSession {
+  sessionId
+  appId
+  name
+  status
+  createdByUserId
+  currentTurnUserId
+  metadataJson
+}
+
+fragment GmContainerFields on GmContainer {
+  containerId
+  appId
+  sessionId
+  typeName
+  displayName
+  description
+  ownerUserId
+  metadataJson
+}
+
+fragment GmInvokeResultFields on GmInvokeResult {
+  eventId
+  functionName
+  success
+  returnValueJson
+  errorMessage
+  mutationsApplied {
+    containerId
+    key
+    valueType
+    oldValueJson
+    newValueJson
+  }
+}
+
+mutation GameModelCreateSession($input: CreateSessionInput!) {
+  gameModelCreateSession(input: $input) {
+    ...GmSessionFields
+  }
+}
+
+mutation GameModelJoinSession($input: JoinSessionInput!) {
+  gameModelJoinSession(input: $input) {
+    sessionId
+    userId
+    role
+  }
+}
+
+mutation GameModelSetSessionTurn($input: SetSessionTurnInput!) {
+  gameModelSetSessionTurn(input: $input) {
+    ...GmSessionFields
+  }
+}
+
+mutation GameModelCreateContainer($input: CreateContainerInput!) {
+  gameModelCreateContainer(input: $input) {
+    ...GmContainerFields
+  }
+}
+
+mutation GameModelSetProperty($input: SetContainerPropertyInput!) {
+  gameModelSetProperty(input: $input) {
+    ...GmContainerFields
+  }
+}
+
+mutation GameModelAddEdge($input: AddEdgeInput!) {
+  gameModelAddEdge(input: $input) {
+    edgeId
+    fromContainerId
+    toContainerId
+    relationshipType
+    weight
+  }
+}
+
+mutation GameModelInvoke($input: InvokeFunctionInput!) {
+  gameModelInvoke(input: $input) {
+    ...GmInvokeResultFields
+  }
+}
+
+query GameModelContainer($appId: BigInt!, $containerId: String!) {
+  gameModelContainer(appId: $appId, containerId: $containerId) {
+    ...GmContainerFields
+  }
+}
+
+query GameModelContainers($appId: BigInt!, $typeName: String, $sessionId: String) {
+  gameModelContainers(appId: $appId, typeName: $typeName, sessionId: $sessionId) {
+    ...GmContainerFields
+  }
+}
+
+query GameModelContainerState($appId: BigInt!, $containerId: String!) {
+  gameModelContainerState(appId: $appId, containerId: $containerId) {
+    containerId
+    appId
+    sessionId
+    typeName
+    displayName
+    ownerUserId
+    propertiesJson
+  }
+}
+
+query GameModelTraverse(
+  $appId: BigInt!
+  $rootId: String!
+  $relationshipType: String!
+  $depth: Int
+) {
+  gameModelTraverse(
+    appId: $appId
+    rootId: $rootId
+    relationshipType: $relationshipType
+    depth: $depth
+  ) {
+    rootId
+    nodes {
+      ...GmContainerFields
+    }
+    edges {
+      edgeId
+      fromContainerId
+      toContainerId
+      relationshipType
+      weight
+    }
+  }
+}
+
+query GameModelSession($appId: BigInt!, $sessionId: String!) {
+  gameModelSession(appId: $appId, sessionId: $sessionId) {
+    ...GmSessionFields
+  }
+}
+
+query GameModelSessions($appId: BigInt!, $status: String) {
+  gameModelSessions(appId: $appId, status: $status) {
+    ...GmSessionFields
+  }
+}
+
+query GameModelEvents(
+  $appId: BigInt!
+  $sessionId: String
+  $selfContainerId: String
+  $functionName: String
+  $success: Boolean
+  $limit: Int
+  $offset: Int
+) {
+  gameModelEvents(
+    appId: $appId
+    sessionId: $sessionId
+    selfContainerId: $selfContainerId
+    functionName: $functionName
+    success: $success
+    limit: $limit
+    offset: $offset
+  ) {
+    eventId
+    sessionId
+    functionName
+    selfContainerId
+    callerUserId
+    paramsJson
+    mutationsAppliedJson
+    returnValueJson
+    success
+    errorMessage
+    executedAt
+  }
+}

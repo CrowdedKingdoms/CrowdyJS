@@ -127,6 +127,7 @@ export { StateAPI } from './domains/state.js';
 export { ServerStatusAPI } from './domains/serverStatus.js';
 export { ChannelsAPI } from './domains/channels.js';
 export { UdpAPI } from './domains/udp.js';
+export { GameModelAPI } from './domains/gameModel.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from
@@ -194,6 +195,49 @@ export type {
   VersionInfo,
   PageInfo,
   UdpNotificationsSubscription,
+
+  // Abstract game model (cks-game-api game-model module).
+  GmContainer,
+  GmContainerState,
+  GmContainerType,
+  GmPropertyDef,
+  GmFunction,
+  GmFunctionParam,
+  GmFunctionMutation,
+  GmSession,
+  GmSessionParticipant,
+  GmEdge,
+  GmTraverseResult,
+  GmInvokeResult,
+  GmMutationApplied,
+  GmEvent,
+  GmTypeSchema,
+  GmAppFeature,
+  GmTierFeature,
+  GmAppPolicy,
+  GmSeedResult,
+  UpsertContainerTypeInput,
+  UpsertPropertyDefInput,
+  UpsertFunctionInput,
+  FunctionParamInput,
+  FunctionMutationInput,
+  SeedGameModelInput,
+  SeedContainerInput,
+  SeedContainerTypeInput,
+  SeedPropertyDefInput,
+  SeedFunctionInput,
+  SeedEdgeInput,
+  SeedPropertyInput,
+  CreateSessionInput,
+  JoinSessionInput,
+  SetSessionTurnInput,
+  CreateContainerInput,
+  SetContainerPropertyInput,
+  AddEdgeInput,
+  InvokeFunctionInput,
+  DefineAppFeatureInput,
+  GrantTierFeatureInput,
+  SetGameModelPolicyInput,
 
   Scalars,
 } from './generated/graphql.js';
