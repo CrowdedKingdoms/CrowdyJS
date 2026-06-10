@@ -1,0 +1,112 @@
+fragment GmFunctionFields on GmFunction {
+  functionId
+  appId
+  name
+  containerTypeName
+  description
+  returnType
+  invokeScope
+  invokePolicyJson
+  returnExpression
+  warnings
+  parameters {
+    name
+    valueType
+    required
+    defaultValueJson
+    description
+    sortOrder
+  }
+  mutations {
+    target
+    property
+    expression
+  }
+}
+
+fragment GmPropertyDefFields on GmPropertyDef {
+  appId
+  containerTypeName
+  key
+  valueType
+  defaultValueJson
+  visibility
+  writable
+  description
+}
+
+mutation GameModelSeed($input: SeedGameModelInput!) {
+  gameModelSeed(input: $input) {
+    containerTypesCreated
+    propertyDefinitionsCreated
+    functionsCreated
+    containersCreated
+    edgesCreated
+    warnings
+    idMapJson
+  }
+}
+
+mutation GameModelUpsertContainerType($input: UpsertContainerTypeInput!) {
+  gameModelUpsertContainerType(input: $input) {
+    appId
+    typeName
+    displayName
+    description
+    instantiableBy
+    defaultPropertyVisibility
+    metadataJson
+  }
+}
+
+mutation GameModelUpsertPropertyDef($input: UpsertPropertyDefInput!) {
+  gameModelUpsertPropertyDef(input: $input) {
+    ...GmPropertyDefFields
+  }
+}
+
+mutation GameModelUpsertFunction($input: UpsertFunctionInput!) {
+  gameModelUpsertFunction(input: $input) {
+    ...GmFunctionFields
+  }
+}
+
+mutation GameModelDeleteFunction($appId: BigInt!, $name: String!) {
+  gameModelDeleteFunction(appId: $appId, name: $name)
+}
+
+mutation GameModelDefineFeature($input: DefineAppFeatureInput!) {
+  gameModelDefineFeature(input: $input) {
+    appId
+    featureKey
+    description
+  }
+}
+
+mutation GameModelGrantTierFeature($input: GrantTierFeatureInput!) {
+  gameModelGrantTierFeature(input: $input) {
+    appId
+    tierId
+    featureKey
+  }
+}
+
+mutation GameModelSetPolicy($input: SetGameModelPolicyInput!) {
+  gameModelSetPolicy(input: $input) {
+    appId
+    sessionCreationPolicy
+    defaultParticipantRole
+  }
+}
+
+query GameModelTypeSchema($appId: BigInt!, $typeName: String!) {
+  gameModelTypeSchema(appId: $appId, typeName: $typeName) {
+    typeName
+    propertyDefinitions {
+      ...GmPropertyDefFields
+    }
+    functions {
+      ...GmFunctionFields
+    }
+  }
+}

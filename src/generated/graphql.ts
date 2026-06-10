@@ -105,17 +105,29 @@ export type ActorUpdateResponse = {
   uuid: Scalars['String']['output'];
 };
 
+export type AddEdgeInput = {
+  appId: Scalars['BigInt']['input'];
+  fromContainerId: Scalars['String']['input'];
+  metadataJson?: InputMaybe<Scalars['String']['input']>;
+  relationshipType: Scalars['String']['input'];
+  toContainerId: Scalars['String']['input'];
+  weight?: InputMaybe<Scalars['Float']['input']>;
+};
+
 export type App = {
   __typename?: 'App';
   appId: Scalars['BigInt']['output'];
   createdAt: Scalars['DateTime']['output'];
   createdBy: Scalars['BigInt']['output'];
+  deploymentTarget: Scalars['String']['output'];
   description: Maybe<Scalars['String']['output']>;
   gameApiUrl: Maybe<Scalars['String']['output']>;
   metadata: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   org: Maybe<Organization>;
   orgId: Scalars['BigInt']['output'];
+  runtimeDenialReason: Maybe<Scalars['String']['output']>;
+  runtimeStatus: Scalars['String']['output'];
   slug: Maybe<Scalars['String']['output']>;
   splitMode: Scalars['Boolean']['output'];
   state: Maybe<Scalars['String']['output']>;
@@ -163,6 +175,13 @@ export type AppBudget = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** Where an app runs: none (draft), shared (the shared game-api), or dedicated (a provisioned environment). */
+export enum AppDeploymentTarget {
+  Dedicated = 'DEDICATED',
+  None = 'NONE',
+  Shared = 'SHARED'
+}
+
 export type AppGroupPolicy = {
   __typename?: 'AppGroupPolicy';
   appId: Scalars['BigInt']['output'];
@@ -178,6 +197,39 @@ export type AppGroupPolicy = {
 export type AppMarketplaceFilterInput = {
   orgSlug?: InputMaybe<Scalars['String']['input']>;
   query?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** The shared-environment runtime gate + current billing-window usage for an app. */
+export type AppRuntimeState = {
+  __typename?: 'AppRuntimeState';
+  appId: Scalars['BigInt']['output'];
+  currentDayUsageCents: Scalars['BigInt']['output'];
+  currentHourUsageCents: Scalars['BigInt']['output'];
+  dailyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  deploymentTarget: AppDeploymentTarget;
+  hourlyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** free_allowance | insufficient_funds | spend_cap | subscription_lapsed when not active. */
+  runtimeDenialReason: Maybe<Scalars['String']['output']>;
+  runtimeStatus: AppRuntimeStatus;
+  walletBalanceCents: Scalars['BigInt']['output'];
+};
+
+/** The per-app runtime gate game-api + Buddy enforce: active, grace, denied, or suspended. */
+export enum AppRuntimeStatus {
+  Active = 'ACTIVE',
+  Denied = 'DENIED',
+  Grace = 'GRACE',
+  Suspended = 'SUSPENDED'
+}
+
+export type AppSharedSubscription = {
+  __typename?: 'AppSharedSubscription';
+  appId: Scalars['BigInt']['output'];
+  currentPeriodEnd: Maybe<Scalars['DateTime']['output']>;
+  orgId: Scalars['BigInt']['output'];
+  planId: Maybe<Scalars['BigInt']['output']>;
+  provider: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
 };
 
 /** DRAFT = invisible to non-members, LIVE = purchasable/playable, ARCHIVED = read-only */
@@ -345,12 +397,13 @@ export type CheckoutFilterInput = {
   userId?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
-/** Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens. */
+/** Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens; SHARED_APP_SUBSCRIPTION activates a paid shared-environment app slot. */
 export enum CheckoutPurpose {
   AppAccessPurchase = 'APP_ACCESS_PURCHASE',
   Donation = 'DONATION',
   OrgWalletTopup = 'ORG_WALLET_TOPUP',
-  PropertyTokens = 'PROPERTY_TOKENS'
+  PropertyTokens = 'PROPERTY_TOKENS',
+  SharedAppSubscription = 'SHARED_APP_SUBSCRIPTION'
 }
 
 /** Lifecycle state of a Checkout. Updated by webhook reconciliation, not by the redirect URL. */
@@ -453,6 +506,8 @@ export type CksDeployProgress = {
   /** Redeploy is allowed (failed deploy or stuck order cleared) */
   canRetry: Scalars['Boolean']['output'];
   changeOrderId: Scalars['String']['output'];
+  /** Change order kind (deploy or destroy pipeline identifier) */
+  changeOrderKind: Scalars['String']['output'];
   changeOrderStatus: Scalars['String']['output'];
   currentStepKind: Maybe<Scalars['String']['output']>;
   currentTaskKind: Maybe<Scalars['String']['output']>;
@@ -498,6 +553,8 @@ export type CksEnvironment = {
   databaseFlavor: Maybe<Scalars['String']['output']>;
   desiredEnvironmentVersion: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
+  /** 'dedicated' (multi-VM) or 'dev_single' (one dev-only VM). */
+  environmentClass: Scalars['String']['output'];
   gameApiFlavor: Maybe<Scalars['String']['output']>;
   gameApiMaxServers: Scalars['Int']['output'];
   gameApiMinServers: Scalars['Int']['output'];
@@ -507,6 +564,8 @@ export type CksEnvironment = {
   orgId: Scalars['BigInt']['output'];
   primaryCloud: Scalars['String']['output'];
   primaryRegion: Scalars['String']['output'];
+  /** Single VM flavor when environmentClass = 'dev_single'. */
+  singleBoxFlavor: Maybe<Scalars['String']['output']>;
   slug: Scalars['String']['output'];
   status: Scalars['String']['output'];
   subdomainHandle: Maybe<Scalars['String']['output']>;
@@ -581,6 +640,8 @@ export type CksEnvironmentDetail = {
   components: Array<CksEnvironmentComponent>;
   /** Live deploy task/step progress for the active or most recent failed deploy */
   deployProgress: Maybe<CksDeployProgress>;
+  /** Destroy tear-down progress for game-api and platform change orders */
+  destroyProgress: Array<CksDeployProgress>;
   environment: CksEnvironment;
   outputs: Array<CksEnvironmentOutput>;
   secrets: Array<CksEnvironmentSecretValue>;
@@ -1111,32 +1172,49 @@ export type CreateCheckoutInput = {
   cancelUrl?: InputMaybe<Scalars['String']['input']>;
   currency?: InputMaybe<Scalars['String']['input']>;
   orgId?: InputMaybe<Scalars['BigInt']['input']>;
+  planId?: InputMaybe<Scalars['BigInt']['input']>;
   provider: PaymentProvider;
   purpose: CheckoutPurpose;
   successUrl?: InputMaybe<Scalars['String']['input']>;
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
+export type CreateContainerInput = {
+  appId: Scalars['BigInt']['input'];
+  description?: InputMaybe<Scalars['String']['input']>;
+  displayName: Scalars['String']['input'];
+  metadataJson?: InputMaybe<Scalars['String']['input']>;
+  /** Owner user id; defaults to the caller for member/owner instantiation. */
+  ownerUserId?: InputMaybe<Scalars['BigInt']['input']>;
+  properties?: InputMaybe<Array<SeedPropertyInput>>;
+  sessionId?: InputMaybe<Scalars['String']['input']>;
+  typeName: Scalars['String']['input'];
+};
+
 export type CreateEnvironmentInput = {
   appIds?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. */
-  caddyFlavor: Scalars['String']['input'];
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
-  databaseFlavor: Scalars['String']['input'];
+  /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. Required for dedicated. */
+  caddyFlavor?: InputMaybe<Scalars['String']['input']>;
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated. */
+  databaseFlavor?: InputMaybe<Scalars['String']['input']>;
   datacenter: Scalars['String']['input'];
   displayName: Scalars['String']['input'];
-  /** Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. */
-  gameApiFlavor: Scalars['String']['input'];
-  gameApiMaxServers: Scalars['Int']['input'];
-  gameApiMinServers: Scalars['Int']['input'];
-  loadBalancerCount: Scalars['Int']['input'];
+  /** Deployment class: 'dedicated' (default, multi-VM) or 'dev_single' (one cheap dev-only VM running Postgres + management-api + game-api + Buddy). dev_single is not for production. */
+  environmentClass?: InputMaybe<Scalars['String']['input']>;
+  /** Single VM flavor for environmentClass='dev_single' (e.g. b3-8); must have a published hourly price. Ignored for dedicated. */
+  flavor?: InputMaybe<Scalars['String']['input']>;
+  /** Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. Required for dedicated. */
+  gameApiFlavor?: InputMaybe<Scalars['String']['input']>;
+  gameApiMaxServers?: InputMaybe<Scalars['Int']['input']>;
+  gameApiMinServers?: InputMaybe<Scalars['Int']['input']>;
+  loadBalancerCount?: InputMaybe<Scalars['Int']['input']>;
   orgId: Scalars['BigInt']['input'];
   /** Optional explicit slug for scripts/E2E. When omitted, the API generates an opaque e-{12} slug. */
   slug?: InputMaybe<Scalars['String']['input']>;
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
-  udpBuddyFlavor: Scalars['String']['input'];
-  udpBuddyMaxServers: Scalars['Int']['input'];
-  udpBuddyMinServers: Scalars['Int']['input'];
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated. */
+  udpBuddyFlavor?: InputMaybe<Scalars['String']['input']>;
+  udpBuddyMaxServers?: InputMaybe<Scalars['Int']['input']>;
+  udpBuddyMinServers?: InputMaybe<Scalars['Int']['input']>;
   x25519PublicKeyBase64: Scalars['String']['input'];
 };
 
@@ -1177,6 +1255,14 @@ export type CreateOrganizationInput = {
   slug: Scalars['String']['input'];
 };
 
+export type CreateSessionInput = {
+  appId: Scalars['BigInt']['input'];
+  metadataJson?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  /** Initial participants besides the creator. */
+  participantUserIds?: InputMaybe<Array<Scalars['BigInt']['input']>>;
+};
+
 export type CreateTeamInput = {
   appId: Scalars['BigInt']['input'];
   description?: InputMaybe<Scalars['String']['input']>;
@@ -1190,27 +1276,37 @@ export type CreateUserAppStateInput = {
   state?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type DefineAppFeatureInput = {
+  appId: Scalars['BigInt']['input'];
+  description?: InputMaybe<Scalars['String']['input']>;
+  featureKey: Scalars['String']['input'];
+};
+
 export type DestroyEnvironmentInput = {
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
 };
 
 export type EnvironmentQuoteInput = {
-  /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. */
-  caddyFlavor: Scalars['String']['input'];
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
-  databaseFlavor: Scalars['String']['input'];
+  /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. Required for dedicated. */
+  caddyFlavor?: InputMaybe<Scalars['String']['input']>;
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated. */
+  databaseFlavor?: InputMaybe<Scalars['String']['input']>;
   datacenter: Scalars['String']['input'];
-  /** Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. */
-  gameApiFlavor: Scalars['String']['input'];
-  gameApiMaxServers: Scalars['Int']['input'];
-  gameApiMinServers: Scalars['Int']['input'];
-  loadBalancerCount: Scalars['Int']['input'];
+  /** Deployment class: 'dedicated' (default) or 'dev_single'. */
+  environmentClass?: InputMaybe<Scalars['String']['input']>;
+  /** Single VM flavor for environmentClass='dev_single'. Ignored for dedicated. */
+  flavor?: InputMaybe<Scalars['String']['input']>;
+  /** Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. Required for dedicated. */
+  gameApiFlavor?: InputMaybe<Scalars['String']['input']>;
+  gameApiMaxServers?: InputMaybe<Scalars['Int']['input']>;
+  gameApiMinServers?: InputMaybe<Scalars['Int']['input']>;
+  loadBalancerCount?: InputMaybe<Scalars['Int']['input']>;
   orgId: Scalars['BigInt']['input'];
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. */
-  udpBuddyFlavor: Scalars['String']['input'];
-  udpBuddyMaxServers: Scalars['Int']['input'];
-  udpBuddyMinServers: Scalars['Int']['input'];
+  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated. */
+  udpBuddyFlavor?: InputMaybe<Scalars['String']['input']>;
+  udpBuddyMaxServers?: InputMaybe<Scalars['Int']['input']>;
+  udpBuddyMinServers?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type EnvironmentUsageRollupRow = {
@@ -1235,11 +1331,39 @@ export type EnvironmentUsageSummary = {
   replicationRates: UsageRatePeaks;
 };
 
+/** An org's free shared app slot quota usage. */
+export type FreeAppQuota = {
+  __typename?: 'FreeAppQuota';
+  orgId: Scalars['BigInt']['output'];
+  paidApps: Scalars['Int']['output'];
+  quota: Scalars['Int']['output'];
+  remainingFree: Scalars['Int']['output'];
+  usedFree: Scalars['Int']['output'];
+};
+
 export type FreePlayWindowInfo = {
   __typename?: 'FreePlayWindowInfo';
   description: Scalars['String']['output'];
   isCurrentlyActive: Scalars['Boolean']['output'];
   nextWindowStart: Maybe<Scalars['String']['output']>;
+};
+
+export type FunctionMutationInput = {
+  /** Expression string (compiled to AST server-side). */
+  expression: Scalars['String']['input'];
+  property: Scalars['String']['input'];
+  /** Container target: self | ref("uuid") | ref($param). */
+  target: Scalars['String']['input'];
+};
+
+export type FunctionParamInput = {
+  /** JSON-encoded default value. */
+  defaultValueJson?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  required?: InputMaybe<Scalars['Boolean']['input']>;
+  sortOrder?: InputMaybe<Scalars['Int']['input']>;
+  valueType: Scalars['String']['input'];
 };
 
 /** Startup contract for browser game clients. Fetch this after login to initialize protocol/version checks and UDP proxy state in one round trip. */
@@ -1304,6 +1428,206 @@ export type GetVoxelListInput = {
   coordinates: ChunkCoordinatesInput;
 };
 
+export type GmAppFeature = {
+  __typename?: 'GmAppFeature';
+  appId: Scalars['BigInt']['output'];
+  description: Maybe<Scalars['String']['output']>;
+  featureKey: Scalars['String']['output'];
+};
+
+export type GmAppPolicy = {
+  __typename?: 'GmAppPolicy';
+  appId: Scalars['BigInt']['output'];
+  defaultParticipantRole: Scalars['String']['output'];
+  sessionCreationPolicy: Scalars['String']['output'];
+};
+
+export type GmContainer = {
+  __typename?: 'GmContainer';
+  appId: Scalars['BigInt']['output'];
+  containerId: Scalars['String']['output'];
+  description: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  /** JSON object of developer metadata. */
+  metadataJson: Scalars['String']['output'];
+  ownerUserId: Maybe<Scalars['BigInt']['output']>;
+  sessionId: Maybe<Scalars['String']['output']>;
+  typeName: Scalars['String']['output'];
+};
+
+export type GmContainerState = {
+  __typename?: 'GmContainerState';
+  appId: Scalars['BigInt']['output'];
+  containerId: Scalars['String']['output'];
+  displayName: Scalars['String']['output'];
+  ownerUserId: Maybe<Scalars['BigInt']['output']>;
+  /** JSON object of visible properties (filtered by the caller). */
+  propertiesJson: Scalars['String']['output'];
+  sessionId: Maybe<Scalars['String']['output']>;
+  typeName: Scalars['String']['output'];
+};
+
+export type GmContainerType = {
+  __typename?: 'GmContainerType';
+  appId: Scalars['BigInt']['output'];
+  defaultPropertyVisibility: Scalars['String']['output'];
+  description: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  instantiableBy: Scalars['String']['output'];
+  /** JSON object of developer metadata. */
+  metadataJson: Scalars['String']['output'];
+  typeName: Scalars['String']['output'];
+};
+
+export type GmEdge = {
+  __typename?: 'GmEdge';
+  edgeId: Scalars['String']['output'];
+  fromContainerId: Scalars['String']['output'];
+  relationshipType: Scalars['String']['output'];
+  toContainerId: Scalars['String']['output'];
+  weight: Maybe<Scalars['Float']['output']>;
+};
+
+export type GmEvent = {
+  __typename?: 'GmEvent';
+  callerUserId: Maybe<Scalars['BigInt']['output']>;
+  errorMessage: Maybe<Scalars['String']['output']>;
+  eventId: Scalars['String']['output'];
+  executedAt: Scalars['DateTime']['output'];
+  functionName: Scalars['String']['output'];
+  /** JSON array of applied mutations. */
+  mutationsAppliedJson: Scalars['String']['output'];
+  /** JSON object of params. */
+  paramsJson: Scalars['String']['output'];
+  /** JSON-encoded return value. */
+  returnValueJson: Maybe<Scalars['String']['output']>;
+  selfContainerId: Maybe<Scalars['String']['output']>;
+  sessionId: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
+export type GmFunction = {
+  __typename?: 'GmFunction';
+  appId: Scalars['BigInt']['output'];
+  containerTypeName: Maybe<Scalars['String']['output']>;
+  description: Maybe<Scalars['String']['output']>;
+  functionId: Scalars['String']['output'];
+  /** JSON-encoded invoke policy rule tree. */
+  invokePolicyJson: Maybe<Scalars['String']['output']>;
+  invokeScope: Scalars['String']['output'];
+  mutations: Array<GmFunctionMutation>;
+  name: Scalars['String']['output'];
+  parameters: Array<GmFunctionParam>;
+  returnExpression: Maybe<Scalars['String']['output']>;
+  returnType: Maybe<Scalars['String']['output']>;
+  /** Non-fatal static-analysis warnings from the last upload. */
+  warnings: Array<Scalars['String']['output']>;
+};
+
+export type GmFunctionMutation = {
+  __typename?: 'GmFunctionMutation';
+  expression: Scalars['String']['output'];
+  property: Scalars['String']['output'];
+  /** Container reference target: self | ref("uuid") | ref($param). */
+  target: Scalars['String']['output'];
+};
+
+export type GmFunctionParam = {
+  __typename?: 'GmFunctionParam';
+  /** JSON-encoded default value. */
+  defaultValueJson: Maybe<Scalars['String']['output']>;
+  description: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  required: Scalars['Boolean']['output'];
+  sortOrder: Scalars['Int']['output'];
+  valueType: Scalars['String']['output'];
+};
+
+export type GmInvokeResult = {
+  __typename?: 'GmInvokeResult';
+  errorMessage: Maybe<Scalars['String']['output']>;
+  eventId: Scalars['String']['output'];
+  functionName: Scalars['String']['output'];
+  mutationsApplied: Array<GmMutationApplied>;
+  /** JSON-encoded return value. */
+  returnValueJson: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
+export type GmMutationApplied = {
+  __typename?: 'GmMutationApplied';
+  containerId: Scalars['String']['output'];
+  key: Scalars['String']['output'];
+  newValueJson: Maybe<Scalars['String']['output']>;
+  oldValueJson: Maybe<Scalars['String']['output']>;
+  valueType: Scalars['String']['output'];
+};
+
+export type GmPropertyDef = {
+  __typename?: 'GmPropertyDef';
+  appId: Scalars['BigInt']['output'];
+  containerTypeName: Scalars['String']['output'];
+  /** JSON-encoded default value. */
+  defaultValueJson: Maybe<Scalars['String']['output']>;
+  description: Maybe<Scalars['String']['output']>;
+  key: Scalars['String']['output'];
+  valueType: Scalars['String']['output'];
+  visibility: Scalars['String']['output'];
+  writable: Scalars['String']['output'];
+};
+
+export type GmSeedResult = {
+  __typename?: 'GmSeedResult';
+  containerTypesCreated: Scalars['Int']['output'];
+  containersCreated: Scalars['Int']['output'];
+  edgesCreated: Scalars['Int']['output'];
+  functionsCreated: Scalars['Int']['output'];
+  /** JSON object mapping seed temp_id -> created container UUID. */
+  idMapJson: Scalars['String']['output'];
+  propertyDefinitionsCreated: Scalars['Int']['output'];
+  warnings: Array<Scalars['String']['output']>;
+};
+
+export type GmSession = {
+  __typename?: 'GmSession';
+  appId: Scalars['BigInt']['output'];
+  createdByUserId: Maybe<Scalars['BigInt']['output']>;
+  currentTurnUserId: Maybe<Scalars['BigInt']['output']>;
+  /** JSON object of developer metadata. */
+  metadataJson: Scalars['String']['output'];
+  name: Maybe<Scalars['String']['output']>;
+  sessionId: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
+export type GmSessionParticipant = {
+  __typename?: 'GmSessionParticipant';
+  role: Scalars['String']['output'];
+  sessionId: Scalars['String']['output'];
+  userId: Scalars['BigInt']['output'];
+};
+
+export type GmTierFeature = {
+  __typename?: 'GmTierFeature';
+  appId: Scalars['BigInt']['output'];
+  featureKey: Scalars['String']['output'];
+  tierId: Scalars['BigInt']['output'];
+};
+
+export type GmTraverseResult = {
+  __typename?: 'GmTraverseResult';
+  edges: Array<GmEdge>;
+  nodes: Array<GmContainer>;
+  rootId: Scalars['String']['output'];
+};
+
+export type GmTypeSchema = {
+  __typename?: 'GmTypeSchema';
+  functions: Array<GmFunction>;
+  propertyDefinitions: Array<GmPropertyDef>;
+  typeName: Scalars['String']['output'];
+};
+
 export type GrantAppAccessInput = {
   appId: Scalars['BigInt']['input'];
   grantedBy?: InputMaybe<Scalars['String']['input']>;
@@ -1317,6 +1641,12 @@ export type GrantGridPermissionsInput = {
   gridId: Scalars['BigInt']['input'];
   permissionKeys: Array<Scalars['String']['input']>;
   userId: Scalars['BigInt']['input'];
+};
+
+export type GrantTierFeatureInput = {
+  appId: Scalars['BigInt']['input'];
+  featureKey: Scalars['String']['input'];
+  tierId: Scalars['BigInt']['input'];
 };
 
 export type GraphQlServer = {
@@ -1439,6 +1769,21 @@ export type InviteOrgMemberInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+export type InvokeFunctionInput = {
+  appId: Scalars['BigInt']['input'];
+  functionName: Scalars['String']['input'];
+  /** JSON object of params. */
+  paramsJson?: InputMaybe<Scalars['String']['input']>;
+  selfContainerId: Scalars['String']['input'];
+  sessionId?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type JoinSessionInput = {
+  appId: Scalars['BigInt']['input'];
+  role?: InputMaybe<Scalars['String']['input']>;
+  sessionId: Scalars['String']['input'];
+};
+
 export type ListVoxelUpdatesByDistanceInput = {
   appId: Scalars['BigInt']['input'];
   centerCoordinate: ChunkCoordinatesInput;
@@ -1481,6 +1826,7 @@ export type Mutation = {
   archiveAccessTier: AppAccessTier;
   archiveApp: App;
   assignGroupToGrid: Array<GridGroupGrant>;
+  cancelSharedSubscription: AppSharedSubscription;
   /** Captures an approved PayPal order after the hosted checkout redirects back. Wallet credit still reconciles through PayPal webhooks. */
   capturePaypalCheckout: Checkout;
   changePassword: Scalars['Boolean']['output'];
@@ -1528,6 +1874,22 @@ export type Mutation = {
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
   forceLogoutUser: Scalars['Boolean']['output'];
+  gameModelAddEdge: GmEdge;
+  gameModelCreateContainer: GmContainer;
+  gameModelCreateSession: GmSession;
+  gameModelDefineFeature: GmAppFeature;
+  gameModelDeleteFunction: Scalars['Boolean']['output'];
+  gameModelGrantTierFeature: GmTierFeature;
+  gameModelInvoke: GmInvokeResult;
+  gameModelJoinSession: GmSessionParticipant;
+  gameModelRevokeTierFeature: Scalars['Boolean']['output'];
+  gameModelSeed: GmSeedResult;
+  gameModelSetPolicy: GmAppPolicy;
+  gameModelSetProperty: GmContainer;
+  gameModelSetSessionTurn: GmSession;
+  gameModelUpsertContainerType: GmContainerType;
+  gameModelUpsertFunction: GmFunction;
+  gameModelUpsertPropertyDef: GmPropertyDef;
   grantAppAccess: AppUserAccess;
   grantGridPermissions: GridUserPermissions;
   ingestEnvironmentVersion: CpEnvironmentVersionRow;
@@ -1543,6 +1905,8 @@ export type Mutation = {
   login: AuthResponse;
   logout: Scalars['Boolean']['output'];
   logoutAllDevices: Scalars['Boolean']['output'];
+  /** Publish an app to the shared game-api environment. Free under the org quota; otherwise pass a planId for a paid subscription checkout. */
+  publishAppToShared: PublishAppResult;
   publishEnvironmentReleaseFromGameApiTag: CpPublishEnvironmentReleaseResult;
   /** Permanently deletes a destroyed environment record from the platform. Cloud resources must already be torn down via destroyEnvironment. */
   purgeEnvironment: Scalars['Boolean']['output'];
@@ -1554,6 +1918,7 @@ export type Mutation = {
   /** Remove a member from a channel (manage_members; members may remove themselves). */
   removeChannelMember: Scalars['Boolean']['output'];
   removeOrgMember: Scalars['Boolean']['output'];
+  removeSharedPaymentMethod: Scalars['Boolean']['output'];
   /** Remove a member from a team (manage_members; members may remove themselves). */
   removeTeamMember: Scalars['Boolean']['output'];
   requestPasswordReset: Scalars['Boolean']['output'];
@@ -1587,8 +1952,12 @@ export type Mutation = {
   /** Send a voxel update to the game server. Opens a UDP proxy session automatically if none exists; responses arrive on udpNotifications. */
   sendVoxelUpdate: Scalars['Boolean']['output'];
   setAppBudget: AppBudget;
+  /** Set per-app hourly/daily spend caps (cents). Pass null to clear a cap. */
+  setAppSpendCaps: AppRuntimeState;
   /** Super admin only. Used to take down or relist apps platform-wide. */
   setAppVisibility: App;
+  /** Enable/disable off-session auto-billing. Pass limitCents=null for no limit. */
+  setAutoBilling: OrgAutoBilling;
   /** Replace a member's channel roles (manage_roles). Re-pushes the member's effective send permission to Buddy. */
   setChannelMemberRoles: GroupMember;
   /** Set who may create channels in an app and the default membership policy for new channels (requires manage_apps). */
@@ -1606,6 +1975,8 @@ export type Mutation = {
   setTeamMemberRoles: GroupMember;
   /** Set who may create teams in an app and the default membership policy for new teams (requires manage_apps). */
   setTeamPolicy: AppGroupPolicy;
+  /** Begin vaulting a card for auto-billing. Returns a Stripe SetupIntent client secret for the browser to confirm. */
+  setupSharedPaymentMethod: PaymentMethodSetup;
   teleportRequest: TeleportResponse;
   updateAccessTier: AppAccessTier;
   updateActor: Actor;
@@ -1668,6 +2039,11 @@ export type MutationArchiveAppArgs = {
 
 export type MutationAssignGroupToGridArgs = {
   input: AssignGroupToGridInput;
+};
+
+
+export type MutationCancelSharedSubscriptionArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -1818,6 +2194,87 @@ export type MutationForceLogoutUserArgs = {
 };
 
 
+export type MutationGameModelAddEdgeArgs = {
+  input: AddEdgeInput;
+};
+
+
+export type MutationGameModelCreateContainerArgs = {
+  input: CreateContainerInput;
+};
+
+
+export type MutationGameModelCreateSessionArgs = {
+  input: CreateSessionInput;
+};
+
+
+export type MutationGameModelDefineFeatureArgs = {
+  input: DefineAppFeatureInput;
+};
+
+
+export type MutationGameModelDeleteFunctionArgs = {
+  appId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationGameModelGrantTierFeatureArgs = {
+  input: GrantTierFeatureInput;
+};
+
+
+export type MutationGameModelInvokeArgs = {
+  input: InvokeFunctionInput;
+};
+
+
+export type MutationGameModelJoinSessionArgs = {
+  input: JoinSessionInput;
+};
+
+
+export type MutationGameModelRevokeTierFeatureArgs = {
+  input: GrantTierFeatureInput;
+};
+
+
+export type MutationGameModelSeedArgs = {
+  input: SeedGameModelInput;
+};
+
+
+export type MutationGameModelSetPolicyArgs = {
+  input: SetGameModelPolicyInput;
+};
+
+
+export type MutationGameModelSetPropertyArgs = {
+  input: SetContainerPropertyInput;
+};
+
+
+export type MutationGameModelSetSessionTurnArgs = {
+  input: SetSessionTurnInput;
+};
+
+
+export type MutationGameModelUpsertContainerTypeArgs = {
+  input: UpsertContainerTypeInput;
+};
+
+
+export type MutationGameModelUpsertFunctionArgs = {
+  input: UpsertFunctionInput;
+};
+
+
+export type MutationGameModelUpsertPropertyDefArgs = {
+  input: UpsertPropertyDefInput;
+};
+
+
 export type MutationGrantAppAccessArgs = {
   input: GrantAppAccessInput;
 };
@@ -1860,6 +2317,15 @@ export type MutationLeaveTeamArgs = {
 
 export type MutationLoginArgs = {
   loginUserInput: LoginUserInput;
+};
+
+
+export type MutationPublishAppToSharedArgs = {
+  appId: Scalars['BigInt']['input'];
+  cancelUrl?: InputMaybe<Scalars['String']['input']>;
+  planId?: InputMaybe<Scalars['BigInt']['input']>;
+  provider?: InputMaybe<PaymentProvider>;
+  successUrl?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -1908,6 +2374,12 @@ export type MutationRemoveChannelMemberArgs = {
 export type MutationRemoveOrgMemberArgs = {
   orgId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRemoveSharedPaymentMethodArgs = {
+  orgId: Scalars['BigInt']['input'];
+  paymentMethodId: Scalars['BigInt']['input'];
 };
 
 
@@ -2020,9 +2492,25 @@ export type MutationSetAppBudgetArgs = {
 };
 
 
+export type MutationSetAppSpendCapsArgs = {
+  appId: Scalars['BigInt']['input'];
+  dailyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  hourlyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
 export type MutationSetAppVisibilityArgs = {
   appId: Scalars['BigInt']['input'];
   visibility: AppVisibility;
+};
+
+
+export type MutationSetAutoBillingArgs = {
+  enabled: Scalars['Boolean']['input'];
+  limitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  lowWaterThresholdCents?: InputMaybe<Scalars['BigInt']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  rechargeAmountCents?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
 
@@ -2083,6 +2571,11 @@ export type MutationSetTeamMemberRolesArgs = {
 
 export type MutationSetTeamPolicyArgs = {
   input: SetTeamPolicyInput;
+};
+
+
+export type MutationSetupSharedPaymentMethodArgs = {
+  orgId: Scalars['BigInt']['input'];
 };
 
 
@@ -2238,6 +2731,21 @@ export type NearbyGridPermissionsInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+/** Org off-session auto-billing configuration. */
+export type OrgAutoBilling = {
+  __typename?: 'OrgAutoBilling';
+  autoBilledThisPeriodCents: Scalars['BigInt']['output'];
+  enabled: Scalars['Boolean']['output'];
+  hasPaymentMethod: Scalars['Boolean']['output'];
+  lastError: Maybe<Scalars['String']['output']>;
+  /** Max auto-billed per period in cents. Null = no limit. */
+  limitCents: Maybe<Scalars['BigInt']['output']>;
+  lowWaterThresholdCents: Scalars['BigInt']['output'];
+  orgId: Scalars['BigInt']['output'];
+  period: Scalars['String']['output'];
+  rechargeAmountCents: Scalars['BigInt']['output'];
+};
+
 export type OrgMember = {
   __typename?: 'OrgMember';
   createdAt: Scalars['DateTime']['output'];
@@ -2349,11 +2857,40 @@ export type PaymentEventsPage = {
   pageInfo: PageInfo;
 };
 
+/** Stripe SetupIntent handle the browser uses to vault a card for auto-billing. */
+export type PaymentMethodSetup = {
+  __typename?: 'PaymentMethodSetup';
+  clientSecret: Maybe<Scalars['String']['output']>;
+  externalCustomerId: Scalars['String']['output'];
+  publishableKey: Maybe<Scalars['String']['output']>;
+};
+
 /** External payment processor for a checkout. */
 export enum PaymentProvider {
   Paypal = 'PAYPAL',
   Stripe = 'STRIPE'
 }
+
+/** Public platform discovery. Clients/SDKs read the shared game-api URL here to route apps deployed to the shared environment. */
+export type PlatformConfig = {
+  __typename?: 'PlatformConfig';
+  /** Free shared app slots an org gets before a paid subscription. */
+  freeAppsPerOrg: Scalars['Int']['output'];
+  /** Shared game-api HTTP/GraphQL root for shared-environment apps. */
+  sharedGameApiUrl: Maybe<Scalars['String']['output']>;
+  /** Shared game-api WebSocket root (subscriptions / UDP proxy). */
+  sharedGameApiWsUrl: Maybe<Scalars['String']['output']>;
+};
+
+/** Result of publishing an app to the shared environment. Free path returns a runtime state with no checkout; paid path returns a checkout to redirect to. */
+export type PublishAppResult = {
+  __typename?: 'PublishAppResult';
+  appId: Scalars['BigInt']['output'];
+  /** Subscription checkout to redirect to (paid path only). */
+  checkout: Maybe<Checkout>;
+  /** True when published under the free quota (no payment). */
+  free: Scalars['Boolean']['output'];
+};
 
 export type PublishEnvironmentReleaseFromGameApiTagInput = {
   /** Overwrite an existing environment version row if it already exists. */
@@ -2381,6 +2918,9 @@ export type Query = {
   appBySlug: Maybe<App>;
   /** Top GraphQL operations by bytes for an app in the time range. */
   appGraphqlOperations: Array<GraphqlOperationUsageRow>;
+  /** Shared-environment runtime gate + current billing-window usage for an app. */
+  appRuntimeState: AppRuntimeState;
+  appSharedSubscription: Maybe<AppSharedSubscription>;
   /** Replication and GraphQL totals plus top operations for one app. */
   appUsageSummary: AppUsageSummary;
   appUserAccessByApp: Array<AppUserAccess>;
@@ -2434,6 +2974,21 @@ export type Query = {
   gameClientBootstrap: GameClientBootstrap;
   /** Returns the single elected host user for an app (game). Deterministic across all cks-game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
   gameHost: Maybe<GameHost>;
+  gameModelContainer: GmContainer;
+  gameModelContainerState: GmContainerState;
+  gameModelContainerTypes: Array<GmContainerType>;
+  gameModelContainers: Array<GmContainer>;
+  gameModelEvents: Array<GmEvent>;
+  gameModelFeatures: Array<GmAppFeature>;
+  gameModelFunction: GmFunction;
+  gameModelFunctions: Array<GmFunction>;
+  gameModelPolicy: GmAppPolicy;
+  gameModelPropertyDefs: Array<GmPropertyDef>;
+  gameModelSession: GmSession;
+  gameModelSessions: Array<GmSession>;
+  gameModelTierFeatures: Array<GmTierFeature>;
+  gameModelTraverse: GmTraverseResult;
+  gameModelTypeSchema: GmTypeSchema;
   getChunk: Maybe<Chunk>;
   getChunkLods: Maybe<ChunkLodsResponse>;
   getChunksByDistance: ChunksByDistanceResponse;
@@ -2461,9 +3016,12 @@ export type Query = {
   myTeams: Array<GroupMembership>;
   nearbyGridPermissions: Array<NearbyGridPermissions>;
   operatorUsers: Array<CpOperatorUser>;
+  orgAutoBilling: OrgAutoBilling;
   orgEnvironment: Maybe<CksEnvironmentDetail>;
   orgEnvironments: Array<CksEnvironment>;
+  orgFreeAppQuota: FreeAppQuota;
   orgMembers: Array<OrgMember>;
+  orgPaymentMethods: Array<SavedPaymentMethod>;
   /** The full seed list of permission keys. Used by the UI to render role editors. */
   orgPermissions: Array<OrgPermission>;
   orgRoles: Array<OrgRole>;
@@ -2474,12 +3032,16 @@ export type Query = {
   organizationBySlug: Maybe<Organization>;
   /** Super admin only. Inbound payment webhook audit log. */
   paymentEvents: PaymentEventsPage;
+  /** Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps. No auth required. */
+  platformConfig: PlatformConfig;
   quotasForApp: Array<ServiceQuota>;
   quotasForOrg: Array<ServiceQuota>;
   /** Runtime permission keys that can be granted through app tiers or grid permissions. */
   runtimePermissions: Array<Scalars['String']['output']>;
   /** Returns a random server from the lowest 20% of servers by client count to distribute load evenly */
   serverWithLeastClients: ServerStatus;
+  /** Public catalog of paid shared-environment app-slot subscription plans. */
+  sharedEnvPlans: Array<SharedEnvPlan>;
   /** Fetch one team by id. */
   team: Group;
   /** List the members of a team. */
@@ -2549,6 +3111,16 @@ export type QueryAppGraphqlOperationsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   orgId: Scalars['BigInt']['input'];
   since: Scalars['DateTime']['input'];
+};
+
+
+export type QueryAppRuntimeStateArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppSharedSubscriptionArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -2726,6 +3298,101 @@ export type QueryGameHostArgs = {
 };
 
 
+export type QueryGameModelContainerArgs = {
+  appId: Scalars['BigInt']['input'];
+  containerId: Scalars['String']['input'];
+};
+
+
+export type QueryGameModelContainerStateArgs = {
+  appId: Scalars['BigInt']['input'];
+  containerId: Scalars['String']['input'];
+};
+
+
+export type QueryGameModelContainerTypesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGameModelContainersArgs = {
+  appId: Scalars['BigInt']['input'];
+  sessionId?: InputMaybe<Scalars['String']['input']>;
+  typeName?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryGameModelEventsArgs = {
+  appId: Scalars['BigInt']['input'];
+  functionName?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  selfContainerId?: InputMaybe<Scalars['String']['input']>;
+  sessionId?: InputMaybe<Scalars['String']['input']>;
+  success?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryGameModelFeaturesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGameModelFunctionArgs = {
+  appId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type QueryGameModelFunctionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  containerTypeName?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryGameModelPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGameModelPropertyDefsArgs = {
+  appId: Scalars['BigInt']['input'];
+  typeName: Scalars['String']['input'];
+};
+
+
+export type QueryGameModelSessionArgs = {
+  appId: Scalars['BigInt']['input'];
+  sessionId: Scalars['String']['input'];
+};
+
+
+export type QueryGameModelSessionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  status?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryGameModelTierFeaturesArgs = {
+  appId: Scalars['BigInt']['input'];
+  tierId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryGameModelTraverseArgs = {
+  appId: Scalars['BigInt']['input'];
+  depth?: InputMaybe<Scalars['Int']['input']>;
+  relationshipType: Scalars['String']['input'];
+  rootId: Scalars['String']['input'];
+};
+
+
+export type QueryGameModelTypeSchemaArgs = {
+  appId: Scalars['BigInt']['input'];
+  typeName: Scalars['String']['input'];
+};
+
+
 export type QueryGetChunkArgs = {
   input: GetChunkInput;
 };
@@ -2807,6 +3474,11 @@ export type QueryNearbyGridPermissionsArgs = {
 };
 
 
+export type QueryOrgAutoBillingArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryOrgEnvironmentArgs = {
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
@@ -2818,7 +3490,17 @@ export type QueryOrgEnvironmentsArgs = {
 };
 
 
+export type QueryOrgFreeAppQuotaArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryOrgMembersArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgPaymentMethodsArgs = {
   orgId: Scalars['BigInt']['input'];
 };
 
@@ -3011,6 +3693,85 @@ export type RollbackVoxelUpdatesInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+/** A saved (vaulted) off-session payment method. */
+export type SavedPaymentMethod = {
+  __typename?: 'SavedPaymentMethod';
+  brand: Maybe<Scalars['String']['output']>;
+  isDefault: Scalars['Boolean']['output'];
+  last4: Maybe<Scalars['String']['output']>;
+  paymentMethodId: Scalars['BigInt']['output'];
+  provider: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
+export type SeedContainerInput = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  displayName: Scalars['String']['input'];
+  metadataJson?: InputMaybe<Scalars['String']['input']>;
+  ownerUserId?: InputMaybe<Scalars['BigInt']['input']>;
+  properties?: InputMaybe<Array<SeedPropertyInput>>;
+  /** Developer-assigned id used only for edge references in this seed. */
+  tempId: Scalars['String']['input'];
+  typeName: Scalars['String']['input'];
+};
+
+export type SeedContainerTypeInput = {
+  defaultPropertyVisibility?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  displayName: Scalars['String']['input'];
+  instantiableBy?: InputMaybe<Scalars['String']['input']>;
+  metadataJson?: InputMaybe<Scalars['String']['input']>;
+  typeName: Scalars['String']['input'];
+};
+
+export type SeedEdgeInput = {
+  fromTempId: Scalars['String']['input'];
+  metadataJson?: InputMaybe<Scalars['String']['input']>;
+  relationshipType: Scalars['String']['input'];
+  toTempId: Scalars['String']['input'];
+  weight?: InputMaybe<Scalars['Float']['input']>;
+};
+
+export type SeedFunctionInput = {
+  containerTypeName?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  invokePolicyJson?: InputMaybe<Scalars['String']['input']>;
+  invokeScope?: InputMaybe<Scalars['String']['input']>;
+  mutations?: InputMaybe<Array<FunctionMutationInput>>;
+  name: Scalars['String']['input'];
+  parameters?: InputMaybe<Array<FunctionParamInput>>;
+  returnExpression?: InputMaybe<Scalars['String']['input']>;
+  returnType?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type SeedGameModelInput = {
+  appId: Scalars['BigInt']['input'];
+  containerTypes?: InputMaybe<Array<SeedContainerTypeInput>>;
+  containers?: InputMaybe<Array<SeedContainerInput>>;
+  edges?: InputMaybe<Array<SeedEdgeInput>>;
+  functions?: InputMaybe<Array<SeedFunctionInput>>;
+  propertyDefinitions?: InputMaybe<Array<SeedPropertyDefInput>>;
+  /** Optional session to seed instances into (NULL = app-global). */
+  sessionId?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type SeedPropertyDefInput = {
+  containerTypeName: Scalars['String']['input'];
+  defaultValueJson?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  key: Scalars['String']['input'];
+  valueType: Scalars['String']['input'];
+  visibility?: InputMaybe<Scalars['String']['input']>;
+  writable?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type SeedPropertyInput = {
+  key: Scalars['String']['input'];
+  /** JSON-encoded value. */
+  valueJson: Scalars['String']['input'];
+  valueType: Scalars['String']['input'];
+};
+
 /** Notification received when the server sends a custom event. Received via the udpNotifications subscription. */
 export type ServerEventNotification = {
   __typename?: 'ServerEventNotification';
@@ -3101,6 +3862,22 @@ export type SetChannelPolicyInput = {
   maxMembers?: InputMaybe<Scalars['Int']['input']>;
 };
 
+export type SetContainerPropertyInput = {
+  appId: Scalars['BigInt']['input'];
+  containerId: Scalars['String']['input'];
+  key: Scalars['String']['input'];
+  /** JSON-encoded value. */
+  valueJson: Scalars['String']['input'];
+  valueType: Scalars['String']['input'];
+};
+
+export type SetGameModelPolicyInput = {
+  appId: Scalars['BigInt']['input'];
+  defaultParticipantRole?: InputMaybe<Scalars['String']['input']>;
+  /** admin | member | anyone */
+  sessionCreationPolicy?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type SetGridPermissionLimitsInput = {
   appId: Scalars['BigInt']['input'];
   gridId: Scalars['BigInt']['input'];
@@ -3124,6 +3901,13 @@ export type SetQuotaInput = {
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
+export type SetSessionTurnInput = {
+  appId: Scalars['BigInt']['input'];
+  sessionId: Scalars['String']['input'];
+  /** The user whose turn it now is (NULL clears the turn). */
+  userId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
 export type SetTeamPolicyInput = {
   appId: Scalars['BigInt']['input'];
   /** admin | member | anyone. Who may create teams in this app. */
@@ -3132,6 +3916,18 @@ export type SetTeamPolicyInput = {
   defaultMembershipPolicy?: InputMaybe<Scalars['String']['input']>;
   maxGroupsPerUser?: InputMaybe<Scalars['Int']['input']>;
   maxMembers?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type SharedEnvPlan = {
+  __typename?: 'SharedEnvPlan';
+  billingInterval: Scalars['String']['output'];
+  code: Scalars['String']['output'];
+  currency: Scalars['String']['output'];
+  description: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  planId: Scalars['BigInt']['output'];
+  priceCents: Scalars['BigInt']['output'];
+  status: Scalars['String']['output'];
 };
 
 /** Input for sending an actor-to-actor message: a message delivered only to the single actor identified by targetUuid. It is spatially routed (the sender must know the destination actor’s chunk), but unlike normal spatial messages it is NOT broadcast to other nearby actors and has no distance/decay. */
@@ -3171,8 +3967,16 @@ export type SingleActorMessageNotification = {
 
 export type Subscription = {
   __typename?: 'Subscription';
+  /** Realtime stream of successful function-invocation events for an app, optionally narrowed to one session. Backed by Postgres NOTIFY so it fans out across game-api replicas without Buddy. Poll gameModelEvents if you prefer pull-based delivery. */
+  gameModelEventStream: Maybe<GmEvent>;
   /** Downlink from the game server (responses, notifications, GenericErrorResponse, and RealtimeConnectionEvent). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Connection failures are delivered as RealtimeConnectionEvent. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session. */
   udpNotifications: Maybe<UdpNotification>;
+};
+
+
+export type SubscriptionGameModelEventStreamArgs = {
+  appId: Scalars['BigInt']['input'];
+  sessionId?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type TeleportRequestInput = {
@@ -3360,6 +4164,49 @@ export type UpdateVoxelInput = {
   location: VoxelCoordinatesInput;
   state?: InputMaybe<Scalars['String']['input']>;
   voxelType: Scalars['Float']['input'];
+};
+
+export type UpsertContainerTypeInput = {
+  appId: Scalars['BigInt']['input'];
+  /** public | owner | hidden default for this type's properties. */
+  defaultPropertyVisibility?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  displayName: Scalars['String']['input'];
+  /** admin | member | owner (who may instantiate this type). */
+  instantiableBy?: InputMaybe<Scalars['String']['input']>;
+  /** JSON object of metadata. */
+  metadataJson?: InputMaybe<Scalars['String']['input']>;
+  typeName: Scalars['String']['input'];
+};
+
+export type UpsertFunctionInput = {
+  appId: Scalars['BigInt']['input'];
+  containerTypeName?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** JSON-encoded invoke-policy rule tree (authority requirements). */
+  invokePolicyJson?: InputMaybe<Scalars['String']['input']>;
+  /** player | server | internal */
+  invokeScope?: InputMaybe<Scalars['String']['input']>;
+  mutations?: InputMaybe<Array<FunctionMutationInput>>;
+  name: Scalars['String']['input'];
+  parameters?: InputMaybe<Array<FunctionParamInput>>;
+  returnExpression?: InputMaybe<Scalars['String']['input']>;
+  returnType?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpsertPropertyDefInput = {
+  appId: Scalars['BigInt']['input'];
+  containerTypeName: Scalars['String']['input'];
+  /** JSON-encoded default value. */
+  defaultValueJson?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  key: Scalars['String']['input'];
+  /** int | float | string | bool | array | object | container_ref */
+  valueType: Scalars['String']['input'];
+  /** public | owner | hidden */
+  visibility?: InputMaybe<Scalars['String']['input']>;
+  /** function | owner | admin */
+  writable?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UsageMinuteRow = {
@@ -3713,7 +4560,7 @@ export type AppQueryVariables = Exact<{
 }>;
 
 
-export type AppQuery = { __typename?: 'Query', app: { __typename?: 'App', appId: string, orgId: string, name: string, slug: string | null, description: string | null, visibility: AppVisibility, status: AppStatus, metadata: string | null, splitMode: boolean, gameApiUrl: string | null, createdAt: string, updatedAt: string, org: { __typename?: 'Organization', orgId: string, slug: string, name: string } | null } | null };
+export type AppQuery = { __typename?: 'Query', app: { __typename?: 'App', appId: string, orgId: string, name: string, slug: string | null, description: string | null, visibility: AppVisibility, status: AppStatus, metadata: string | null, splitMode: boolean, deploymentTarget: string, runtimeStatus: string, runtimeDenialReason: string | null, gameApiUrl: string | null, createdAt: string, updatedAt: string, org: { __typename?: 'Organization', orgId: string, slug: string, name: string } | null } | null };
 
 export type AppBySlugQueryVariables = Exact<{
   orgSlug: Scalars['String']['input'];
@@ -4058,6 +4905,194 @@ export type UpdateChunkStateMutationVariables = Exact<{
 
 export type UpdateChunkStateMutation = { __typename?: 'Mutation', updateChunkState: { __typename?: 'Chunk', chunkId: string, appId: string, chunkState: string | null, updatedAt: string, coordinates: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string } } | null };
 
+export type GmSessionFieldsFragment = { __typename?: 'GmSession', sessionId: string, appId: string, name: string | null, status: string, createdByUserId: string | null, currentTurnUserId: string | null, metadataJson: string };
+
+export type GmContainerFieldsFragment = { __typename?: 'GmContainer', containerId: string, appId: string, sessionId: string | null, typeName: string, displayName: string, description: string | null, ownerUserId: string | null, metadataJson: string };
+
+export type GmInvokeResultFieldsFragment = { __typename?: 'GmInvokeResult', eventId: string, functionName: string, success: boolean, returnValueJson: string | null, errorMessage: string | null, mutationsApplied: Array<{ __typename?: 'GmMutationApplied', containerId: string, key: string, valueType: string, oldValueJson: string | null, newValueJson: string | null }> };
+
+export type GameModelCreateSessionMutationVariables = Exact<{
+  input: CreateSessionInput;
+}>;
+
+
+export type GameModelCreateSessionMutation = { __typename?: 'Mutation', gameModelCreateSession: { __typename?: 'GmSession', sessionId: string, appId: string, name: string | null, status: string, createdByUserId: string | null, currentTurnUserId: string | null, metadataJson: string } };
+
+export type GameModelJoinSessionMutationVariables = Exact<{
+  input: JoinSessionInput;
+}>;
+
+
+export type GameModelJoinSessionMutation = { __typename?: 'Mutation', gameModelJoinSession: { __typename?: 'GmSessionParticipant', sessionId: string, userId: string, role: string } };
+
+export type GameModelSetSessionTurnMutationVariables = Exact<{
+  input: SetSessionTurnInput;
+}>;
+
+
+export type GameModelSetSessionTurnMutation = { __typename?: 'Mutation', gameModelSetSessionTurn: { __typename?: 'GmSession', sessionId: string, appId: string, name: string | null, status: string, createdByUserId: string | null, currentTurnUserId: string | null, metadataJson: string } };
+
+export type GameModelCreateContainerMutationVariables = Exact<{
+  input: CreateContainerInput;
+}>;
+
+
+export type GameModelCreateContainerMutation = { __typename?: 'Mutation', gameModelCreateContainer: { __typename?: 'GmContainer', containerId: string, appId: string, sessionId: string | null, typeName: string, displayName: string, description: string | null, ownerUserId: string | null, metadataJson: string } };
+
+export type GameModelSetPropertyMutationVariables = Exact<{
+  input: SetContainerPropertyInput;
+}>;
+
+
+export type GameModelSetPropertyMutation = { __typename?: 'Mutation', gameModelSetProperty: { __typename?: 'GmContainer', containerId: string, appId: string, sessionId: string | null, typeName: string, displayName: string, description: string | null, ownerUserId: string | null, metadataJson: string } };
+
+export type GameModelAddEdgeMutationVariables = Exact<{
+  input: AddEdgeInput;
+}>;
+
+
+export type GameModelAddEdgeMutation = { __typename?: 'Mutation', gameModelAddEdge: { __typename?: 'GmEdge', edgeId: string, fromContainerId: string, toContainerId: string, relationshipType: string, weight: number | null } };
+
+export type GameModelInvokeMutationVariables = Exact<{
+  input: InvokeFunctionInput;
+}>;
+
+
+export type GameModelInvokeMutation = { __typename?: 'Mutation', gameModelInvoke: { __typename?: 'GmInvokeResult', eventId: string, functionName: string, success: boolean, returnValueJson: string | null, errorMessage: string | null, mutationsApplied: Array<{ __typename?: 'GmMutationApplied', containerId: string, key: string, valueType: string, oldValueJson: string | null, newValueJson: string | null }> } };
+
+export type GameModelContainerQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  containerId: Scalars['String']['input'];
+}>;
+
+
+export type GameModelContainerQuery = { __typename?: 'Query', gameModelContainer: { __typename?: 'GmContainer', containerId: string, appId: string, sessionId: string | null, typeName: string, displayName: string, description: string | null, ownerUserId: string | null, metadataJson: string } };
+
+export type GameModelContainersQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  typeName?: InputMaybe<Scalars['String']['input']>;
+  sessionId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type GameModelContainersQuery = { __typename?: 'Query', gameModelContainers: Array<{ __typename?: 'GmContainer', containerId: string, appId: string, sessionId: string | null, typeName: string, displayName: string, description: string | null, ownerUserId: string | null, metadataJson: string }> };
+
+export type GameModelContainerStateQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  containerId: Scalars['String']['input'];
+}>;
+
+
+export type GameModelContainerStateQuery = { __typename?: 'Query', gameModelContainerState: { __typename?: 'GmContainerState', containerId: string, appId: string, sessionId: string | null, typeName: string, displayName: string, ownerUserId: string | null, propertiesJson: string } };
+
+export type GameModelTraverseQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  rootId: Scalars['String']['input'];
+  relationshipType: Scalars['String']['input'];
+  depth?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type GameModelTraverseQuery = { __typename?: 'Query', gameModelTraverse: { __typename?: 'GmTraverseResult', rootId: string, nodes: Array<{ __typename?: 'GmContainer', containerId: string, appId: string, sessionId: string | null, typeName: string, displayName: string, description: string | null, ownerUserId: string | null, metadataJson: string }>, edges: Array<{ __typename?: 'GmEdge', edgeId: string, fromContainerId: string, toContainerId: string, relationshipType: string, weight: number | null }> } };
+
+export type GameModelSessionQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  sessionId: Scalars['String']['input'];
+}>;
+
+
+export type GameModelSessionQuery = { __typename?: 'Query', gameModelSession: { __typename?: 'GmSession', sessionId: string, appId: string, name: string | null, status: string, createdByUserId: string | null, currentTurnUserId: string | null, metadataJson: string } };
+
+export type GameModelSessionsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  status?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type GameModelSessionsQuery = { __typename?: 'Query', gameModelSessions: Array<{ __typename?: 'GmSession', sessionId: string, appId: string, name: string | null, status: string, createdByUserId: string | null, currentTurnUserId: string | null, metadataJson: string }> };
+
+export type GameModelEventsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  sessionId?: InputMaybe<Scalars['String']['input']>;
+  selfContainerId?: InputMaybe<Scalars['String']['input']>;
+  functionName?: InputMaybe<Scalars['String']['input']>;
+  success?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type GameModelEventsQuery = { __typename?: 'Query', gameModelEvents: Array<{ __typename?: 'GmEvent', eventId: string, sessionId: string | null, functionName: string, selfContainerId: string | null, callerUserId: string | null, paramsJson: string, mutationsAppliedJson: string, returnValueJson: string | null, success: boolean, errorMessage: string | null, executedAt: string }> };
+
+export type GmFunctionFieldsFragment = { __typename?: 'GmFunction', functionId: string, appId: string, name: string, containerTypeName: string | null, description: string | null, returnType: string | null, invokeScope: string, invokePolicyJson: string | null, returnExpression: string | null, warnings: Array<string>, parameters: Array<{ __typename?: 'GmFunctionParam', name: string, valueType: string, required: boolean, defaultValueJson: string | null, description: string | null, sortOrder: number }>, mutations: Array<{ __typename?: 'GmFunctionMutation', target: string, property: string, expression: string }> };
+
+export type GmPropertyDefFieldsFragment = { __typename?: 'GmPropertyDef', appId: string, containerTypeName: string, key: string, valueType: string, defaultValueJson: string | null, visibility: string, writable: string, description: string | null };
+
+export type GameModelSeedMutationVariables = Exact<{
+  input: SeedGameModelInput;
+}>;
+
+
+export type GameModelSeedMutation = { __typename?: 'Mutation', gameModelSeed: { __typename?: 'GmSeedResult', containerTypesCreated: number, propertyDefinitionsCreated: number, functionsCreated: number, containersCreated: number, edgesCreated: number, warnings: Array<string>, idMapJson: string } };
+
+export type GameModelUpsertContainerTypeMutationVariables = Exact<{
+  input: UpsertContainerTypeInput;
+}>;
+
+
+export type GameModelUpsertContainerTypeMutation = { __typename?: 'Mutation', gameModelUpsertContainerType: { __typename?: 'GmContainerType', appId: string, typeName: string, displayName: string, description: string | null, instantiableBy: string, defaultPropertyVisibility: string, metadataJson: string } };
+
+export type GameModelUpsertPropertyDefMutationVariables = Exact<{
+  input: UpsertPropertyDefInput;
+}>;
+
+
+export type GameModelUpsertPropertyDefMutation = { __typename?: 'Mutation', gameModelUpsertPropertyDef: { __typename?: 'GmPropertyDef', appId: string, containerTypeName: string, key: string, valueType: string, defaultValueJson: string | null, visibility: string, writable: string, description: string | null } };
+
+export type GameModelUpsertFunctionMutationVariables = Exact<{
+  input: UpsertFunctionInput;
+}>;
+
+
+export type GameModelUpsertFunctionMutation = { __typename?: 'Mutation', gameModelUpsertFunction: { __typename?: 'GmFunction', functionId: string, appId: string, name: string, containerTypeName: string | null, description: string | null, returnType: string | null, invokeScope: string, invokePolicyJson: string | null, returnExpression: string | null, warnings: Array<string>, parameters: Array<{ __typename?: 'GmFunctionParam', name: string, valueType: string, required: boolean, defaultValueJson: string | null, description: string | null, sortOrder: number }>, mutations: Array<{ __typename?: 'GmFunctionMutation', target: string, property: string, expression: string }> } };
+
+export type GameModelDeleteFunctionMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+}>;
+
+
+export type GameModelDeleteFunctionMutation = { __typename?: 'Mutation', gameModelDeleteFunction: boolean };
+
+export type GameModelDefineFeatureMutationVariables = Exact<{
+  input: DefineAppFeatureInput;
+}>;
+
+
+export type GameModelDefineFeatureMutation = { __typename?: 'Mutation', gameModelDefineFeature: { __typename?: 'GmAppFeature', appId: string, featureKey: string, description: string | null } };
+
+export type GameModelGrantTierFeatureMutationVariables = Exact<{
+  input: GrantTierFeatureInput;
+}>;
+
+
+export type GameModelGrantTierFeatureMutation = { __typename?: 'Mutation', gameModelGrantTierFeature: { __typename?: 'GmTierFeature', appId: string, tierId: string, featureKey: string } };
+
+export type GameModelSetPolicyMutationVariables = Exact<{
+  input: SetGameModelPolicyInput;
+}>;
+
+
+export type GameModelSetPolicyMutation = { __typename?: 'Mutation', gameModelSetPolicy: { __typename?: 'GmAppPolicy', appId: string, sessionCreationPolicy: string, defaultParticipantRole: string } };
+
+export type GameModelTypeSchemaQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  typeName: Scalars['String']['input'];
+}>;
+
+
+export type GameModelTypeSchemaQuery = { __typename?: 'Query', gameModelTypeSchema: { __typename?: 'GmTypeSchema', typeName: string, propertyDefinitions: Array<{ __typename?: 'GmPropertyDef', appId: string, containerTypeName: string, key: string, valueType: string, defaultValueJson: string | null, visibility: string, writable: string, description: string | null }>, functions: Array<{ __typename?: 'GmFunction', functionId: string, appId: string, name: string, containerTypeName: string | null, description: string | null, returnType: string | null, invokeScope: string, invokePolicyJson: string | null, returnExpression: string | null, warnings: Array<string>, parameters: Array<{ __typename?: 'GmFunctionParam', name: string, valueType: string, required: boolean, defaultValueJson: string | null, description: string | null, sortOrder: number }>, mutations: Array<{ __typename?: 'GmFunctionMutation', target: string, property: string, expression: string }> }> } };
+
 export type CreateOrgRoleMutationVariables = Exact<{
   input: CreateOrgRoleInput;
 }>;
@@ -4209,6 +5244,11 @@ export type MyCheckoutsQueryVariables = Exact<{
 
 
 export type MyCheckoutsQuery = { __typename?: 'Query', myCheckouts: { __typename?: 'CheckoutsPage', items: Array<{ __typename?: 'Checkout', checkoutId: string, userId: string, provider: PaymentProvider, purpose: CheckoutPurpose, status: CheckoutStatus, amountCents: string | null, currency: string | null, externalId: string, externalUrl: string, orgId: string | null, appId: string | null, tierId: string | null, error: string | null, createdAt: string, completedAt: string | null, expiresAt: string | null }>, pageInfo: { __typename?: 'PageInfo', totalCount: number, limit: number, offset: number } } };
+
+export type PlatformConfigQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PlatformConfigQuery = { __typename?: 'Query', platformConfig: { __typename?: 'PlatformConfig', sharedGameApiUrl: string | null, sharedGameApiWsUrl: string | null, freeAppsPerOrg: number } };
 
 export type DeleteQuotaMutationVariables = Exact<{
   quotaId: Scalars['BigInt']['input'];
@@ -4501,7 +5541,11 @@ export type VoxelUpdateHistoryQueryVariables = Exact<{
 
 export type VoxelUpdateHistoryQuery = { __typename?: 'Query', voxelUpdateHistory: Array<{ __typename?: 'VoxelUpdateHistoryEvent', id: string, appId: string, oldVoxelType: number | null, newVoxelType: number | null, changedBy: string | null, changedAt: string, coordinates: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string }, location: { __typename?: 'VoxelCoordinates', x: number, y: number, z: number } }> };
 
-
+export const GmSessionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTurnUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GmSessionFieldsFragment, unknown>;
+export const GmContainerFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmContainerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmContainer"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GmContainerFieldsFragment, unknown>;
+export const GmInvokeResultFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmInvokeResultFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmInvokeResult"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"returnValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"mutationsApplied"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"oldValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"newValueJson"}}]}}]}}]} as unknown as DocumentNode<GmInvokeResultFieldsFragment, unknown>;
+export const GmFunctionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmFunctionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmFunction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"functionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"returnType"}},{"kind":"Field","name":{"kind":"Name","value":"invokeScope"}},{"kind":"Field","name":{"kind":"Name","value":"invokePolicyJson"}},{"kind":"Field","name":{"kind":"Name","value":"returnExpression"}},{"kind":"Field","name":{"kind":"Name","value":"warnings"}},{"kind":"Field","name":{"kind":"Name","value":"parameters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"required"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}}]}},{"kind":"Field","name":{"kind":"Name","value":"mutations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"property"}},{"kind":"Field","name":{"kind":"Name","value":"expression"}}]}}]}}]} as unknown as DocumentNode<GmFunctionFieldsFragment, unknown>;
+export const GmPropertyDefFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmPropertyDefFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmPropertyDef"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"writable"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]} as unknown as DocumentNode<GmPropertyDefFieldsFragment, unknown>;
 export const ActorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Actor"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"actor"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"chunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ActorQuery, ActorQueryVariables>;
 export const ActorsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Actors"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ActorFilterInput"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"actors"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"chunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ActorsQuery, ActorsQueryVariables>;
 export const BatchLookupActorsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"BatchLookupActors"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BatchActorLookupInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"batchLookupActors"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"chunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<BatchLookupActorsQuery, BatchLookupActorsQueryVariables>;
@@ -4517,7 +5561,7 @@ export const GrantAppAccessDocument = {"kind":"Document","definitions":[{"kind":
 export const MyAppAccessDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyAppAccess"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myAppAccess"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUserAccessId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedBy"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionId"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<MyAppAccessQuery, MyAppAccessQueryVariables>;
 export const RevokeAppAccessDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RevokeAppAccess"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"revokeAppAccess"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUserAccessId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedBy"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionId"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<RevokeAppAccessMutation, RevokeAppAccessMutationVariables>;
 export const UpdateAccessTierDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAccessTier"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAccessTierInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAccessTier"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tierId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tierOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isFree"}},{"kind":"Field","name":{"kind":"Name","value":"isDefault"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"billingPeriod"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissionKeys"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAccessTierMutation, UpdateAccessTierMutationVariables>;
-export const AppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"App"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"app"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<AppQuery, AppQueryVariables>;
+export const AppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"App"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"app"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentTarget"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeDenialReason"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<AppQuery, AppQueryVariables>;
 export const AppBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgSlug"}}},{"kind":"Argument","name":{"kind":"Name","value":"appSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appSlug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<AppBySlugQuery, AppBySlugQueryVariables>;
 export const AppsForOrgDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppsForOrg"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appsForOrg"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgSlug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppsForOrgQuery, AppsForOrgQueryVariables>;
 export const ArchiveAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ArchiveApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"archiveApp"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ArchiveAppMutation, ArchiveAppMutationVariables>;
@@ -4566,6 +5610,29 @@ export const GetVoxelListDocument = {"kind":"Document","definitions":[{"kind":"O
 export const UpdateChunkDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunk"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ChunkUpdateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunk"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"voxels"}},{"kind":"Field","name":{"kind":"Name","value":"chunkState"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkMutation, UpdateChunkMutationVariables>;
 export const UpdateChunkLodsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunkLods"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateChunkLodsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunkLods"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lods"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"data"}}]}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkLodsMutation, UpdateChunkLodsMutationVariables>;
 export const UpdateChunkStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunkState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateChunkStateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunkState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"chunkState"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkStateMutation, UpdateChunkStateMutationVariables>;
+export const GameModelCreateSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelCreateSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateSessionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelCreateSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTurnUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelCreateSessionMutation, GameModelCreateSessionMutationVariables>;
+export const GameModelJoinSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelJoinSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"JoinSessionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelJoinSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}}]}}]}}]} as unknown as DocumentNode<GameModelJoinSessionMutation, GameModelJoinSessionMutationVariables>;
+export const GameModelSetSessionTurnDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelSetSessionTurn"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetSessionTurnInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelSetSessionTurn"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTurnUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelSetSessionTurnMutation, GameModelSetSessionTurnMutationVariables>;
+export const GameModelCreateContainerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelCreateContainer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateContainerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelCreateContainer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmContainerFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmContainerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmContainer"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelCreateContainerMutation, GameModelCreateContainerMutationVariables>;
+export const GameModelSetPropertyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelSetProperty"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetContainerPropertyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelSetProperty"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmContainerFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmContainerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmContainer"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelSetPropertyMutation, GameModelSetPropertyMutationVariables>;
+export const GameModelAddEdgeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelAddEdge"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AddEdgeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAddEdge"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edgeId"}},{"kind":"Field","name":{"kind":"Name","value":"fromContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"toContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"relationshipType"}},{"kind":"Field","name":{"kind":"Name","value":"weight"}}]}}]}}]} as unknown as DocumentNode<GameModelAddEdgeMutation, GameModelAddEdgeMutationVariables>;
+export const GameModelInvokeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelInvoke"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"InvokeFunctionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelInvoke"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmInvokeResultFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmInvokeResultFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmInvokeResult"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"returnValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"mutationsApplied"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"oldValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"newValueJson"}}]}}]}}]} as unknown as DocumentNode<GameModelInvokeMutation, GameModelInvokeMutationVariables>;
+export const GameModelContainerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelContainer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"containerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelContainer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"containerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"containerId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmContainerFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmContainerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmContainer"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelContainerQuery, GameModelContainerQueryVariables>;
+export const GameModelContainersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelContainers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"typeName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelContainers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"typeName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"typeName"}}},{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmContainerFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmContainerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmContainer"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelContainersQuery, GameModelContainersQueryVariables>;
+export const GameModelContainerStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelContainerState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"containerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelContainerState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"containerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"containerId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"propertiesJson"}}]}}]}}]} as unknown as DocumentNode<GameModelContainerStateQuery, GameModelContainerStateQueryVariables>;
+export const GameModelTraverseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelTraverse"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"rootId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"relationshipType"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"depth"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelTraverse"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"rootId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"rootId"}}},{"kind":"Argument","name":{"kind":"Name","value":"relationshipType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipType"}}},{"kind":"Argument","name":{"kind":"Name","value":"depth"},"value":{"kind":"Variable","name":{"kind":"Name","value":"depth"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rootId"}},{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmContainerFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edgeId"}},{"kind":"Field","name":{"kind":"Name","value":"fromContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"toContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"relationshipType"}},{"kind":"Field","name":{"kind":"Name","value":"weight"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmContainerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmContainer"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelTraverseQuery, GameModelTraverseQueryVariables>;
+export const GameModelSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTurnUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelSessionQuery, GameModelSessionQueryVariables>;
+export const GameModelSessionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelSessions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelSessions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTurnUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelSessionsQuery, GameModelSessionsQueryVariables>;
+export const GameModelEventsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelEvents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"selfContainerId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"functionName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"success"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelEvents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}},{"kind":"Argument","name":{"kind":"Name","value":"selfContainerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"selfContainerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"functionName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"functionName"}}},{"kind":"Argument","name":{"kind":"Name","value":"success"},"value":{"kind":"Variable","name":{"kind":"Name","value":"success"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"selfContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"callerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"paramsJson"}},{"kind":"Field","name":{"kind":"Name","value":"mutationsAppliedJson"}},{"kind":"Field","name":{"kind":"Name","value":"returnValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"executedAt"}}]}}]}}]} as unknown as DocumentNode<GameModelEventsQuery, GameModelEventsQueryVariables>;
+export const GameModelSeedDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelSeed"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SeedGameModelInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelSeed"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerTypesCreated"}},{"kind":"Field","name":{"kind":"Name","value":"propertyDefinitionsCreated"}},{"kind":"Field","name":{"kind":"Name","value":"functionsCreated"}},{"kind":"Field","name":{"kind":"Name","value":"containersCreated"}},{"kind":"Field","name":{"kind":"Name","value":"edgesCreated"}},{"kind":"Field","name":{"kind":"Name","value":"warnings"}},{"kind":"Field","name":{"kind":"Name","value":"idMapJson"}}]}}]}}]} as unknown as DocumentNode<GameModelSeedMutation, GameModelSeedMutationVariables>;
+export const GameModelUpsertContainerTypeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelUpsertContainerType"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertContainerTypeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelUpsertContainerType"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"instantiableBy"}},{"kind":"Field","name":{"kind":"Name","value":"defaultPropertyVisibility"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]}}]} as unknown as DocumentNode<GameModelUpsertContainerTypeMutation, GameModelUpsertContainerTypeMutationVariables>;
+export const GameModelUpsertPropertyDefDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelUpsertPropertyDef"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertPropertyDefInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelUpsertPropertyDef"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmPropertyDefFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmPropertyDefFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmPropertyDef"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"writable"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]} as unknown as DocumentNode<GameModelUpsertPropertyDefMutation, GameModelUpsertPropertyDefMutationVariables>;
+export const GameModelUpsertFunctionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelUpsertFunction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertFunctionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelUpsertFunction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmFunctionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmFunctionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmFunction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"functionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"returnType"}},{"kind":"Field","name":{"kind":"Name","value":"invokeScope"}},{"kind":"Field","name":{"kind":"Name","value":"invokePolicyJson"}},{"kind":"Field","name":{"kind":"Name","value":"returnExpression"}},{"kind":"Field","name":{"kind":"Name","value":"warnings"}},{"kind":"Field","name":{"kind":"Name","value":"parameters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"required"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}}]}},{"kind":"Field","name":{"kind":"Name","value":"mutations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"property"}},{"kind":"Field","name":{"kind":"Name","value":"expression"}}]}}]}}]} as unknown as DocumentNode<GameModelUpsertFunctionMutation, GameModelUpsertFunctionMutationVariables>;
+export const GameModelDeleteFunctionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelDeleteFunction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelDeleteFunction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}}]}]}}]} as unknown as DocumentNode<GameModelDeleteFunctionMutation, GameModelDeleteFunctionMutationVariables>;
+export const GameModelDefineFeatureDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelDefineFeature"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DefineAppFeatureInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelDefineFeature"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"featureKey"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<GameModelDefineFeatureMutation, GameModelDefineFeatureMutationVariables>;
+export const GameModelGrantTierFeatureDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelGrantTierFeature"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"GrantTierFeatureInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelGrantTierFeature"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"featureKey"}}]}}]}}]} as unknown as DocumentNode<GameModelGrantTierFeatureMutation, GameModelGrantTierFeatureMutationVariables>;
+export const GameModelSetPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelSetPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetGameModelPolicyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelSetPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionCreationPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"defaultParticipantRole"}}]}}]}}]} as unknown as DocumentNode<GameModelSetPolicyMutation, GameModelSetPolicyMutationVariables>;
+export const GameModelTypeSchemaDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelTypeSchema"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"typeName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelTypeSchema"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"typeName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"typeName"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"typeName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyDefinitions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmPropertyDefFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"functions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmFunctionFields"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmFunctionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmFunction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"functionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"returnType"}},{"kind":"Field","name":{"kind":"Name","value":"invokeScope"}},{"kind":"Field","name":{"kind":"Name","value":"invokePolicyJson"}},{"kind":"Field","name":{"kind":"Name","value":"returnExpression"}},{"kind":"Field","name":{"kind":"Name","value":"warnings"}},{"kind":"Field","name":{"kind":"Name","value":"parameters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"required"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}}]}},{"kind":"Field","name":{"kind":"Name","value":"mutations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"property"}},{"kind":"Field","name":{"kind":"Name","value":"expression"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmPropertyDefFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmPropertyDef"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"writable"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]} as unknown as DocumentNode<GameModelTypeSchemaQuery, GameModelTypeSchemaQueryVariables>;
 export const CreateOrgRoleDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrgRole"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrgRoleInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgRole"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgRoleId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"roleName"}},{"kind":"Field","name":{"kind":"Name","value":"isSystem"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CreateOrgRoleMutation, CreateOrgRoleMutationVariables>;
 export const CreateOrgTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrgToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrgTokenInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgTokenId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"token"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CreateOrgTokenMutation, CreateOrgTokenMutationVariables>;
 export const CreateOrganizationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrganization"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrganizationInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrganization"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateOrganizationMutation, CreateOrganizationMutationVariables>;
@@ -4587,6 +5654,7 @@ export const UpdateOrgTokenDocument = {"kind":"Document","definitions":[{"kind":
 export const CheckoutsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Checkouts"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"CheckoutFilterInput"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"checkouts"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"checkoutId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"purpose"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"externalUrl"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"offset"}}]}}]}}]}}]} as unknown as DocumentNode<CheckoutsQuery, CheckoutsQueryVariables>;
 export const CreateCheckoutDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateCheckout"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateCheckoutInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createCheckout"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"checkoutId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"purpose"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"externalUrl"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]} as unknown as DocumentNode<CreateCheckoutMutation, CreateCheckoutMutationVariables>;
 export const MyCheckoutsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyCheckouts"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myCheckouts"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"checkoutId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"purpose"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"externalUrl"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"offset"}}]}}]}}]}}]} as unknown as DocumentNode<MyCheckoutsQuery, MyCheckoutsQueryVariables>;
+export const PlatformConfigDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlatformConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"platformConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sharedGameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"sharedGameApiWsUrl"}},{"kind":"Field","name":{"kind":"Name","value":"freeAppsPerOrg"}}]}}]}}]} as unknown as DocumentNode<PlatformConfigQuery, PlatformConfigQueryVariables>;
 export const DeleteQuotaDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteQuota"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"quotaId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteQuota"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"quotaId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"quotaId"}}}]}]}}]} as unknown as DocumentNode<DeleteQuotaMutation, DeleteQuotaMutationVariables>;
 export const EffectiveQuotaDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EffectiveQuota"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"metric"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"effectiveQuota"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"metric"},"value":{"kind":"Variable","name":{"kind":"Name","value":"metric"}}},{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"tierId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotaId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"metric"}},{"kind":"Field","name":{"kind":"Name","value":"limitValue"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}}]}}]}}]} as unknown as DocumentNode<EffectiveQuotaQuery, EffectiveQuotaQueryVariables>;
 export const QuotasForAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"QuotasForApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotasForApp"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotaId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"metric"}},{"kind":"Field","name":{"kind":"Name","value":"limitValue"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<QuotasForAppQuery, QuotasForAppQueryVariables>;

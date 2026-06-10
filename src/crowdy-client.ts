@@ -40,6 +40,7 @@ import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
 import { ChannelsAPI } from './domains/channels.js';
 import { UdpAPI } from './domains/udp.js';
+import { GameModelAPI } from './domains/gameModel.js';
 
 export interface CrowdyClientConfig {
   // ----- Game API (default endpoint) -----
@@ -102,6 +103,8 @@ export class CrowdyClient {
   readonly serverStatus: ServerStatusAPI;
   readonly channels: ChannelsAPI;
   readonly udp: UdpAPI;
+  /** Abstract game model: containers, properties, functions, sessions. */
+  readonly gameModel: GameModelAPI;
 
   constructor(config: CrowdyClientConfig = {}) {
     this.session = new AuthState(config.tokenStore);
@@ -157,6 +160,7 @@ export class CrowdyClient {
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);
     this.udp = new UdpAPI(this.graphql, this.realtime);
+    this.gameModel = new GameModelAPI(this.graphql);
   }
 
   /** Imperatively set the Bearer token (useful for SSO / token rehydrate). */

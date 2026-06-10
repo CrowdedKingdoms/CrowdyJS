@@ -177,6 +177,9 @@ type App {
   createdBy: BigInt!
   splitMode: Boolean!
   gameApiUrl: String
+  deploymentTarget: String!
+  runtimeStatus: String!
+  runtimeDenialReason: String
   createdAt: DateTime!
   updatedAt: DateTime!
   org: Organization
@@ -279,13 +282,14 @@ enum PaymentProvider {
 }
 
 """
-Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens.
+Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens; SHARED_APP_SUBSCRIPTION activates a paid shared-environment app slot.
 """
 enum CheckoutPurpose {
   ORG_WALLET_TOPUP
   APP_ACCESS_PURCHASE
   DONATION
   PROPERTY_TOKENS
+  SHARED_APP_SUBSCRIPTION
 }
 
 """
@@ -341,6 +345,8 @@ type CksDeployProgressTask {
 
 type CksDeployProgress {
   changeOrderId: String!
+  """Change order kind (deploy or destroy pipeline identifier)"""
+  changeOrderKind: String!
   changeOrderStatus: String!
   targetVersion: String
   error: String
@@ -378,6 +384,10 @@ type CksEnvironment {
   udpBuddyMinServers: Int!
   udpBuddyMaxServers: Int!
   loadBalancerCount: Int!
+  """'dedicated' (multi-VM) or 'dev_single' (one dev-only VM)."""
+  environmentClass: String!
+  """Single VM flavor when environmentClass = 'dev_single'."""
+  singleBoxFlavor: String
   billingStatus: String!
   billingGraceDeadline: DateTime
   suspendedAt: DateTime
@@ -557,6 +567,8 @@ type CksEnvironmentDetail {
   Live deploy task/step progress for the active or most recent failed deploy
   """
   deployProgress: CksDeployProgress
+  """Destroy tear-down progress for game-api and platform change orders"""
+  destroyProgress: [CksDeployProgress!]!
 }
 
 type UsageMinuteRow {
@@ -925,6 +937,128 @@ type CpPublishEnvironmentReleaseResult {
 }
 
 """
+Public platform discovery. Clients/SDKs read the shared game-api URL here to route apps deployed to the shared environment.
+"""
+type PlatformConfig {
+  """Shared game-api HTTP/GraphQL root for shared-environment apps."""
+  sharedGameApiUrl: String
+  """Shared game-api WebSocket root (subscriptions / UDP proxy)."""
+  sharedGameApiWsUrl: String
+  """Free shared app slots an org gets before a paid subscription."""
+  freeAppsPerOrg: Int!
+}
+
+type SharedEnvPlan {
+  planId: BigInt!
+  code: String!
+  name: String!
+  description: String
+  priceCents: BigInt!
+  currency: String!
+  billingInterval: String!
+  status: String!
+}
+
+type AppSharedSubscription {
+  appId: BigInt!
+  orgId: BigInt!
+  planId: BigInt
+  provider: String
+  status: String!
+  currentPeriodEnd: DateTime
+}
+
+"""
+The shared-environment runtime gate + current billing-window usage for an app.
+"""
+type AppRuntimeState {
+  appId: BigInt!
+  deploymentTarget: AppDeploymentTarget!
+  runtimeStatus: AppRuntimeStatus!
+  """
+  free_allowance | insufficient_funds | spend_cap | subscription_lapsed when not active.
+  """
+  runtimeDenialReason: String
+  walletBalanceCents: BigInt!
+  currentHourUsageCents: BigInt!
+  currentDayUsageCents: BigInt!
+  hourlyLimitCents: BigInt
+  dailyLimitCents: BigInt
+}
+
+"""
+Where an app runs: none (draft), shared (the shared game-api), or dedicated (a provisioned environment).
+"""
+enum AppDeploymentTarget {
+  NONE
+  SHARED
+  DEDICATED
+}
+
+"""
+The per-app runtime gate game-api + Buddy enforce: active, grace, denied, or suspended.
+"""
+enum AppRuntimeStatus {
+  ACTIVE
+  GRACE
+  DENIED
+  SUSPENDED
+}
+
+"""An org's free shared app slot quota usage."""
+type FreeAppQuota {
+  orgId: BigInt!
+  quota: Int!
+  usedFree: Int!
+  paidApps: Int!
+  remainingFree: Int!
+}
+
+"""
+Result of publishing an app to the shared environment. Free path returns a runtime state with no checkout; paid path returns a checkout to redirect to.
+"""
+type PublishAppResult {
+  appId: BigInt!
+  """True when published under the free quota (no payment)."""
+  free: Boolean!
+  """Subscription checkout to redirect to (paid path only)."""
+  checkout: Checkout
+}
+
+"""Org off-session auto-billing configuration."""
+type OrgAutoBilling {
+  orgId: BigInt!
+  enabled: Boolean!
+  """Max auto-billed per period in cents. Null = no limit."""
+  limitCents: BigInt
+  period: String!
+  autoBilledThisPeriodCents: BigInt!
+  rechargeAmountCents: BigInt!
+  lowWaterThresholdCents: BigInt!
+  hasPaymentMethod: Boolean!
+  lastError: String
+}
+
+"""A saved (vaulted) off-session payment method."""
+type SavedPaymentMethod {
+  paymentMethodId: BigInt!
+  provider: String!
+  brand: String
+  last4: String
+  isDefault: Boolean!
+  status: String!
+}
+
+"""
+Stripe SetupIntent handle the browser uses to vault a card for auto-billing.
+"""
+type PaymentMethodSetup {
+  externalCustomerId: String!
+  clientSecret: String
+  publishableKey: String
+}
+
+"""
 BigInt custom scalar type. Input should be a string representation of a BigInt.
 """
 scalar BigInt
@@ -1032,6 +1166,20 @@ type Query {
   cpEnvironmentVersions: CpEnvironmentVersionsPage!
   operatorUsers: [CpOperatorUser!]!
   """
+  Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps. No auth required.
+  """
+  platformConfig: PlatformConfig!
+  """Public catalog of paid shared-environment app-slot subscription plans."""
+  sharedEnvPlans: [SharedEnvPlan!]!
+  orgFreeAppQuota(orgId: BigInt!): FreeAppQuota!
+  appSharedSubscription(appId: BigInt!): AppSharedSubscription
+  """
+  Shared-environment runtime gate + current billing-window usage for an app.
+  """
+  appRuntimeState(appId: BigInt!): AppRuntimeState!
+  orgAutoBilling(orgId: BigInt!): OrgAutoBilling!
+  orgPaymentMethods(orgId: BigInt!): [SavedPaymentMethod!]!
+  """
   Avatars owned by a user. Non-owners receive public state only (private_state is stripped).
   """
   userAvatars(userId: BigInt!): [Avatar!]!
@@ -1093,6 +1241,21 @@ type Query {
   channelRoles(groupId: BigInt!): [GroupRole!]!
   """The current channel creation/membership policy for an app."""
   channelPolicy(appId: BigInt!): AppGroupPolicy!
+  gameModelContainerTypes(appId: BigInt!): [GmContainerType!]!
+  gameModelPropertyDefs(appId: BigInt!, typeName: String!): [GmPropertyDef!]!
+  gameModelFunction(appId: BigInt!, name: String!): GmFunction!
+  gameModelFunctions(appId: BigInt!, containerTypeName: String): [GmFunction!]!
+  gameModelTypeSchema(appId: BigInt!, typeName: String!): GmTypeSchema!
+  gameModelFeatures(appId: BigInt!): [GmAppFeature!]!
+  gameModelTierFeatures(appId: BigInt!, tierId: BigInt): [GmTierFeature!]!
+  gameModelPolicy(appId: BigInt!): GmAppPolicy!
+  gameModelContainer(appId: BigInt!, containerId: String!): GmContainer!
+  gameModelContainers(appId: BigInt!, typeName: String, sessionId: String): [GmContainer!]!
+  gameModelContainerState(appId: BigInt!, containerId: String!): GmContainerState!
+  gameModelTraverse(appId: BigInt!, rootId: String!, relationshipType: String!, depth: Int = 1): GmTraverseResult!
+  gameModelSession(appId: BigInt!, sessionId: String!): GmSession!
+  gameModelSessions(appId: BigInt!, status: String): [GmSession!]!
+  gameModelEvents(appId: BigInt!, sessionId: String, selfContainerId: String, functionName: String, success: Boolean, limit: Int, offset: Int): [GmEvent!]!
   """
   UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
   """
@@ -1120,27 +1283,33 @@ input CheckoutFilterInput {
 input EnvironmentQuoteInput {
   orgId: BigInt!
   datacenter: String!
+  """Deployment class: 'dedicated' (default) or 'dev_single'."""
+  environmentClass: String
   """
-  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  Single VM flavor for environmentClass='dev_single'. Ignored for dedicated.
   """
-  databaseFlavor: String!
+  flavor: String
   """
-  Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price.
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated.
   """
-  gameApiFlavor: String!
+  databaseFlavor: String
   """
-  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. Required for dedicated.
   """
-  udpBuddyFlavor: String!
+  gameApiFlavor: String
   """
-  Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price.
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated.
   """
-  caddyFlavor: String!
-  gameApiMinServers: Int!
-  gameApiMaxServers: Int!
-  udpBuddyMinServers: Int!
-  udpBuddyMaxServers: Int!
-  loadBalancerCount: Int!
+  udpBuddyFlavor: String
+  """
+  Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. Required for dedicated.
+  """
+  caddyFlavor: String
+  gameApiMinServers: Int
+  gameApiMaxServers: Int
+  udpBuddyMinServers: Int
+  udpBuddyMaxServers: Int
+  loadBalancerCount: Int
 }
 
 type Mutation {
@@ -1228,6 +1397,22 @@ type Mutation {
   ingestEnvironmentVersion(input: IngestEnvironmentVersionInput!): CpEnvironmentVersionRow!
   publishEnvironmentReleaseFromGameApiTag(input: PublishEnvironmentReleaseFromGameApiTagInput!): CpPublishEnvironmentReleaseResult!
   yankEnvironmentVersion(version: String!): Boolean!
+  """
+  Publish an app to the shared game-api environment. Free under the org quota; otherwise pass a planId for a paid subscription checkout.
+  """
+  publishAppToShared(appId: BigInt!, planId: BigInt, provider: PaymentProvider, successUrl: String, cancelUrl: String): PublishAppResult!
+  cancelSharedSubscription(appId: BigInt!): AppSharedSubscription!
+  """Set per-app hourly/daily spend caps (cents). Pass null to clear a cap."""
+  setAppSpendCaps(appId: BigInt!, hourlyLimitCents: BigInt, dailyLimitCents: BigInt): AppRuntimeState!
+  """
+  Enable/disable off-session auto-billing. Pass limitCents=null for no limit.
+  """
+  setAutoBilling(orgId: BigInt!, enabled: Boolean!, limitCents: BigInt, rechargeAmountCents: BigInt, lowWaterThresholdCents: BigInt): OrgAutoBilling!
+  """
+  Begin vaulting a card for auto-billing. Returns a Stripe SetupIntent client secret for the browser to confirm.
+  """
+  setupSharedPaymentMethod(orgId: BigInt!): PaymentMethodSetup!
+  removeSharedPaymentMethod(orgId: BigInt!, paymentMethodId: BigInt!): Boolean!
   createAvatar(input: CreateAvatarInput!): Avatar!
   updateAvatar(id: BigInt!, input: UpdateAvatarInput!): Avatar!
   deleteAvatar(id: BigInt!): Avatar!
@@ -1336,6 +1521,22 @@ type Mutation {
   updateChannelRole(input: UpdateGroupRoleInput!): GroupRole!
   """Delete a non-system channel role (manage_roles)."""
   deleteChannelRole(groupRoleId: BigInt!): Boolean!
+  gameModelUpsertContainerType(input: UpsertContainerTypeInput!): GmContainerType!
+  gameModelUpsertPropertyDef(input: UpsertPropertyDefInput!): GmPropertyDef!
+  gameModelUpsertFunction(input: UpsertFunctionInput!): GmFunction!
+  gameModelDeleteFunction(appId: BigInt!, name: String!): Boolean!
+  gameModelSeed(input: SeedGameModelInput!): GmSeedResult!
+  gameModelSetPolicy(input: SetGameModelPolicyInput!): GmAppPolicy!
+  gameModelDefineFeature(input: DefineAppFeatureInput!): GmAppFeature!
+  gameModelGrantTierFeature(input: GrantTierFeatureInput!): GmTierFeature!
+  gameModelRevokeTierFeature(input: GrantTierFeatureInput!): Boolean!
+  gameModelCreateSession(input: CreateSessionInput!): GmSession!
+  gameModelJoinSession(input: JoinSessionInput!): GmSessionParticipant!
+  gameModelSetSessionTurn(input: SetSessionTurnInput!): GmSession!
+  gameModelCreateContainer(input: CreateContainerInput!): GmContainer!
+  gameModelSetProperty(input: SetContainerPropertyInput!): GmContainer!
+  gameModelAddEdge(input: AddEdgeInput!): GmEdge!
+  gameModelInvoke(input: InvokeFunctionInput!): GmInvokeResult!
   """
   Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first.
   """
@@ -1495,6 +1696,7 @@ input CreateCheckoutInput {
   orgId: BigInt
   appId: BigInt
   tierId: BigInt
+  planId: BigInt
   amountCents: BigInt
   currency: String = "usd"
   successUrl: String
@@ -1511,26 +1713,34 @@ input CreateEnvironmentInput {
   x25519PublicKeyBase64: String!
   datacenter: String!
   """
-  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  Deployment class: 'dedicated' (default, multi-VM) or 'dev_single' (one cheap dev-only VM running Postgres + management-api + game-api + Buddy). dev_single is not for production.
   """
-  databaseFlavor: String!
+  environmentClass: String
   """
-  Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price.
+  Single VM flavor for environmentClass='dev_single' (e.g. b3-8); must have a published hourly price. Ignored for dedicated.
   """
-  gameApiFlavor: String!
+  flavor: String
   """
-  Flavor name from environmentFlavors(datacenter); must have a published hourly price.
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated.
   """
-  udpBuddyFlavor: String!
+  databaseFlavor: String
   """
-  Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price.
+  Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. Required for dedicated.
   """
-  caddyFlavor: String!
-  gameApiMinServers: Int!
-  gameApiMaxServers: Int!
-  udpBuddyMinServers: Int!
-  udpBuddyMaxServers: Int!
-  loadBalancerCount: Int!
+  gameApiFlavor: String
+  """
+  Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated.
+  """
+  udpBuddyFlavor: String
+  """
+  Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. Required for dedicated.
+  """
+  caddyFlavor: String
+  gameApiMinServers: Int
+  gameApiMaxServers: Int
+  udpBuddyMinServers: Int
+  udpBuddyMaxServers: Int
+  loadBalancerCount: Int
   appIds: [String!]
 }
 
@@ -1961,6 +2171,187 @@ type GroupMembership {
   joinedAt: DateTime!
 }
 
+type GmContainerType {
+  appId: BigInt!
+  typeName: String!
+  displayName: String!
+  description: String
+  instantiableBy: String!
+  defaultPropertyVisibility: String!
+  """JSON object of developer metadata."""
+  metadataJson: String!
+}
+
+type GmPropertyDef {
+  appId: BigInt!
+  containerTypeName: String!
+  key: String!
+  valueType: String!
+  """JSON-encoded default value."""
+  defaultValueJson: String
+  visibility: String!
+  writable: String!
+  description: String
+}
+
+type GmFunctionParam {
+  name: String!
+  valueType: String!
+  required: Boolean!
+  """JSON-encoded default value."""
+  defaultValueJson: String
+  description: String
+  sortOrder: Int!
+}
+
+type GmFunctionMutation {
+  """Container reference target: self | ref("uuid") | ref($param)."""
+  target: String!
+  property: String!
+  expression: String!
+}
+
+type GmFunction {
+  functionId: String!
+  appId: BigInt!
+  name: String!
+  containerTypeName: String
+  description: String
+  returnType: String
+  parameters: [GmFunctionParam!]!
+  mutations: [GmFunctionMutation!]!
+  returnExpression: String
+  invokeScope: String!
+  """JSON-encoded invoke policy rule tree."""
+  invokePolicyJson: String
+  """Non-fatal static-analysis warnings from the last upload."""
+  warnings: [String!]!
+}
+
+type GmContainer {
+  containerId: String!
+  appId: BigInt!
+  sessionId: String
+  typeName: String!
+  displayName: String!
+  description: String
+  ownerUserId: BigInt
+  """JSON object of developer metadata."""
+  metadataJson: String!
+}
+
+type GmContainerState {
+  containerId: String!
+  appId: BigInt!
+  sessionId: String
+  typeName: String!
+  displayName: String!
+  ownerUserId: BigInt
+  """JSON object of visible properties (filtered by the caller)."""
+  propertiesJson: String!
+}
+
+type GmEdge {
+  edgeId: String!
+  fromContainerId: String!
+  toContainerId: String!
+  relationshipType: String!
+  weight: Float
+}
+
+type GmTraverseResult {
+  rootId: String!
+  nodes: [GmContainer!]!
+  edges: [GmEdge!]!
+}
+
+type GmSession {
+  sessionId: String!
+  appId: BigInt!
+  name: String
+  status: String!
+  createdByUserId: BigInt
+  currentTurnUserId: BigInt
+  """JSON object of developer metadata."""
+  metadataJson: String!
+}
+
+type GmSessionParticipant {
+  sessionId: String!
+  userId: BigInt!
+  role: String!
+}
+
+type GmMutationApplied {
+  containerId: String!
+  key: String!
+  valueType: String!
+  oldValueJson: String
+  newValueJson: String
+}
+
+type GmInvokeResult {
+  eventId: String!
+  functionName: String!
+  success: Boolean!
+  """JSON-encoded return value."""
+  returnValueJson: String
+  mutationsApplied: [GmMutationApplied!]!
+  errorMessage: String
+}
+
+type GmEvent {
+  eventId: String!
+  sessionId: String
+  functionName: String!
+  selfContainerId: String
+  callerUserId: BigInt
+  """JSON object of params."""
+  paramsJson: String!
+  """JSON array of applied mutations."""
+  mutationsAppliedJson: String!
+  """JSON-encoded return value."""
+  returnValueJson: String
+  success: Boolean!
+  errorMessage: String
+  executedAt: DateTime!
+}
+
+type GmTypeSchema {
+  typeName: String!
+  propertyDefinitions: [GmPropertyDef!]!
+  functions: [GmFunction!]!
+}
+
+type GmAppFeature {
+  appId: BigInt!
+  featureKey: String!
+  description: String
+}
+
+type GmTierFeature {
+  appId: BigInt!
+  tierId: BigInt!
+  featureKey: String!
+}
+
+type GmAppPolicy {
+  appId: BigInt!
+  sessionCreationPolicy: String!
+  defaultParticipantRole: String!
+}
+
+type GmSeedResult {
+  containerTypesCreated: Int!
+  propertyDefinitionsCreated: Int!
+  functionsCreated: Int!
+  containersCreated: Int!
+  edgesCreated: Int!
+  warnings: [String!]!
+  """JSON object mapping seed temp_id -> created container UUID."""
+  idMapJson: String!
+}
+
 input ActorFilterInput {
   appId: BigInt
   avatarId: BigInt
@@ -2267,6 +2658,214 @@ input UpdateChannelInput {
   membershipPolicy: String
 }
 
+input UpsertContainerTypeInput {
+  appId: BigInt!
+  typeName: String!
+  displayName: String!
+  description: String
+  """admin | member | owner (who may instantiate this type)."""
+  instantiableBy: String
+  """public | owner | hidden default for this type's properties."""
+  defaultPropertyVisibility: String
+  """JSON object of metadata."""
+  metadataJson: String
+}
+
+input UpsertPropertyDefInput {
+  appId: BigInt!
+  containerTypeName: String!
+  key: String!
+  """int | float | string | bool | array | object | container_ref"""
+  valueType: String!
+  """JSON-encoded default value."""
+  defaultValueJson: String
+  """public | owner | hidden"""
+  visibility: String
+  """function | owner | admin"""
+  writable: String
+  description: String
+}
+
+input UpsertFunctionInput {
+  appId: BigInt!
+  name: String!
+  containerTypeName: String
+  description: String
+  returnType: String
+  parameters: [FunctionParamInput!]
+  mutations: [FunctionMutationInput!]
+  returnExpression: String
+  """player | server | internal"""
+  invokeScope: String
+  """JSON-encoded invoke-policy rule tree (authority requirements)."""
+  invokePolicyJson: String
+}
+
+input FunctionParamInput {
+  name: String!
+  valueType: String!
+  required: Boolean = true
+  """JSON-encoded default value."""
+  defaultValueJson: String
+  description: String
+  sortOrder: Int = 0
+}
+
+input FunctionMutationInput {
+  """Container target: self | ref("uuid") | ref($param)."""
+  target: String!
+  property: String!
+  """Expression string (compiled to AST server-side)."""
+  expression: String!
+}
+
+input SeedGameModelInput {
+  appId: BigInt!
+  """Optional session to seed instances into (NULL = app-global)."""
+  sessionId: String
+  containerTypes: [SeedContainerTypeInput!]
+  propertyDefinitions: [SeedPropertyDefInput!]
+  functions: [SeedFunctionInput!]
+  containers: [SeedContainerInput!]
+  edges: [SeedEdgeInput!]
+}
+
+input SeedContainerTypeInput {
+  typeName: String!
+  displayName: String!
+  description: String
+  instantiableBy: String
+  defaultPropertyVisibility: String
+  metadataJson: String
+}
+
+input SeedPropertyDefInput {
+  containerTypeName: String!
+  key: String!
+  valueType: String!
+  defaultValueJson: String
+  visibility: String
+  writable: String
+  description: String
+}
+
+input SeedFunctionInput {
+  name: String!
+  containerTypeName: String
+  description: String
+  returnType: String
+  parameters: [FunctionParamInput!]
+  mutations: [FunctionMutationInput!]
+  returnExpression: String
+  invokeScope: String
+  invokePolicyJson: String
+}
+
+input SeedContainerInput {
+  """Developer-assigned id used only for edge references in this seed."""
+  tempId: String!
+  typeName: String!
+  displayName: String!
+  description: String
+  ownerUserId: BigInt
+  metadataJson: String
+  properties: [SeedPropertyInput!]
+}
+
+input SeedPropertyInput {
+  key: String!
+  valueType: String!
+  """JSON-encoded value."""
+  valueJson: String!
+}
+
+input SeedEdgeInput {
+  fromTempId: String!
+  toTempId: String!
+  relationshipType: String!
+  weight: Float
+  metadataJson: String
+}
+
+input SetGameModelPolicyInput {
+  appId: BigInt!
+  """admin | member | anyone"""
+  sessionCreationPolicy: String
+  defaultParticipantRole: String
+}
+
+input DefineAppFeatureInput {
+  appId: BigInt!
+  featureKey: String!
+  description: String
+}
+
+input GrantTierFeatureInput {
+  appId: BigInt!
+  tierId: BigInt!
+  featureKey: String!
+}
+
+input CreateSessionInput {
+  appId: BigInt!
+  name: String
+  metadataJson: String
+  """Initial participants besides the creator."""
+  participantUserIds: [BigInt!]
+}
+
+input JoinSessionInput {
+  appId: BigInt!
+  sessionId: String!
+  role: String
+}
+
+input SetSessionTurnInput {
+  appId: BigInt!
+  sessionId: String!
+  """The user whose turn it now is (NULL clears the turn)."""
+  userId: BigInt
+}
+
+input CreateContainerInput {
+  appId: BigInt!
+  sessionId: String
+  typeName: String!
+  displayName: String!
+  description: String
+  """Owner user id; defaults to the caller for member/owner instantiation."""
+  ownerUserId: BigInt
+  metadataJson: String
+  properties: [SeedPropertyInput!]
+}
+
+input SetContainerPropertyInput {
+  appId: BigInt!
+  containerId: String!
+  key: String!
+  valueType: String!
+  """JSON-encoded value."""
+  valueJson: String!
+}
+
+input AddEdgeInput {
+  appId: BigInt!
+  fromContainerId: String!
+  toContainerId: String!
+  relationshipType: String!
+  weight: Float
+  metadataJson: String
+}
+
+input InvokeFunctionInput {
+  appId: BigInt!
+  functionName: String!
+  selfContainerId: String!
+  sessionId: String
+  """JSON object of params."""
+  paramsJson: String
+}
+
 """
 Input for sending an actor update request to the UDP game server. This updates the state of an actor (player character or NPC) in a specific chunk.
 """
@@ -2474,6 +3073,10 @@ input ChannelMessageInput {
 }
 
 type Subscription {
+  """
+  Realtime stream of successful function-invocation events for an app, optionally narrowed to one session. Backed by Postgres NOTIFY so it fans out across game-api replicas without Buddy. Poll gameModelEvents if you prefer pull-based delivery.
+  """
+  gameModelEventStream(appId: BigInt!, sessionId: String): GmEvent
   """
   Downlink from the game server (responses, notifications, GenericErrorResponse, and RealtimeConnectionEvent). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Connection failures are delivered as RealtimeConnectionEvent. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session.
   """
