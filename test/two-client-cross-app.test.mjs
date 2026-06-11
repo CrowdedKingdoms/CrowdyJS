@@ -8,12 +8,17 @@
  * delivery by it; app-agnostic subscriptions are rejected.
  *
  * This exercises the deployed game-api + UDP-proxy chain black-box (provisioning
- * is entirely through the management API — see provision.mjs). One entitled
- * player's single token is shared by three clients:
+ * is entirely through the management API -- see provision.mjs). player[0]'s ONE
+ * token is shared by three clients, mirroring a single user opening the world in
+ * several tabs/apps:
  *
- *   clientApp  -> subscribe(appId)        + sends actor updates -> sees its own
- *   clientOther-> subscribe(OTHER_APP_ID) (never sends)         -> sees nothing
- *   clientNone -> subscribe() with NO appId                     -> rejected
+ *   clientApp  -> subscribe(appId)          -> receives the app's fan-out
+ *   clientOther-> subscribe(OTHER_APP_ID)   -> sees nothing (fenced)
+ *   clientNone -> subscribe() with NO appId -> rejected (APP_ID_REQUIRED)
+ *
+ * player[1] is a separate peer (its own token) that registers an actor in the
+ * same chunk and sends the updates. The game server excludes a sender from its
+ * own fan-out, so the positive control needs a distinct peer to receive from.
  *
  * Auto-skips unless the integration env is set (same vars as the other
  * two-client suites).
@@ -45,7 +50,10 @@ const SEND_COUNT = Number(process.env.CROWDY_TEST_SEND_COUNT ?? 5);
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const SYNC_WAIT_MS = Number(process.env.CROWDY_TEST_SYNC_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
-const TEST_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
+// clientApp's own actor, registered so it is an in-range recipient.
+const OBSERVER_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
+// The peer (player[1]) that sends; clientApp must receive these.
+const SENDER_UUID = 'ddddddddccccbbbbaaaaeeeeeeeeeeee';
 
 function randomBase64ActorState(byteCount = 96) {
   const buf = new Uint8Array(byteCount);
@@ -77,19 +85,23 @@ test(
   async () => {
     const { createCrowdyClient } = await import('../dist/index.js');
 
-    // One app + one entitled player; all three clients share the ONE token,
-    // mirroring a single user opening the world in several tabs/apps.
-    const { appId, players } = await provisionAppWithPlayers(1);
+    // Two entitled players. player[0]'s single token is shared by the three
+    // observer clients (the cross-app reuse scenario); player[1] is the peer
+    // that actually sends, since a sender never receives its own fan-out.
+    const { appId, players } = await provisionAppWithPlayers(2);
     await sleep(SYNC_WAIT_MS);
     const token = players[0].token;
-    // An app the player is NOT operating in (subscription is still accepted,
-    // but must not receive `appId`'s spatial traffic).
+    const senderToken = players[1].token;
+    // An app the observers are NOT scoped to; its subscription is still opened
+    // but must not receive `appId`'s spatial traffic.
     const OTHER_APP_ID = String(BigInt(appId) + 7919n);
 
     const clientApp = createCrowdyClient(clientConfig());
     const clientOther = createCrowdyClient(clientConfig());
     const clientNone = createCrowdyClient(clientConfig());
     for (const c of [clientApp, clientOther, clientNone]) c.setToken(token);
+    const clientSender = createCrowdyClient(clientConfig());
+    clientSender.setToken(senderToken);
 
     const recvApp = [];
     const recvOther = [];
@@ -97,14 +109,35 @@ test(
     const connNone = [];
     const cleanup = [];
 
+    // clientApp registers an actor so its (player[0]) session is an in-range
+    // recipient; the peer (player[1]) registers + sends. Defined here so we can
+    // pre-open both sessions before the subscriptions attach.
+    const register = async () => {
+      await clientApp.udp.sendActorUpdate({
+        appId, chunk: CHUNK, distance: 8, uuid: OBSERVER_UUID, state: 'AA==', sequenceNumber: 1,
+      });
+      await clientSender.udp.sendActorUpdate({
+        appId, chunk: CHUNK, distance: 8, uuid: SENDER_UUID, state: 'AA==', sequenceNumber: 1,
+      });
+    };
+
     try {
+      // Pre-open both UDP proxy sessions with one connect each BEFORE attaching
+      // subscriptions. connect() is idempotent but only stores the session after
+      // an async server-selection + socket bind, so letting the three
+      // subscriptions on player[0]'s token race to create it would orphan the
+      // first subscriber's stream. Opening each session once up front makes every
+      // later subscribe reuse the one session.
+      await register();
+      await sleep(800);
+
       cleanup.push(
         clientApp.udp.subscribe({ actorUpdate: (n) => recvApp.push(n), genericError: () => {} }, appId),
       );
       cleanup.push(
         clientOther.udp.subscribe({ actorUpdate: (n) => recvOther.push(n), genericError: () => {} }, OTHER_APP_ID),
       );
-      // No appId on purpose — the game-api must reject this subscription.
+      // No appId on purpose -- the game-api must reject this subscription.
       cleanup.push(
         clientNone.udp.subscribe({
           actorUpdate: (n) => recvNone.push(n),
@@ -115,13 +148,9 @@ test(
 
       await sleep(2000); // let the WS subscriptions open
 
-      // Register + warm the grid-permission window (first message to a new chunk
-      // is dropped while it loads), then send a burst as the app-scoped client.
-      const register = async () => {
-        await clientApp.udp.sendActorUpdate({
-          appId, chunk: CHUNK, distance: 8, uuid: TEST_UUID, state: 'AA==', sequenceNumber: 1,
-        });
-      };
+      // Warm the grid-permission window (the first message to a new chunk is
+      // dropped while it loads) by re-registering both actors, then send a burst
+      // from the peer.
       await register();
       await sleep(1000);
       await register();
@@ -133,8 +162,8 @@ test(
 
       let sent = 0;
       for (let i = 0; i < SEND_COUNT; i++) {
-        const ok = await clientApp.udp.sendActorUpdate({
-          appId, chunk: CHUNK, distance: 8, uuid: TEST_UUID,
+        const ok = await clientSender.udp.sendActorUpdate({
+          appId, chunk: CHUNK, distance: 8, uuid: SENDER_UUID,
           state: randomBase64ActorState(), sequenceNumber: i + 2,
         });
         if (ok) sent++;
@@ -144,21 +173,21 @@ test(
 
       await sleep(NOTIFY_WAIT_MS);
 
-      const ownByApp = recvApp.filter((n) => n.uuid === TEST_UUID);
+      const recvByApp = recvApp.filter((n) => n.uuid === SENDER_UUID);
       const leakToOther = recvOther.filter(
-        (n) => n.uuid === TEST_UUID || String(n.appId) === String(appId),
+        (n) => n.uuid === SENDER_UUID || String(n.appId) === String(appId),
       );
       const rejectedNone = connNone.some((e) => e.code === 'APP_ID_REQUIRED');
 
       const diagnostics = {
         appId, otherAppId: OTHER_APP_ID, sent,
-        ownByApp: ownByApp.length, leakToOther: leakToOther.length,
+        recvByApp: recvByApp.length, leakToOther: leakToOther.length,
         recvNone: recvNone.length, connNoneCodes: connNone.map((e) => e.code).slice(0, 3),
       };
 
-      // Positive control: the app-scoped client receives its own app's stream.
-      assert.ok(ownByApp.length > 0, `app-scoped client should receive its own updates. ${JSON.stringify(diagnostics)}`);
-      // The fence: a subscription scoped to a different app gets none of it.
+      // Positive control: the app-scoped client receives the peer's app stream.
+      assert.ok(recvByApp.length > 0, `app-scoped client should receive the peer's updates. ${JSON.stringify(diagnostics)}`);
+      // The fence: a subscription scoped to a different app (same token) gets none of it.
       assert.equal(leakToOther.length, 0, `cross-app leak to OTHER app subscription. ${JSON.stringify(diagnostics)}`);
       // Breaking change: an app-agnostic subscription is rejected and gets no data.
       assert.equal(recvNone.length, 0, `app-agnostic subscription received spatial data. ${JSON.stringify(diagnostics)}`);
@@ -167,7 +196,7 @@ test(
       for (const unsub of cleanup) {
         try { unsub(); } catch { /* swallow */ }
       }
-      for (const c of [clientApp, clientOther, clientNone]) {
+      for (const c of [clientApp, clientOther, clientNone, clientSender]) {
         try { await c.udp.disconnect(); } catch { /* swallow */ }
         try { c.close(); } catch { /* swallow */ }
       }
