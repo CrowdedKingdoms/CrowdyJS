@@ -1121,6 +1121,7 @@ type Query {
   orgEnvironments(orgId: BigInt!): [CksEnvironment!]!
   orgEnvironment(orgId: BigInt!, slug: String!): CksEnvironmentDetail
   environmentVersions: [CksEnvironmentVersion!]!
+  environmentForwardVersions(orgId: BigInt!, slug: String!): [CksEnvironmentVersion!]!
   """
   OVH datacenters that have at least one customer-priced instance flavor available for customer selection.
   """
@@ -1390,6 +1391,10 @@ type Mutation {
   SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale; does not replace cks-udp-api pool fixes.
   """
   restartEnvironmentServices(input: RestartEnvironmentServicesInput!): CksEnvironmentChangeOrder!
+  """
+  Links an unlinked app to an existing environment for split-mode routing. Refuses shared apps and apps already linked elsewhere.
+  """
+  linkAppToEnvironment(input: LinkAppToEnvironmentInput!): App!
   setEnvironmentDeletionProtection(environmentId: String!, enabled: Boolean!): Boolean!
   putCpSecret(environmentId: String!, name: String!, plaintext: String!, kind: String): CpSecretRow!
   deleteCpSecret(environmentId: String!, name: String!): Boolean!
@@ -1776,6 +1781,7 @@ input UpdateEnvironmentScalingInput {
 input RedeployEnvironmentInput {
   orgId: BigInt!
   slug: String!
+  version: String
   deployMode: RedeployDeployMode
 }
 
@@ -1790,6 +1796,13 @@ enum RedeployDeployMode {
 input RestartEnvironmentServicesInput {
   orgId: BigInt!
   slug: String!
+}
+
+input LinkAppToEnvironmentInput {
+  orgId: BigInt!
+  appId: BigInt!
+  """Environment slug (cks_environments.slug) to link the app to."""
+  environmentSlug: String!
 }
 
 input IngestEnvironmentVersionInput {

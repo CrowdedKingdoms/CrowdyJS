@@ -65,7 +65,7 @@ Auth and user reads always target `managementUrl`. Everything else targets `http
 ## Game-loop lifecycle
 
 1. Authenticate with `client.auth.login()` or restore a previous token through `client.session.restore()`.
-2. Subscribe to UDP proxy notifications with `client.udp.subscribe()` (the SDK will open the realtime socket on demand).
+2. Subscribe to UDP proxy notifications with `client.udp.subscribe(handlers, appId)` — `appId` is **required** (the SDK opens the realtime socket on demand and scopes it to that app).
 3. Join a chunk by sending an initial actor update.
 4. Send actor, voxel, text, audio, and client-event updates through `client.udp` or the higher-level `client.world(appId)` helpers.
 5. Call `client.udp.disconnect()` when leaving the world.
@@ -76,43 +76,63 @@ Auth and user reads always target `managementUrl`. Everything else targets `http
 When a player is about to join an app, query its routing fields on the management API first:
 
 ```graphql
-query AppForRouting($id: BigInt!) {
-  app(id: $id) {
+query AppForRouting($appId: BigInt!) {
+  app(appId: $appId) {
     appId
     splitMode
+    deploymentTarget
     gameApiUrl
   }
 }
 ```
 
-If `splitMode && gameApiUrl`, the app lives behind its own Game API deployment. Build a **second** `CrowdyClient` with `httpUrl: gameApiUrl` (and the matching `wsUrl`) **sharing the same `tokenStore` as the first client**, then drive gameplay through that client. Apps without `splitMode` keep working against the default `httpUrl` you configured.
+`gameApiUrl` is populated for **both** dedicated (`splitMode`) and shared
+(`deploymentTarget: "shared"`) apps. When it's set, build a **second**
+`CrowdyClient` with `httpUrl: gameApiUrl` (and the matching `wsUrl`) **sharing the
+same `tokenStore` as the first client**, then drive gameplay through that client.
+Apps with no `gameApiUrl` keep working against the default `httpUrl` you
+configured.
 
 ## Realtime notifications
 
+`subscribe` takes the handlers **and a required `appId`** (second argument). The
+Game API scopes the realtime session to that app and rejects an app-agnostic
+subscription with a `RealtimeConnectionEvent` (`code: 'APP_ID_REQUIRED'`). Run
+one client per app (sharing the same `tokenStore`) when a player is in multiple
+apps at once.
+
 ```ts
-const unsubscribe = client.udp.subscribe({
-  actorUpdate: (event) => {
-    console.log(event.uuid, event.state);
+const appId = '1';
+
+const unsubscribe = client.udp.subscribe(
+  {
+    actorUpdate: (event) => {
+      console.log(event.uuid, event.state);
+    },
+    voxelUpdate: (event) => { /* ... */ },
+    text: (event) => { /* ... */ },
+    audio: (event) => { /* ... */ },
+    clientEvent: (event) => { /* ... */ },
+    serverEvent: (event) => { /* ... */ },
+    singleActorMessage: (event) => {
+      // A direct actor-to-actor message addressed to you.
+      console.log(event.uuid, event.payload); // payload is base64
+    },
+    genericError: (event) => {
+      console.warn(event.sequenceNumber, event.errorCode);
+    },
+    connectionEvent: (event) => {
+      console.warn(event.code, event.message);
+    },
+    error: (error) => {
+      console.error(error.code, error.message);
+    },
   },
-  voxelUpdate: (event) => { /* ... */ },
-  text: (event) => { /* ... */ },
-  audio: (event) => { /* ... */ },
-  clientEvent: (event) => { /* ... */ },
-  serverEvent: (event) => { /* ... */ },
-  singleActorMessage: (event) => {
-    // A direct actor-to-actor message addressed to you.
-    console.log(event.uuid, event.payload); // payload is base64
-  },
-  genericError: (event) => {
-    console.warn(event.sequenceNumber, event.errorCode);
-  },
-  connectionEvent: (event) => {
-    console.warn(event.code, event.message);
-  },
-  error: (error) => {
-    console.error(error.code, error.message);
-  },
-});
+  appId,
+);
+
+// Or use the world helper, which passes its appId automatically:
+//   client.world(appId).subscribe(handlers);
 
 client.realtime.onStatus((status) => {
   console.log('realtime:', status);

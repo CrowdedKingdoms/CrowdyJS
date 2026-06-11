@@ -1784,6 +1784,13 @@ export type JoinSessionInput = {
   sessionId: Scalars['String']['input'];
 };
 
+export type LinkAppToEnvironmentInput = {
+  appId: Scalars['BigInt']['input'];
+  /** Environment slug (cks_environments.slug) to link the app to. */
+  environmentSlug: Scalars['String']['input'];
+  orgId: Scalars['BigInt']['input'];
+};
+
 export type ListVoxelUpdatesByDistanceInput = {
   appId: Scalars['BigInt']['input'];
   centerCoordinate: ChunkCoordinatesInput;
@@ -1902,6 +1909,8 @@ export type Mutation = {
   leaveChannel: Scalars['Boolean']['output'];
   /** Leave a team. */
   leaveTeam: Scalars['Boolean']['output'];
+  /** Links an unlinked app to an existing environment for split-mode routing. Refuses shared apps and apps already linked elsewhere. */
+  linkAppToEnvironment: App;
   login: AuthResponse;
   logout: Scalars['Boolean']['output'];
   logoutAllDevices: Scalars['Boolean']['output'];
@@ -2312,6 +2321,11 @@ export type MutationLeaveChannelArgs = {
 
 export type MutationLeaveTeamArgs = {
   groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationLinkAppToEnvironmentArgs = {
+  input: LinkAppToEnvironmentInput;
 };
 
 
@@ -2962,6 +2976,7 @@ export type Query = {
   environmentDatacenters: Array<CksOvhDatacenter>;
   /** Customer-selectable instance flavors in the datacenter with current availability and customer pricing. */
   environmentFlavors: Array<CksOvhFlavor>;
+  environmentForwardVersions: Array<CksEnvironmentVersion>;
   /** Pricing quote for the selected flavors. Fails if any flavor is unavailable, hidden, or lacks customer pricing. */
   environmentQuote: CksEnvironmentQuote;
   /** Per-app usage totals for apps linked to an environment. */
@@ -3266,6 +3281,12 @@ export type QueryEffectiveQuotaArgs = {
 
 export type QueryEnvironmentFlavorsArgs = {
   datacenter: Scalars['String']['input'];
+};
+
+
+export type QueryEnvironmentForwardVersionsArgs = {
+  orgId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
 };
 
 
@@ -3634,6 +3655,7 @@ export type RedeployEnvironmentInput = {
   deployMode?: InputMaybe<RedeployDeployMode>;
   orgId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
+  version?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type RegisterUserInput = {
