@@ -104,7 +104,7 @@ test(
         clientB.udp.subscribe({
           actorUpdate: (n) => receivedByB.actorUpdates.push(n),
           genericError: (e) => receivedByB.genericErrors.push(e),
-        }),
+        }, appId),
       );
 
       // Give the WS time to connect + subscribe before we send anything

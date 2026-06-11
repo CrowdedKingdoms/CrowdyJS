@@ -97,14 +97,14 @@ test(
       cleanup.push(clientB.udp.subscribe({
         channelMessage: (n) => receivedByB.channel.push(n),
         genericError: (e) => receivedByB.errors.push(e),
-      }));
+      }, appId));
       cleanup.push(clientC.udp.subscribe({
         channelMessage: (n) => receivedByC.channel.push(n),
         genericError: (e) => receivedByC.errors.push(e),
-      }));
+      }, appId));
       cleanup.push(clientA.udp.subscribe({
         channelMessage: (n) => receivedByA.channel.push(n),
-      }));
+      }, appId));
 
       // Every connected client sends actor-update keepalives; this registers each
       // client's UDP return path on Buddy (so channel messages can be delivered)

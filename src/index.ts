@@ -26,14 +26,14 @@
  *
  *   const { token, user } = await client.auth.login({ email, password });
  *   const me = await client.users.me();
- *   const unsub = client.udp.subscribe({ onActorUpdate: (n) => { ... } });
+ *   const unsub = client.udp.subscribe({ actorUpdate: (n) => { ... } }, appId);
  *
  * Org / app / billing / payments / quotas operations are not in this
  * package; consume `cks-management-api` directly (the management UI does)
  * via Apollo, fetch, or a separate codegen client.
  */
 
-export const VERSION = '4.0.0';
+export const VERSION = '5.0.0';
 
 export {
   CrowdyClient,

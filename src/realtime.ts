@@ -74,6 +74,10 @@ export class RealtimeClient {
   private readonly subscribers = new Map<string, UdpNotificationHandlers>();
   private readonly pending = new Map<number, PendingWait[]>();
   private nextSubscriberId = 1;
+  // App this realtime session is scoped to. Sent in connectionParams so the
+  // game-api only fans this app's spatial notifications to this subscription.
+  // The game-api rejects subscriptions that arrive without it.
+  private subscribedAppId: string | null = null;
 
   constructor(
     config: RealtimeConfig = {},
@@ -134,7 +138,11 @@ export class RealtimeClient {
     this.rejectAllPending(new CrowdyRealtimeError('Realtime client closed', { retryable: false }));
   }
 
-  subscribe(handlers: UdpNotificationHandlers): () => void {
+  subscribe(handlers: UdpNotificationHandlers, appId: string): () => void {
+    // appId is required by the type; guard for JS callers so a missing value
+    // is sent as "no app" (cleanly rejected by the game-api) rather than the
+    // literal string "undefined".
+    this.subscribedAppId = appId != null ? String(appId) : null;
     const id = `s${this.nextSubscriberId++}`;
     this.subscribers.set(id, handlers);
     this.connect();
@@ -188,7 +196,12 @@ export class RealtimeClient {
       retryAttempts: this.retryAttempts,
       connectionParams: () => {
         const currentToken = this.session.getToken();
-        return currentToken ? { Authorization: `Bearer ${currentToken}` } : {};
+        if (!currentToken) return {};
+        const params: Record<string, string> = {
+          Authorization: `Bearer ${currentToken}`,
+        };
+        if (this.subscribedAppId != null) params.appId = this.subscribedAppId;
+        return params;
       },
       retryWait: async (retries) => {
         this.setStatus('reconnecting');
@@ -269,6 +282,18 @@ export class RealtimeClient {
 
   private dispatch(notification: UdpNotification): void {
     this.resolvePending(notification);
+
+    // A non-retryable connection event (e.g. APP_ID_REQUIRED, AUTH_REQUIRED)
+    // means the server completed the subscription and resubscribing would just
+    // be rejected again. Stop wanting the connection so the `complete` handler
+    // doesn't immediately reopen it (lazy graphql-ws then closes the socket).
+    if (
+      notification.__typename === 'RealtimeConnectionEvent' &&
+      notification.retryable === false
+    ) {
+      this.desired = false;
+      this.setStatus('failed');
+    }
 
     for (const handlers of [...this.subscribers.values()]) {
       try {
