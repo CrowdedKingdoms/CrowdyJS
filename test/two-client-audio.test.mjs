@@ -71,7 +71,7 @@ test(
       cleanup.push(clientB.udp.subscribe({
         audio: (n) => receivedByB.audio.push(n),
         genericError: (e) => receivedByB.genericErrors.push(e),
-      }));
+      }, appId));
 
       await sleep(2000);
 

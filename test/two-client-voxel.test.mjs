@@ -74,7 +74,7 @@ test(
       cleanup.push(clientB.udp.subscribe({
         voxelUpdate: (n) => receivedByB.voxelUpdates.push(n),
         genericError: (e) => receivedByB.genericErrors.push(e),
-      }));
+      }, appId));
 
       await sleep(2000);
 

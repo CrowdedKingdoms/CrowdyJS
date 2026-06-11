@@ -57,7 +57,7 @@ async function setupPair(createCrowdyClient, handlers, chunk) {
   const { appId, clients } = await provisionClients(createCrowdyClient, clientConfig(), 2);
   const [clientA, clientB] = clients;
   const cleanup = [];
-  cleanup.push(clientB.udp.subscribe(handlers));
+  cleanup.push(clientB.udp.subscribe(handlers, appId));
   await sleep(2000);
 
   const registerBoth = async () => {

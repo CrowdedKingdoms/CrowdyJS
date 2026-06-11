@@ -31,7 +31,7 @@ export class WorldClient {
   }
 
   subscribe(handlers: UdpNotificationHandlers): () => void {
-    return this.udp.subscribe(handlers);
+    return this.udp.subscribe(handlers, String(this.appId));
   }
 }
 

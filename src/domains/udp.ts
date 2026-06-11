@@ -179,13 +179,17 @@ export class UdpAPI {
   }
 
   /**
-   * Subscribe to udpNotifications. Pass any combination of typename
-   * handlers; the returned function detaches all of them. The first
-   * subscriber opens the shared WebSocket; the last one to leave closes
-   * it.
+   * Subscribe to udpNotifications for a single app. Pass any combination of
+   * typename handlers; the returned function detaches all of them. The first
+   * subscriber opens the shared WebSocket; the last one to leave closes it.
+   *
+   * `appId` is required and scopes the subscription to one app: the game-api
+   * only delivers that app's spatial notifications and rejects app-agnostic
+   * subscriptions (a single game token reused across apps would otherwise
+   * cross-deliver). Use a separate client per app (sharing the token store).
    */
-  subscribe(handlers: UdpNotificationHandlers): () => void {
-    return this.subs.subscribe(handlers);
+  subscribe(handlers: UdpNotificationHandlers, appId: string): () => void {
+    return this.subs.subscribe(handlers, appId);
   }
 
   private withSequence<T extends { sequenceNumber?: number | null }>(

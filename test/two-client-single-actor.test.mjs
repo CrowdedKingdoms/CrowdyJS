@@ -73,11 +73,11 @@ test(
       cleanup.push(clientB.udp.subscribe({
         singleActorMessage: (n) => receivedByB.single.push(n),
         genericError: (e) => receivedByB.errors.push(e),
-      }));
+      }, appId));
       cleanup.push(clientC.udp.subscribe({
         singleActorMessage: (n) => receivedByC.single.push(n),
         genericError: (e) => receivedByC.errors.push(e),
-      }));
+      }, appId));
 
       await sleep(2000);
 
