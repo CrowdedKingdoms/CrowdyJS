@@ -1,3 +1,34 @@
+# CrowdyJS v5.1 Notes
+
+v5.1 is additive and non-breaking.
+
+## Added
+
+- **`client.teams`** — the Teams API is now a first-class sub-client, mirroring
+  `client.channels`. Create / update / delete teams, manage membership and
+  roles, set the per-app team policy, and read `mine` (`myTeams`), `list`
+  (`teams`), `get`, `members`, `roles`, and `policy`. Teams are app-scoped
+  player groups with roles and delegated management (no realtime messaging
+  path — that is Channels).
+
+  ```ts
+  const team = await client.teams.create({ appId: '1', name: 'Red Squad' });
+  await client.teams.join(team.groupId);
+  const mine = await client.teams.mine('1');
+  ```
+
+## Removed
+
+- The `gameModelEventStream` GraphQL subscription has been removed from the Game
+  API and the bundled schema. It was never wrapped by a CrowdyJS method, so no
+  SDK call sites change. To react to game-model changes, have the mutating
+  client send a lightweight notification over the realtime UDP path — a channel
+  message (`client.udp.sendChannelMessage`, recommended) or a spatial client
+  event (`client.udp.sendClientEvent`) — and have peers re-pull authoritative
+  state via `client.gameModel.containerState(...)` / `client.gameModel.events(...)`.
+
+---
+
 # CrowdyJS v5 Migration Notes
 
 CrowdyJS v5 makes the realtime subscription **app-scoped** to fix a cross-app

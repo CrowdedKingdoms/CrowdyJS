@@ -1,0 +1,16 @@
+mutation AddTeamMember($groupId: BigInt!, $userId: BigInt!) {
+  addTeamMember(groupId: $groupId, userId: $userId) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}

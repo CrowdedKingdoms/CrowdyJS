@@ -1,0 +1,16 @@
+query TeamMembers($groupId: BigInt!) {
+  teamMembers(groupId: $groupId) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}

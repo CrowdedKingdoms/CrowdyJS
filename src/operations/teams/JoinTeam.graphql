@@ -1,0 +1,16 @@
+mutation JoinTeam($groupId: BigInt!) {
+  joinTeam(groupId: $groupId) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}

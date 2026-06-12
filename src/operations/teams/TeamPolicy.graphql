@@ -1,0 +1,10 @@
+query TeamPolicy($appId: BigInt!) {
+  teamPolicy(appId: $appId) {
+    appId
+    groupType
+    creationPolicy
+    defaultMembershipPolicy
+    maxMembers
+    maxGroupsPerUser
+  }
+}

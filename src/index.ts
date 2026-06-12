@@ -33,7 +33,7 @@
  * via Apollo, fetch, or a separate codegen client.
  */
 
-export const VERSION = '5.0.0';
+export const VERSION = '5.1.0';
 
 export {
   CrowdyClient,
@@ -126,6 +126,7 @@ export { TeleportAPI } from './domains/teleport.js';
 export { StateAPI } from './domains/state.js';
 export { ServerStatusAPI } from './domains/serverStatus.js';
 export { ChannelsAPI } from './domains/channels.js';
+export { TeamsAPI } from './domains/teams.js';
 export { UdpAPI } from './domains/udp.js';
 export { GameModelAPI } from './domains/gameModel.js';
 

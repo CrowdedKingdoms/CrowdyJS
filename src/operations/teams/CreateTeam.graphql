@@ -1,0 +1,14 @@
+mutation CreateTeam($input: CreateTeamInput!) {
+  createTeam(input: $input) {
+    groupId
+    appId
+    groupType
+    name
+    description
+    ownerUserId
+    membershipPolicy
+    status
+    defaultRoleId
+    createdAt
+  }
+}

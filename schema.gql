@@ -3087,10 +3087,6 @@ input ChannelMessageInput {
 
 type Subscription {
   """
-  Realtime stream of successful function-invocation events for an app, optionally narrowed to one session. Backed by Postgres NOTIFY so it fans out across game-api replicas without Buddy. Poll gameModelEvents if you prefer pull-based delivery.
-  """
-  gameModelEventStream(appId: BigInt!, sessionId: String): GmEvent
-  """
   Downlink from the game server (responses, notifications, GenericErrorResponse, and RealtimeConnectionEvent). On subscribe, opens a UDP proxy session if none exists (least-loaded server). Connection failures are delivered as RealtimeConnectionEvent. Unsubscribing stops delivery only; call disconnectUdpProxy to release the session.
   """
   udpNotifications: UdpNotification

@@ -1,0 +1,3 @@
+mutation LeaveTeam($groupId: BigInt!) {
+  leaveTeam(groupId: $groupId)
+}

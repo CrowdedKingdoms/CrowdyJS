@@ -1,0 +1,11 @@
+mutation CreateTeamRole($input: CreateGroupRoleInput!) {
+  createTeamRole(input: $input) {
+    groupRoleId
+    groupId
+    roleName
+    rank
+    isSystem
+    permissions
+    createdAt
+  }
+}

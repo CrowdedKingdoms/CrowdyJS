@@ -1,0 +1,11 @@
+mutation UpdateTeamRole($input: UpdateGroupRoleInput!) {
+  updateTeamRole(input: $input) {
+    groupRoleId
+    groupId
+    roleName
+    rank
+    isSystem
+    permissions
+    createdAt
+  }
+}

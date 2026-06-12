@@ -1,0 +1,14 @@
+query Teams($appId: BigInt!) {
+  teams(appId: $appId) {
+    groupId
+    appId
+    groupType
+    name
+    description
+    ownerUserId
+    membershipPolicy
+    status
+    defaultRoleId
+    createdAt
+  }
+}
