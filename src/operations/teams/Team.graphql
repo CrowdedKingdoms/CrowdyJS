@@ -1,0 +1,14 @@
+query Team($groupId: BigInt!) {
+  team(groupId: $groupId) {
+    groupId
+    appId
+    groupType
+    name
+    description
+    ownerUserId
+    membershipPolicy
+    status
+    defaultRoleId
+    createdAt
+  }
+}

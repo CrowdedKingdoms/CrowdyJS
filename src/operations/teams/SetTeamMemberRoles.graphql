@@ -1,0 +1,16 @@
+mutation SetTeamMemberRoles($input: SetMemberRolesInput!) {
+  setTeamMemberRoles(input: $input) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}

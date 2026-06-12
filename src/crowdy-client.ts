@@ -39,6 +39,7 @@ import { TeleportAPI } from './domains/teleport.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
 import { ChannelsAPI } from './domains/channels.js';
+import { TeamsAPI } from './domains/teams.js';
 import { UdpAPI } from './domains/udp.js';
 import { GameModelAPI } from './domains/gameModel.js';
 
@@ -102,6 +103,8 @@ export class CrowdyClient {
   readonly state: StateAPI;
   readonly serverStatus: ServerStatusAPI;
   readonly channels: ChannelsAPI;
+  /** Teams: app-scoped player groups with roles and delegated management. */
+  readonly teams: TeamsAPI;
   readonly udp: UdpAPI;
   /** Abstract game model: containers, properties, functions, sessions. */
   readonly gameModel: GameModelAPI;
@@ -159,6 +162,7 @@ export class CrowdyClient {
     this.state = new StateAPI(this.graphql);
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);
+    this.teams = new TeamsAPI(this.graphql);
     this.udp = new UdpAPI(this.graphql, this.realtime);
     this.gameModel = new GameModelAPI(this.graphql);
   }

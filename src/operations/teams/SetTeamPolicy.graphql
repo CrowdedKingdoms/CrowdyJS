@@ -1,0 +1,10 @@
+mutation SetTeamPolicy($input: SetTeamPolicyInput!) {
+  setTeamPolicy(input: $input) {
+    appId
+    groupType
+    creationPolicy
+    defaultMembershipPolicy
+    maxMembers
+    maxGroupsPerUser
+  }
+}
