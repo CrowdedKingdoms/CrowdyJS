@@ -1,5 +1,5 @@
-mutation DeleteActor($uuid: String!) {
-  deleteActor(uuid: $uuid) {
+mutation DeleteActor($uuid: String!, $idempotencyKey: String) {
+  deleteActor(uuid: $uuid, idempotencyKey: $idempotencyKey) {
     uuid
     appId
     userId

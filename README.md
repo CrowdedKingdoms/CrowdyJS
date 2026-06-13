@@ -10,6 +10,8 @@ npm install @crowdedkingdomstudios/crowdyjs
 
 CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must provide browser-compatible globals when opening realtime connections.
 
+> **Server compatibility:** v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define.
+
 ## Quick start
 
 ```ts
@@ -206,6 +208,23 @@ Transport and protocol failures throw structured error classes:
 - `CrowdyTimeoutError` — request or `AndWait` timed out.
 - `CrowdyRealtimeError` — realtime subscription couldn't be established or was dropped.
 - `CrowdyProtocolError` — server response failed schema validation.
+
+GraphQL errors carry a stable `extensions.code` (e.g. `UNAUTHENTICATED`, `SCOPE_MISSING`, `FORBIDDEN`, `IDEMPOTENCY_CONFLICT`) plus, where applicable, `extensions.remediation` and `extensions.requiredPermission`. Branch on `error.extensions?.code` rather than parsing messages.
+
+## Idempotent retries
+
+Destructive game-client mutations accept an optional **idempotency key**. Pass a stable key (e.g. `crypto.randomUUID()`) and a network retry replays the first result instead of applying the side effect twice. Reusing a key with different arguments throws a `CrowdyGraphQLError` with `extensions.code === 'IDEMPOTENCY_CONFLICT'`. Keys expire server-side after 24h.
+
+```ts
+const key = crypto.randomUUID();
+await client.actors.delete(uuid, key);          // first call deletes
+await client.actors.delete(uuid, key);          // retry → replays the first result
+await client.teams.remove(groupId, key);        // deleteTeam
+await client.teams.leave(groupId, key);         // leaveTeam
+await client.voxels.rollback({ ...input, idempotencyKey: key }); // input field
+```
+
+The key parameter is optional and trailing, so it's safe to omit. Requires a server on release v0.1.19+ (see Server compatibility above).
 
 ## Auth notes
 

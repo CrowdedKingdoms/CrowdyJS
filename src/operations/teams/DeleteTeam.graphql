@@ -1,3 +1,3 @@
-mutation DeleteTeam($groupId: BigInt!) {
-  deleteTeam(groupId: $groupId)
+mutation DeleteTeam($groupId: BigInt!, $idempotencyKey: String) {
+  deleteTeam(groupId: $groupId, idempotencyKey: $idempotencyKey)
 }

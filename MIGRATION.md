@@ -1,3 +1,45 @@
+# CrowdyJS v5.2 Notes
+
+v5.2 is additive at the SDK API level (new optional parameters only) and
+refreshes the bundled schema, but it **raises the minimum server version**.
+
+## Added
+
+- **Idempotency keys on destructive mutations.** The four destructive
+  game-client mutations now accept an optional idempotency key. Replaying the
+  same call with the same key returns the first result instead of re-applying
+  the side effect; the same key with different arguments returns an
+  `IDEMPOTENCY_CONFLICT` error. Keys expire server-side after 24h.
+
+  ```ts
+  const key = crypto.randomUUID();
+  await client.actors.delete(uuid, key);   // first call deletes
+  await client.actors.delete(uuid, key);   // retry replays the first result
+  await client.teams.remove(groupId, key);
+  await client.teams.leave(groupId, key);
+  await client.voxels.rollback({ ...input, idempotencyKey: key }); // input field
+  ```
+
+  All four parameters are optional and trailing, so existing call sites are
+  unchanged.
+
+- **Refreshed bundled schema.** Re-synced against `cks-management-api` and
+  `cks-game-api` so generated types now include the new Relay-style `*Connection`
+  queries (offset `limit`/`offset` args are now marked `@deprecated`), the
+  machine-readable `@requiresPermission` directive metadata, and the enumerated
+  error codes. `CrowdyGraphQLError` already surfaces these via `extensions.code`,
+  `extensions.remediation`, and `extensions.requiredPermission` — no new error
+  class is needed.
+
+## Requires
+
+- `cks-game-api >= v0.10.3` and `cks-management-api >= v0.1.70`. The destructive
+  mutation documents now send the `idempotencyKey` argument, so those four
+  operations require a server that defines it. Point the SDK at an environment
+  running release **v0.1.19** or later.
+
+---
+
 # CrowdyJS v5.1 Notes
 
 v5.1 is additive and non-breaking.

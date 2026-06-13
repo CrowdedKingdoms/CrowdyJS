@@ -68,9 +68,10 @@ export class ActorsAPI {
   }
 
   async delete(
-    uuid: DeleteActorMutationVariables['uuid']
+    uuid: DeleteActorMutationVariables['uuid'],
+    idempotencyKey?: DeleteActorMutationVariables['idempotencyKey']
   ): Promise<DeleteActorMutation['deleteActor']> {
-    const data = await this.gql.request(DeleteActorDocument, { uuid });
+    const data = await this.gql.request(DeleteActorDocument, { uuid, idempotencyKey });
     return data.deleteActor;
   }
 
