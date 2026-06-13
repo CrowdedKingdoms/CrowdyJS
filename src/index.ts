@@ -33,7 +33,8 @@
  * via Apollo, fetch, or a separate codegen client.
  */
 
-export const VERSION = '5.1.0';
+/** The published package version. Mirrors `package.json`. */
+export const VERSION = '5.2.1';
 
 export {
   CrowdyClient,

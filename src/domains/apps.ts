@@ -1,30 +1,3 @@
-/**
- * Apps sub-client. Targets `cks-management-api` (where the apps catalog
- * lives). After the DB split each app may be served by its own per-tenant
- * cks-game-api; the marketplace returns `gameApiUrl` for those rows so the
- * caller can build a per-app `CrowdyClient` against the correct endpoint.
- *
- * Typical pattern:
- *
- *   const baseClient = createCrowdyClient({
- *     managementUrl: 'https://api.example.com',
- *     httpUrl: 'https://legacy-game-api.example.com', // pre-split fallback
- *   });
- *   await baseClient.auth.login({ email, password });
- *
- *   const route = await baseClient.apps.routeFor(appId);
- *   if (route.gameApiUrl) {
- *     // Set for both dedicated (split-mode) AND shared-environment apps.
- *     const perAppClient = createCrowdyClient({
- *       managementUrl: 'https://api.example.com',
- *       httpUrl: route.gameApiUrl,
- *       wsUrl: route.gameApiUrl.replace(/^http/, 'ws'),
- *       tokenStore: baseClient.session.tokenStore,
- *     });
- *     // drive gameplay through perAppClient
- *   }
- */
-
 import type { GraphQLClient } from '../client.js';
 import {
   AppDocument,
@@ -38,22 +11,29 @@ import {
 } from '../generated/graphql.js';
 
 /**
- * Subset of an `App` row that the SDK exposes for routing decisions. The
- * fields are typed loosely as `unknown` because the generated types lag
- * behind the `splitMode` / `gameApiUrl` selection until codegen runs.
+ * The minimal routing tuple the SDK derives from an `App` row: just enough to
+ * decide which game-api endpoint should serve a given app. Returned by
+ * {@link AppsAPI.routeFor}.
  */
 export interface AppRoute {
+  /** Numeric id of the app (`BigInt` as a decimal string). */
   appId: string;
+  /**
+   * `true` when the app's runtime data lives in a dedicated per-tenant game-api
+   * database rather than the shared game-api. Used together with `gameApiUrl` to
+   * route gameplay calls.
+   */
   splitMode: boolean;
   /**
-   * 'none' (draft), 'shared' (the shared game-api), or 'dedicated' (a
-   * per-tenant environment). Populated once the schema/codegen expose it.
+   * Where the app runs: `'none'` (draft / not deployed), `'shared'` (the shared
+   * game-api), or `'dedicated'` (a provisioned per-tenant environment). `null`
+   * until the schema/codegen expose it.
    */
   deploymentTarget: string | null;
   /**
-   * The game-api URL to route gameplay to. Set for BOTH dedicated (split-mode)
-   * and shared-environment apps. When non-null, build a game-api client
-   * against it; when null, fall back to the constructor `httpUrl`.
+   * The game-api base URL to route gameplay to. Set for BOTH dedicated
+   * (split-mode) and shared-environment apps. When non-null, build a game-api
+   * client against it; when `null`, fall back to the constructor `httpUrl`.
    */
   gameApiUrl: string | null;
 }
@@ -72,10 +52,55 @@ function appRouteFromAppRow(row: unknown): AppRoute | null {
   };
 }
 
+/**
+ * App discovery & game-api routing — exposed as `client.apps`.
+ *
+ * Targets the **management-api** (every call routes to `managementUrl`), where
+ * the apps catalog lives. After the database split an app may be served by its
+ * own per-tenant cks-game-api; the catalog returns each app's `gameApiUrl` so
+ * you can build a per-app `CrowdyClient` against the correct endpoint (see
+ * {@link routeFor} / {@link AppRoute}).
+ *
+ * Auth: {@link appBySlug} is **public** (no session; resolves unlisted or draft
+ * apps when the exact slugs are known). {@link app}, {@link myApps}, and
+ * {@link routeFor} require authentication (any signed-in user) and otherwise
+ * throw {@link CrowdyGraphQLError} with `UNAUTHENTICATED`; note {@link app} does
+ * not enforce org/app permissions. `BigInt` ids such as `appId` and `orgId` are
+ * decimal strings.
+ *
+ * @example
+ * ```ts
+ * const base = createCrowdyClient({
+ *   managementUrl: 'https://api.example.com',
+ *   httpUrl: 'https://legacy-game-api.example.com', // pre-split fallback
+ * });
+ * await base.auth.login({ email, password });
+ *
+ * const route = await base.apps.routeFor(appId);
+ * if (route.gameApiUrl) {
+ *   // route gameplay to the app's resolved game-api endpoint
+ *   const perAppClient = createCrowdyClient({
+ *     managementUrl: 'https://api.example.com',
+ *     httpUrl: route.gameApiUrl,
+ *     wsUrl: route.gameApiUrl.replace(/^http/, 'ws'),
+ *     tokenStore: base.session.tokenStore,
+ *   });
+ * }
+ * ```
+ */
 export class AppsAPI {
   constructor(private readonly management: GraphQLClient) {}
 
-  /** Fetch a single app by id. */
+  /**
+   * Fetch a single app by its numeric id. Requires authentication (any signed-in
+   * user); does **not** enforce org/app permissions, so it can read apps the
+   * caller does not own, of any visibility/status. Prefer {@link appBySlug} for
+   * slug-based marketplace lookups.
+   *
+   * @param appId - Numeric id of the app (`BigInt` as a decimal string).
+   * @returns The {@link App}, or `null` if the id does not exist.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` if the caller is not signed in.
+   */
   async app(appId: string): Promise<AppQuery['app']> {
     const data = await this.management.request<AppQuery, AppQueryVariables>(
       AppDocument,
@@ -84,7 +109,19 @@ export class AppsAPI {
     return data.app;
   }
 
-  /** Fetch by org slug + app slug (marketplace links). */
+  /**
+   * Look up a single app by its org slug + app slug (the marketplace URL path).
+   * **Public**: no authentication required, and not filtered by visibility or
+   * status — it can resolve unlisted or draft apps when the exact slugs are
+   * known.
+   *
+   * @param orgSlug - URL slug of the owning organization (e.g. `"acme"` in the
+   *   path `/acme/my-game`).
+   * @param appSlug - URL slug of the app within the org (e.g. `"my-game"`);
+   *   unique per org.
+   * @returns The {@link App}, or `null` if no matching app exists.
+   * @throws {CrowdyGraphQLError} on transport/validation failures.
+   */
   async appBySlug(
     orgSlug: string,
     appSlug: string,
@@ -96,7 +133,15 @@ export class AppsAPI {
     return data.appBySlug;
   }
 
-  /** Apps the caller can play (org membership OR active access). */
+  /**
+   * List the apps the authenticated caller can see in their account: those owned
+   * by an org they are an active member of, OR those where they hold an active
+   * access grant. Includes apps of any visibility/status (e.g. accessible
+   * drafts), ordered newest-first. Requires authentication.
+   *
+   * @returns The caller's accessible {@link App}s (an empty array if none).
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` if the caller is not signed in.
+   */
   async myApps(): Promise<MyAppsQuery['myApps']> {
     const data = await this.management.request<
       MyAppsQuery,
@@ -106,10 +151,18 @@ export class AppsAPI {
   }
 
   /**
-   * Convenience: returns just the routing tuple for a given app. If the
-   * app row is missing or the API does not expose split-mode fields yet,
-   * returns `{ appId, splitMode: false, gameApiUrl: null }` so the caller
-   * keeps using the legacy single-endpoint deployment.
+   * Convenience wrapper over {@link app} that returns just the {@link AppRoute}
+   * routing tuple for an app — i.e. which game-api endpoint should serve it. If
+   * the app row is missing or the API does not expose the split-mode fields yet,
+   * returns a safe default (`{ appId, splitMode: false, deploymentTarget: null,
+   * gameApiUrl: null }`) so the caller keeps using the legacy single-endpoint
+   * deployment.
+   *
+   * @param appId - Numeric id of the app (`BigInt` as a decimal string).
+   * @returns The {@link AppRoute}; route gameplay to `gameApiUrl` when non-null,
+   *   otherwise fall back to the constructor `httpUrl`.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` (it calls {@link app} under
+   *   the hood).
    */
   async routeFor(appId: string): Promise<AppRoute> {
     const row = await this.app(appId);
