@@ -5184,8 +5184,12 @@ export type ServerEventNotification = {
   uuid: Scalars['String']['output'];
 };
 
-/** Lifecycle state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy servers. */
+/** Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers. */
 export enum ServerState {
+  /** Buddy hard resource overload: excluded from new-client selection and actively shedding clients (sends reconnect commands so they migrate elsewhere). */
+  Full = 'Full',
+  /** Buddy soft resource overload: excluded from new-client selection until it recovers; existing sessions continue. */
+  NearCapacity = 'NearCapacity',
   /** Not running or unreachable (e.g. crashed or missed heartbeats). */
   Offline = 'Offline',
   /** Healthy and accepting client traffic. The only state safe to route to. */
