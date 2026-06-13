@@ -1,3 +1,25 @@
+# CrowdyJS v5.2.1 Notes
+
+v5.2.1 is **documentation-only** — no API, type, or behavior changes.
+
+## Changed
+
+- Comprehensive TSDoc across the entire public surface (every sub-client class
+  and method, the error classes, the realtime types, the token store, and the
+  config). Descriptions mirror the GraphQL schema's field semantics and add
+  SDK-specific notes — auth/permission requirements, the stable
+  `extensions.code`s each call can throw, encoding/units conventions (`BigInt`
+  as decimal strings, base64 blobs, 32-char actor ids, chunk-unit distances),
+  idempotency-key replay/`IDEMPOTENCY_CONFLICT` behavior, and realtime
+  `...AndWait` echo/timeout semantics. These now show up on hover in your IDE
+  and in the published `.d.ts`.
+- Two doc-accuracy fixes: `...AndWait` echo timeouts reject with
+  `CrowdyRealtimeError` (`code === 'UDP_SEQUENCE_TIMEOUT'`), not
+  `CrowdyTimeoutError`; and only actor/voxel sends echo to the sender, so the
+  audio/text/event `...AndWait` variants are documented as fire-and-forget-with-error-wait.
+
+---
+
 # CrowdyJS v5.2 Notes
 
 v5.2 is additive at the SDK API level (new optional parameters only) and

@@ -67,13 +67,25 @@ export interface CrowdyClientConfig {
   managementGraphqlEndpoint?: string;
 
   // ----- Common -----
+  /** Per-request HTTP timeout in milliseconds (applies to both endpoints). */
   timeout?: number;
+  /**
+   * Persistence for the Bearer token across reloads. `BrowserLocalStorageTokenStore`
+   * is provided; supply your own for SSR/Node. When omitted the token lives only
+   * in memory for the lifetime of the client.
+   */
   tokenStore?: TokenStore;
+  /** Optional logger for SDK diagnostics (request/realtime lifecycle). */
   logger?: CrowdyLogger;
+  /** Realtime (WebSocket) tuning for reconnect backoff and `...AndWait` timeouts. */
   realtime?: {
+    /** Max reconnect attempts before giving up (default tuned for browsers). */
     retryAttempts?: number;
+    /** Initial reconnect backoff in milliseconds. */
     retryInitialDelayMs?: number;
+    /** Maximum reconnect backoff in milliseconds (the backoff is capped here). */
     retryMaxDelayMs?: number;
+    /** Default timeout for `...AndWait` round-trips that await a matching echo. */
     waitTimeoutMs?: number;
   };
 }
@@ -89,22 +101,33 @@ export class CrowdyClient {
   readonly management: GraphQLClient;
 
   // Identity + catalog (management-api).
+  /** Auth + session: login, register, logout, password/email flows. */
   readonly auth: AuthAPI;
+  /** Current-user identity: `me`, gamertag, account deletion. */
   readonly users: UsersAPI;
+  /** App discovery + routing (which game-api serves a given app). */
   readonly apps: AppsAPI;
   /** Public platform discovery (shared game-api URL, free app quota). */
   readonly platform: PlatformAPI;
 
   // Game (game-api).
+  /** Chunk reads/writes: terrain, LODs, chunk state, distance queries. */
   readonly chunks: ChunksAPI;
+  /** Voxel reads/writes: list, history, rollback, single-voxel edits. */
   readonly voxels: VoxelsAPI;
+  /** Persisted-actor CRUD (durable records; realtime is `udp`/`world`). */
   readonly actors: ActorsAPI;
+  /** Teleport: move an actor to a destination chunk/world. */
   readonly teleport: TeleportAPI;
+  /** Per-user/per-app persisted state blobs. */
   readonly state: StateAPI;
+  /** Server status + version discovery (UDP availability, version floors). */
   readonly serverStatus: ServerStatusAPI;
+  /** Channels: location-independent pub/sub messaging groups. */
   readonly channels: ChannelsAPI;
   /** Teams: app-scoped player groups with roles and delegated management. */
   readonly teams: TeamsAPI;
+  /** UDP proxy: spatial sends + the shared realtime notification subscription. */
   readonly udp: UdpAPI;
   /** Abstract game model: containers, properties, functions, sessions. */
   readonly gameModel: GameModelAPI;
@@ -177,6 +200,14 @@ export class CrowdyClient {
     return this.session.getToken();
   }
 
+  /**
+   * Ergonomic, app-scoped realtime facade. `client.world(appId)` returns a
+   * {@link WorldClient} whose `actor()` and `subscribe()` helpers pass `appId`
+   * for you and manage chunk/sequence bookkeeping — the recommended entry point
+   * for game loops. The lower-level `client.udp` remains available.
+   *
+   * @param appId - The app to scope realtime traffic to (BigInt as a decimal string).
+   */
   world(appId: string): WorldClient {
     return new WorldClient(appId, this.udp);
   }
