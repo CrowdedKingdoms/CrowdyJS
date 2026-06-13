@@ -125,8 +125,11 @@ export class TeamsAPI {
     return data.updateTeam;
   }
 
-  async remove(groupId: DeleteTeamMutationVariables['groupId']): Promise<boolean> {
-    const data = await this.gql.request(DeleteTeamDocument, { groupId });
+  async remove(
+    groupId: DeleteTeamMutationVariables['groupId'],
+    idempotencyKey?: DeleteTeamMutationVariables['idempotencyKey'],
+  ): Promise<boolean> {
+    const data = await this.gql.request(DeleteTeamDocument, { groupId, idempotencyKey });
     return data.deleteTeam;
   }
 
@@ -155,8 +158,9 @@ export class TeamsAPI {
 
   async leave(
     groupId: LeaveTeamMutationVariables['groupId'],
+    idempotencyKey?: LeaveTeamMutationVariables['idempotencyKey'],
   ): Promise<boolean> {
-    const data = await this.gql.request(LeaveTeamDocument, { groupId });
+    const data = await this.gql.request(LeaveTeamDocument, { groupId, idempotencyKey });
     return data.leaveTeam;
   }
 
