@@ -162,14 +162,41 @@ export async function provisionAppWithPlayers(playerCount) {
  */
 export async function provisionClients(createCrowdyClient, config, playerCount) {
   const { appId: id, tierId, owner, players } = await provisionAppWithPlayers(playerCount);
-  // Give the management -> game-api replica-sync a moment to mirror the access
-  // rows + grid grants into the per-tenant game DB before clients send traffic.
-  const syncWaitMs = Number(process.env.CROWDY_TEST_SYNC_WAIT_MS ?? 3000);
-  await new Promise((r) => setTimeout(r, syncWaitMs));
   const clients = players.map((p) => {
     const c = createCrowdyClient(config);
     c.setToken(p.token);
     return c;
   });
+
+  // Wait for the management -> game-api replica-sync to mirror each player's
+  // access row + grid grant into the per-tenant game DB before clients send
+  // traffic. Rather than a blind fixed sleep (racy), poll gameClientBootstrap:
+  // it triggers the server-side lazy mirror (ensureAppEntitlementsForUdp) and
+  // throws FORBIDDEN until the entitlement lands, so a successful call is a
+  // precise readiness signal. CROWDY_TEST_SYNC_WAIT_MS, if set, is still honored
+  // as an initial fixed delay for environments that prefer it.
+  const initialWaitMs = Number(process.env.CROWDY_TEST_SYNC_WAIT_MS ?? 0);
+  if (initialWaitMs > 0) await new Promise((r) => setTimeout(r, initialWaitMs));
+
+  const timeoutMs = Number(process.env.CROWDY_TEST_SYNC_TIMEOUT_MS ?? 15000);
+  const deadline = Date.now() + timeoutMs;
+  await Promise.all(
+    clients.map(async (c) => {
+      let lastErr;
+      while (Date.now() < deadline) {
+        try {
+          await c.serverStatus.gameClientBootstrap(id);
+          return;
+        } catch (err) {
+          lastErr = err;
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      }
+      throw new Error(
+        `replica-sync readiness timed out after ${timeoutMs}ms for app ${id}: ${lastErr?.message ?? lastErr}`,
+      );
+    }),
+  );
+
   return { appId: id, tierId, owner, players, clients };
 }
