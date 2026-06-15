@@ -200,3 +200,46 @@ export async function provisionClients(createCrowdyClient, config, playerCount) 
 
   return { appId: id, tierId, owner, players, clients };
 }
+
+/** The org that owns CROWDY_TEST_APP_ID — the owner's org, used to create new apps. */
+export async function ownerOrgId(token) {
+  const data = await gql(`query($a: BigInt!){ app(appId: $a){ orgId } }`, { a: appId() }, token);
+  return data.app.orgId;
+}
+
+/**
+ * Create a brand-new app under `orgId`. Per the management API, createApp also
+ * provisions the app's free, **open-by-default** "Default" access tier with full
+ * runtime permissions — the business rule under test: any authenticated player
+ * gains access automatically (no explicit grantAppAccess) when they connect.
+ */
+export async function createNewApp(token, orgId, label = rid()) {
+  const data = await gql(
+    `mutation($i: CreateAppInput!){ createApp(input: $i){ appId orgId } }`,
+    { i: { orgId, name: `e2e-newapp-${label}`, slug: `e2e-newapp-${label}` } },
+    token,
+  );
+  return data.createApp.appId;
+}
+
+/**
+ * Provision a FRESH app + players who are deliberately NOT granted access. The
+ * owner creates a new app (which auto-gets the open-by-default tier); we register
+ * players but skip grantAppAccess. On connect, the game-api pulls open-by-default
+ * access from the management API (s2s ensureDefaultAppAccess) and auto-grants the
+ * free default tier, so the players become entitled with zero explicit grants —
+ * that's the business rule the new-app test verifies.
+ */
+export async function provisionNewAppWithPlayers(playerCount) {
+  if (!ownerEnvReady()) {
+    throw new Error(`owner env not configured (need ${OWNER_ENV.join(', ')})`);
+  }
+  const owner = await loginOwner();
+  const orgId = await ownerOrgId(owner.token);
+  const newAppId = await createNewApp(owner.token, orgId);
+  const players = [];
+  for (let i = 0; i < playerCount; i++) {
+    players.push(await registerUser()); // intentionally NO grantAppAccess
+  }
+  return { appId: newAppId, orgId, owner, players };
+}
