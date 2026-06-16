@@ -28,9 +28,17 @@
  *   const me = await client.users.me();
  *   const unsub = client.udp.subscribe({ actorUpdate: (n) => { ... } }, appId);
  *
- * Org / app / billing / payments / quotas operations are not in this
- * package; consume `cks-management-api` directly (the management UI does)
- * via Apollo, fetch, or a separate codegen client.
+ * As of v6 the SDK wraps the **full** public surface of both APIs, namespaced
+ * by audience: the game-client surface (`auth`, `users`, `udp`, `world`,
+ * `chunks`/`voxels`/`actors`/`avatars`/`state`/`teleport`/`channels`/`teams`/
+ * `gameModel`/`host`), the privileged studio-admin surface grouped under
+ * `client.admin` (`organizations`, `appAccess`, `billing`, `payments`,
+ * `quotas`, `environments`, `usage`, `sharedEnvironment`, `gameApps`; also
+ * available top-level), and the operator control-plane surface under
+ * `client.operator` (requires `is_operator`). Admin/operator calls still
+ * require the appropriate token + permission — the server enforces them; the
+ * SDK only provides typed wrappers. Drive admin/operator from a studio backend
+ * or internal tooling, never an untrusted browser.
  */
 
 /** The published package version. Mirrors `package.json`. */
