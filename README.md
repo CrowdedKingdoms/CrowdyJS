@@ -50,6 +50,8 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 
 ## Sub-clients at a glance
 
+**Game-client surface** (end-user, browser-safe):
+
 | Sub-client | What it does |
 |---|---|
 | `client.auth` | Register, log in, log out, password reset, email confirmation. |
@@ -57,12 +59,36 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
 | `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes. |
+| `client.host` | Game-host election + actor liveness `heartbeat`. |
 | `client.teleport` | Teleport requests. |
+| `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
+| `client.gameModel` | Abstract game model: containers, properties, functions, sessions. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
 
-Auth and user reads always target `managementUrl`. Everything else targets `httpUrl` / `wsUrl`.
+**Studio-admin surface** (privileged; drive with a server-side / studio token, grouped under `client.admin`):
+
+| Sub-client | What it does |
+|---|---|
+| `client.organizations` | Orgs, members, RBAC roles, org API tokens. |
+| `client.apps` | App discovery + routing (`createApp` etc. via the management API directly). |
+| `client.appAccess` | Access tiers + per-user grants. |
+| `client.billing` | Org wallet + per-app spend budgets. |
+| `client.payments` | Payment checkouts (wallet top-ups, plan purchases). |
+| `client.quotas` | Usage quotas at the org/app scope. |
+| `client.environments` | Dedicated environments: quote, provision, scale, deploy, link apps. |
+| `client.usage` | Replication + GraphQL usage reporting. |
+| `client.sharedEnvironment` | Publish to shared, runtime gating, spend caps, auto-billing. |
+| `client.gameApps` | App grids + grid runtime-permission administration. |
+
+**Operator surface** (platform operations; requires `is_operator`):
+
+| Sub-client | What it does |
+|---|---|
+| `client.operator` | Control plane: cross-org environments, change orders, secrets, release management, audit. |
+
+Auth, user reads, and the studio-admin / operator surfaces target `managementUrl`; the game-client world/UDP surfaces target `httpUrl` / `wsUrl`. A single shared `AuthState` carries the bearer token to whichever endpoint serves each call.
 
 ## Game-loop lifecycle
 
@@ -232,16 +258,25 @@ The key parameter is optional and trailing, so it's safe to omit. Requires a ser
 - `client.session.restore()` reads from the configured `tokenStore`. `BrowserLocalStorageTokenStore` is provided; bring your own for SSR or Node usage.
 - A single `AuthState` is observed by both the HTTP client and the realtime socket, so HTTP and WebSocket auth can never drift.
 
-## What's NOT in CrowdyJS
+## Surface scope & security
 
-CrowdyJS focuses on the **game-client surface**: auth, world data, UDP proxy, profile reads. The following operations are **not** exposed by the SDK and should be called against the management GraphQL API directly (with a server-side token, typically from a studio backend):
+As of v6, CrowdyJS wraps the **full** management-api + game-api public surface, not
+just the game-client subset. The surfaces are namespaced by audience:
 
-- Org / app / billing / payments / quotas operations
-- Access-tier and runtime-permission administration
-- Game-token issuance / revocation
-- Marketplace and catalog management
+- **Game-client** (`client.auth`, `client.users`, `client.udp`, `client.world(...)`,
+  `client.chunks`/`voxels`/`actors`/`avatars`/`state`/`teleport`/`channels`/`teams`/
+  `gameModel`/`host`) — safe for untrusted browser clients with an end-user token.
+- **Studio-admin** (`client.admin.*` — also reachable at the top level, e.g.
+  `client.billing`) — privileged organization/app administration. Drive these from a
+  **studio backend** with an org-scoped or admin token, **not** from an untrusted
+  browser; the server still enforces the relevant org/app permission on every call.
+- **Operator** (`client.operator`) — platform control-plane operations that require
+  `users.is_operator`. For internal operator tooling only.
 
-The SDK is intentionally scoped to client-side, end-user-facing flows.
+A few management mutations (e.g. `createApp`, game-token issuance/revocation) are still
+called against the management GraphQL API directly; everything else is a typed SDK
+method. The SDK never relaxes server-side authorization — exposing an operation here
+just gives you a typed wrapper; the caller still needs the right token and permission.
 
 ## Low-level GraphQL access
 

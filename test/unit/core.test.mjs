@@ -6,8 +6,8 @@ test('package import is silent and exposes v4 browser APIs', async () => {
   const originalLog = console.log;
   console.log = (...args) => logs.push(args);
   try {
-    const sdk = await import('../dist/index.js');
-    const pkg = await import('../package.json', { with: { type: 'json' } });
+    const sdk = await import('../../dist/index.js');
+    const pkg = await import('../../package.json', { with: { type: 'json' } });
     // VERSION constant must stay in lockstep with the published package
     // version so consumers reading `client.session` / `sdk.VERSION` don't
     // get a different number than their `npm ls` output.
@@ -34,7 +34,7 @@ test('SessionStore persists and restores tokens through a TokenStore', async () 
     },
   };
 
-  const { SessionStore } = await import('../dist/index.js');
+  const { SessionStore } = await import('../../dist/index.js');
   const session = new SessionStore(store);
   const seen = [];
   session.onChange((token) => seen.push(token));
@@ -53,7 +53,7 @@ test('SessionStore persists and restores tokens through a TokenStore', async () 
 });
 
 test('SequenceAllocator wraps in uint8 space', async () => {
-  const { SequenceAllocator } = await import('../dist/index.js');
+  const { SequenceAllocator } = await import('../../dist/index.js');
   const allocator = new SequenceAllocator(254);
   assert.equal(allocator.next(), 254);
   assert.equal(allocator.next(), 255);
@@ -61,7 +61,7 @@ test('SequenceAllocator wraps in uint8 space', async () => {
 });
 
 test('CrowdyGraphQLError preserves all GraphQL errors and codes', async () => {
-  const { CrowdyGraphQLError } = await import('../dist/index.js');
+  const { CrowdyGraphQLError } = await import('../../dist/index.js');
   const error = new CrowdyGraphQLError([
     {
       message: 'Nope',

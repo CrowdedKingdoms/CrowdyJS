@@ -1,0 +1,26 @@
+name: Test
+
+# Builds the SDK (codegen falls back to the committed schema.gql when the
+# sibling API schemas aren't checked out) and runs the offline unit suite with
+# coverage. The live e2e suites (test/e2e/**) auto-skip without a configured
+# stack (CROWDY_* env), so they aren't run here; point them at a deployed env or
+# the local smoke stack to execute them.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Build + unit tests + coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Build + unit tests + coverage
+        run: npm run coverage

@@ -1,0 +1,175 @@
+query SharedEnvPlans {
+  sharedEnvPlans {
+    planId
+    code
+    name
+    description
+    priceCents
+    currency
+    billingInterval
+    status
+  }
+}
+
+query OrgFreeAppQuota($orgId: BigInt!) {
+  orgFreeAppQuota(orgId: $orgId) {
+    orgId
+    quota
+    usedFree
+    paidApps
+    remainingFree
+  }
+}
+
+query AppSharedSubscription($appId: BigInt!) {
+  appSharedSubscription(appId: $appId) {
+    appId
+    orgId
+    planId
+    provider
+    status
+    currentPeriodEnd
+  }
+}
+
+query AppRuntimeState($appId: BigInt!) {
+  appRuntimeState(appId: $appId) {
+    appId
+    deploymentTarget
+    runtimeStatus
+    runtimeDenialReason
+    walletBalanceCents
+    currentHourUsageCents
+    currentDayUsageCents
+    hourlyLimitCents
+    dailyLimitCents
+  }
+}
+
+query OrgAutoBilling($orgId: BigInt!) {
+  orgAutoBilling(orgId: $orgId) {
+    orgId
+    enabled
+    limitCents
+    period
+    autoBilledThisPeriodCents
+    rechargeAmountCents
+    lowWaterThresholdCents
+    hasPaymentMethod
+    lastError
+  }
+}
+
+query OrgPaymentMethods($orgId: BigInt!) {
+  orgPaymentMethods(orgId: $orgId) {
+    paymentMethodId
+    provider
+    brand
+    last4
+    isDefault
+    status
+  }
+}
+
+mutation PublishAppToShared(
+  $appId: BigInt!
+  $planId: BigInt
+  $provider: PaymentProvider
+  $successUrl: String
+  $cancelUrl: String
+  $idempotencyKey: String
+) {
+  publishAppToShared(
+    appId: $appId
+    planId: $planId
+    provider: $provider
+    successUrl: $successUrl
+    cancelUrl: $cancelUrl
+    idempotencyKey: $idempotencyKey
+  ) {
+    appId
+    free
+    checkout {
+      checkoutId
+      provider
+      status
+      amountCents
+      currency
+      externalUrl
+    }
+  }
+}
+
+mutation CancelSharedSubscription($appId: BigInt!, $idempotencyKey: String) {
+  cancelSharedSubscription(appId: $appId, idempotencyKey: $idempotencyKey) {
+    appId
+    orgId
+    planId
+    provider
+    status
+    currentPeriodEnd
+  }
+}
+
+mutation SetAppSpendCaps(
+  $appId: BigInt!
+  $hourlyLimitCents: BigInt
+  $dailyLimitCents: BigInt
+) {
+  setAppSpendCaps(
+    appId: $appId
+    hourlyLimitCents: $hourlyLimitCents
+    dailyLimitCents: $dailyLimitCents
+  ) {
+    appId
+    runtimeStatus
+    runtimeDenialReason
+    hourlyLimitCents
+    dailyLimitCents
+  }
+}
+
+mutation SetAutoBilling(
+  $orgId: BigInt!
+  $enabled: Boolean!
+  $limitCents: BigInt
+  $rechargeAmountCents: BigInt
+  $lowWaterThresholdCents: BigInt
+  $idempotencyKey: String
+) {
+  setAutoBilling(
+    orgId: $orgId
+    enabled: $enabled
+    limitCents: $limitCents
+    rechargeAmountCents: $rechargeAmountCents
+    lowWaterThresholdCents: $lowWaterThresholdCents
+    idempotencyKey: $idempotencyKey
+  ) {
+    orgId
+    enabled
+    limitCents
+    rechargeAmountCents
+    lowWaterThresholdCents
+    hasPaymentMethod
+  }
+}
+
+mutation SetupSharedPaymentMethod($orgId: BigInt!, $idempotencyKey: String) {
+  setupSharedPaymentMethod(orgId: $orgId, idempotencyKey: $idempotencyKey) {
+    externalCustomerId
+    clientSecret
+    publishableKey
+  }
+}
+
+mutation RemoveSharedPaymentMethod(
+  $orgId: BigInt!
+  $paymentMethodId: BigInt!
+  $idempotencyKey: String
+) {
+  removeSharedPaymentMethod(
+    orgId: $orgId
+    paymentMethodId: $paymentMethodId
+    idempotencyKey: $idempotencyKey
+  )
+}

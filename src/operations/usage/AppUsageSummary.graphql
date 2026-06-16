@@ -1,0 +1,25 @@
+query AppUsageSummary(
+  $orgId: BigInt!
+  $appId: BigInt!
+  $since: DateTime!
+  $operationLimit: Int
+) {
+  appUsageSummary(
+    orgId: $orgId
+    appId: $appId
+    since: $since
+    operationLimit: $operationLimit
+  ) {
+    appId
+    replicationSendBytes
+    replicationRecvBytes
+    graphqlSendBytes
+    graphqlRecvBytes
+    topGraphqlOperations {
+      operationName
+      totalOps
+      sendBytes
+      recvBytes
+    }
+  }
+}

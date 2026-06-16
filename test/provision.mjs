@@ -61,6 +61,31 @@ async function gql(query, variables, token) {
   return json.data;
 }
 
+/**
+ * Raw management GraphQL helper exposed for suites that need to drive arbitrary
+ * operations (e.g. permission/validation/malicious-input negative tests).
+ * Throws on `errors`; use {@link gqlManagementRaw} when you want to assert on the
+ * error envelope instead.
+ */
+export async function gqlManagement(query, variables, token) {
+  return gql(query, variables, token);
+}
+
+/**
+ * Like {@link gqlManagement} but returns the full `{ data, errors }` envelope
+ * WITHOUT throwing — for negative tests that assert on `errors[].extensions.code`.
+ */
+export async function gqlManagementRaw(query, variables, token) {
+  const headers = { 'content-type': 'application/json' };
+  if (token) headers.authorization = `Bearer ${token}`;
+  const res = await fetch(managementEndpoint(), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ query, variables }),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
 /** Register a fresh player through the public management API. */
 export async function registerUser(overrides = {}) {
   const email = overrides.email ?? `crowdy-e2e-${rid()}@test.invalid`;
@@ -75,14 +100,55 @@ export async function registerUser(overrides = {}) {
   return { email, password, token: r.token, gameTokenId: r.gameTokenId, userId: r.user.userId };
 }
 
-async function loginOwner() {
+/** Log in with explicit credentials; returns `{ token, userId }`. */
+export async function loginAs(email, password) {
   const data = await gql(
     `mutation Login($i: LoginUserInput!) {
        login(loginUserInput: $i) { token user { userId } }
      }`,
-    { i: { email: process.env.CROWDY_OWNER_EMAIL, password: process.env.CROWDY_OWNER_PASSWORD } },
+    { i: { email, password } },
   );
   return { token: data.login.token, userId: data.login.user.userId };
+}
+
+async function loginOwner() {
+  return loginAs(process.env.CROWDY_OWNER_EMAIL, process.env.CROWDY_OWNER_PASSWORD);
+}
+
+/** Log in as the configured app owner; returns `{ token, userId }`. */
+export async function provisionOwner() {
+  if (!ownerEnvReady()) {
+    throw new Error(`owner env not configured (need ${OWNER_ENV.join(', ')})`);
+  }
+  return loginOwner();
+}
+
+/** Env for the operator/super-admin persona used by control-plane e2e. */
+export const OPERATOR_ENV = ['CROWDY_OPERATOR_EMAIL', 'CROWDY_OPERATOR_PASSWORD'];
+
+export function operatorEnvReady() {
+  return OPERATOR_ENV.every((k) => !!process.env[k]);
+}
+
+/**
+ * Log in as the operator/super-admin persona. Uses CROWDY_OPERATOR_EMAIL /
+ * CROWDY_OPERATOR_PASSWORD when set; otherwise falls back to the owner creds
+ * (in the local smoke stack the seeded owner is also a super-admin/operator).
+ */
+export async function provisionOperator() {
+  if (operatorEnvReady()) {
+    return loginAs(process.env.CROWDY_OPERATOR_EMAIL, process.env.CROWDY_OPERATOR_PASSWORD);
+  }
+  return provisionOwner();
+}
+
+/**
+ * Register a fresh "outsider" player: a real account that is NOT a member of the
+ * owner's org and has NOT been granted access to the test app. Used by
+ * permission-denial / cross-tenant negative tests.
+ */
+export async function provisionOutsider() {
+  return registerUser();
 }
 
 async function listRuntimePermissions(token) {

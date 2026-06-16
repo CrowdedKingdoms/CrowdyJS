@@ -1,0 +1,11 @@
+query OrgUsageByEnvironment($orgId: BigInt!, $since: DateTime!) {
+  orgUsageByEnvironment(orgId: $orgId, since: $since) {
+    environmentId
+    environmentSlug
+    displayName
+    replicationSendBytes
+    replicationRecvBytes
+    graphqlSendBytes
+    graphqlRecvBytes
+  }
+}

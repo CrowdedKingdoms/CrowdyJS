@@ -1,3 +1,35 @@
+# CrowdyJS v6 Notes
+
+v6 is **additive** at the SDK API level (new sub-clients only) but is a **scope
+change**: CrowdyJS now wraps the **full** public management-api + game-api surface
+instead of just the game-client subset. Existing sub-clients (`auth`, `users`,
+`udp`, `world`, `chunks`/`voxels`/`actors`/`avatars`/`state`/`teleport`/`channels`/
+`teams`/`gameModel`) are unchanged — no migration needed for existing code.
+
+## Added
+
+- **Studio-admin sub-clients** (target `managementUrl`): `client.organizations`,
+  `client.appAccess`, `client.billing`, `client.payments`, `client.quotas`,
+  `client.environments`, `client.usage`, `client.sharedEnvironment`, and
+  `client.gameApps` (grid admin, game-api). All are also grouped under a
+  `client.admin` facade for discoverability (`client.admin.organizations`, …,
+  `client.admin.grids`).
+- **Operator surface**: `client.operator` (control plane — environments, change
+  orders, secrets, release management, audit). Requires `users.is_operator`.
+- **Game-side**: `client.avatars` (durable avatars + per-app avatar state — the
+  README previously referenced this before it existed) and `client.host`
+  (game-host election + actor `heartbeat`).
+
+## Security note
+
+These admin/operator operations are **privileged**. The SDK only provides typed
+wrappers; the server still enforces the org/app permission (or `is_operator`) on
+every call. Drive `client.admin.*` from a studio backend with an org-scoped/admin
+token and `client.operator` from internal tooling — **not** from an untrusted
+browser. The game-client surface remains browser-safe with an end-user token.
+
+---
+
 # CrowdyJS v5.2.1 Notes
 
 v5.2.1 is **documentation-only** — no API, type, or behavior changes.

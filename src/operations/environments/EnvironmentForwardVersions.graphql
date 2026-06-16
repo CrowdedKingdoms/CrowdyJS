@@ -1,0 +1,9 @@
+query EnvironmentForwardVersions($orgId: BigInt!, $slug: String!) {
+  environmentForwardVersions(orgId: $orgId, slug: $slug) {
+    version
+    releasedAt
+    status
+    notes
+    gameApiGitTag
+  }
+}

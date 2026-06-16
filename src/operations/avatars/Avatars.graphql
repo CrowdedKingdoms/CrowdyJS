@@ -1,0 +1,104 @@
+query UserAvatars($userId: BigInt!) {
+  userAvatars(userId: $userId) {
+    avatarId
+    userId
+    name
+    publicState
+    privateState
+    createdAt
+  }
+}
+
+query AvatarById($id: BigInt!) {
+  avatar(id: $id) {
+    avatarId
+    userId
+    name
+    publicState
+    privateState
+    createdAt
+  }
+}
+
+query MyAvatars {
+  myAvatars {
+    avatarId
+    userId
+    name
+    publicState
+    privateState
+    createdAt
+  }
+}
+
+query AvatarAppState($appId: BigInt!, $avatarId: BigInt!) {
+  avatarAppState(appId: $appId, avatarId: $avatarId) {
+    appId
+    avatarId
+    state
+    createdAt
+    updatedAt
+  }
+}
+
+query AvatarAppStates($appId: BigInt!, $avatarIds: [BigInt!]!) {
+  avatarAppStates(appId: $appId, avatarIds: $avatarIds) {
+    appId
+    avatarId
+    state
+    createdAt
+    updatedAt
+  }
+}
+
+mutation CreateAvatar($input: CreateAvatarInput!) {
+  createAvatar(input: $input) {
+    avatarId
+    userId
+    name
+    publicState
+    privateState
+    createdAt
+  }
+}
+
+mutation UpdateAvatar($id: BigInt!, $input: UpdateAvatarInput!) {
+  updateAvatar(id: $id, input: $input) {
+    avatarId
+    userId
+    name
+    publicState
+    privateState
+    createdAt
+  }
+}
+
+mutation DeleteAvatar($id: BigInt!, $idempotencyKey: String) {
+  deleteAvatar(id: $id, idempotencyKey: $idempotencyKey) {
+    avatarId
+    userId
+    name
+    createdAt
+  }
+}
+
+mutation UpdateAvatarState($id: BigInt!, $input: UpdateAvatarStateInput!) {
+  updateAvatarState(id: $id, input: $input) {
+    avatarId
+    userId
+    name
+    publicState
+    privateState
+    createdAt
+  }
+}
+
+mutation UpdateAvatarAppState($input: UpdateAvatarAppStateInput!) {
+  updateAvatarAppState(input: $input) {
+    appId
+    avatarId
+    state
+    createdAt
+    updatedAt
+  }
+}

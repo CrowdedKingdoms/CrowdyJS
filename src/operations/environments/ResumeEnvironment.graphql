@@ -1,0 +1,13 @@
+mutation ResumeEnvironment($input: ResumeEnvironmentInput!) {
+  resumeEnvironment(input: $input) {
+    id
+    environmentId
+    kind
+    status
+    requestedBy
+    error
+    createdAt
+    updatedAt
+    finishedAt
+  }
+}

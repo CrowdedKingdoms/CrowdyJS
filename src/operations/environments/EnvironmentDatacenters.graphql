@@ -1,0 +1,12 @@
+query EnvironmentDatacenters {
+  environmentDatacenters {
+    region
+    name
+    city
+    continent
+    status
+    isAvailable
+    selectableInstanceCount
+    syncedAt
+  }
+}

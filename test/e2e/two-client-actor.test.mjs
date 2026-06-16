@@ -25,7 +25,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionAppWithPlayers } from './provision.mjs';
+import { provisionAppWithPlayers } from '../provision.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
 globalThis.WebSocket = WebSocket;
@@ -84,7 +84,7 @@ test(
   async () => {
     // Import lazily so the test file can be evaluated even when dist isn't
     // built (the unit test suite still passes).
-    const { createCrowdyClient } = await import('../dist/index.js');
+    const { createCrowdyClient } = await import('../../dist/index.js');
 
     // 1. Provision an app + two entitled players via the management API only.
     const { appId, players } = await provisionAppWithPlayers(2);

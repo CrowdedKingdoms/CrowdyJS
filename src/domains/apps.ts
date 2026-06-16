@@ -3,11 +3,24 @@ import {
   AppDocument,
   AppBySlugDocument,
   MyAppsDocument,
+  AppsForOrgDocument,
+  CreateAppDocument,
+  UpdateAppDocument,
+  ArchiveAppDocument,
+  SetAppVisibilityDocument,
   type AppQuery,
   type AppQueryVariables,
   type AppBySlugQuery,
   type AppBySlugQueryVariables,
   type MyAppsQuery,
+  type AppsForOrgQuery,
+  type CreateAppMutation,
+  type UpdateAppMutation,
+  type ArchiveAppMutation,
+  type SetAppVisibilityMutation,
+  type CreateAppInput,
+  type UpdateAppInput,
+  type AppVisibility,
 } from '../generated/graphql.js';
 
 /**
@@ -174,5 +187,89 @@ export class AppsAPI {
         gameApiUrl: null,
       }
     );
+  }
+
+  /**
+   * List the apps owned by an organization (by org slug). Studio-admin read —
+   * requires the caller to be a member of the org.
+   *
+   * @param orgSlug - URL slug of the owning organization.
+   * @returns The org's {@link App}s.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN`.
+   */
+  async forOrg(orgSlug: string): Promise<AppsForOrgQuery['appsForOrg']> {
+    const data = await this.management.request(AppsForOrgDocument, { orgSlug });
+    return data.appsForOrg;
+  }
+
+  /**
+   * Create a new app under an organization. Requires the `manage_apps` org
+   * permission. The new app auto-provisions an open-by-default access tier.
+   *
+   * @param input - {@link CreateAppInput}: `orgId`, `name`, `slug`, optional
+   *   `description`/`visibility`/`metadata`.
+   * @returns The created {@link App}.
+   * @throws {CrowdyGraphQLError} `FORBIDDEN`/`SCOPE_MISSING` without
+   *   `manage_apps`, or `BAD_USER_INPUT` (e.g. duplicate slug).
+   */
+  async create(
+    input: CreateAppInput,
+  ): Promise<CreateAppMutation['createApp']> {
+    const data = await this.management.request(CreateAppDocument, { input });
+    return data.createApp;
+  }
+
+  /**
+   * Update an app's mutable fields. Requires the `manage_apps` app permission.
+   *
+   * @param appId - Numeric app id.
+   * @param input - {@link UpdateAppInput} fields to change.
+   * @returns The updated {@link App}.
+   * @throws {CrowdyGraphQLError} `FORBIDDEN`/`SCOPE_MISSING` without
+   *   `manage_apps`.
+   */
+  async update(
+    appId: string,
+    input: UpdateAppInput,
+  ): Promise<UpdateAppMutation['updateApp']> {
+    const data = await this.management.request(UpdateAppDocument, {
+      appId,
+      input,
+    });
+    return data.updateApp;
+  }
+
+  /**
+   * Archive (soft-delete) an app. Requires the `manage_apps` app permission.
+   *
+   * @param appId - Numeric app id.
+   * @returns The archived app's new status.
+   * @throws {CrowdyGraphQLError} `FORBIDDEN`/`SCOPE_MISSING` without
+   *   `manage_apps`.
+   */
+  async archive(
+    appId: string,
+  ): Promise<ArchiveAppMutation['archiveApp']> {
+    const data = await this.management.request(ArchiveAppDocument, { appId });
+    return data.archiveApp;
+  }
+
+  /**
+   * Override an app's marketplace visibility. **Super-admin only.**
+   *
+   * @param appId - Numeric app id.
+   * @param visibility - The new {@link AppVisibility}.
+   * @returns The app's updated visibility.
+   * @throws {CrowdyGraphQLError} `FORBIDDEN` for non-super-admins.
+   */
+  async setVisibility(
+    appId: string,
+    visibility: AppVisibility,
+  ): Promise<SetAppVisibilityMutation['setAppVisibility']> {
+    const data = await this.management.request(SetAppVisibilityDocument, {
+      appId,
+      visibility,
+    });
+    return data.setAppVisibility;
   }
 }

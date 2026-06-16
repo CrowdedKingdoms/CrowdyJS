@@ -1,0 +1,13 @@
+mutation UpdateEnvironmentScaling($input: UpdateEnvironmentScalingInput!) {
+  updateEnvironmentScaling(input: $input) {
+    id
+    environmentId
+    kind
+    status
+    requestedBy
+    error
+    createdAt
+    updatedAt
+    finishedAt
+  }
+}

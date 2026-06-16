@@ -21,7 +21,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from './provision.mjs';
+import { provisionClients } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -63,7 +63,7 @@ test(
   'channel message reaches members but not non-members, with no sender echo',
   { skip: skipReason, timeout: 60_000 },
   async () => {
-    const { createCrowdyClient } = await import('../dist/index.js');
+    const { createCrowdyClient } = await import('../../dist/index.js');
     const { appId, owner, players, clients } = await provisionClients(
       createCrowdyClient,
       clientConfig(),

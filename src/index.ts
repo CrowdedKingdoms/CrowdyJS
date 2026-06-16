@@ -28,9 +28,17 @@
  *   const me = await client.users.me();
  *   const unsub = client.udp.subscribe({ actorUpdate: (n) => { ... } }, appId);
  *
- * Org / app / billing / payments / quotas operations are not in this
- * package; consume `cks-management-api` directly (the management UI does)
- * via Apollo, fetch, or a separate codegen client.
+ * As of v6 the SDK wraps the **full** public surface of both APIs, namespaced
+ * by audience: the game-client surface (`auth`, `users`, `udp`, `world`,
+ * `chunks`/`voxels`/`actors`/`avatars`/`state`/`teleport`/`channels`/`teams`/
+ * `gameModel`/`host`), the privileged studio-admin surface grouped under
+ * `client.admin` (`organizations`, `appAccess`, `billing`, `payments`,
+ * `quotas`, `environments`, `usage`, `sharedEnvironment`, `gameApps`; also
+ * available top-level), and the operator control-plane surface under
+ * `client.operator` (requires `is_operator`). Admin/operator calls still
+ * require the appropriate token + permission — the server enforces them; the
+ * SDK only provides typed wrappers. Drive admin/operator from a studio backend
+ * or internal tooling, never an untrusted browser.
  */
 
 /** The published package version. Mirrors `package.json`. */
@@ -120,6 +128,19 @@ export { AuthAPI } from './domains/auth.js';
 export { UsersAPI } from './domains/users.js';
 export { AppsAPI, type AppRoute } from './domains/apps.js';
 export { PlatformAPI, type PlatformConfig } from './domains/platform.js';
+export { OrganizationsAPI } from './domains/organizations.js';
+export { AppAccessAPI } from './domains/appAccess.js';
+export { BillingAPI } from './domains/billing.js';
+export { PaymentsAPI } from './domains/payments.js';
+export { QuotasAPI } from './domains/quotas.js';
+export { EnvironmentsAPI } from './domains/environments.js';
+export { UsageAPI } from './domains/usage.js';
+export { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
+export { ControlPlaneAPI } from './domains/controlPlane.js';
+export { AdminAPI } from './domains/admin.js';
+export { AvatarsAPI } from './domains/avatars.js';
+export { HostAPI } from './domains/host.js';
+export { GameAppsAPI } from './domains/gameApps.js';
 export { ChunksAPI } from './domains/chunks.js';
 export { VoxelsAPI } from './domains/voxels.js';
 export { ActorsAPI } from './domains/actors.js';
@@ -244,4 +265,25 @@ export type {
   Scalars,
 } from './generated/graphql.js';
 
-export { ServerState } from './generated/graphql.js';
+// -----------------------------------------------------------------------------
+// Management-api admin surface input types (organizations, app-access,
+// billing, payments, quotas) used by the studio-admin sub-clients.
+// -----------------------------------------------------------------------------
+export type {
+  CreateAppInput,
+  UpdateAppInput,
+  CreateOrganizationInput,
+  CreateOrgTokenInput,
+  UpdateOrgTokenInput,
+  InviteOrgMemberInput,
+  CreateOrgRoleInput,
+  UpdateOrgRoleInput,
+  CreateAccessTierInput,
+  UpdateAccessTierInput,
+  GrantAppAccessInput,
+  CreateCheckoutInput,
+  CheckoutFilterInput,
+  SetQuotaInput,
+} from './generated/graphql.js';
+
+export { ServerState, AppVisibility } from './generated/graphql.js';

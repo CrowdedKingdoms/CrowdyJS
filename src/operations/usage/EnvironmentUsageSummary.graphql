@@ -1,0 +1,43 @@
+query EnvironmentUsageSummary(
+  $orgId: BigInt!
+  $environmentSlug: String!
+  $since: DateTime!
+) {
+  environmentUsageSummary(
+    orgId: $orgId
+    environmentSlug: $environmentSlug
+    since: $since
+  ) {
+    environmentSlug
+    environmentId
+    orgId
+    replication {
+      minute
+      recvBytes
+      sendBytes
+      recvMsgs
+      sendMsgs
+    }
+    graphql {
+      minute
+      recvBytes
+      sendBytes
+    }
+    replicationRates {
+      peakSendMsgsPerSec
+      peakSendMbitPerSec
+      avgSendMsgsPerSec
+      avgSendMbitPerSec
+      sampleMinutes
+    }
+    buddyLive {
+      serverId
+      clientSendMsgsPerSec
+      clientSendMbitPerSec
+      clientRecvMsgsPerSec
+      clientRecvMbitPerSec
+      clients
+      updatedAt
+    }
+  }
+}

@@ -1,0 +1,20 @@
+query EnvironmentQuote($input: EnvironmentQuoteInput!) {
+  environmentQuote(input: $input) {
+    datacenter
+    databaseFlavor
+    gameApiFlavor
+    udpBuddyFlavor
+    caddyFlavor
+    gameApiMinServers
+    gameApiMaxServers
+    udpBuddyMinServers
+    udpBuddyMaxServers
+    loadBalancerCount
+    hourlyCostCents
+    firstDayReserveCents
+    walletBalanceCents
+    availableBalanceCents
+    currency
+    canCreate
+  }
+}

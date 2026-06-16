@@ -1,0 +1,22 @@
+query OrgEnvironments($orgId: BigInt!) {
+  orgEnvironments(orgId: $orgId) {
+    id
+    orgId
+    slug
+    displayName
+    status
+    billingStatus
+    environmentClass
+    primaryCloud
+    primaryRegion
+    desiredEnvironmentVersion
+    observedEnvironmentVersion
+    gameApiMinServers
+    gameApiMaxServers
+    udpBuddyMinServers
+    udpBuddyMaxServers
+    loadBalancerCount
+    createdAt
+    updatedAt
+  }
+}

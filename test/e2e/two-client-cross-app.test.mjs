@@ -27,7 +27,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionAppWithPlayers } from './provision.mjs';
+import { provisionAppWithPlayers } from '../provision.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
 globalThis.WebSocket = WebSocket;
@@ -83,7 +83,7 @@ test(
   'udpNotifications is fenced by appId and rejects app-agnostic subscriptions',
   { skip: skipReason, timeout: 60_000 },
   async () => {
-    const { createCrowdyClient } = await import('../dist/index.js');
+    const { createCrowdyClient } = await import('../../dist/index.js');
 
     // Two entitled players. player[0]'s single token is shared by the three
     // observer clients (the cross-app reuse scenario); player[1] is the peer
