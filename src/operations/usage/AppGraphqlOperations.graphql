@@ -1,0 +1,18 @@
+query AppGraphqlOperations(
+  $orgId: BigInt!
+  $appId: BigInt!
+  $since: DateTime!
+  $limit: Int
+) {
+  appGraphqlOperations(
+    orgId: $orgId
+    appId: $appId
+    since: $since
+    limit: $limit
+  ) {
+    operationName
+    totalOps
+    sendBytes
+    recvBytes
+  }
+}

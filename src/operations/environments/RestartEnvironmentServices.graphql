@@ -1,0 +1,13 @@
+mutation RestartEnvironmentServices($input: RestartEnvironmentServicesInput!) {
+  restartEnvironmentServices(input: $input) {
+    id
+    environmentId
+    kind
+    status
+    requestedBy
+    error
+    createdAt
+    updatedAt
+    finishedAt
+  }
+}

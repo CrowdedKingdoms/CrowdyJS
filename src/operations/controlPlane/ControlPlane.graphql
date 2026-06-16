@@ -1,0 +1,314 @@
+query CpEnvironments($page: Int, $pageSize: Int) {
+  cpEnvironments(page: $page, pageSize: $pageSize) {
+    rows {
+      id
+      orgId
+      slug
+      displayName
+      primaryCloud
+      primaryRegion
+      status
+      deletionProtectionEnabled
+      subdomainHandle
+      createdAt
+      updatedAt
+    }
+    total
+    page
+    pageSize
+  }
+}
+
+query CpEnvironment($slug: String!) {
+  cpEnvironment(slug: $slug) {
+    id
+    orgId
+    slug
+    displayName
+    primaryCloud
+    primaryRegion
+    status
+    deletionProtectionEnabled
+    deletionProtectionSetAt
+    deletionProtectionSetByEmail
+    subdomainHandle
+    createdAt
+    updatedAt
+  }
+}
+
+query CpChangeOrders($environmentId: String, $page: Int, $pageSize: Int) {
+  cpChangeOrders(
+    environmentId: $environmentId
+    page: $page
+    pageSize: $pageSize
+  ) {
+    rows {
+      id
+      environmentId
+      kind
+      status
+      claimedBy
+      claimedAt
+      finishedAt
+      error
+      createdAt
+      updatedAt
+    }
+    total
+    page
+    pageSize
+  }
+}
+
+query CpChangeOrder($id: String!) {
+  cpChangeOrder(id: $id) {
+    order {
+      id
+      environmentId
+      kind
+      status
+      error
+      createdAt
+      updatedAt
+      finishedAt
+    }
+    tasks {
+      id
+      changeOrderId
+      kind
+      ordinal
+      status
+      error
+      createdAt
+      finishedAt
+    }
+    steps {
+      id
+      taskId
+      ordinal
+      kind
+      status
+      attempt
+      error
+      createdAt
+      finishedAt
+    }
+  }
+}
+
+query CpAudit($environmentId: String, $limit: Int) {
+  cpAudit(environmentId: $environmentId, limit: $limit) {
+    id
+    actorUserId
+    actorKind
+    action
+    entityKind
+    entityId
+    environmentId
+    payloadJson
+    createdAt
+  }
+}
+
+query CpSecrets($environmentId: String) {
+  cpSecrets(environmentId: $environmentId) {
+    id
+    environmentId
+    name
+    kind
+    createdAt
+    rotatedAt
+  }
+}
+
+query CpEnvSecrets($environmentId: String) {
+  cpEnvSecrets(environmentId: $environmentId) {
+    id
+    environmentId
+    name
+    kind
+    createdAt
+    rotatedAt
+  }
+}
+
+query CpOvhCatalogSummary($region: String) {
+  cpOvhCatalogSummary(region: $region) {
+    region
+    flavorName
+    vcpus
+    ramMb
+    diskGb
+    ovhHourlyPriceCents
+    customerHourlyPriceCents
+    customerPricingMode
+    quotaAvailable
+  }
+}
+
+query CpUsageSummary($environmentSlug: String!, $since: DateTime!) {
+  cpUsageSummary(environmentSlug: $environmentSlug, since: $since) {
+    environmentSlug
+    orgId
+    replication {
+      minute
+      recvBytes
+      sendBytes
+      recvMsgs
+      sendMsgs
+    }
+    graphql {
+      minute
+      recvBytes
+      sendBytes
+    }
+    replicationRates {
+      peakSendMsgsPerSec
+      peakSendMbitPerSec
+      avgSendMsgsPerSec
+      avgSendMbitPerSec
+      sampleMinutes
+    }
+    buddyLive {
+      serverId
+      clientSendMsgsPerSec
+      clientRecvMsgsPerSec
+      clients
+      updatedAt
+    }
+  }
+}
+
+query CpUnreleasedGameApiTags {
+  cpUnreleasedGameApiTags {
+    tags {
+      tag
+      taggedAt
+      proposedEnvironmentVersion
+      schemaChanged
+    }
+    currentDeployTargetGameApiTag
+    gitSourceAvailable
+  }
+}
+
+query CpEnvironmentVersions {
+  cpEnvironmentVersions {
+    rows {
+      version
+      releasedAt
+      status
+      notes
+      sourceCommit
+      gameApiGitTag
+      buddyVersion
+      ingestedAt
+      updatedAt
+      inGit
+      inDb
+      isLatestAvailable
+    }
+    latestAvailableVersion
+    gitSourceAvailable
+  }
+}
+
+query OperatorUsers {
+  operatorUsers {
+    userId
+    email
+    gamertag
+    isOperator
+    isSuperAdmin
+    createdAt
+  }
+}
+
+mutation SetEnvironmentDeletionProtection(
+  $environmentId: String!
+  $enabled: Boolean!
+) {
+  setEnvironmentDeletionProtection(
+    environmentId: $environmentId
+    enabled: $enabled
+  )
+}
+
+mutation PutCpSecret(
+  $environmentId: String!
+  $name: String!
+  $plaintext: String!
+  $kind: String
+) {
+  putCpSecret(
+    environmentId: $environmentId
+    name: $name
+    plaintext: $plaintext
+    kind: $kind
+  ) {
+    id
+    environmentId
+    name
+    kind
+    createdAt
+    rotatedAt
+  }
+}
+
+mutation DeleteCpSecret($environmentId: String!, $name: String!) {
+  deleteCpSecret(environmentId: $environmentId, name: $name)
+}
+
+mutation PutCpEnvSecret(
+  $environmentId: String!
+  $name: String!
+  $plaintext: String!
+  $kind: String
+) {
+  putCpEnvSecret(
+    environmentId: $environmentId
+    name: $name
+    plaintext: $plaintext
+    kind: $kind
+  ) {
+    id
+    environmentId
+    name
+    kind
+    createdAt
+    rotatedAt
+  }
+}
+
+mutation IngestEnvironmentVersion($input: IngestEnvironmentVersionInput!) {
+  ingestEnvironmentVersion(input: $input) {
+    version
+    releasedAt
+    status
+    notes
+    gameApiGitTag
+    inGit
+    inDb
+    isLatestAvailable
+  }
+}
+
+mutation PublishEnvironmentReleaseFromGameApiTag(
+  $input: PublishEnvironmentReleaseFromGameApiTagInput!
+) {
+  publishEnvironmentReleaseFromGameApiTag(input: $input) {
+    version {
+      version
+      status
+      gameApiGitTag
+    }
+    schemaChanged
+    committedToGit
+    gitCommitError
+  }
+}
+
+mutation YankEnvironmentVersion($version: String!) {
+  yankEnvironmentVersion(version: $version)
+}

@@ -1,0 +1,44 @@
+query OrgEnvironment($orgId: BigInt!, $slug: String!) {
+  orgEnvironment(orgId: $orgId, slug: $slug) {
+    environment {
+      id
+      orgId
+      slug
+      displayName
+      status
+      billingStatus
+      environmentClass
+      primaryRegion
+      desiredEnvironmentVersion
+      observedEnvironmentVersion
+      gameApiMinServers
+      gameApiMaxServers
+      udpBuddyMinServers
+      udpBuddyMaxServers
+      loadBalancerCount
+      createdAt
+      updatedAt
+    }
+    components {
+      id
+      kind
+      status
+      desiredVersion
+      observedVersion
+    }
+    changeOrders {
+      id
+      kind
+      status
+      error
+      createdAt
+      finishedAt
+    }
+    outputs {
+      name
+      label
+      value
+      valueKind
+    }
+  }
+}

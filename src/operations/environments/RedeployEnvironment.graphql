@@ -1,0 +1,13 @@
+mutation RedeployEnvironment($input: RedeployEnvironmentInput!) {
+  redeployEnvironment(input: $input) {
+    id
+    environmentId
+    kind
+    status
+    requestedBy
+    error
+    createdAt
+    updatedAt
+    finishedAt
+  }
+}

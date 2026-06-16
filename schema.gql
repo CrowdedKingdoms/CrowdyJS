@@ -2040,7 +2040,7 @@ type Query {
     limit: Int = 50
     """Number of rows to skip for pagination. Defaults to 0."""
     offset: Int = 0
-  ): UsersPage! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  ): UsersPage!
   """
   Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated.
   """
@@ -2837,7 +2837,7 @@ type Query {
     gridId: BigInt!
     """The user whose effective permissions to read."""
     userId: BigInt!
-  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GridUserPermissions!
   """
   List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps').
   """
@@ -2846,7 +2846,7 @@ type Query {
     The app, the user, and the low/high chunk corners of the region to scan (corners are normalized).
     """
     input: NearbyGridPermissionsInput!
-  ): [NearbyGridPermissions!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): [NearbyGridPermissions!]!
   """
   Read the permission-key whitelist configured for a grid. An empty list means there is no limit (every active runtime permission may be granted on the grid). Requires app-admin ('manage_apps').
   """
@@ -2855,7 +2855,7 @@ type Query {
     appId: BigInt!
     """The grid whose limit whitelist to read."""
     gridId: BigInt!
-  ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GridPermissionLimits!
   """
   List the group/role -> permission-key grants configured on a grid for one group (rows of the `grid_group_grants` input table). These are inputs to the effective ACL, not the materialized result — use `gridUserPermissions` for a specific user's effective keys. Requires app-admin ('manage_apps').
   """
@@ -2866,7 +2866,7 @@ type Query {
     gridId: BigInt!
     """The group whose grants on the grid to list."""
     groupId: BigInt!
-  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GridGroupGrant!]!
   """
   The caller's teams in an app, with their roles and effective team permissions. Use this to discover which teams the current user belongs to and what they may do in each.
   """
@@ -2949,7 +2949,7 @@ type Query {
   gameModelContainerTypes(
     """The app (tenant) whose container types to list."""
     appId: BigInt!
-  ): [GmContainerType!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmContainerType!]!
   """
   List the property definitions for a container type. Requires app-admin ('manage_apps').
   """
@@ -2958,7 +2958,7 @@ type Query {
     appId: BigInt!
     """The container type whose properties to list."""
     typeName: String!
-  ): [GmPropertyDef!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmPropertyDef!]!
   """
   Fetch one studio-defined function by name. Requires app-admin ('manage_apps').
   """
@@ -2967,7 +2967,7 @@ type Query {
     appId: BigInt!
     """The function name to fetch."""
     name: String!
-  ): GmFunction! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmFunction!
   """
   List studio-defined functions for an app, optionally filtered to those attached to a container type. Requires app-admin ('manage_apps').
   """
@@ -2978,7 +2978,7 @@ type Query {
     Optional: only functions bound to this container type. Omit for all functions.
     """
     containerTypeName: String
-  ): [GmFunction!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmFunction!]!
   """
   Fetch a container type's full schema: its property definitions plus the functions available on it. Requires app-admin ('manage_apps').
   """
@@ -2987,14 +2987,14 @@ type Query {
     appId: BigInt!
     """The container type whose schema to fetch."""
     typeName: String!
-  ): GmTypeSchema! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmTypeSchema!
   """
   List the feature keys defined for an app. Requires app-admin ('manage_apps').
   """
   gameModelFeatures(
     """The app (tenant) whose features to list."""
     appId: BigInt!
-  ): [GmAppFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmAppFeature!]!
   """
   List tier -> feature grants for an app, optionally filtered to one tier. Requires app-admin ('manage_apps').
   """
@@ -3003,14 +3003,14 @@ type Query {
     appId: BigInt!
     """Optional: only grants for this access tier. Omit for all tiers."""
     tierId: BigInt
-  ): [GmTierFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmTierFeature!]!
   """
   Read the app's game-model runtime policy (session creation policy + default participant role). Requires app-admin ('manage_apps').
   """
   gameModelPolicy(
     """The app (tenant) whose policy to read."""
     appId: BigInt!
-  ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmAppPolicy!
   """Fetch one container (instance) by id. Requires a valid token."""
   gameModelContainer(
     """The app (tenant) that owns the container."""
@@ -3271,7 +3271,7 @@ type Mutation {
     userId: BigInt!
     """true grants super-admin; false revokes it."""
     value: Boolean!
-  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  ): User!
   """
   Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access.
   """
@@ -3289,7 +3289,7 @@ type Mutation {
     userId: BigInt!
     """true grants the early-access override; false revokes it."""
     value: Boolean!
-  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  ): User!
   """
   Sets the target user’s account `user_type` (e.g. "direct", "deleted"). Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api.
   """
@@ -3298,14 +3298,14 @@ type Mutation {
     userId: BigInt!
     """New user_type string, e.g. "direct"."""
     value: String!
-  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  ): User!
   """
   ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api.
   """
   forceLogoutUser(
     """Target user id whose sessions to revoke (BigInt as a decimal string)."""
     userId: BigInt!
-  ): Boolean! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  ): Boolean!
   """
   DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token. NOTE: the users table is management-owned, so in cks-game-api this throws ForbiddenException — call cks-management-api instead.
   """
@@ -3869,19 +3869,19 @@ type Mutation {
   """
   Upserts ONLY the opaque base64 chunk-level state blob for a chunk, preserving its voxels, per-voxel states and LODs; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass).
   """
-  updateChunkState(input: UpdateChunkStateInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  updateChunkState(input: UpdateChunkStateInput!): Chunk
   """
   Replaces the level-of-detail (LOD) set for a chunk, preserving voxels, per-voxel states, chunk state and owner; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass).
   """
-  updateChunkLods(input: UpdateChunkLodsInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  updateChunkLods(input: UpdateChunkLodsInput!): Chunk
   """
   Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and (when grids cover the chunk) `update_voxel_data` on a covering grid.
   """
-  updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
+  updateVoxel(input: UpdateVoxelInput!): Voxel!
   """
   Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass).
   """
-  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]!
   """
   Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit entirely within one of the app's existing grid assignments and must not overlap another grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS).
   """
@@ -3890,7 +3890,7 @@ type Mutation {
     Target app plus the two opposite corners of the grid box, in chunk coordinates. Corners are normalized to a low/high chunk, so their order does not matter.
     """
     input: CreateGridInput!
-  ): CreateGridResponse! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): CreateGridResponse!
   """
   Grant one or more runtime permission keys directly to a single user on a grid (writes the `grid_user_direct_grants` input table), then recompute that user's materialized effective ACL on the grid. The target user must already have active app access (otherwise this fails). Requires app-admin ('manage_apps'). Returns the user's full effective permission-key set on the grid. To grant by group/role instead of per-user, use `assignGroupToGrid`.
   """
@@ -3899,7 +3899,7 @@ type Mutation {
     The app, grid, and target user, the runtime permission keys to grant, and an optional expiry timestamp.
     """
     input: GrantGridPermissionsInput!
-  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GridUserPermissions!
   """
   Revoke a user's direct grants on a grid (deletes from the `grid_user_direct_grants` input table) and recompute their materialized effective ACL. Omit `permissionKeys` to remove ALL of the user's direct grants on the grid; pass a subset to remove only those keys. Does not affect permissions the user receives via group grants. Requires app-admin ('manage_apps'). DESTRUCTIVE for the targeted grants. Returns the user's remaining effective permission keys on the grid.
   """
@@ -3908,7 +3908,7 @@ type Mutation {
     The app, grid, and target user; optionally the subset of permission keys to revoke (omit to revoke all of the user's direct grants).
     """
     input: RevokeGridPermissionsInput!
-  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GridUserPermissions!
   """
   Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid.
   """
@@ -3917,7 +3917,7 @@ type Mutation {
     The app, grid, and the new whitelist of allowed permission keys (empty array = no limit).
     """
     input: SetGridPermissionLimitsInput!
-  ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GridPermissionLimits!
   """
   Grant runtime permission keys to a group (optionally scoped to a single group role) on a grid by writing the `grid_group_grants` input table, then recompute the materialized effective ACL so every affected member gains the keys. Requires app-admin ('manage_apps'). Returns the grid's current group grants for the group. Use `grantGridPermissions` for per-user grants instead.
   """
@@ -3926,7 +3926,7 @@ type Mutation {
     The app, grid, and target group; an optional group role to scope the grant to; the runtime permission keys to grant; and an optional expiry timestamp.
     """
     input: AssignGroupToGridInput!
-  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): [GridGroupGrant!]!
   """
   Revoke group/role grants on a grid (deletes from the `grid_group_grants` input table) and recompute the materialized effective ACL. Omit `permissionKeys` to revoke ALL of the group/role's grants on the grid; pass a subset to revoke only those keys. Requires app-admin ('manage_apps'). DESTRUCTIVE: removes the granted permissions from every affected member. Returns the group's remaining grants on the grid.
   """
@@ -3935,7 +3935,7 @@ type Mutation {
     The app, grid, and target group, plus an optional group role; optionally the subset of permission keys to revoke (omit to revoke all of the group/role's grants).
     """
     input: RevokeGroupFromGridInput!
-  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): [GridGroupGrant!]!
   """
   Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams.
   """
@@ -3960,7 +3960,7 @@ type Mutation {
   updateTeam(
     """The team id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateTeamInput!
-  ): Group! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "input.groupId")
+  ): Group!
   """
   Delete a team. Requires the 'manage_group' team permission (app admins bypass). DESTRUCTIVE: cascades to members, roles, and any grid grants the team conferred, and recomputes the effective grid ACL for affected grids. Returns true on success.
   """
@@ -3971,7 +3971,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "groupId")
+  ): Boolean!
   """
   Join a team as the caller. Honors the team membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. Banned users are rejected. No special permission required.
   """
@@ -4005,7 +4005,7 @@ type Mutation {
     groupId: BigInt!
     """The user to add or approve."""
     userId: BigInt!
-  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  ): GroupMember!
   """
   Remove a member from a team. Requires the 'manage_members' team permission, except that any member may remove themselves. DESTRUCTIVE: drops the membership and its roles. Returns true if a membership was removed.
   """
@@ -4014,7 +4014,7 @@ type Mutation {
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
     userId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  ): Boolean!
   """
   Replace a member's roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' team permission (app admins bypass).
   """
@@ -4023,7 +4023,7 @@ type Mutation {
     The team, the target user, and the full list of role ids the member should have.
     """
     input: SetMemberRolesInput!
-  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
+  ): GroupMember!
   """
   Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs).
   """
@@ -4032,21 +4032,21 @@ type Mutation {
     The team, the role name, the team permission keys to grant, and an optional rank.
     """
     input: CreateGroupRoleInput!
-  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
+  ): GroupRole!
   """
   Update a team role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' team permission (app admins bypass).
   """
   updateTeamRole(
     """The role id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateGroupRoleInput!
-  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupRoleId")
+  ): GroupRole!
   """
   Delete a non-system team role. Requires the 'manage_roles' team permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members and recomputes any grid ACLs the role granted on. Returns true if a role was deleted.
   """
   deleteTeamRole(
     """The team role to delete (must be a non-system role)."""
     groupRoleId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "groupRoleId")
+  ): Boolean!
   """
   Set who may create channels in an app and the default membership policy for new channels. Requires app-admin ('manage_apps'). Affects future channel creation only, not existing channels.
   """
@@ -4073,14 +4073,14 @@ type Mutation {
     The channel id plus the fields to change (omitted fields are left as-is).
     """
     input: UpdateChannelInput!
-  ): Group! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "input.groupId")
+  ): Group!
   """
   Delete a channel. Requires the 'manage_group' channel permission (app admins bypass). DESTRUCTIVE: cascades to members and roles and notifies Buddy servers to tear down message routing for the channel. Returns true on success.
   """
   deleteChannel(
     """The channel to delete."""
     groupId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "groupId")
+  ): Boolean!
   """
   Join a channel as the caller (subscribe to it). Honors the channel membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. On becoming active, Buddy is notified with the caller's effective send permission so routing starts.
   """
@@ -4110,7 +4110,7 @@ type Mutation {
     groupId: BigInt!
     """The user to add or approve."""
     userId: BigInt!
-  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  ): GroupMember!
   """
   Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed.
   """
@@ -4119,7 +4119,7 @@ type Mutation {
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
     userId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  ): Boolean!
   """
   Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately.
   """
@@ -4128,7 +4128,7 @@ type Mutation {
     The channel, the target user, and the full list of role ids the member should have.
     """
     input: SetMemberRolesInput!
-  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
+  ): GroupMember!
   """
   Create a custom (non-system) channel role granting the given channel permission keys (e.g. send_messages for posting rights). Requires the 'manage_roles' channel permission (app admins bypass).
   """
@@ -4137,21 +4137,21 @@ type Mutation {
     The channel, the role name, the channel permission keys to grant, and an optional rank.
     """
     input: CreateGroupRoleInput!
-  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
+  ): GroupRole!
   """
   Update a channel role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' channel permission (app admins bypass). Note: changing send_messages here does not re-push Buddy until affected members' roles are re-applied via setChannelMemberRoles.
   """
   updateChannelRole(
     """The role id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateGroupRoleInput!
-  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupRoleId")
+  ): GroupRole!
   """
   Delete a non-system channel role. Requires the 'manage_roles' channel permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members. Returns true if a role was deleted.
   """
   deleteChannelRole(
     """The channel role to delete (must be a non-system role)."""
     groupRoleId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "groupRoleId")
+  ): Boolean!
   """
   Create or update a container type: the studio-defined schema for a kind of runtime entity (like a class). Idempotent on (app, typeName). Requires app-admin ('manage_apps').
   """
@@ -4160,7 +4160,7 @@ type Mutation {
     The app, type name, display name, and optional instantiableBy / default property visibility / metadata.
     """
     input: UpsertContainerTypeInput!
-  ): GmContainerType! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmContainerType!
   """
   Create or update a property definition on a container type (a typed field with default value, visibility, and writability). Idempotent on (app, containerTypeName, key). Requires app-admin ('manage_apps').
   """
@@ -4169,7 +4169,7 @@ type Mutation {
     The app, container type, property key, value type, and optional default/visibility/writability/description.
     """
     input: UpsertPropertyDefInput!
-  ): GmPropertyDef! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmPropertyDef!
   """
   Create or update a studio-defined function: a named, sandboxed behavior with typed parameters, declared property mutations (expressions compiled to an AST server-side, never eval'd), an optional return expression, an invoke scope, and an invoke policy (authority rule tree). Idempotent on (app, name). Requires app-admin ('manage_apps'). Returns the function plus any non-fatal static-analysis warnings.
   """
@@ -4178,7 +4178,7 @@ type Mutation {
     The full function definition: app, name, optional container type binding, parameters, mutations, return expression, invoke scope, and invoke-policy JSON.
     """
     input: UpsertFunctionInput!
-  ): GmFunction! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmFunction!
   """
   Delete a studio-defined function by name. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a function was deleted.
   """
@@ -4187,7 +4187,7 @@ type Mutation {
     appId: BigInt!
     """The function name to delete."""
     name: String!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): Boolean!
   """
   Bulk-create game-model definitions (container types, property defs, functions) and optionally instances (containers + edges) in one transaction — used to initialize or import a model. Requires app-admin ('manage_apps'). Returns counts created, warnings, and a map of seed temp_id -> created container UUID.
   """
@@ -4196,7 +4196,7 @@ type Mutation {
     The app, an optional target session for instances, and arrays of container types, property defs, functions, containers, and edges to create.
     """
     input: SeedGameModelInput!
-  ): GmSeedResult! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmSeedResult!
   """
   Set the app's game-model runtime policy: who may create sessions (admin | member | anyone) and the default participant role. Requires app-admin ('manage_apps').
   """
@@ -4205,28 +4205,28 @@ type Mutation {
     The app plus the session creation policy and/or default participant role to set.
     """
     input: SetGameModelPolicyInput!
-  ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmAppPolicy!
   """
   Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps').
   """
   gameModelDefineFeature(
     """The app, the feature key, and an optional description."""
     input: DefineAppFeatureInput!
-  ): GmAppFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmAppFeature!
   """
   Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps').
   """
   gameModelGrantTierFeature(
     """The app, the tier id, and the feature key to grant to that tier."""
     input: GrantTierFeatureInput!
-  ): GmTierFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmTierFeature!
   """
   Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed.
   """
   gameModelRevokeTierFeature(
     """The app, the tier id, and the feature key to revoke from that tier."""
     input: GrantTierFeatureInput!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): Boolean!
   """
   Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save). Subject to the app's session creation policy. The caller becomes the creator and a participant. Requires a valid token.
   """
@@ -4322,7 +4322,7 @@ type Mutation {
     The voice/audio packet to send: target appId, chunk coordinates, 32-byte source uuid, base64 (compressed) audioData, and optional distance/decayRate/sequenceNumber. See ClientAudioPacketInput.
     """
     input: ClientAudioPacketInput!
-  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_voice_chat", scopeArg: "input.appId")
+  ): Boolean!
   """
   Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
@@ -4852,12 +4852,6 @@ input PublishEnvironmentReleaseFromGameApiTagInput {
   gameApiTag: String!
   """Overwrite an existing environment version row if it already exists."""
   force: Boolean! = false
-}
-
-schema {
-  query: Query
-  mutation: Mutation
-  subscription: Subscription
 }
 
 type Avatar {
@@ -7564,4 +7558,10 @@ type RealtimeConnectionEvent {
   Whether resubscribing without changing anything may succeed. true for transient failures (e.g. UDP_PROXY_CONNECTION_FAILED) — back off and retry. false for caller errors that must be fixed first (AUTH_REQUIRED needs a fresh/valid game token; APP_ID_REQUIRED needs an appId-scoped subscription).
   """
   retryable: Boolean!
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
 }

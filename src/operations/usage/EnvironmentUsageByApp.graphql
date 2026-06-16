@@ -1,0 +1,19 @@
+query EnvironmentUsageByApp(
+  $orgId: BigInt!
+  $environmentSlug: String!
+  $since: DateTime!
+) {
+  environmentUsageByApp(
+    orgId: $orgId
+    environmentSlug: $environmentSlug
+    since: $since
+  ) {
+    appId
+    appSlug
+    appName
+    replicationSendBytes
+    replicationRecvBytes
+    graphqlSendBytes
+    graphqlRecvBytes
+  }
+}

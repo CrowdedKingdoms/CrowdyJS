@@ -1,0 +1,15 @@
+query GameHost($appId: BigInt!) {
+  gameHost(appId: $appId) {
+    hostUserId
+    actorCount
+    earliestActorJoinedAt
+  }
+}
+
+mutation ActorHeartbeat($appId: BigInt!) {
+  actorHeartbeat(appId: $appId) {
+    hostUserId
+    actorCount
+    earliestActorJoinedAt
+  }
+}

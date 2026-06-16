@@ -1,0 +1,12 @@
+mutation LinkAppToEnvironment($input: LinkAppToEnvironmentInput!) {
+  linkAppToEnvironment(input: $input) {
+    appId
+    orgId
+    slug
+    name
+    splitMode
+    deploymentTarget
+    gameApiUrl
+    status
+  }
+}

@@ -120,6 +120,19 @@ export { AuthAPI } from './domains/auth.js';
 export { UsersAPI } from './domains/users.js';
 export { AppsAPI, type AppRoute } from './domains/apps.js';
 export { PlatformAPI, type PlatformConfig } from './domains/platform.js';
+export { OrganizationsAPI } from './domains/organizations.js';
+export { AppAccessAPI } from './domains/appAccess.js';
+export { BillingAPI } from './domains/billing.js';
+export { PaymentsAPI } from './domains/payments.js';
+export { QuotasAPI } from './domains/quotas.js';
+export { EnvironmentsAPI } from './domains/environments.js';
+export { UsageAPI } from './domains/usage.js';
+export { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
+export { ControlPlaneAPI } from './domains/controlPlane.js';
+export { AdminAPI } from './domains/admin.js';
+export { AvatarsAPI } from './domains/avatars.js';
+export { HostAPI } from './domains/host.js';
+export { GameAppsAPI } from './domains/gameApps.js';
 export { ChunksAPI } from './domains/chunks.js';
 export { VoxelsAPI } from './domains/voxels.js';
 export { ActorsAPI } from './domains/actors.js';
@@ -242,6 +255,25 @@ export type {
   SetGameModelPolicyInput,
 
   Scalars,
+} from './generated/graphql.js';
+
+// -----------------------------------------------------------------------------
+// Management-api admin surface input types (organizations, app-access,
+// billing, payments, quotas) used by the studio-admin sub-clients.
+// -----------------------------------------------------------------------------
+export type {
+  CreateOrganizationInput,
+  CreateOrgTokenInput,
+  UpdateOrgTokenInput,
+  InviteOrgMemberInput,
+  CreateOrgRoleInput,
+  UpdateOrgRoleInput,
+  CreateAccessTierInput,
+  UpdateAccessTierInput,
+  GrantAppAccessInput,
+  CreateCheckoutInput,
+  CheckoutFilterInput,
+  SetQuotaInput,
 } from './generated/graphql.js';
 
 export { ServerState } from './generated/graphql.js';

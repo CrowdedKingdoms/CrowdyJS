@@ -1,0 +1,16 @@
+query EnvironmentFlavors($datacenter: String!) {
+  environmentFlavors(datacenter: $datacenter) {
+    flavorName
+    flavorType
+    vcpus
+    ramMb
+    diskGb
+    quotaAvailable
+    customerHourlyPriceCents
+    customerMonthlyPriceCents
+    currency
+    availabilityStatus
+    pricingMode
+    syncedAt
+  }
+}

@@ -1,0 +1,114 @@
+query GridUserPermissions($appId: BigInt!, $gridId: BigInt!, $userId: BigInt!) {
+  gridUserPermissions(appId: $appId, gridId: $gridId, userId: $userId) {
+    appId
+    gridId
+    userId
+    permissionKeys
+  }
+}
+
+query NearbyGridPermissions($input: NearbyGridPermissionsInput!) {
+  nearbyGridPermissions(input: $input) {
+    appId
+    gridId
+    userId
+    lowChunk {
+      x
+      y
+      z
+    }
+    highChunk {
+      x
+      y
+      z
+    }
+    permissionKeys
+  }
+}
+
+query GridPermissionLimits($appId: BigInt!, $gridId: BigInt!) {
+  gridPermissionLimits(appId: $appId, gridId: $gridId) {
+    appId
+    gridId
+    permissionKeys
+  }
+}
+
+query GridGroupGrants($appId: BigInt!, $gridId: BigInt!, $groupId: BigInt!) {
+  gridGroupGrants(appId: $appId, gridId: $gridId, groupId: $groupId) {
+    appId
+    gridId
+    groupId
+    groupRoleId
+    permissionKey
+    expiresAt
+  }
+}
+
+mutation CreateGrid($input: CreateGridInput!) {
+  createGrid(input: $input) {
+    grid {
+      grid_id
+      app_id
+      low_chunk {
+        x
+        y
+        z
+      }
+      high_chunk {
+        x
+        y
+        z
+      }
+    }
+    error
+  }
+}
+
+mutation GrantGridPermissions($input: GrantGridPermissionsInput!) {
+  grantGridPermissions(input: $input) {
+    appId
+    gridId
+    userId
+    permissionKeys
+  }
+}
+
+mutation RevokeGridPermissions($input: RevokeGridPermissionsInput!) {
+  revokeGridPermissions(input: $input) {
+    appId
+    gridId
+    userId
+    permissionKeys
+  }
+}
+
+mutation SetGridPermissionLimits($input: SetGridPermissionLimitsInput!) {
+  setGridPermissionLimits(input: $input) {
+    appId
+    gridId
+    permissionKeys
+  }
+}
+
+mutation AssignGroupToGrid($input: AssignGroupToGridInput!) {
+  assignGroupToGrid(input: $input) {
+    appId
+    gridId
+    groupId
+    groupRoleId
+    permissionKey
+    expiresAt
+  }
+}
+
+mutation RevokeGroupFromGrid($input: RevokeGroupFromGridInput!) {
+  revokeGroupFromGrid(input: $input) {
+    appId
+    gridId
+    groupId
+    groupRoleId
+    permissionKey
+    expiresAt
+  }
+}

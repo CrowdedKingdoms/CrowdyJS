@@ -1,0 +1,117 @@
+import type { GraphQLClient } from '../client.js';
+import {
+  WalletBalanceDocument,
+  WalletTransactionsDocument,
+  AppBudgetDocument,
+  AppBudgetsDocument,
+  SetAppBudgetDocument,
+  type WalletBalanceQuery,
+  type WalletTransactionsQuery,
+  type AppBudgetQuery,
+  type AppBudgetsQuery,
+  type SetAppBudgetMutation,
+} from '../generated/graphql.js';
+
+/**
+ * Org wallet + per-app budgets — exposed as `client.billing` (and grouped under
+ * `client.admin`).
+ *
+ * Targets the **management-api**. Reads require the `view_billing` org/app
+ * permission; {@link setAppBudget} requires `manage_billing`. Monetary values
+ * are minor currency units (`*Cents`) and serialized as `BigInt` decimal
+ * strings.
+ *
+ * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN` / `SCOPE_MISSING`
+ *   per the permission notes above.
+ */
+export class BillingAPI {
+  constructor(private readonly management: GraphQLClient) {}
+
+  /**
+   * Return an organization's wallet balance. Requires the `view_billing` org
+   * permission.
+   *
+   * @param orgId - Numeric org id (`BigInt` as a decimal string).
+   * @returns The wallet balance (cents as a decimal string).
+   */
+  async walletBalance(
+    orgId: string,
+  ): Promise<WalletBalanceQuery['walletBalance']> {
+    const data = await this.management.request(WalletBalanceDocument, { orgId });
+    return data.walletBalance;
+  }
+
+  /**
+   * List an organization's wallet transactions (newest first). Requires the
+   * `view_billing` org permission.
+   *
+   * @param orgId - Numeric org id.
+   * @param opts - Optional `limit` / `offset` (default limit 50).
+   * @returns The wallet transactions.
+   */
+  async walletTransactions(
+    orgId: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<WalletTransactionsQuery['walletTransactions']> {
+    const data = await this.management.request(WalletTransactionsDocument, {
+      orgId,
+      limit: opts.limit,
+      offset: opts.offset,
+    });
+    return data.walletTransactions;
+  }
+
+  /**
+   * Return the spend budget for one app. Requires the `view_billing` app
+   * permission.
+   *
+   * @param orgId - Numeric org id that owns the app.
+   * @param appId - Numeric app id.
+   * @returns The app budget, or `null` if unset.
+   */
+  async appBudget(
+    orgId: string,
+    appId: string,
+  ): Promise<AppBudgetQuery['appBudget']> {
+    const data = await this.management.request(AppBudgetDocument, {
+      orgId,
+      appId,
+    });
+    return data.appBudget;
+  }
+
+  /**
+   * List the spend budgets for every app under an org. Requires the
+   * `view_billing` org permission.
+   *
+   * @param orgId - Numeric org id.
+   * @returns The app budgets.
+   */
+  async appBudgets(orgId: string): Promise<AppBudgetsQuery['appBudgets']> {
+    const data = await this.management.request(AppBudgetsDocument, { orgId });
+    return data.appBudgets;
+  }
+
+  /**
+   * Set (or clear) an app's monthly spend cap. Requires the `manage_billing`
+   * app permission.
+   *
+   * @param orgId - Numeric org id.
+   * @param appId - Numeric app id.
+   * @param monthlyLimitCents - Monthly cap in minor currency units (decimal
+   *   string); `"0"` disables the cap.
+   * @returns The updated app budget.
+   */
+  async setAppBudget(
+    orgId: string,
+    appId: string,
+    monthlyLimitCents: string,
+  ): Promise<SetAppBudgetMutation['setAppBudget']> {
+    const data = await this.management.request(SetAppBudgetDocument, {
+      orgId,
+      appId,
+      monthlyLimitCents,
+    });
+    return data.setAppBudget;
+  }
+}

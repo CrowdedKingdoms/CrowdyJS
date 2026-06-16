@@ -1,0 +1,25 @@
+mutation CreateEnvironment($input: CreateEnvironmentInput!) {
+  createEnvironment(input: $input) {
+    environment {
+      id
+      orgId
+      slug
+      displayName
+      status
+      billingStatus
+      environmentClass
+      primaryRegion
+      desiredEnvironmentVersion
+      observedEnvironmentVersion
+      createdAt
+      updatedAt
+    }
+    changeOrders {
+      id
+      kind
+      status
+      error
+      createdAt
+    }
+  }
+}

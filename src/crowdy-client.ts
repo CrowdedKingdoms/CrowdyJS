@@ -32,7 +32,20 @@ import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
 import { AppsAPI } from './domains/apps.js';
 import { PlatformAPI } from './domains/platform.js';
+import { OrganizationsAPI } from './domains/organizations.js';
+import { AppAccessAPI } from './domains/appAccess.js';
+import { BillingAPI } from './domains/billing.js';
+import { PaymentsAPI } from './domains/payments.js';
+import { QuotasAPI } from './domains/quotas.js';
+import { EnvironmentsAPI } from './domains/environments.js';
+import { UsageAPI } from './domains/usage.js';
+import { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
+import { ControlPlaneAPI } from './domains/controlPlane.js';
+import { AdminAPI } from './domains/admin.js';
 import { ChunksAPI } from './domains/chunks.js';
+import { AvatarsAPI } from './domains/avatars.js';
+import { HostAPI } from './domains/host.js';
+import { GameAppsAPI } from './domains/gameApps.js';
 import { VoxelsAPI } from './domains/voxels.js';
 import { ActorsAPI } from './domains/actors.js';
 import { TeleportAPI } from './domains/teleport.js';
@@ -109,6 +122,30 @@ export class CrowdyClient {
   readonly apps: AppsAPI;
   /** Public platform discovery (shared game-api URL, free app quota). */
   readonly platform: PlatformAPI;
+  /** Organizations, members, RBAC roles, and org API tokens (studio admin). */
+  readonly organizations: OrganizationsAPI;
+  /** App access tiers + per-user access grants (studio admin). */
+  readonly appAccess: AppAccessAPI;
+  /** Org wallet + per-app spend budgets (studio admin). */
+  readonly billing: BillingAPI;
+  /** Payment checkouts: wallet top-ups, plan purchases (studio admin). */
+  readonly payments: PaymentsAPI;
+  /** Usage quotas at the org/app scope (studio admin). */
+  readonly quotas: QuotasAPI;
+  /** Dedicated customer environments: provision, scale, deploy (studio admin). */
+  readonly environments: EnvironmentsAPI;
+  /** Replication + GraphQL usage reporting (studio admin). */
+  readonly usage: UsageAPI;
+  /** Shared-environment publishing, runtime gating, auto-billing (studio admin). */
+  readonly sharedEnvironment: SharedEnvironmentAPI;
+  /** Operator (control-plane) surface — requires `is_operator`. */
+  readonly operator: ControlPlaneAPI;
+  /**
+   * Studio-admin facade grouping the privileged management sub-clients
+   * (`organizations`, `appAccess`, `billing`, `payments`, `quotas`,
+   * `environments`, `usage`, `sharedEnvironment`, `grids`) under one namespace.
+   */
+  readonly admin: AdminAPI;
 
   // Game (game-api).
   /** Chunk reads/writes: terrain, LODs, chunk state, distance queries. */
@@ -131,6 +168,12 @@ export class CrowdyClient {
   readonly udp: UdpAPI;
   /** Abstract game model: containers, properties, functions, sessions. */
   readonly gameModel: GameModelAPI;
+  /** Durable avatars + per-app avatar state (owner-aware reads). */
+  readonly avatars: AvatarsAPI;
+  /** Game-host election + actor liveness heartbeat. */
+  readonly host: HostAPI;
+  /** App grids + grid runtime-permission administration (app admin). */
+  readonly gameApps: GameAppsAPI;
 
   constructor(config: CrowdyClientConfig = {}) {
     this.session = new AuthState(config.tokenStore);
@@ -177,6 +220,15 @@ export class CrowdyClient {
     this.users = new UsersAPI(this.management);
     this.apps = new AppsAPI(this.management);
     this.platform = new PlatformAPI(this.management);
+    this.organizations = new OrganizationsAPI(this.management);
+    this.appAccess = new AppAccessAPI(this.management);
+    this.billing = new BillingAPI(this.management);
+    this.payments = new PaymentsAPI(this.management);
+    this.quotas = new QuotasAPI(this.management);
+    this.environments = new EnvironmentsAPI(this.management);
+    this.usage = new UsageAPI(this.management);
+    this.sharedEnvironment = new SharedEnvironmentAPI(this.management);
+    this.operator = new ControlPlaneAPI(this.management);
 
     this.chunks = new ChunksAPI(this.graphql);
     this.voxels = new VoxelsAPI(this.graphql);
@@ -188,6 +240,21 @@ export class CrowdyClient {
     this.teams = new TeamsAPI(this.graphql);
     this.udp = new UdpAPI(this.graphql, this.realtime);
     this.gameModel = new GameModelAPI(this.graphql);
+    this.avatars = new AvatarsAPI(this.graphql);
+    this.host = new HostAPI(this.graphql);
+    this.gameApps = new GameAppsAPI(this.graphql);
+
+    this.admin = new AdminAPI({
+      organizations: this.organizations,
+      appAccess: this.appAccess,
+      billing: this.billing,
+      payments: this.payments,
+      quotas: this.quotas,
+      environments: this.environments,
+      usage: this.usage,
+      sharedEnvironment: this.sharedEnvironment,
+      grids: this.gameApps,
+    });
   }
 
   /** Imperatively set the Bearer token (useful for SSO / token rehydrate). */
