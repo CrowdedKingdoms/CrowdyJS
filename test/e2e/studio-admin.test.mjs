@@ -15,7 +15,6 @@ import { loadSdk, clientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../hel
 import {
   provisionOwner,
   registerUser,
-  gqlManagement,
   gqlManagementRaw,
 } from '../provision.mjs';
 
@@ -30,15 +29,11 @@ async function ownerClient() {
   return { client, owner };
 }
 
-/** Create an app under an org via the management API (createApp is not yet an SDK method). */
-async function createApp(token, orgId) {
+/** Create an app under an org via the SDK (client.apps.create). */
+async function createApp(client, orgId) {
   const slug = `e2e-admin-${rid()}`;
-  const data = await gqlManagement(
-    `mutation($i: CreateAppInput!){ createApp(input:$i){ appId orgId } }`,
-    { i: { orgId, name: slug, slug } },
-    token,
-  );
-  return data.createApp.appId;
+  const app = await client.apps.create({ orgId, name: slug, slug });
+  return app.appId;
 }
 
 test('studio admin: org -> roles -> app -> access tier -> grant happy path', { skip, timeout: 60_000 }, async () => {
@@ -72,7 +67,7 @@ test('studio admin: org -> roles -> app -> access tier -> grant happy path', { s
     assert.ok(Array.isArray(tokens), 'orgTokens lists tokens');
 
     // App + access tier + grant.
-    const appId = await createApp(owner.token, org.orgId);
+    const appId = await createApp(client, org.orgId);
     const tier = await client.appAccess.createTier({
       appId, name: `tier-${rid()}`, isFree: true, isDefault: false,
       permissionKeys: ['access', 'update_voxel_data'],
@@ -94,11 +89,11 @@ test('studio admin: org -> roles -> app -> access tier -> grant happy path', { s
 });
 
 test('studio admin: billing + quotas + environment discovery', { skip, timeout: 60_000 }, async () => {
-  const { client, owner } = await ownerClient();
+  const { client } = await ownerClient();
   try {
     const slug = `e2e-org-${rid()}`;
     const org = await client.organizations.create({ name: slug, slug });
-    const appId = await createApp(owner.token, org.orgId);
+    const appId = await createApp(client, org.orgId);
 
     // Billing: wallet + budgets (view_billing/manage_billing on the owner's org).
     const balance = await client.billing.walletBalance(org.orgId);

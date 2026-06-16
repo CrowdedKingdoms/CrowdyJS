@@ -270,6 +270,8 @@ export type {
 // billing, payments, quotas) used by the studio-admin sub-clients.
 // -----------------------------------------------------------------------------
 export type {
+  CreateAppInput,
+  UpdateAppInput,
   CreateOrganizationInput,
   CreateOrgTokenInput,
   UpdateOrgTokenInput,
@@ -284,4 +286,4 @@ export type {
   SetQuotaInput,
 } from './generated/graphql.js';
 
-export { ServerState } from './generated/graphql.js';
+export { ServerState, AppVisibility } from './generated/graphql.js';
