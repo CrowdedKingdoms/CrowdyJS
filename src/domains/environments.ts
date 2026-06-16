@@ -126,7 +126,8 @@ export class EnvironmentsAPI {
   }
 
   /**
-   * OVH datacenters with at least one customer-selectable flavor. **Public.**
+   * OVH datacenters with at least one customer-selectable flavor. Requires an
+   * authenticated caller.
    *
    * @returns The selectable datacenters.
    */
