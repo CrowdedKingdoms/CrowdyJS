@@ -1,10 +1,9 @@
 /**
- * Two-client voxel replication smoke test for a CKS environment.
+ * Two-client voice-chat (audio) replication smoke test for a CKS environment.
  *
- * Two players register actors in a shared chunk, player A edits a voxel, and
- * player B must receive the VoxelUpdateNotification via the game-api + UDP-proxy
- * + buddy chain (cross-server when the two proxy sessions land on different
- * Buddies).
+ * Two players register actors in a shared chunk, player A streams voice/audio
+ * packets, and player B must receive the ClientAudioNotification via the
+ * game-api + UDP-proxy + buddy chain.
  *
  * Fully black-box: owner, tier, and players are created/entitled through the
  * management API (provision.mjs). No database credentials. Auto-skips unless the
@@ -14,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from './provision.mjs';
+import { provisionClients } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -35,13 +34,11 @@ const skipReason =
 const SEND_COUNT = Number(process.env.CROWDY_TEST_SEND_COUNT ?? 5);
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
-const VOXEL = { x: 5, y: 5, z: 5 };
-const VOXEL_TYPE = 42;
 const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
 const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
-const VOXEL_UUID = 'voxel-aaaa-bbbb-cccc-dddd-eeeeee';
+const AUDIO_UUID = 'audio-aaaa-bbbb-cccc-dddd-eeeeee';
 
-function randomBase64(byteCount = 8) {
+function randomBase64(byteCount = 64) {
   const buf = new Uint8Array(byteCount);
   for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
   return Buffer.from(buf).toString('base64');
@@ -61,18 +58,18 @@ function clientConfig() {
 }
 
 test(
-  'two-client voxel replication against a deployed env',
+  'two-client voice-chat (audio) replication against a deployed env',
   { skip: skipReason, timeout: 60_000 },
   async () => {
-    const { createCrowdyClient } = await import('../dist/index.js');
+    const { createCrowdyClient } = await import('../../dist/index.js');
     const { appId, clients } = await provisionClients(createCrowdyClient, clientConfig(), 2);
     const [clientA, clientB] = clients;
     const cleanup = [];
 
     try {
-      const receivedByB = { voxelUpdates: [], genericErrors: [] };
+      const receivedByB = { audio: [], genericErrors: [] };
       cleanup.push(clientB.udp.subscribe({
-        voxelUpdate: (n) => receivedByB.voxelUpdates.push(n),
+        audio: (n) => receivedByB.audio.push(n),
         genericError: (e) => receivedByB.genericErrors.push(e),
       }, appId));
 
@@ -91,32 +88,30 @@ test(
       await registerBoth();
       await sleep(1000);
 
+      // Audio defaults to distance=1; A and B share a chunk (distance 0), but set
+      // distance=8 explicitly to be safe.
       let sendSuccessCount = 0;
       for (let i = 0; i < SEND_COUNT; i++) {
-        const ok = await clientA.udp.sendVoxelUpdate({
-          appId, chunk: CHUNK, voxel: VOXEL, voxelType: VOXEL_TYPE,
-          voxelState: randomBase64(), distance: 8, uuid: VOXEL_UUID, sequenceNumber: i + 2,
+        const ok = await clientA.udp.sendAudioPacket({
+          appId, chunk: CHUNK, audioData: randomBase64(), distance: 8, uuid: AUDIO_UUID, sequenceNumber: i + 2,
         });
         if (ok) sendSuccessCount++;
         await sleep(200);
       }
-      assert.equal(sendSuccessCount, SEND_COUNT, `All ${SEND_COUNT} sendVoxelUpdate mutations returned truthy`);
+      assert.equal(sendSuccessCount, SEND_COUNT, `All ${SEND_COUNT} sendAudioPacket mutations returned truthy`);
 
       await sleep(NOTIFY_WAIT_MS);
 
-      const voxelFromA = receivedByB.voxelUpdates.filter((n) => n.uuid === VOXEL_UUID);
+      const audioFromA = receivedByB.audio.filter((n) => n.uuid === AUDIO_UUID);
       const diagnostics = {
-        appId, sent: sendSuccessCount, receivedByB: receivedByB.voxelUpdates.length,
-        voxelFromA: voxelFromA.length, genericErrors: receivedByB.genericErrors,
+        appId, sent: sendSuccessCount, receivedByB: receivedByB.audio.length,
+        audioFromA: audioFromA.length, genericErrors: receivedByB.genericErrors,
       };
-      assert.ok(voxelFromA.length > 0, `Client B should receive at least one voxel update from A. diagnostics=${JSON.stringify(diagnostics)}`);
+      assert.ok(audioFromA.length > 0, `Client B should receive at least one voice packet from A. diagnostics=${JSON.stringify(diagnostics)}`);
 
-      const sample = voxelFromA[0];
-      assert.equal(sample.__typename, 'VoxelUpdateNotification', 'expected VoxelUpdateNotification');
-      assert.equal(sample.voxelType, VOXEL_TYPE, 'Voxel type matches what A sent');
-      assert.equal(Number(sample.voxelX), VOXEL.x, 'Voxel X matches');
-      assert.equal(Number(sample.voxelY), VOXEL.y, 'Voxel Y matches');
-      assert.equal(Number(sample.voxelZ), VOXEL.z, 'Voxel Z matches');
+      const sample = audioFromA[0];
+      assert.equal(sample.__typename, 'ClientAudioNotification', 'expected ClientAudioNotification');
+      assert.ok(typeof sample.audioData === 'string' && sample.audioData.length > 0, 'Voice notification carries audioData');
       assert.ok(sample.sequenceNumber != null, 'Notification includes sequenceNumber');
       assert.ok(sample.epochMillis != null, 'Notification includes epochMillis');
     } finally {

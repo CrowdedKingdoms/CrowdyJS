@@ -28,7 +28,10 @@
     "codegen:watch": "graphql-codegen --config codegen.ts --watch",
     "prebuild": "npm run codegen",
     "build": "tsc",
-    "test": "npm run build && node --test --test-concurrency=1 test/*.test.mjs",
+    "test": "npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/e2e/*.test.mjs",
+    "test:unit": "npm run build && node --test test/unit/*.test.mjs",
+    "test:e2e": "npm run build && node --test --test-concurrency=1 test/e2e/*.test.mjs",
+    "coverage": "npm run build && node --test --experimental-test-coverage test/unit/*.test.mjs",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"

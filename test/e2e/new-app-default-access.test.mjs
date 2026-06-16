@@ -22,7 +22,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionNewAppWithPlayers } from './provision.mjs';
+import { provisionNewAppWithPlayers } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -69,7 +69,7 @@ test(
   'a brand-new app is usable via the open-by-default tier with no explicit grant',
   { skip: skipReason, timeout: 120_000 },
   async () => {
-    const { createCrowdyClient } = await import('../dist/index.js');
+    const { createCrowdyClient } = await import('../../dist/index.js');
 
     // 1. Owner creates a NEW app (auto-gets the free open-by-default tier). Two
     //    players are registered but NEVER granted access.

@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from './provision.mjs';
+import { provisionClients } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -88,7 +88,7 @@ test(
   'two-client text-chat replication against a deployed env',
   { skip: skipReason, timeout: 60_000 },
   async () => {
-    const { createCrowdyClient } = await import('../dist/index.js');
+    const { createCrowdyClient } = await import('../../dist/index.js');
     const received = { text: [], genericErrors: [] };
     const chunk = { x: '10', y: '0', z: '0' };
     const ctx = await setupPair(createCrowdyClient, {
@@ -122,7 +122,7 @@ test(
   'two-client client-event replication against a deployed env',
   { skip: skipReason, timeout: 60_000 },
   async () => {
-    const { createCrowdyClient } = await import('../dist/index.js');
+    const { createCrowdyClient } = await import('../../dist/index.js');
     const received = { clientEvent: [], genericErrors: [] };
     const chunk = { x: '20', y: '0', z: '0' };
     const EVENT_TYPE = 4242;

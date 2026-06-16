@@ -20,7 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from './provision.mjs';
+import { provisionClients } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -61,7 +61,7 @@ test(
   'single-actor message reaches only the target actor',
   { skip: skipReason, timeout: 60_000 },
   async () => {
-    const { createCrowdyClient } = await import('../dist/index.js');
+    const { createCrowdyClient } = await import('../../dist/index.js');
     const { appId, clients } = await provisionClients(createCrowdyClient, clientConfig(), 3);
     const [clientA, clientB, clientC] = clients;
     const cleanup = [];
