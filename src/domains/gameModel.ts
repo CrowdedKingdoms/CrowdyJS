@@ -72,6 +72,49 @@ import {
   GameModelTypeSchemaDocument,
   type GameModelTypeSchemaQuery,
   type GameModelTypeSchemaQueryVariables,
+  // Automations (autonomous processes / NPCs)
+  GameModelUpsertAutomationDocument,
+  type GameModelUpsertAutomationMutation,
+  type GameModelUpsertAutomationMutationVariables,
+  GameModelDeleteAutomationDocument,
+  type GameModelDeleteAutomationMutation,
+  type GameModelDeleteAutomationMutationVariables,
+  GameModelSetAutomationEnabledDocument,
+  type GameModelSetAutomationEnabledMutation,
+  type GameModelSetAutomationEnabledMutationVariables,
+  GameModelUpsertAutomationTriggerDocument,
+  type GameModelUpsertAutomationTriggerMutation,
+  type GameModelUpsertAutomationTriggerMutationVariables,
+  GameModelDeleteAutomationTriggerDocument,
+  type GameModelDeleteAutomationTriggerMutation,
+  type GameModelDeleteAutomationTriggerMutationVariables,
+  GameModelSetAutomationPolicyDocument,
+  type GameModelSetAutomationPolicyMutation,
+  type GameModelSetAutomationPolicyMutationVariables,
+  GameModelRunAutomationDocument,
+  type GameModelRunAutomationMutation,
+  type GameModelRunAutomationMutationVariables,
+  GameModelAutomationsDocument,
+  type GameModelAutomationsQuery,
+  type GameModelAutomationsQueryVariables,
+  GameModelAutomationDocument,
+  type GameModelAutomationQuery,
+  type GameModelAutomationQueryVariables,
+  GameModelAutomationTriggersDocument,
+  type GameModelAutomationTriggersQuery,
+  type GameModelAutomationTriggersQueryVariables,
+  GameModelAutomationPolicyDocument,
+  type GameModelAutomationPolicyQuery,
+  type GameModelAutomationPolicyQueryVariables,
+  GameModelAutomationRunsDocument,
+  type GameModelAutomationRunsQuery,
+  type GameModelAutomationRunsQueryVariables,
+  GameModelAutomationStatsDocument,
+  type GameModelAutomationStatsQuery,
+  type GameModelAutomationStatsQueryVariables,
+  GameModelAppDiagnosticsDocument,
+  type GameModelAppDiagnosticsQuery,
+  type GameModelAppDiagnosticsQueryVariables,
 } from '../generated/graphql.js';
 
 /**
@@ -656,5 +699,231 @@ export class GameModelAPI {
   ): Promise<GameModelTypeSchemaQuery['gameModelTypeSchema']> {
     const data = await this.gql.request(GameModelTypeSchemaDocument, variables);
     return data.gameModelTypeSchema;
+  }
+
+  // -- Automations (autonomous processes / NPCs) ------------------------------
+
+  /**
+   * **Automations** — create or update an autonomous process ("automation" /
+   * NPC): a server-driven entry-point function bound to a trigger
+   * (`schedule | event | manual`), an optional run-as identity, a target/
+   * candidate selector, and a per-automation safety budget. The entry-point
+   * function must be marked `autonomousInvocable` (see {@link upsertFunction}).
+   * Idempotent on `(appId, name)`. The game-api dispatcher runs it headlessly;
+   * a tick is just "invoke a function on behalf of the server".
+   *
+   * Requires the app-admin **`manage_apps`** permission.
+   *
+   * @param input - {@link UpsertAutomationInput}: `appId`; `name` (upsert key);
+   *   `functionName`; `targetMode` (`container | type | global`) with
+   *   `selfContainerId` / `targetTypeName`; optional `sessionId`, `paramsJson`,
+   *   `selectorJson` (model-data candidate selection), `runAsUserId`; the trigger
+   *   (`triggerType`, `scheduleKind`, `intervalMs` / `cronExpr`); and the safety
+   *   budget (`maxTargets`, `maxFnDepth`, `gasLimit`, `runTimeoutMs`,
+   *   `maxRunsPerMinute`, `failureThreshold`, `cooldownMs`).
+   * @returns The upserted {@link GmAutomation}, including circuit-breaker state.
+   */
+  async upsertAutomation(
+    input: GameModelUpsertAutomationMutationVariables['input'],
+  ): Promise<GameModelUpsertAutomationMutation['gameModelUpsertAutomation']> {
+    const data = await this.gql.request(GameModelUpsertAutomationDocument, { input });
+    return data.gameModelUpsertAutomation;
+  }
+
+  /**
+   * **Automations** — delete an automation by name (also removes its event
+   * triggers). **Destructive.** Requires the app-admin **`manage_apps`**
+   * permission.
+   *
+   * @param variables - `{ appId, name }`.
+   * @returns `true` if one was deleted.
+   */
+  async deleteAutomation(
+    variables: GameModelDeleteAutomationMutationVariables,
+  ): Promise<GameModelDeleteAutomationMutation['gameModelDeleteAutomation']> {
+    const data = await this.gql.request(GameModelDeleteAutomationDocument, variables);
+    return data.gameModelDeleteAutomation;
+  }
+
+  /**
+   * **Automations** — enable or disable an automation. Re-enabling also resets
+   * its circuit breaker so a tripped automation resumes. Requires the app-admin
+   * **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, name, enabled }`.
+   * @returns The updated {@link GmAutomation}.
+   */
+  async setAutomationEnabled(
+    variables: GameModelSetAutomationEnabledMutationVariables,
+  ): Promise<GameModelSetAutomationEnabledMutation['gameModelSetAutomationEnabled']> {
+    const data = await this.gql.request(GameModelSetAutomationEnabledDocument, variables);
+    return data.gameModelSetAutomationEnabled;
+  }
+
+  /**
+   * **Automations** — create an event trigger that fires an automation in
+   * reaction to model activity (`function_invoked` | `property_changed` |
+   * `container_created`), matched in the API server post-commit. Requires the
+   * app-admin **`manage_apps`** permission.
+   *
+   * @param input - {@link UpsertAutomationTriggerInput}: `appId`,
+   *   `automationName`, `onEvent`, optional `functionName` /
+   *   `containerTypeName` / `propertyKey` filters, and `debounceMs`.
+   * @returns The created {@link GmAutomationTrigger}.
+   */
+  async upsertAutomationTrigger(
+    input: GameModelUpsertAutomationTriggerMutationVariables['input'],
+  ): Promise<GameModelUpsertAutomationTriggerMutation['gameModelUpsertAutomationTrigger']> {
+    const data = await this.gql.request(GameModelUpsertAutomationTriggerDocument, { input });
+    return data.gameModelUpsertAutomationTrigger;
+  }
+
+  /**
+   * **Automations** — delete an event trigger by id. Requires the app-admin
+   * **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, triggerId }`.
+   * @returns `true` if one was deleted.
+   */
+  async deleteAutomationTrigger(
+    variables: GameModelDeleteAutomationTriggerMutationVariables,
+  ): Promise<GameModelDeleteAutomationTriggerMutation['gameModelDeleteAutomationTrigger']> {
+    const data = await this.gql.request(GameModelDeleteAutomationTriggerDocument, variables);
+    return data.gameModelDeleteAutomationTrigger;
+  }
+
+  /**
+   * **Automations** — set the app's automation policy (platform guardrails: the
+   * kill switch, max automations, the minimum schedule interval floor, max
+   * fan-out, max event cascade depth, and the aggregate per-minute run ceiling).
+   * Requires the app-admin **`manage_apps`** permission.
+   *
+   * @param input - {@link SetAutomationPolicyInput}.
+   * @returns The updated {@link GmAutomationPolicy}.
+   */
+  async setAutomationPolicy(
+    input: GameModelSetAutomationPolicyMutationVariables['input'],
+  ): Promise<GameModelSetAutomationPolicyMutation['gameModelSetAutomationPolicy']> {
+    const data = await this.gql.request(GameModelSetAutomationPolicyDocument, { input });
+    return data.gameModelSetAutomationPolicy;
+  }
+
+  /**
+   * **Automations** — run an automation once, immediately (manual trigger),
+   * regardless of its schedule. Applies the same guard chain and records a run.
+   * Useful for testing an NPC. Requires the app-admin **`manage_apps`**
+   * permission.
+   *
+   * @param variables - `{ appId, name }`.
+   * @returns The recorded {@link GmAutomationRun}.
+   */
+  async runAutomation(
+    variables: GameModelRunAutomationMutationVariables,
+  ): Promise<GameModelRunAutomationMutation['gameModelRunAutomation']> {
+    const data = await this.gql.request(GameModelRunAutomationDocument, variables);
+    return data.gameModelRunAutomation;
+  }
+
+  /**
+   * **Automations** — list the automations defined for an app (with
+   * circuit-breaker state). Requires the app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId }`.
+   * @returns The {@link GmAutomation}s.
+   */
+  async automations(
+    variables: GameModelAutomationsQueryVariables,
+  ): Promise<GameModelAutomationsQuery['gameModelAutomations']> {
+    const data = await this.gql.request(GameModelAutomationsDocument, variables);
+    return data.gameModelAutomations;
+  }
+
+  /**
+   * **Automations** — fetch one automation by name. Requires the app-admin
+   * **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, name }`.
+   * @returns The {@link GmAutomation}.
+   */
+  async automation(
+    variables: GameModelAutomationQueryVariables,
+  ): Promise<GameModelAutomationQuery['gameModelAutomation']> {
+    const data = await this.gql.request(GameModelAutomationDocument, variables);
+    return data.gameModelAutomation;
+  }
+
+  /**
+   * **Automations** — list event triggers for an app, optionally filtered to one
+   * automation by name. Requires the app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, automationName? }`.
+   * @returns The {@link GmAutomationTrigger}s.
+   */
+  async automationTriggers(
+    variables: GameModelAutomationTriggersQueryVariables,
+  ): Promise<GameModelAutomationTriggersQuery['gameModelAutomationTriggers']> {
+    const data = await this.gql.request(GameModelAutomationTriggersDocument, variables);
+    return data.gameModelAutomationTriggers;
+  }
+
+  /**
+   * **Automations** — read the app's automation policy. Requires the app-admin
+   * **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId }`.
+   * @returns The {@link GmAutomationPolicy}.
+   */
+  async automationPolicy(
+    variables: GameModelAutomationPolicyQueryVariables,
+  ): Promise<GameModelAutomationPolicyQuery['gameModelAutomationPolicy']> {
+    const data = await this.gql.request(GameModelAutomationPolicyDocument, variables);
+    return data.gameModelAutomationPolicy;
+  }
+
+  /**
+   * **Automations** — list automation runs (the monitoring/audit trail), newest
+   * first, optionally filtered by automation name and/or outcome. Requires the
+   * app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, automationName?, success?, limit?, offset? }`.
+   * @returns The {@link GmAutomationRun}s.
+   */
+  async automationRuns(
+    variables: GameModelAutomationRunsQueryVariables,
+  ): Promise<GameModelAutomationRunsQuery['gameModelAutomationRuns']> {
+    const data = await this.gql.request(GameModelAutomationRunsDocument, variables);
+    return data.gameModelAutomationRuns;
+  }
+
+  /**
+   * **Automations** — aggregate automation activity over a recent window
+   * (throughput, failure rate, compute, per-automation breakdown). The
+   * "what are my NPCs doing" view. Requires the app-admin **`manage_apps`**
+   * permission.
+   *
+   * @param variables - `{ appId, windowMinutes? }` (default 60, max 1440).
+   * @returns The {@link GmAutomationStats}.
+   */
+  async automationStats(
+    variables: GameModelAutomationStatsQueryVariables,
+  ): Promise<GameModelAutomationStatsQuery['gameModelAutomationStats']> {
+    const data = await this.gql.request(GameModelAutomationStatsDocument, variables);
+    return data.gameModelAutomationStats;
+  }
+
+  /**
+   * **Diagnostics** — a snapshot of an app's game-model footprint and recent
+   * activity (row counts + 24h invocation activity + top functions). Helps
+   * developers understand what is in their game and their database. Requires the
+   * app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId }`.
+   * @returns The {@link GmAppDiagnostics}.
+   */
+  async appDiagnostics(
+    variables: GameModelAppDiagnosticsQueryVariables,
+  ): Promise<GameModelAppDiagnosticsQuery['gameModelAppDiagnostics']> {
+    const data = await this.gql.request(GameModelAppDiagnosticsDocument, variables);
+    return data.gameModelAppDiagnostics;
   }
 }

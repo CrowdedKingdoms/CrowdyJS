@@ -1,0 +1,199 @@
+fragment GmAutomationFields on GmAutomation {
+  automationId
+  appId
+  name
+  description
+  enabled
+  functionName
+  targetMode
+  selfContainerId
+  targetTypeName
+  sessionId
+  paramsJson
+  selectorJson
+  runAsUserId
+  triggerType
+  scheduleKind
+  intervalMs
+  cronExpr
+  maxTargets
+  maxFnDepth
+  gasLimit
+  runTimeoutMs
+  maxRunsPerMinute
+  failureThreshold
+  cooldownMs
+  circuitState
+  consecutiveFailures
+  pausedUntil
+  lastError
+  lastRunAt
+  nextRunAt
+}
+
+fragment GmAutomationTriggerFields on GmAutomationTrigger {
+  triggerId
+  appId
+  automationId
+  onEvent
+  functionName
+  containerTypeName
+  propertyKey
+  debounceMs
+}
+
+fragment GmAutomationPolicyFields on GmAutomationPolicy {
+  appId
+  enabled
+  maxAutomations
+  minIntervalMs
+  maxFanout
+  maxCascadeDepth
+  globalRunsPerMinute
+}
+
+fragment GmAutomationRunFields on GmAutomationRun {
+  runId
+  appId
+  automationId
+  automationName
+  triggerSource
+  parentRunId
+  cascadeDepth
+  startedAt
+  finishedAt
+  durationUs
+  targets
+  invocations
+  mutations
+  fnCalls
+  gasUsed
+  success
+  errorMessage
+  circuitAction
+  computeUnits
+}
+
+mutation GameModelUpsertAutomation($input: UpsertAutomationInput!) {
+  gameModelUpsertAutomation(input: $input) {
+    ...GmAutomationFields
+  }
+}
+
+mutation GameModelDeleteAutomation($appId: BigInt!, $name: String!) {
+  gameModelDeleteAutomation(appId: $appId, name: $name)
+}
+
+mutation GameModelSetAutomationEnabled($appId: BigInt!, $name: String!, $enabled: Boolean!) {
+  gameModelSetAutomationEnabled(appId: $appId, name: $name, enabled: $enabled) {
+    ...GmAutomationFields
+  }
+}
+
+mutation GameModelUpsertAutomationTrigger($input: UpsertAutomationTriggerInput!) {
+  gameModelUpsertAutomationTrigger(input: $input) {
+    ...GmAutomationTriggerFields
+  }
+}
+
+mutation GameModelDeleteAutomationTrigger($appId: BigInt!, $triggerId: String!) {
+  gameModelDeleteAutomationTrigger(appId: $appId, triggerId: $triggerId)
+}
+
+mutation GameModelSetAutomationPolicy($input: SetAutomationPolicyInput!) {
+  gameModelSetAutomationPolicy(input: $input) {
+    ...GmAutomationPolicyFields
+  }
+}
+
+mutation GameModelRunAutomation($appId: BigInt!, $name: String!) {
+  gameModelRunAutomation(appId: $appId, name: $name) {
+    ...GmAutomationRunFields
+  }
+}
+
+query GameModelAutomations($appId: BigInt!) {
+  gameModelAutomations(appId: $appId) {
+    ...GmAutomationFields
+  }
+}
+
+query GameModelAutomation($appId: BigInt!, $name: String!) {
+  gameModelAutomation(appId: $appId, name: $name) {
+    ...GmAutomationFields
+  }
+}
+
+query GameModelAutomationTriggers($appId: BigInt!, $automationName: String) {
+  gameModelAutomationTriggers(appId: $appId, automationName: $automationName) {
+    ...GmAutomationTriggerFields
+  }
+}
+
+query GameModelAutomationPolicy($appId: BigInt!) {
+  gameModelAutomationPolicy(appId: $appId) {
+    ...GmAutomationPolicyFields
+  }
+}
+
+query GameModelAutomationRuns(
+  $appId: BigInt!
+  $automationName: String
+  $success: Boolean
+  $limit: Int
+  $offset: Int
+) {
+  gameModelAutomationRuns(
+    appId: $appId
+    automationName: $automationName
+    success: $success
+    limit: $limit
+    offset: $offset
+  ) {
+    ...GmAutomationRunFields
+  }
+}
+
+query GameModelAutomationStats($appId: BigInt!, $windowMinutes: Int) {
+  gameModelAutomationStats(appId: $appId, windowMinutes: $windowMinutes) {
+    windowMinutes
+    totalRuns
+    failedRuns
+    failureRatePct
+    runsPerMinute
+    totalInvocations
+    totalMutations
+    totalComputeUnits
+    avgDurationUs
+    byAutomation {
+      automationName
+      runs
+      failures
+      invocations
+      computeUnits
+      avgDurationUs
+      circuitState
+    }
+  }
+}
+
+query GameModelAppDiagnostics($appId: BigInt!) {
+  gameModelAppDiagnostics(appId: $appId) {
+    appId
+    containerCount
+    propertyCount
+    edgeCount
+    sessionCount
+    functionCount
+    automationCount
+    eventCount
+    events24h
+    failedEvents24h
+    automationEvents24h
+    topFunctions {
+      functionName
+      invocations
+      failures
+    }
+  }
+}

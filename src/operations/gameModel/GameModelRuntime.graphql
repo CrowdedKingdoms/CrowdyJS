@@ -167,6 +167,8 @@ query GameModelEvents(
     functionName
     selfContainerId
     callerUserId
+    callerKind
+    automationId
     paramsJson
     mutationsAppliedJson
     returnValueJson

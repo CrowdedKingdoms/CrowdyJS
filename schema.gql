@@ -2040,7 +2040,7 @@ type Query {
     limit: Int = 50
     """Number of rows to skip for pagination. Defaults to 0."""
     offset: Int = 0
-  ): UsersPage!
+  ): UsersPage! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated.
   """
@@ -2837,7 +2837,7 @@ type Query {
     gridId: BigInt!
     """The user whose effective permissions to read."""
     userId: BigInt!
-  ): GridUserPermissions!
+  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps').
   """
@@ -2846,7 +2846,7 @@ type Query {
     The app, the user, and the low/high chunk corners of the region to scan (corners are normalized).
     """
     input: NearbyGridPermissionsInput!
-  ): [NearbyGridPermissions!]!
+  ): [NearbyGridPermissions!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Read the permission-key whitelist configured for a grid. An empty list means there is no limit (every active runtime permission may be granted on the grid). Requires app-admin ('manage_apps').
   """
@@ -2855,7 +2855,7 @@ type Query {
     appId: BigInt!
     """The grid whose limit whitelist to read."""
     gridId: BigInt!
-  ): GridPermissionLimits!
+  ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List the group/role -> permission-key grants configured on a grid for one group (rows of the `grid_group_grants` input table). These are inputs to the effective ACL, not the materialized result — use `gridUserPermissions` for a specific user's effective keys. Requires app-admin ('manage_apps').
   """
@@ -2866,7 +2866,7 @@ type Query {
     gridId: BigInt!
     """The group whose grants on the grid to list."""
     groupId: BigInt!
-  ): [GridGroupGrant!]!
+  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   The caller's teams in an app, with their roles and effective team permissions. Use this to discover which teams the current user belongs to and what they may do in each.
   """
@@ -2949,7 +2949,7 @@ type Query {
   gameModelContainerTypes(
     """The app (tenant) whose container types to list."""
     appId: BigInt!
-  ): [GmContainerType!]!
+  ): [GmContainerType!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List the property definitions for a container type. Requires app-admin ('manage_apps').
   """
@@ -2958,7 +2958,7 @@ type Query {
     appId: BigInt!
     """The container type whose properties to list."""
     typeName: String!
-  ): [GmPropertyDef!]!
+  ): [GmPropertyDef!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Fetch one studio-defined function by name. Requires app-admin ('manage_apps').
   """
@@ -2967,7 +2967,7 @@ type Query {
     appId: BigInt!
     """The function name to fetch."""
     name: String!
-  ): GmFunction!
+  ): GmFunction! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List studio-defined functions for an app, optionally filtered to those attached to a container type. Requires app-admin ('manage_apps').
   """
@@ -2978,7 +2978,7 @@ type Query {
     Optional: only functions bound to this container type. Omit for all functions.
     """
     containerTypeName: String
-  ): [GmFunction!]!
+  ): [GmFunction!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Fetch a container type's full schema: its property definitions plus the functions available on it. Requires app-admin ('manage_apps').
   """
@@ -2987,14 +2987,14 @@ type Query {
     appId: BigInt!
     """The container type whose schema to fetch."""
     typeName: String!
-  ): GmTypeSchema!
+  ): GmTypeSchema! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List the feature keys defined for an app. Requires app-admin ('manage_apps').
   """
   gameModelFeatures(
     """The app (tenant) whose features to list."""
     appId: BigInt!
-  ): [GmAppFeature!]!
+  ): [GmAppFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List tier -> feature grants for an app, optionally filtered to one tier. Requires app-admin ('manage_apps').
   """
@@ -3003,14 +3003,77 @@ type Query {
     appId: BigInt!
     """Optional: only grants for this access tier. Omit for all tiers."""
     tierId: BigInt
-  ): [GmTierFeature!]!
+  ): [GmTierFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Read the app's game-model runtime policy (session creation policy + default participant role). Requires app-admin ('manage_apps').
   """
   gameModelPolicy(
     """The app (tenant) whose policy to read."""
     appId: BigInt!
-  ): GmAppPolicy!
+  ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  List the automations defined for an app. Requires app-admin ('manage_apps').
+  """
+  gameModelAutomations(
+    """The app (tenant) whose automations to list."""
+    appId: BigInt!
+  ): [GmAutomation!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Fetch one automation by name, including its circuit-breaker state. Requires app-admin ('manage_apps').
+  """
+  gameModelAutomation(
+    """The app (tenant) that owns the automation."""
+    appId: BigInt!
+    """The automation name to fetch."""
+    name: String!
+  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  List automation event triggers for an app, optionally filtered to one automation (by name). Requires app-admin ('manage_apps').
+  """
+  gameModelAutomationTriggers(
+    """The app (tenant) whose triggers to list."""
+    appId: BigInt!
+    """Optional: only triggers for this automation. Omit for all."""
+    automationName: String
+  ): [GmAutomationTrigger!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Read the app's automation policy (guardrails / platform ceilings). Requires app-admin ('manage_apps').
+  """
+  gameModelAutomationPolicy(
+    """The app (tenant) whose automation policy to read."""
+    appId: BigInt!
+  ): GmAutomationPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  List automation runs (the monitoring + audit trail of autonomous-process executions) for an app, newest first, optionally filtered by automation name and/or outcome. Each run carries timing, fan-out + invocation counts, billed compute, and any circuit action. Requires app-admin ('manage_apps').
+  """
+  gameModelAutomationRuns(
+    """The app (tenant) whose runs to list."""
+    appId: BigInt!
+    """Optional: only runs of this automation. Omit for all."""
+    automationName: String
+    """Optional: filter by outcome (true = succeeded, false = failed)."""
+    success: Boolean
+    """Max runs to return (default 50, max 200)."""
+    limit: Int
+    """Number of runs to skip (pagination)."""
+    offset: Int
+  ): [GmAutomationRun!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Aggregate automation activity for an app over a recent window (default 60 minutes, max 1440): total/failed runs, failure rate, runs/min, invocations/mutations/compute, and a per-automation breakdown with current circuit state. The "what are my NPCs doing" dashboard query. Requires app-admin ('manage_apps').
+  """
+  gameModelAutomationStats(
+    """The app (tenant) whose automation activity to summarize."""
+    appId: BigInt!
+    """Look-back window in minutes (default 60, max 1440)."""
+    windowMinutes: Int = 60
+  ): GmAutomationStats! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  A snapshot of an app's game-model footprint and recent activity: container/property/edge/session/function/automation row counts, total + 24h event volume, failed + automation-driven invocations, and the most-invoked functions. Helps developers understand what is in their game and their database. Requires app-admin ('manage_apps').
+  """
+  gameModelAppDiagnostics(
+    """The app (tenant) to diagnose."""
+    appId: BigInt!
+  ): GmAppDiagnostics! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """Fetch one container (instance) by id. Requires a valid token."""
   gameModelContainer(
     """The app (tenant) that owns the container."""
@@ -3271,7 +3334,7 @@ type Mutation {
     userId: BigInt!
     """true grants super-admin; false revokes it."""
     value: Boolean!
-  ): User!
+  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access.
   """
@@ -3289,7 +3352,7 @@ type Mutation {
     userId: BigInt!
     """true grants the early-access override; false revokes it."""
     value: Boolean!
-  ): User!
+  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Sets the target user’s account `user_type` (e.g. "direct", "deleted"). Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api.
   """
@@ -3298,14 +3361,14 @@ type Mutation {
     userId: BigInt!
     """New user_type string, e.g. "direct"."""
     value: String!
-  ): User!
+  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api.
   """
   forceLogoutUser(
     """Target user id whose sessions to revoke (BigInt as a decimal string)."""
     userId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token. NOTE: the users table is management-owned, so in cks-game-api this throws ForbiddenException — call cks-management-api instead.
   """
@@ -3869,28 +3932,28 @@ type Mutation {
   """
   Upserts ONLY the opaque base64 chunk-level state blob for a chunk, preserving its voxels, per-voxel states and LODs; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass).
   """
-  updateChunkState(input: UpdateChunkStateInput!): Chunk
+  updateChunkState(input: UpdateChunkStateInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Replaces the level-of-detail (LOD) set for a chunk, preserving voxels, per-voxel states, chunk state and owner; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass).
   """
-  updateChunkLods(input: UpdateChunkLodsInput!): Chunk
+  updateChunkLods(input: UpdateChunkLodsInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and (when grids cover the chunk) `update_voxel_data` on a covering grid.
   """
-  updateVoxel(input: UpdateVoxelInput!): Voxel!
+  updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
   """
   Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass).
   """
-  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]!
+  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
-  Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit entirely within one of the app's existing grid assignments and must not overlap another grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS).
+  Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit within one of the app's grid assignments (its buildable regions); it MAY be nested inside a broader containing grid such as the open-by-default world grid, but must not partially overlap a peer grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS).
   """
   createGrid(
     """
     Target app plus the two opposite corners of the grid box, in chunk coordinates. Corners are normalized to a low/high chunk, so their order does not matter.
     """
     input: CreateGridInput!
-  ): CreateGridResponse!
+  ): CreateGridResponse! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Grant one or more runtime permission keys directly to a single user on a grid (writes the `grid_user_direct_grants` input table), then recompute that user's materialized effective ACL on the grid. The target user must already have active app access (otherwise this fails). Requires app-admin ('manage_apps'). Returns the user's full effective permission-key set on the grid. To grant by group/role instead of per-user, use `assignGroupToGrid`.
   """
@@ -3899,7 +3962,7 @@ type Mutation {
     The app, grid, and target user, the runtime permission keys to grant, and an optional expiry timestamp.
     """
     input: GrantGridPermissionsInput!
-  ): GridUserPermissions!
+  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Revoke a user's direct grants on a grid (deletes from the `grid_user_direct_grants` input table) and recompute their materialized effective ACL. Omit `permissionKeys` to remove ALL of the user's direct grants on the grid; pass a subset to remove only those keys. Does not affect permissions the user receives via group grants. Requires app-admin ('manage_apps'). DESTRUCTIVE for the targeted grants. Returns the user's remaining effective permission keys on the grid.
   """
@@ -3908,7 +3971,7 @@ type Mutation {
     The app, grid, and target user; optionally the subset of permission keys to revoke (omit to revoke all of the user's direct grants).
     """
     input: RevokeGridPermissionsInput!
-  ): GridUserPermissions!
+  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid.
   """
@@ -3917,7 +3980,7 @@ type Mutation {
     The app, grid, and the new whitelist of allowed permission keys (empty array = no limit).
     """
     input: SetGridPermissionLimitsInput!
-  ): GridPermissionLimits!
+  ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Grant runtime permission keys to a group (optionally scoped to a single group role) on a grid by writing the `grid_group_grants` input table, then recompute the materialized effective ACL so every affected member gains the keys. Requires app-admin ('manage_apps'). Returns the grid's current group grants for the group. Use `grantGridPermissions` for per-user grants instead.
   """
@@ -3926,7 +3989,7 @@ type Mutation {
     The app, grid, and target group; an optional group role to scope the grant to; the runtime permission keys to grant; and an optional expiry timestamp.
     """
     input: AssignGroupToGridInput!
-  ): [GridGroupGrant!]!
+  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Revoke group/role grants on a grid (deletes from the `grid_group_grants` input table) and recompute the materialized effective ACL. Omit `permissionKeys` to revoke ALL of the group/role's grants on the grid; pass a subset to revoke only those keys. Requires app-admin ('manage_apps'). DESTRUCTIVE: removes the granted permissions from every affected member. Returns the group's remaining grants on the grid.
   """
@@ -3935,7 +3998,7 @@ type Mutation {
     The app, grid, and target group, plus an optional group role; optionally the subset of permission keys to revoke (omit to revoke all of the group/role's grants).
     """
     input: RevokeGroupFromGridInput!
-  ): [GridGroupGrant!]!
+  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams.
   """
@@ -3960,7 +4023,7 @@ type Mutation {
   updateTeam(
     """The team id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateTeamInput!
-  ): Group!
+  ): Group! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "input.groupId")
   """
   Delete a team. Requires the 'manage_group' team permission (app admins bypass). DESTRUCTIVE: cascades to members, roles, and any grid grants the team conferred, and recomputes the effective grid ACL for affected grids. Returns true on success.
   """
@@ -3971,7 +4034,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "groupId")
   """
   Join a team as the caller. Honors the team membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. Banned users are rejected. No special permission required.
   """
@@ -4005,7 +4068,7 @@ type Mutation {
     groupId: BigInt!
     """The user to add or approve."""
     userId: BigInt!
-  ): GroupMember!
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
   Remove a member from a team. Requires the 'manage_members' team permission, except that any member may remove themselves. DESTRUCTIVE: drops the membership and its roles. Returns true if a membership was removed.
   """
@@ -4014,7 +4077,7 @@ type Mutation {
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
     userId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
   Replace a member's roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' team permission (app admins bypass).
   """
@@ -4023,7 +4086,7 @@ type Mutation {
     The team, the target user, and the full list of role ids the member should have.
     """
     input: SetMemberRolesInput!
-  ): GroupMember!
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
   """
   Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs).
   """
@@ -4032,21 +4095,21 @@ type Mutation {
     The team, the role name, the team permission keys to grant, and an optional rank.
     """
     input: CreateGroupRoleInput!
-  ): GroupRole!
+  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
   """
   Update a team role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' team permission (app admins bypass).
   """
   updateTeamRole(
     """The role id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateGroupRoleInput!
-  ): GroupRole!
+  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupRoleId")
   """
   Delete a non-system team role. Requires the 'manage_roles' team permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members and recomputes any grid ACLs the role granted on. Returns true if a role was deleted.
   """
   deleteTeamRole(
     """The team role to delete (must be a non-system role)."""
     groupRoleId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "groupRoleId")
   """
   Set who may create channels in an app and the default membership policy for new channels. Requires app-admin ('manage_apps'). Affects future channel creation only, not existing channels.
   """
@@ -4073,14 +4136,14 @@ type Mutation {
     The channel id plus the fields to change (omitted fields are left as-is).
     """
     input: UpdateChannelInput!
-  ): Group!
+  ): Group! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "input.groupId")
   """
   Delete a channel. Requires the 'manage_group' channel permission (app admins bypass). DESTRUCTIVE: cascades to members and roles and notifies Buddy servers to tear down message routing for the channel. Returns true on success.
   """
   deleteChannel(
     """The channel to delete."""
     groupId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "groupId")
   """
   Join a channel as the caller (subscribe to it). Honors the channel membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. On becoming active, Buddy is notified with the caller's effective send permission so routing starts.
   """
@@ -4110,7 +4173,7 @@ type Mutation {
     groupId: BigInt!
     """The user to add or approve."""
     userId: BigInt!
-  ): GroupMember!
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
   Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed.
   """
@@ -4119,7 +4182,7 @@ type Mutation {
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
     userId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
   Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately.
   """
@@ -4128,7 +4191,7 @@ type Mutation {
     The channel, the target user, and the full list of role ids the member should have.
     """
     input: SetMemberRolesInput!
-  ): GroupMember!
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
   """
   Create a custom (non-system) channel role granting the given channel permission keys (e.g. send_messages for posting rights). Requires the 'manage_roles' channel permission (app admins bypass).
   """
@@ -4137,21 +4200,21 @@ type Mutation {
     The channel, the role name, the channel permission keys to grant, and an optional rank.
     """
     input: CreateGroupRoleInput!
-  ): GroupRole!
+  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
   """
   Update a channel role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' channel permission (app admins bypass). Note: changing send_messages here does not re-push Buddy until affected members' roles are re-applied via setChannelMemberRoles.
   """
   updateChannelRole(
     """The role id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateGroupRoleInput!
-  ): GroupRole!
+  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupRoleId")
   """
   Delete a non-system channel role. Requires the 'manage_roles' channel permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members. Returns true if a role was deleted.
   """
   deleteChannelRole(
     """The channel role to delete (must be a non-system role)."""
     groupRoleId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "groupRoleId")
   """
   Create or update a container type: the studio-defined schema for a kind of runtime entity (like a class). Idempotent on (app, typeName). Requires app-admin ('manage_apps').
   """
@@ -4160,7 +4223,7 @@ type Mutation {
     The app, type name, display name, and optional instantiableBy / default property visibility / metadata.
     """
     input: UpsertContainerTypeInput!
-  ): GmContainerType!
+  ): GmContainerType! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Create or update a property definition on a container type (a typed field with default value, visibility, and writability). Idempotent on (app, containerTypeName, key). Requires app-admin ('manage_apps').
   """
@@ -4169,7 +4232,7 @@ type Mutation {
     The app, container type, property key, value type, and optional default/visibility/writability/description.
     """
     input: UpsertPropertyDefInput!
-  ): GmPropertyDef!
+  ): GmPropertyDef! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Create or update a studio-defined function: a named, sandboxed behavior with typed parameters, declared property mutations (expressions compiled to an AST server-side, never eval'd), an optional return expression, an invoke scope, and an invoke policy (authority rule tree). Idempotent on (app, name). Requires app-admin ('manage_apps'). Returns the function plus any non-fatal static-analysis warnings.
   """
@@ -4178,7 +4241,7 @@ type Mutation {
     The full function definition: app, name, optional container type binding, parameters, mutations, return expression, invoke scope, and invoke-policy JSON.
     """
     input: UpsertFunctionInput!
-  ): GmFunction!
+  ): GmFunction! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Delete a studio-defined function by name. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a function was deleted.
   """
@@ -4187,7 +4250,7 @@ type Mutation {
     appId: BigInt!
     """The function name to delete."""
     name: String!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Bulk-create game-model definitions (container types, property defs, functions) and optionally instances (containers + edges) in one transaction — used to initialize or import a model. Requires app-admin ('manage_apps'). Returns counts created, warnings, and a map of seed temp_id -> created container UUID.
   """
@@ -4196,7 +4259,7 @@ type Mutation {
     The app, an optional target session for instances, and arrays of container types, property defs, functions, containers, and edges to create.
     """
     input: SeedGameModelInput!
-  ): GmSeedResult!
+  ): GmSeedResult! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Set the app's game-model runtime policy: who may create sessions (admin | member | anyone) and the default participant role. Requires app-admin ('manage_apps').
   """
@@ -4205,28 +4268,91 @@ type Mutation {
     The app plus the session creation policy and/or default participant role to set.
     """
     input: SetGameModelPolicyInput!
-  ): GmAppPolicy!
+  ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps').
   """
   gameModelDefineFeature(
     """The app, the feature key, and an optional description."""
     input: DefineAppFeatureInput!
-  ): GmAppFeature!
+  ): GmAppFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps').
   """
   gameModelGrantTierFeature(
     """The app, the tier id, and the feature key to grant to that tier."""
     input: GrantTierFeatureInput!
-  ): GmTierFeature!
+  ): GmTierFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed.
   """
   gameModelRevokeTierFeature(
     """The app, the tier id, and the feature key to revoke from that tier."""
     input: GrantTierFeatureInput!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps').
+  """
+  gameModelUpsertAutomation(
+    """
+    The automation definition: app, name, entry-point function, target mode + selector, trigger/schedule, run-as identity, and safety budget.
+    """
+    input: UpsertAutomationInput!
+  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Delete an automation by name (also removes its event triggers). Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if one was deleted.
+  """
+  gameModelDeleteAutomation(
+    """The app (tenant) that owns the automation."""
+    appId: BigInt!
+    """The automation name to delete."""
+    name: String!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Enable or disable an automation. Re-enabling also resets its circuit breaker (closed, zero failures, no pause) so a tripped automation resumes. Requires app-admin ('manage_apps').
+  """
+  gameModelSetAutomationEnabled(
+    """The app (tenant) that owns the automation."""
+    appId: BigInt!
+    """The automation name."""
+    name: String!
+    """True to enable (and reset the circuit); false to pause."""
+    enabled: Boolean!
+  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Create an event trigger that fires an automation in reaction to model activity (a function invocation, a direct property write, or a container creation). Matched in the API server post-commit. Requires app-admin ('manage_apps').
+  """
+  gameModelUpsertAutomationTrigger(
+    """
+    The app, the target automation (by name), the model event, and optional filters.
+    """
+    input: UpsertAutomationTriggerInput!
+  ): GmAutomationTrigger! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Delete an automation event trigger by id. Requires app-admin ('manage_apps'). Returns true if one was deleted.
+  """
+  gameModelDeleteAutomationTrigger(
+    """The app (tenant) that owns the trigger."""
+    appId: BigInt!
+    """The trigger id (UUID) to delete."""
+    triggerId: String!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Set the app's automation policy (platform guardrails): the kill switch, max automations, the minimum schedule interval floor, max fan-out, max event cascade depth, and the aggregate per-minute run ceiling. Requires app-admin ('manage_apps').
+  """
+  gameModelSetAutomationPolicy(
+    """The app plus any guardrail fields to set."""
+    input: SetAutomationPolicyInput!
+  ): GmAutomationPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Run an automation once, immediately (manual trigger), regardless of its schedule. Applies the same guard chain (app gate, rate limit, circuit) and records a run. Useful for testing an NPC. Requires app-admin ('manage_apps').
+  """
+  gameModelRunAutomation(
+    """The app (tenant) that owns the automation."""
+    appId: BigInt!
+    """The automation name to run now."""
+    name: String!
+  ): GmAutomationRun! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save). Subject to the app's session creation policy. The caller becomes the creator and a participant. Requires a valid token.
   """
@@ -4322,7 +4448,7 @@ type Mutation {
     The voice/audio packet to send: target appId, chunk coordinates, 32-byte source uuid, base64 (compressed) audioData, and optional distance/decayRate/sequenceNumber. See ClientAudioPacketInput.
     """
     input: ClientAudioPacketInput!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_voice_chat", scopeArg: "input.appId")
   """
   Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
@@ -4852,6 +4978,12 @@ input PublishEnvironmentReleaseFromGameApiTagInput {
   gameApiTag: String!
   """Overwrite an existing environment version row if it already exists."""
   force: Boolean! = false
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
 }
 
 type Avatar {
@@ -5693,6 +5825,248 @@ type GroupMembership {
 }
 
 """
+An autonomous process (automation / NPC): a server-driven entry-point function bound to a trigger (schedule or model activity) plus a safety budget and circuit-breaker state.
+"""
+type GmAutomation {
+  """Unique automation id (UUID)."""
+  automationId: String!
+  """The app (tenant) that owns the automation."""
+  appId: BigInt!
+  """Automation name (unique per app); the upsert key."""
+  name: String!
+  """Optional description."""
+  description: String
+  """Whether the automation is eligible to run."""
+  enabled: Boolean!
+  """The entry-point function name (must be autonomous_invocable)."""
+  functionName: String!
+  """Target resolution mode: container | type | global."""
+  targetMode: String!
+  """For target_mode=container: the specific self container UUID."""
+  selfContainerId: String
+  """For target_mode=type: the container type to fan out over."""
+  targetTypeName: String
+  """Optional session scope (UUID)."""
+  sessionId: String
+  """JSON object of static params passed to the entry point."""
+  paramsJson: String!
+  """
+  JSON selector that resolves candidate refs/scalars over model data (e.g. nearest enemy) into params. Null when unused.
+  """
+  selectorJson: String
+  """
+  Identity the automation acts as (drives owner_of_self / $caller_user_id). Null = trusted server caller.
+  """
+  runAsUserId: BigInt
+  """Trigger type: schedule | event | manual."""
+  triggerType: String!
+  """For schedule triggers: interval | cron."""
+  scheduleKind: String
+  """Interval in ms (schedule_kind=interval)."""
+  intervalMs: Int
+  """Cron expression (schedule_kind=cron)."""
+  cronExpr: String
+  """Max targets per run (fan-out cap)."""
+  maxTargets: Int!
+  """Override: max fn: call depth per invoke."""
+  maxFnDepth: Int
+  """Override: evaluation gas per invoke."""
+  gasLimit: Int
+  """Override: wall-clock budget per invoke (ms)."""
+  runTimeoutMs: Int
+  """Max runs per minute for this automation."""
+  maxRunsPerMinute: Int!
+  """Consecutive failures that trip the circuit breaker."""
+  failureThreshold: Int!
+  """Cooldown (ms) while the circuit is open."""
+  cooldownMs: Int!
+  """Circuit-breaker state: closed | open | half_open."""
+  circuitState: String!
+  """Current consecutive-failure count."""
+  consecutiveFailures: Int!
+  """When the open circuit may retry (half-open)."""
+  pausedUntil: DateTime
+  """Last error recorded for this automation."""
+  lastError: String
+  """When the automation last ran."""
+  lastRunAt: DateTime
+  """When the automation is next due (schedule)."""
+  nextRunAt: DateTime
+}
+
+"""
+An event subscription that fires an automation in reaction to model activity (matched in the API server, not the DB).
+"""
+type GmAutomationTrigger {
+  """Unique trigger id (UUID)."""
+  triggerId: String!
+  """The app (tenant)."""
+  appId: BigInt!
+  """The automation this trigger fires."""
+  automationId: String!
+  """
+  The model event: function_invoked | property_changed | container_created.
+  """
+  onEvent: String!
+  """Filter: only this function name."""
+  functionName: String
+  """Filter: only this container type."""
+  containerTypeName: String
+  """Filter: only this property key."""
+  propertyKey: String
+  """Debounce/coalesce window in ms."""
+  debounceMs: Int!
+}
+
+"""
+One execution of an automation: its target/fan-out + invocation counts, timing, outcome, circuit action, and billed compute. The monitoring + billing record.
+"""
+type GmAutomationRun {
+  """Unique run id (UUID)."""
+  runId: String!
+  """The app (tenant)."""
+  appId: BigInt!
+  """The automation that ran."""
+  automationId: String!
+  """The automation name at run time."""
+  automationName: String!
+  """What triggered the run: schedule | event | manual | cascade."""
+  triggerSource: String!
+  """Parent run id when triggered as a cascade."""
+  parentRunId: String
+  """Cascade depth (0 = top-level)."""
+  cascadeDepth: Int!
+  """When the run started."""
+  startedAt: DateTime!
+  """When the run finished."""
+  finishedAt: DateTime
+  """Wall-clock duration in microseconds."""
+  durationUs: Int!
+  """Number of target containers acted on (fan-out)."""
+  targets: Int!
+  """Number of function invocations performed."""
+  invocations: Int!
+  """Number of property mutations applied across invocations."""
+  mutations: Int!
+  """Number of fn: user-function calls across invocations."""
+  fnCalls: Int!
+  """Evaluation gas consumed across invocations."""
+  gasUsed: Int!
+  """Whether the run succeeded."""
+  success: Boolean!
+  """Error message when the run failed."""
+  errorMessage: String
+  """
+  Circuit action taken (e.g. opened, half_open_retry, budget_paused, cascade_dropped, rate_limited).
+  """
+  circuitAction: String
+  """Billed compute units for this run."""
+  computeUnits: Int!
+}
+
+"""Per-automation rollup within a stats window."""
+type GmAutomationStat {
+  """The automation name."""
+  automationName: String!
+  """Runs in the window."""
+  runs: Int!
+  """Failed runs in the window."""
+  failures: Int!
+  """Total invocations across runs."""
+  invocations: Int!
+  """Total compute units consumed."""
+  computeUnits: Int!
+  """Average run duration (microseconds)."""
+  avgDurationUs: Int!
+  """Current circuit-breaker state: closed | open | half_open."""
+  circuitState: String!
+}
+
+"""
+Aggregate automation activity for an app over a recent window: throughput, failure rate, compute, and a per-automation breakdown. The "what are my NPCs doing" view.
+"""
+type GmAutomationStats {
+  """The window size in minutes."""
+  windowMinutes: Int!
+  """Total runs in the window."""
+  totalRuns: Int!
+  """Failed runs in the window."""
+  failedRuns: Int!
+  """Failure rate as a percentage (0-100)."""
+  failureRatePct: Float!
+  """Average runs per minute over the window."""
+  runsPerMinute: Float!
+  """Total function invocations across runs."""
+  totalInvocations: Int!
+  """Total property mutations across runs."""
+  totalMutations: Int!
+  """Total billed compute units in the window."""
+  totalComputeUnits: Int!
+  """Average run duration in microseconds."""
+  avgDurationUs: Int!
+  """Per-automation breakdown."""
+  byAutomation: [GmAutomationStat!]!
+}
+
+"""A function and its recent invocation counts (diagnostics)."""
+type GmTopFunction {
+  """The function name."""
+  functionName: String!
+  """Invocations in the window."""
+  invocations: Int!
+  """Failed invocations in the window."""
+  failures: Int!
+}
+
+"""
+A snapshot of an app's game-model footprint and recent activity: row counts in the database plus invocation activity. Helps developers understand what is in their game and their database.
+"""
+type GmAppDiagnostics {
+  """The app (tenant)."""
+  appId: BigInt!
+  """Container instances in the app."""
+  containerCount: Int!
+  """Property rows in the app."""
+  propertyCount: Int!
+  """Edge rows in the app."""
+  edgeCount: Int!
+  """Sessions in the app."""
+  sessionCount: Int!
+  """Defined functions."""
+  functionCount: Int!
+  """Defined automations."""
+  automationCount: Int!
+  """Total event-log rows (all time)."""
+  eventCount: Int!
+  """Event-log rows in the last 24h."""
+  events24h: Int!
+  """Failed invocations in the last 24h."""
+  failedEvents24h: Int!
+  """Automation-driven invocations in the last 24h."""
+  automationEvents24h: Int!
+  """Most-invoked functions in the last 24h."""
+  topFunctions: [GmTopFunction!]!
+}
+
+"""Per-app guardrails / platform ceilings for autonomous processes."""
+type GmAutomationPolicy {
+  """The app (tenant) the policy applies to."""
+  appId: BigInt!
+  """App-wide kill switch for all automations."""
+  enabled: Boolean!
+  """Maximum number of automations the app may define."""
+  maxAutomations: Int!
+  """Minimum allowed schedule interval (ms) floor."""
+  minIntervalMs: Int!
+  """Maximum fan-out targets per run."""
+  maxFanout: Int!
+  """Maximum event-trigger cascade depth."""
+  maxCascadeDepth: Int!
+  """Maximum aggregate automation runs per minute for the app."""
+  globalRunsPerMinute: Int!
+}
+
+"""
 A studio-defined container type: the schema for a kind of runtime entity (like a class).
 """
 type GmContainerType {
@@ -5792,6 +6166,10 @@ type GmFunction {
   invokeScope: String!
   """JSON-encoded invoke policy rule tree."""
   invokePolicyJson: String
+  """
+  Whether an autonomous process (automation/NPC) may use this function as an entry point. Players are unaffected by this flag.
+  """
+  autonomousInvocable: Boolean!
   """Non-fatal static-analysis warnings from the last upload."""
   warnings: [String!]!
 }
@@ -5942,6 +6320,14 @@ type GmEvent {
   selfContainerId: String
   """The user who invoked the function."""
   callerUserId: BigInt
+  """
+  Who invoked: player | automation | system. Distinguishes NPC/autonomous-process actions from player actions.
+  """
+  callerKind: String!
+  """
+  The automation (autonomous process) that drove this invocation, if any.
+  """
+  automationId: String
   """JSON object of params."""
   paramsJson: String!
   """JSON array of applied mutations."""
@@ -6756,6 +7142,10 @@ input UpsertFunctionInput {
   invokeScope: String
   """JSON-encoded invoke-policy rule tree (authority requirements)."""
   invokePolicyJson: String
+  """
+  Opt-in: allow an autonomous process (automation/NPC) to use this function as an entry point. Defaults to false. Players are unaffected; this only enables server-driven invocation.
+  """
+  autonomousInvocable: Boolean
 }
 
 """A typed parameter declaration for a function."""
@@ -6858,6 +7248,10 @@ input SeedFunctionInput {
   invokeScope: String
   """JSON-encoded invoke-policy rule tree (authority requirements)."""
   invokePolicyJson: String
+  """
+  Opt-in: allow an autonomous process (automation/NPC) to use this function as an entry point. Defaults to false.
+  """
+  autonomousInvocable: Boolean
 }
 
 """A container (instance) to create as part of a seed."""
@@ -6930,6 +7324,100 @@ input GrantTierFeatureInput {
   tierId: BigInt!
   """The feature key to grant to (or revoke from) the tier."""
   featureKey: String!
+}
+
+"""
+Create or update an autonomous process (automation / NPC). Upsert key is (app, name).
+"""
+input UpsertAutomationInput {
+  """The app (tenant) that owns the automation."""
+  appId: BigInt!
+  """Automation name (unique per app). The upsert key."""
+  name: String!
+  """Optional description."""
+  description: String
+  """Whether it may run. Defaults to true."""
+  enabled: Boolean
+  """Entry-point function name (must be autonomous_invocable)."""
+  functionName: String!
+  """Target mode: container | type | global. Defaults to container."""
+  targetMode: String
+  """For target_mode=container: the self container UUID."""
+  selfContainerId: String
+  """For target_mode=type: the container type to fan out over."""
+  targetTypeName: String
+  """Optional session scope (UUID)."""
+  sessionId: String
+  """JSON object of static params."""
+  paramsJson: String
+  """
+  JSON selector resolving candidate refs/scalars over model data into params (e.g. {"pick":"nearest","ofType":"Unit","where":[...],"by":"manhattan","bindAs":{...}}).
+  """
+  selectorJson: String
+  """
+  Identity to act as (drives owner_of_self / $caller_user_id). Null = trusted server caller.
+  """
+  runAsUserId: BigInt
+  """Trigger type: schedule | event | manual. Defaults to schedule."""
+  triggerType: String
+  """For schedule triggers: interval | cron."""
+  scheduleKind: String
+  """Interval in ms (schedule_kind=interval)."""
+  intervalMs: Int
+  """Cron expression (schedule_kind=cron)."""
+  cronExpr: String
+  """Max fan-out targets per run."""
+  maxTargets: Int
+  """Override: max fn: depth per invoke."""
+  maxFnDepth: Int
+  """Override: gas per invoke."""
+  gasLimit: Int
+  """Override: wall-clock budget per invoke (ms)."""
+  runTimeoutMs: Int
+  """Max runs per minute for this automation."""
+  maxRunsPerMinute: Int
+  """Consecutive failures that open the circuit."""
+  failureThreshold: Int
+  """Cooldown (ms) while the circuit is open."""
+  cooldownMs: Int
+}
+
+"""Create an event trigger that fires an automation on model activity."""
+input UpsertAutomationTriggerInput {
+  """The app (tenant)."""
+  appId: BigInt!
+  """The automation (by name) this trigger fires."""
+  automationName: String!
+  """
+  The model event: function_invoked | property_changed | container_created.
+  """
+  onEvent: String!
+  """Filter: only this function name."""
+  functionName: String
+  """Filter: only this container type."""
+  containerTypeName: String
+  """Filter: only this property key."""
+  propertyKey: String
+  """Debounce/coalesce window in ms."""
+  debounceMs: Int
+}
+
+"""Set the per-app automation policy (guardrails / platform ceilings)."""
+input SetAutomationPolicyInput {
+  """The app (tenant)."""
+  appId: BigInt!
+  """App-wide kill switch."""
+  enabled: Boolean
+  """Max automations the app may define."""
+  maxAutomations: Int
+  """Minimum schedule interval (ms) floor."""
+  minIntervalMs: Int
+  """Max fan-out targets per run."""
+  maxFanout: Int
+  """Max event-trigger cascade depth."""
+  maxCascadeDepth: Int
+  """Max aggregate runs per minute for the app."""
+  globalRunsPerMinute: Int
 }
 
 """Create a runtime session."""
@@ -7558,10 +8046,4 @@ type RealtimeConnectionEvent {
   Whether resubscribing without changing anything may succeed. true for transient failures (e.g. UDP_PROXY_CONNECTION_FAILED) — back off and retry. false for caller errors that must be fixed first (AUTH_REQUIRED needs a fresh/valid game token; APP_ID_REQUIRED needs an appId-scoped subscription).
   """
   retryable: Boolean!
-}
-
-schema {
-  query: Query
-  mutation: Mutation
-  subscription: Subscription
 }
