@@ -6140,6 +6140,30 @@ type GmFunctionMutation {
   expression: String!
 }
 
+"""One named argument expression of a notify_* effect."""
+type GmNotificationArg {
+  """
+  Argument name (kind-specific: chunk_x, channel_id, payload, target_uuid, ...).
+  """
+  name: String!
+  """The expression (source) evaluated post-mutation to produce the value."""
+  expression: String!
+}
+
+"""
+A declarative realtime notification the function emits via Buddy AFTER its transaction commits. Fenced by delivery mode (proximity / channel membership / target).
+"""
+type GmFunctionNotification {
+  """Delivery mode: 'spatial' | 'channel' | 'actor'."""
+  kind: String!
+  """
+  For kind 'spatial': 'server_event' (default) | 'generic_spatial' | 'actor_update'.
+  """
+  emitAs: String
+  """Named argument expressions."""
+  args: [GmNotificationArg!]!
+}
+
 """
 A studio-defined function: a named, sandboxed behavior over containers (parameters, declared mutations, optional return, and an authority invoke policy).
 """
@@ -6170,6 +6194,10 @@ type GmFunction {
   Whether an autonomous process (automation/NPC) may use this function as an entry point. Players are unaffected by this flag.
   """
   autonomousInvocable: Boolean!
+  """
+  Declarative realtime notifications the function emits via Buddy after it commits.
+  """
+  notifications: [GmFunctionNotification!]!
   """Non-fatal static-analysis warnings from the last upload."""
   warnings: [String!]!
 }
@@ -7146,6 +7174,10 @@ input UpsertFunctionInput {
   Opt-in: allow an autonomous process (automation/NPC) to use this function as an entry point. Defaults to false. Players are unaffected; this only enables server-driven invocation.
   """
   autonomousInvocable: Boolean
+  """
+  Declarative realtime notifications the function emits via Buddy AFTER it commits. Players and automations (NPCs) emit identically; fenced by delivery mode.
+  """
+  notifications: [FunctionNotificationInput!]
 }
 
 """A typed parameter declaration for a function."""
@@ -7172,6 +7204,36 @@ input FunctionMutationInput {
   property: String!
   """Expression string (compiled to AST server-side)."""
   expression: String!
+}
+
+"""One named argument expression of a notify_* effect."""
+input NotificationArgInput {
+  """
+  Argument name (kind-specific: chunk_x, channel_id, payload, target_uuid, ...).
+  """
+  name: String!
+  """
+  Expression string (compiled to AST server-side; evaluated post-mutation).
+  """
+  expression: String!
+}
+
+"""
+A declarative realtime notification the function emits via Buddy AFTER its transaction commits. Players and automations (NPCs) emit identically. Fenced by delivery mode (proximity / channel membership / target).
+"""
+input FunctionNotificationInput {
+  """
+  Delivery mode: 'spatial' (nearby clients) | 'channel' (channel members) | 'actor' (one target).
+  """
+  kind: String!
+  """
+  For kind 'spatial': which client downlink Buddy emits — 'server_event' (default) | 'generic_spatial' | 'actor_update'.
+  """
+  emitAs: String
+  """
+  Named argument expressions. spatial: chunk_x/chunk_y/chunk_z required (+ event_type/state/distance/decay/source_uuid); channel: channel_id/payload required (+ sender_uuid); actor: target_uuid/chunk_x/chunk_y/chunk_z/payload required.
+  """
+  args: [NotificationArgInput!]!
 }
 
 """
@@ -7252,6 +7314,10 @@ input SeedFunctionInput {
   Opt-in: allow an autonomous process (automation/NPC) to use this function as an entry point. Defaults to false.
   """
   autonomousInvocable: Boolean
+  """
+  Declarative realtime notifications the function emits via Buddy after it commits (see notify_* effects).
+  """
+  notifications: [FunctionNotificationInput!]
 }
 
 """A container (instance) to create as part of a seed."""
