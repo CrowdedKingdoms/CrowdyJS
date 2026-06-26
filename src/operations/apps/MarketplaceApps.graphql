@@ -30,3 +30,41 @@ query MarketplaceApps(
     }
   }
 }
+
+query AppsConnection(
+  $first: Int
+  $after: String
+  $filter: AppMarketplaceFilterInput
+) {
+  appsConnection(first: $first, after: $after, filter: $filter) {
+    edges {
+      cursor
+      node {
+        appId
+        orgId
+        name
+        slug
+        description
+        visibility
+        status
+        metadata
+        splitMode
+        gameApiUrl
+        createdAt
+        updatedAt
+        org {
+          orgId
+          slug
+          name
+        }
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

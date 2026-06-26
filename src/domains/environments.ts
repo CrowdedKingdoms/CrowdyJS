@@ -12,6 +12,7 @@ import {
   PurgeEnvironmentDocument,
   ResumeEnvironmentDocument,
   UpdateEnvironmentScalingDocument,
+  UpdateEnvironmentBillingTiersDocument,
   RedeployEnvironmentDocument,
   RestartEnvironmentServicesDocument,
   LinkAppToEnvironmentDocument,
@@ -27,6 +28,7 @@ import {
   type PurgeEnvironmentMutation,
   type ResumeEnvironmentMutation,
   type UpdateEnvironmentScalingMutation,
+  type UpdateEnvironmentBillingTiersMutation,
   type RedeployEnvironmentMutation,
   type RestartEnvironmentServicesMutation,
   type LinkAppToEnvironmentMutation,
@@ -36,6 +38,7 @@ import {
   type PurgeEnvironmentInput,
   type ResumeEnvironmentInput,
   type UpdateEnvironmentScalingInput,
+  type UpdateEnvironmentBillingTiersInput,
   type RedeployEnvironmentInput,
   type RestartEnvironmentServicesInput,
   type LinkAppToEnvironmentInput,
@@ -252,6 +255,27 @@ export class EnvironmentsAPI {
       { input },
     );
     return data.updateEnvironmentScaling;
+  }
+
+  /**
+   * Set an environment's Buddy / GraphQL / Postgres capacity billing-tier
+   * levels (from {@link BillingAPI.buddyTiers} / {@link BillingAPI.graphqlTiers}
+   * / {@link BillingAPI.postgresTiers}). Requires `manage_environments`.
+   *
+   * @param input - {@link UpdateEnvironmentBillingTiersInput} (org, slug, and
+   *   the per-resource tier levels to set).
+   * @returns The updated {@link CksEnvironment}.
+   */
+  async updateBillingTiers(
+    input: UpdateEnvironmentBillingTiersInput,
+  ): Promise<
+    UpdateEnvironmentBillingTiersMutation['updateEnvironmentBillingTiers']
+  > {
+    const data = await this.management.request(
+      UpdateEnvironmentBillingTiersDocument,
+      { input },
+    );
+    return data.updateEnvironmentBillingTiers;
   }
 
   /**

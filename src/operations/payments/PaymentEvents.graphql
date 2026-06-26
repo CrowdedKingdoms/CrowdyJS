@@ -1,0 +1,44 @@
+query PaymentEvents($limit: Int, $offset: Int) {
+  paymentEvents(limit: $limit, offset: $offset) {
+    items {
+      eventId
+      provider
+      externalEventId
+      eventType
+      checkoutId
+      processedAt
+      error
+      createdAt
+    }
+    pageInfo {
+      totalCount
+      limit
+      offset
+    }
+  }
+}
+
+query PaymentEventsConnection($first: Int, $after: String) {
+  paymentEventsConnection(first: $first, after: $after) {
+    edges {
+      cursor
+      node {
+        eventId
+        provider
+        externalEventId
+        eventType
+        checkoutId
+        processedAt
+        error
+        createdAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

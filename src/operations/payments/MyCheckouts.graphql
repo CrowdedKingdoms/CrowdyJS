@@ -25,3 +25,36 @@ query MyCheckouts($limit: Int, $offset: Int) {
     }
   }
 }
+
+query MyCheckoutsConnection($first: Int, $after: String) {
+  myCheckoutsConnection(first: $first, after: $after) {
+    edges {
+      cursor
+      node {
+        checkoutId
+        userId
+        provider
+        purpose
+        status
+        amountCents
+        currency
+        externalId
+        externalUrl
+        orgId
+        appId
+        tierId
+        error
+        createdAt
+        completedAt
+        expiresAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

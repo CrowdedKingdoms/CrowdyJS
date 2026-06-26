@@ -1,0 +1,7 @@
+query AppGrantMemberCandidates($appId: BigInt!) {
+  appGrantMemberCandidates(appId: $appId) {
+    userId
+    email
+    gamertag
+  }
+}

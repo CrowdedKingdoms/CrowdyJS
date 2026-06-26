@@ -3,9 +3,32 @@ import {
   MeDocument,
   UpdateGamertagDocument,
   DeleteMyAccountDocument,
+  UserDocument,
+  UsersPaginatedDocument,
+  UsersConnectionDocument,
+  SetSuperAdminDocument,
+  SetOperatorDocument,
+  SetEarlyAccessOverrideDocument,
+  UpdateUserTypeDocument,
+  ForceLogoutUserDocument,
+  UpdateUserStateDocument,
+  FreePlayWindowDocument,
   type MeQuery,
   type UpdateGamertagInput,
   type UpdateGamertagMutation,
+  type UserQuery,
+  type UsersPaginatedQuery,
+  type UsersPaginatedQueryVariables,
+  type UsersConnectionQuery,
+  type UsersConnectionQueryVariables,
+  type SetSuperAdminMutation,
+  type SetOperatorMutation,
+  type SetEarlyAccessOverrideMutation,
+  type UpdateUserTypeMutation,
+  type ForceLogoutUserMutation,
+  type UpdateUserStateMutation,
+  type UpdateUserStateInput,
+  type FreePlayWindowQuery,
 } from '../generated/graphql.js';
 
 /**
@@ -74,5 +97,168 @@ export class UsersAPI {
   async deleteMyAccount(): Promise<boolean> {
     const data = await this.graphql.request(DeleteMyAccountDocument);
     return data.deleteMyAccount;
+  }
+
+  /**
+   * Report whether a free-play window is currently active and when the next one
+   * starts. **Public** — no session required.
+   *
+   * @returns The {@link FreePlayWindowInfo}.
+   */
+  async freePlayWindow(): Promise<FreePlayWindowQuery['freePlayWindowInfo']> {
+    const data = await this.graphql.request(FreePlayWindowDocument);
+    return data.freePlayWindowInfo;
+  }
+
+  /**
+   * Look up any user by id. **Super-admin only** (regular callers can only read
+   * their own profile via {@link me}).
+   *
+   * @param id - Numeric user id (`BigInt` as a decimal string).
+   * @returns The {@link User}, or `null` if no such user.
+   */
+  async get(id: string): Promise<UserQuery['user']> {
+    const data = await this.graphql.request(UserDocument, { id });
+    return data.user;
+  }
+
+  /**
+   * Search/list users with offset pagination. **Super-admin only.**
+   *
+   * @param opts - Optional `query` (prefix match over email/gamertag/id) and
+   *   `limit` / `offset`.
+   * @returns A page of users.
+   * @remarks Prefer {@link listConnection} (Relay cursor pagination) for large
+   *   result sets; the offset args here are deprecated server-side.
+   */
+  async paginated(
+    opts: {
+      query?: UsersPaginatedQueryVariables['query'];
+      limit?: UsersPaginatedQueryVariables['limit'];
+      offset?: UsersPaginatedQueryVariables['offset'];
+    } = {},
+  ): Promise<UsersPaginatedQuery['usersPaginated']> {
+    const data = await this.graphql.request(UsersPaginatedDocument, opts);
+    return data.usersPaginated;
+  }
+
+  /**
+   * Relay-style cursor pagination over users — the preferred alternative to
+   * {@link paginated}. **Super-admin only.** Page with `first` plus the previous
+   * page's `pageInfo.endCursor` as `after`. See
+   * https://docs.crowdedkingdoms.com/overview/pagination.
+   *
+   * @param args - Optional `first`, `after`, and `query`.
+   * @returns A {@link UsersConnection}.
+   */
+  async listConnection(
+    args: UsersConnectionQueryVariables = {},
+  ): Promise<UsersConnectionQuery['usersConnection']> {
+    const data = await this.graphql.request(UsersConnectionDocument, args);
+    return data.usersConnection;
+  }
+
+  /**
+   * Grant or revoke the platform `is_super_admin` flag on a user. **Super-admin
+   * only.**
+   *
+   * @param userId - Target user id.
+   * @param value - `true` to grant, `false` to revoke.
+   * @returns The updated user's `userId` + `isSuperAdmin`.
+   */
+  async setSuperAdmin(
+    userId: string,
+    value: boolean,
+  ): Promise<SetSuperAdminMutation['setSuperAdmin']> {
+    const data = await this.graphql.request(SetSuperAdminDocument, {
+      userId,
+      value,
+    });
+    return data.setSuperAdmin;
+  }
+
+  /**
+   * Grant or revoke the platform `is_operator` flag (control-plane access) on a
+   * user. **Super-admin only.**
+   *
+   * @param userId - Target user id.
+   * @param value - `true` to grant, `false` to revoke.
+   * @returns The updated user's `userId` + `isOperator`.
+   */
+  async setOperator(
+    userId: string,
+    value: boolean,
+  ): Promise<SetOperatorMutation['setOperator']> {
+    const data = await this.graphql.request(SetOperatorDocument, {
+      userId,
+      value,
+    });
+    return data.setOperator;
+  }
+
+  /**
+   * Force an early-access override on a user (bypasses the early-access gate).
+   * **Super-admin only.**
+   *
+   * @param userId - Target user id.
+   * @param value - `true` to grant the override, `false` to clear it.
+   * @returns The updated user's `userId` + `grantEarlyAccessOverride`.
+   */
+  async setEarlyAccessOverride(
+    userId: string,
+    value: boolean,
+  ): Promise<SetEarlyAccessOverrideMutation['setEarlyAccessOverride']> {
+    const data = await this.graphql.request(SetEarlyAccessOverrideDocument, {
+      userId,
+      value,
+    });
+    return data.setEarlyAccessOverride;
+  }
+
+  /**
+   * Set a user's `user_type`. **Super-admin only.**
+   *
+   * @param userId - Target user id.
+   * @param value - The new user type string.
+   * @returns The updated user's `userId` + `userType`.
+   */
+  async updateType(
+    userId: string,
+    value: string,
+  ): Promise<UpdateUserTypeMutation['updateUserType']> {
+    const data = await this.graphql.request(UpdateUserTypeDocument, {
+      userId,
+      value,
+    });
+    return data.updateUserType;
+  }
+
+  /**
+   * Revoke all of a user's sessions (force logout everywhere). **Super-admin
+   * only.**
+   *
+   * @param userId - Target user id.
+   * @returns `true` on success.
+   */
+  async forceLogout(
+    userId: string,
+  ): Promise<ForceLogoutUserMutation['forceLogoutUser']> {
+    const data = await this.graphql.request(ForceLogoutUserDocument, {
+      userId,
+    });
+    return data.forceLogoutUser;
+  }
+
+  /**
+   * Replace a user's top-level state blob. **Super-admin only.**
+   *
+   * @param input - {@link UpdateUserStateInput} (`userId` + base64 `state`).
+   * @returns The updated user's `userId` + `state`.
+   */
+  async updateState(
+    input: UpdateUserStateInput,
+  ): Promise<UpdateUserStateMutation['updateUserState']> {
+    const data = await this.graphql.request(UpdateUserStateDocument, { input });
+    return data.updateUserState;
   }
 }

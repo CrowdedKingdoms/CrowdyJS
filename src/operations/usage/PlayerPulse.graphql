@@ -1,0 +1,10 @@
+query PlayerPulse($orgId: BigInt!) {
+  playerPulse(orgId: $orgId) {
+    orgLivePlayers
+    orgAllTimePeak
+    orgAllTimePeakAt
+    globalLivePlayers
+    percentile
+    poolSize
+  }
+}

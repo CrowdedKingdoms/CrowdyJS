@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdomstudios/crowdyjs",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "Client SDK for Crowded Kingdoms GraphQL API with UDP proxy support",
   "type": "module",
   "main": "dist/index.js",

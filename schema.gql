@@ -16,6 +16,12 @@ directive @requiresPermission(
   scopeArg: String
 ) on FIELD_DEFINITION
 
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
 type User {
   """Unique user id and primary key. BigInt serialized as a decimal string."""
   userId: BigInt!
@@ -782,7 +788,7 @@ enum PaymentProvider {
   """
   STRIPE
   """
-  PayPal. Hosted approval flow; the approved order is captured (see capturePaypalCheckout) and confirmed via PayPal webhooks.
+  PayPal. Hosted approval flow; the approved order is captured via capturePaypalCheckout (which completes the checkout), with PayPal webhooks as backup reconciliation.
   """
   PAYPAL
 }
@@ -808,9 +814,9 @@ enum CheckoutPurpose {
   """
   PROPERTY_TOKENS @deprecated(reason: "No longer purchasable; use ORG_WALLET_TOPUP or APP_ACCESS_PURCHASE. Retained for historical checkouts.")
   """
-  Recurring subscription for a paid app slot on the shared environment, beyond the org's free app quota. Requires appId and planId (a shared_env_plans.plan_id). Activates the paid slot on completion.
+  @deprecated Legacy recurring subscription for a paid shared app slot. No longer purchasable via createCheckout; retained for historical checkouts and webhook reconciliation.
   """
-  SHARED_APP_SUBSCRIPTION
+  SHARED_APP_SUBSCRIPTION @deprecated(reason: "Shared apps use org wallet hourly usage billing. Publish via publishAppToShared and top up with ORG_WALLET_TOPUP.")
 }
 
 """
@@ -837,6 +843,194 @@ enum CheckoutStatus {
   The user abandoned or canceled the checkout before completion. Terminal state.
   """
   CANCELED
+}
+
+"""
+Public platform discovery. Clients/SDKs read the shared game-api URL here to route apps deployed to the shared environment.
+"""
+type PlatformConfig {
+  """Shared game-api HTTP/GraphQL root for shared-environment apps."""
+  sharedGameApiUrl: String
+  """Shared game-api WebSocket root (subscriptions / UDP proxy)."""
+  sharedGameApiWsUrl: String
+  """Free shared app slots an org gets before usage is wallet-billed."""
+  freeAppsPerOrg: Int!
+}
+
+"""
+@deprecated Legacy monthly app-slot subscription plan. New shared publishes use wallet usage billing.
+"""
+type SharedEnvPlan {
+  """Plan id (BigInt)."""
+  planId: BigInt!
+  """Stable machine-readable plan code."""
+  code: String!
+  """Human-readable plan name."""
+  name: String!
+  description: String
+  """Recurring price per billing interval, in cents."""
+  priceCents: BigInt!
+  """ISO-4217 currency for priceCents, e.g. 'USD'."""
+  currency: String!
+  """Billing cadence, e.g. 'month' or 'year'."""
+  billingInterval: String!
+  """Plan status, e.g. 'active' (offered) or 'archived'."""
+  status: String!
+}
+
+"""
+@deprecated Legacy paid shared-environment subscription for an app slot. Null when the app has none.
+"""
+type AppSharedSubscription {
+  """App id (BigInt)."""
+  appId: BigInt!
+  """Owning organization id (BigInt)."""
+  orgId: BigInt!
+  """Subscribed plan id (BigInt). Null when not on a paid plan."""
+  planId: BigInt
+  """Payment provider backing the subscription, e.g. 'stripe'."""
+  provider: String
+  """Subscription status, e.g. 'active', 'past_due', or 'canceled'."""
+  status: String!
+  """End of the current paid period (when access lapses if not renewed)."""
+  currentPeriodEnd: DateTime
+}
+
+"""
+The shared-environment runtime gate + current billing-window usage for an app.
+"""
+type AppRuntimeState {
+  """App id (BigInt)."""
+  appId: BigInt!
+  """Where the app runs (none / shared / dedicated)."""
+  deploymentTarget: AppDeploymentTarget!
+  """Current runtime gate decision (active / grace / denied / suspended)."""
+  runtimeStatus: AppRuntimeStatus!
+  """
+  free_allowance | insufficient_funds | spend_cap | subscription_lapsed when not active.
+  """
+  runtimeDenialReason: String
+  """Owning org wallet balance, in cents."""
+  walletBalanceCents: BigInt!
+  """Spend so far in the current hour window, in cents."""
+  currentHourUsageCents: BigInt!
+  """Spend so far in the current day window, in cents."""
+  currentDayUsageCents: BigInt!
+  """
+  Per-app hourly spend cap in cents (set via setAppSpendCaps). Null = no cap.
+  """
+  hourlyLimitCents: BigInt
+  """
+  Per-app daily spend cap in cents (set via setAppSpendCaps). Null = no cap.
+  """
+  dailyLimitCents: BigInt
+}
+
+"""
+Where an app runs: none (draft), shared (the shared game-api), or dedicated (a provisioned environment).
+"""
+enum AppDeploymentTarget {
+  """Draft / unpublished: the app is not deployed to any runtime."""
+  NONE
+  """Runs on the multi-tenant shared game-api (publishAppToShared)."""
+  SHARED
+  """Runs on a dedicated, org-provisioned environment."""
+  DEDICATED
+}
+
+"""
+The per-app runtime gate game-api + Buddy enforce. See runtimeDenialReason when not active.
+"""
+enum AppRuntimeStatus {
+  """Allowed to run; clients may connect."""
+  ACTIVE
+  """
+  Still running on a temporary allowance (e.g. low funds) but at risk of being denied soon.
+  """
+  GRACE
+  """
+  Blocked from running now (e.g. insufficient funds, spend cap hit, or free allowance exhausted); recoverable once the cause clears.
+  """
+  DENIED
+  """Hard-stopped (e.g. lapsed subscription); requires action to restore."""
+  SUSPENDED
+}
+
+"""An org's free shared app slot quota usage."""
+type FreeAppQuota {
+  """Organization id (BigInt)."""
+  orgId: BigInt!
+  """Total free shared app slots granted to the org."""
+  quota: Int!
+  """Free slots currently in use."""
+  usedFree: Int!
+  """Apps on a paid subscription (do not consume free slots)."""
+  paidApps: Int!
+  """Free slots still available (quota − usedFree)."""
+  remainingFree: Int!
+}
+
+"""
+Result of publishing an app to the shared environment. All paths publish immediately; usage above the free hourly allowance is wallet-billed.
+"""
+type PublishAppResult {
+  appId: BigInt!
+  """True when the app uses a free org app-slot (under the quota)."""
+  free: Boolean!
+  """@deprecated Always null — subscriptions replaced by wallet billing."""
+  checkout: Checkout
+}
+
+"""Org off-session auto-billing configuration."""
+type OrgAutoBilling {
+  """Organization id (BigInt)."""
+  orgId: BigInt!
+  """Whether off-session auto-billing is enabled."""
+  enabled: Boolean!
+  """Max auto-billed per period in cents. Null = no limit."""
+  limitCents: BigInt
+  """Reset window for the per-period auto-billed total, e.g. 'month'."""
+  period: String!
+  """Amount already auto-billed in the current period, in cents."""
+  autoBilledThisPeriodCents: BigInt!
+  """Amount to top up the wallet by on each auto-recharge, in cents."""
+  rechargeAmountCents: BigInt!
+  """
+  Wallet balance at or below which an auto-recharge is triggered, in cents.
+  """
+  lowWaterThresholdCents: BigInt!
+  """True when a vaulted payment method exists to charge off-session."""
+  hasPaymentMethod: Boolean!
+  """Most recent auto-billing failure message, if any."""
+  lastError: String
+}
+
+"""A saved (vaulted) off-session payment method."""
+type SavedPaymentMethod {
+  """Payment method id (BigInt)."""
+  paymentMethodId: BigInt!
+  """Payment provider, e.g. 'stripe'."""
+  provider: String!
+  """Card brand, e.g. 'visa'. Null for non-card methods."""
+  brand: String
+  """Last 4 digits of the card, if applicable."""
+  last4: String
+  """True when this is the org default method charged off-session."""
+  isDefault: Boolean!
+  """Method status, e.g. 'active' or 'expired'."""
+  status: String!
+}
+
+"""
+Stripe SetupIntent handle the browser uses to vault a card for auto-billing.
+"""
+type PaymentMethodSetup {
+  """Provider customer id (e.g. Stripe customer) the card is vaulted under."""
+  externalCustomerId: String!
+  """SetupIntent client secret the browser confirms to vault the card."""
+  clientSecret: String
+  """Provider publishable key for the browser SDK."""
+  publishableKey: String
 }
 
 """
@@ -936,597 +1130,64 @@ type PaymentEventsConnection {
 }
 
 """
-A single step within a deploy/destroy task, with its retry attempt and any error.
+Buddy (UDP replication) billing tier: message rate + bandwidth allotments and capacity charge.
 """
-type CksDeployProgressStep {
-  id: String!
-  kind: String!
-  """Human-readable step label for the org UI"""
-  label: String!
-  status: String!
-  attempt: Int!
-  error: String
-}
-
-"""A task in a deploy/destroy pipeline, containing ordered steps."""
-type CksDeployProgressTask {
-  id: String!
-  kind: String!
-  label: String!
-  status: String!
-  error: String
-  steps: [CksDeployProgressStep!]!
-}
-
-"""
-Live progress for the active (or most recent failed) deploy/destroy change order, with per-task counts and a retry hint.
-"""
-type CksDeployProgress {
-  changeOrderId: String!
-  """Change order kind (deploy or destroy pipeline identifier)"""
-  changeOrderKind: String!
-  changeOrderStatus: String!
-  targetVersion: String
-  error: String
-  tasksTotal: Int!
-  tasksSucceeded: Int!
-  tasksFailed: Int!
-  tasksInProgress: Int!
-  tasksPending: Int!
-  currentTaskKind: String
-  currentStepKind: String
-  """True when the deploy failed but the change order was left in_progress"""
-  isStuck: Boolean!
-  """Redeploy is allowed (failed deploy or stuck order cleared)"""
-  canRetry: Boolean!
-  tasks: [CksDeployProgressTask!]!
-}
-
-"""
-A provisioned (or provisioning/destroyed) tenant environment. status tracks provisioning lifecycle; billingStatus tracks payment lifecycle — they are independent.
-"""
-type CksEnvironment {
-  """Opaque environment UUID (cks_environments.id)."""
-  id: String!
-  """Owning organization id (BigInt)."""
-  orgId: BigInt!
+type BuddyBillingTier {
+  """Tier level (1 = lowest offered tier)."""
+  tierLevel: Int!
+  """Maximum messages per second allotment."""
+  messagesPerSecond: Int!
+  """Maximum bandwidth allotment in megabits per second."""
+  bandwidthMbitPerSecond: Float!
   """
-  URL-safe environment identifier, stable for the environment's lifetime. Auto-generated as 'e-<12 chars>' unless a custom slug was supplied at creation.
+  Capacity charge for this tier, in cents (placeholder until load tests).
   """
-  slug: String!
-  displayName: String!
-  """Cloud provider, e.g. 'ovh'."""
-  primaryCloud: String!
-  """Primary datacenter/region code, e.g. 'GRA11'."""
-  primaryRegion: String!
-  """
-  Provisioning lifecycle (NOT billing): deploy_requested -> provisioning -> active; deploy_failed on error; destroy_requested -> destroyed (destroy_failed on error). See billingStatus for payment state.
-  """
-  status: String!
-  """
-  Subdomain handle used to build the environment public URLs. Null until assigned.
-  """
-  subdomainHandle: String
-  """
-  Environment release version the platform is driving toward (target/desired state).
-  """
-  desiredEnvironmentVersion: String
-  """
-  Release version actually observed running. Lags desiredEnvironmentVersion while a deploy is in progress.
-  """
-  observedEnvironmentVersion: String
-  databaseFlavor: String
-  gameApiFlavor: String
-  udpBuddyFlavor: String
-  caddyFlavor: String
-  gameApiMinServers: Int!
-  gameApiMaxServers: Int!
-  udpBuddyMinServers: Int!
-  udpBuddyMaxServers: Int!
-  loadBalancerCount: Int!
-  """'dedicated' (multi-VM) or 'dev_single' (one dev-only VM)."""
-  environmentClass: String!
-  """Single VM flavor when environmentClass = 'dev_single'."""
-  singleBoxFlavor: String
-  """
-  Payment lifecycle (NOT provisioning): active; grace (a charge failed — funds must be added before billingGraceDeadline); suspension_queued -> suspended (runtime stopped for non-payment); resume_queued -> active after payment (resume_failed on error). Recover with resumeEnvironment.
-  """
-  billingStatus: String!
-  """
-  When billingStatus = grace, the deadline to add funds before suspension (~24h after the failed charge). Null otherwise.
-  """
-  billingGraceDeadline: DateTime
-  """
-  When the environment was suspended for non-payment. Null unless suspended.
-  """
-  suspendedAt: DateTime
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-"""
-One provisioned component of an environment (DNS, database VM, game-api, Buddy, load balancer, etc.) with its desired vs. observed version and spec.
-"""
-type CksEnvironmentComponent {
-  id: String!
-  environmentId: String!
-  kind: String!
-  desiredVersion: String
-  desiredSpecJson: String
-  observedVersion: String
-  observedSpecJson: String
-  status: String
-  lastObservedAt: DateTime
-}
-
-"""
-An asynchronous change order tracking a deploy / destroy / scaling pipeline for an environment. Returned by mutations so callers can poll completion.
-"""
-type CksEnvironmentChangeOrder {
-  """Change order UUID."""
-  id: String!
-  environmentId: String!
-  """
-  Pipeline kind, e.g. 'deploy_environment_version', 'game_api_environment_destroy', or 'postgres_citus_destroy'.
-  """
-  kind: String!
-  """JSON-encoded change order payload."""
-  payloadJson: String!
-  """User id (BigInt) that requested the change order."""
-  requestedBy: BigInt
-  """
-  Execution status: pending, claimed/in_progress, succeeded, failed, or cancelled.
-  """
-  status: String!
-  claimedBy: String
-  claimedAt: DateTime
-  finishedAt: DateTime
-  error: String
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-"""Audit-log entry recording an environment lifecycle action."""
-type CksEnvironmentAudit {
-  id: String!
-  environmentId: String!
-  action: String!
-  payloadJson: String
-  createdAt: DateTime!
-}
-
-"""
-A sealed environment secret. Exposes ciphertext only (sealedCiphertextBase64) — never the plaintext.
-"""
-type CksEnvironmentSecretValue {
-  id: String!
-  environmentId: String!
-  name: String!
-  kind: String
-  sealedCiphertextBase64: String!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-"""An environment release version in the deployable catalog."""
-type CksEnvironmentVersion {
-  """Semantic version, e.g. 'v0.1.4'."""
-  version: String!
-  releasedAt: DateTime!
-  """Release status, e.g. 'available' (deployable) or 'yanked' (withdrawn)."""
-  status: String!
-  notes: String
-  """Pinned cks-game-api git tag from the ingested manifest."""
-  gameApiGitTag: String
-}
-
-"""
-An OVH datacenter offered for environment placement. Only datacenters with at least one customer-selectable flavor are returned by environmentDatacenters.
-"""
-type CksOvhDatacenter {
-  """Region/datacenter code used as the datacenter arg, e.g. 'GRA11'."""
-  region: String!
-  name: String
-  city: String
-  continent: String
-  """Provider availability status string, e.g. 'UP'."""
-  status: String!
-  """True when the datacenter is currently accepting new instances."""
-  isAvailable: Boolean!
-  syncedAt: DateTime!
-  """
-  Number of customer-selectable instances in this datacenter after availability, pricing, and admin visibility filters.
-  """
-  selectableInstanceCount: Int!
-}
-
-"""
-Customer-selectable catalog instance flavor. Hidden, unavailable, or unpriced rows are omitted from environmentFlavors.
-"""
-type CksOvhFlavor {
-  flavorName: String!
-  flavorType: String
-  """Virtual CPU count."""
-  vcpus: Int
-  """RAM in megabytes."""
-  ramMb: Int
-  """Local disk in gigabytes."""
-  diskGb: Int
-  """
-  Remaining instances of this flavor the project may launch in the datacenter (OVH quota headroom).
-  """
-  quotaAvailable: Int
-  """
-  Raw OVH provider hourly cost in cents (pre-markup). Internal reference; bill against customerHourlyPriceCents.
-  """
-  rawHourlyCostCents: BigInt
-  """
-  Customer hourly price in cents. Non-null for every flavor returned from environmentFlavors.
-  """
-  customerHourlyPriceCents: BigInt!
-  """
-  Customer monthly reference price in cents. Display-only until monthly billing is implemented.
-  """
-  customerMonthlyPriceCents: BigInt
-  """ISO-4217 currency for the price fields, e.g. 'USD'."""
+  chargeCents: BigInt!
+  """ISO-4217 currency for chargeCents, e.g. 'usd'."""
   currency: String!
-  """Catalog availability for this flavor, e.g. 'available'."""
-  availabilityStatus: String!
-  """Where the customer price came from (pricing pipeline source)."""
-  pricingSource: String
-  """How the customer price was derived (e.g. fixed vs. markup mode)."""
-  pricingMode: String!
-  syncedAt: DateTime!
-}
-
-"""
-Pricing quote for a proposed environment selection plus the org wallet balance, used to gate createEnvironment. All *Cents fields are in minor currency units (cents).
-"""
-type CksEnvironmentQuote {
-  datacenter: String!
-  databaseFlavor: String!
-  gameApiFlavor: String!
-  udpBuddyFlavor: String!
-  caddyFlavor: String!
-  gameApiMinServers: Int!
-  gameApiMaxServers: Int!
-  udpBuddyMinServers: Int!
-  udpBuddyMaxServers: Int!
-  loadBalancerCount: Int!
-  """Total hourly price of the full selection, in cents."""
-  hourlyCostCents: BigInt!
-  """
-  Up-front wallet reserve required to create (≈ first day of runtime), in cents.
-  """
-  firstDayReserveCents: BigInt!
-  """Org wallet balance, in cents."""
-  walletBalanceCents: BigInt!
-  """
-  Wallet balance still available after existing reservations, in cents. Compared against firstDayReserveCents.
-  """
-  availableBalanceCents: BigInt!
-  """ISO-4217 currency of the *Cents fields, e.g. 'USD'."""
-  currency: String!
-  """
-  True when availableBalanceCents ≥ firstDayReserveCents. createEnvironment fails when false.
-  """
-  canCreate: Boolean!
-}
-
-"""
-A published output value from a provisioned component (e.g. URLs, handles, connection details).
-"""
-type CksEnvironmentOutput {
-  id: String!
-  environmentId: String!
-  componentKind: String!
-  name: String!
+  """Customer-facing tier label."""
   label: String!
-  value: String!
-  valueKind: String!
+  description: String
 }
 
 """
-A billable cloud resource attributed to the environment, with its customer hourly price.
+GraphQL (game API) billing tier: endpoint call rate + bandwidth allotments and capacity charge.
 """
-type CksEnvironmentBillingResource {
-  id: String!
-  environmentId: String!
-  provider: String!
-  resourceId: String!
-  resourceName: String
-  componentKind: String!
-  region: String!
-  flavorName: String
-  status: String!
-  """Customer hourly price billed for this resource, in cents."""
-  customerHourlyPriceCents: BigInt
+type GraphqlBillingTier {
+  """Tier level (1 = lowest offered tier)."""
+  tierLevel: Int!
+  """Maximum endpoint calls per second allotment (per endpoint)."""
+  endpointCallsPerSecond: Int!
+  """Maximum bandwidth allotment in megabits per second."""
+  bandwidthMbitPerSecond: Float!
+  """
+  Capacity charge for this tier, in cents (placeholder until load tests).
+  """
+  chargeCents: BigInt!
+  """ISO-4217 currency for chargeCents, e.g. 'usd'."""
   currency: String!
-  observedAt: DateTime!
-}
-
-type CksBuddyHealth {
-  """False when no server_status row exists for this environment."""
-  registered: Boolean!
-  """Public IPv4 of the Buddy UDP runtime VM, if registered."""
-  ip4: String
-  """UDP port clients connect to on the Buddy server."""
-  clientPort: Int
-  """
-  Buddy-reported server state from server_status (e.g. 'ReadyForClients').
-  """
-  status: String
-  """Currently connected client count reported by Buddy."""
-  clients: Int
-  """Timestamp of the last server_status heartbeat (game DB)."""
-  updatedAt: DateTime
-  """Seconds since server_status.updated_at (game DB heartbeat)."""
-  heartbeatAgeSec: Float
-  """
-  True when heartbeat is missing or older than the staleness threshold (~30s). Game-api rejects assignment when age > ~11s.
-  """
-  isStale: Boolean!
-  """Operator-facing hint when multiplayer assignment may fail."""
-  troubleshootingHint: String!
+  """Customer-facing tier label."""
+  label: String!
+  description: String
 }
 
 """
-Full environment detail returned by orgEnvironment: the environment plus its components, change orders, audit, secrets, outputs, billing resources, live deploy/destroy progress, and Buddy health.
+Postgres billing tier: bandwidth allotment and capacity charge. Usage metering deferred.
 """
-type CksEnvironmentDetail {
-  environment: CksEnvironment!
+type PostgresBillingTier {
+  """Tier level (1 = lowest offered tier)."""
+  tierLevel: Int!
+  """Maximum bandwidth allotment in megabits per second."""
+  bandwidthMbitPerSecond: Float!
   """
-  Buddy UDP server heartbeat from mirrored server_status. Null when env is destroyed or management DB has no row.
+  Capacity charge for this tier, in cents (placeholder until load tests).
   """
-  buddyHealth: CksBuddyHealth
-  components: [CksEnvironmentComponent!]!
-  changeOrders: [CksEnvironmentChangeOrder!]!
-  audit: [CksEnvironmentAudit!]!
-  secrets: [CksEnvironmentSecretValue!]!
-  outputs: [CksEnvironmentOutput!]!
-  billingResources: [CksEnvironmentBillingResource!]!
-  """
-  Live deploy task/step progress for the active or most recent failed deploy
-  """
-  deployProgress: CksDeployProgress
-  """Destroy tear-down progress for game-api and platform change orders"""
-  destroyProgress: [CksDeployProgress!]!
-}
-
-"""
-One minute-bucketed usage sample. Byte/message counters are returned as strings because they can exceed the 32-bit Int range.
-"""
-type UsageMinuteRow {
-  """Start of the one-minute bucket."""
-  minute: DateTime!
-  """Bytes received in the minute (string counter)."""
-  recvBytes: String!
-  """Bytes sent in the minute (string counter)."""
-  sendBytes: String!
-  """Messages received in the minute (replication only)."""
-  recvMsgs: String
-  """Messages sent in the minute (replication only)."""
-  sendMsgs: String
-}
-
-"""Peak and average send rates over the sampled replication window."""
-type UsageRatePeaks {
-  """Highest observed sent messages per second."""
-  peakSendMsgsPerSec: Float!
-  """Highest observed sent megabits per second."""
-  peakSendMbitPerSec: Float!
-  """Average sent messages per second over the window."""
-  avgSendMsgsPerSec: Float!
-  """Average sent megabits per second over the window."""
-  avgSendMbitPerSec: Float!
-  """Number of minute samples the averages are computed over."""
-  sampleMinutes: Float!
-}
-
-"""Live (most recent heartbeat) Buddy UDP throughput rates."""
-type BuddyLiveRates {
-  """Buddy/runtime server id reporting these rates."""
-  serverId: String!
-  """Messages per second sent to clients."""
-  clientSendMsgsPerSec: Float!
-  """Megabits per second sent to clients."""
-  clientSendMbitPerSec: Float!
-  """Messages per second received from clients."""
-  clientRecvMsgsPerSec: Float!
-  """Megabits per second received from clients."""
-  clientRecvMbitPerSec: Float!
-  """Currently connected client count."""
-  clients: Float!
-  """Timestamp of the heartbeat these rates came from."""
-  updatedAt: DateTime!
-}
-
-"""
-Per-minute replication and GraphQL usage time series for an environment, with rate peaks and live Buddy rates.
-"""
-type EnvironmentUsageSummary {
-  """Environment slug."""
-  environmentSlug: String!
-  """Environment UUID (as a string)."""
-  environmentId: String!
-  """Owning organization id (as a string)."""
-  orgId: String!
-  """Replication (game state sync) usage, one row per minute."""
-  replication: [UsageMinuteRow!]!
-  """GraphQL API usage, one row per minute."""
-  graphql: [UsageMinuteRow!]!
-  """Peak/average replication send rates."""
-  replicationRates: UsageRatePeaks!
-  """Live Buddy UDP rates, or null when no live server is reporting."""
-  buddyLive: BuddyLiveRates
-}
-
-"""
-Aggregate byte totals for one app over the requested window. All *Bytes fields are string counters (may exceed Int range).
-"""
-type AppUsageRollupRow {
-  """App id (as a string)."""
-  appId: String!
-  """App slug."""
-  appSlug: String!
-  """App display name."""
-  appName: String!
-  """Total replication bytes sent (string counter)."""
-  replicationSendBytes: String!
-  """Total replication bytes received (string counter)."""
-  replicationRecvBytes: String!
-  """Total GraphQL bytes sent (string counter)."""
-  graphqlSendBytes: String!
-  """Total GraphQL bytes received (string counter)."""
-  graphqlRecvBytes: String!
-}
-
-"""
-Aggregate byte totals for one environment over the requested window. All *Bytes fields are string counters (may exceed Int range).
-"""
-type EnvironmentUsageRollupRow {
-  """Environment UUID (as a string)."""
-  environmentId: String!
-  """Environment slug."""
-  environmentSlug: String!
-  """Environment display name."""
-  displayName: String!
-  """Total replication bytes sent (string counter)."""
-  replicationSendBytes: String!
-  """Total replication bytes received (string counter)."""
-  replicationRecvBytes: String!
-  """Total GraphQL bytes sent (string counter)."""
-  graphqlSendBytes: String!
-  """Total GraphQL bytes received (string counter)."""
-  graphqlRecvBytes: String!
-}
-
-"""Usage totals for a single GraphQL operation over the window."""
-type GraphqlOperationUsageRow {
-  """GraphQL operation name (or '(anonymous)')."""
-  operationName: String!
-  """Total invocation count (string counter)."""
-  totalOps: String!
-  """Total bytes sent for this operation (string counter)."""
-  sendBytes: String!
-  """Total bytes received for this operation (string counter)."""
-  recvBytes: String!
-}
-
-"""
-Aggregate byte totals plus the top GraphQL operations for one app over the window.
-"""
-type AppUsageSummary {
-  """App id (as a string)."""
-  appId: String!
-  """Total replication bytes sent (string counter)."""
-  replicationSendBytes: String!
-  """Total replication bytes received (string counter)."""
-  replicationRecvBytes: String!
-  """Total GraphQL bytes sent (string counter)."""
-  graphqlSendBytes: String!
-  """Total GraphQL bytes received (string counter)."""
-  graphqlRecvBytes: String!
-  """Top GraphQL operations by bytes (capped by operationLimit)."""
-  topGraphqlOperations: [GraphqlOperationUsageRow!]!
-}
-
-"""
-A registered GraphQL API server instance in the fleet (either a management-api or a game-api, see `kind`), with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy.
-"""
-type GraphQLServer {
-  """Unique id of this GraphQL server registration."""
-  graphqlServerId: ID!
-  """Logical kind of GraphQL service: 'management-api' or 'game-api'."""
-  kind: String
-  """
-  Internal/private IPv4 address of this server. Use publicIp4 for external reachability.
-  """
-  ip4: String
-  """
-  Internal/private IPv6 address of this server. Use publicIp6 for external reachability.
-  """
-  ip6: String
-  """
-  UUID of the runtime/Buddy (cks-udp-api) instance this API server is paired with, if any.
-  """
-  runtimeServerId: String
-  """Cloud provider instance id of the underlying host, if known."""
-  providerInstanceId: String
-  """Public IPv4 address clients use to reach this server, if assigned."""
-  publicIp4: String
-  """Public IPv6 address clients use to reach this server, if assigned."""
-  publicIp6: String
-  """TCP port the GraphQL/HTTP API listens on (default 4000)."""
-  apiPort: Int!
-  """
-  Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients.
-  """
-  status: ServerState!
-  """Current CPU utilization percentage (0-100) of the host, if reported."""
-  cpuUsagePct: Float
-  """
-  Current memory utilization percentage (0-100) of the host, if reported.
-  """
-  memoryUsagePct: Float
-  """1-minute load average of the host, if reported."""
-  loadAverage1m: Float
-  """When this server was first registered in the fleet."""
-  createdAt: DateTime!
-  """
-  When this server row was last updated (heartbeat). Use to judge freshness.
-  """
-  updatedAt: DateTime!
-}
-
-"""
-Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers.
-"""
-enum ServerState {
-  """
-  Booting / not yet ready: registered but still initializing; do not route client traffic here.
-  """
-  Starting
-  """Healthy and accepting client traffic. The only state safe to route to."""
-  ReadyForClients
-  """
-  Draining / shutting down: finishing in-flight work; do not send new traffic.
-  """
-  Stopping
-  """Not running or unreachable (e.g. crashed or missed heartbeats)."""
-  Offline
-  """
-  Buddy soft resource overload: excluded from new-client selection until it recovers; existing sessions continue.
-  """
-  NearCapacity
-  """
-  Buddy hard resource overload: excluded from new-client selection and actively shedding clients (sends reconnect commands so they migrate elsewhere).
-  """
-  Full
-}
-
-"""
-A semantic-style version as four integer components (major.minor.patch.build). Compare components in order (major, then minor, then patch, then build).
-"""
-type VersionInfo {
-  """Major version number"""
-  major: Int!
-  """Minor version number"""
-  minor: Int!
-  """Patch version number"""
-  patch: Int!
-  """Build number"""
-  build: Int!
-}
-
-"""
-Server version plus the minimum client version the server will accept. A client whose build is older than minimumClientVersion should prompt the user to update before connecting.
-"""
-type ServerVersionInfo {
-  """Current server version"""
-  serverVersion: VersionInfo!
-  """Minimum accepted client version"""
-  minimumClientVersion: VersionInfo!
+  chargeCents: BigInt!
+  """ISO-4217 currency for chargeCents, e.g. 'usd'."""
+  currency: String!
+  """Customer-facing tier label."""
+  label: String!
+  description: String
 }
 
 """Operator-facing view of cks_environments."""
@@ -1810,193 +1471,643 @@ type CpPublishEnvironmentReleaseResult {
 }
 
 """
-Public platform discovery. Clients/SDKs read the shared game-api URL here to route apps deployed to the shared environment.
+One minute-bucketed usage sample. Byte/message counters are returned as strings because they can exceed the 32-bit Int range.
 """
-type PlatformConfig {
-  """Shared game-api HTTP/GraphQL root for shared-environment apps."""
-  sharedGameApiUrl: String
-  """Shared game-api WebSocket root (subscriptions / UDP proxy)."""
-  sharedGameApiWsUrl: String
-  """Free shared app slots an org gets before a paid subscription."""
-  freeAppsPerOrg: Int!
+type UsageMinuteRow {
+  """Start of the one-minute bucket."""
+  minute: DateTime!
+  """Bytes received in the minute (string counter)."""
+  recvBytes: String!
+  """Bytes sent in the minute (string counter)."""
+  sendBytes: String!
+  """Messages received in the minute (replication only)."""
+  recvMsgs: String
+  """Messages sent in the minute (replication only)."""
+  sendMsgs: String
+}
+
+"""Peak and average send rates over the sampled replication window."""
+type UsageRatePeaks {
+  """Highest observed sent messages per second."""
+  peakSendMsgsPerSec: Float!
+  """Highest observed sent megabits per second."""
+  peakSendMbitPerSec: Float!
+  """Average sent messages per second over the window."""
+  avgSendMsgsPerSec: Float!
+  """Average sent megabits per second over the window."""
+  avgSendMbitPerSec: Float!
+  """Number of minute samples the averages are computed over."""
+  sampleMinutes: Float!
+}
+
+"""Live (most recent heartbeat) Buddy UDP throughput rates."""
+type BuddyLiveRates {
+  """Buddy/runtime server id reporting these rates."""
+  serverId: String!
+  """Messages per second sent to clients."""
+  clientSendMsgsPerSec: Float!
+  """Megabits per second sent to clients."""
+  clientSendMbitPerSec: Float!
+  """Messages per second received from clients."""
+  clientRecvMsgsPerSec: Float!
+  """Megabits per second received from clients."""
+  clientRecvMbitPerSec: Float!
+  """Currently connected client count."""
+  clients: Float!
+  """Timestamp of the heartbeat these rates came from."""
+  updatedAt: DateTime!
 }
 
 """
-A paid shared-environment app-slot subscription plan. Pass planId to publishAppToShared to subscribe.
+Per-minute replication and GraphQL usage time series for an environment, with rate peaks and live Buddy rates.
 """
-type SharedEnvPlan {
-  """Plan id (BigInt)."""
-  planId: BigInt!
-  """Stable machine-readable plan code."""
-  code: String!
-  """Human-readable plan name."""
-  name: String!
-  description: String
-  """Recurring price per billing interval, in cents."""
-  priceCents: BigInt!
-  """ISO-4217 currency for priceCents, e.g. 'USD'."""
-  currency: String!
-  """Billing cadence, e.g. 'month' or 'year'."""
-  billingInterval: String!
-  """Plan status, e.g. 'active' (offered) or 'archived'."""
+type EnvironmentUsageSummary {
+  """Environment slug."""
+  environmentSlug: String!
+  """Environment UUID (as a string)."""
+  environmentId: String!
+  """Owning organization id (as a string)."""
+  orgId: String!
+  """Replication (game state sync) usage, one row per minute."""
+  replication: [UsageMinuteRow!]!
+  """GraphQL API usage, one row per minute."""
+  graphql: [UsageMinuteRow!]!
+  """Peak/average replication send rates."""
+  replicationRates: UsageRatePeaks!
+  """Live Buddy UDP rates, or null when no live server is reporting."""
+  buddyLive: BuddyLiveRates
+}
+
+"""
+Aggregate byte totals for one app over the requested window. All *Bytes fields are string counters (may exceed Int range).
+"""
+type AppUsageRollupRow {
+  """App id (as a string)."""
+  appId: String!
+  """App slug."""
+  appSlug: String!
+  """App display name."""
+  appName: String!
+  """Total replication bytes sent (string counter)."""
+  replicationSendBytes: String!
+  """Total replication bytes received (string counter)."""
+  replicationRecvBytes: String!
+  """Total GraphQL bytes sent (string counter)."""
+  graphqlSendBytes: String!
+  """Total GraphQL bytes received (string counter)."""
+  graphqlRecvBytes: String!
+}
+
+"""
+Aggregate byte totals for one environment over the requested window. All *Bytes fields are string counters (may exceed Int range).
+"""
+type EnvironmentUsageRollupRow {
+  """Environment UUID (as a string)."""
+  environmentId: String!
+  """Environment slug."""
+  environmentSlug: String!
+  """Environment display name."""
+  displayName: String!
+  """Total replication bytes sent (string counter)."""
+  replicationSendBytes: String!
+  """Total replication bytes received (string counter)."""
+  replicationRecvBytes: String!
+  """Total GraphQL bytes sent (string counter)."""
+  graphqlSendBytes: String!
+  """Total GraphQL bytes received (string counter)."""
+  graphqlRecvBytes: String!
+}
+
+"""Usage totals for a single GraphQL operation over the window."""
+type GraphqlOperationUsageRow {
+  """GraphQL operation name (or '(anonymous)')."""
+  operationName: String!
+  """Total invocation count (string counter)."""
+  totalOps: String!
+  """Total bytes sent for this operation (string counter)."""
+  sendBytes: String!
+  """Total bytes received for this operation (string counter)."""
+  recvBytes: String!
+}
+
+"""
+Aggregate byte totals plus the top GraphQL operations for one app over the window.
+"""
+type AppUsageSummary {
+  """App id (as a string)."""
+  appId: String!
+  """Total replication bytes sent (string counter)."""
+  replicationSendBytes: String!
+  """Total replication bytes received (string counter)."""
+  replicationRecvBytes: String!
+  """Total GraphQL bytes sent (string counter)."""
+  graphqlSendBytes: String!
+  """Total GraphQL bytes received (string counter)."""
+  graphqlRecvBytes: String!
+  """Top GraphQL operations by bytes (capped by operationLimit)."""
+  topGraphqlOperations: [GraphqlOperationUsageRow!]!
+  """Autonomous-process (NPC) runs over the window (string counter)."""
+  automationRuns: String!
+  """
+  Autonomous-process function invocations over the window (string counter).
+  """
+  automationInvocations: String!
+  """
+  Billed autonomous-process compute units over the window (string counter).
+  """
+  automationComputeUnits: String!
+}
+
+"""
+Live concurrent players for a studio vs its all-time peak, a percentile comparison against other studios, and the site-wide CKS total.
+"""
+type PlayerPulse {
+  """
+  Current concurrent players for this org (dedicated environments plus active dev boxes).
+  """
+  orgLivePlayers: Int!
+  """All-time peak concurrent players recorded for this org."""
+  orgAllTimePeak: Int!
+  """When the org all-time peak was observed."""
+  orgAllTimePeakAt: DateTime
+  """
+  Current concurrent players site-wide (dedicated environments plus active dev boxes). Aggregate-only; no per-studio breakdown.
+  """
+  globalLivePlayers: Int!
+  """
+  Share of studios whose all-time peak is at or below this org (0–1). Null when the comparison pool is empty or this org has no peak.
+  """
+  percentile: Float
+  """
+  Number of studios in the percentile comparison pool (studios with all_time_peak > 0).
+  """
+  poolSize: Int!
+}
+
+"""
+A single step within a deploy/destroy task, with its retry attempt and any error.
+"""
+type CksDeployProgressStep {
+  id: String!
+  kind: String!
+  """Human-readable step label for the org UI"""
+  label: String!
   status: String!
+  attempt: Int!
+  error: String
+}
+
+"""A task in a deploy/destroy pipeline, containing ordered steps."""
+type CksDeployProgressTask {
+  id: String!
+  kind: String!
+  label: String!
+  status: String!
+  error: String
+  steps: [CksDeployProgressStep!]!
 }
 
 """
-An app's paid shared-environment subscription. Null (from appSharedSubscription) when the app has none / is on the free quota.
+Live progress for the active (or most recent failed) deploy/destroy change order, with per-task counts and a retry hint.
 """
-type AppSharedSubscription {
-  """App id (BigInt)."""
-  appId: BigInt!
+type CksDeployProgress {
+  changeOrderId: String!
+  """Change order kind (deploy or destroy pipeline identifier)"""
+  changeOrderKind: String!
+  changeOrderStatus: String!
+  targetVersion: String
+  error: String
+  tasksTotal: Int!
+  tasksSucceeded: Int!
+  tasksFailed: Int!
+  tasksInProgress: Int!
+  tasksPending: Int!
+  currentTaskKind: String
+  currentStepKind: String
+  """True when the deploy failed but the change order was left in_progress"""
+  isStuck: Boolean!
+  """Redeploy is allowed (failed deploy or stuck order cleared)"""
+  canRetry: Boolean!
+  tasks: [CksDeployProgressTask!]!
+}
+
+"""
+A provisioned (or provisioning/destroyed) tenant environment. status tracks provisioning lifecycle; billingStatus tracks payment lifecycle — they are independent.
+"""
+type CksEnvironment {
+  """Opaque environment UUID (cks_environments.id)."""
+  id: String!
   """Owning organization id (BigInt)."""
   orgId: BigInt!
-  """Subscribed plan id (BigInt). Null when not on a paid plan."""
-  planId: BigInt
-  """Payment provider backing the subscription, e.g. 'stripe'."""
-  provider: String
-  """Subscription status, e.g. 'active', 'past_due', or 'canceled'."""
+  """
+  URL-safe environment identifier, stable for the environment's lifetime. Auto-generated as 'e-<12 chars>' unless a custom slug was supplied at creation.
+  """
+  slug: String!
+  displayName: String!
+  """Cloud provider, e.g. 'ovh'."""
+  primaryCloud: String!
+  """Primary datacenter/region code, e.g. 'GRA11'."""
+  primaryRegion: String!
+  """
+  Provisioning lifecycle (NOT billing): deploy_requested -> provisioning -> active; deploy_failed on error; destroy_requested -> destroyed (destroy_failed on error). See billingStatus for payment state.
+  """
   status: String!
-  """End of the current paid period (when access lapses if not renewed)."""
-  currentPeriodEnd: DateTime
+  """
+  Subdomain handle used to build the environment public URLs. Null until assigned.
+  """
+  subdomainHandle: String
+  """
+  Environment release version the platform is driving toward (target/desired state).
+  """
+  desiredEnvironmentVersion: String
+  """
+  Release version actually observed running. Lags desiredEnvironmentVersion while a deploy is in progress.
+  """
+  observedEnvironmentVersion: String
+  databaseFlavor: String
+  gameApiFlavor: String
+  udpBuddyFlavor: String
+  caddyFlavor: String
+  gameApiMinServers: Int!
+  gameApiMaxServers: Int!
+  udpBuddyMinServers: Int!
+  udpBuddyMaxServers: Int!
+  loadBalancerCount: Int!
+  """'dedicated' (multi-VM) or 'dev_single' (one dev-only VM)."""
+  environmentClass: String!
+  """Single VM flavor when environmentClass = 'dev_single'."""
+  singleBoxFlavor: String
+  """Selected Buddy billing tier level, if any."""
+  buddyBillingTier: Int
+  """Selected GraphQL billing tier level, if any."""
+  graphqlBillingTier: Int
+  """Selected Postgres billing tier level, if any."""
+  postgresBillingTier: Int
+  """
+  Payment lifecycle (NOT provisioning): active; grace (a charge failed — funds must be added before billingGraceDeadline); suspension_queued -> suspended (runtime stopped for non-payment); resume_queued -> active after payment (resume_failed on error). Recover with resumeEnvironment.
+  """
+  billingStatus: String!
+  """
+  When billingStatus = grace, the deadline to add funds before suspension (~24h after the failed charge). Null otherwise.
+  """
+  billingGraceDeadline: DateTime
+  """
+  When the environment was suspended for non-payment. Null unless suspended.
+  """
+  suspendedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
 }
 
 """
-The shared-environment runtime gate + current billing-window usage for an app.
+One provisioned component of an environment (DNS, database VM, game-api, Buddy, load balancer, etc.) with its desired vs. observed version and spec.
 """
-type AppRuntimeState {
-  """App id (BigInt)."""
-  appId: BigInt!
-  """Where the app runs (none / shared / dedicated)."""
-  deploymentTarget: AppDeploymentTarget!
-  """Current runtime gate decision (active / grace / denied / suspended)."""
-  runtimeStatus: AppRuntimeStatus!
+type CksEnvironmentComponent {
+  id: String!
+  environmentId: String!
+  kind: String!
+  desiredVersion: String
+  desiredSpecJson: String
+  observedVersion: String
+  observedSpecJson: String
+  status: String
+  lastObservedAt: DateTime
+}
+
+"""
+An asynchronous change order tracking a deploy / destroy / scaling pipeline for an environment. Returned by mutations so callers can poll completion.
+"""
+type CksEnvironmentChangeOrder {
+  """Change order UUID."""
+  id: String!
+  environmentId: String!
   """
-  free_allowance | insufficient_funds | spend_cap | subscription_lapsed when not active.
+  Pipeline kind, e.g. 'deploy_environment_version', 'game_api_environment_destroy', or 'postgres_citus_destroy'.
   """
-  runtimeDenialReason: String
-  """Owning org wallet balance, in cents."""
+  kind: String!
+  """JSON-encoded change order payload."""
+  payloadJson: String!
+  """User id (BigInt) that requested the change order."""
+  requestedBy: BigInt
+  """
+  Execution status: pending, claimed/in_progress, succeeded, failed, or cancelled.
+  """
+  status: String!
+  claimedBy: String
+  claimedAt: DateTime
+  finishedAt: DateTime
+  error: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""Audit-log entry recording an environment lifecycle action."""
+type CksEnvironmentAudit {
+  id: String!
+  environmentId: String!
+  action: String!
+  payloadJson: String
+  createdAt: DateTime!
+}
+
+"""
+A sealed environment secret. Exposes ciphertext only (sealedCiphertextBase64) — never the plaintext.
+"""
+type CksEnvironmentSecretValue {
+  id: String!
+  environmentId: String!
+  name: String!
+  kind: String
+  sealedCiphertextBase64: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""An environment release version in the deployable catalog."""
+type CksEnvironmentVersion {
+  """Semantic version, e.g. 'v0.1.4'."""
+  version: String!
+  releasedAt: DateTime!
+  """Release status, e.g. 'available' (deployable) or 'yanked' (withdrawn)."""
+  status: String!
+  notes: String
+  """Pinned cks-game-api git tag from the ingested manifest."""
+  gameApiGitTag: String
+}
+
+"""
+An OVH datacenter offered for environment placement. Only datacenters with at least one customer-selectable flavor are returned by environmentDatacenters.
+"""
+type CksOvhDatacenter {
+  """Region/datacenter code used as the datacenter arg, e.g. 'GRA11'."""
+  region: String!
+  name: String
+  city: String
+  continent: String
+  """Provider availability status string, e.g. 'UP'."""
+  status: String!
+  """True when the datacenter is currently accepting new instances."""
+  isAvailable: Boolean!
+  syncedAt: DateTime!
+  """
+  Number of customer-selectable instances in this datacenter after availability, pricing, and admin visibility filters.
+  """
+  selectableInstanceCount: Int!
+}
+
+"""
+Customer-selectable catalog instance flavor. Hidden, unavailable, or unpriced rows are omitted from environmentFlavors.
+"""
+type CksOvhFlavor {
+  flavorName: String!
+  flavorType: String
+  """Virtual CPU count."""
+  vcpus: Int
+  """RAM in megabytes."""
+  ramMb: Int
+  """Local disk in gigabytes."""
+  diskGb: Int
+  """
+  Remaining instances of this flavor the project may launch in the datacenter (OVH quota headroom).
+  """
+  quotaAvailable: Int
+  """
+  Raw OVH provider hourly cost in cents (pre-markup). Internal reference; bill against customerHourlyPriceCents.
+  """
+  rawHourlyCostCents: BigInt
+  """
+  Customer hourly price in cents. Non-null for every flavor returned from environmentFlavors.
+  """
+  customerHourlyPriceCents: BigInt!
+  """
+  Customer monthly reference price in cents. Display-only until monthly billing is implemented.
+  """
+  customerMonthlyPriceCents: BigInt
+  """ISO-4217 currency for the price fields, e.g. 'USD'."""
+  currency: String!
+  """Catalog availability for this flavor, e.g. 'available'."""
+  availabilityStatus: String!
+  """Where the customer price came from (pricing pipeline source)."""
+  pricingSource: String
+  """How the customer price was derived (e.g. fixed vs. markup mode)."""
+  pricingMode: String!
+  syncedAt: DateTime!
+}
+
+"""
+Pricing quote for a proposed environment selection plus the org wallet balance, used to gate createEnvironment. All *Cents fields are in minor currency units (cents).
+"""
+type CksEnvironmentQuote {
+  datacenter: String!
+  databaseFlavor: String!
+  gameApiFlavor: String!
+  udpBuddyFlavor: String!
+  caddyFlavor: String!
+  gameApiMinServers: Int!
+  gameApiMaxServers: Int!
+  udpBuddyMinServers: Int!
+  udpBuddyMaxServers: Int!
+  loadBalancerCount: Int!
+  """'dedicated' (multi-VM) or 'dev_single' (one dev-only VM)."""
+  environmentClass: String!
+  """Single VM flavor when environmentClass = 'dev_single'."""
+  singleBoxFlavor: String
+  """Total hourly price of the full selection, in cents."""
+  hourlyCostCents: BigInt!
+  """
+  Up-front wallet reserve required to create (≈ first day of runtime), in cents.
+  """
+  firstDayReserveCents: BigInt!
+  """Org wallet balance, in cents."""
   walletBalanceCents: BigInt!
-  """Spend so far in the current hour window, in cents."""
-  currentHourUsageCents: BigInt!
-  """Spend so far in the current day window, in cents."""
-  currentDayUsageCents: BigInt!
   """
-  Per-app hourly spend cap in cents (set via setAppSpendCaps). Null = no cap.
+  Wallet balance still available after existing reservations, in cents. Compared against firstDayReserveCents.
   """
-  hourlyLimitCents: BigInt
+  availableBalanceCents: BigInt!
+  """ISO-4217 currency of the *Cents fields, e.g. 'USD'."""
+  currency: String!
   """
-  Per-app daily spend cap in cents (set via setAppSpendCaps). Null = no cap.
+  True when availableBalanceCents ≥ firstDayReserveCents, or when AUTO_BILLING_PAID_PROVISIONING_ENABLED is true and auto-billing is enabled with a saved payment method and enough period headroom to cover the shortfall. createEnvironment may auto-recharge before provisioning when the wallet is short but billing-ready.
   """
-  dailyLimitCents: BigInt
+  canCreate: Boolean!
 }
 
 """
-Where an app runs: none (draft), shared (the shared game-api), or dedicated (a provisioned environment).
+A published output value from a provisioned component (e.g. URLs, handles, connection details).
 """
-enum AppDeploymentTarget {
-  """Draft / unpublished: the app is not deployed to any runtime."""
-  NONE
-  """Runs on the multi-tenant shared game-api (publishAppToShared)."""
-  SHARED
-  """Runs on a dedicated, org-provisioned environment."""
-  DEDICATED
+type CksEnvironmentOutput {
+  id: String!
+  environmentId: String!
+  componentKind: String!
+  name: String!
+  label: String!
+  value: String!
+  valueKind: String!
 }
 
 """
-The per-app runtime gate game-api + Buddy enforce. See runtimeDenialReason when not active.
+A billable cloud resource attributed to the environment, with its customer hourly price.
 """
-enum AppRuntimeStatus {
-  """Allowed to run; clients may connect."""
-  ACTIVE
-  """
-  Still running on a temporary allowance (e.g. low funds) but at risk of being denied soon.
-  """
-  GRACE
-  """
-  Blocked from running now (e.g. insufficient funds, spend cap hit, or free allowance exhausted); recoverable once the cause clears.
-  """
-  DENIED
-  """Hard-stopped (e.g. lapsed subscription); requires action to restore."""
-  SUSPENDED
-}
-
-"""An org's free shared app slot quota usage."""
-type FreeAppQuota {
-  """Organization id (BigInt)."""
-  orgId: BigInt!
-  """Total free shared app slots granted to the org."""
-  quota: Int!
-  """Free slots currently in use."""
-  usedFree: Int!
-  """Apps on a paid subscription (do not consume free slots)."""
-  paidApps: Int!
-  """
-  Free slots still available (quota − usedFree); 0 means a paid plan is required.
-  """
-  remainingFree: Int!
-}
-
-"""
-Result of publishing an app to the shared environment. Free path returns a runtime state with no checkout; paid path returns a checkout to redirect to.
-"""
-type PublishAppResult {
-  appId: BigInt!
-  """True when published under the free quota (no payment)."""
-  free: Boolean!
-  """Subscription checkout to redirect to (paid path only)."""
-  checkout: Checkout
-}
-
-"""Org off-session auto-billing configuration."""
-type OrgAutoBilling {
-  """Organization id (BigInt)."""
-  orgId: BigInt!
-  """Whether off-session auto-billing is enabled."""
-  enabled: Boolean!
-  """Max auto-billed per period in cents. Null = no limit."""
-  limitCents: BigInt
-  """Reset window for the per-period auto-billed total, e.g. 'month'."""
-  period: String!
-  """Amount already auto-billed in the current period, in cents."""
-  autoBilledThisPeriodCents: BigInt!
-  """Amount to top up the wallet by on each auto-recharge, in cents."""
-  rechargeAmountCents: BigInt!
-  """
-  Wallet balance at or below which an auto-recharge is triggered, in cents.
-  """
-  lowWaterThresholdCents: BigInt!
-  """True when a vaulted payment method exists to charge off-session."""
-  hasPaymentMethod: Boolean!
-  """Most recent auto-billing failure message, if any."""
-  lastError: String
-}
-
-"""A saved (vaulted) off-session payment method."""
-type SavedPaymentMethod {
-  """Payment method id (BigInt)."""
-  paymentMethodId: BigInt!
-  """Payment provider, e.g. 'stripe'."""
+type CksEnvironmentBillingResource {
+  id: String!
+  environmentId: String!
   provider: String!
-  """Card brand, e.g. 'visa'. Null for non-card methods."""
-  brand: String
-  """Last 4 digits of the card, if applicable."""
-  last4: String
-  """True when this is the org default method charged off-session."""
-  isDefault: Boolean!
-  """Method status, e.g. 'active' or 'expired'."""
+  resourceId: String!
+  resourceName: String
+  componentKind: String!
+  region: String!
+  flavorName: String
   status: String!
+  """Customer hourly price billed for this resource, in cents."""
+  customerHourlyPriceCents: BigInt
+  currency: String!
+  observedAt: DateTime!
+}
+
+type CksBuddyHealth {
+  """False when no server_status row exists for this environment."""
+  registered: Boolean!
+  """Public IPv4 of the Buddy UDP runtime VM, if registered."""
+  ip4: String
+  """UDP port clients connect to on the Buddy server."""
+  clientPort: Int
+  """
+  Buddy-reported server state from server_status (e.g. 'ReadyForClients').
+  """
+  status: String
+  """Currently connected client count reported by Buddy."""
+  clients: Int
+  """Timestamp of the last server_status heartbeat (game DB)."""
+  updatedAt: DateTime
+  """Seconds since server_status.updated_at (game DB heartbeat)."""
+  heartbeatAgeSec: Float
+  """
+  True when heartbeat is missing or older than the staleness threshold (~30s). Game-api rejects assignment when age > ~11s.
+  """
+  isStale: Boolean!
+  """Operator-facing hint when multiplayer assignment may fail."""
+  troubleshootingHint: String!
 }
 
 """
-Stripe SetupIntent handle the browser uses to vault a card for auto-billing.
+Full environment detail returned by orgEnvironment: the environment plus its components, change orders, audit, secrets, outputs, billing resources, live deploy/destroy progress, and Buddy health.
 """
-type PaymentMethodSetup {
-  """Provider customer id (e.g. Stripe customer) the card is vaulted under."""
-  externalCustomerId: String!
-  """SetupIntent client secret the browser confirms to vault the card."""
-  clientSecret: String
-  """Provider publishable key for the browser SDK."""
-  publishableKey: String
+type CksEnvironmentDetail {
+  environment: CksEnvironment!
+  """
+  Buddy UDP server heartbeat from mirrored server_status. Null when env is destroyed or management DB has no row.
+  """
+  buddyHealth: CksBuddyHealth
+  components: [CksEnvironmentComponent!]!
+  changeOrders: [CksEnvironmentChangeOrder!]!
+  audit: [CksEnvironmentAudit!]!
+  secrets: [CksEnvironmentSecretValue!]!
+  outputs: [CksEnvironmentOutput!]!
+  billingResources: [CksEnvironmentBillingResource!]!
+  """
+  Live deploy task/step progress for the active or most recent failed deploy
+  """
+  deployProgress: CksDeployProgress
+  """Destroy tear-down progress for game-api and platform change orders"""
+  destroyProgress: [CksDeployProgress!]!
+}
+
+"""
+A registered GraphQL API server instance in the fleet (either a management-api or a game-api, see `kind`), with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy.
+"""
+type GraphQLServer {
+  """Unique id of this GraphQL server registration."""
+  graphqlServerId: ID!
+  """Logical kind of GraphQL service: 'management-api' or 'game-api'."""
+  kind: String
+  """
+  Internal/private IPv4 address of this server. Use publicIp4 for external reachability.
+  """
+  ip4: String
+  """
+  Internal/private IPv6 address of this server. Use publicIp6 for external reachability.
+  """
+  ip6: String
+  """
+  UUID of the runtime/Buddy (cks-udp-api) instance this API server is paired with, if any.
+  """
+  runtimeServerId: String
+  """Cloud provider instance id of the underlying host, if known."""
+  providerInstanceId: String
+  """Public IPv4 address clients use to reach this server, if assigned."""
+  publicIp4: String
+  """Public IPv6 address clients use to reach this server, if assigned."""
+  publicIp6: String
+  """TCP port the GraphQL/HTTP API listens on (default 4000)."""
+  apiPort: Int!
+  """
+  Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients.
+  """
+  status: ServerState!
+  """Current CPU utilization percentage (0-100) of the host, if reported."""
+  cpuUsagePct: Float
+  """
+  Current memory utilization percentage (0-100) of the host, if reported.
+  """
+  memoryUsagePct: Float
+  """1-minute load average of the host, if reported."""
+  loadAverage1m: Float
+  """When this server was first registered in the fleet."""
+  createdAt: DateTime!
+  """
+  When this server row was last updated (heartbeat). Use to judge freshness.
+  """
+  updatedAt: DateTime!
+}
+
+"""
+Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers.
+"""
+enum ServerState {
+  """
+  Booting / not yet ready: registered but still initializing; do not route client traffic here.
+  """
+  Starting
+  """Healthy and accepting client traffic. The only state safe to route to."""
+  ReadyForClients
+  """
+  Draining / shutting down: finishing in-flight work; do not send new traffic.
+  """
+  Stopping
+  """Not running or unreachable (e.g. crashed or missed heartbeats)."""
+  Offline
+  """
+  Buddy soft resource overload: excluded from new-client selection until it recovers; existing sessions continue.
+  """
+  NearCapacity
+  """
+  Buddy hard resource overload: excluded from new-client selection and actively shedding clients (sends reconnect commands so they migrate elsewhere).
+  """
+  Full
+}
+
+"""
+A semantic-style version as four integer components (major.minor.patch.build). Compare components in order (major, then minor, then patch, then build).
+"""
+type VersionInfo {
+  """Major version number"""
+  major: Int!
+  """Minor version number"""
+  minor: Int!
+  """Patch version number"""
+  patch: Int!
+  """Build number"""
+  build: Int!
+}
+
+"""
+Server version plus the minimum client version the server will accept. A client whose build is older than minimumClientVersion should prompt the user to update before connecting.
+"""
+type ServerVersionInfo {
+  """Current server version"""
+  serverVersion: VersionInfo!
+  """Minimum accepted client version"""
+  minimumClientVersion: VersionInfo!
 }
 
 """
@@ -2055,7 +2166,7 @@ type Query {
     Optional search term. Case-insensitive prefix match over email, gamertag, and disambiguation, plus an exact match on user_id. Omit to list all users.
     """
     query: String
-  ): UsersConnection!
+  ): UsersConnection! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Fetches an organization by id (BigInt as string). Requires a valid session token. Returns null if no such organization exists.
   """
@@ -2084,14 +2195,14 @@ type Query {
   orgMembers(
     """Organization id (BigInt as string)."""
     orgId: BigInt!
-  ): [OrgMember!]!
+  ): [OrgMember!]! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "orgId")
   """
   Lists all roles defined in an organization. Requires the 'manage_members' permission on the org (super admins bypass).
   """
   orgRoles(
     """Organization id (BigInt as string)."""
     orgId: BigInt!
-  ): [OrgRole!]!
+  ): [OrgRole!]! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "orgId")
   """
   Lists the roles assigned to a single org member. Requires a valid session token.
   """
@@ -2107,7 +2218,7 @@ type Query {
   orgTokens(
     """Organization id (BigInt as string)."""
     orgId: BigInt!
-  ): [OrgToken!]!
+  ): [OrgToken!]! @requiresPermission(scope: "org", permission: "manage_tokens", scopeArg: "orgId")
   """
   Public marketplace listing of apps. PUBLIC: no authentication required. Returns ONLY apps with visibility=PUBLIC AND status=LIVE (drafts, unlisted, private, and archived apps are never returned). Use myApps or appsForOrg for caller-visible or org-scoped apps. Results are ordered newest-first and paginated via pageInfo.
   """
@@ -2205,7 +2316,7 @@ type Query {
     Number of records to skip for pagination. Defaults to 0; negative values are treated as 0.
     """
     offset: Int = 0 @deprecated(reason: "Use appUserAccessConnection(first:, after:) instead. See /overview/pagination.")
-  ): [AppUserAccess!]!
+  ): [AppUserAccess!]! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Admin view of the user access records for an app (who has been granted/revoked access and on which tier). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Ordered by most recently updated. Relay cursor connection; prefer this over the offset-based appUserAccessByApp.
   """
@@ -2222,7 +2333,7 @@ type Query {
     Optional exact-match filter on access status (e.g. "active" or "revoked"). Omit to return records of all statuses.
     """
     status: String
-  ): AppUserAccessConnection!
+  ): AppUserAccessConnection! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Lists org members eligible for a manual app access grant (active members of the app's owning org). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Use the returned user ids with grantAppAccess.
   """
@@ -2231,7 +2342,7 @@ type Query {
     Numeric id of the app whose org members should be listed as grant candidates.
     """
     appId: BigInt!
-  ): [AppGrantMemberCandidate!]!
+  ): [AppGrantMemberCandidate!]! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Returns the organization's wallet, creating an empty zero-balance wallet on first access if one does not yet exist (so it never returns null). Use it to read the current balance and currency before charging usage or topping up. Requires the 'view_billing' org permission.
   """
@@ -2240,7 +2351,7 @@ type Query {
     Organization id (BigInt as a decimal string) whose wallet to fetch or create.
     """
     orgId: BigInt!
-  ): OrgWallet!
+  ): OrgWallet! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission.
   """
@@ -2255,7 +2366,7 @@ type Query {
     Number of transactions to skip before returning results, for offset/limit pagination. Defaults to 0 when omitted.
     """
     offset: Int @deprecated(reason: "Use walletTransactionsConnection(first:, after:) instead. See /overview/pagination.")
-  ): [WalletTransaction!]!
+  ): [WalletTransaction!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission. Relay cursor connection; prefer this over the offset-based walletTransactions.
   """
@@ -2270,7 +2381,7 @@ type Query {
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
     """
     after: String
-  ): WalletTransactionsConnection!
+  ): WalletTransactionsConnection! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Returns the monthly spend cap and current-month usage for a single app, or null if no budget has been configured for it. Requires the 'view_billing' app permission.
   """
@@ -2279,7 +2390,7 @@ type Query {
     orgId: BigInt!
     """App id (BigInt as a decimal string) whose budget to fetch."""
     appId: BigInt!
-  ): AppBudget
+  ): AppBudget @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId")
   """
   Lists every app spend-cap budget configured under the organization. Requires the 'view_billing' org permission.
   """
@@ -2288,7 +2399,7 @@ type Query {
     Organization id (BigInt as a decimal string) whose app budgets to list.
     """
     orgId: BigInt!
-  ): [AppBudget!]!
+  ): [AppBudget!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission.
   """
@@ -2297,14 +2408,14 @@ type Query {
     Organization id (BigInt as a decimal string) whose quota rules to list.
     """
     orgId: BigInt!
-  ): [ServiceQuota!]!
+  ): [ServiceQuota!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission.
   """
   quotasForApp(
     """App id (BigInt as a decimal string) whose quota rules to list."""
     appId: BigInt!
-  ): [ServiceQuota!]!
+  ): [ServiceQuota!]! @requiresPermission(scope: "app", permission: "view_usage", scopeArg: "appId")
   """
   Resolves the single most-specific quota that applies to the given (tierId, appId, orgId, metric) by walking tier -> app -> org -> free-tier defaults and returning the first match; its limitValue/period describe the enforced limit. Returns null if no matching rule and no free-tier default exist for the metric. Requires the 'view_usage' permission on the most-specific scope provided: tierId or appId -> 'view_usage' on the (owning) app; orgId -> 'view_usage' on the org. A metric-only query (no scope ids) resolves the platform free-tier default and only requires an authenticated user.
   """
@@ -2366,7 +2477,7 @@ type Query {
     Number of checkouts to skip for offset/limit pagination. Default 0; negative values are treated as 0.
     """
     offset: Int = 0 @deprecated(reason: "Use checkoutsConnection(first:, after:) instead. See /overview/pagination.")
-  ): CheckoutsPage!
+  ): CheckoutsPage! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckoutsConnection` instead. Relay cursor connection; prefer this over the offset-based checkouts.
   """
@@ -2381,7 +2492,7 @@ type Query {
     Optional filters (provider, purpose, status, userId, orgId, appId), AND-combined. Omit to return all checkouts.
     """
     filter: CheckoutFilterInput
-  ): CheckoutsConnection!
+  ): CheckoutsConnection! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected.
   """
@@ -2394,7 +2505,7 @@ type Query {
     Number of events to skip for offset/limit pagination. Default 0; negative values are treated as 0.
     """
     offset: Int = 0 @deprecated(reason: "Use paymentEventsConnection(first:, after:) instead. See /overview/pagination.")
-  ): PaymentEventsPage!
+  ): PaymentEventsPage! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected. Relay cursor connection; prefer this over the offset-based paymentEvents.
   """
@@ -2405,219 +2516,17 @@ type Query {
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
     """
     after: String
-  ): PaymentEventsConnection!
-  """
-  Lists every environment owned by an organization, in any lifecycle state (including destroyed). Summary rows only — use orgEnvironment(slug) for full detail. Requires the 'view_environments' org permission.
-  """
-  orgEnvironments(
-    """Organization id (BigInt) that owns the environments."""
-    orgId: BigInt!
-  ): [CksEnvironment!]!
-  """
-  Full detail for one environment: the environment row plus components, change orders, audit log, secrets, outputs, billing resources, live deploy/destroy progress, and Buddy UDP health. Returns null when no environment with that slug exists for the org. Requires the 'view_environments' org permission.
-  """
-  orgEnvironment(
-    """Organization id (BigInt) that owns the environment."""
-    orgId: BigInt!
-    """
-    Environment slug (cks_environments.slug), e.g. an auto-generated 'e-<12 chars>' or a custom slug supplied at creation.
-    """
-    slug: String!
-  ): CksEnvironmentDetail
-  """
-  Catalog of available environment release versions that can be deployed, newest first. Not org-scoped (any authenticated caller). For the versions a specific environment may move to, use environmentForwardVersions.
-  """
-  environmentVersions: [CksEnvironmentVersion!]!
-  """
-  Release versions a specific environment may upgrade to: available, deployable by its environment class, and not older than the version it currently runs (forward-only — no rollback). Newest first; backs the version picker passed to redeployEnvironment. Requires the 'view_environments' org permission.
-  """
-  environmentForwardVersions(
-    """Organization id (BigInt) that owns the environment."""
-    orgId: BigInt!
-    """Environment slug to list upgrade targets for."""
-    slug: String!
-  ): [CksEnvironmentVersion!]!
-  """
-  OVH datacenters that have at least one customer-priced instance flavor available for customer selection.
-  """
-  environmentDatacenters: [CksOvhDatacenter!]!
-  """
-  Customer-selectable instance flavors in the datacenter with current availability and customer pricing.
-  """
-  environmentFlavors(
-    """OVH datacenter/region code from environmentDatacenters (e.g. 'GRA11')."""
-    datacenter: String!
-  ): [CksOvhFlavor!]!
-  """
-  Pricing quote for the selected flavors plus the org wallet balance and a canCreate gate. Read-only — provisions nothing. Fails if any flavor is unavailable, hidden, or lacks customer pricing. Requires the 'view_billing' org permission.
-  """
-  environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote!
-  """
-  Per-minute replication and GraphQL byte/message usage time series for the apps linked to an environment, plus replication rate peaks and live Buddy rates. Read-only observability. Requires the 'view_usage' org permission.
-  """
-  environmentUsageSummary(
-    """Organization id (BigInt) that owns the environment."""
-    orgId: BigInt!
-    """Slug of the environment to report usage for."""
-    environmentSlug: String!
-    """
-    Start of the time window (ISO-8601 DateTime). Usage is aggregated from this instant up to now.
-    """
-    since: DateTime!
-  ): EnvironmentUsageSummary!
-  """
-  Aggregate replication/GraphQL byte totals per environment across the org for the time window. Read-only reporting. Requires the 'view_usage' org permission.
-  """
-  orgUsageByEnvironment(
-    """Organization id (BigInt) to roll up usage for."""
-    orgId: BigInt!
-    """Start of the aggregation window (ISO-8601 DateTime) up to now."""
-    since: DateTime!
-  ): [EnvironmentUsageRollupRow!]!
-  """
-  Aggregate replication/GraphQL byte totals per app for the apps linked to an environment, over the time window. Read-only reporting. Requires the 'view_usage' org permission.
-  """
-  environmentUsageByApp(
-    """Organization id (BigInt) that owns the environment."""
-    orgId: BigInt!
-    """Slug of the environment whose apps to roll up."""
-    environmentSlug: String!
-    """Start of the aggregation window (ISO-8601 DateTime) up to now."""
-    since: DateTime!
-  ): [AppUsageRollupRow!]!
-  """
-  Top GraphQL operations for an app ranked by bytes over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission.
-  """
-  appGraphqlOperations(
-    """Organization id (BigInt) that owns the app."""
-    orgId: BigInt!
-    """App id (BigInt) to report operations for."""
-    appId: BigInt!
-    """Start of the time range (ISO-8601 DateTime) up to now."""
-    since: DateTime!
-    """Max number of operations to return (default 20)."""
-    limit: Int = 20
-  ): [GraphqlOperationUsageRow!]!
-  """
-  Replication and GraphQL byte totals plus the top GraphQL operations for one app over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission.
-  """
-  appUsageSummary(
-    """Organization id (BigInt) that owns the app."""
-    orgId: BigInt!
-    """App id (BigInt) to summarize usage for."""
-    appId: BigInt!
-    """Start of the time range (ISO-8601 DateTime) up to now."""
-    since: DateTime!
-    """Max number of top GraphQL operations to include (default 20)."""
-    operationLimit: Int = 20
-  ): AppUsageSummary!
-  """
-  List every registered GraphQL API server (both management-api and game-api kinds), regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers).
-  """
-  graphqlServers: [GraphQLServer!]!
-  """
-  List only healthy GraphQL API servers (status = ReadyForClients) for client routing/discovery. No authentication required.
-  """
-  activeGraphQLServers: [GraphQLServer!]!
-  """
-  Current server version and the minimum client version the server accepts. No authentication required. Compare your client build against minimumClientVersion before connecting and prompt an update if it is too old.
-  """
-  versionInfo: ServerVersionInfo!
-  """
-  Operator only (is_operator). Paginated list of all environments across every org. Returns a *Page (rows/total/page/pageSize); page is 1-based.
-  """
-  cpEnvironments(
-    """1-based page number (default 1)."""
-    page: Int! = 1
-    """Rows per page (default 50)."""
-    pageSize: Int! = 50
-  ): CpAdminEnvironmentsPage!
-  """
-  Operator only (is_operator). Operator view of one environment by slug, across any org. Null when not found.
-  """
-  cpEnvironment(
-    """Environment slug to look up."""
-    slug: String!
-  ): CpAdminEnvironment
-  """
-  Operator only (is_operator). Paginated change orders, optionally filtered by environment. Returns a *Page (rows/total/page/pageSize); page is 1-based.
-  """
-  cpChangeOrders(
-    """Environment UUID to filter by. Omit/null for all environments."""
-    environmentId: String
-    """1-based page number (default 1)."""
-    page: Int! = 1
-    """Rows per page (default 50)."""
-    pageSize: Int! = 50
-  ): CpChangeOrdersPage!
-  """
-  Operator only (is_operator). One change order with its tasks and steps. Null when the id is not found.
-  """
-  cpChangeOrder(
-    """Change order UUID."""
-    id: String!
-  ): CpChangeOrderDetail
-  """
-  Operator only (is_operator). Most recent operator audit entries, newest first, optionally filtered by environment.
-  """
-  cpAudit(
-    """Environment UUID to filter by. Omit/null for all environments."""
-    environmentId: String
-    """Max entries to return (default 200; clamped to 1–1000)."""
-    limit: Int! = 200
-  ): [CpAuditEntry!]!
-  """
-  Operator only (is_operator). Lists control-plane secret metadata (names/kinds only, never plaintext), optionally filtered by environment.
-  """
-  cpSecrets(
-    """Environment UUID to filter by. Omit/null for all."""
-    environmentId: String
-  ): [CpSecretRow!]!
-  """
-  Operator only (is_operator). Lists environment-delivered secret metadata (names/kinds only, never plaintext) injected into the tenant runtime, optionally filtered by environment.
-  """
-  cpEnvSecrets(
-    """Environment UUID to filter by. Omit/null for all."""
-    environmentId: String
-  ): [CpEnvSecretRow!]!
-  """
-  Operator only (is_operator). OVH flavor catalog with provider vs. customer pricing for cost analysis, optionally filtered by region. Read-only.
-  """
-  cpOvhCatalogSummary(
-    """
-    OVH region code to filter by (e.g. 'GRA11'). Omit/null for all regions.
-    """
-    region: String
-  ): [CpOvhCatalogRow!]!
-  """
-  Operator only (is_operator). Per-minute usage summary for any environment by slug (operator equivalent of environmentUsageSummary, not org-scoped). Read-only.
-  """
-  cpUsageSummary(
-    """Slug of the environment to report on."""
-    environmentSlug: String!
-    """Start of the time window (ISO-8601 DateTime) up to now."""
-    since: DateTime!
-  ): CpUsageSummary!
-  """
-  Operator only (is_operator). cks-game-api git tags not yet pinned by any environment release, each with the version a publish would create. Read-only.
-  """
-  cpUnreleasedGameApiTags: CpUnreleasedGameApiTagsPage!
-  """
-  Operator only (is_operator). Environment release manifests merged from git and the database, with the latest available version and git-source availability. Read-only.
-  """
-  cpEnvironmentVersions: CpEnvironmentVersionsPage!
-  """
-  Operator only (is_operator). Lists users with is_operator or is_super_admin set, ordered by user id. Read-only.
-  """
-  operatorUsers: [CpOperatorUser!]!
+  ): PaymentEventsConnection! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps. No auth required.
   """
   platformConfig: PlatformConfig!
-  """Public catalog of paid shared-environment app-slot subscription plans."""
+  """
+  @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only.
+  """
   sharedEnvPlans: [SharedEnvPlan!]!
   """
-  An org's free shared-app slot quota and how much of it is used. Use before publishAppToShared to know whether the free path applies or a paid planId is needed. Caller must be a member of the org.
+  An org's free shared-app slot quota and how much of it is used. Apps beyond the quota still publish; metered usage is billed from the org wallet. Caller must be a member of the org.
   """
   orgFreeAppQuota(
     """Organization id (BigInt) to read the free quota for."""
@@ -2651,6 +2560,227 @@ type Query {
     """Organization id (BigInt) to list payment methods for."""
     orgId: BigInt!
   ): [SavedPaymentMethod!]!
+  """
+  Lists every environment owned by an organization, in any lifecycle state (including destroyed). Summary rows only — use orgEnvironment(slug) for full detail. Requires the 'view_environments' org permission.
+  """
+  orgEnvironments(
+    """Organization id (BigInt) that owns the environments."""
+    orgId: BigInt!
+  ): [CksEnvironment!]! @requiresPermission(scope: "org", permission: "view_environments", scopeArg: "orgId")
+  """
+  Full detail for one environment: the environment row plus components, change orders, audit log, secrets, outputs, billing resources, live deploy/destroy progress, and Buddy UDP health. Returns null when no environment with that slug exists for the org. Requires the 'view_environments' org permission.
+  """
+  orgEnvironment(
+    """Organization id (BigInt) that owns the environment."""
+    orgId: BigInt!
+    """
+    Environment slug (cks_environments.slug), e.g. an auto-generated 'e-<12 chars>' or a custom slug supplied at creation.
+    """
+    slug: String!
+  ): CksEnvironmentDetail @requiresPermission(scope: "org", permission: "view_environments", scopeArg: "orgId")
+  """
+  Catalog of available environment release versions that can be deployed, newest first. Not org-scoped (any authenticated caller). For the versions a specific environment may move to, use environmentForwardVersions.
+  """
+  environmentVersions: [CksEnvironmentVersion!]!
+  """
+  Release versions a specific environment may upgrade to: available, deployable by its environment class, and not older than the version it currently runs (forward-only — no rollback). Newest first; backs the version picker passed to redeployEnvironment. Requires the 'view_environments' org permission.
+  """
+  environmentForwardVersions(
+    """Organization id (BigInt) that owns the environment."""
+    orgId: BigInt!
+    """Environment slug to list upgrade targets for."""
+    slug: String!
+  ): [CksEnvironmentVersion!]! @requiresPermission(scope: "org", permission: "view_environments", scopeArg: "orgId")
+  """
+  OVH datacenters that have at least one customer-priced instance flavor available for customer selection.
+  """
+  environmentDatacenters: [CksOvhDatacenter!]!
+  """
+  Customer-selectable instance flavors in the datacenter with current availability and customer pricing.
+  """
+  environmentFlavors(
+    """OVH datacenter/region code from environmentDatacenters (e.g. 'GRA11')."""
+    datacenter: String!
+  ): [CksOvhFlavor!]!
+  """
+  Pricing quote for the selected flavors plus the org wallet balance and a canCreate gate. Read-only — provisions nothing. Fails if any flavor is unavailable, hidden, or lacks customer pricing. Requires the 'view_billing' org permission.
+  """
+  environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "input.orgId")
+  """
+  Public read-only catalog of active Buddy (UDP replication) billing tiers.
+  """
+  buddyBillingTiers: [BuddyBillingTier!]!
+  """Public read-only catalog of active GraphQL (game API) billing tiers."""
+  graphqlBillingTiers: [GraphqlBillingTier!]!
+  """
+  Public read-only catalog of active Postgres billing tiers. Usage metering deferred.
+  """
+  postgresBillingTiers: [PostgresBillingTier!]!
+  """
+  Operator only (is_operator). Paginated list of all environments across every org. Returns a *Page (rows/total/page/pageSize); page is 1-based.
+  """
+  cpEnvironments(
+    """1-based page number (default 1)."""
+    page: Int! = 1
+    """Rows per page (default 50)."""
+    pageSize: Int! = 50
+  ): CpAdminEnvironmentsPage! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Operator view of one environment by slug, across any org. Null when not found.
+  """
+  cpEnvironment(
+    """Environment slug to look up."""
+    slug: String!
+  ): CpAdminEnvironment @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Paginated change orders, optionally filtered by environment. Returns a *Page (rows/total/page/pageSize); page is 1-based.
+  """
+  cpChangeOrders(
+    """Environment UUID to filter by. Omit/null for all environments."""
+    environmentId: String
+    """1-based page number (default 1)."""
+    page: Int! = 1
+    """Rows per page (default 50)."""
+    pageSize: Int! = 50
+  ): CpChangeOrdersPage! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). One change order with its tasks and steps. Null when the id is not found.
+  """
+  cpChangeOrder(
+    """Change order UUID."""
+    id: String!
+  ): CpChangeOrderDetail @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Most recent operator audit entries, newest first, optionally filtered by environment.
+  """
+  cpAudit(
+    """Environment UUID to filter by. Omit/null for all environments."""
+    environmentId: String
+    """Max entries to return (default 200; clamped to 1–1000)."""
+    limit: Int! = 200
+  ): [CpAuditEntry!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Lists control-plane secret metadata (names/kinds only, never plaintext), optionally filtered by environment.
+  """
+  cpSecrets(
+    """Environment UUID to filter by. Omit/null for all."""
+    environmentId: String
+  ): [CpSecretRow!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Lists environment-delivered secret metadata (names/kinds only, never plaintext) injected into the tenant runtime, optionally filtered by environment.
+  """
+  cpEnvSecrets(
+    """Environment UUID to filter by. Omit/null for all."""
+    environmentId: String
+  ): [CpEnvSecretRow!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). OVH flavor catalog with provider vs. customer pricing for cost analysis, optionally filtered by region. Read-only.
+  """
+  cpOvhCatalogSummary(
+    """
+    OVH region code to filter by (e.g. 'GRA11'). Omit/null for all regions.
+    """
+    region: String
+  ): [CpOvhCatalogRow!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Per-minute usage summary for any environment by slug (operator equivalent of environmentUsageSummary, not org-scoped). Read-only.
+  """
+  cpUsageSummary(
+    """Slug of the environment to report on."""
+    environmentSlug: String!
+    """Start of the time window (ISO-8601 DateTime) up to now."""
+    since: DateTime!
+  ): CpUsageSummary! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). cks-game-api git tags not yet pinned by any environment release, each with the version a publish would create. Read-only.
+  """
+  cpUnreleasedGameApiTags: CpUnreleasedGameApiTagsPage! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Environment release manifests merged from git and the database, with the latest available version and git-source availability. Read-only.
+  """
+  cpEnvironmentVersions: CpEnvironmentVersionsPage! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Lists users with is_operator or is_super_admin set, ordered by user id. Read-only.
+  """
+  operatorUsers: [CpOperatorUser!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Per-minute replication and GraphQL byte/message usage time series for the apps linked to an environment, plus replication rate peaks and live Buddy rates. Read-only observability. Requires the 'view_usage' org permission.
+  """
+  environmentUsageSummary(
+    """Organization id (BigInt) that owns the environment."""
+    orgId: BigInt!
+    """Slug of the environment to report usage for."""
+    environmentSlug: String!
+    """
+    Start of the time window (ISO-8601 DateTime). Usage is aggregated from this instant up to now.
+    """
+    since: DateTime!
+  ): EnvironmentUsageSummary! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
+  """
+  Aggregate replication/GraphQL byte totals per environment across the org for the time window. Read-only reporting. Requires the 'view_usage' org permission.
+  """
+  orgUsageByEnvironment(
+    """Organization id (BigInt) to roll up usage for."""
+    orgId: BigInt!
+    """Start of the aggregation window (ISO-8601 DateTime) up to now."""
+    since: DateTime!
+  ): [EnvironmentUsageRollupRow!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
+  """
+  Aggregate replication/GraphQL byte totals per app for the apps linked to an environment, over the time window. Read-only reporting. Requires the 'view_usage' org permission.
+  """
+  environmentUsageByApp(
+    """Organization id (BigInt) that owns the environment."""
+    orgId: BigInt!
+    """Slug of the environment whose apps to roll up."""
+    environmentSlug: String!
+    """Start of the aggregation window (ISO-8601 DateTime) up to now."""
+    since: DateTime!
+  ): [AppUsageRollupRow!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
+  """
+  Top GraphQL operations for an app ranked by bytes over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission.
+  """
+  appGraphqlOperations(
+    """Organization id (BigInt) that owns the app."""
+    orgId: BigInt!
+    """App id (BigInt) to report operations for."""
+    appId: BigInt!
+    """Start of the time range (ISO-8601 DateTime) up to now."""
+    since: DateTime!
+    """Max number of operations to return (default 20)."""
+    limit: Int = 20
+  ): [GraphqlOperationUsageRow!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
+  """
+  Replication and GraphQL byte totals plus the top GraphQL operations for one app over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission.
+  """
+  appUsageSummary(
+    """Organization id (BigInt) that owns the app."""
+    orgId: BigInt!
+    """App id (BigInt) to summarize usage for."""
+    appId: BigInt!
+    """Start of the time range (ISO-8601 DateTime) up to now."""
+    since: DateTime!
+    """Max number of top GraphQL operations to include (default 20)."""
+    operationLimit: Int = 20
+  ): AppUsageSummary! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
+  """
+  Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission.
+  """
+  playerPulse(
+    """Organization id (BigInt) to report player pulse for."""
+    orgId: BigInt!
+  ): PlayerPulse! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
+  """
+  List every registered GraphQL API server (both management-api and game-api kinds), regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers).
+  """
+  graphqlServers: [GraphQLServer!]!
+  """
+  List only healthy GraphQL API servers (status = ReadyForClients) for client routing/discovery. No authentication required.
+  """
+  activeGraphQLServers: [GraphQLServer!]!
+  """
+  Current server version and the minimum client version the server accepts. No authentication required. Compare your client build against minimumClientVersion before connecting and prompt an update if it is too old.
+  """
+  versionInfo: ServerVersionInfo!
   """
   Lists the avatars owned by `userId`. Requires a valid game token. Owner-aware: when the caller is NOT the owner, each avatar’s `privateState` is stripped (returned null); `publicState` is always included. State blobs are base64-encoded binary.
   """
@@ -3343,7 +3473,7 @@ type Mutation {
     userId: BigInt!
     """true to grant operator access, false to revoke."""
     value: Boolean!
-  ): User!
+  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api.
   """
@@ -3385,11 +3515,11 @@ type Mutation {
     orgId: BigInt!
     """New status, e.g. 'active' or 'frozen'."""
     status: String!
-  ): Organization!
+  ): Organization! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Mints a new org API token and returns the plaintext token exactly once - save it, since subsequent queries only show metadata. Requires the 'manage_tokens' permission on the target org (super admins bypass).
   """
-  createOrgToken(input: CreateOrgTokenInput!): OrgTokenWithSecret!
+  createOrgToken(input: CreateOrgTokenInput!): OrgTokenWithSecret! @requiresPermission(scope: "org", permission: "manage_tokens", scopeArg: "input.orgId")
   """
   Updates an org token's metadata (label, expiry, active flag). Requires the 'manage_tokens' permission on the token's org (super admins bypass). Does not rotate the secret value.
   """
@@ -3412,7 +3542,7 @@ type Mutation {
   """
   Adds a user to an organization as a member. Requires the 'manage_members' permission on the target org (super admins bypass).
   """
-  inviteOrgMember(input: InviteOrgMemberInput!): OrgMember!
+  inviteOrgMember(input: InviteOrgMemberInput!): OrgMember! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "input.orgId")
   """
   Removes a user from an organization. Requires the 'manage_members' permission on the org (super admins bypass). DESTRUCTIVE: revokes the user's membership and role assignments in that org. Returns false if the user was not a member.
   """
@@ -3425,7 +3555,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "orgId")
   """
   Replaces the full set of roles assigned to an org member. Requires the 'manage_members' permission on the org (super admins bypass). Pass the complete desired role list; roles not included are removed.
   """
@@ -3438,11 +3568,11 @@ type Mutation {
     Complete desired list of org_role ids (BigInt strings) to assign; replaces the member's current roles.
     """
     roleIds: [BigInt!]!
-  ): OrgMember!
+  ): OrgMember! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "orgId")
   """
   Creates a custom role in an organization with a name, optional description, and permission keys. Requires the 'manage_members' permission on the org (super admins bypass).
   """
-  createOrgRole(input: CreateOrgRoleInput!): OrgRole!
+  createOrgRole(input: CreateOrgRoleInput!): OrgRole! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "input.orgId")
   """
   Updates a role's name, description, and/or permission set. Requires the 'manage_members' permission on the role's org (super admins bypass). If input.permissions is provided it replaces the entire set (empty array clears all); omit to leave permissions unchanged.
   """
@@ -3468,7 +3598,7 @@ type Mutation {
   createApp(
     """Details for the app to create."""
     input: CreateAppInput!
-  ): App!
+  ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
   Update mutable fields of an existing app (name, description, visibility, status, metadata); only fields present in the input are changed. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
   """
@@ -3477,7 +3607,7 @@ type Mutation {
     appId: BigInt!
     """Fields to change; omitted fields are left unchanged."""
     input: UpdateAppInput!
-  ): App!
+  ): App! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Soft-delete an app by setting status=ARCHIVED. The row is retained (NOT hard-deleted) and is excluded from the public marketplace. REVERSIBLE: call updateApp to set status back to DRAFT or LIVE. Requires the 'manage_apps' permission on the app; super admins bypass. Throws if the app id does not exist.
   """
@@ -3488,7 +3618,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): App!
+  ): App! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Super admin only (also requires the management API to be enabled for this deployment). Overrides an app visibility platform-wide, e.g. to take down (PRIVATE/UNLISTED) or relist (PUBLIC) an app. Throws ForbiddenException for non-super-admins or when management APIs are disabled. Throws if the app id does not exist.
   """
@@ -3497,14 +3627,14 @@ type Mutation {
     appId: BigInt!
     """New visibility to set (PUBLIC, UNLISTED, or PRIVATE)."""
     visibility: AppVisibility!
-  ): App!
+  ): App! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user.
   """
   createAccessTier(
     """Definition of the access tier to create."""
     input: CreateAccessTierInput!
-  ): AppAccessTier!
+  ): AppAccessTier! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "input.appId")
   """
   Update an existing access tier (name, ordering, pricing, permissions, etc.); only fields present in the input are changed. Requires the 'manage_access_tiers' permission on the app that owns the tier (resolved from tierId); super admins bypass. SIDE EFFECTS: re-syncs the tier's permissions to the game API. Throws if the tier is not found or the caller lacks permission.
   """
@@ -3531,7 +3661,7 @@ type Mutation {
   grantAppAccess(
     """Who to grant access to, and on which tier."""
     input: GrantAppAccessInput!
-  ): AppUserAccess!
+  ): AppUserAccess! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "input.appId")
   """
   Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess.
   """
@@ -3544,7 +3674,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): AppUserAccess!
+  ): AppUserAccess! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived.
   """
@@ -3575,7 +3705,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): AppBudget!
+  ): AppBudget! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
   """
   Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage.
   """
@@ -3606,7 +3736,7 @@ type Mutation {
     input: CreateCheckoutInput!
   ): Checkout!
   """
-  Captures an approved PayPal order after the hosted checkout redirects back, and returns the updated Checkout. The resulting wallet credit / access grant still reconciles through PayPal webhooks. Requires an authenticated user who owns the checkout.
+  Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout.
   """
   capturePaypalCheckout(
     """
@@ -3619,113 +3749,22 @@ type Mutation {
     idempotencyKey: String
   ): Checkout!
   """
-  Provisions a new environment. SIDE EFFECTS / COST: creates billable cloud infrastructure (OVH VMs + DNS) and starts hourly wallet charges; fails if the wallet's available balance is below the first-day reserve (see environmentQuote.canCreate). Each selected flavor must be available and customer-priced (use environmentFlavors / environmentDatacenters). When input.slug is omitted the slug is auto-generated as 'e-<12 chars>'. Returns immediately with status 'deploy_requested'; poll orgEnvironment for deploy progress. Requires the 'manage_environments' org permission.
-  """
-  createEnvironment(input: CreateEnvironmentInput!): CksEnvironmentDetail!
-  """
-  DESTRUCTIVE and IRREVERSIBLE. Tears down all cloud resources for the environment (per-tenant Postgres, game-api, Buddy, and load-balancer VMs plus DNS records) and revokes its service tokens; all tenant data is lost. Sets status to 'destroy_requested' and returns the tracking change order — poll orgEnvironment.destroyProgress. Fails if a destroy is already queued. After it reaches 'destroyed', call purgeEnvironment to remove the record. Requires the 'manage_environments' org permission.
-  """
-  destroyEnvironment(input: DestroyEnvironmentInput!): CksEnvironmentChangeOrder!
-  """
-  DESTRUCTIVE. Permanently deletes a destroyed environment's record and all cascaded metadata from the platform; returns true on success. The environment must already be in status 'destroyed' (run destroyEnvironment first) and must not have deletion protection enabled, otherwise this fails. Does not touch cloud resources. Requires the 'manage_environments' org permission.
-  """
-  purgeEnvironment(input: PurgeEnvironmentInput!): Boolean!
-  """
-  Resumes a payment-suspended environment, queuing a change order and moving billingStatus to 'resume_queued' (and restarting runtime once it settles). Only valid when billingStatus is grace, suspension_queued, suspended, or resume_failed; otherwise fails. Resumes billable hourly charges. Requires the 'manage_environments' org permission.
-  """
-  resumeEnvironment(input: ResumeEnvironmentInput!): CksEnvironmentChangeOrder!
-  """
-  Updates a dedicated environment's autoscaling bounds (game-api / Buddy min & max server counts), load-balancer count, and optionally the Caddy flavor, queuing a change order that redeploys the affected tiers. May change the hourly cost. Rejected for 'dev_single' environments and when another change order is already active. Requires the 'manage_environments' org permission.
-  """
-  updateEnvironmentScaling(input: UpdateEnvironmentScalingInput!): CksEnvironmentChangeOrder!
-  """
-  Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Requires the 'manage_environments' org permission.
-  """
-  redeployEnvironment(input: RedeployEnvironmentInput!): CksEnvironmentChangeOrder!
-  """
-  SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale (see CksBuddyHealth.isStale); does not replace cks-udp-api pool fixes. Requires the 'manage_environments' org permission.
-  """
-  restartEnvironmentServices(input: RestartEnvironmentServicesInput!): CksEnvironmentChangeOrder!
-  """
-  Links an unlinked app to an existing environment for split-mode routing. Refuses shared apps and apps already linked elsewhere. Requires the 'manage_environments' org permission.
-  """
-  linkAppToEnvironment(input: LinkAppToEnvironmentInput!): App!
-  """
-  Operator only (is_operator). Toggles deletion protection on an environment (when enabled, purgeEnvironment is blocked) and writes an audit entry. Returns true on success.
-  """
-  setEnvironmentDeletionProtection(
-    """Environment UUID to protect/unprotect."""
-    environmentId: String!
-    """True to enable deletion protection, false to disable."""
-    enabled: Boolean!
-  ): Boolean!
-  """
-  Operator only (is_operator). Creates or overwrites a control-plane secret (encrypted at rest) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned by cpSecrets.
-  """
-  putCpSecret(
-    """Environment UUID the secret belongs to."""
-    environmentId: String!
-    """Secret name/key (unique per environment)."""
-    name: String!
-    """Secret value to encrypt and store (write-only)."""
-    plaintext: String!
-    """Optional classification/kind tag for the secret."""
-    kind: String
-  ): CpSecretRow!
-  """
-  Operator only (is_operator). Deletes a control-plane secret by environment + name and writes an audit entry. Returns true when a secret was removed.
-  """
-  deleteCpSecret(
-    """Environment UUID the secret belongs to."""
-    environmentId: String!
-    """Name/key of the secret to delete."""
-    name: String!
-  ): Boolean!
-  """
-  Operator only (is_operator). Creates or overwrites an environment-delivered secret (injected into the tenant runtime) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned.
-  """
-  putCpEnvSecret(
-    """Environment UUID the secret is delivered to."""
-    environmentId: String!
-    """Secret name/key (unique per environment)."""
-    name: String!
-    """Secret value to encrypt and store (write-only)."""
-    plaintext: String!
-    """Optional classification/kind tag for the secret."""
-    kind: String
-  ): CpEnvSecretRow!
-  """
-  Operator only (is_operator). Ingests a release manifest into cks_environment_versions, making the version deployable, and writes an audit entry. Use force to overwrite an existing row.
-  """
-  ingestEnvironmentVersion(input: IngestEnvironmentVersionInput!): CpEnvironmentVersionRow!
-  """
-  Operator only (is_operator). Cuts a new environment release from a cks-game-api git tag: ingests it as available and commits the manifest to the git ref. SIDE EFFECT: makes the version the new redeploy target and writes to GitHub. Use force to overwrite. Writes an audit entry.
-  """
-  publishEnvironmentReleaseFromGameApiTag(input: PublishEnvironmentReleaseFromGameApiTagInput!): CpPublishEnvironmentReleaseResult!
-  """
-  Operator only (is_operator). Yanks (withdraws) an environment version so it can no longer be deployed; existing environments are unaffected. Writes an audit entry. Returns true on success.
-  """
-  yankEnvironmentVersion(
-    """Environment version to yank, e.g. 'v0.1.4'."""
-    version: String!
-  ): Boolean!
-  """
-  Publishes an app to the shared game-api environment. Free under the org's quota (result.free = true, no charge); otherwise pass a planId to start a paid subscription — SIDE EFFECT: returns a checkout the caller must complete, which creates a recurring subscription and charges the org. Requires the 'manage_apps' permission on the app's org; currently limited to super admins (preview).
+  Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured.
   """
   publishAppToShared(
     """App id (BigInt) to publish to the shared environment."""
     appId: BigInt!
     """
-    Paid plan id (from sharedEnvPlans) to subscribe to. Omit to use a free quota slot.
+    @deprecated Ignored. Shared app subscriptions are replaced by org wallet usage billing.
     """
     planId: BigInt
     """
-    Payment provider for the paid checkout. Defaults to the platform default.
+    @deprecated Ignored. Shared app subscriptions are replaced by org wallet usage billing.
     """
     provider: PaymentProvider
-    """Redirect URL after a successful paid checkout."""
+    """@deprecated Ignored."""
     successUrl: String
-    """Redirect URL if the paid checkout is cancelled."""
+    """@deprecated Ignored."""
     cancelUrl: String
     """
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
@@ -3799,6 +3838,101 @@ type Mutation {
     """
     idempotencyKey: String
   ): Boolean!
+  """
+  Provisions a new environment. SIDE EFFECTS / COST: creates billable cloud infrastructure (OVH VMs + DNS) and starts hourly wallet charges; fails if the wallet's available balance is below the first-day reserve (see environmentQuote.canCreate). Each selected flavor must be available and customer-priced (use environmentFlavors / environmentDatacenters). When input.slug is omitted the slug is auto-generated as 'e-<12 chars>'. Returns immediately with status 'deploy_requested'; poll orgEnvironment for deploy progress. Requires the 'manage_environments' org permission.
+  """
+  createEnvironment(input: CreateEnvironmentInput!): CksEnvironmentDetail! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  DESTRUCTIVE and IRREVERSIBLE. Tears down all cloud resources for the environment (per-tenant Postgres, game-api, Buddy, and load-balancer VMs plus DNS records) and revokes its service tokens; all tenant data is lost. Sets status to 'destroy_requested' and returns the tracking change order — poll orgEnvironment.destroyProgress. Fails if a destroy is already queued. After it reaches 'destroyed', call purgeEnvironment to remove the record. Requires the 'manage_environments' org permission.
+  """
+  destroyEnvironment(input: DestroyEnvironmentInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  DESTRUCTIVE. Permanently deletes a destroyed environment's record and all cascaded metadata from the platform; returns true on success. The environment must already be in status 'destroyed' (run destroyEnvironment first) and must not have deletion protection enabled, otherwise this fails. Does not touch cloud resources. Requires the 'manage_environments' org permission.
+  """
+  purgeEnvironment(input: PurgeEnvironmentInput!): Boolean! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  Resumes a payment-suspended environment, queuing a change order and moving billingStatus to 'resume_queued' (and restarting runtime once it settles). Only valid when billingStatus is grace, suspension_queued, suspended, or resume_failed; otherwise fails. Resumes billable hourly charges. Requires the 'manage_environments' org permission.
+  """
+  resumeEnvironment(input: ResumeEnvironmentInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  Updates a dedicated environment's autoscaling bounds (game-api / Buddy min & max server counts), load-balancer count, and optionally the Caddy flavor, queuing a change order that redeploys the affected tiers. May change the hourly cost. Rejected for 'dev_single' environments and when another change order is already active. Requires the 'manage_environments' org permission.
+  """
+  updateEnvironmentScaling(input: UpdateEnvironmentScalingInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  Updates an environment's three-dimension usage billing tier selections (Buddy, GraphQL, Postgres). Omitted tier fields are left unchanged. Requires the 'manage_environments' org permission.
+  """
+  updateEnvironmentBillingTiers(input: UpdateEnvironmentBillingTiersInput!): CksEnvironment! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Requires the 'manage_environments' org permission.
+  """
+  redeployEnvironment(input: RedeployEnvironmentInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale (see CksBuddyHealth.isStale); does not replace cks-udp-api pool fixes. Requires the 'manage_environments' org permission.
+  """
+  restartEnvironmentServices(input: RestartEnvironmentServicesInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  Links an unlinked app to an existing environment for split-mode routing. Refuses shared apps and apps already linked elsewhere. Requires the 'manage_environments' org permission.
+  """
+  linkAppToEnvironment(input: LinkAppToEnvironmentInput!): App! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
+  """
+  Operator only (is_operator). Toggles deletion protection on an environment (when enabled, purgeEnvironment is blocked) and writes an audit entry. Returns true on success.
+  """
+  setEnvironmentDeletionProtection(
+    """Environment UUID to protect/unprotect."""
+    environmentId: String!
+    """True to enable deletion protection, false to disable."""
+    enabled: Boolean!
+  ): Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Creates or overwrites a control-plane secret (encrypted at rest) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned by cpSecrets.
+  """
+  putCpSecret(
+    """Environment UUID the secret belongs to."""
+    environmentId: String!
+    """Secret name/key (unique per environment)."""
+    name: String!
+    """Secret value to encrypt and store (write-only)."""
+    plaintext: String!
+    """Optional classification/kind tag for the secret."""
+    kind: String
+  ): CpSecretRow! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Deletes a control-plane secret by environment + name and writes an audit entry. Returns true when a secret was removed.
+  """
+  deleteCpSecret(
+    """Environment UUID the secret belongs to."""
+    environmentId: String!
+    """Name/key of the secret to delete."""
+    name: String!
+  ): Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Creates or overwrites an environment-delivered secret (injected into the tenant runtime) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned.
+  """
+  putCpEnvSecret(
+    """Environment UUID the secret is delivered to."""
+    environmentId: String!
+    """Secret name/key (unique per environment)."""
+    name: String!
+    """Secret value to encrypt and store (write-only)."""
+    plaintext: String!
+    """Optional classification/kind tag for the secret."""
+    kind: String
+  ): CpEnvSecretRow! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Ingests a release manifest into cks_environment_versions, making the version deployable, and writes an audit entry. Use force to overwrite an existing row.
+  """
+  ingestEnvironmentVersion(input: IngestEnvironmentVersionInput!): CpEnvironmentVersionRow! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Cuts a new environment release from a cks-game-api git tag: ingests it as available and commits the manifest to the git ref. SIDE EFFECT: makes the version the new redeploy target and writes to GitHub. Use force to overwrite. Writes an audit entry.
+  """
+  publishEnvironmentReleaseFromGameApiTag(input: PublishEnvironmentReleaseFromGameApiTagInput!): CpPublishEnvironmentReleaseResult! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Yanks (withdraws) an environment version so it can no longer be deployed; existing environments are unaffected. Writes an audit entry. Returns true on success.
+  """
+  yankEnvironmentVersion(
+    """Environment version to yank, e.g. 'v0.1.4'."""
+    version: String!
+  ): Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar".
   """
@@ -3954,6 +4088,13 @@ type Mutation {
     """
     input: CreateGridInput!
   ): CreateGridResponse! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Delete a studio-created peer grid so its chunk box no longer blocks overlapping grid creation. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `gridId` is populated and `error` is NO_ERROR; on failure `gridId` is null and `error` is a UDP-style error code (e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN). The open-by-default world grid and any grid that still contains nested child grids cannot be deleted.
+  """
+  deleteGrid(
+    """The app and grid to delete."""
+    input: DeleteGridInput!
+  ): DeleteGridResponse! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Grant one or more runtime permission keys directly to a single user on a grid (writes the `grid_user_direct_grants` input table), then recompute that user's materialized effective ACL on the grid. The target user must already have active app access (otherwise this fails). Requires app-admin ('manage_apps'). Returns the user's full effective permission-key set on the grid. To grant by group/role instead of per-user, use `assignGroupToGrid`.
   """
@@ -4788,7 +4929,7 @@ input CreateEnvironmentInput {
   """Human-readable environment name (max 80 chars)."""
   displayName: String!
   """
-  Optional explicit slug for scripts/E2E. When omitted, the API generates an opaque e-{12} slug.
+  Optional explicit slug for scripts/E2E. When omitted, the API auto-assigns a short slug. Must fit Route 53 DNS limits for this tier (typically 11–16 characters when DBOS is enabled; up to 40 on legacy runner). Lowercase letters, numbers, and dashes only.
   """
   slug: String
   """
@@ -4845,6 +4986,18 @@ input CreateEnvironmentInput {
   Optional app ids to link to the new environment at creation. Each must be unique; omit or pass an empty list to link none.
   """
   appIds: [String!]
+  """
+  Buddy billing tier level from buddyBillingTiers. Defaults to tier 1 for dedicated environments.
+  """
+  buddyBillingTier: Int
+  """
+  GraphQL billing tier level from graphqlBillingTiers. Defaults to tier 1 for dedicated environments.
+  """
+  graphqlBillingTier: Int
+  """
+  Postgres billing tier level from postgresBillingTiers. Defaults to tier 1 for dedicated environments.
+  """
+  postgresBillingTier: Int
 }
 
 input DestroyEnvironmentInput {
@@ -4915,6 +5068,19 @@ input UpdateEnvironmentScalingInput {
   caddyFlavor: String
 }
 
+input UpdateEnvironmentBillingTiersInput {
+  """Organization id (BigInt) that owns the environment."""
+  orgId: BigInt!
+  """Slug of the environment whose billing tiers to update."""
+  slug: String!
+  """Buddy billing tier level from buddyBillingTiers."""
+  buddyBillingTier: Int
+  """GraphQL billing tier level from graphqlBillingTiers."""
+  graphqlBillingTier: Int
+  """Postgres billing tier level from postgresBillingTiers."""
+  postgresBillingTier: Int
+}
+
 input RedeployEnvironmentInput {
   orgId: BigInt!
   slug: String!
@@ -4978,12 +5144,6 @@ input PublishEnvironmentReleaseFromGameApiTagInput {
   gameApiTag: String!
   """Overwrite an existing environment version row if it already exists."""
   force: Boolean! = false
-}
-
-schema {
-  query: Query
-  mutation: Mutation
-  subscription: Subscription
 }
 
 type Avatar {
@@ -5230,6 +5390,9 @@ enum UdpErrorCode {
   GRID_OVERLAPS_EXISTING
   """The requested gamertag is already taken."""
   GAMERTAG_ALREADY_EXISTS
+  GRID_NOT_FOUND
+  CANNOT_DELETE_DEFAULT_WORLD_GRID
+  GRID_HAS_NESTED_CHILDREN
 }
 
 """
@@ -5646,6 +5809,18 @@ type CreateGridResponse {
   grid: Grid
   """
   A UDP-style error code (the same ErrorType enum the realtime/UDP servers use). NO_ERROR (0) means success; non-zero values describe the failure, e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS, or UNKNOWN_ERROR.
+  """
+  error: UdpErrorCode!
+}
+
+"""
+Result of deleteGrid. This is a hybrid result rather than a thrown error: inspect `error` first. When `error` is NO_ERROR the call succeeded and `gridId` is populated; otherwise `gridId` is null and `error` explains why.
+"""
+type DeleteGridResponse {
+  """The deleted grid id on success; null when `error` is non-zero."""
+  gridId: BigInt
+  """
+  A UDP-style error code (the same ErrorType enum the realtime/UDP servers use). NO_ERROR (0) means success; non-zero values describe the failure, e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN, or UNKNOWN_ERROR.
   """
   error: UdpErrorCode!
 }
@@ -6869,6 +7044,16 @@ input CreateGridInput {
 }
 
 """
+Identifies a studio-created grid to delete. The default open-by-default world grid and grids that still contain nested child grids cannot be removed.
+"""
+input DeleteGridInput {
+  """The app (tenant) that owns the grid."""
+  appId: BigInt!
+  """The grid to delete."""
+  gridId: BigInt!
+}
+
+"""
 Grant runtime permission keys directly to one user on one grid (writes the grid_user_direct_grants input table).
 """
 input GrantGridPermissionsInput {
@@ -7206,18 +7391,6 @@ input FunctionMutationInput {
   expression: String!
 }
 
-"""One named argument expression of a notify_* effect."""
-input NotificationArgInput {
-  """
-  Argument name (kind-specific: chunk_x, channel_id, payload, target_uuid, ...).
-  """
-  name: String!
-  """
-  Expression string (compiled to AST server-side; evaluated post-mutation).
-  """
-  expression: String!
-}
-
 """
 A declarative realtime notification the function emits via Buddy AFTER its transaction commits. Players and automations (NPCs) emit identically. Fenced by delivery mode (proximity / channel membership / target).
 """
@@ -7231,9 +7404,21 @@ input FunctionNotificationInput {
   """
   emitAs: String
   """
-  Named argument expressions. spatial: chunk_x/chunk_y/chunk_z required (+ event_type/state/distance/decay/source_uuid); channel: channel_id/payload required (+ sender_uuid); actor: target_uuid/chunk_x/chunk_y/chunk_z/payload required.
+  Named argument expressions. spatial: chunk_x/chunk_y/chunk_z required (+ event_type/state/distance/decay/source_uuid); channel: channel_id/payload required (+ sender_uuid); actor: target_uuid/payload required (+ chunk_x/y/z/source_uuid).
   """
   args: [NotificationArgInput!]!
+}
+
+"""One named argument expression of a notify_* effect."""
+input NotificationArgInput {
+  """
+  Argument name (kind-specific: chunk_x, channel_id, payload, target_uuid, ...).
+  """
+  name: String!
+  """
+  Expression string (compiled to AST server-side; evaluated post-mutation).
+  """
+  expression: String!
 }
 
 """

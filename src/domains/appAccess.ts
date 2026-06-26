@@ -3,6 +3,11 @@ import {
   AppAccessTiersDocument,
   MyAppAccessDocument,
   AppUserAccessByAppDocument,
+  AppUserAccessConnectionDocument,
+  RuntimePermissionsDocument,
+  AppGrantMemberCandidatesDocument,
+  ClaimFreeAppAccessDocument,
+  GrantMyAppAccessDocument,
   CreateAccessTierDocument,
   UpdateAccessTierDocument,
   ArchiveAccessTierDocument,
@@ -11,6 +16,12 @@ import {
   type AppAccessTiersQuery,
   type MyAppAccessQuery,
   type AppUserAccessByAppQuery,
+  type AppUserAccessConnectionQuery,
+  type AppUserAccessConnectionQueryVariables,
+  type RuntimePermissionsQuery,
+  type AppGrantMemberCandidatesQuery,
+  type ClaimFreeAppAccessMutation,
+  type GrantMyAppAccessMutation,
   type CreateAccessTierMutation,
   type UpdateAccessTierMutation,
   type ArchiveAccessTierMutation,
@@ -85,6 +96,91 @@ export class AppAccessAPI {
       offset: opts.offset,
     });
     return data.appUserAccessByApp;
+  }
+
+  /**
+   * Relay-style cursor pagination over an app's access grants — the preferred
+   * alternative to {@link usersByApp}. Page with `first` plus the previous
+   * page's `pageInfo.endCursor` as `after`; optional `status` filter. Requires
+   * the `manage_access_tiers` app permission. See
+   * https://docs.crowdedkingdoms.com/overview/pagination.
+   *
+   * @param args - `appId` plus optional `status`, `first`, and `after`.
+   * @returns An {@link AppUserAccessConnection}.
+   */
+  async usersByAppConnection(
+    args: AppUserAccessConnectionQueryVariables,
+  ): Promise<AppUserAccessConnectionQuery['appUserAccessConnection']> {
+    const data = await this.management.request(
+      AppUserAccessConnectionDocument,
+      args,
+    );
+    return data.appUserAccessConnection;
+  }
+
+  /**
+   * List every valid runtime permission key (e.g. `access`, `teleport`,
+   * `update_voxel_data`, `use_voice_chat`) that a tier or grid grant can
+   * reference. **Public.**
+   *
+   * @returns The runtime permission keys.
+   */
+  async runtimePermissions(): Promise<
+    RuntimePermissionsQuery['runtimePermissions']
+  > {
+    const data = await this.management.request(RuntimePermissionsDocument);
+    return data.runtimePermissions;
+  }
+
+  /**
+   * List org members eligible for a manual app-access grant (those without an
+   * active grant yet). Requires the `manage_access_tiers` app permission. Pair
+   * with {@link grant} to grant the chosen candidate.
+   *
+   * @param appId - Numeric app id.
+   * @returns The candidate users (id + email/gamertag where known).
+   */
+  async grantMemberCandidates(
+    appId: string,
+  ): Promise<AppGrantMemberCandidatesQuery['appGrantMemberCandidates']> {
+    const data = await this.management.request(
+      AppGrantMemberCandidatesDocument,
+      { appId },
+    );
+    return data.appGrantMemberCandidates;
+  }
+
+  /**
+   * Self-service: claim the app's free/default tier for the authenticated
+   * caller (no admin permission required). Use when an app exposes a free tier
+   * a player can opt into themselves.
+   *
+   * @param appId - Numeric app id.
+   * @returns The caller's new {@link AppUserAccess} record.
+   */
+  async claimFree(
+    appId: string,
+  ): Promise<ClaimFreeAppAccessMutation['claimFreeAppAccess']> {
+    const data = await this.management.request(ClaimFreeAppAccessDocument, {
+      appId,
+    });
+    return data.claimFreeAppAccess;
+  }
+
+  /**
+   * Self-grant access to an app via its default tier for the authenticated
+   * caller, when the caller is an org member of the app's owning org.
+   *
+   * @param appId - Numeric app id.
+   * @returns The caller's new {@link AppUserAccess} record.
+   */
+  async grantMine(
+    appId: string,
+  ): Promise<GrantMyAppAccessMutation['grantMyAppAccess']> {
+    const data = await this.management.request(GrantMyAppAccessDocument, {
+      appId,
+    });
+    return data.grantMyAppAccess;
   }
 
   /**

@@ -13,6 +13,9 @@ import {
   VoxelUpdateHistoryDocument,
   type VoxelUpdateHistoryQuery,
   type VoxelUpdateHistoryQueryVariables,
+  VoxelUpdateHistoryConnectionDocument,
+  type VoxelUpdateHistoryConnectionQuery,
+  type VoxelUpdateHistoryConnectionQueryVariables,
   RollbackVoxelUpdatesDocument,
   type RollbackVoxelUpdatesMutation,
   type RollbackVoxelUpdatesMutationVariables,
@@ -132,6 +135,29 @@ export class VoxelsAPI {
   ): Promise<VoxelUpdateHistoryQuery['voxelUpdateHistory']> {
     const data = await this.gql.request(VoxelUpdateHistoryDocument, args);
     return data.voxelUpdateHistory;
+  }
+
+  /**
+   * Relay-style cursor pagination over the immutable voxel edit history — the
+   * preferred alternative to {@link history} for large histories. Page with
+   * `first` plus the previous page's `pageInfo.endCursor` as `after`; the
+   * `appId` is required and `userId`/`from`/`to` filters are optional. See
+   * https://docs.crowdedkingdoms.com/overview/pagination.
+   *
+   * @param args - `appId` plus optional `userId`/`from`/`to` filters and
+   *   `first`/`after` cursor paging.
+   * @returns A {@link VoxelUpdateHistoryConnection} (`edges { cursor node }`,
+   *   `pageInfo`, `totalCount`).
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN`.
+   */
+  async historyConnection(
+    args: VoxelUpdateHistoryConnectionQueryVariables
+  ): Promise<VoxelUpdateHistoryConnectionQuery['voxelUpdateHistoryConnection']> {
+    const data = await this.gql.request(
+      VoxelUpdateHistoryConnectionDocument,
+      args,
+    );
+    return data.voxelUpdateHistoryConnection;
   }
 
   /**

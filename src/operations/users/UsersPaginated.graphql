@@ -21,3 +21,32 @@ query UsersPaginated($query: String, $limit: Int, $offset: Int) {
     }
   }
 }
+
+query UsersConnection($first: Int, $after: String, $query: String) {
+  usersConnection(first: $first, after: $after, query: $query) {
+    edges {
+      cursor
+      node {
+        userId
+        email
+        gamertag
+        disambiguation
+        isConfirmed
+        createdAt
+        grantEarlyAccess
+        grantEarlyAccessOverride
+        orgId
+        externalId
+        userType
+        isSuperAdmin
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

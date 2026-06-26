@@ -1,0 +1,14 @@
+mutation ClaimFreeAppAccess($appId: BigInt!) {
+  claimFreeAppAccess(appId: $appId) {
+    appUserAccessId
+    appId
+    userId
+    tierId
+    status
+    grantedBy
+    subscriptionId
+    expiresAt
+    createdAt
+    updatedAt
+  }
+}

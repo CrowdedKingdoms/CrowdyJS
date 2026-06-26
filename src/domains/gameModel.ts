@@ -72,6 +72,33 @@ import {
   GameModelTypeSchemaDocument,
   type GameModelTypeSchemaQuery,
   type GameModelTypeSchemaQueryVariables,
+  GameModelContainerTypesDocument,
+  type GameModelContainerTypesQuery,
+  type GameModelContainerTypesQueryVariables,
+  GameModelPropertyDefsDocument,
+  type GameModelPropertyDefsQuery,
+  type GameModelPropertyDefsQueryVariables,
+  GameModelFunctionDocument,
+  type GameModelFunctionQuery,
+  type GameModelFunctionQueryVariables,
+  GameModelFunctionsDocument,
+  type GameModelFunctionsQuery,
+  type GameModelFunctionsQueryVariables,
+  GameModelFeaturesDocument,
+  type GameModelFeaturesQuery,
+  type GameModelFeaturesQueryVariables,
+  GameModelTierFeaturesDocument,
+  type GameModelTierFeaturesQuery,
+  type GameModelTierFeaturesQueryVariables,
+  GameModelPolicyDocument,
+  type GameModelPolicyQuery,
+  type GameModelPolicyQueryVariables,
+  GameModelRevokeTierFeatureDocument,
+  type GameModelRevokeTierFeatureMutation,
+  type GameModelRevokeTierFeatureMutationVariables,
+  GameModelEventsConnectionDocument,
+  type GameModelEventsConnectionQuery,
+  type GameModelEventsConnectionQueryVariables,
   // Automations (autonomous processes / NPCs)
   GameModelUpsertAutomationDocument,
   type GameModelUpsertAutomationMutation,
@@ -492,6 +519,28 @@ export class GameModelAPI {
     return data.gameModelEvents;
   }
 
+  /**
+   * **Events** — Relay-style cursor pagination over the function-invocation
+   * event log; the preferred alternative to {@link events} for large logs. Page
+   * with `first` plus the previous page's `pageInfo.endCursor` as `after`. See
+   * https://docs.crowdedkingdoms.com/overview/pagination.
+   *
+   * @param variables - `{ appId, first?, after?, sessionId?, selfContainerId?,
+   *   functionName?, success? }`.
+   * @returns A {@link GameModelEventsConnection} (`edges { cursor node }`,
+   *   `pageInfo`, `totalCount`).
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`.
+   */
+  async eventsConnection(
+    variables: GameModelEventsConnectionQueryVariables,
+  ): Promise<GameModelEventsConnectionQuery['gameModelEventsConnection']> {
+    const data = await this.gql.request(
+      GameModelEventsConnectionDocument,
+      variables,
+    );
+    return data.gameModelEventsConnection;
+  }
+
   // -- Studio authoring -------------------------------------------------------
 
   /**
@@ -699,6 +748,134 @@ export class GameModelAPI {
   ): Promise<GameModelTypeSchemaQuery['gameModelTypeSchema']> {
     const data = await this.gql.request(GameModelTypeSchemaDocument, variables);
     return data.gameModelTypeSchema;
+  }
+
+  /**
+   * **Container types** — list every container type defined for an app. A
+   * studio/authoring read. Requires the app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId }`.
+   * @returns The app's {@link GmContainerType}s.
+   */
+  async containerTypes(
+    variables: GameModelContainerTypesQueryVariables,
+  ): Promise<GameModelContainerTypesQuery['gameModelContainerTypes']> {
+    const data = await this.gql.request(
+      GameModelContainerTypesDocument,
+      variables,
+    );
+    return data.gameModelContainerTypes;
+  }
+
+  /**
+   * **Property definitions** — list the property definitions for one container
+   * type. A studio/authoring read. Requires the app-admin **`manage_apps`**
+   * permission.
+   *
+   * @param variables - `{ appId, typeName }`.
+   * @returns The type's {@link GmPropertyDef}s.
+   */
+  async propertyDefs(
+    variables: GameModelPropertyDefsQueryVariables,
+  ): Promise<GameModelPropertyDefsQuery['gameModelPropertyDefs']> {
+    const data = await this.gql.request(
+      GameModelPropertyDefsDocument,
+      variables,
+    );
+    return data.gameModelPropertyDefs;
+  }
+
+  /**
+   * **Functions** — fetch one studio-defined function by name (including its
+   * parameters, mutations, and notification effects). Requires the app-admin
+   * **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, name }`.
+   * @returns The {@link GmFunction}.
+   */
+  async getFunction(
+    variables: GameModelFunctionQueryVariables,
+  ): Promise<GameModelFunctionQuery['gameModelFunction']> {
+    const data = await this.gql.request(GameModelFunctionDocument, variables);
+    return data.gameModelFunction;
+  }
+
+  /**
+   * **Functions** — list studio-defined functions for an app, optionally
+   * filtered to those bound to a container type. Requires the app-admin
+   * **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, containerTypeName? }`.
+   * @returns The matching {@link GmFunction}s.
+   */
+  async functions(
+    variables: GameModelFunctionsQueryVariables,
+  ): Promise<GameModelFunctionsQuery['gameModelFunctions']> {
+    const data = await this.gql.request(GameModelFunctionsDocument, variables);
+    return data.gameModelFunctions;
+  }
+
+  /**
+   * **App features** — list the feature keys defined for an app. Requires the
+   * app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId }`.
+   * @returns The app's {@link GmAppFeature}s.
+   */
+  async features(
+    variables: GameModelFeaturesQueryVariables,
+  ): Promise<GameModelFeaturesQuery['gameModelFeatures']> {
+    const data = await this.gql.request(GameModelFeaturesDocument, variables);
+    return data.gameModelFeatures;
+  }
+
+  /**
+   * **App features** — list tier→feature grants for an app, optionally filtered
+   * to one tier. Requires the app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, tierId? }`.
+   * @returns The {@link GmTierFeature} grants.
+   */
+  async tierFeatures(
+    variables: GameModelTierFeaturesQueryVariables,
+  ): Promise<GameModelTierFeaturesQuery['gameModelTierFeatures']> {
+    const data = await this.gql.request(
+      GameModelTierFeaturesDocument,
+      variables,
+    );
+    return data.gameModelTierFeatures;
+  }
+
+  /**
+   * **App features** — revoke a feature key from an access tier (the inverse of
+   * {@link grantTierFeature}). Requires the app-admin **`manage_apps`**
+   * permission.
+   *
+   * @param input - {@link GrantTierFeatureInput} (`appId`, `tierId`, `featureKey`).
+   * @returns `true` if a grant was removed.
+   */
+  async revokeTierFeature(
+    input: GameModelRevokeTierFeatureMutationVariables['input'],
+  ): Promise<GameModelRevokeTierFeatureMutation['gameModelRevokeTierFeature']> {
+    const data = await this.gql.request(GameModelRevokeTierFeatureDocument, {
+      input,
+    });
+    return data.gameModelRevokeTierFeature;
+  }
+
+  /**
+   * **Policy** — read the app's game-model runtime policy (session-creation
+   * policy + default participant role). Requires the app-admin **`manage_apps`**
+   * permission.
+   *
+   * @param variables - `{ appId }`.
+   * @returns The {@link GmAppPolicy}.
+   */
+  async policy(
+    variables: GameModelPolicyQueryVariables,
+  ): Promise<GameModelPolicyQuery['gameModelPolicy']> {
+    const data = await this.gql.request(GameModelPolicyDocument, variables);
+    return data.gameModelPolicy;
   }
 
   // -- Automations (autonomous processes / NPCs) ------------------------------

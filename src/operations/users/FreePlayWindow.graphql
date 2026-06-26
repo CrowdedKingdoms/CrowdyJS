@@ -1,0 +1,7 @@
+query FreePlayWindow {
+  freePlayWindowInfo {
+    isCurrentlyActive
+    description
+    nextWindowStart
+  }
+}

@@ -65,6 +65,13 @@ mutation CreateGrid($input: CreateGridInput!) {
   }
 }
 
+mutation DeleteGrid($input: DeleteGridInput!) {
+  deleteGrid(input: $input) {
+    gridId
+    error
+  }
+}
+
 mutation GrantGridPermissions($input: GrantGridPermissionsInput!) {
   grantGridPermissions(input: $input) {
     appId

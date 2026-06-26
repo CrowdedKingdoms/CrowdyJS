@@ -5,6 +5,7 @@ import {
   GridPermissionLimitsDocument,
   GridGroupGrantsDocument,
   CreateGridDocument,
+  DeleteGridDocument,
   GrantGridPermissionsDocument,
   RevokeGridPermissionsDocument,
   SetGridPermissionLimitsDocument,
@@ -15,6 +16,7 @@ import {
   type GridPermissionLimitsQuery,
   type GridGroupGrantsQuery,
   type CreateGridMutation,
+  type DeleteGridMutation,
   type GrantGridPermissionsMutation,
   type RevokeGridPermissionsMutation,
   type SetGridPermissionLimitsMutation,
@@ -22,6 +24,7 @@ import {
   type RevokeGroupFromGridMutation,
   type NearbyGridPermissionsInput,
   type CreateGridInput,
+  type DeleteGridInput,
   type GrantGridPermissionsInput,
   type RevokeGridPermissionsInput,
   type SetGridPermissionLimitsInput,
@@ -132,6 +135,25 @@ export class GameAppsAPI {
   ): Promise<CreateGridMutation['createGrid']> {
     const data = await this.graphql.request(CreateGridDocument, { input });
     return data.createGrid;
+  }
+
+  /**
+   * Delete a studio-created peer grid so its chunk box no longer blocks
+   * overlapping grid creation. Returns a hybrid response: on success `gridId`
+   * is set and `error` is `NO_ERROR`; on failure `gridId` is `null` and `error`
+   * is a UDP-style code (e.g. `GRID_NOT_FOUND`,
+   * `CANNOT_DELETE_DEFAULT_WORLD_GRID`, `GRID_HAS_NESTED_CHILDREN`). The
+   * open-by-default world grid and any grid that still contains nested child
+   * grids cannot be deleted.
+   *
+   * @param input - {@link DeleteGridInput} (the app + grid id to delete).
+   * @returns The delete-grid result.
+   */
+  async deleteGrid(
+    input: DeleteGridInput,
+  ): Promise<DeleteGridMutation['deleteGrid']> {
+    const data = await this.graphql.request(DeleteGridDocument, { input });
+    return data.deleteGrid;
   }
 
   /**

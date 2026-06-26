@@ -119,3 +119,61 @@ query GameModelTypeSchema($appId: BigInt!, $typeName: String!) {
     }
   }
 }
+
+query GameModelContainerTypes($appId: BigInt!) {
+  gameModelContainerTypes(appId: $appId) {
+    appId
+    typeName
+    displayName
+    description
+    instantiableBy
+    defaultPropertyVisibility
+    metadataJson
+  }
+}
+
+query GameModelPropertyDefs($appId: BigInt!, $typeName: String!) {
+  gameModelPropertyDefs(appId: $appId, typeName: $typeName) {
+    ...GmPropertyDefFields
+  }
+}
+
+query GameModelFunction($appId: BigInt!, $name: String!) {
+  gameModelFunction(appId: $appId, name: $name) {
+    ...GmFunctionFields
+  }
+}
+
+query GameModelFunctions($appId: BigInt!, $containerTypeName: String) {
+  gameModelFunctions(appId: $appId, containerTypeName: $containerTypeName) {
+    ...GmFunctionFields
+  }
+}
+
+query GameModelFeatures($appId: BigInt!) {
+  gameModelFeatures(appId: $appId) {
+    appId
+    featureKey
+    description
+  }
+}
+
+query GameModelTierFeatures($appId: BigInt!, $tierId: BigInt) {
+  gameModelTierFeatures(appId: $appId, tierId: $tierId) {
+    appId
+    tierId
+    featureKey
+  }
+}
+
+query GameModelPolicy($appId: BigInt!) {
+  gameModelPolicy(appId: $appId) {
+    appId
+    sessionCreationPolicy
+    defaultParticipantRole
+  }
+}
+
+mutation GameModelRevokeTierFeature($input: GrantTierFeatureInput!) {
+  gameModelRevokeTierFeature(input: $input)
+}

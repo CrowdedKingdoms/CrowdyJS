@@ -1,0 +1,34 @@
+query BuddyBillingTiers {
+  buddyBillingTiers {
+    tierLevel
+    messagesPerSecond
+    bandwidthMbitPerSecond
+    chargeCents
+    currency
+    label
+    description
+  }
+}
+
+query GraphqlBillingTiers {
+  graphqlBillingTiers {
+    tierLevel
+    endpointCallsPerSecond
+    bandwidthMbitPerSecond
+    chargeCents
+    currency
+    label
+    description
+  }
+}
+
+query PostgresBillingTiers {
+  postgresBillingTiers {
+    tierLevel
+    bandwidthMbitPerSecond
+    chargeCents
+    currency
+    label
+    description
+  }
+}

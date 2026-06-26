@@ -1,0 +1,7 @@
+mutation SetOperator($userId: BigInt!, $value: Boolean!) {
+  setOperator(userId: $userId, value: $value) {
+    userId
+    isOperator
+    isSuperAdmin
+  }
+}
