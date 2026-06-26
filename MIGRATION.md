@@ -1,3 +1,28 @@
+# CrowdyJS 1.0.0 — npm org rename
+
+The package moved to the **`@crowdedkingdoms`** npm organization and its version
+line was reset:
+
+- **Old:** `@crowdedkingdomstudios/crowdyjs@6.1.0`
+- **New:** `@crowdedkingdoms/crowdyjs@1.0.0` — **identical code**, new package name.
+
+To upgrade, change your install and imports:
+
+```bash
+npm uninstall @crowdedkingdomstudios/crowdyjs
+npm install @crowdedkingdoms/crowdyjs
+```
+
+```ts
+// before: import { createCrowdyClient } from '@crowdedkingdomstudios/crowdyjs';
+import { createCrowdyClient } from '@crowdedkingdoms/crowdyjs';
+// generated docs export likewise: '@crowdedkingdoms/crowdyjs/generated'
+```
+
+No API, behavior, or type changes vs `@crowdedkingdomstudios/crowdyjs@6.1.0`. The
+old package is deprecated and points here. The notes below (kept for history)
+describe the feature set as of the former 6.x line, which `1.0.0` ships as-is.
+
 # CrowdyJS v6.1 Notes
 
 v6.1 is **additive** — new methods and fields only, no breaking changes. It
@@ -207,7 +232,7 @@ CrowdyJS v3 is a breaking rewrite focused on browser game clients.
 - Use `client.udp.disconnect()` instead of `client.disconnectUdpProxy()`.
 - Use `client.session` for token restore, manual token injection, and token persistence.
 - Use `client.realtime.onStatus()` for connection state and reconnect visibility.
-- Import generated operation documents from `@crowdedkingdomstudios/crowdyjs/generated`.
+- Import generated operation documents from `@crowdedkingdoms/crowdyjs/generated`.
 
 ## API Field Renames
 
