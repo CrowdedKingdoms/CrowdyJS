@@ -24,3 +24,40 @@ query Checkouts($filter: CheckoutFilterInput, $limit: Int, $offset: Int) {
     }
   }
 }
+
+query CheckoutsConnection(
+  $first: Int
+  $after: String
+  $filter: CheckoutFilterInput
+) {
+  checkoutsConnection(first: $first, after: $after, filter: $filter) {
+    edges {
+      cursor
+      node {
+        checkoutId
+        userId
+        provider
+        purpose
+        status
+        amountCents
+        currency
+        externalId
+        externalUrl
+        orgId
+        appId
+        tierId
+        error
+        createdAt
+        completedAt
+        expiresAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

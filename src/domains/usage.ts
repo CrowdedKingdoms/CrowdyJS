@@ -5,11 +5,13 @@ import {
   EnvironmentUsageByAppDocument,
   AppGraphqlOperationsDocument,
   AppUsageSummaryDocument,
+  PlayerPulseDocument,
   type EnvironmentUsageSummaryQuery,
   type OrgUsageByEnvironmentQuery,
   type EnvironmentUsageByAppQuery,
   type AppGraphqlOperationsQuery,
   type AppUsageSummaryQuery,
+  type PlayerPulseQuery,
 } from '../generated/graphql.js';
 
 /**
@@ -133,5 +135,21 @@ export class UsageAPI {
       operationLimit,
     });
     return data.appUsageSummary;
+  }
+
+  /**
+   * Live concurrent-player "pulse" for an org: current and all-time-peak
+   * concurrents for the org, the site-wide live total (aggregate only), and the
+   * org's percentile within the studio pool. Requires the `view_usage` org
+   * permission.
+   *
+   * @param orgId - Numeric org id.
+   * @returns The {@link PlayerPulse} snapshot.
+   */
+  async playerPulse(
+    orgId: string,
+  ): Promise<PlayerPulseQuery['playerPulse']> {
+    const data = await this.management.request(PlayerPulseDocument, { orgId });
+    return data.playerPulse;
   }
 }

@@ -1,3 +1,42 @@
+# CrowdyJS v6.1 Notes
+
+v6.1 is **additive** — new methods and fields only, no breaking changes. It
+completes the "full-surface" goal so every non-deprecated public root field on
+both APIs now has a typed SDK method, and adds Relay cursor-pagination variants
+alongside the existing offset list methods.
+
+## Added
+
+- **Grids**: `client.gameApps.deleteGrid(input)` (also `client.admin.grids.deleteGrid`)
+  — delete a studio-created peer grid (game-api `deleteGrid`, requires
+  `cks-game-api >= v0.12.3`).
+- **Game model (studio reads + revoke)**: `client.gameModel.containerTypes`,
+  `propertyDefs`, `getFunction`, `functions`, `features`, `tierFeatures`,
+  `policy`, and `revokeTierFeature`.
+- **Management admin reads/mutations**: `client.users.{get, paginated, setOperator,
+  setSuperAdmin, setEarlyAccessOverride, updateType, forceLogout, updateState,
+  freePlayWindow}`; `client.organizations.memberRoles`;
+  `client.appAccess.{runtimePermissions, grantMemberCandidates, claimFree, grantMine}`;
+  `client.apps.marketplace`; `client.billing.{buddyTiers, graphqlTiers,
+  postgresTiers}`; `client.environments.updateBillingTiers`;
+  `client.payments.{capturePaypal, events}`; `client.usage.playerPulse`.
+- **Relay `*Connection` variants** (preferred over the deprecated offset lists):
+  `client.actors.listConnection`, `client.voxels.historyConnection`,
+  `client.gameModel.eventsConnection`, `client.users.listConnection`,
+  `client.apps.marketplaceConnection`, `client.appAccess.usersByAppConnection`,
+  `client.billing.walletTransactionsConnection`,
+  `client.payments.{mineConnection, allConnection, eventsConnection}`.
+- **New fields on existing operations**: `environmentQuote` /
+  `orgEnvironment(s)` now return `environmentClass` + `singleBoxFlavor`;
+  `appUsageSummary` now returns `automationRuns` / `automationInvocations` /
+  `automationComputeUnits`.
+
+## Server compatibility
+
+`deleteGrid` requires a server on release **v0.1.33+** (`cks-game-api >= v0.12.3`).
+The new management fields require `cks-management-api` recent enough to expose them.
+All additions are backward compatible at the SDK API level.
+
 # CrowdyJS v6 Notes
 
 v6 is **additive** at the SDK API level (new sub-clients only) but is a **scope

@@ -12,3 +12,34 @@ query WalletTransactions($orgId: BigInt!, $limit: Int, $offset: Int) {
     createdAt
   }
 }
+
+query WalletTransactionsConnection(
+  $orgId: BigInt!
+  $first: Int
+  $after: String
+) {
+  walletTransactionsConnection(orgId: $orgId, first: $first, after: $after) {
+    edges {
+      cursor
+      node {
+        transactionId
+        walletId
+        orgId
+        amountCents
+        balanceAfter
+        transactionType
+        description
+        referenceId
+        appId
+        createdAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

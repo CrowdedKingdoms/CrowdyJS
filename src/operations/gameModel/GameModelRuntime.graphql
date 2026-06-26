@@ -177,3 +177,49 @@ query GameModelEvents(
     executedAt
   }
 }
+
+query GameModelEventsConnection(
+  $appId: BigInt!
+  $first: Int
+  $after: String
+  $sessionId: String
+  $selfContainerId: String
+  $functionName: String
+  $success: Boolean
+) {
+  gameModelEventsConnection(
+    appId: $appId
+    first: $first
+    after: $after
+    sessionId: $sessionId
+    selfContainerId: $selfContainerId
+    functionName: $functionName
+    success: $success
+  ) {
+    edges {
+      cursor
+      node {
+        eventId
+        sessionId
+        functionName
+        selfContainerId
+        callerUserId
+        callerKind
+        automationId
+        paramsJson
+        mutationsAppliedJson
+        returnValueJson
+        success
+        errorMessage
+        executedAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

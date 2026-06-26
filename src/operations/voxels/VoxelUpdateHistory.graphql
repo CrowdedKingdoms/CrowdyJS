@@ -32,3 +32,50 @@ query VoxelUpdateHistory(
     changedAt
   }
 }
+
+query VoxelUpdateHistoryConnection(
+  $appId: BigInt!
+  $userId: BigInt
+  $from: DateTime
+  $to: DateTime
+  $first: Int
+  $after: String
+) {
+  voxelUpdateHistoryConnection(
+    appId: $appId
+    userId: $userId
+    from: $from
+    to: $to
+    first: $first
+    after: $after
+  ) {
+    edges {
+      cursor
+      node {
+        id
+        appId
+        coordinates {
+          x
+          y
+          z
+        }
+        location {
+          x
+          y
+          z
+        }
+        oldVoxelType
+        newVoxelType
+        changedBy
+        changedAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

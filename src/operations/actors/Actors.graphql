@@ -14,3 +14,32 @@ query Actors($filter: ActorFilterInput) {
     createdAt
   }
 }
+
+query ActorsConnection($first: Int, $after: String, $filter: ActorFilterInput) {
+  actorsConnection(first: $first, after: $after, filter: $filter) {
+    edges {
+      cursor
+      node {
+        uuid
+        appId
+        userId
+        avatarId
+        chunk {
+          x
+          y
+          z
+        }
+        privateState
+        publicState
+        createdAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

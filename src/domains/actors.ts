@@ -7,6 +7,9 @@ import {
   ActorsDocument,
   type ActorsQuery,
   type ActorsQueryVariables,
+  ActorsConnectionDocument,
+  type ActorsConnectionQuery,
+  type ActorsConnectionQueryVariables,
   BatchLookupActorsDocument,
   type BatchLookupActorsQuery,
   type BatchLookupActorsQueryVariables,
@@ -72,6 +75,24 @@ export class ActorsAPI {
   async list(filter?: ActorsQueryVariables['filter']): Promise<ActorsQuery['actors']> {
     const data = await this.gql.request(ActorsDocument, { filter });
     return data.actors;
+  }
+
+  /**
+   * Relay-style cursor pagination over the caller's actors — the preferred
+   * alternative to {@link list} for large result sets. Page with `first` plus
+   * the previous page's `pageInfo.endCursor` as `after`; `filter` fields are
+   * ANDed together. See https://docs.crowdedkingdoms.com/overview/pagination.
+   *
+   * @param args - Optional `first` (default 50, max 200), `after` cursor, and
+   *   {@link ActorFilterInput}.
+   * @returns An {@link ActorsConnection} (`edges { cursor node }`, `pageInfo`,
+   *   `totalCount`).
+   */
+  async listConnection(
+    args: ActorsConnectionQueryVariables = {}
+  ): Promise<ActorsConnectionQuery['actorsConnection']> {
+    const data = await this.gql.request(ActorsConnectionDocument, args);
+    return data.actorsConnection;
   }
 
   /**

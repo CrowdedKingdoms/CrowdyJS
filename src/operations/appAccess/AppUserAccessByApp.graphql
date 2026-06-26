@@ -22,3 +22,40 @@ query AppUserAccessByApp(
     updatedAt
   }
 }
+
+query AppUserAccessConnection(
+  $appId: BigInt!
+  $first: Int
+  $after: String
+  $status: String
+) {
+  appUserAccessConnection(
+    appId: $appId
+    first: $first
+    after: $after
+    status: $status
+  ) {
+    edges {
+      cursor
+      node {
+        appUserAccessId
+        appId
+        userId
+        tierId
+        status
+        grantedBy
+        subscriptionId
+        expiresAt
+        createdAt
+        updatedAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

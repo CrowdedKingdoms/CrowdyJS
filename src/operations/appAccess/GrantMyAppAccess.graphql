@@ -1,0 +1,14 @@
+mutation GrantMyAppAccess($appId: BigInt!) {
+  grantMyAppAccess(appId: $appId) {
+    appUserAccessId
+    appId
+    userId
+    tierId
+    status
+    grantedBy
+    subscriptionId
+    expiresAt
+    createdAt
+    updatedAt
+  }
+}

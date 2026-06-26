@@ -10,6 +10,8 @@ query EnvironmentQuote($input: EnvironmentQuoteInput!) {
     udpBuddyMinServers
     udpBuddyMaxServers
     loadBalancerCount
+    environmentClass
+    singleBoxFlavor
     hourlyCostCents
     firstDayReserveCents
     walletBalanceCents

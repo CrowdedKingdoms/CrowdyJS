@@ -15,6 +15,9 @@ query AppUsageSummary(
     replicationRecvBytes
     graphqlSendBytes
     graphqlRecvBytes
+    automationRuns
+    automationInvocations
+    automationComputeUnits
     topGraphqlOperations {
       operationName
       totalOps

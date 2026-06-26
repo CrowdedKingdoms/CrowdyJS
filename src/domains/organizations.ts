@@ -5,6 +5,7 @@ import {
   MyOrganizationsDocument,
   OrgMembersDocument,
   OrgRolesDocument,
+  MemberRolesDocument,
   OrgPermissionsDocument,
   OrgTokensDocument,
   CreateOrganizationDocument,
@@ -23,6 +24,7 @@ import {
   type MyOrganizationsQuery,
   type OrgMembersQuery,
   type OrgRolesQuery,
+  type MemberRolesQuery,
   type OrgPermissionsQuery,
   type OrgTokensQuery,
   type CreateOrganizationMutation,
@@ -126,6 +128,22 @@ export class OrganizationsAPI {
   async roles(orgId: string): Promise<OrgRolesQuery['orgRoles']> {
     const data = await this.management.request(OrgRolesDocument, { orgId });
     return data.orgRoles;
+  }
+
+  /**
+   * List the roles currently assigned to one organization member. Requires the
+   * `manage_members` org permission.
+   *
+   * @param orgMemberId - Numeric org-member id (`BigInt` as a decimal string).
+   * @returns The member's roles.
+   */
+  async memberRoles(
+    orgMemberId: string,
+  ): Promise<MemberRolesQuery['memberRoles']> {
+    const data = await this.management.request(MemberRolesDocument, {
+      orgMemberId,
+    });
+    return data.memberRoles;
   }
 
   /**

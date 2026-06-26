@@ -1,5 +1,7 @@
-query OrgEnvironments($orgId: BigInt!) {
-  orgEnvironments(orgId: $orgId) {
+mutation UpdateEnvironmentBillingTiers(
+  $input: UpdateEnvironmentBillingTiersInput!
+) {
+  updateEnvironmentBillingTiers(input: $input) {
     id
     orgId
     slug

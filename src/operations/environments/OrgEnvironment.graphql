@@ -8,6 +8,7 @@ query OrgEnvironment($orgId: BigInt!, $slug: String!) {
       status
       billingStatus
       environmentClass
+      singleBoxFlavor
       primaryRegion
       desiredEnvironmentVersion
       observedEnvironmentVersion

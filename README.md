@@ -10,7 +10,7 @@ npm install @crowdedkingdomstudios/crowdyjs
 
 CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must provide browser-compatible globals when opening realtime connections.
 
-> **Server compatibility:** v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define.
+> **Server compatibility:** v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define. v6.1's `client.gameApps.deleteGrid` additionally requires release **v0.1.33+** (`cks-game-api >= v0.12.3`).
 
 ## Quick start
 
@@ -62,7 +62,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.host` | Game-host election + actor liveness `heartbeat`. |
 | `client.teleport` | Teleport requests. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
-| `client.gameModel` | Abstract game model: containers, properties, functions, sessions. |
+| `client.gameModel` | Abstract game model: containers, properties, functions (incl. model-driven `notify_*` effects), sessions, and **automations / NPCs** (`upsertAutomation`, `runAutomation`, `automationRuns`, `automationStats`, …). |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
@@ -80,7 +80,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.environments` | Dedicated environments: quote, provision, scale, deploy, link apps. |
 | `client.usage` | Replication + GraphQL usage reporting. |
 | `client.sharedEnvironment` | Publish to shared, runtime gating, spend caps, auto-billing. |
-| `client.gameApps` | App grids + grid runtime-permission administration. |
+| `client.gameApps` | App grids (`createGrid` / `deleteGrid`) + grid runtime-permission administration. |
 
 **Operator surface** (platform operations; requires `is_operator`):
 
@@ -260,8 +260,10 @@ The key parameter is optional and trailing, so it's safe to omit. Requires a ser
 
 ## Surface scope & security
 
-As of v6, CrowdyJS wraps the **full** management-api + game-api public surface, not
-just the game-client subset. The surfaces are namespaced by audience:
+As of v6 (completed in v6.1), CrowdyJS wraps the **full** management-api + game-api
+public surface, not just the game-client subset — every non-deprecated public root
+field has a typed method, with Relay `*Connection` cursor-pagination variants
+alongside the legacy offset lists. The surfaces are namespaced by audience:
 
 - **Game-client** (`client.auth`, `client.users`, `client.udp`, `client.world(...)`,
   `client.chunks`/`voxels`/`actors`/`avatars`/`state`/`teleport`/`channels`/`teams`/
@@ -273,10 +275,10 @@ just the game-client subset. The surfaces are namespaced by audience:
 - **Operator** (`client.operator`) — platform control-plane operations that require
   `users.is_operator`. For internal operator tooling only.
 
-A few management mutations (e.g. `createApp`, game-token issuance/revocation) are still
-called against the management GraphQL API directly; everything else is a typed SDK
-method. The SDK never relaxes server-side authorization — exposing an operation here
-just gives you a typed wrapper; the caller still needs the right token and permission.
+The SDK never relaxes server-side authorization — exposing an operation here just
+gives you a typed wrapper; the caller still needs the right token and permission. For
+any brand-new server field not yet wrapped, the low-level escape hatch
+(`client.graphql.request(...)` / `client.management.request(...)`) always works.
 
 ## Low-level GraphQL access
 

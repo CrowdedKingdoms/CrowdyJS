@@ -1,0 +1,20 @@
+mutation CapturePaypalCheckout($orderId: String!, $idempotencyKey: String) {
+  capturePaypalCheckout(orderId: $orderId, idempotencyKey: $idempotencyKey) {
+    checkoutId
+    userId
+    provider
+    purpose
+    status
+    amountCents
+    currency
+    externalId
+    externalUrl
+    orgId
+    appId
+    tierId
+    error
+    createdAt
+    completedAt
+    expiresAt
+  }
+}

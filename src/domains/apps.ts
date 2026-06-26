@@ -4,6 +4,8 @@ import {
   AppBySlugDocument,
   MyAppsDocument,
   AppsForOrgDocument,
+  MarketplaceAppsDocument,
+  AppsConnectionDocument,
   CreateAppDocument,
   UpdateAppDocument,
   ArchiveAppDocument,
@@ -14,6 +16,10 @@ import {
   type AppBySlugQueryVariables,
   type MyAppsQuery,
   type AppsForOrgQuery,
+  type MarketplaceAppsQuery,
+  type MarketplaceAppsQueryVariables,
+  type AppsConnectionQuery,
+  type AppsConnectionQueryVariables,
   type CreateAppMutation,
   type UpdateAppMutation,
   type ArchiveAppMutation,
@@ -200,6 +206,42 @@ export class AppsAPI {
   async forOrg(orgSlug: string): Promise<AppsForOrgQuery['appsForOrg']> {
     const data = await this.management.request(AppsForOrgDocument, { orgSlug });
     return data.appsForOrg;
+  }
+
+  /**
+   * List the public marketplace apps (LIVE + PUBLIC only) with offset
+   * pagination. **Public** — no session required.
+   *
+   * @param opts - Optional {@link AppMarketplaceFilterInput} `filter` and
+   *   `limit` / `offset`.
+   * @returns A page of marketplace apps.
+   * @remarks Prefer {@link marketplaceConnection} (Relay cursor pagination) for
+   *   large catalogs; the offset args here are deprecated server-side.
+   */
+  async marketplace(
+    opts: {
+      filter?: MarketplaceAppsQueryVariables['filter'];
+      limit?: MarketplaceAppsQueryVariables['limit'];
+      offset?: MarketplaceAppsQueryVariables['offset'];
+    } = {},
+  ): Promise<MarketplaceAppsQuery['apps']> {
+    const data = await this.management.request(MarketplaceAppsDocument, opts);
+    return data.apps;
+  }
+
+  /**
+   * Relay-style cursor pagination over the public marketplace — the preferred
+   * alternative to {@link marketplace}. **Public.** See
+   * https://docs.crowdedkingdoms.com/overview/pagination.
+   *
+   * @param args - Optional `first`, `after`, and {@link AppMarketplaceFilterInput}.
+   * @returns An apps connection.
+   */
+  async marketplaceConnection(
+    args: AppsConnectionQueryVariables = {},
+  ): Promise<AppsConnectionQuery['appsConnection']> {
+    const data = await this.management.request(AppsConnectionDocument, args);
+    return data.appsConnection;
   }
 
   /**
