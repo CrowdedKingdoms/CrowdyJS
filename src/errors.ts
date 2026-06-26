@@ -15,7 +15,7 @@
  *
  * @example
  * ```ts
- * import { CrowdyGraphQLError, CrowdyTimeoutError } from '@crowdedkingdomstudios/crowdyjs';
+ * import { CrowdyGraphQLError, CrowdyTimeoutError } from '@crowdedkingdoms/crowdyjs';
  * try {
  *   await client.actors.delete(uuid, key);
  * } catch (err) {

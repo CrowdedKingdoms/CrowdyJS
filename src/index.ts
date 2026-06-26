@@ -16,7 +16,7 @@
  *
  * Usage:
  *
- *   import { CrowdyClient } from '@crowdedkingdomstudios/crowdyjs';
+ *   import { CrowdyClient } from '@crowdedkingdoms/crowdyjs';
  *
  *   const client = new CrowdyClient({
  *     httpUrl: 'https://dev-game-api.crowdedkingdoms.com',
@@ -42,7 +42,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '6.1.0';
+export const VERSION = '1.0.0';
 
 export {
   CrowdyClient,
