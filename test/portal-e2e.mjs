@@ -109,13 +109,17 @@ async function main() {
   const oldMe = await gql(MGMT, Q.me, {}, aPrime?.token);
   log(!oldMe.data?.me, '8c. the rotated-out token is revoked (me rejected)', code(oldMe) ?? '');
 
-  // 9. expiry enforced (mint, expire in DB, then use)
-  const e = (await gql(MGMT, Q.mint, { i: { appId: APP_A } }, session)).data?.mintAppToken;
-  execSync(`sudo -u postgres psql -d cks_management -c "UPDATE game_tokens SET expires_at = now() - interval '5 minutes' WHERE token = '${e.token}';"`, { stdio: 'ignore' });
-  const expBoot = await gql(GAME, Q.bootstrap, { a: APP_A }, e.token);
-  log(!expBoot.data?.gameClientBootstrap, '9a. an expired app token is rejected for gameplay', code(expBoot) ?? '');
-  const expMe = await gql(MGMT, Q.me, {}, e.token);
-  log(!expMe.data?.me, '9b. an expired app token is rejected on the management plane');
+  // 9. expiry enforced (mint, expire in DB, then use). Only when the management
+  // DB is locally reachable (builder smoke stack); skipped for remote envs where
+  // expiry is validated separately via portal-mgmt-test.
+  if (process.env.PORTAL_E2E_LOCAL_DB === '1') {
+    const e = (await gql(MGMT, Q.mint, { i: { appId: APP_A } }, session)).data?.mintAppToken;
+    execSync(`sudo -u postgres psql -d cks_management -c "UPDATE game_tokens SET expires_at = now() - interval '5 minutes' WHERE token = '${e.token}';"`, { stdio: 'ignore' });
+    const expBoot = await gql(GAME, Q.bootstrap, { a: APP_A }, e.token);
+    log(!expBoot.data?.gameClientBootstrap, '9a. an expired app token is rejected for gameplay', code(expBoot) ?? '');
+    const expMe = await gql(MGMT, Q.me, {}, e.token);
+    log(!expMe.data?.me, '9b. an expired app token is rejected on the management plane');
+  }
 
   // 10. logout cascades session -> child app tokens
   await gql(MGMT, Q.logout, {}, session);

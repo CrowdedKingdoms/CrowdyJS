@@ -42,7 +42,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '7.0.0';
+export const VERSION = '7.1.0';
 
 export {
   CrowdyClient,

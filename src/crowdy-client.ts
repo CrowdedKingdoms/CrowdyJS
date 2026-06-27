@@ -31,7 +31,7 @@ import { WorldClient } from './world.js';
 import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
 import { AppsAPI } from './domains/apps.js';
-import { PortalAPI } from './domains/portal.js';
+import { PortalAPI, type PkceStore } from './domains/portal.js';
 import { PlatformAPI } from './domains/platform.js';
 import { OrganizationsAPI } from './domains/organizations.js';
 import { AppAccessAPI } from './domains/appAccess.js';
@@ -91,6 +91,13 @@ export interface CrowdyClientConfig {
   tokenStore?: TokenStore;
   /** Optional logger for SDK diagnostics (request/realtime lifecycle). */
   logger?: CrowdyLogger;
+  /**
+   * Optional storage for the PKCE verifier across the portal redirect round-trip
+   * (`client.portal.beginEntry` -> `completeEntry`). Defaults to a
+   * sessionStorage-backed store in the browser; supply your own for SSR, native,
+   * or tests where sessionStorage is unavailable.
+   */
+  pkceStore?: PkceStore;
   /** Realtime (WebSocket) tuning for reconnect backoff and `...AndWait` timeouts. */
   realtime?: {
     /** Max reconnect attempts before giving up (default tuned for browsers). */
@@ -188,7 +195,8 @@ export class CrowdyClient {
     this.graphql = new GraphQLClient(
       {
         httpUrl: config.httpUrl,
-        graphqlEndpoint: config.graphqlEndpoint,
+        graphqlEndpoint:
+          config.graphqlEndpoint ?? toGraphqlEndpoint(config.httpUrl, 'graphql'),
         timeout: config.timeout,
         logger: config.logger,
       },
@@ -198,7 +206,8 @@ export class CrowdyClient {
     this.realtime = new SubscriptionManager(
       {
         wsUrl: config.wsUrl,
-        wsEndpoint: config.wsEndpoint,
+        wsEndpoint:
+          config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
         logger: config.logger,
         ...config.realtime,
       },
@@ -207,9 +216,8 @@ export class CrowdyClient {
 
     const managementGraphqlEndpoint =
       config.managementGraphqlEndpoint ??
-      (config.managementUrl
-        ? `${config.managementUrl.replace(/\/$/, '')}/graphql`
-        : config.graphqlEndpoint);
+      toGraphqlEndpoint(config.managementUrl, 'graphql') ??
+      config.graphqlEndpoint;
 
     // Management-api client. Falls back to game-api endpoint if the caller
     // hasn't configured `managementUrl` yet (single-endpoint legacy mode).
@@ -226,7 +234,7 @@ export class CrowdyClient {
     this.auth = new AuthAPI(this.management, this.session);
     this.users = new UsersAPI(this.management);
     this.apps = new AppsAPI(this.management);
-    this.portal = new PortalAPI(this.management, this.session);
+    this.portal = new PortalAPI(this.management, this.session, config.pkceStore);
     this.platform = new PlatformAPI(this.management);
     this.organizations = new OrganizationsAPI(this.management);
     this.appAccess = new AppAccessAPI(this.management);
@@ -298,4 +306,20 @@ export function createCrowdyClient(
   config: CrowdyClientConfig = {},
 ): CrowdyClient {
   return new CrowdyClient(config);
+}
+
+/**
+ * Normalize a base URL into a GraphQL endpoint. Accepts either a base origin
+ * (`https://game.example.com`) or a full endpoint already ending in `/graphql`
+ * (the historical form some callers pass as `httpUrl`/`wsUrl`), so the portal's
+ * `gameApiUrl` (a base URL) is usable directly. Returns undefined for empty input.
+ */
+function toGraphqlEndpoint(
+  url: string | undefined,
+  suffix: string,
+): string | undefined {
+  const trimmed = url?.trim();
+  if (!trimmed) return undefined;
+  const noSlash = trimmed.replace(/\/$/, '');
+  return noSlash.endsWith(`/${suffix}`) ? noSlash : `${noSlash}/${suffix}`;
 }
