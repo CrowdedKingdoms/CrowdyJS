@@ -1,10 +1,15 @@
-# CrowdyJS 1.0.0 — npm org rename
+# CrowdyJS — npm org rename (v6 version line kept)
 
-The package moved to the **`@crowdedkingdoms`** npm organization and its version
-line was reset:
+The package moved to the **`@crowdedkingdoms`** npm organization. The version line
+is **unchanged** — it continues the v6 series:
 
 - **Old:** `@crowdedkingdomstudios/crowdyjs@6.1.0`
-- **New:** `@crowdedkingdoms/crowdyjs@1.0.0` — **identical code**, new package name.
+- **New:** `@crowdedkingdoms/crowdyjs@6.1.1` — **identical code**, new package name.
+
+> During the org move the version was briefly reset to `1.0.0` / `1.0.1`. That was a
+> versioning mistake: the docs and the rest of the platform track the v6 line, so the
+> published SDK was restored to it. `6.1.1` (which is `latest`) supersedes the `1.0.x`
+> publishes — those remain installable but are the *same code* as `6.1.1`.
 
 To upgrade, change your install and imports:
 
@@ -21,7 +26,7 @@ import { createCrowdyClient } from '@crowdedkingdoms/crowdyjs';
 
 No API, behavior, or type changes vs `@crowdedkingdomstudios/crowdyjs@6.1.0`. The
 old package is deprecated and points here. The notes below (kept for history)
-describe the feature set as of the former 6.x line, which `1.0.0` ships as-is.
+describe the feature set as of the 6.x line, which `6.1.1` ships as-is.
 
 # CrowdyJS v6.1 Notes
 
