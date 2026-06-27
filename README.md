@@ -8,7 +8,7 @@ The official browser-first TypeScript SDK for **Crowded Kingdoms**. CrowdyJS giv
 npm install @crowdedkingdoms/crowdyjs
 ```
 
-> **Renamed package.** This SDK moved to the `@crowdedkingdoms` npm org. `@crowdedkingdoms/crowdyjs@1.0.0` is the **same code** as the former `@crowdedkingdomstudios/crowdyjs@6.1.0` — only the package name changed. See [MIGRATION.md](MIGRATION.md).
+> **Renamed package, same version line.** This SDK moved to the `@crowdedkingdoms` npm org but **kept its v6 version line**. `@crowdedkingdoms/crowdyjs@6.1.1` continues directly from the former `@crowdedkingdomstudios/crowdyjs@6.1.0` — same code, new package name. (Two interim `1.0.x` publishes during the org move reset the version by mistake; they remain on npm but are superseded by `6.1.1`, which is `latest`.) See [MIGRATION.md](MIGRATION.md).
 
 CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must provide browser-compatible globals when opening realtime connections.
 
