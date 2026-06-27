@@ -260,6 +260,52 @@ The key parameter is optional and trailing, so it's safe to omit. Requires a ser
 - `client.session.restore()` reads from the configured `tokenStore`. `BrowserLocalStorageTokenStore` is provided; bring your own for SSR or Node usage.
 - A single `AuthState` is observed by both the HTTP client and the realtime socket, so HTTP and WebSocket auth can never drift.
 
+## Overworld portals & app-scoped tokens (v7)
+
+As of v7 gameplay requires an **app-scoped token**, not the login token. Login
+returns an **identity session token** (Management API only — account, studio
+admin, and minting); each game is entered with a short-lived token confined to
+that one app, so a game stack never receives the player's full session.
+
+Use two clients: an Overworld/identity client (session token) and a per-game
+client (app token), sharing only the Management URL.
+
+```ts
+// Overworld/identity client
+const overworld = createCrowdyClient({ managementUrl, tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:session') });
+await overworld.auth.login({ email, password });
+
+// Native / same-origin: mint directly, then build a game client.
+const t = await overworld.portal.mintAppToken(appId);
+const game = createCrowdyClient({ httpUrl: t.gameApiUrl!, wsUrl: t.gameApiWsUrl!, managementUrl,
+  tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:app:' + appId) });
+game.setToken(t.token);
+game.world(appId).subscribe({ actorUpdate: (n) => { /* ... */ } });
+```
+
+Browser cross-origin handoff is OAuth2 Authorization Code + PKCE — the verifier
+never leaves the game origin:
+
+```ts
+// Game origin, on "enter": redirect to the Overworld authorize page.
+location.assign(await game.portal.beginEntry({
+  appId, authorizeUrl: 'https://overworld.example.com/authorize',
+  redirectUri: location.origin + location.pathname,
+}));
+
+// Overworld /authorize page (holds the session token):
+location.assign(await overworld.portal.handleAuthorizeRequest());
+
+// Game origin, on callback boot: exchange code+verifier -> app token (stored).
+const entered = await game.portal.completeEntry();
+// Keep playing past expiry without re-portaling (same app):
+await game.portal.refresh();
+```
+
+Game-to-game routes through the Overworld for a fresh per-game token. New
+realtime codes: `APP_TOKEN_REQUIRED`, `APP_SCOPE_MISMATCH`; new `UdpErrorCode`:
+`TOKEN_EXPIRED`. See [MIGRATION.md](MIGRATION.md) for the full v7 breaking guide.
+
 ## Surface scope & security
 
 As of v6 (completed in v6.1), CrowdyJS wraps the **full** management-api + game-api

@@ -379,6 +379,25 @@ export enum AppStatus {
   Live = 'LIVE'
 }
 
+/** A short-lived, app-scoped gameplay token (Overworld portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session. */
+export type AppTokenResponse = {
+  __typename?: 'AppTokenResponse';
+  /** The app this token is confined to, as a String. */
+  appId: Scalars['String']['output'];
+  /** ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this, or re-portal through the Overworld for a different app. */
+  expiresAt: Scalars['String']['output'];
+  /** Base HTTPS URL of the Game API that serves this app (null if the app has no dedicated/shared game-api route yet). */
+  gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** WebSocket URL of the Game API that serves this app (wss://), for realtime subscriptions. */
+  gameApiWsUrl: Maybe<Scalars['String']['output']>;
+  /** Identifier of the underlying game_token row, as a String. */
+  gameTokenId: Scalars['String']['output'];
+  /** Browser launch URL for this app (where the player's browser plays it), if configured. */
+  launchUrl: Maybe<Scalars['String']['output']>;
+  /** Opaque app-scoped gameplay token. Send to the target app's Game API as `Authorization: Bearer <token>` (and in the realtime `connectionParams`). Do NOT send it to the Management API for anything other than `me`/`refreshAppToken`. */
+  token: Scalars['String']['output'];
+};
+
 /** Aggregate byte totals for one app over the requested window. All *Bytes fields are string counters (may exceed Int range). */
 export type AppUsageRollupRow = {
   __typename?: 'AppUsageRollupRow';
@@ -1805,6 +1824,18 @@ export type CreateOrganizationInput = {
   slug: Scalars['String']['input'];
 };
 
+/** Input for createPortalAuthorizationCode: the Overworld (identity origin, holding the session token) mints a one-time code the destination game exchanges for an app token. Browser handoff path; pair with a PKCE verifier held by the destination game origin. */
+export type CreatePortalAuthorizationCodeInput = {
+  /** Numeric id of the target app the player is portaling into. */
+  appId: Scalars['BigInt']['input'];
+  /** PKCE code challenge (recommended). Base64url(SHA-256(verifier)) when method is S256. The destination game generates the verifier+challenge so the verifier never leaves its origin. */
+  codeChallenge: Scalars['String']['input'];
+  /** PKCE method: "S256" (default, recommended) or "plain". */
+  codeChallengeMethod?: InputMaybe<Scalars['String']['input']>;
+  /** Where to redirect the player after issuing the code. Must match the target app's configured launch_url origin when set. */
+  redirectUri: Scalars['String']['input'];
+};
+
 /** Create a runtime session. */
 export type CreateSessionInput = {
   /** The app (tenant) the session belongs to. */
@@ -1933,6 +1964,14 @@ export type EnvironmentUsageSummary = {
   replication: Array<UsageMinuteRow>;
   /** Peak/average replication send rates. */
   replicationRates: UsageRatePeaks;
+};
+
+/** Input for exchangePortalCode: the destination game (public client) trades a one-time portal code for an app-scoped gameplay token. Public (the code + PKCE verifier authorize the call). */
+export type ExchangePortalCodeInput = {
+  /** The one-time authorization code received on the redirect. */
+  code: Scalars['String']['input'];
+  /** PKCE code verifier matching the challenge supplied when the code was created. Required when the code was created with a challenge. */
+  codeVerifier?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** An org's free shared app slot quota usage. */
@@ -3014,6 +3053,12 @@ export type LoginUserInput = {
   password: Scalars['String']['input'];
 };
 
+/** Input for mintAppToken: directly mint an app-scoped gameplay token for the calling user (native/direct path, no browser redirect). */
+export type MintAppTokenInput = {
+  /** Numeric id of the app to mint a confined gameplay token for. Free/open apps are auto-granted access; paid apps require an existing entitlement (else FORBIDDEN). */
+  appId: Scalars['BigInt']['input'];
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
   /** Liveness heartbeat for the authenticated user's actors in an app. Refreshes actors.updated_at for every actor row the user owns so the user stays host-eligible, then returns the freshly-elected host (same shape as the gameHost query) so a client can fold its poll and heartbeat into one round-trip. Call on an interval shorter than HOST_ACTOR_FRESHNESS_SECONDS. Only refreshes rows that already exist (created by Buddy on chunk entry); returns null when no fresh actors exist for the app. */
@@ -3064,6 +3109,8 @@ export type Mutation = {
   createOrgToken: OrgTokenWithSecret;
   /** Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token. */
   createOrganization: Organization;
+  /** Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Requires a SESSION token. */
+  createPortalAuthorizationCode: PortalAuthorizationCode;
   /** Create a team. Whether the caller may create one is governed by the per-app team policy (app_group_policies: admin | member | anyone). The caller becomes the owner and is granted a system 'leader' role holding every team permission. New teams default to the app's default membership policy unless overridden. */
   createTeam: Group;
   /** Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs). */
@@ -3096,6 +3143,8 @@ export type Mutation = {
   destroyEnvironment: CksEnvironmentChangeOrder;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
+  /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
+  exchangePortalCode: AppTokenResponse;
   /** ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api. */
   forceLogoutUser: Scalars['Boolean']['output'];
   /** Create a directed relationship edge between two containers (the game model is a graph), with a relationship type and optional weight. Requires a valid token. */
@@ -3170,6 +3219,8 @@ export type Mutation = {
   logout: Scalars['Boolean']['output'];
   /** Ends every active session for the authenticated user (deletes all their game_tokens and records revocations). Requires a valid session token. Use logout to end only the current session. */
   logoutAllDevices: Scalars['Boolean']['output'];
+  /** Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). Side effect: may create an app_user_access row on the app's free default tier. */
+  mintAppToken: AppTokenResponse;
   /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
   /** Operator only (is_operator). Cuts a new environment release from a cks-game-api git tag: ingests it as available and commits the manifest to the git ref. SIDE EFFECT: makes the version the new redeploy target and writes to GitHub. Use force to overwrite. Writes an audit entry. */
@@ -3182,6 +3233,8 @@ export type Mutation = {
   putCpSecret: CpSecretRow;
   /** Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Requires the 'manage_environments' org permission. */
   redeployEnvironment: CksEnvironmentChangeOrder;
+  /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. */
+  refreshAppToken: AppTokenResponse;
   /** Creates a new (initially unconfirmed) account, sends a confirmation email, and returns an AuthResponse with a session `token` for immediate login (send as `Authorization: Bearer <token>`). Public; throws if the email already exists. */
   register: AuthResponse;
   /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
@@ -3439,6 +3492,11 @@ export type MutationCreateOrganizationArgs = {
 };
 
 
+export type MutationCreatePortalAuthorizationCodeArgs = {
+  input: CreatePortalAuthorizationCodeInput;
+};
+
+
 export type MutationCreateTeamArgs = {
   input: CreateTeamInput;
 };
@@ -3512,6 +3570,11 @@ export type MutationDeleteUserAppStateArgs = {
 
 export type MutationDestroyEnvironmentArgs = {
   input: DestroyEnvironmentInput;
+};
+
+
+export type MutationExchangePortalCodeArgs = {
+  input: ExchangePortalCodeInput;
 };
 
 
@@ -3694,6 +3757,11 @@ export type MutationLinkAppToEnvironmentArgs = {
 
 export type MutationLoginArgs = {
   loginUserInput: LoginUserInput;
+};
+
+
+export type MutationMintAppTokenArgs = {
+  input: MintAppTokenInput;
 };
 
 
@@ -4406,6 +4474,17 @@ export type PlayerPulse = {
   percentile: Maybe<Scalars['Float']['output']>;
   /** Number of studios in the percentile comparison pool (studios with all_time_peak > 0). */
   poolSize: Scalars['Int']['output'];
+};
+
+/** A one-time portal authorization code. Redirect the player to `redirectUri` carrying `code`; the destination game exchanges it (with its PKCE verifier) via exchangePortalCode for an app token. Single-use and short-lived. */
+export type PortalAuthorizationCode = {
+  __typename?: 'PortalAuthorizationCode';
+  /** The one-time authorization code. Deliver it to the destination game origin only (e.g. as a `code` query param on redirectUri). */
+  code: Scalars['String']['output'];
+  /** ISO-8601 UTC expiry of the code (typically ~60s). */
+  expiresAt: Scalars['String']['output'];
+  /** The validated redirect URI the player should be sent to. */
+  redirectUri: Scalars['String']['output'];
 };
 
 /** Postgres billing tier: bandwidth allotment and capacity charge. Usage metering deferred. */
@@ -6060,6 +6139,8 @@ export enum UdpErrorCode {
   PasswordTooLong = 'PASSWORD_TOO_LONG',
   /** Password failed minimum-length validation. */
   PasswordTooShort = 'PASSWORD_TOO_SHORT',
+  /** The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session. */
+  TokenExpired = 'TOKEN_EXPIRED',
   /** The caller lacks the runtime/grid permission required for this action. Grid permissions can load asynchronously, so the first message to a newly entered region may transiently return this — retry shortly. */
   Unauthorized = 'UNAUTHORIZED',
   /** Unspecified server error (1). Retry; if it persists, report it. */

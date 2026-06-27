@@ -582,6 +582,50 @@ type AppsConnection {
   totalCount: Int
 }
 
+"""
+A short-lived, app-scoped gameplay token (Overworld portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session.
+"""
+type AppTokenResponse {
+  """
+  Opaque app-scoped gameplay token. Send to the target app's Game API as `Authorization: Bearer <token>` (and in the realtime `connectionParams`). Do NOT send it to the Management API for anything other than `me`/`refreshAppToken`.
+  """
+  token: String!
+  """Identifier of the underlying game_token row, as a String."""
+  gameTokenId: String!
+  """The app this token is confined to, as a String."""
+  appId: String!
+  """
+  ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this, or re-portal through the Overworld for a different app.
+  """
+  expiresAt: String!
+  """
+  Base HTTPS URL of the Game API that serves this app (null if the app has no dedicated/shared game-api route yet).
+  """
+  gameApiUrl: String
+  """
+  WebSocket URL of the Game API that serves this app (wss://), for realtime subscriptions.
+  """
+  gameApiWsUrl: String
+  """
+  Browser launch URL for this app (where the player's browser plays it), if configured.
+  """
+  launchUrl: String
+}
+
+"""
+A one-time portal authorization code. Redirect the player to `redirectUri` carrying `code`; the destination game exchanges it (with its PKCE verifier) via exchangePortalCode for an app token. Single-use and short-lived.
+"""
+type PortalAuthorizationCode {
+  """
+  The one-time authorization code. Deliver it to the destination game origin only (e.g. as a `code` query param on redirectUri).
+  """
+  code: String!
+  """The validated redirect URI the player should be sent to."""
+  redirectUri: String!
+  """ISO-8601 UTC expiry of the code (typically ~60s)."""
+  expiresAt: String!
+}
+
 type OrgWallet {
   """Unique wallet id (BigInt as a decimal string)."""
   walletId: BigInt!
@@ -3690,6 +3734,22 @@ type Mutation {
     appId: BigInt!
   ): AppUserAccess!
   """
+  Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). Side effect: may create an app_user_access row on the app's free default tier.
+  """
+  mintAppToken(input: MintAppTokenInput!): AppTokenResponse!
+  """
+  Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Requires a SESSION token.
+  """
+  createPortalAuthorizationCode(input: CreatePortalAuthorizationCodeInput!): PortalAuthorizationCode!
+  """
+  Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token.
+  """
+  exchangePortalCode(input: ExchangePortalCodeInput!): AppTokenResponse!
+  """
+  Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement.
+  """
+  refreshAppToken: AppTokenResponse!
+  """
   Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission.
   """
   setAppBudget(
@@ -4844,6 +4904,46 @@ input GrantAppAccessInput {
   idempotencyKey: String
 }
 
+"""
+Input for mintAppToken: directly mint an app-scoped gameplay token for the calling user (native/direct path, no browser redirect).
+"""
+input MintAppTokenInput {
+  """
+  Numeric id of the app to mint a confined gameplay token for. Free/open apps are auto-granted access; paid apps require an existing entitlement (else FORBIDDEN).
+  """
+  appId: BigInt!
+}
+
+"""
+Input for createPortalAuthorizationCode: the Overworld (identity origin, holding the session token) mints a one-time code the destination game exchanges for an app token. Browser handoff path; pair with a PKCE verifier held by the destination game origin.
+"""
+input CreatePortalAuthorizationCodeInput {
+  """Numeric id of the target app the player is portaling into."""
+  appId: BigInt!
+  """
+  PKCE code challenge (recommended). Base64url(SHA-256(verifier)) when method is S256. The destination game generates the verifier+challenge so the verifier never leaves its origin.
+  """
+  codeChallenge: String!
+  """PKCE method: "S256" (default, recommended) or "plain"."""
+  codeChallengeMethod: String
+  """
+  Where to redirect the player after issuing the code. Must match the target app's configured launch_url origin when set.
+  """
+  redirectUri: String!
+}
+
+"""
+Input for exchangePortalCode: the destination game (public client) trades a one-time portal code for an app-scoped gameplay token. Public (the code + PKCE verifier authorize the call).
+"""
+input ExchangePortalCodeInput {
+  """The one-time authorization code received on the redirect."""
+  code: String!
+  """
+  PKCE code verifier matching the challenge supplied when the code was created. Required when the code was created with a challenge.
+  """
+  codeVerifier: String
+}
+
 input SetQuotaInput {
   """
   Scope the rule to this organization (BigInt as a decimal string). Provide one of orgId/appId/tierId to choose the scope; omit all three for a global (super-admin) rule.
@@ -5393,6 +5493,10 @@ enum UdpErrorCode {
   GRID_NOT_FOUND
   CANNOT_DELETE_DEFAULT_WORLD_GRID
   GRID_HAS_NESTED_CHILDREN
+  """
+  The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session.
+  """
+  TOKEN_EXPIRED
 }
 
 """

@@ -1,3 +1,58 @@
+# CrowdyJS v7 — Overworld portals & app-scoped tokens (BREAKING)
+
+v7 splits the single app-agnostic game token into two credentials and makes
+gameplay require an **app-scoped token**. This is a breaking change requiring
+servers on the matching release (management-api + game-api + Buddy with the
+app-scoped-token feature).
+
+**The two credential kinds**
+
+- **Identity SESSION token** — returned by `client.auth.login()` / `register()`.
+  It talks to the **Management API only** (account, studio admin, and minting
+  app tokens). It is **no longer valid for gameplay**: the Game API and Buddy
+  reject it. Never hand it to a game stack.
+- **App-scoped GAMEPLAY token** — short-lived (default ~30 min), confined to one
+  app. Minted from a session token via the portal flow; used against that app's
+  Game API + realtime surface.
+
+**What breaks**
+
+- Driving `client.udp`, `client.world(appId)`, `serverWithLeastClients`,
+  `connectUdpProxy`, world reads/writes, etc. with a plain login token now fails
+  (`APP_TOKEN_REQUIRED` on `udpNotifications`; `FORBIDDEN`/`SCOPE_MISSING` on
+  HTTP). You must obtain an app token first.
+- A single client can no longer be both your identity client and your game
+  client. Use the two-client pattern: an Overworld/identity client (holds the
+  session token) and a per-game client (holds that game's app token).
+
+**New: `client.portal`**
+
+```ts
+// Native / same-origin: mint directly with the session token.
+const appToken = await overworld.portal.mintAppToken(appId);
+const game = createCrowdyClient({ httpUrl: appToken.gameApiUrl!, wsUrl: appToken.gameApiWsUrl!,
+  managementUrl, tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:token:' + appId) });
+game.setToken(appToken.token);
+
+// Browser cross-origin handoff (OAuth2 Authorization Code + PKCE):
+//   game origin, on "enter":
+const url = await game.portal.beginEntry({ appId, authorizeUrl: 'https://overworld.example.com/authorize',
+  redirectUri: location.origin + location.pathname });
+location.assign(url);
+//   Overworld /authorize page (holds the session token):
+location.assign(await overworld.portal.handleAuthorizeRequest());
+//   game origin, on callback boot:
+const token = await game.portal.completeEntry(); // exchanges code+verifier, stores app token
+//   keep playing past expiry without re-portaling:
+await game.portal.refresh();
+```
+
+The session token never reaches the game origin — only the app token does. New
+realtime `RealtimeConnectionEvent` codes: `APP_TOKEN_REQUIRED`,
+`APP_SCOPE_MISMATCH`. New `UdpErrorCode`: `TOKEN_EXPIRED`.
+
+---
+
 # CrowdyJS — npm org rename (v6 version line kept)
 
 The package moved to the **`@crowdedkingdoms`** npm organization. The version line

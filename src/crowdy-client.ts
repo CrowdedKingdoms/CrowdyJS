@@ -31,6 +31,7 @@ import { WorldClient } from './world.js';
 import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
 import { AppsAPI } from './domains/apps.js';
+import { PortalAPI } from './domains/portal.js';
 import { PlatformAPI } from './domains/platform.js';
 import { OrganizationsAPI } from './domains/organizations.js';
 import { AppAccessAPI } from './domains/appAccess.js';
@@ -120,6 +121,12 @@ export class CrowdyClient {
   readonly users: UsersAPI;
   /** App discovery + routing (which game-api serves a given app). */
   readonly apps: AppsAPI;
+  /**
+   * Overworld portal: mint/exchange/refresh app-scoped gameplay tokens and the
+   * PKCE browser handoff. Identity session token mints; games receive only an
+   * app token.
+   */
+  readonly portal: PortalAPI;
   /** Public platform discovery (shared game-api URL, free app quota). */
   readonly platform: PlatformAPI;
   /** Organizations, members, RBAC roles, and org API tokens (studio admin). */
@@ -219,6 +226,7 @@ export class CrowdyClient {
     this.auth = new AuthAPI(this.management, this.session);
     this.users = new UsersAPI(this.management);
     this.apps = new AppsAPI(this.management);
+    this.portal = new PortalAPI(this.management, this.session);
     this.platform = new PlatformAPI(this.management);
     this.organizations = new OrganizationsAPI(this.management);
     this.appAccess = new AppAccessAPI(this.management);

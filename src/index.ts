@@ -42,7 +42,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '6.1.1';
+export const VERSION = '7.0.0';
 
 export {
   CrowdyClient,
@@ -127,6 +127,15 @@ export { UdpErrorCode } from './types.js';
 export { AuthAPI } from './domains/auth.js';
 export { UsersAPI } from './domains/users.js';
 export { AppsAPI, type AppRoute } from './domains/apps.js';
+export {
+  PortalAPI,
+  BrowserSessionPkceStore,
+  type AppTokenResponse,
+  type PortalAuthorizationCode,
+  type PkceStore,
+  type BeginEntryParams,
+} from './domains/portal.js';
+export { generatePkcePair, generateState, type PkcePair } from './pkce.js';
 export { PlatformAPI, type PlatformConfig } from './domains/platform.js';
 export { OrganizationsAPI } from './domains/organizations.js';
 export { AppAccessAPI } from './domains/appAccess.js';
