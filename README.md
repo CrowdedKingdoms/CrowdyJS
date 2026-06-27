@@ -1,6 +1,6 @@
 # CrowdyJS
 
-The official browser-first TypeScript SDK for **Crowded Kingdoms**. CrowdyJS gives you one typed client that handles auth, the world/replication GraphQL API, and the UDP proxy subscription stream behind a single shared session.
+The official browser-first TypeScript SDK for **Crowded Kingdoms**. CrowdyJS gives you typed clients for auth, the world/replication GraphQL API, and the UDP proxy subscription stream. As of **v7** it follows the Overworld two-token model: an identity **session token** for the Management API, and short-lived **app-scoped tokens** for gameplay via `client.portal` (see [Overworld portals & app-scoped tokens (v7)](#overworld-portals--app-scoped-tokens-v7)).
 
 ## Install
 
@@ -41,12 +41,15 @@ if (!client.session.getToken()) {
   await client.auth.login({ email: 'player@example.com', password: 'secret' });
 }
 
-// Fetch the per-app bootstrap (version requirements, UDP availability, spatial limits).
-const bootstrap = await client.serverStatus.gameClientBootstrap('1');
-console.log(bootstrap.versionInfo.minimumClientVersion);
+// `client.auth.login()` returns an identity SESSION token (Management API only).
+// Identity reads run on it:
+const me = await client.users.me();
+console.log(me.email);
 ```
 
-Both endpoints share a single `AuthState`, so once `client.auth.login()` returns, every subsequent SDK call (against either endpoint) carries the bearer token automatically.
+**Gameplay needs an app-scoped token, not the login token.** Mint one per app and
+drive the Game API world/UDP surface (including `gameClientBootstrap`) from a
+per-game client — see [Overworld portals & app-scoped tokens (v7)](#overworld-portals--app-scoped-tokens-v7).
 
 If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-compat with the single-endpoint deployment.
 
@@ -90,16 +93,17 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 |---|---|
 | `client.operator` | Control plane: cross-org environments, change orders, secrets, release management, audit. |
 
-Auth, user reads, and the studio-admin / operator surfaces target `managementUrl`; the game-client world/UDP surfaces target `httpUrl` / `wsUrl`. A single shared `AuthState` carries the bearer token to whichever endpoint serves each call.
+Auth, user reads, and the studio-admin / operator surfaces target `managementUrl` and use the **identity session token**; the game-client world/UDP surfaces target `httpUrl` / `wsUrl` and require an **app-scoped token** for that app. Use one identity client plus a per-game client (see [Overworld portals & app-scoped tokens (v7)](#overworld-portals--app-scoped-tokens-v7)); each client's `AuthState` carries its token to its own endpoints, so HTTP and WebSocket auth never drift within a client.
 
 ## Game-loop lifecycle
 
-1. Authenticate with `client.auth.login()` or restore a previous token through `client.session.restore()`.
-2. Subscribe to UDP proxy notifications with `client.udp.subscribe(handlers, appId)` — `appId` is **required** (the SDK opens the realtime socket on demand and scopes it to that app).
-3. Join a chunk by sending an initial actor update.
-4. Send actor, voxel, text, audio, and client-event updates through `client.udp` or the higher-level `client.world(appId)` helpers.
-5. Call `client.udp.disconnect()` when leaving the world.
-6. Call `client.close()` when disposing the SDK instance.
+1. Authenticate on the identity client with `client.auth.login()` (or `client.session.restore()`) — this yields the **session token**.
+2. Mint an **app-scoped token** for the app (`identity.portal.mintAppToken(appId)`, or the PKCE portal flow across origins) and build a per-game client holding it (`game.setToken(token)`). The gameplay steps below run on that **game** client.
+3. Subscribe to UDP proxy notifications with `game.udp.subscribe(handlers, appId)` — `appId` is **required** (the SDK opens the realtime socket on demand and scopes it to that app).
+4. Join a chunk by sending an initial actor update.
+5. Send actor, voxel, text, audio, and client-event updates through `game.udp` or the higher-level `game.world(appId)` helpers.
+6. Call `game.udp.disconnect()` when leaving the world; `game.portal.refresh()` before the token expires to keep playing.
+7. Call `client.close()` (and `game.close()`) when disposing the SDK instances.
 
 ## Per-app routing
 
@@ -118,18 +122,21 @@ query AppForRouting($appId: BigInt!) {
 
 `gameApiUrl` is populated for **both** dedicated (`splitMode`) and shared
 (`deploymentTarget: "shared"`) apps. When it's set, build a **second**
-`CrowdyClient` with `httpUrl: gameApiUrl` (and the matching `wsUrl`) **sharing the
-same `tokenStore` as the first client**, then drive gameplay through that client.
-Apps with no `gameApiUrl` keep working against the default `httpUrl` you
-configured.
+`CrowdyClient` with `httpUrl: gameApiUrl` (and the matching `wsUrl`) holding that
+app's **app-scoped token** (`identity.portal.mintAppToken(appId)` — do **not**
+reuse the identity client's session token store), then drive gameplay through that
+client. In practice `mintAppToken` already returns `gameApiUrl` / `gameApiWsUrl`,
+so you rarely need this separate routing query. Apps with no `gameApiUrl` keep
+working against the default `httpUrl` you configured.
 
 ## Realtime notifications
 
 `subscribe` takes the handlers **and a required `appId`** (second argument). The
 Game API scopes the realtime session to that app and rejects an app-agnostic
-subscription with a `RealtimeConnectionEvent` (`code: 'APP_ID_REQUIRED'`). Run
-one client per app (sharing the same `tokenStore`) when a player is in multiple
-apps at once.
+subscription with a `RealtimeConnectionEvent` (`code: 'APP_ID_REQUIRED'`). It also
+rejects an identity session token (`APP_TOKEN_REQUIRED`) or a token scoped to a
+different app (`APP_SCOPE_MISMATCH`). Run one client per app (each holding that
+app's app-scoped token) when a player is in multiple apps at once.
 
 ```ts
 const appId = '1';
@@ -258,7 +265,7 @@ The key parameter is optional and trailing, so it's safe to omit. Requires a ser
 
 - Use `client.auth.setToken(token)` if you need to seed a token externally (e.g. when restoring auth from a non-default storage).
 - `client.session.restore()` reads from the configured `tokenStore`. `BrowserLocalStorageTokenStore` is provided; bring your own for SSR or Node usage.
-- A single `AuthState` is observed by both the HTTP client and the realtime socket, so HTTP and WebSocket auth can never drift.
+- Each client's `AuthState` is observed by both its HTTP client and its realtime socket, so HTTP and WebSocket auth never drift within a client. Hold the **identity session token** on the management/identity client and an **app-scoped token** on each per-game client (`client.portal` — see the [v7 section](#overworld-portals--app-scoped-tokens-v7)).
 
 ## Overworld portals & app-scoped tokens (v7)
 
