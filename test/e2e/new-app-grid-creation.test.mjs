@@ -25,7 +25,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { provisionNewAppWithPlayers } from '../provision.mjs';
+import { provisionNewAppWithPlayers, mintAppToken } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -66,9 +66,17 @@ test(
     const { appId, owner, players } = await provisionNewAppWithPlayers(1);
 
     const player = createCrowdyClient(clientConfig());
-    player.setToken(players[0].token);
+    // Gameplay (gameClientBootstrap + UDP) needs an APP-scoped token; the identity
+    // session token is rejected. Minting for the open-by-default app auto-grants
+    // the free default tier, just like the first-UDP-touch path it stands in for.
+    const playerAppToken = await mintAppToken(appId, players[0].token);
+    player.setToken(playerAppToken);
     const owner_ = createCrowdyClient(clientConfig());
-    owner_.setToken(owner.token);
+    // createGrid is a game-api grid op that requires an app-scoped token (a studio
+    // admin may mint one for their own app); the identity session token is rejected
+    // (SCOPE_MISSING). Mint the owner an app token for this app.
+    const ownerAppToken = await mintAppToken(appId, owner.token);
+    owner_.setToken(ownerAppToken);
     const cleanup = [];
 
     try {

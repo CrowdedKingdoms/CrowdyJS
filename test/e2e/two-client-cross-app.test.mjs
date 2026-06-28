@@ -1,11 +1,12 @@
 /**
  * Cross-app fence regression test.
  *
- * A game token is app-agnostic and a single UDP proxy socket/Subject is shared
- * by every subscription on that token, so a token reused across apps used to
- * cross-deliver: a client "in" app A received app B's spatial fan-out. The fix
- * requires every udpNotifications subscription to declare its appId and filters
- * delivery by it; app-agnostic subscriptions are rejected.
+ * App-scoped tokens + a per-subscription appId fence the realtime fan-out. A
+ * single UDP proxy socket/Subject is shared by every subscription on a token, so
+ * without a fence a client "in" app A could receive app B's spatial fan-out. Now
+ * every udpNotifications subscription must declare its appId (app-agnostic
+ * subscriptions are rejected with APP_ID_REQUIRED), and a token minted for app A
+ * cannot subscribe to app B, so cross-app delivery is impossible.
  *
  * This exercises the deployed game-api + UDP-proxy chain black-box (provisioning
  * is entirely through the management API -- see provision.mjs). player[0]'s ONE
@@ -27,7 +28,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionAppWithPlayers } from '../provision.mjs';
+import { provisionAppWithPlayers, mintAppToken } from '../provision.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
 globalThis.WebSocket = WebSocket;
@@ -89,8 +90,11 @@ test(
     // that actually sends, since a sender never receives its own fan-out.
     const { appId, players } = await provisionAppWithPlayers(2);
     await sleep(SYNC_WAIT_MS);
-    const token = players[0].token;
-    const senderToken = players[1].token;
+    // Gameplay needs APP-scoped tokens. player[0]'s ONE app token (for `appId`) is
+    // shared by the three observer clients; an app-scoped token can only subscribe
+    // to its own app, so the OTHER_APP_ID subscription is fenced/rejected, not fed.
+    const token = await mintAppToken(appId, players[0].token);
+    const senderToken = await mintAppToken(appId, players[1].token);
     // An app the observers are NOT scoped to; its subscription is still opened
     // but must not receive `appId`'s spatial traffic.
     const OTHER_APP_ID = String(BigInt(appId) + 7919n);

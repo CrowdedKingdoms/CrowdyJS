@@ -7,8 +7,8 @@
  * writes, deletion-protection) only run when CROWDY_TEST_OPERATOR_DESTRUCTIVE=1
  * because they write audit entries / GitHub / retarget deploys.
  *
- * Requires an operator persona: set CROWDY_OPERATOR_EMAIL/PASSWORD, or rely on
- * the local smoke stack where the seeded owner is also a super-admin/operator.
+ * Requires an operator persona: set CROWDY_OPERATOR_EMAIL (passwordless), or rely
+ * on the local smoke stack where the seeded owner is also a super-admin/operator.
  * Management-only; auto-skips without the management e2e env.
  */
 import test from 'node:test';

@@ -26,7 +26,7 @@ const client = createCrowdyClient({
   // Game API (world data + UDP proxy)
   httpUrl: 'https://game.example.com',
   wsUrl: 'wss://game.example.com',
-  // Management API (login, register, profile)
+  // Management API (passwordless sign-in, profile)
   managementUrl: 'https://management.example.com',
   tokenStore: new BrowserLocalStorageTokenStore(),
   realtime: {
@@ -35,19 +35,23 @@ const client = createCrowdyClient({
   },
 });
 
-// Restore a previous session if there is one, otherwise log in.
+// Restore a previous session if there is one, otherwise sign in (passwordless).
 await client.session.restore();
 if (!client.session.getToken()) {
-  await client.auth.login({ email: 'player@example.com', password: 'secret' });
+  // Magic link: email a one-time link, then complete with the token from it.
+  await client.auth.requestLoginLink({ email: 'player@example.com', redirectUri });
+  await client.auth.completeLoginLink(tokenFromLink);
+  // Or social/OIDC: socialLoginStart('google', redirectUri) -> socialLoginComplete({ provider, code, state })
+  // Or dev/test only (server has DEV_AUTH_BYPASS): client.auth.devLogin('player@example.com')
 }
 
-// `client.auth.login()` returns an identity SESSION token (Management API only).
-// Identity reads run on it:
+// Passwordless sign-in returns an identity SESSION token (Management API only);
+// the account is created on first sign-in. Identity reads run on it:
 const me = await client.users.me();
 console.log(me.email);
 ```
 
-**Gameplay needs an app-scoped token, not the login token.** Mint one per app and
+**Gameplay needs an app-scoped token, not the session token.** Mint one per app and
 drive the Game API world/UDP surface (including `gameClientBootstrap`) from a
 per-game client — see [Overworld portals & app-scoped tokens (v7)](#overworld-portals--app-scoped-tokens-v7).
 
@@ -59,7 +63,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 
 | Sub-client | What it does |
 |---|---|
-| `client.auth` | Register, log in, log out, password reset, email confirmation. |
+| `client.auth` | Passwordless sign-in (magic link, social/OIDC, dev bypass), log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). |
 | `client.users` | `me`, `updateGamertag`, profile reads. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
@@ -97,7 +101,7 @@ Auth, user reads, and the studio-admin / operator surfaces target `managementUrl
 
 ## Game-loop lifecycle
 
-1. Authenticate on the identity client with `client.auth.login()` (or `client.session.restore()`) — this yields the **session token**.
+1. Sign in (passwordless) on the identity client with `client.auth` — `requestLoginLink`/`completeLoginLink` (magic link), `socialLoginStart`/`socialLoginComplete` (social/OIDC), or `devLogin` (dev/test only) — or `client.session.restore()`. This yields the **session token** (Management API only).
 2. Mint an **app-scoped token** for the app (`identity.portal.mintAppToken(appId)`, or the PKCE portal flow across origins) and build a per-game client holding it (`game.setToken(token)`). The gameplay steps below run on that **game** client.
 3. Subscribe to UDP proxy notifications with `game.udp.subscribe(handlers, appId)` — `appId` is **required** (the SDK opens the realtime socket on demand and scopes it to that app).
 4. Join a chunk by sending an initial actor update.
@@ -269,10 +273,10 @@ The key parameter is optional and trailing, so it's safe to omit. Requires a ser
 
 ## Overworld portals & app-scoped tokens (v7)
 
-As of v7 gameplay requires an **app-scoped token**, not the login token. Login
-returns an **identity session token** (Management API only — account, studio
-admin, and minting); each game is entered with a short-lived token confined to
-that one app, so a game stack never receives the player's full session.
+As of v7 gameplay requires an **app-scoped token**, not the session token.
+Passwordless sign-in returns an **identity session token** (Management API only —
+account, studio admin, and minting); each game is entered with a short-lived token
+confined to that one app, so a game stack never receives the player's full session.
 
 Use two clients: an Overworld/identity client (session token) and a per-game
 client (app token), sharing only the Management URL.
@@ -280,7 +284,9 @@ client (app token), sharing only the Management URL.
 ```ts
 // Overworld/identity client
 const overworld = createCrowdyClient({ managementUrl, tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:session') });
-await overworld.auth.login({ email, password });
+// Passwordless sign-in (magic link, social/OIDC, or dev bypass) yields the session token.
+await overworld.auth.requestLoginLink({ email, redirectUri });
+await overworld.auth.completeLoginLink(tokenFromLink);
 
 // Native / same-origin: mint directly, then build a game client.
 const t = await overworld.portal.mintAppToken(appId);
