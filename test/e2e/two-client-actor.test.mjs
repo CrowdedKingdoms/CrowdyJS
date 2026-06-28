@@ -37,7 +37,6 @@ const REQUIRED_ENV = [
   // App owner that owns CROWDY_TEST_APP_ID (default app 1); entitles players via
   // the management API. No DB credentials.
   'CROWDY_OWNER_EMAIL',
-  'CROWDY_OWNER_PASSWORD',
 ];
 
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);

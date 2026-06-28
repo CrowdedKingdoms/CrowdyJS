@@ -19,7 +19,7 @@ async function gql(q, v, t) {
 const code = (j) => j?.errors?.[0]?.extensions?.code ?? null;
 const b64url = (b) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const Q = {
-  register: `mutation($i: RegisterUserInput!){ register(registerUserInput:$i){ token user { userId } } }`,
+  devLogin: `mutation($i: DevLoginInput!){ devLogin(input:$i){ token gameTokenId user { userId } } }`,
   mint: `mutation($i: MintAppTokenInput!){ mintAppToken(input:$i){ token gameTokenId appId expiresAt gameApiUrl } }`,
   createCode: `mutation($i: CreatePortalAuthorizationCodeInput!){ createPortalAuthorizationCode(input:$i){ code redirectUri expiresAt } }`,
   exchange: `mutation($i: ExchangePortalCodeInput!){ exchangePortalCode(input:$i){ token appId } }`,
@@ -29,9 +29,9 @@ const Q = {
 };
 async function main() {
   const email = `portal-mgmt-${Date.now()}@test.invalid`;
-  const reg = await gql(Q.register, { i: { email, password: 'Password123!' } });
-  const session = reg.data?.register?.token, userId = reg.data?.register?.user?.userId;
-  log(!!session, '1. register -> identity session token', JSON.stringify(reg.errors ?? ''));
+  const reg = await gql(Q.devLogin, { i: { email } });
+  const session = reg.data?.devLogin?.token, userId = reg.data?.devLogin?.user?.userId;
+  log(!!session, '1. devLogin -> identity session token', JSON.stringify(reg.errors ?? ''));
 
   const a1 = (await gql(Q.mint, { i: { appId: APP_A } }, session)).data?.mintAppToken;
   log(a1?.appId === APP_A && !!a1?.token && !!a1?.expiresAt, '2. mintAppToken auto-grants free app + returns app token w/ expiry', JSON.stringify(a1 ?? ''));

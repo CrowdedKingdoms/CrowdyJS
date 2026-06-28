@@ -22,7 +22,6 @@ const REQUIRED_ENV = [
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   'CROWDY_OWNER_EMAIL',
-  'CROWDY_OWNER_PASSWORD',
 ];
 
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);

@@ -24,9 +24,9 @@ async function main() {
   const gamePkce = memPkceStore();
   const game = createCrowdyClient({ managementUrl: MGMT, httpUrl: GAME, wsUrl: GAME.replace(/^http/, 'ws'), tokenStore: memTokenStore(), pkceStore: gamePkce });
 
-  await overworld.auth.register({ email: `portal-browser-${Date.now()}@test.invalid`, password: 'Password123!' });
+  await overworld.auth.devLogin(`portal-browser-${Date.now()}@test.invalid`);
   const sessionTok = overworld.getToken();
-  log(!!sessionTok, '1. overworld registered (identity session token held on overworld origin)');
+  log(!!sessionTok, '1. overworld signed in via devLogin (identity session token held on overworld origin)');
 
   // Game origin step 1: beginEntry -> build the Overworld authorize URL (verifier kept locally).
   const authorizeUrl = await game.portal.beginEntry({ appId: APP_A, authorizeUrl: `${MGMT}/authorize`, redirectUri: 'https://game.example/callback' });

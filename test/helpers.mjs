@@ -24,14 +24,12 @@ export const FULL_E2E_ENV = [
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   'CROWDY_OWNER_EMAIL',
-  'CROWDY_OWNER_PASSWORD',
 ];
 
 /** Env required for management-only e2e (no game-api / realtime needed). */
 export const MANAGEMENT_E2E_ENV = [
   'CROWDY_MANAGEMENT_URL',
   'CROWDY_OWNER_EMAIL',
-  'CROWDY_OWNER_PASSWORD',
 ];
 
 /** Return the subset of `keys` that are missing from the environment. */

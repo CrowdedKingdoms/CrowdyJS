@@ -13,7 +13,7 @@
  *   CROWDY_MANAGEMENT_URL='http://127.0.0.1:3001' \
  *   CROWDY_HTTP_URL='http://127.0.0.1:3000/graphql' \
  *   CROWDY_WS_URL='ws://127.0.0.1:3000/graphql' \
- *   CROWDY_OWNER_EMAIL='owner@example.com' CROWDY_OWNER_PASSWORD='...' \
+ *   CROWDY_OWNER_EMAIL='owner@example.com' \
  *   npm test
  */
 import test from 'node:test';
@@ -29,7 +29,6 @@ const REQUIRED_ENV = [
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   'CROWDY_OWNER_EMAIL',
-  'CROWDY_OWNER_PASSWORD',
 ];
 
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);

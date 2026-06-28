@@ -58,15 +58,18 @@ test('auth: password reset + resend are enumeration-resistant', { skip, timeout:
   }
 });
 
-test('auth: bad credentials fail closed without distinguishing email vs password', { skip, timeout: 60_000 }, async () => {
+test('auth: a forged session token fails closed (cannot read the current user)', { skip, timeout: 60_000 }, async () => {
+  // Passwordless: there is no password to get "wrong". The equivalent fail-closed
+  // property is that a bogus identity session token cannot read protected data.
   const { createCrowdyClient } = await loadSdk();
   const client = createCrowdyClient(clientConfig());
-  const user = await registerUser();
+  client.setToken(`forged-session-${rid()}.deadbeef`);
   try {
-    const wrongEmail = client.auth.login({ email: `nope-${rid()}@test.invalid`, password: 'whatever123' });
-    const wrongPassword = client.auth.login({ email: user.email, password: 'definitely-wrong-123' });
-    await assert.rejects(() => wrongEmail, (e) => !!(e?.extensions?.code || e?.message), 'wrong email rejected');
-    await assert.rejects(() => wrongPassword, (e) => !!(e?.extensions?.code || e?.message), 'wrong password rejected');
+    await assert.rejects(
+      () => client.users.me(),
+      (err) => /UNAUTHENTICATED|FORBIDDEN/.test(err?.extensions?.code ?? err?.message ?? ''),
+      'a forged session token cannot read me',
+    );
   } finally {
     client.close();
   }

@@ -19,7 +19,7 @@
  *   CROWDY_MANAGEMENT_URL='https://api.dev-2.dev.cks-env.com' \
  *   CROWDY_HTTP_URL='https://game.dev-2.dev.cks-env.com/graphql' \
  *   CROWDY_WS_URL='wss://game.dev-2.dev.cks-env.com/graphql' \
- *   CROWDY_OWNER_EMAIL='admin@dev-2.dev.cks-env.com' CROWDY_OWNER_PASSWORD='...' \
+ *   CROWDY_OWNER_EMAIL='admin@dev-2.dev.cks-env.com' \
  *   npm test
  */
 import test from 'node:test';
@@ -34,7 +34,6 @@ const REQUIRED_ENV = [
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   'CROWDY_OWNER_EMAIL',
-  'CROWDY_OWNER_PASSWORD',
 ];
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
 const skipReason =
