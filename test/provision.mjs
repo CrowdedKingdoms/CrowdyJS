@@ -231,11 +231,18 @@ export async function provisionAppWithPlayers(playerCount) {
  */
 export async function provisionClients(createCrowdyClient, config, playerCount) {
   const { appId: id, tierId, owner, players } = await provisionAppWithPlayers(playerCount);
-  const clients = players.map((p) => {
+  // Two-client pattern: gameplay needs an APP-scoped token (the identity SESSION
+  // token is rejected by game-api/Buddy with SCOPE_MISSING). Each entitled player
+  // mints one for `id` via the portal and the realtime client carries THAT; the
+  // session token stays on the player object for management-plane calls.
+  const clients = [];
+  for (const p of players) {
+    p.sessionToken = p.token;
+    p.appToken = await mintAppToken(id, p.token);
     const c = createCrowdyClient(config);
-    c.setToken(p.token);
-    return c;
-  });
+    c.setToken(p.appToken);
+    clients.push(c);
+  }
 
   // Wait for the management -> game-api replica-sync to mirror each player's
   // access row + grid grant into the per-tenant game DB before clients send
@@ -268,6 +275,22 @@ export async function provisionClients(createCrowdyClient, config, playerCount) 
   );
 
   return { appId: id, tierId, owner, players, clients };
+}
+
+/**
+ * Mint a short-lived **app-scoped** token for `id` using a player's identity
+ * SESSION token. Gameplay (game-api + Buddy) requires an app token and rejects
+ * the session token with `SCOPE_MISSING`, so every realtime client must carry
+ * one. Auto-grant-free: an entitled player (or any player on an open-by-default
+ * app) gets the token without an explicit prior grant.
+ */
+export async function mintAppToken(id, sessionToken) {
+  const data = await gql(
+    `mutation($i: MintAppTokenInput!){ mintAppToken(input:$i){ token } }`,
+    { i: { appId: id } },
+    sessionToken,
+  );
+  return data.mintAppToken.token;
 }
 
 /** The org that owns CROWDY_TEST_APP_ID — the owner's org, used to create new apps. */

@@ -22,7 +22,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionNewAppWithPlayers } from '../provision.mjs';
+import { provisionNewAppWithPlayers, mintAppToken } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -76,8 +76,10 @@ test(
 
     const clientA = createCrowdyClient(clientConfig());
     const clientB = createCrowdyClient(clientConfig());
-    clientA.setToken(players[0].token);
-    clientB.setToken(players[1].token);
+    // Open-by-default: minting an app token for an ungranted player auto-grants
+    // the free default tier (no explicit grantAppAccess) — the rule under test.
+    clientA.setToken(await mintAppToken(appId, players[0].token));
+    clientB.setToken(await mintAppToken(appId, players[1].token));
     const cleanup = [];
 
     try {

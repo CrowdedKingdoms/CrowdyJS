@@ -25,7 +25,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionAppWithPlayers } from '../provision.mjs';
+import { provisionAppWithPlayers, mintAppToken } from '../provision.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
 globalThis.WebSocket = WebSocket;
@@ -91,8 +91,10 @@ test(
 
     const clientA = createCrowdyClient(clientConfig());
     const clientB = createCrowdyClient(clientConfig());
-    clientA.setToken(players[0].token);
-    clientB.setToken(players[1].token);
+    // Gameplay requires an app-scoped token; the identity session token is
+    // rejected by game-api/Buddy with SCOPE_MISSING.
+    clientA.setToken(await mintAppToken(appId, players[0].token));
+    clientB.setToken(await mintAppToken(appId, players[1].token));
     const cleanup = [];
 
     try {
