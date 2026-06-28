@@ -1,3 +1,0 @@
-mutation ResendConfirmationEmail($email: String!) {
-  resendConfirmationEmail(email: $email)
-}

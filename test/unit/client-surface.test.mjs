@@ -50,6 +50,25 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.host, 'host', ['get', 'heartbeat']);
   assertMethods(client.gameApps, 'gameApps', ['userPermissions', 'nearbyPermissions', 'permissionLimits', 'createGrid', 'grantPermissions', 'assignGroup']);
 
+  // Passwordless auth surface (v8): no password login/register.
+  assertMethods(client.auth, 'auth', [
+    'requestLoginLink', 'completeLoginLink', 'socialLoginStart',
+    'socialLoginComplete', 'devLogin', 'availableLoginProviders',
+    'myIdentities', 'linkIdentity', 'unlinkIdentity', 'logout',
+    'logoutAllDevices', 'setToken', 'getToken',
+  ]);
+  for (const removed of ['login', 'register', 'changePassword', 'resetPassword']) {
+    assert.equal(client.auth[removed], undefined, `auth.${removed} should be removed`);
+  }
+
+  // Portal consent + connected-apps surface.
+  assertMethods(client.portal, 'portal', [
+    'mintAppToken', 'createAuthorizationCode', 'exchangeCode', 'refresh',
+    'beginEntry', 'handleAuthorizeRequest', 'completeEntry',
+    'getConsent', 'authorizeApp', 'revokeAppAuthorization',
+    'myAuthorizedApps', 'setAppClientSettings',
+  ]);
+
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');
   assert.equal(client.admin.billing, client.billing, 'admin.billing aliases client.billing');

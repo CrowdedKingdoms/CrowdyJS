@@ -84,6 +84,26 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 scalar DateTime
 
 """
+A federated / passwordless sign-in identity linked to a user account (a social provider, an emailed magic link, or the dev bypass).
+"""
+type UserIdentity {
+  identityId: ID!
+  userId: ID!
+  """
+  The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'dev' (dev bypass).
+  """
+  provider: String!
+  """
+  The provider's stable subject id ('sub'). For 'email'/'dev' this is the lowercased email.
+  """
+  subject: String!
+  email: String
+  emailVerified: Boolean!
+  createdAt: DateTime!
+  lastLoginAt: DateTime
+}
+
+"""
 Aggregated lifetime donation totals for a user. LEGACY: donations are no longer purchasable. Returned by the deprecated myDonationData query.
 """
 type UserDonationData {
@@ -187,6 +207,24 @@ type AuthResponse {
   gameTokenId: String!
   """The authenticated user."""
   user: User!
+}
+
+"""A federated sign-in handoff: redirect the user to authorizeUrl."""
+type SocialLoginStart {
+  """Provider authorize URL to redirect the user to."""
+  authorizeUrl: String!
+  """Opaque state to round-trip back to socialLoginComplete."""
+  state: String!
+}
+
+"""Result of requesting a magic link."""
+type RequestLoginLinkResult {
+  """Always true (does not reveal whether the email exists)."""
+  sent: Boolean!
+  """
+  DEV ONLY: when DEV_AUTH_BYPASS is enabled (so no email is delivered), the one-time token to pass to completeLoginLink. Always null in production.
+  """
+  devToken: String
 }
 
 type Organization {
@@ -475,6 +513,22 @@ type App {
   """Lifecycle state (DRAFT/LIVE/ARCHIVED). See AppStatus."""
   status: AppStatus!
   """
+  Browser destination (origin/URL) a player is redirected to when they portal into this app from the Overworld. Used to route the player and to validate portal redirect URIs.
+  """
+  launchUrl: String
+  """
+  True for first-party/trusted apps: portal entry skips the consent screen. The Overworld (app 1) is trusted. Studio admins cannot set this; it is platform-controlled.
+  """
+  isTrusted: Boolean!
+  """
+  OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app.
+  """
+  redirectUris: [String!]!
+  """
+  OAuth client type: "public" (browser/PKCE, no secret) or "confidential" (server-side, holds a secret). Defaults to "public".
+  """
+  clientType: String!
+  """
   Opaque JSON-encoded string of marketplace media (cover image URL, screenshots, long description, etc.). Stored internally as JSONB; clients must JSON.parse on read and JSON.stringify on write. Null/"{}" when unset.
   """
   metadata: String
@@ -624,6 +678,40 @@ type PortalAuthorizationCode {
   redirectUri: String!
   """ISO-8601 UTC expiry of the code (typically ~60s)."""
   expiresAt: String!
+}
+
+"""
+A user's standing consent for an app to receive app-scoped tokens via the Overworld portal (the “connected apps” list).
+"""
+type AppAuthorizationGrant {
+  grantId: ID!
+  userId: ID!
+  appId: ID!
+  """The scopes the user approved for this app."""
+  scopes: [String!]!
+  """'active' | 'revoked'."""
+  status: String!
+  grantedAt: DateTime!
+  revokedAt: DateTime
+  appName: String
+}
+
+"""
+Whether portaling into an app requires a consent prompt on the Overworld.
+"""
+type PortalConsentState {
+  """App id, as a String."""
+  appId: String!
+  """App display name."""
+  appName: String
+  """True for first-party/trusted apps (consent is always skipped)."""
+  trusted: Boolean!
+  """True if the user already has an active grant for this app."""
+  alreadyGranted: Boolean!
+  """
+  True if the Overworld must show a consent screen (untrusted app, not yet granted) before creating a portal code.
+  """
+  consentRequired: Boolean!
 }
 
 type OrgWallet {
@@ -2165,6 +2253,12 @@ type Query {
   """
   me: User
   """
+  The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart. The dev mock provider only appears when the dev bypass is enabled.
+  """
+  availableLoginProviders: [String!]!
+  """The signed-in user's linked sign-in identities."""
+  myIdentities: [UserIdentity!]!
+  """
   Looks up a single user by id. Requires a valid game token. NOTE: the users table is management-owned, so in cks-game-api this throws ForbiddenException directing you to call cks-management-api directly; use that API to read arbitrary users. Use `me` to read the caller’s own profile.
   """
   user(
@@ -2387,6 +2481,14 @@ type Query {
     """
     appId: BigInt!
   ): [AppGrantMemberCandidate!]! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
+  """
+  Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token.
+  """
+  portalConsent(appId: BigInt!): PortalConsentState!
+  """
+  The calling user's active app authorizations ("connected apps"). Requires a SESSION token.
+  """
+  myAuthorizedApps: [AppAuthorizationGrant!]!
   """
   Returns the organization's wallet, creating an empty zero-balance wallet on first access if one does not yet exist (so it never returns null). Use it to read the current balance and currency before charging usage or topping up. Requires the 'view_billing' org permission.
   """
@@ -3431,66 +3533,42 @@ input EnvironmentQuoteInput {
 
 type Mutation {
   """
-  Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials.
+  Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public.
   """
-  login(
-    """
-    Wraps the login credentials (email + password). (Argument name is non-standard but required.)
-    """
-    loginUserInput: LoginUserInput!
-  ): AuthResponse!
+  requestLoginLink(input: RequestLoginLinkInput!): RequestLoginLinkResult!
   """
-  Creates a new (initially unconfirmed) account, sends a confirmation email, and returns an AuthResponse with a session `token` for immediate login (send as `Authorization: Bearer <token>`). Public; throws if the email already exists.
+  Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used.
   """
-  register(
-    """
-    Wraps the new-account credentials (email, password, optional gamertag). (Argument name is non-standard but required.)
-    """
-    registerUserInput: RegisterUserInput!
-  ): AuthResponse!
+  completeLoginLink(input: CompleteLoginLinkInput!): AuthResponse!
   """
-  Confirms a user email address using the token from the confirmation email. Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call).
+  Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public.
   """
-  confirmEmail(
-    """The confirmation token from the emailed link."""
-    token: String!
-  ): Boolean!
+  socialLoginStart(input: SocialLoginStartInput!): SocialLoginStart!
   """
-  Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists or is confirmed (prevents account enumeration). Public.
+  Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public.
   """
-  requestPasswordReset(
-    """Email address to send the password-reset link to."""
-    email: String!
-  ): Boolean!
+  socialLoginComplete(input: SocialLoginCompleteInput!): AuthResponse!
   """
-  Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call). Existing sessions are not revoked.
+  DEV ONLY bypass sign-in: returns a session for the given email without email/social verification. Active only when DEV_AUTH_BYPASS is enabled; throws (FORBIDDEN) otherwise. Never enabled in production.
   """
-  resetPassword(
-    """Wraps the reset token and the new password."""
-    resetPasswordInput: ResetPasswordInput!
-  ): Boolean!
+  devLogin(input: DevLoginInput!): AuthResponse!
   """
-  Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public.
+  Link an additional federated identity (from a socialLoginStart callback) to the signed-in account. Requires a session token; throws if the identity is already linked to another account.
   """
-  resendConfirmationEmail(
-    """Email address of the account to re-send confirmation to."""
-    email: String!
+  linkIdentity(input: LinkIdentityInput!): UserIdentity!
+  """
+  Unlink a federated identity from the signed-in account by identityId. Refuses to remove your last remaining sign-in method. Requires a session token.
+  """
+  unlinkIdentity(
+    """The identityId to remove (from myIdentities)."""
+    identityId: String!
   ): Boolean!
   """
   Single-device logout: revokes the game token that authenticated this request by deleting its game_tokens row. Returns true if a token was revoked, false if the request had no game token. Other devices/tokens are unaffected (use the Management API to revoke all devices). After this, the bearer token is rejected and any open UDP proxy session will no longer authorize new traffic.
   """
   logout: Boolean!
   """
-  Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success; throws if the current password is wrong. Existing sessions are not revoked.
-  """
-  changePassword(
-    """The user's current password, for verification."""
-    currentPassword: String!
-    """The new password to set (min 8 characters)."""
-    newPassword: String!
-  ): Boolean!
-  """
-  Ends every active session for the authenticated user (deletes all their game_tokens and records revocations). Requires a valid session token. Use logout to end only the current session.
+  Ends every active session for the authenticated user (deletes all their game_tokens and records revocations). Requires a valid session token.
   """
   logoutAllDevices: Boolean!
   """
@@ -3749,6 +3827,18 @@ type Mutation {
   Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement.
   """
   refreshAppToken: AppTokenResponse!
+  """
+  Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the Overworld consent screen before createPortalAuthorizationCode. Idempotent. Requires a SESSION token.
+  """
+  authorizeApp(input: AuthorizeAppInput!): AppAuthorizationGrant!
+  """
+  Revoke a previously-granted app authorization and immediately revoke the user's live app tokens for it. Requires a SESSION token.
+  """
+  revokeAppAuthorization(appId: BigInt!): Boolean!
+  """
+  Register/update an app's portal client settings (redirect_uris, client_type, launch_url). Requires manage_apps on the app and a SESSION token.
+  """
+  setAppClientSettings(input: SetAppClientSettingsInput!): PortalConsentState!
   """
   Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission.
   """
@@ -4688,29 +4778,54 @@ type Mutation {
   ): Boolean!
 }
 
-input LoginUserInput {
-  """Account email address."""
+"""Request an emailed magic-link to sign in (passwordless)."""
+input RequestLoginLinkInput {
+  """Email address to send the one-time sign-in link to."""
   email: String!
-  """Account password (min 8 characters)."""
-  password: String!
+  """
+  Where to send the user after they click the link (origin must be an allowed app/UI origin). Defaults to the platform sign-in page.
+  """
+  redirectUri: String
 }
 
-input RegisterUserInput {
-  """Email for the new account; the confirmation email is sent here."""
-  email: String!
-  """Password for the new account (min 8 characters)."""
-  password: String!
-  """
-  Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag.
-  """
-  gamertag: String
-}
-
-input ResetPasswordInput {
-  """Password-reset token from the emailed reset link."""
+"""Complete a magic-link sign-in with the emailed token."""
+input CompleteLoginLinkInput {
+  """The one-time token from the magic-link URL."""
   token: String!
-  """New password to set (min 8 characters)."""
-  newPassword: String!
+}
+
+"""Begin a federated (social) sign-in."""
+input SocialLoginStartInput {
+  """Provider id, e.g. 'google' (see availableLoginProviders)."""
+  provider: String!
+  """
+  The callback URL the provider returns to (must be a registered auth callback for your app/UI).
+  """
+  redirectUri: String!
+}
+
+"""Complete a federated sign-in from the provider callback."""
+input SocialLoginCompleteInput {
+  provider: String!
+  """The authorization code returned by the provider."""
+  code: String!
+  """The opaque state value from socialLoginStart (CSRF binding)."""
+  state: String!
+}
+
+"""
+Dev-only bypass sign-in (active only when DEV_AUTH_BYPASS is enabled; never in production).
+"""
+input DevLoginInput {
+  """Email of the account to sign in as (created if absent)."""
+  email: String!
+}
+
+"""Link an additional federated identity to the signed-in account."""
+input LinkIdentityInput {
+  provider: String!
+  code: String!
+  state: String!
 }
 
 input UpdateGamertagInput {
@@ -4942,6 +5057,31 @@ input ExchangePortalCodeInput {
   PKCE code verifier matching the challenge supplied when the code was created. Required when the code was created with a challenge.
   """
   codeVerifier: String
+}
+
+"""
+Approve (consent to) an app receiving app-scoped tokens via the Overworld portal.
+"""
+input AuthorizeAppInput {
+  """App to authorize."""
+  appId: BigInt!
+  """Optional explicit scopes to grant (defaults to the app baseline)."""
+  scopes: [String!]
+}
+
+"""
+Register/update an app's OAuth client settings for the portal handoff (requires manage_apps on the app).
+"""
+input SetAppClientSettingsInput {
+  appId: BigInt!
+  """
+  Allow-listed redirect URIs for the portal authorization code (origin-matched). Replaces the current list.
+  """
+  redirectUris: [String!]
+  """OAuth client type: 'public' (browser/PKCE) or 'confidential'."""
+  clientType: String
+  """Browser launch URL players are sent to when entering the app."""
+  launchUrl: String
 }
 
 input SetQuotaInput {

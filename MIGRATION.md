@@ -1,3 +1,49 @@
+# CrowdyJS v8 — Passwordless & federated sign-in (BREAKING)
+
+**Crowded Kingdoms is passwordless.** Email + password login is removed. Update
+your sign-in flow to one of:
+
+- **Magic link (email):**
+  ```ts
+  await client.auth.requestLoginLink({ email, redirectUri }); // emails a one-time link
+  // on the landing page (token from the URL):
+  const { user } = await client.auth.completeLoginLink(tokenFromUrl);
+  ```
+- **Social (federated / OIDC):**
+  ```ts
+  const providers = await client.auth.availableLoginProviders(); // e.g. ['google']
+  const { authorizeUrl, state } = await client.auth.socialLoginStart('google', callbackUrl);
+  location.assign(authorizeUrl);
+  // on the callback page:
+  await client.auth.socialLoginComplete({ provider: 'google', code, state });
+  ```
+- **Dev bypass (development only):** `await client.auth.devLogin(email)` — works only
+  when the server has `DEV_AUTH_BYPASS` enabled.
+
+**Removed:** `client.auth.login`, `register`, `confirmEmail`, `requestPasswordReset`,
+`resetPassword`, `resendConfirmationEmail`, `changePassword` (and the
+`LoginUserInput` / `RegisterUserInput` / `ResetPasswordInput` types).
+
+**New:** `requestLoginLink`, `completeLoginLink`, `socialLoginStart`,
+`socialLoginComplete`, `devLogin`, `availableLoginProviders`, `myIdentities`,
+`linkIdentity`, `unlinkIdentity`. Each sign-in still returns an identity session
+token, stored on the shared session automatically (account is created on first
+sign-in).
+
+**Portal consent + connected apps (new on `client.portal`):** `getConsent(appId)`,
+`authorizeApp(appId)`, `revokeAppAuthorization(appId)`, `myAuthorizedApps()`,
+`setAppClientSettings({ appId, redirectUris, clientType, launchUrl })`.
+`handleAuthorizeRequest` now enforces consent: untrusted apps throw
+`PortalConsentRequiredError` unless you pass `{ grantConsent: true }` (call after
+the user approves on the consent screen). Trusted/first-party apps (the Overworld,
+app 1) skip consent. Browser portal entry now requires the destination app's
+`redirect_uris` to be registered (`setAppClientSettings`).
+
+Everything else from v7 (the two-client pattern, `client.portal` minting/PKCE,
+app-scoped tokens) is unchanged.
+
+---
+
 # CrowdyJS v7 — Overworld portals & app-scoped tokens (BREAKING)
 
 v7 splits the single app-agnostic game token into two credentials and makes

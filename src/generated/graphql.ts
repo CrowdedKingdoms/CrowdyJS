@@ -159,6 +159,8 @@ export type App = {
   __typename?: 'App';
   /** Unique numeric identifier of the app (primary key). */
   appId: Scalars['BigInt']['output'];
+  /** OAuth client type: "public" (browser/PKCE, no secret) or "confidential" (server-side, holds a secret). Defaults to "public". */
+  clientType: Scalars['String']['output'];
   /** Timestamp when the app was created. */
   createdAt: Scalars['DateTime']['output'];
   /** Numeric user id of the account that created the app. */
@@ -169,6 +171,10 @@ export type App = {
   description: Maybe<Scalars['String']['output']>;
   /** Resolved game-api base URL for SDK/runtime calls: the per-tenant URL for dedicated apps, or the shared platform URL for shared apps. Null for legacy or not-yet-deployed apps. */
   gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** True for first-party/trusted apps: portal entry skips the consent screen. The Overworld (app 1) is trusted. Studio admins cannot set this; it is platform-controlled. */
+  isTrusted: Scalars['Boolean']['output'];
+  /** Browser destination (origin/URL) a player is redirected to when they portal into this app from the Overworld. Used to route the player and to validate portal redirect URIs. */
+  launchUrl: Maybe<Scalars['String']['output']>;
   /** Opaque JSON-encoded string of marketplace media (cover image URL, screenshots, long description, etc.). Stored internally as JSONB; clients must JSON.parse on read and JSON.stringify on write. Null/"{}" when unset. */
   metadata: Maybe<Scalars['String']['output']>;
   /** Human-readable display name of the app. */
@@ -177,6 +183,8 @@ export type App = {
   org: Maybe<Organization>;
   /** Numeric id of the organization that owns this app. */
   orgId: Scalars['BigInt']['output'];
+  /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. */
+  redirectUris: Array<Scalars['String']['output']>;
   /** When runtimeStatus is not "active", why the runtime is gated: "free_allowance", "insufficient_funds", "spend_cap", or "subscription_lapsed". Null when active. */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
   /** Shared-environment runtime gate, mirrored to the game DB and enforced by game-api + Buddy: "active", "grace", "denied", or "suspended". */
@@ -226,6 +234,21 @@ export type AppAccessTier = {
   tierOrder: Scalars['Float']['output'];
   /** Timestamp when the tier was last updated. */
   updatedAt: Scalars['DateTime']['output'];
+};
+
+/** A user's standing consent for an app to receive app-scoped tokens via the Overworld portal (the “connected apps” list). */
+export type AppAuthorizationGrant = {
+  __typename?: 'AppAuthorizationGrant';
+  appId: Scalars['ID']['output'];
+  appName: Maybe<Scalars['String']['output']>;
+  grantId: Scalars['ID']['output'];
+  grantedAt: Scalars['DateTime']['output'];
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The scopes the user approved for this app. */
+  scopes: Array<Scalars['String']['output']>;
+  /** 'active' | 'revoked'. */
+  status: Scalars['String']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export type AppAvatarState = {
@@ -544,6 +567,14 @@ export type AuthResponse = {
   token: Scalars['String']['output'];
   /** The authenticated user. */
   user: User;
+};
+
+/** Approve (consent to) an app receiving app-scoped tokens via the Overworld portal. */
+export type AuthorizeAppInput = {
+  /** App to authorize. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional explicit scopes to grant (defaults to the app baseline). */
+  scopes?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
 export type Avatar = {
@@ -1317,6 +1348,12 @@ export type ClientTextPacketInput = {
   uuid: Scalars['String']['input'];
 };
 
+/** Complete a magic-link sign-in with the emailed token. */
+export type CompleteLoginLinkInput = {
+  /** The one-time token from the magic-link URL. */
+  token: Scalars['String']['input'];
+};
+
 /** Relay-style pagination metadata for a connection. */
 export type ConnectionPageInfo = {
   __typename?: 'ConnectionPageInfo';
@@ -1901,6 +1938,12 @@ export type DestroyEnvironmentInput = {
   orgId: Scalars['BigInt']['input'];
   /** Slug of the environment to destroy (all cloud resources are torn down). */
   slug: Scalars['String']['input'];
+};
+
+/** Dev-only bypass sign-in (active only when DEV_AUTH_BYPASS is enabled; never in production). */
+export type DevLoginInput = {
+  /** Email of the account to sign in as (created if absent). */
+  email: Scalars['String']['input'];
 };
 
 /** Input for environmentQuote. Mirrors CreateEnvironmentInput’s class/flavor shape: dedicated needs the four per-role flavors + counts; dev_single needs only the single flavor. */
@@ -3003,6 +3046,13 @@ export type LinkAppToEnvironmentInput = {
   orgId: Scalars['BigInt']['input'];
 };
 
+/** Link an additional federated identity to the signed-in account. */
+export type LinkIdentityInput = {
+  code: Scalars['String']['input'];
+  provider: Scalars['String']['input'];
+  state: Scalars['String']['input'];
+};
+
 /** Arguments for listVoxelUpdatesByDistance: selects recorded voxel edits across chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance. */
 export type ListVoxelUpdatesByDistanceInput = {
   /** Id of the app whose voxel edits to search (decimal string). */
@@ -3046,13 +3096,6 @@ export type LodDataInput = {
   level: Scalars['Int']['input'];
 };
 
-export type LoginUserInput = {
-  /** Account email address. */
-  email: Scalars['String']['input'];
-  /** Account password (min 8 characters). */
-  password: Scalars['String']['input'];
-};
-
 /** Input for mintAppToken: directly mint an app-scoped gameplay token for the calling user (native/direct path, no browser redirect). */
 export type MintAppTokenInput = {
   /** Numeric id of the app to mint a confined gameplay token for. Free/open apps are auto-granted access; paid apps require an existing entitlement (else FORBIDDEN). */
@@ -3073,16 +3116,16 @@ export type Mutation = {
   archiveApp: App;
   /** Grant runtime permission keys to a group (optionally scoped to a single group role) on a grid by writing the `grid_group_grants` input table, then recompute the materialized effective ACL so every affected member gains the keys. Requires app-admin ('manage_apps'). Returns the grid's current group grants for the group. Use `grantGridPermissions` for per-user grants instead. */
   assignGroupToGrid: Array<GridGroupGrant>;
+  /** Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the Overworld consent screen before createPortalAuthorizationCode. Idempotent. Requires a SESSION token. */
+  authorizeApp: AppAuthorizationGrant;
   /** DESTRUCTIVE. Cancels an app's paid shared-environment subscription. The app loses its paid shared slot (typically at currentPeriodEnd) and may be denied runtime once the period lapses unless a free slot covers it. Returns the updated subscription. Requires the 'manage_billing' permission on the app's org. */
   cancelSharedSubscription: AppSharedSubscription;
   /** Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout. */
   capturePaypalCheckout: Checkout;
-  /** Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success; throws if the current password is wrong. Existing sessions are not revoked. */
-  changePassword: Scalars['Boolean']['output'];
   /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
   claimFreeAppAccess: AppUserAccess;
-  /** Confirms a user email address using the token from the confirmation email. Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call). */
-  confirmEmail: Scalars['Boolean']['output'];
+  /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. */
+  completeLoginLink: AuthResponse;
   /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
   connectUdpProxy: UdpProxyConnectionStatus;
   /** Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user. */
@@ -3141,6 +3184,8 @@ export type Mutation = {
   deleteUserAppState: UserAppState;
   /** DESTRUCTIVE and IRREVERSIBLE. Tears down all cloud resources for the environment (per-tenant Postgres, game-api, Buddy, and load-balancer VMs plus DNS records) and revokes its service tokens; all tenant data is lost. Sets status to 'destroy_requested' and returns the tracking change order — poll orgEnvironment.destroyProgress. Fails if a destroy is already queued. After it reaches 'destroyed', call purgeEnvironment to remove the record. Requires the 'manage_environments' org permission. */
   destroyEnvironment: CksEnvironmentChangeOrder;
+  /** DEV ONLY bypass sign-in: returns a session for the given email without email/social verification. Active only when DEV_AUTH_BYPASS is enabled; throws (FORBIDDEN) otherwise. Never enabled in production. */
+  devLogin: AuthResponse;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
@@ -3213,11 +3258,11 @@ export type Mutation = {
   leaveTeam: Scalars['Boolean']['output'];
   /** Links an unlinked app to an existing environment for split-mode routing. Refuses shared apps and apps already linked elsewhere. Requires the 'manage_environments' org permission. */
   linkAppToEnvironment: App;
-  /** Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. */
-  login: AuthResponse;
+  /** Link an additional federated identity (from a socialLoginStart callback) to the signed-in account. Requires a session token; throws if the identity is already linked to another account. */
+  linkIdentity: UserIdentity;
   /** Single-device logout: revokes the game token that authenticated this request by deleting its game_tokens row. Returns true if a token was revoked, false if the request had no game token. Other devices/tokens are unaffected (use the Management API to revoke all devices). After this, the bearer token is rejected and any open UDP proxy session will no longer authorize new traffic. */
   logout: Scalars['Boolean']['output'];
-  /** Ends every active session for the authenticated user (deletes all their game_tokens and records revocations). Requires a valid session token. Use logout to end only the current session. */
+  /** Ends every active session for the authenticated user (deletes all their game_tokens and records revocations). Requires a valid session token. */
   logoutAllDevices: Scalars['Boolean']['output'];
   /** Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). Side effect: may create an app_user_access row on the app's free default tier. */
   mintAppToken: AppTokenResponse;
@@ -3235,8 +3280,6 @@ export type Mutation = {
   redeployEnvironment: CksEnvironmentChangeOrder;
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. */
   refreshAppToken: AppTokenResponse;
-  /** Creates a new (initially unconfirmed) account, sends a confirmation email, and returns an AuthResponse with a session `token` for immediate login (send as `Authorization: Bearer <token>`). Public; throws if the email already exists. */
-  register: AuthResponse;
   /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
   removeChannelMember: Scalars['Boolean']['output'];
   /** Removes a user from an organization. Requires the 'manage_members' permission on the org (super admins bypass). DESTRUCTIVE: revokes the user's membership and role assignments in that org. Returns false if the user was not a member. */
@@ -3245,22 +3288,20 @@ export type Mutation = {
   removeSharedPaymentMethod: Scalars['Boolean']['output'];
   /** Remove a member from a team. Requires the 'manage_members' team permission, except that any member may remove themselves. DESTRUCTIVE: drops the membership and its roles. Returns true if a membership was removed. */
   removeTeamMember: Scalars['Boolean']['output'];
-  /** Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists or is confirmed (prevents account enumeration). Public. */
-  requestPasswordReset: Scalars['Boolean']['output'];
+  /** Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public. */
+  requestLoginLink: RequestLoginLinkResult;
   /** Request to join a request-only channel (creates a pending membership a manager can approve via addChannelMember). Behaves identically to joinChannel; named for request-policy UIs. */
   requestToJoinChannel: GroupMember;
   /** Request to join a request-only team (creates a pending membership a manager can approve via addTeamMember). Behaves identically to joinTeam; named for request-policy UIs. */
   requestToJoinTeam: GroupMember;
-  /** Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public. */
-  resendConfirmationEmail: Scalars['Boolean']['output'];
-  /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call). Existing sessions are not revoked. */
-  resetPassword: Scalars['Boolean']['output'];
   /** SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale (see CksBuddyHealth.isStale); does not replace cks-udp-api pool fixes. Requires the 'manage_environments' org permission. */
   restartEnvironmentServices: CksEnvironmentChangeOrder;
   /** Resumes a payment-suspended environment, queuing a change order and moving billingStatus to 'resume_queued' (and restarting runtime once it settles). Only valid when billingStatus is grace, suspension_queued, suspended, or resume_failed; otherwise fails. Resumes billable hourly charges. Requires the 'manage_environments' org permission. */
   resumeEnvironment: CksEnvironmentChangeOrder;
   /** Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. */
   revokeAppAccess: AppUserAccess;
+  /** Revoke a previously-granted app authorization and immediately revoke the user's live app tokens for it. Requires a SESSION token. */
+  revokeAppAuthorization: Scalars['Boolean']['output'];
   /** Revoke a user's direct grants on a grid (deletes from the `grid_user_direct_grants` input table) and recompute their materialized effective ACL. Omit `permissionKeys` to remove ALL of the user's direct grants on the grid; pass a subset to remove only those keys. Does not affect permissions the user receives via group grants. Requires app-admin ('manage_apps'). DESTRUCTIVE for the targeted grants. Returns the user's remaining effective permission keys on the grid. */
   revokeGridPermissions: GridUserPermissions;
   /** Revoke group/role grants on a grid (deletes from the `grid_group_grants` input table) and recompute the materialized effective ACL. Omit `permissionKeys` to revoke ALL of the group/role's grants on the grid; pass a subset to revoke only those keys. Requires app-admin ('manage_apps'). DESTRUCTIVE: removes the granted permissions from every affected member. Returns the group's remaining grants on the grid. */
@@ -3285,6 +3326,8 @@ export type Mutation = {
   sendVoxelUpdate: Scalars['Boolean']['output'];
   /** Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission. */
   setAppBudget: AppBudget;
+  /** Register/update an app's portal client settings (redirect_uris, client_type, launch_url). Requires manage_apps on the app and a SESSION token. */
+  setAppClientSettings: PortalConsentState;
   /** Sets per-app hourly/daily spend caps (in cents) and returns the re-evaluated runtime state. Pass null for a limit to clear that cap. Exceeding a cap denies the app's runtime (runtimeDenialReason = spend_cap). Requires the 'manage_billing' permission on the app's org. */
   setAppSpendCaps: AppRuntimeState;
   /** Super admin only (also requires the management API to be enabled for this deployment). Overrides an app visibility platform-wide, e.g. to take down (PRIVATE/UNLISTED) or relist (PUBLIC) an app. Throws ForbiddenException for non-super-admins or when management APIs are disabled. Throws if the app id does not exist. */
@@ -3315,8 +3358,14 @@ export type Mutation = {
   setTeamPolicy: AppGroupPolicy;
   /** Begins vaulting a card for off-session auto-billing. Returns a Stripe SetupIntent client secret the browser confirms; no charge is made here. Requires the 'manage_billing' org permission. */
   setupSharedPaymentMethod: PaymentMethodSetup;
+  /** Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public. */
+  socialLoginComplete: AuthResponse;
+  /** Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public. */
+  socialLoginStart: SocialLoginStart;
   /** Checks whether the authenticated user is allowed to teleport an actor to a destination within an app and returns the authorization result. This is an authorization check only — it does NOT itself move the actor; the UDP runtime performs the actual movement. Requires a valid bearer game token plus the app-level "teleport" runtime permission. Returns success=false with errorCode INVALID_APP_ID (non-positive appId), UNAUTHORIZED (reserved sentinel destination -6,-6,-6 or missing permission), or success=true / NO_ERROR when allowed. */
   teleportRequest: TeleportResponse;
+  /** Unlink a federated identity from the signed-in account by identityId. Refuses to remove your last remaining sign-in method. Requires a session token. */
+  unlinkIdentity: Scalars['Boolean']['output'];
   /** Update an existing access tier (name, ordering, pricing, permissions, etc.); only fields present in the input are changed. Requires the 'manage_access_tiers' permission on the app that owns the tier (resolved from tierId); super admins bypass. SIDE EFFECTS: re-syncs the tier's permissions to the game API. Throws if the tier is not found or the caller lacks permission. */
   updateAccessTier: AppAccessTier;
   /** Partially updates an actor (appId, avatarId, chunk, publicState, privateState); fields omitted from `input` are left unchanged. OWNER-EXCLUSIVE: only the actor’s owner may update (throws Unauthorized otherwise). Requires a valid game token. `uuid` is the 32-character ASCII actor id. */
@@ -3404,6 +3453,11 @@ export type MutationAssignGroupToGridArgs = {
 };
 
 
+export type MutationAuthorizeAppArgs = {
+  input: AuthorizeAppInput;
+};
+
+
 export type MutationCancelSharedSubscriptionArgs = {
   appId: Scalars['BigInt']['input'];
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
@@ -3416,19 +3470,13 @@ export type MutationCapturePaypalCheckoutArgs = {
 };
 
 
-export type MutationChangePasswordArgs = {
-  currentPassword: Scalars['String']['input'];
-  newPassword: Scalars['String']['input'];
-};
-
-
 export type MutationClaimFreeAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
 };
 
 
-export type MutationConfirmEmailArgs = {
-  token: Scalars['String']['input'];
+export type MutationCompleteLoginLinkArgs = {
+  input: CompleteLoginLinkInput;
 };
 
 
@@ -3570,6 +3618,11 @@ export type MutationDeleteUserAppStateArgs = {
 
 export type MutationDestroyEnvironmentArgs = {
   input: DestroyEnvironmentInput;
+};
+
+
+export type MutationDevLoginArgs = {
+  input: DevLoginInput;
 };
 
 
@@ -3755,8 +3808,8 @@ export type MutationLinkAppToEnvironmentArgs = {
 };
 
 
-export type MutationLoginArgs = {
-  loginUserInput: LoginUserInput;
+export type MutationLinkIdentityArgs = {
+  input: LinkIdentityInput;
 };
 
 
@@ -3806,11 +3859,6 @@ export type MutationRedeployEnvironmentArgs = {
 };
 
 
-export type MutationRegisterArgs = {
-  registerUserInput: RegisterUserInput;
-};
-
-
 export type MutationRemoveChannelMemberArgs = {
   groupId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
@@ -3837,8 +3885,8 @@ export type MutationRemoveTeamMemberArgs = {
 };
 
 
-export type MutationRequestPasswordResetArgs = {
-  email: Scalars['String']['input'];
+export type MutationRequestLoginLinkArgs = {
+  input: RequestLoginLinkInput;
 };
 
 
@@ -3849,16 +3897,6 @@ export type MutationRequestToJoinChannelArgs = {
 
 export type MutationRequestToJoinTeamArgs = {
   groupId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationResendConfirmationEmailArgs = {
-  email: Scalars['String']['input'];
-};
-
-
-export type MutationResetPasswordArgs = {
-  resetPasswordInput: ResetPasswordInput;
 };
 
 
@@ -3876,6 +3914,11 @@ export type MutationRevokeAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeAppAuthorizationArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -3940,6 +3983,11 @@ export type MutationSetAppBudgetArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   monthlyLimitCents: Scalars['BigInt']['input'];
   orgId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationSetAppClientSettingsArgs = {
+  input: SetAppClientSettingsInput;
 };
 
 
@@ -4032,8 +4080,23 @@ export type MutationSetupSharedPaymentMethodArgs = {
 };
 
 
+export type MutationSocialLoginCompleteArgs = {
+  input: SocialLoginCompleteInput;
+};
+
+
+export type MutationSocialLoginStartArgs = {
+  input: SocialLoginStartInput;
+};
+
+
 export type MutationTeleportRequestArgs = {
   input: TeleportRequestInput;
+};
+
+
+export type MutationUnlinkIdentityArgs = {
+  identityId: Scalars['String']['input'];
 };
 
 
@@ -4487,6 +4550,21 @@ export type PortalAuthorizationCode = {
   redirectUri: Scalars['String']['output'];
 };
 
+/** Whether portaling into an app requires a consent prompt on the Overworld. */
+export type PortalConsentState = {
+  __typename?: 'PortalConsentState';
+  /** True if the user already has an active grant for this app. */
+  alreadyGranted: Scalars['Boolean']['output'];
+  /** App id, as a String. */
+  appId: Scalars['String']['output'];
+  /** App display name. */
+  appName: Maybe<Scalars['String']['output']>;
+  /** True if the Overworld must show a consent screen (untrusted app, not yet granted) before creating a portal code. */
+  consentRequired: Scalars['Boolean']['output'];
+  /** True for first-party/trusted apps (consent is always skipped). */
+  trusted: Scalars['Boolean']['output'];
+};
+
 /** Postgres billing tier: bandwidth allotment and capacity charge. Usage metering deferred. */
 export type PostgresBillingTier = {
   __typename?: 'PostgresBillingTier';
@@ -4569,6 +4647,8 @@ export type Query = {
   appsConnection: AppsConnection;
   /** All apps belonging to an organization, identified by the org's slug, regardless of visibility or status (includes drafts and archived). Requires authentication; intended for org dashboards. Ordered newest-first. Returns an empty list for an unknown slug. */
   appsForOrg: Array<App>;
+  /** The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart. The dev mock provider only appears when the dev bypass is enabled. */
+  availableLoginProviders: Array<Scalars['String']['output']>;
   /** Fetches a single avatar by id. Requires a valid game token. Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null). Throws NotFound if the id does not exist. State blobs are base64-encoded binary. */
   avatar: Avatar;
   /** Reads one avatar’s per-app state (keyed by appId+avatarId). PUBLIC READ: any authenticated user may read it. Requires a valid game token. Returns null when no row exists. `state` is base64-encoded binary. */
@@ -4713,6 +4793,8 @@ export type Query = {
   myAppAccess: Maybe<AppUserAccess>;
   /** Apps the authenticated caller can see in their account: those owned by an org they are an active member of, OR those where they hold an active app_user_access grant. Requires authentication. Includes apps of any visibility/status (e.g. drafts the caller can access). Ordered newest-first. */
   myApps: Array<App>;
+  /** The calling user's active app authorizations ("connected apps"). Requires a SESSION token. */
+  myAuthorizedApps: Array<AppAuthorizationGrant>;
   /** Lists all avatars owned by the authenticated user, including full `publicState` and `privateState` (the caller is always the owner here). Requires a valid bearer game token; takes no arguments. State blobs are base64-encoded binary. Use `userAvatars` to view another user’s avatars (private state is stripped for non-owners). */
   myAvatars: Array<AvatarDto>;
   /** The caller's channels in an app, with their roles and effective channel permissions (e.g. whether they hold send_messages). Use this to discover which channels the current user can read/post in. */
@@ -4726,6 +4808,8 @@ export type Query = {
    * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
    */
   myDonationData: UserDonationData;
+  /** The signed-in user's linked sign-in identities. */
+  myIdentities: Array<UserIdentity>;
   /** Lists the authenticated caller's organization memberships. Each entry bundles the org, the caller's effective permission keys, and assigned roles. Requires a valid session token. */
   myOrganizations: Array<OrgMembership>;
   /**
@@ -4771,6 +4855,8 @@ export type Query = {
   platformConfig: PlatformConfig;
   /** Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission. */
   playerPulse: PlayerPulse;
+  /** Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token. */
+  portalConsent: PortalConsentState;
   /** Public read-only catalog of active Postgres billing tiers. Usage metering deferred. */
   postgresBillingTiers: Array<PostgresBillingTier>;
   /** Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission. */
@@ -5400,6 +5486,11 @@ export type QueryPlayerPulseArgs = {
 };
 
 
+export type QueryPortalConsentArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryQuotasForAppArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -5534,20 +5625,21 @@ export type RedeployEnvironmentInput = {
   version?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type RegisterUserInput = {
-  /** Email for the new account; the confirmation email is sent here. */
+/** Request an emailed magic-link to sign in (passwordless). */
+export type RequestLoginLinkInput = {
+  /** Email address to send the one-time sign-in link to. */
   email: Scalars['String']['input'];
-  /** Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag. */
-  gamertag?: InputMaybe<Scalars['String']['input']>;
-  /** Password for the new account (min 8 characters). */
-  password: Scalars['String']['input'];
+  /** Where to send the user after they click the link (origin must be an allowed app/UI origin). Defaults to the platform sign-in page. */
+  redirectUri?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type ResetPasswordInput = {
-  /** New password to set (min 8 characters). */
-  newPassword: Scalars['String']['input'];
-  /** Password-reset token from the emailed reset link. */
-  token: Scalars['String']['input'];
+/** Result of requesting a magic link. */
+export type RequestLoginLinkResult = {
+  __typename?: 'RequestLoginLinkResult';
+  /** DEV ONLY: when DEV_AUTH_BYPASS is enabled (so no email is delivered), the one-time token to pass to completeLoginLink. Always null in production. */
+  devToken: Maybe<Scalars['String']['output']>;
+  /** Always true (does not reveal whether the email exists). */
+  sent: Scalars['Boolean']['output'];
 };
 
 export type RestartEnvironmentServicesInput = {
@@ -5885,6 +5977,17 @@ export type ServiceQuota = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** Register/update an app's OAuth client settings for the portal handoff (requires manage_apps on the app). */
+export type SetAppClientSettingsInput = {
+  appId: Scalars['BigInt']['input'];
+  /** OAuth client type: 'public' (browser/PKCE) or 'confidential'. */
+  clientType?: InputMaybe<Scalars['String']['input']>;
+  /** Browser launch URL players are sent to when entering the app. */
+  launchUrl?: InputMaybe<Scalars['String']['input']>;
+  /** Allow-listed redirect URIs for the portal authorization code (origin-matched). Replaces the current list. */
+  redirectUris?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
 /** Set the per-app automation policy (guardrails / platform ceilings). */
 export type SetAutomationPolicyInput = {
   /** The app (tenant). */
@@ -6057,6 +6160,32 @@ export type SingleActorMessageNotification = {
   sequenceNumber: Scalars['Int']['output'];
   /** The destination actor’s UUID (your own actor’s UUID, echoed from the message). */
   uuid: Scalars['String']['output'];
+};
+
+/** Complete a federated sign-in from the provider callback. */
+export type SocialLoginCompleteInput = {
+  /** The authorization code returned by the provider. */
+  code: Scalars['String']['input'];
+  provider: Scalars['String']['input'];
+  /** The opaque state value from socialLoginStart (CSRF binding). */
+  state: Scalars['String']['input'];
+};
+
+/** A federated sign-in handoff: redirect the user to authorizeUrl. */
+export type SocialLoginStart = {
+  __typename?: 'SocialLoginStart';
+  /** Provider authorize URL to redirect the user to. */
+  authorizeUrl: Scalars['String']['output'];
+  /** Opaque state to round-trip back to socialLoginComplete. */
+  state: Scalars['String']['output'];
+};
+
+/** Begin a federated (social) sign-in. */
+export type SocialLoginStartInput = {
+  /** Provider id, e.g. 'google' (see availableLoginProviders). */
+  provider: Scalars['String']['input'];
+  /** The callback URL the provider returns to (must be a registered auth callback for your app/UI). */
+  redirectUri: Scalars['String']['input'];
 };
 
 export type Subscription = {
@@ -6615,6 +6744,21 @@ export type UserEdge = {
   node: User;
 };
 
+/** A federated / passwordless sign-in identity linked to a user account (a social provider, an emailed magic link, or the dev bypass). */
+export type UserIdentity = {
+  __typename?: 'UserIdentity';
+  createdAt: Scalars['DateTime']['output'];
+  email: Maybe<Scalars['String']['output']>;
+  emailVerified: Scalars['Boolean']['output'];
+  identityId: Scalars['ID']['output'];
+  lastLoginAt: Maybe<Scalars['DateTime']['output']>;
+  /** The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'dev' (dev bypass). */
+  provider: Scalars['String']['output'];
+  /** The provider's stable subject id ('sub'). For 'email'/'dev' this is the lowercased email. */
+  subject: Scalars['String']['output'];
+  userId: Scalars['ID']['output'];
+};
+
 /** Aggregated property-token balances for a user. LEGACY: property tokens are no longer purchasable. Returned by the deprecated myPropertyTokens query. */
 export type UserPropertyTokenData = {
   __typename?: 'UserPropertyTokenData';
@@ -7131,28 +7275,6 @@ export type UpdateAppMutationVariables = Exact<{
 
 export type UpdateAppMutation = { __typename?: 'Mutation', updateApp: { __typename?: 'App', appId: string, orgId: string, name: string, slug: string | null, description: string | null, visibility: AppVisibility, status: AppStatus, metadata: string | null, updatedAt: string } };
 
-export type ChangePasswordMutationVariables = Exact<{
-  currentPassword: Scalars['String']['input'];
-  newPassword: Scalars['String']['input'];
-}>;
-
-
-export type ChangePasswordMutation = { __typename?: 'Mutation', changePassword: boolean };
-
-export type ConfirmEmailMutationVariables = Exact<{
-  token: Scalars['String']['input'];
-}>;
-
-
-export type ConfirmEmailMutation = { __typename?: 'Mutation', confirmEmail: boolean };
-
-export type LoginMutationVariables = Exact<{
-  input: LoginUserInput;
-}>;
-
-
-export type LoginMutation = { __typename?: 'Mutation', login: { __typename?: 'AuthResponse', token: string, gameTokenId: string, user: { __typename?: 'User', userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, isConfirmed: boolean, createdAt: string, grantEarlyAccess: boolean, grantEarlyAccessOverride: boolean, orgId: string | null, externalId: string | null, userType: string, isSuperAdmin: boolean } } };
-
 export type LogoutMutationVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -7162,34 +7284,6 @@ export type LogoutAllDevicesMutationVariables = Exact<{ [key: string]: never; }>
 
 
 export type LogoutAllDevicesMutation = { __typename?: 'Mutation', logoutAllDevices: boolean };
-
-export type RegisterMutationVariables = Exact<{
-  input: RegisterUserInput;
-}>;
-
-
-export type RegisterMutation = { __typename?: 'Mutation', register: { __typename?: 'AuthResponse', token: string, gameTokenId: string, user: { __typename?: 'User', userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, isConfirmed: boolean, createdAt: string, grantEarlyAccess: boolean, grantEarlyAccessOverride: boolean, orgId: string | null, externalId: string | null, userType: string, isSuperAdmin: boolean } } };
-
-export type RequestPasswordResetMutationVariables = Exact<{
-  email: Scalars['String']['input'];
-}>;
-
-
-export type RequestPasswordResetMutation = { __typename?: 'Mutation', requestPasswordReset: boolean };
-
-export type ResendConfirmationEmailMutationVariables = Exact<{
-  email: Scalars['String']['input'];
-}>;
-
-
-export type ResendConfirmationEmailMutation = { __typename?: 'Mutation', resendConfirmationEmail: boolean };
-
-export type ResetPasswordMutationVariables = Exact<{
-  input: ResetPasswordInput;
-}>;
-
-
-export type ResetPasswordMutation = { __typename?: 'Mutation', resetPassword: boolean };
 
 export type UserAvatarsQueryVariables = Exact<{
   userId: Scalars['BigInt']['input'];
@@ -9095,15 +9189,8 @@ export const AppsConnectionDocument = {"kind":"Document","definitions":[{"kind":
 export const MyAppsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyApps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myApps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<MyAppsQuery, MyAppsQueryVariables>;
 export const SetAppVisibilityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAppVisibility"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"visibility"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AppVisibility"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAppVisibility"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"visibility"},"value":{"kind":"Variable","name":{"kind":"Name","value":"visibility"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SetAppVisibilityMutation, SetAppVisibilityMutationVariables>;
 export const UpdateAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAppInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateApp"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAppMutation, UpdateAppMutationVariables>;
-export const ChangePasswordDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ChangePassword"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"currentPassword"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newPassword"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"changePassword"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"currentPassword"},"value":{"kind":"Variable","name":{"kind":"Name","value":"currentPassword"}}},{"kind":"Argument","name":{"kind":"Name","value":"newPassword"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newPassword"}}}]}]}}]} as unknown as DocumentNode<ChangePasswordMutation, ChangePasswordMutationVariables>;
-export const ConfirmEmailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ConfirmEmail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"token"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"confirmEmail"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"token"},"value":{"kind":"Variable","name":{"kind":"Name","value":"token"}}}]}]}}]} as unknown as DocumentNode<ConfirmEmailMutation, ConfirmEmailMutationVariables>;
-export const LoginDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"Login"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"LoginUserInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"loginUserInput"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"token"}},{"kind":"Field","name":{"kind":"Name","value":"gameTokenId"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"gamertag"}},{"kind":"Field","name":{"kind":"Name","value":"disambiguation"}},{"kind":"Field","name":{"kind":"Name","value":"isConfirmed"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"grantEarlyAccess"}},{"kind":"Field","name":{"kind":"Name","value":"grantEarlyAccessOverride"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"userType"}},{"kind":"Field","name":{"kind":"Name","value":"isSuperAdmin"}}]}}]}}]}}]} as unknown as DocumentNode<LoginMutation, LoginMutationVariables>;
 export const LogoutDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"Logout"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"logout"}}]}}]} as unknown as DocumentNode<LogoutMutation, LogoutMutationVariables>;
 export const LogoutAllDevicesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"LogoutAllDevices"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"logoutAllDevices"}}]}}]} as unknown as DocumentNode<LogoutAllDevicesMutation, LogoutAllDevicesMutationVariables>;
-export const RegisterDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"Register"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RegisterUserInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"register"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"registerUserInput"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"token"}},{"kind":"Field","name":{"kind":"Name","value":"gameTokenId"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"gamertag"}},{"kind":"Field","name":{"kind":"Name","value":"disambiguation"}},{"kind":"Field","name":{"kind":"Name","value":"isConfirmed"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"grantEarlyAccess"}},{"kind":"Field","name":{"kind":"Name","value":"grantEarlyAccessOverride"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"userType"}},{"kind":"Field","name":{"kind":"Name","value":"isSuperAdmin"}}]}}]}}]}}]} as unknown as DocumentNode<RegisterMutation, RegisterMutationVariables>;
-export const RequestPasswordResetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RequestPasswordReset"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"email"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestPasswordReset"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"email"},"value":{"kind":"Variable","name":{"kind":"Name","value":"email"}}}]}]}}]} as unknown as DocumentNode<RequestPasswordResetMutation, RequestPasswordResetMutationVariables>;
-export const ResendConfirmationEmailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ResendConfirmationEmail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"email"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resendConfirmationEmail"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"email"},"value":{"kind":"Variable","name":{"kind":"Name","value":"email"}}}]}]}}]} as unknown as DocumentNode<ResendConfirmationEmailMutation, ResendConfirmationEmailMutationVariables>;
-export const ResetPasswordDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ResetPassword"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ResetPasswordInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resetPassword"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"resetPasswordInput"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<ResetPasswordMutation, ResetPasswordMutationVariables>;
 export const UserAvatarsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"UserAvatars"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userAvatars"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<UserAvatarsQuery, UserAvatarsQueryVariables>;
 export const AvatarByIdDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AvatarById"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"avatar"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<AvatarByIdQuery, AvatarByIdQueryVariables>;
 export const MyAvatarsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyAvatars"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myAvatars"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<MyAvatarsQuery, MyAvatarsQueryVariables>;

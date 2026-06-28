@@ -10,9 +10,11 @@
  *     `client.voxels`, `client.actors`, `client.teleport`, `client.state`,
  *     `client.serverStatus`, `client.udp`).
  *
- * Both clients share a single `AuthState` so the token returned by
- * `client.auth.login()` is automatically attached to every subsequent
- * request, regardless of which endpoint serves it.
+ * Authentication is **passwordless** (as of v8): sign in with an emailed magic
+ * link, a federated social provider, or — in dev — the dev bypass. The returned
+ * identity session token is stored on the shared `AuthState` automatically.
+ * Gameplay uses app-scoped tokens minted via `client.portal` (see the two-client
+ * pattern in the README).
  *
  * Usage:
  *
@@ -24,9 +26,11 @@
  *     managementUrl: 'https://dev-management-api.crowdedkingdoms.com',
  *   });
  *
- *   const { token, user } = await client.auth.login({ email, password });
+ *   // passwordless sign-in (magic link): emails a one-time link
+ *   await client.auth.requestLoginLink({ email });
+ *   // ...user clicks the link; the landing page calls:
+ *   const { user } = await client.auth.completeLoginLink(tokenFromUrl);
  *   const me = await client.users.me();
- *   const unsub = client.udp.subscribe({ actorUpdate: (n) => { ... } }, appId);
  *
  * As of v6 the SDK wraps the **full** public surface of both APIs, namespaced
  * by audience: the game-client surface (`auth`, `users`, `udp`, `world`,
@@ -42,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '7.1.1';
+export const VERSION = '8.0.0';
 
 export {
   CrowdyClient,
@@ -124,14 +128,22 @@ export { UdpErrorCode } from './types.js';
 // AuthAPI / UsersAPI / AppsAPI target cks-management-api; the rest target
 // cks-game-api.
 // -----------------------------------------------------------------------------
-export { AuthAPI } from './domains/auth.js';
+export {
+  AuthAPI,
+  type AuthResponse,
+  type AuthUser,
+  type UserIdentity,
+} from './domains/auth.js';
 export { UsersAPI } from './domains/users.js';
 export { AppsAPI, type AppRoute } from './domains/apps.js';
 export {
   PortalAPI,
   BrowserSessionPkceStore,
+  PortalConsentRequiredError,
   type AppTokenResponse,
   type PortalAuthorizationCode,
+  type PortalConsentState,
+  type AppAuthorizationGrant,
   type PkceStore,
   type BeginEntryParams,
 } from './domains/portal.js';
@@ -179,9 +191,6 @@ export type {
   GameClientBootstrap,
 
   // Management-api auth surface (used by AuthAPI / UsersAPI).
-  LoginUserInput,
-  RegisterUserInput,
-  ResetPasswordInput,
   UpdateGamertagInput,
 
   CreateActorInput,

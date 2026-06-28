@@ -111,6 +111,79 @@ const RefreshAppTokenDocument = parse(
   `mutation RefreshAppToken { refreshAppToken { ${APP_TOKEN_FIELDS} } }`,
 ) as TypedDocumentNode<{ refreshAppToken: AppTokenResponse }, Record<string, never>>;
 
+export interface PortalConsentState {
+  appId: string;
+  appName: string | null;
+  /** True for first-party/trusted apps (consent always skipped). */
+  trusted: boolean;
+  alreadyGranted: boolean;
+  /** True if the Overworld must show a consent screen before minting a code. */
+  consentRequired: boolean;
+}
+
+export interface AppAuthorizationGrant {
+  grantId: string;
+  appId: string;
+  appName: string | null;
+  scopes: string[];
+  status: string;
+  grantedAt: string;
+  revokedAt: string | null;
+}
+
+/** Thrown by {@link PortalAPI.handleAuthorizeRequest} when the user must consent. */
+export class PortalConsentRequiredError extends Error {
+  constructor(
+    public readonly appId: string,
+    public readonly appName: string | null,
+  ) {
+    super(`Consent required for app ${appId}`);
+    this.name = 'PortalConsentRequiredError';
+  }
+}
+
+const PortalConsentDocument = parse(
+  `query PortalConsent($appId: BigInt!) { portalConsent(appId: $appId) { appId appName trusted alreadyGranted consentRequired } }`,
+) as TypedDocumentNode<
+  { portalConsent: PortalConsentState },
+  { appId: string }
+>;
+
+const AuthorizeAppDocument = parse(
+  `mutation AuthorizeApp($input: AuthorizeAppInput!) { authorizeApp(input: $input) { grantId appId status scopes } }`,
+) as TypedDocumentNode<
+  { authorizeApp: AppAuthorizationGrant },
+  { input: { appId: string; scopes?: string[] } }
+>;
+
+const RevokeAppAuthorizationDocument = parse(
+  `mutation RevokeAppAuthorization($appId: BigInt!) { revokeAppAuthorization(appId: $appId) }`,
+) as TypedDocumentNode<
+  { revokeAppAuthorization: boolean },
+  { appId: string }
+>;
+
+const MyAuthorizedAppsDocument = parse(
+  `query MyAuthorizedApps { myAuthorizedApps { grantId appId appName scopes status grantedAt revokedAt } }`,
+) as TypedDocumentNode<
+  { myAuthorizedApps: AppAuthorizationGrant[] },
+  Record<string, never>
+>;
+
+const SetAppClientSettingsDocument = parse(
+  `mutation SetAppClientSettings($input: SetAppClientSettingsInput!) { setAppClientSettings(input: $input) { appId appName trusted consentRequired } }`,
+) as TypedDocumentNode<
+  { setAppClientSettings: PortalConsentState },
+  {
+    input: {
+      appId: string;
+      redirectUris?: string[];
+      clientType?: string;
+      launchUrl?: string;
+    };
+  }
+>;
+
 export interface BeginEntryParams {
   /** Target app id (decimal string). */
   appId: string;
@@ -187,6 +260,52 @@ export class PortalAPI {
     return data.refreshAppToken;
   }
 
+  // ----- Consent + connected apps ------------------------------------------
+
+  /** Whether portaling into an app needs a consent prompt (Overworld side). */
+  async getConsent(appId: string): Promise<PortalConsentState> {
+    const data = await this.management.request(PortalConsentDocument, { appId });
+    return data.portalConsent;
+  }
+
+  /** Record the user's consent for an app (call from the consent screen). */
+  async authorizeApp(
+    appId: string,
+    scopes?: string[],
+  ): Promise<AppAuthorizationGrant> {
+    const data = await this.management.request(AuthorizeAppDocument, {
+      input: { appId, scopes },
+    });
+    return data.authorizeApp;
+  }
+
+  /** Revoke a prior authorization; also revokes the user's live tokens for it. */
+  async revokeAppAuthorization(appId: string): Promise<boolean> {
+    const data = await this.management.request(RevokeAppAuthorizationDocument, {
+      appId,
+    });
+    return data.revokeAppAuthorization;
+  }
+
+  /** The user's active app authorizations ("connected apps"). */
+  async myAuthorizedApps(): Promise<AppAuthorizationGrant[]> {
+    const data = await this.management.request(MyAuthorizedAppsDocument);
+    return data.myAuthorizedApps;
+  }
+
+  /** Register/update an app's portal client settings (requires manage_apps). */
+  async setAppClientSettings(input: {
+    appId: string;
+    redirectUris?: string[];
+    clientType?: string;
+    launchUrl?: string;
+  }): Promise<PortalConsentState> {
+    const data = await this.management.request(SetAppClientSettingsDocument, {
+      input,
+    });
+    return data.setAppClientSettings;
+  }
+
   // ----- Browser PKCE redirect helpers -------------------------------------
 
   /**
@@ -212,7 +331,10 @@ export class PortalAPI {
    * game's params from the URL, mints a code with the session token, and returns
    * the URL to redirect the player back to (carrying `code` + `state`).
    */
-  async handleAuthorizeRequest(search?: string): Promise<string> {
+  async handleAuthorizeRequest(
+    search?: string,
+    options?: { grantConsent?: boolean; scopes?: string[] },
+  ): Promise<string> {
     const params = new URLSearchParams(search ?? defaultSearch());
     const appId = params.get('app_id');
     const codeChallenge = params.get('code_challenge');
@@ -224,6 +346,17 @@ export class PortalAPI {
       throw new Error(
         'authorize request missing app_id, code_challenge, or redirect_uri',
       );
+    }
+    // Consent gate: trusted apps + already-granted apps proceed silently. For an
+    // untrusted, not-yet-granted app, either record consent (when the user
+    // approved on the consent screen) or signal the caller to show one.
+    const consent = await this.getConsent(appId);
+    if (consent.consentRequired) {
+      if (options?.grantConsent) {
+        await this.authorizeApp(appId, options.scopes);
+      } else {
+        throw new PortalConsentRequiredError(appId, consent.appName);
+      }
     }
     const result = await this.createAuthorizationCode({
       appId,
