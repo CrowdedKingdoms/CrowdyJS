@@ -991,6 +991,8 @@ export type CksEnvironment = {
   graphqlBillingTier: Maybe<Scalars['Int']['output']>;
   /** Opaque environment UUID (cks_environments.id). */
   id: Scalars['String']['output'];
+  /** True for the single platform-owned shared environment (slug 'shared') that hosts the shared game-api serving apps with deploymentTarget='shared'. Customer environments are always false. */
+  isShared: Scalars['Boolean']['output'];
   loadBalancerCount: Scalars['Int']['output'];
   /** Release version actually observed running. Lags desiredEnvironmentVersion while a deploy is in progress. */
   observedEnvironmentVersion: Maybe<Scalars['String']['output']>;
@@ -1785,6 +1787,8 @@ export type CreateEnvironmentInput = {
   gameApiMinServers?: InputMaybe<Scalars['Int']['input']>;
   /** GraphQL billing tier level from graphqlBillingTiers. Defaults to tier 1 for dedicated environments. */
   graphqlBillingTier?: InputMaybe<Scalars['Int']['input']>;
+  /** Super-admin only: designate this as the single platform-owned shared environment (slug 'shared') that hosts the shared game-api for apps with deploymentTarget='shared'. Must be a dedicated environment. Customers cannot set this; the management API rejects it for non-super-admins. */
+  isShared?: InputMaybe<Scalars['Boolean']['input']>;
   /** Number of Caddy load-balancer VMs in front of the game-api fleet (min 1). Required for dedicated; ignored for dev_single. */
   loadBalancerCount?: InputMaybe<Scalars['Int']['input']>;
   /** Organization id (BigInt) that will own and be billed for the environment. */
@@ -3096,6 +3100,13 @@ export type LodDataInput = {
   level: Scalars['Int']['input'];
 };
 
+export type LoginUserInput = {
+  /** Account email address. */
+  email: Scalars['String']['input'];
+  /** Account password (min 8 characters). */
+  password: Scalars['String']['input'];
+};
+
 /** Input for mintAppToken: directly mint an app-scoped gameplay token for the calling user (native/direct path, no browser redirect). */
 export type MintAppTokenInput = {
   /** Numeric id of the app to mint a confined gameplay token for. Free/open apps are auto-granted access; paid apps require an existing entitlement (else FORBIDDEN). */
@@ -3122,10 +3133,14 @@ export type Mutation = {
   cancelSharedSubscription: AppSharedSubscription;
   /** Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout. */
   capturePaypalCheckout: Checkout;
+  /** Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success; throws if the current password is wrong. Existing sessions are not revoked. */
+  changePassword: Scalars['Boolean']['output'];
   /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
   claimFreeAppAccess: AppUserAccess;
   /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. */
   completeLoginLink: AuthResponse;
+  /** Confirms a user email address using the token from the confirmation email (also enables password sign-in for the account). Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call). */
+  confirmEmail: Scalars['Boolean']['output'];
   /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
   connectUdpProxy: UdpProxyConnectionStatus;
   /** Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user. */
@@ -3260,6 +3275,8 @@ export type Mutation = {
   linkAppToEnvironment: App;
   /** Link an additional federated identity (from a socialLoginStart callback) to the signed-in account. Requires a session token; throws if the identity is already linked to another account. */
   linkIdentity: UserIdentity;
+  /** Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed. */
+  login: AuthResponse;
   /** Single-device logout: revokes the game token that authenticated this request by deleting its game_tokens row. Returns true if a token was revoked, false if the request had no game token. Other devices/tokens are unaffected (use the Management API to revoke all devices). After this, the bearer token is rejected and any open UDP proxy session will no longer authorize new traffic. */
   logout: Scalars['Boolean']['output'];
   /** Ends every active session for the authenticated user (deletes all their game_tokens and records revocations). Requires a valid session token. */
@@ -3280,6 +3297,8 @@ export type Mutation = {
   redeployEnvironment: CksEnvironmentChangeOrder;
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. */
   refreshAppToken: AppTokenResponse;
+  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email (e.g. created via magic link/social), the password is attached pending email confirmation and no session is returned (throws CONFLICT). Public. */
+  register: AuthResponse;
   /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
   removeChannelMember: Scalars['Boolean']['output'];
   /** Removes a user from an organization. Requires the 'manage_members' permission on the org (super admins bypass). DESTRUCTIVE: revokes the user's membership and role assignments in that org. Returns false if the user was not a member. */
@@ -3290,10 +3309,16 @@ export type Mutation = {
   removeTeamMember: Scalars['Boolean']['output'];
   /** Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public. */
   requestLoginLink: RequestLoginLinkResult;
+  /** Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public. */
+  requestPasswordReset: Scalars['Boolean']['output'];
   /** Request to join a request-only channel (creates a pending membership a manager can approve via addChannelMember). Behaves identically to joinChannel; named for request-policy UIs. */
   requestToJoinChannel: GroupMember;
   /** Request to join a request-only team (creates a pending membership a manager can approve via addTeamMember). Behaves identically to joinTeam; named for request-policy UIs. */
   requestToJoinTeam: GroupMember;
+  /** Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public. */
+  resendConfirmationEmail: Scalars['Boolean']['output'];
+  /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call). Existing sessions are not revoked. */
+  resetPassword: Scalars['Boolean']['output'];
   /** SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale (see CksBuddyHealth.isStale); does not replace cks-udp-api pool fixes. Requires the 'manage_environments' org permission. */
   restartEnvironmentServices: CksEnvironmentChangeOrder;
   /** Resumes a payment-suspended environment, queuing a change order and moving billingStatus to 'resume_queued' (and restarting runtime once it settles). Only valid when billingStatus is grace, suspension_queued, suspended, or resume_failed; otherwise fails. Resumes billable hourly charges. Requires the 'manage_environments' org permission. */
@@ -3470,6 +3495,12 @@ export type MutationCapturePaypalCheckoutArgs = {
 };
 
 
+export type MutationChangePasswordArgs = {
+  currentPassword: Scalars['String']['input'];
+  newPassword: Scalars['String']['input'];
+};
+
+
 export type MutationClaimFreeAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -3477,6 +3508,11 @@ export type MutationClaimFreeAppAccessArgs = {
 
 export type MutationCompleteLoginLinkArgs = {
   input: CompleteLoginLinkInput;
+};
+
+
+export type MutationConfirmEmailArgs = {
+  token: Scalars['String']['input'];
 };
 
 
@@ -3813,6 +3849,11 @@ export type MutationLinkIdentityArgs = {
 };
 
 
+export type MutationLoginArgs = {
+  loginUserInput: LoginUserInput;
+};
+
+
 export type MutationMintAppTokenArgs = {
   input: MintAppTokenInput;
 };
@@ -3859,6 +3900,11 @@ export type MutationRedeployEnvironmentArgs = {
 };
 
 
+export type MutationRegisterArgs = {
+  registerUserInput: RegisterUserInput;
+};
+
+
 export type MutationRemoveChannelMemberArgs = {
   groupId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
@@ -3890,6 +3936,11 @@ export type MutationRequestLoginLinkArgs = {
 };
 
 
+export type MutationRequestPasswordResetArgs = {
+  email: Scalars['String']['input'];
+};
+
+
 export type MutationRequestToJoinChannelArgs = {
   groupId: Scalars['BigInt']['input'];
 };
@@ -3897,6 +3948,16 @@ export type MutationRequestToJoinChannelArgs = {
 
 export type MutationRequestToJoinTeamArgs = {
   groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationResendConfirmationEmailArgs = {
+  email: Scalars['String']['input'];
+};
+
+
+export type MutationResetPasswordArgs = {
+  resetPasswordInput: ResetPasswordInput;
 };
 
 
@@ -4851,7 +4912,7 @@ export type Query = {
   paymentEvents: PaymentEventsPage;
   /** Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected. Relay cursor connection; prefer this over the offset-based paymentEvents. */
   paymentEventsConnection: PaymentEventsConnection;
-  /** Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps. No auth required. */
+  /** Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required. */
   platformConfig: PlatformConfig;
   /** Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission. */
   playerPulse: PlayerPulse;
@@ -5625,6 +5686,15 @@ export type RedeployEnvironmentInput = {
   version?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type RegisterUserInput = {
+  /** Email for the new account; the confirmation email is sent here. */
+  email: Scalars['String']['input'];
+  /** Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag. */
+  gamertag?: InputMaybe<Scalars['String']['input']>;
+  /** Password for the new account (min 8 characters). */
+  password: Scalars['String']['input'];
+};
+
 /** Request an emailed magic-link to sign in (passwordless). */
 export type RequestLoginLinkInput = {
   /** Email address to send the one-time sign-in link to. */
@@ -5640,6 +5710,13 @@ export type RequestLoginLinkResult = {
   devToken: Maybe<Scalars['String']['output']>;
   /** Always true (does not reveal whether the email exists). */
   sent: Scalars['Boolean']['output'];
+};
+
+export type ResetPasswordInput = {
+  /** New password to set (min 8 characters). */
+  newPassword: Scalars['String']['input'];
+  /** Password-reset token from the emailed reset link. */
+  token: Scalars['String']['input'];
 };
 
 export type RestartEnvironmentServicesInput = {

@@ -14,6 +14,37 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 
 > **Server compatibility:** v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define. v6.1's `client.gameApps.deleteGrid` additionally requires release **v0.1.33+** (`cks-game-api >= v0.12.3`).
 
+## Standalone builds and schema refresh
+
+CrowdyJS is a standalone public package. A clean external clone must be able to
+run `npm install && npm run build` without sibling CKS API repos checked out.
+For that reason the build uses committed schema artifacts in this repo:
+
+- `schema.gql` — merged Management API + Game API SDL.
+- `src/generated/graphql.ts` — generated TypeScript operation types.
+
+Schema refresh is explicit:
+
+```bash
+# Refresh from the published production SDLs.
+npm run schema:sync:prod
+npm run codegen
+
+# Or, inside the CKS wrapper repo, refresh from local API checkouts.
+npm run schema:sync:local
+npm run codegen
+
+# Or use exact file/URL sources.
+npm run schema:sync:paths -- \
+  --management ../cks-management-api/schema.gql \
+  --game ../cks-game-api/schema.gql
+npm run codegen
+```
+
+Commit `schema.gql` and `src/generated/graphql.ts` together whenever the public
+GraphQL surface changes. Do not make `npm run build` depend on local API repos or
+network access; use `npm run check:schema` in CI/release work to detect drift.
+
 ## Quick start
 
 ```ts

@@ -21,12 +21,13 @@
     "MIGRATION.md"
   ],
   "scripts": {
-    "sync-schema": "node scripts/sync-schema.mjs",
-    "precodegen": "npm run sync-schema",
+    "schema:sync": "npm run schema:sync:prod",
+    "schema:sync:prod": "node scripts/sync-schema.mjs --prod",
+    "schema:sync:local": "node scripts/sync-schema.mjs --local",
+    "schema:sync:paths": "node scripts/sync-schema.mjs",
     "codegen": "graphql-codegen --config codegen.ts",
     "check:schema": "npm run codegen && git diff --exit-code schema.gql src/generated/graphql.ts",
     "codegen:watch": "graphql-codegen --config codegen.ts --watch",
-    "prebuild": "npm run codegen",
     "build": "tsc",
     "test": "npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/e2e/*.test.mjs",
     "test:unit": "npm run build && node --test test/unit/*.test.mjs",
@@ -61,6 +62,7 @@
     "@graphql-codegen/typed-document-node": "^6.1.8",
     "@graphql-codegen/typescript": "^5.0.10",
     "@graphql-codegen/typescript-operations": "^5.1.0",
+    "@graphql-tools/merge": "^9.1.10",
     "@types/node": "^22.10.7",
     "typescript": "^5.7.3",
     "ws": "^8.20.0"
