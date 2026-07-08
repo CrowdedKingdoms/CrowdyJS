@@ -185,6 +185,8 @@ export type App = {
   orgId: Scalars['BigInt']['output'];
   /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. */
   redirectUris: Array<Scalars['String']['output']>;
+  /** Reserved sustained egress in bytes/s for shared apps. 0 = free tier; >0 bypasses the ~1 MB/s rate limit and incurs a monthly reservation fee. */
+  reservedEgressBytesPerSec: Scalars['BigInt']['output'];
   /** When runtimeStatus is not "active", why the runtime is gated: "free_allowance", "insufficient_funds", "spend_cap", or "subscription_lapsed". Null when active. */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
   /** Shared-environment runtime gate, mirrored to the game DB and enforced by game-api + Buddy: "active", "grace", "denied", or "suspended". */
@@ -419,6 +421,27 @@ export type AppTokenResponse = {
   launchUrl: Maybe<Scalars['String']['output']>;
   /** Opaque app-scoped gameplay token. Send to the target app's Game API as `Authorization: Bearer <token>` (and in the realtime `connectionParams`). Do NOT send it to the Management API for anything other than `me`/`refreshAppToken`. */
   token: Scalars['String']['output'];
+};
+
+/** End-of-month egress projection for one shared app from linear extrapolation of calendar-month usage so far. */
+export type AppUsageProjection = {
+  __typename?: 'AppUsageProjection';
+  /** App id (as a string). */
+  appId: Scalars['String']['output'];
+  /** Egress bytes recorded so far this calendar month (from app_monthly_egress). */
+  currentEgressBytes: Scalars['String']['output'];
+  /** Fractional UTC days elapsed since the calendar month started. */
+  daysElapsed: Scalars['Float']['output'];
+  /** Per-app free monthly egress allowance in bytes (5 decimal GB). */
+  freeAllowanceBytes: Scalars['String']['output'];
+  /** True when projected egress exceeds the free allowance, or null when insufficient data. */
+  onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
+  /** Projected end-of-month egress bytes (linear extrapolation), or null when insufficient data. */
+  projectedBytes: Maybe<Scalars['String']['output']>;
+  /** Projected usage as a percentage of the free allowance, or null when insufficient data. */
+  projectedPctOfFree: Maybe<Scalars['Float']['output']>;
+  /** True when at least 3 days have elapsed in the month (projection is meaningful). */
+  sufficientData: Scalars['Boolean']['output'];
 };
 
 /** Aggregate byte totals for one app over the requested window. All *Bytes fields are string counters (may exceed Int range). */
@@ -2032,6 +2055,8 @@ export type FreeAppQuota = {
   quota: Scalars['Int']['output'];
   /** Free slots still available (quota − usedFree). */
   remainingFree: Scalars['Int']['output'];
+  /** Apps with reserved throughput (premium; do not consume free slots). */
+  reservedApps: Scalars['Int']['output'];
   /** Free slots currently in use. */
   usedFree: Scalars['Int']['output'];
 };
@@ -3353,6 +3378,8 @@ export type Mutation = {
   setAppBudget: AppBudget;
   /** Register/update an app's portal client settings (redirect_uris, client_type, launch_url). Requires manage_apps on the app and a SESSION token. */
   setAppClientSettings: PortalConsentState;
+  /** Reserve sustained egress throughput for a shared app (bypasses the ~1 MB/s free-tier rate limit). Billed at $3/MB/s/month from the org wallet; upgrades are prorated for the current month. Requires 'manage_billing' on the app's org. */
+  setAppReservedThroughput: SetAppReservedThroughputResult;
   /** Sets per-app hourly/daily spend caps (in cents) and returns the re-evaluated runtime state. Pass null for a limit to clear that cap. Exceeding a cap denies the app's runtime (runtimeDenialReason = spend_cap). Requires the 'manage_billing' permission on the app's org. */
   setAppSpendCaps: AppRuntimeState;
   /** Super admin only (also requires the management API to be enabled for this deployment). Overrides an app visibility platform-wide, e.g. to take down (PRIVATE/UNLISTED) or relist (PUBLIC) an app. Throws ForbiddenException for non-super-admins or when management APIs are disabled. Throws if the app id does not exist. */
@@ -4052,6 +4079,12 @@ export type MutationSetAppClientSettingsArgs = {
 };
 
 
+export type MutationSetAppReservedThroughputArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  input: SetAppReservedThroughputInput;
+};
+
+
 export type MutationSetAppSpendCapsArgs = {
   appId: Scalars['BigInt']['input'];
   dailyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
@@ -4333,6 +4366,21 @@ export type NotificationArgInput = {
   name: Scalars['String']['input'];
 };
 
+/** Per-app projection row within an org rollup. */
+export type OrgAppUsageProjectionRow = {
+  __typename?: 'OrgAppUsageProjectionRow';
+  /** App id (as a string). */
+  appId: Scalars['String']['output'];
+  /** App display name. */
+  appName: Scalars['String']['output'];
+  /** Egress bytes so far this calendar month. */
+  currentEgressBytes: Scalars['String']['output'];
+  /** True when this app is on track to exceed its free allowance, or null when insufficient data. */
+  onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
+  /** Projected end-of-month egress bytes, or null when insufficient data. */
+  projectedBytes: Maybe<Scalars['String']['output']>;
+};
+
 /** Org off-session auto-billing configuration. */
 export type OrgAutoBilling = {
   __typename?: 'OrgAutoBilling';
@@ -4456,6 +4504,42 @@ export type OrgTokenWithSecret = {
   orgTokenId: Scalars['BigInt']['output'];
   /** The plaintext token. Save it now; it is not stored. */
   token: Scalars['String']['output'];
+};
+
+/** Org-level rollup of per-app monthly egress projections for all shared apps. */
+export type OrgUsageProjection = {
+  __typename?: 'OrgUsageProjection';
+  /** Per-app projection breakdown. */
+  apps: Array<OrgAppUsageProjectionRow>;
+  /** Fractional UTC days elapsed since the calendar month started. */
+  daysElapsed: Scalars['Float']['output'];
+  /** True when any shared app is on track to exceed its free allowance. */
+  onTrackToExceedAny: Scalars['Boolean']['output'];
+  /** True when at least 3 days have elapsed in the month (projection is meaningful). */
+  sufficientData: Scalars['Boolean']['output'];
+  /** True when org total projected egress exceeds the combined free tier — suggest reserved throughput. */
+  suggestReservedThroughput: Scalars['Boolean']['output'];
+  /** Total free monthly egress allowance across all shared apps in the org (apps × 5 GB). */
+  totalFreeAllowanceBytes: Scalars['String']['output'];
+  /** Sum of projected end-of-month egress across shared apps, or null when insufficient data. */
+  totalProjectedBytes: Maybe<Scalars['String']['output']>;
+};
+
+/** Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. */
+export type OrgUsageSummary = {
+  __typename?: 'OrgUsageSummary';
+  /** Total GraphQL bytes received across all org apps (string counter). */
+  graphqlRecvBytes: Scalars['String']['output'];
+  /** Total GraphQL bytes sent across all org apps (string counter). */
+  graphqlSendBytes: Scalars['String']['output'];
+  /** Organization id (as a string). */
+  orgId: Scalars['String']['output'];
+  /** Total replication bytes received across all org apps (string counter). */
+  replicationRecvBytes: Scalars['String']['output'];
+  /** Total replication bytes sent across all org apps (string counter). */
+  replicationSendBytes: Scalars['String']['output'];
+  /** Total GraphQL operations (send + recv) across all org apps (string counter). */
+  totalOps: Scalars['String']['output'];
 };
 
 export type OrgWallet = {
@@ -4678,6 +4762,8 @@ export type Query = {
   actors: Array<Actor>;
   /** Relay-style cursor-paginated version of `actors`: lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); `totalCount` is the full number of matching actors. Requires a valid game token; only the caller’s own actors are returned (full state included). */
   actorsConnection: ActorsConnection;
+  /** Convenience for UI: returns true when the authenticated caller is the currently elected host for the given app (same election as gameHost), otherwise false (including when no host is elected). Not authoritative for server-side mutations — use gameModelInvoke's is_host policy for that. Requires a valid bearer game token (same auth as gameHost). */
+  amIGameHost: Scalars['Boolean']['output'];
   /** Fetch a single app by its numeric id. Requires authentication (any signed-in user); does NOT enforce org/app permissions, so it can read apps the caller does not own, of any visibility/status. Returns null if the id does not exist. Prefer appBySlug for slug-based marketplace lookups. */
   app: Maybe<App>;
   /** Public listing of an app's access tiers (the free/paid bundles of runtime permissions), ordered by tierOrder ascending. PUBLIC: no authentication required. Powers the marketplace app detail / pricing page. Includes tiers of all statuses; inspect AppAccessTier.status to skip archived tiers. */
@@ -4696,6 +4782,8 @@ export type Query = {
   appRuntimeState: AppRuntimeState;
   /** An app's paid shared-environment subscription, or null when it has none (e.g. unpublished or on the free quota). Caller must be a member of the app's org. */
   appSharedSubscription: Maybe<AppSharedSubscription>;
+  /** Linear end-of-month egress projection for one shared app from calendar-month usage so far. Requires at least 3 elapsed days in the month before returning projected values. Requires the 'view_usage' org permission. */
+  appUsageProjection: AppUsageProjection;
   /** Replication and GraphQL byte totals plus the top GraphQL operations for one app over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission. */
   appUsageSummary: AppUsageSummary;
   /** Admin view of the user access records for an app (who has been granted/revoked access and on which tier). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Ordered by most recently updated. Paginated via limit/offset. */
@@ -4904,6 +4992,10 @@ export type Query = {
   orgTokens: Array<OrgToken>;
   /** Aggregate replication/GraphQL byte totals per environment across the org for the time window. Read-only reporting. Requires the 'view_usage' org permission. */
   orgUsageByEnvironment: Array<EnvironmentUsageRollupRow>;
+  /** Org rollup of per-app monthly egress projections for all shared apps, with upgrade prompts when on track to exceed free tier. Requires the 'view_usage' org permission. */
+  orgUsageProjection: OrgUsageProjection;
+  /** Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. Read-only reporting. Requires the 'view_usage' org permission. */
+  orgUsageSummary: OrgUsageSummary;
   /** Fetches an organization by id (BigInt as string). Requires a valid session token. Returns null if no such organization exists. */
   organization: Maybe<Organization>;
   /** Fetches an organization by its unique URL slug. Requires a valid session token. Returns null if not found. Use this when you only have the slug; otherwise prefer organization(id). */
@@ -4986,6 +5078,11 @@ export type QueryActorsConnectionArgs = {
 };
 
 
+export type QueryAmIGameHostArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryAppArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -5033,6 +5130,12 @@ export type QueryAppRuntimeStateArgs = {
 
 export type QueryAppSharedSubscriptionArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppUsageProjectionArgs = {
+  appId: Scalars['BigInt']['input'];
+  orgId: Scalars['BigInt']['input'];
 };
 
 
@@ -5517,6 +5620,17 @@ export type QueryOrgTokensArgs = {
 export type QueryOrgUsageByEnvironmentArgs = {
   orgId: Scalars['BigInt']['input'];
   since: Scalars['DateTime']['input'];
+};
+
+
+export type QueryOrgUsageProjectionArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgUsageSummaryArgs = {
+  orgId: Scalars['BigInt']['input'];
+  since?: InputMaybe<Scalars['DateTime']['input']>;
 };
 
 
@@ -6065,6 +6179,25 @@ export type SetAppClientSettingsInput = {
   redirectUris?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
+/** Set or change an app's reserved sustained throughput on the shared environment. */
+export type SetAppReservedThroughputInput = {
+  /** App to configure reserved throughput for. */
+  appId: Scalars['BigInt']['input'];
+  /** Organization that owns the app. */
+  orgId: Scalars['BigInt']['input'];
+  /** Reserved sustained egress in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation (free tier). */
+  reservedBytesPerSec: Scalars['BigInt']['input'];
+};
+
+/** Result of setAppReservedThroughput: updated app + reservation fee debited (0 when downgrading or unchanged). */
+export type SetAppReservedThroughputResult = {
+  __typename?: 'SetAppReservedThroughputResult';
+  /** App after the reservation change. */
+  app: App;
+  /** Cents debited from the org wallet for this change (prorated upgrade). 0 when clearing or lowering reservation. */
+  chargedCents: Scalars['BigInt']['output'];
+};
+
 /** Set the per-app automation policy (guardrails / platform ceilings). */
 export type SetAutomationPolicyInput = {
   /** The app (tenant). */
@@ -6345,8 +6478,6 @@ export enum UdpErrorCode {
   PasswordTooLong = 'PASSWORD_TOO_LONG',
   /** Password failed minimum-length validation. */
   PasswordTooShort = 'PASSWORD_TOO_SHORT',
-  /** The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session. */
-  TokenExpired = 'TOKEN_EXPIRED',
   /** The caller lacks the runtime/grid permission required for this action. Grid permissions can load asynchronously, so the first message to a newly entered region may transiently return this — retry shortly. */
   Unauthorized = 'UNAUTHORIZED',
   /** Unspecified server error (1). Retry; if it persists, report it. */
@@ -7093,7 +7224,7 @@ export type WalletTransaction = {
   referenceId: Maybe<Scalars['String']['output']>;
   /** Unique transaction id (BigInt as a decimal string). */
   transactionId: Scalars['BigInt']['output'];
-  /** What produced this transaction. Known values: "topup" (wallet credit from a checkout/top-up), "usage" (per-app usage charge, negative), "shared_usage" (shared-environment usage charge, negative), "environment_usage" (hourly environment cost, negative), "auto_recharge" (automatic wallet recharge). Other caller-supplied deposit types are possible. */
+  /** What produced this transaction. Known values: "topup" (wallet credit from a checkout/top-up), "usage" (per-app usage charge, negative), "shared_usage" (shared-environment usage charge, negative), "reserved_throughput" (monthly/prorated reserved egress capacity, negative), "environment_usage" (hourly environment cost, negative), "auto_recharge" (automatic wallet recharge). Other caller-supplied deposit types are possible. */
   transactionType: Scalars['String']['output'];
   /** Wallet this transaction belongs to (BigInt as a decimal string). */
   walletId: Scalars['BigInt']['output'];
@@ -8401,6 +8532,13 @@ export type GameHostQueryVariables = Exact<{
 
 export type GameHostQuery = { __typename?: 'Query', gameHost: { __typename?: 'GameHost', hostUserId: string, actorCount: number, earliestActorJoinedAt: string } | null };
 
+export type AmIGameHostQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type AmIGameHostQuery = { __typename?: 'Query', amIGameHost: boolean };
+
 export type ActorHeartbeatMutationVariables = Exact<{
   appId: Scalars['BigInt']['input'];
 }>;
@@ -9406,6 +9544,7 @@ export const GameModelTierFeaturesDocument = {"kind":"Document","definitions":[{
 export const GameModelPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionCreationPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"defaultParticipantRole"}}]}}]}}]} as unknown as DocumentNode<GameModelPolicyQuery, GameModelPolicyQueryVariables>;
 export const GameModelRevokeTierFeatureDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelRevokeTierFeature"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"GrantTierFeatureInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelRevokeTierFeature"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<GameModelRevokeTierFeatureMutation, GameModelRevokeTierFeatureMutationVariables>;
 export const GameHostDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameHost"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameHost"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hostUserId"}},{"kind":"Field","name":{"kind":"Name","value":"actorCount"}},{"kind":"Field","name":{"kind":"Name","value":"earliestActorJoinedAt"}}]}}]}}]} as unknown as DocumentNode<GameHostQuery, GameHostQueryVariables>;
+export const AmIGameHostDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AmIGameHost"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"amIGameHost"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}]}]}}]} as unknown as DocumentNode<AmIGameHostQuery, AmIGameHostQueryVariables>;
 export const ActorHeartbeatDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ActorHeartbeat"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"actorHeartbeat"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hostUserId"}},{"kind":"Field","name":{"kind":"Name","value":"actorCount"}},{"kind":"Field","name":{"kind":"Name","value":"earliestActorJoinedAt"}}]}}]}}]} as unknown as DocumentNode<ActorHeartbeatMutation, ActorHeartbeatMutationVariables>;
 export const CreateOrgRoleDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrgRole"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrgRoleInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgRole"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgRoleId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"roleName"}},{"kind":"Field","name":{"kind":"Name","value":"isSystem"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CreateOrgRoleMutation, CreateOrgRoleMutationVariables>;
 export const CreateOrgTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrgToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrgTokenInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgTokenId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"token"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CreateOrgTokenMutation, CreateOrgTokenMutationVariables>;

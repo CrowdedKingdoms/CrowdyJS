@@ -6,6 +6,10 @@ query GameHost($appId: BigInt!) {
   }
 }
 
+query AmIGameHost($appId: BigInt!) {
+  amIGameHost(appId: $appId)
+}
+
 mutation ActorHeartbeat($appId: BigInt!) {
   actorHeartbeat(appId: $appId) {
     hostUserId
