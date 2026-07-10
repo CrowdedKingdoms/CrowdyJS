@@ -60,6 +60,10 @@ mutation GameModelCreateContainer($input: CreateContainerInput!) {
   }
 }
 
+mutation GameModelDeleteContainer($appId: BigInt!, $containerId: String!) {
+  gameModelDeleteContainer(appId: $appId, containerId: $containerId)
+}
+
 mutation GameModelSetProperty($input: SetContainerPropertyInput!) {
   gameModelSetProperty(input: $input) {
     ...GmContainerFields
@@ -74,6 +78,10 @@ mutation GameModelAddEdge($input: AddEdgeInput!) {
     relationshipType
     weight
   }
+}
+
+mutation GameModelDeleteEdge($appId: BigInt!, $edgeId: String!) {
+  gameModelDeleteEdge(appId: $appId, edgeId: $edgeId)
 }
 
 mutation GameModelInvoke($input: InvokeFunctionInput!) {

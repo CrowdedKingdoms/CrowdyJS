@@ -14,12 +14,18 @@ import {
   GameModelCreateContainerDocument,
   type GameModelCreateContainerMutation,
   type GameModelCreateContainerMutationVariables,
+  GameModelDeleteContainerDocument,
+  type GameModelDeleteContainerMutation,
+  type GameModelDeleteContainerMutationVariables,
   GameModelSetPropertyDocument,
   type GameModelSetPropertyMutation,
   type GameModelSetPropertyMutationVariables,
   GameModelAddEdgeDocument,
   type GameModelAddEdgeMutation,
   type GameModelAddEdgeMutationVariables,
+  GameModelDeleteEdgeDocument,
+  type GameModelDeleteEdgeMutation,
+  type GameModelDeleteEdgeMutationVariables,
   GameModelInvokeDocument,
   type GameModelInvokeMutation,
   type GameModelInvokeMutationVariables,
@@ -54,6 +60,12 @@ import {
   GameModelUpsertPropertyDefDocument,
   type GameModelUpsertPropertyDefMutation,
   type GameModelUpsertPropertyDefMutationVariables,
+  GameModelDeletePropertyDefDocument,
+  type GameModelDeletePropertyDefMutation,
+  type GameModelDeletePropertyDefMutationVariables,
+  GameModelDeleteContainerTypeDocument,
+  type GameModelDeleteContainerTypeMutation,
+  type GameModelDeleteContainerTypeMutationVariables,
   GameModelUpsertFunctionDocument,
   type GameModelUpsertFunctionMutation,
   type GameModelUpsertFunctionMutationVariables,
@@ -196,8 +208,9 @@ import {
  * `client.auth.login()` or `client.setToken()`) scoped to the target app, or it
  * throws {@link CrowdyGraphQLError} (`UNAUTHENTICATED` / `SCOPE_MISSING`). The
  * **studio-authoring** methods ({@link seed}, {@link upsertContainerType},
- * {@link upsertPropertyDef}, {@link upsertFunction}, {@link deleteFunction},
- * {@link defineFeature}, {@link grantTierFeature}, {@link setPolicy}) and the
+ * {@link upsertPropertyDef}, {@link deletePropertyDef}, {@link upsertFunction},
+ * {@link deleteFunction}, {@link deleteContainerType}, {@link defineFeature},
+ * {@link grantTierFeature}, {@link setPolicy}) and the
  * {@link typeSchema} query additionally require the app-admin **`manage_apps`**
  * permission (otherwise `FORBIDDEN`, with `extensions.requiredPermission ===
  * 'manage_apps'`); the runtime/player methods need only a valid token plus
@@ -310,6 +323,24 @@ export class GameModelAPI {
   }
 
   /**
+   * **Containers** — delete a container instance. Cascades its instance
+   * properties and any edges connected to it. Allowed for an app admin or the
+   * container owner. **Destructive.**
+   *
+   * @param variables - `{ appId, containerId }`: `appId` (decimal string) and
+   *   the container UUID to delete.
+   * @returns `true` if a container was deleted, `false` if none matched.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`, or
+   *   `FORBIDDEN` if the caller is neither an app admin nor the owner.
+   */
+  async deleteContainer(
+    variables: GameModelDeleteContainerMutationVariables,
+  ): Promise<GameModelDeleteContainerMutation['gameModelDeleteContainer']> {
+    const data = await this.gql.request(GameModelDeleteContainerDocument, variables);
+    return data.gameModelDeleteContainer;
+  }
+
+  /**
    * **Containers** — set a single property value on a container directly (outside
    * a function). Allowed only when the property's `writable` rule
    * (`function | owner | admin`) permits the caller; the value is JSON-encoded
@@ -349,6 +380,23 @@ export class GameModelAPI {
   ): Promise<GameModelAddEdgeMutation['gameModelAddEdge']> {
     const data = await this.gql.request(GameModelAddEdgeDocument, { input });
     return data.gameModelAddEdge;
+  }
+
+  /**
+   * **Edges** — delete a directed relationship edge. Allowed for an app admin or
+   * the owner of the source (`from`) container. **Destructive.**
+   *
+   * @param variables - `{ appId, edgeId }`: `appId` (decimal string) and the
+   *   edge UUID to delete.
+   * @returns `true` if an edge was deleted, `false` if none matched.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`, or
+   *   `FORBIDDEN` if the caller may not delete the edge.
+   */
+  async deleteEdge(
+    variables: GameModelDeleteEdgeMutationVariables,
+  ): Promise<GameModelDeleteEdgeMutation['gameModelDeleteEdge']> {
+    const data = await this.gql.request(GameModelDeleteEdgeDocument, variables);
+    return data.gameModelDeleteEdge;
   }
 
   /**
@@ -616,6 +664,45 @@ export class GameModelAPI {
   ): Promise<GameModelUpsertPropertyDefMutation['gameModelUpsertPropertyDef']> {
     const data = await this.gql.request(GameModelUpsertPropertyDefDocument, { input });
     return data.gameModelUpsertPropertyDef;
+  }
+
+  /**
+   * **Property definitions** — delete a property definition from a container
+   * type. Does **not** remove instance property values already stored on
+   * containers. **Destructive.**
+   *
+   * Requires the app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, containerTypeName, key }`.
+   * @returns `true` if a definition was deleted, `false` if none matched.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`, or
+   *   `FORBIDDEN` (`requiredPermission === 'manage_apps'`).
+   */
+  async deletePropertyDef(
+    variables: GameModelDeletePropertyDefMutationVariables,
+  ): Promise<GameModelDeletePropertyDefMutation['gameModelDeletePropertyDef']> {
+    const data = await this.gql.request(GameModelDeletePropertyDefDocument, variables);
+    return data.gameModelDeletePropertyDef;
+  }
+
+  /**
+   * **Container types** — delete a container type and its property definitions.
+   * Refuses if live containers of that type exist, or if functions are bound to
+   * it — delete those first. **Destructive.**
+   *
+   * Requires the app-admin **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, typeName }`.
+   * @returns `true` if a type was deleted, `false` if none matched.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`,
+   *   `FORBIDDEN` (`requiredPermission === 'manage_apps'`), or `BAD_USER_INPUT`
+   *   when containers or bound functions still exist.
+   */
+  async deleteContainerType(
+    variables: GameModelDeleteContainerTypeMutationVariables,
+  ): Promise<GameModelDeleteContainerTypeMutation['gameModelDeleteContainerType']> {
+    const data = await this.gql.request(GameModelDeleteContainerTypeDocument, variables);
+    return data.gameModelDeleteContainerType;
   }
 
   /**

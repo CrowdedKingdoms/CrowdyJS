@@ -74,6 +74,22 @@ mutation GameModelUpsertPropertyDef($input: UpsertPropertyDefInput!) {
   }
 }
 
+mutation GameModelDeletePropertyDef(
+  $appId: BigInt!
+  $containerTypeName: String!
+  $key: String!
+) {
+  gameModelDeletePropertyDef(
+    appId: $appId
+    containerTypeName: $containerTypeName
+    key: $key
+  )
+}
+
+mutation GameModelDeleteContainerType($appId: BigInt!, $typeName: String!) {
+  gameModelDeleteContainerType(appId: $appId, typeName: $typeName)
+}
+
 mutation GameModelUpsertFunction($input: UpsertFunctionInput!) {
   gameModelUpsertFunction(input: $input) {
     ...GmFunctionFields
