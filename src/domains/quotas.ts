@@ -76,7 +76,7 @@ export class QuotasAPI {
    * Create or update a quota at an org or app scope. Requires `manage_quotas`
    * (super-admin for platform-global quotas).
    *
-   * @param input - {@link SetQuotaInput}: scope ids, `metric`, and `limit`.
+   * @param input - {@link SetQuotaInput}: scope ids, `metric`, and `limitValue`.
    * @returns The created/updated quota.
    */
   async set(input: SetQuotaInput): Promise<SetQuotaMutation['setQuota']> {
