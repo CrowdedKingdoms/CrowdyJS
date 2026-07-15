@@ -23,7 +23,7 @@ test('payments: a signed-in user can list their own checkouts', { skip, timeout:
   client.setToken(owner.token);
   try {
     const mine = await client.payments.mine({ limit: 10 });
-    assert.ok(Array.isArray(mine), 'myCheckouts returns an array');
+    assert.ok(Array.isArray(mine?.items), 'myCheckouts returns a page with an items array');
   } finally {
     client.close();
   }

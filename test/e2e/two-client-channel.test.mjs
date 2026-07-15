@@ -21,7 +21,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from '../provision.mjs';
+import { provisionClients, mintAppToken } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -72,8 +72,11 @@ test(
     const cleanup = [];
 
     // Owner client (app admin) creates the channel and manages membership.
+    // Channel CRUD is a game-api surface that targets a concrete appId, so the
+    // owner needs an app-scoped token (Overworld token confinement rejects
+    // identity session tokens with SCOPE_MISSING).
     const ownerClient = createCrowdyClient(clientConfig());
-    ownerClient.setToken(owner.token);
+    ownerClient.setToken(await mintAppToken(appId, owner.token));
 
     let channelId;
     try {

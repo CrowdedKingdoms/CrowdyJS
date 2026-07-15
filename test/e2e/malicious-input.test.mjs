@@ -46,13 +46,16 @@ test('auth: a revoked (logged-out) token no longer authorizes', { skip, timeout:
   }
 });
 
-test('auth: password reset + resend are enumeration-resistant', { skip, timeout: 60_000 }, async () => {
+test('auth: login-link requests are enumeration-resistant', { skip, timeout: 60_000 }, async () => {
+  // Passwordless (v8): password reset/resend are gone. The enumeration-resistance
+  // property now lives on requestLoginLink, which must report sent=true whether
+  // or not the email maps to an account.
   const { createCrowdyClient } = await loadSdk();
   const client = createCrowdyClient(clientConfig());
   try {
     const unknown = `crowdy-nobody-${rid()}@test.invalid`;
-    assert.equal(await client.auth.requestPasswordReset(unknown), true, 'reset always returns true (no enumeration)');
-    assert.equal(await client.auth.resendConfirmationEmail(unknown), true, 'resend always returns true (no enumeration)');
+    const res = await client.auth.requestLoginLink({ email: unknown });
+    assert.equal(res.sent, true, 'login link always reports sent (no enumeration)');
   } finally {
     client.close();
   }

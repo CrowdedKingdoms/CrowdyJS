@@ -54,9 +54,11 @@ test('gamer: avatars, host, state, actors, idempotency', { skip, timeout: 90_000
     assert.ok(st != null, 'userAppState round-trips');
     await client.state.delete(appId);
 
-    // Persisted actors + idempotent delete contract.
+    // Persisted actors + idempotent delete contract. CreateActorInput.chunk is
+    // required (the actor's initial chunk-grid position).
+    const chunk = { x: '0', y: '0', z: '0' };
     const uuid1 = randomActorUuid();
-    await client.actors.create({ appId, uuid: uuid1 });
+    await client.actors.create({ appId, uuid: uuid1, chunk });
     const got = await client.actors.get(uuid1);
     assert.equal(got.uuid, uuid1, 'createActor + actor round-trip');
 
@@ -67,7 +69,7 @@ test('gamer: avatars, host, state, actors, idempotency', { skip, timeout: 90_000
     assert.ok(del2, 'replaying the same idempotency key returns the first result');
 
     const uuid2 = randomActorUuid();
-    await client.actors.create({ appId, uuid: uuid2 });
+    await client.actors.create({ appId, uuid: uuid2, chunk });
     await assert.rejects(
       () => client.actors.delete(uuid2, key), // same key, different args -> conflict
       (err) => (err?.extensions?.code ?? '') === 'IDEMPOTENCY_CONFLICT',

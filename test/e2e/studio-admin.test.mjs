@@ -60,8 +60,8 @@ test('studio admin: org -> roles -> app -> access tier -> grant happy path', { s
     assert.ok(roles.some((r) => r.orgRoleId === role.orgRoleId), 'role appears in orgRoles');
     await client.organizations.deleteRole(role.orgRoleId);
 
-    // Org token lifecycle.
-    const token = await client.organizations.createToken({ orgId: org.orgId, name: `tok-${rid()}`, permissions: ['manage_apps'] });
+    // Org token lifecycle (CreateOrgTokenInput: orgId + optional label/expiresAt).
+    const token = await client.organizations.createToken({ orgId: org.orgId, label: `tok-${rid()}` });
     assert.ok(token, 'createOrgToken returns a token');
     const tokens = await client.organizations.tokens(org.orgId);
     assert.ok(Array.isArray(tokens), 'orgTokens lists tokens');
@@ -102,8 +102,8 @@ test('studio admin: billing + quotas + environment discovery', { skip, timeout: 
     const budget = await client.billing.appBudget(org.orgId, appId);
     assert.ok(budget != null, 'appBudget reflects the set budget');
 
-    // Quotas.
-    await client.quotas.set({ orgId: org.orgId, metric: 'replication_messages', limit: '1000000' });
+    // Quotas (SetQuotaInput.limitValue, BigInt as a decimal string).
+    await client.quotas.set({ orgId: org.orgId, metric: 'replication_messages', limitValue: '1000000' });
     const orgQuotas = await client.quotas.forOrg(org.orgId);
     assert.ok(Array.isArray(orgQuotas), 'quotasForOrg lists quotas');
 
@@ -160,9 +160,12 @@ test('studio admin: permission + validation + malicious negatives', { skip, time
       'missing required arg is a validation error',
     );
 
-    // Malicious-ish: a bogus huge org id should not leak data (forbidden/not-found, never another tenant's rows).
+    // Malicious-ish: a bogus huge org id should not leak data (forbidden/not-found,
+    // never another tenant's rows). Use the outsider: the owner persona may be a
+    // super admin on smoke stacks, and super admins bypass the org permission
+    // guard (an empty list, not a rejection).
     await assert.rejects(
-      () => owner.organizations.members('999999999999999'),
+      () => outsider.organizations.members('999999999999999'),
       (err) => !!(err?.extensions?.code || err?.message),
       'bogus org id is rejected rather than leaking data',
     );

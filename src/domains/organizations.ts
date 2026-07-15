@@ -207,8 +207,8 @@ export class OrganizationsAPI {
    * Mint a new org API token (for server-side studio backends). Requires the
    * `manage_tokens` org permission. The plaintext secret is returned **once**.
    *
-   * @param input - {@link CreateOrgTokenInput}: `orgId`, `name`, optional
-   *   `permissions` and `expiresAt`.
+   * @param input - {@link CreateOrgTokenInput}: `orgId`, optional `label` and
+   *   `expiresAt`.
    * @returns The created token including its one-time plaintext secret.
    */
   async createToken(
@@ -221,7 +221,7 @@ export class OrganizationsAPI {
   }
 
   /**
-   * Update an org token's metadata (name / permissions / expiry). Requires the
+   * Update an org token's metadata (label / active flag / expiry). Requires the
    * `manage_tokens` org permission.
    *
    * @param orgTokenId - Numeric token id.
