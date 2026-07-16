@@ -20,6 +20,7 @@ import {
   CrowdyTimeoutError,
   type CrowdyGraphQLErrorPayload,
 } from './errors.js';
+import type { LbCookieStore } from './lb-cookie-store.js';
 
 /**
  * Configuration for {@link GraphQLClient}, the low-level HTTP transport. You
@@ -50,6 +51,12 @@ export interface GraphQLClientConfig {
    * that discards all output.
    */
   logger?: CrowdyLogger;
+  /**
+   * Optional sticky-LB cookie jar for game-api requests. When set, the
+   * client forwards `cks_ga` on HTTP and ingests `Set-Cookie` from responses
+   * so mutations stay pinned to the same upstream as the WS subscription.
+   */
+  lbCookieStore?: LbCookieStore;
 }
 
 /**
@@ -78,6 +85,7 @@ export class GraphQLClient {
   private readonly timeout: number;
   private readonly session: SessionStore;
   private readonly logger: CrowdyLogger;
+  private readonly lbCookieStore?: LbCookieStore;
 
   /**
    * @param config - Endpoint, timeout, and logger options; see
@@ -94,6 +102,7 @@ export class GraphQLClient {
     this.timeout = config.timeout || 60000;
     this.session = session;
     this.logger = config.logger ?? silentLogger;
+    this.lbCookieStore = config.lbCookieStore;
   }
 
   /**
@@ -168,6 +177,7 @@ export class GraphQLClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
     const token = this.session.getToken();
     const signal = options.signal ?? controller.signal;
+    const lbCookie = this.lbCookieStore?.headerValue();
 
     try {
       const requestBody = { query, variables };
@@ -176,12 +186,15 @@ export class GraphQLClient {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(lbCookie ? { Cookie: lbCookie } : {}),
         },
         body: JSON.stringify(requestBody),
+        credentials: this.lbCookieStore ? 'include' : 'same-origin',
         signal,
       });
 
       clearTimeout(timeoutId);
+      this.lbCookieStore?.ingestSetCookie(response.headers);
 
       if (!response.ok) {
         const errorText = await response.text();

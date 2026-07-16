@@ -48,6 +48,7 @@
 /** The published package version. Mirrors `package.json`. */
 export const VERSION = '8.0.0';
 
+export { LbCookieStore } from './lb-cookie-store.js';
 export {
   CrowdyClient,
   createCrowdyClient,
