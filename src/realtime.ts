@@ -4,6 +4,7 @@ import type { SessionStore } from './session.js';
 import type { CrowdyLogger } from './logger.js';
 import { silentLogger } from './logger.js';
 import { CrowdyRealtimeError } from './errors.js';
+import type { LbCookieStore } from './lb-cookie-store.js';
 import {
   UdpNotificationsDocument,
   type UdpNotificationsSubscription,
@@ -192,6 +193,12 @@ export interface RealtimeConfig {
   waitTimeoutMs?: number;
   /** Optional logger for realtime diagnostics. Defaults to a silent logger. */
   logger?: CrowdyLogger;
+  /**
+   * Sticky-LB cookie jar shared with the game-api HTTP client. When set in
+   * Node, the WebSocket upgrade forwards `cks_ga` so HTTP mutations and the
+   * subscription land on the same game-api upstream.
+   */
+  lbCookieStore?: LbCookieStore;
 }
 
 interface PendingWait {
@@ -225,6 +232,7 @@ export class RealtimeClient {
   private readonly retryInitialDelayMs: number;
   private readonly retryMaxDelayMs: number;
   private readonly waitTimeoutMs: number;
+  private readonly lbCookieStore?: LbCookieStore;
   private client: Client | null = null;
   private release: (() => void) | null = null;
   private desired = false;
@@ -237,6 +245,7 @@ export class RealtimeClient {
   // game-api only fans this app's spatial notifications to this subscription.
   // The game-api rejects subscriptions that arrive without it.
   private subscribedAppId: string | null = null;
+  private opening: Promise<void> | null = null;
 
   /**
    * @param config - Reconnect/timeout/endpoint tuning; see
@@ -257,6 +266,7 @@ export class RealtimeClient {
     this.retryInitialDelayMs = config.retryInitialDelayMs ?? 250;
     this.retryMaxDelayMs = config.retryMaxDelayMs ?? 5000;
     this.waitTimeoutMs = config.waitTimeoutMs ?? 5000;
+    this.lbCookieStore = config.lbCookieStore;
 
     this.session.onChange((token) => {
       if (!this.desired) return;
@@ -408,6 +418,7 @@ export class RealtimeClient {
 
   private ensureSubscription(): void {
     if (this.release) return;
+    if (this.opening) return;
 
     const token = this.session.getToken();
     if (!token) {
@@ -420,11 +431,26 @@ export class RealtimeClient {
       throw error;
     }
 
+    this.opening = this.openSubscription(token).finally(() => {
+      this.opening = null;
+    });
+  }
+
+  private async openSubscription(token: string): Promise<void> {
+    if (this.lbCookieStore) {
+      await this.lbCookieStore.primeFromGraphql({
+        endpoint: this.wsUrl,
+        token,
+      });
+    }
+
     this.setStatus('connecting');
+    const webSocketImpl = createStickyWebSocketImpl(this.lbCookieStore);
     this.client = createClient({
       url: this.wsUrl,
       lazy: true,
       retryAttempts: this.retryAttempts,
+      ...(webSocketImpl ? { webSocketImpl } : {}),
       connectionParams: () => {
         const currentToken = this.session.getToken();
         if (!currentToken) return {};
@@ -628,4 +654,36 @@ export class RealtimeClient {
       listener(status);
     }
   }
+}
+
+function isNodeRuntime(): boolean {
+  return (
+    typeof process !== 'undefined' &&
+    typeof process.versions?.node === 'string'
+  );
+}
+
+/**
+ * Node `ws` does not send browser cookies on upgrade. When a sticky cookie jar
+ * is configured, wrap `ws` so `cks_ga` rides on the handshake.
+ */
+function createStickyWebSocketImpl(
+  lbCookieStore?: LbCookieStore,
+): unknown | undefined {
+  if (!lbCookieStore || !isNodeRuntime()) return undefined;
+  const cookieStore = lbCookieStore;
+  // Node `ws` accepts a third options arg with `headers`; DOM typings do not.
+  const NodeWebSocket = WebSocket as unknown as {
+    new (
+      url: string,
+      protocols?: string | string[],
+      options?: { headers?: Record<string, string> },
+    ): WebSocket;
+  };
+  return class StickyLbWebSocket extends NodeWebSocket {
+    constructor(url: string, protocols?: string | string[]) {
+      const cookie = cookieStore.headerValue();
+      super(url, protocols, cookie ? { headers: { Cookie: cookie } } : undefined);
+    }
+  };
 }

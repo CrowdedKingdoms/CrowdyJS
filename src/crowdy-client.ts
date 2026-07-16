@@ -23,6 +23,7 @@
 
 import { AuthState } from './auth-state.js';
 import { GraphQLClient } from './client.js';
+import { LbCookieStore } from './lb-cookie-store.js';
 import { SubscriptionManager } from './subscriptions.js';
 import type { CrowdyLogger } from './logger.js';
 import type { TokenStore } from './session.js';
@@ -109,6 +110,12 @@ export interface CrowdyClientConfig {
     /** Default timeout for `...AndWait` round-trips that await a matching echo. */
     waitTimeoutMs?: number;
   };
+  /**
+   * Optional sticky-LB cookie jar shared with the game-api HTTP client. Node
+   * runtimes must forward `cks_ga` on the WebSocket upgrade; browsers send it
+   * automatically once HTTP has stored the cookie via `credentials: 'include'`.
+   */
+  lbCookieStore?: LbCookieStore;
 }
 
 export class CrowdyClient {
@@ -191,6 +198,7 @@ export class CrowdyClient {
 
   constructor(config: CrowdyClientConfig = {}) {
     this.session = new AuthState(config.tokenStore);
+    const lbCookieStore = config.lbCookieStore ?? new LbCookieStore();
 
     this.graphql = new GraphQLClient(
       {
@@ -199,6 +207,7 @@ export class CrowdyClient {
           config.graphqlEndpoint ?? toGraphqlEndpoint(config.httpUrl, 'graphql'),
         timeout: config.timeout,
         logger: config.logger,
+        lbCookieStore,
       },
       this.session,
     );
@@ -209,6 +218,7 @@ export class CrowdyClient {
         wsEndpoint:
           config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
         logger: config.logger,
+        lbCookieStore,
         ...config.realtime,
       },
       this.session,
