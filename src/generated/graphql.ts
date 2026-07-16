@@ -2060,6 +2060,8 @@ export type ExchangePortalCodeInput = {
 /** An org's free shared app slot quota usage. */
 export type FreeAppQuota = {
   __typename?: 'FreeAppQuota';
+  /** Shared apps with free-slot / reserved / paid credit status. */
+  apps: Array<FreeAppQuotaApp>;
   /** Organization id (BigInt). */
   orgId: Scalars['BigInt']['output'];
   /** Apps on a paid subscription (do not consume free slots). */
@@ -2072,6 +2074,25 @@ export type FreeAppQuota = {
   reservedApps: Scalars['Int']['output'];
   /** Free slots currently in use. */
   usedFree: Scalars['Int']['output'];
+};
+
+/** A shared app row in the org free-slot portfolio (free / reserved / paid credit). */
+export type FreeAppQuotaApp = {
+  __typename?: 'FreeAppQuotaApp';
+  /** App id (BigInt). */
+  appId: Scalars['BigInt']['output'];
+  /** True when the app consumes a free org slot (shared, not archived, no active subscription, no reserved throughput). */
+  consumesFreeSlot: Scalars['Boolean']['output'];
+  /** How this app is credited: 'free_slot', 'reserved', or 'paid_subscription'. */
+  creditKind: Scalars['String']['output'];
+  /** True when the app has an active legacy shared subscription. */
+  hasActiveSubscription: Scalars['Boolean']['output'];
+  /** App display name. */
+  name: Scalars['String']['output'];
+  /** Reserved egress throughput in bytes/sec (0 when none). */
+  reservedEgressBytesPerSec: Scalars['BigInt']['output'];
+  /** URL slug for the app. */
+  slug: Scalars['String']['output'];
 };
 
 /** Status of the recurring free-play window during which gameplay is open without entitlement. */
@@ -3381,7 +3402,7 @@ export type Mutation = {
   revokeOrgToken: Scalars['Boolean']['output'];
   /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
-  /** Send an actor (player/NPC) state update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — it does NOT confirm the world applied the update. The applied echo (ActorUpdateResponse) and any failure (GenericErrorResponse) arrive ASYNCHRONOUSLY on the udpNotifications subscription, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Subscribe to udpNotifications before sending so the reply is not missed. */
+  /** Send an actor (player/NPC) state update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — it does NOT confirm the world applied the update. There is NO separate per-request success response: the game server fans the update out to every client in the target chunk INCLUDING the sender, so you observe your own applied update as an ActorUpdateNotification carrying the same sequenceNumber (ActorUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Subscribe to udpNotifications before sending so the self-notification/error is not missed. */
   sendActorUpdate: Scalars['Boolean']['output'];
   /** Send a spatial voice/audio packet, fanned out to nearby actors as a ClientAudioNotification. Requires a bearer game token; voice may additionally be gated by a runtime/grid permission for the region — if the caller lacks it the game server responds asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT that it was delivered; the sender receives no echo, only errors (GenericErrorResponse, correlated by sequenceNumber) on udpNotifications. sequenceNumber is correlation only, not an idempotency key. */
   sendAudioPacket: Scalars['Boolean']['output'];
@@ -3393,7 +3414,7 @@ export type Mutation = {
   sendSingleActorMessage: Scalars['Boolean']['output'];
   /** Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendTextPacket: Scalars['Boolean']['output'];
-  /** Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. The applied echo (VoxelUpdateResponse) and any failure (GenericErrorResponse) arrive ASYNCHRONOUSLY on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  /** Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendVoxelUpdate: Scalars['Boolean']['output'];
   /** Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission. */
   setAppBudget: AppBudget;
@@ -6531,6 +6552,8 @@ export enum UdpErrorCode {
   PasswordTooLong = 'PASSWORD_TOO_LONG',
   /** Password failed minimum-length validation. */
   PasswordTooShort = 'PASSWORD_TOO_SHORT',
+  /** The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session. */
+  TokenExpired = 'TOKEN_EXPIRED',
   /** The caller lacks the runtime/grid permission required for this action. Grid permissions can load asynchronously, so the first message to a newly entered region may transiently return this — retry shortly. */
   Unauthorized = 'UNAUTHORIZED',
   /** Unspecified server error (1). Retry; if it persists, report it. */

@@ -79,9 +79,11 @@ export interface UdpNotificationHandlers {
    */
   actorUpdate?: (notification: Extract<UdpNotification, { __typename?: 'ActorUpdateNotification' }>) => void;
   /**
-   * Server acknowledgement echoing one of **your own** actor updates. This is
-   * the notification a `sendActorUpdateAndWait` correlates to via
-   * `sequenceNumber`.
+   * Legacy handler for `ActorUpdateResponse`. Current game servers never emit
+   * this type; the echo of your own actor update arrives as an
+   * `ActorUpdateNotification` (see {@link actorUpdate}), which is what
+   * `sendActorUpdateAndWait` correlates to via `sequenceNumber`. Retained for
+   * backward compatibility.
    */
   actorUpdateResponse?: (notification: Extract<UdpNotification, { __typename?: 'ActorUpdateResponse' }>) => void;
   /**
@@ -90,8 +92,11 @@ export interface UdpNotificationHandlers {
    */
   voxelUpdate?: (notification: Extract<UdpNotification, { __typename?: 'VoxelUpdateNotification' }>) => void;
   /**
-   * Server acknowledgement echoing one of **your own** voxel updates (the
-   * `sendVoxelUpdateAndWait` correlation target).
+   * Legacy handler for `VoxelUpdateResponse`. Current game servers never emit
+   * this type; the echo of your own voxel update arrives as a
+   * `VoxelUpdateNotification` (see {@link voxelUpdate}), which is what
+   * `sendVoxelUpdateAndWait` correlates to via `sequenceNumber`. Retained for
+   * backward compatibility.
    */
   voxelUpdateResponse?: (notification: Extract<UdpNotification, { __typename?: 'VoxelUpdateResponse' }>) => void;
   /**

@@ -123,10 +123,13 @@ export class UdpAPI {
   /**
    * Send an actor (player/NPC) state update for spatial replication to nearby
    * chunks. Fire-and-forget; opens a UDP proxy session automatically if none
-   * exists. The applied echo (`ActorUpdateResponse`) and any failure
-   * (`GenericErrorResponse`) arrive asynchronously on {@link subscribe},
-   * correlated by `sequenceNumber`; use {@link sendActorUpdateAndWait} to await
-   * that echo inline.
+   * exists. There is no separate per-request response: the server fans the
+   * update out to every client in the target chunk **including the sender**, so
+   * your own applied update comes back as an `ActorUpdateNotification` carrying
+   * the same `sequenceNumber` (the legacy `ActorUpdateResponse` type is never
+   * emitted). Failures arrive as a `GenericErrorResponse`; both are delivered
+   * asynchronously on {@link subscribe} and correlated by `sequenceNumber`. Use
+   * {@link sendActorUpdateAndWait} to await that self-notification inline.
    *
    * @param input - {@link ActorUpdateRequestInput}:
    *   - `appId` — owning app id (`BigInt` as a decimal string).
@@ -158,17 +161,19 @@ export class UdpAPI {
   /**
    * Send an actor update and wait for the server's applied echo. Allocates a
    * `sequenceNumber` when `input.sequenceNumber` is omitted, registers the wait
-   * *before* sending, then resolves with the matching `ActorUpdateResponse`.
-   * Requires an active {@link subscribe} so the echo can be delivered over the
-   * shared WebSocket.
+   * *before* sending, then resolves with the matching notification. Because the
+   * server includes the sender in the chunk fan-out, the echo is your own
+   * `ActorUpdateNotification` with the same `sequenceNumber` (there is no
+   * `ActorUpdateResponse` on the wire). Requires an active {@link subscribe} so
+   * the self-notification can be delivered over the shared WebSocket.
    *
    * @param input - {@link ActorUpdateRequestInput} (see {@link sendActorUpdate}
    *   for field units/encoding). Omit `sequenceNumber` to let the SDK allocate
    *   one.
    * @param options - `timeoutMs`: how long to wait for the echo, in
    *   milliseconds; defaults to the client's realtime `waitTimeoutMs` (5000).
-   * @returns The correlated {@link SpatialNotification} (the `ActorUpdateResponse`
-   *   echo).
+   * @returns The correlated {@link SpatialNotification} (your own
+   *   `ActorUpdateNotification` self-echo).
    * @throws {CrowdyGraphQLError} if the underlying send is rejected.
    * @throws {CrowdyTimeoutError} if the HTTP send leg exceeds the client's
    *   request timeout.
@@ -200,10 +205,13 @@ export class UdpAPI {
 
   /**
    * Send a single voxel (block) update for spatial replication to nearby
-   * chunks. Fire-and-forget; opens a UDP proxy session automatically. The
-   * applied echo (`VoxelUpdateResponse`) and failures (`GenericErrorResponse`)
-   * arrive asynchronously on {@link subscribe}; use
-   * {@link sendVoxelUpdateAndWait} to await the echo inline.
+   * chunks. Fire-and-forget; opens a UDP proxy session automatically. There is
+   * no separate per-request response: the change fans out to nearby clients
+   * **including the sender** as a `VoxelUpdateNotification` carrying the same
+   * `sequenceNumber` (the legacy `VoxelUpdateResponse` type is never emitted).
+   * Failures arrive as a `GenericErrorResponse`; both are delivered
+   * asynchronously on {@link subscribe}. Use {@link sendVoxelUpdateAndWait} to
+   * await the self-notification inline.
    *
    * @param input - {@link VoxelUpdateRequestInput}:
    *   - `appId` — owning app id (`BigInt` as a decimal string).
@@ -231,15 +239,18 @@ export class UdpAPI {
   }
 
   /**
-   * Send a voxel update and wait for the server's applied `VoxelUpdateResponse`
-   * echo. Allocates a `sequenceNumber` when omitted and requires an active
-   * {@link subscribe}.
+   * Send a voxel update and wait for the server's applied echo. Allocates a
+   * `sequenceNumber` when omitted and requires an active {@link subscribe}.
+   * Because the server includes the sender in the chunk fan-out, the echo is
+   * your own `VoxelUpdateNotification` with the same `sequenceNumber` (there is
+   * no `VoxelUpdateResponse` on the wire).
    *
    * @param input - {@link VoxelUpdateRequestInput} (see {@link sendVoxelUpdate}
    *   for field units/encoding).
    * @param options - `timeoutMs`: echo wait in milliseconds; defaults to the
    *   client's realtime `waitTimeoutMs` (5000).
-   * @returns The correlated {@link SpatialNotification} (`VoxelUpdateResponse`).
+   * @returns The correlated {@link SpatialNotification} (your own
+   *   `VoxelUpdateNotification` self-echo).
    * @throws {CrowdyGraphQLError} if the underlying send is rejected.
    * @throws {CrowdyTimeoutError} if the HTTP send leg times out.
    * @throws {CrowdyRealtimeError} on echo timeout
