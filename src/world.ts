@@ -113,7 +113,8 @@ export class ActorClient {
   /**
    * Enter a chunk: records it as this actor's current chunk and sends an
    * initial actor update to register presence there. Resolves with the server's
-   * applied `ActorUpdateResponse` echo.
+   * applied echo — your own `ActorUpdateNotification` (the sender is included in
+   * the chunk fan-out), correlated by `sequenceNumber`.
    *
    * The **first** spatial message to a brand-new chunk may be dropped
    * server-side while grid permissions load, so if this rejects with a timeout,
@@ -123,7 +124,8 @@ export class ActorClient {
    *   int64 decimal string. A chunk is a 16x16x16 voxel cube.
    * @param state - Initial actor state blob, base64-encoded. Defaults to `'AA=='`
    *   (a single zero byte), i.e. registration-only.
-   * @returns The correlated {@link SpatialNotification} (`ActorUpdateResponse`).
+   * @returns The correlated {@link SpatialNotification} (your own
+   *   `ActorUpdateNotification` self-echo).
    * @throws {CrowdyProtocolError} if `chunk` is outside signed int64 range.
    * @throws {CrowdyGraphQLError} if the underlying send is rejected.
    * @throws {CrowdyTimeoutError} if the HTTP send leg times out.
@@ -142,8 +144,9 @@ export class ActorClient {
   /**
    * Send a state update for this actor to its current chunk (set by
    * {@link join}) or to `options.chunk` if provided. Uses the UDP `...AndWait`
-   * path and resolves with the applied `ActorUpdateResponse` echo. `appId` and
-   * `uuid` are filled in for you.
+   * path and resolves with the applied echo — your own `ActorUpdateNotification`
+   * (the sender is included in the chunk fan-out). `appId` and `uuid` are filled
+   * in for you.
    *
    * @param state - Actor state blob, base64-encoded (may be `''` for a
    *   registration-only update).
@@ -154,7 +157,8 @@ export class ActorClient {
    *     actor's `defaultDistance`.
    *   - `decayRate` — decay algorithm 0-5; defaults to the actor's
    *     `defaultDecayRate`.
-   * @returns The correlated {@link SpatialNotification} (`ActorUpdateResponse`).
+   * @returns The correlated {@link SpatialNotification} (your own
+   *   `ActorUpdateNotification` self-echo).
    * @throws {Error} `'Actor must join a chunk before sending state'` if no chunk
    *   has been joined and none is supplied.
    * @throws {CrowdyProtocolError} if the resolved chunk is outside int64 range.
@@ -185,8 +189,8 @@ export class ActorClient {
   /**
    * Send a voxel (block) update from this actor to its current chunk (or
    * `input.chunk`). Uses the UDP `...AndWait` path and resolves with the applied
-   * `VoxelUpdateResponse` echo. `appId`, `uuid`, and `chunk` are filled in for
-   * you.
+   * echo — your own `VoxelUpdateNotification` (the sender is included in the
+   * chunk fan-out). `appId`, `uuid`, and `chunk` are filled in for you.
    *
    * @param input - Voxel fields minus `appId`/`uuid`/`chunk`:
    *   - `voxel` — `{ x, y, z }` voxel coordinates within the chunk, each an
@@ -198,7 +202,8 @@ export class ActorClient {
    *   - `sequenceNumber` — optional uint8 (0-255) correlation id.
    *   - `chunk` — optional `{ x, y, z }` (signed int64 decimal strings) to
    *     override the tracked chunk.
-   * @returns The correlated {@link SpatialNotification} (`VoxelUpdateResponse`).
+   * @returns The correlated {@link SpatialNotification} (your own
+   *   `VoxelUpdateNotification` self-echo).
    * @throws {Error} `'Actor must join a chunk before sending voxel updates'` if
    *   no chunk has been joined and none is supplied.
    * @throws {CrowdyProtocolError} if the resolved chunk is outside int64 range.

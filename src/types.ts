@@ -415,8 +415,12 @@ export interface ActorUpdateNotification {
 }
 
 /**
- * Server acknowledgement echoing one of **your own** actor updates — the
- * correlation target for `sendActorUpdateAndWait`. Has no `state` payload.
+ * Legacy type retained for backward compatibility. Current game servers do
+ * **not** emit an `ActorUpdateResponse` — the applied echo of your own actor
+ * update arrives as an {@link ActorUpdateNotification} (the sender is included
+ * in the chunk fan-out), correlated by `sequenceNumber`. That notification, not
+ * this type, is what `sendActorUpdateAndWait` resolves with. Has no `state`
+ * payload.
  */
 export interface ActorUpdateResponse {
   /** Discriminator for the {@link UdpNotification} union. */
@@ -483,8 +487,12 @@ export interface VoxelUpdateNotification {
 }
 
 /**
- * Server acknowledgement echoing one of **your own** voxel updates — the
- * correlation target for `sendVoxelUpdateAndWait`. Has no voxel payload.
+ * Legacy type retained for backward compatibility. Current game servers do
+ * **not** emit a `VoxelUpdateResponse` — the applied echo of your own voxel
+ * update arrives as a {@link VoxelUpdateNotification} (the sender is included
+ * in the chunk fan-out), correlated by `sequenceNumber`. That notification, not
+ * this type, is what `sendVoxelUpdateAndWait` resolves with. Has no voxel
+ * payload.
  */
 export interface VoxelUpdateResponse {
   /** Discriminator for the {@link UdpNotification} union. */
@@ -692,11 +700,19 @@ export interface CrowdyClientConfig {
 // Handler types
 /** Callback for an {@link ActorUpdateNotification} (another actor moved/changed). */
 export type ActorUpdateHandler = (notification: ActorUpdateNotification) => void;
-/** Callback for an {@link ActorUpdateResponse} (echo of your own actor update). */
+/**
+ * Callback for a legacy {@link ActorUpdateResponse}. Current servers never emit
+ * one; your own actor update echoes back as an {@link ActorUpdateNotification}.
+ * Retained for backward compatibility.
+ */
 export type ActorUpdateResponseHandler = (response: ActorUpdateResponse) => void;
 /** Callback for a {@link VoxelUpdateNotification} (a nearby voxel changed). */
 export type VoxelUpdateHandler = (notification: VoxelUpdateNotification) => void;
-/** Callback for a {@link VoxelUpdateResponse} (echo of your own voxel update). */
+/**
+ * Callback for a legacy {@link VoxelUpdateResponse}. Current servers never emit
+ * one; your own voxel update echoes back as a {@link VoxelUpdateNotification}.
+ * Retained for backward compatibility.
+ */
 export type VoxelUpdateResponseHandler = (response: VoxelUpdateResponse) => void;
 /** Callback for a {@link ClientAudioNotification} (nearby voice/audio packet). */
 export type ClientAudioHandler = (notification: ClientAudioNotification) => void;

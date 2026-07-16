@@ -16,6 +16,12 @@ directive @requiresPermission(
   scopeArg: String
 ) on FIELD_DEFINITION
 
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
 type User {
   """Unique user id and primary key. BigInt serialized as a decimal string."""
   userId: BigInt!
@@ -1091,6 +1097,30 @@ enum AppRuntimeStatus {
   SUSPENDED
 }
 
+"""
+A shared app row in the org free-slot portfolio (free / reserved / paid credit).
+"""
+type FreeAppQuotaApp {
+  """App id (BigInt)."""
+  appId: BigInt!
+  """App display name."""
+  name: String!
+  """URL slug for the app."""
+  slug: String!
+  """
+  True when the app consumes a free org slot (shared, not archived, no active subscription, no reserved throughput).
+  """
+  consumesFreeSlot: Boolean!
+  """Reserved egress throughput in bytes/sec (0 when none)."""
+  reservedEgressBytesPerSec: BigInt!
+  """True when the app has an active legacy shared subscription."""
+  hasActiveSubscription: Boolean!
+  """
+  How this app is credited: 'free_slot', 'reserved', or 'paid_subscription'.
+  """
+  creditKind: String!
+}
+
 """An org's free shared app slot quota usage."""
 type FreeAppQuota {
   """Organization id (BigInt)."""
@@ -1105,6 +1135,8 @@ type FreeAppQuota {
   reservedApps: Int!
   """Free slots still available (quota − usedFree)."""
   remainingFree: Int!
+  """Shared apps with free-slot / reserved / paid credit status."""
+  apps: [FreeAppQuotaApp!]!
 }
 
 """
@@ -2415,7 +2447,7 @@ type Query {
     limit: Int = 50
     """Number of rows to skip for pagination. Defaults to 0."""
     offset: Int = 0
-  ): UsersPage!
+  ): UsersPage! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated.
   """
@@ -2430,7 +2462,7 @@ type Query {
     Optional search term. Case-insensitive prefix match over email, gamertag, and disambiguation, plus an exact match on user_id. Omit to list all users.
     """
     query: String
-  ): UsersConnection!
+  ): UsersConnection! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Fetches an organization by id (BigInt as string). Requires a valid session token. Returns null if no such organization exists.
   """
@@ -2459,14 +2491,14 @@ type Query {
   orgMembers(
     """Organization id (BigInt as string)."""
     orgId: BigInt!
-  ): [OrgMember!]!
+  ): [OrgMember!]! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "orgId")
   """
   Lists all roles defined in an organization. Requires the 'manage_members' permission on the org (super admins bypass).
   """
   orgRoles(
     """Organization id (BigInt as string)."""
     orgId: BigInt!
-  ): [OrgRole!]!
+  ): [OrgRole!]! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "orgId")
   """
   Lists the roles assigned to a single org member. Requires a valid session token.
   """
@@ -2482,7 +2514,7 @@ type Query {
   orgTokens(
     """Organization id (BigInt as string)."""
     orgId: BigInt!
-  ): [OrgToken!]!
+  ): [OrgToken!]! @requiresPermission(scope: "org", permission: "manage_tokens", scopeArg: "orgId")
   """
   Public marketplace listing of apps. PUBLIC: no authentication required. Returns ONLY apps with visibility=PUBLIC AND status=LIVE (drafts, unlisted, private, and archived apps are never returned). Use myApps or appsForOrg for caller-visible or org-scoped apps. Results are ordered newest-first and paginated via pageInfo.
   """
@@ -2580,7 +2612,7 @@ type Query {
     Number of records to skip for pagination. Defaults to 0; negative values are treated as 0.
     """
     offset: Int = 0 @deprecated(reason: "Use appUserAccessConnection(first:, after:) instead. See /overview/pagination.")
-  ): [AppUserAccess!]!
+  ): [AppUserAccess!]! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Admin view of the user access records for an app (who has been granted/revoked access and on which tier). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Ordered by most recently updated. Relay cursor connection; prefer this over the offset-based appUserAccessByApp.
   """
@@ -2597,7 +2629,7 @@ type Query {
     Optional exact-match filter on access status (e.g. "active" or "revoked"). Omit to return records of all statuses.
     """
     status: String
-  ): AppUserAccessConnection!
+  ): AppUserAccessConnection! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Lists org members eligible for a manual app access grant (active members of the app's owning org). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Use the returned user ids with grantAppAccess.
   """
@@ -2606,7 +2638,7 @@ type Query {
     Numeric id of the app whose org members should be listed as grant candidates.
     """
     appId: BigInt!
-  ): [AppGrantMemberCandidate!]!
+  ): [AppGrantMemberCandidate!]! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token.
   """
@@ -2628,7 +2660,7 @@ type Query {
     Organization id (BigInt as a decimal string) whose wallet to fetch or create.
     """
     orgId: BigInt!
-  ): OrgWallet!
+  ): OrgWallet! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission.
   """
@@ -2643,7 +2675,7 @@ type Query {
     Number of transactions to skip before returning results, for offset/limit pagination. Defaults to 0 when omitted.
     """
     offset: Int @deprecated(reason: "Use walletTransactionsConnection(first:, after:) instead. See /overview/pagination.")
-  ): [WalletTransaction!]!
+  ): [WalletTransaction!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission. Relay cursor connection; prefer this over the offset-based walletTransactions.
   """
@@ -2658,7 +2690,7 @@ type Query {
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
     """
     after: String
-  ): WalletTransactionsConnection!
+  ): WalletTransactionsConnection! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Returns the monthly spend cap and current-month usage for a single app, or null if no budget has been configured for it. Requires the 'view_billing' app permission.
   """
@@ -2667,7 +2699,7 @@ type Query {
     orgId: BigInt!
     """App id (BigInt as a decimal string) whose budget to fetch."""
     appId: BigInt!
-  ): AppBudget
+  ): AppBudget @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId")
   """
   Lists every app spend-cap budget configured under the organization. Requires the 'view_billing' org permission.
   """
@@ -2676,7 +2708,7 @@ type Query {
     Organization id (BigInt as a decimal string) whose app budgets to list.
     """
     orgId: BigInt!
-  ): [AppBudget!]!
+  ): [AppBudget!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission.
   """
@@ -2685,14 +2717,14 @@ type Query {
     Organization id (BigInt as a decimal string) whose quota rules to list.
     """
     orgId: BigInt!
-  ): [ServiceQuota!]!
+  ): [ServiceQuota!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission.
   """
   quotasForApp(
     """App id (BigInt as a decimal string) whose quota rules to list."""
     appId: BigInt!
-  ): [ServiceQuota!]!
+  ): [ServiceQuota!]! @requiresPermission(scope: "app", permission: "view_usage", scopeArg: "appId")
   """
   Resolves the single most-specific quota that applies to the given (tierId, appId, orgId, metric) by walking tier -> app -> org -> free-tier defaults and returning the first match; its limitValue/period describe the enforced limit. Returns null if no matching rule and no free-tier default exist for the metric. Requires the 'view_usage' permission on the most-specific scope provided: tierId or appId -> 'view_usage' on the (owning) app; orgId -> 'view_usage' on the org. A metric-only query (no scope ids) resolves the platform free-tier default and only requires an authenticated user.
   """
@@ -2754,7 +2786,7 @@ type Query {
     Number of checkouts to skip for offset/limit pagination. Default 0; negative values are treated as 0.
     """
     offset: Int = 0 @deprecated(reason: "Use checkoutsConnection(first:, after:) instead. See /overview/pagination.")
-  ): CheckoutsPage!
+  ): CheckoutsPage! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckoutsConnection` instead. Relay cursor connection; prefer this over the offset-based checkouts.
   """
@@ -2769,7 +2801,7 @@ type Query {
     Optional filters (provider, purpose, status, userId, orgId, appId), AND-combined. Omit to return all checkouts.
     """
     filter: CheckoutFilterInput
-  ): CheckoutsConnection!
+  ): CheckoutsConnection! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected.
   """
@@ -2782,7 +2814,7 @@ type Query {
     Number of events to skip for offset/limit pagination. Default 0; negative values are treated as 0.
     """
     offset: Int = 0 @deprecated(reason: "Use paymentEventsConnection(first:, after:) instead. See /overview/pagination.")
-  ): PaymentEventsPage!
+  ): PaymentEventsPage! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected. Relay cursor connection; prefer this over the offset-based paymentEvents.
   """
@@ -2793,7 +2825,7 @@ type Query {
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
     """
     after: String
-  ): PaymentEventsConnection!
+  ): PaymentEventsConnection! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required.
   """
@@ -2843,7 +2875,7 @@ type Query {
   orgEnvironments(
     """Organization id (BigInt) that owns the environments."""
     orgId: BigInt!
-  ): [CksEnvironment!]!
+  ): [CksEnvironment!]! @requiresPermission(scope: "org", permission: "view_environments", scopeArg: "orgId")
   """
   Full detail for one environment: the environment row plus components, change orders, audit log, secrets, outputs, billing resources, live deploy/destroy progress, and Buddy UDP health. Returns null when no environment with that slug exists for the org. Requires the 'view_environments' org permission.
   """
@@ -2854,7 +2886,7 @@ type Query {
     Environment slug (cks_environments.slug), e.g. an auto-generated 'e-<12 chars>' or a custom slug supplied at creation.
     """
     slug: String!
-  ): CksEnvironmentDetail
+  ): CksEnvironmentDetail @requiresPermission(scope: "org", permission: "view_environments", scopeArg: "orgId")
   """
   Catalog of available environment release versions that can be deployed, newest first. Not org-scoped (any authenticated caller). For the versions a specific environment may move to, use environmentForwardVersions.
   """
@@ -2867,7 +2899,7 @@ type Query {
     orgId: BigInt!
     """Environment slug to list upgrade targets for."""
     slug: String!
-  ): [CksEnvironmentVersion!]!
+  ): [CksEnvironmentVersion!]! @requiresPermission(scope: "org", permission: "view_environments", scopeArg: "orgId")
   """
   OVH datacenters that have at least one customer-priced instance flavor available for customer selection.
   """
@@ -2882,7 +2914,7 @@ type Query {
   """
   Pricing quote for the selected flavors plus the org wallet balance and a canCreate gate. Read-only — provisions nothing. Fails if any flavor is unavailable, hidden, or lacks customer pricing. Requires the 'view_billing' org permission.
   """
-  environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote!
+  environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "input.orgId")
   """
   Public read-only catalog of active Buddy (UDP replication) billing tiers.
   """
@@ -2901,14 +2933,14 @@ type Query {
     page: Int! = 1
     """Rows per page (default 50)."""
     pageSize: Int! = 50
-  ): CpAdminEnvironmentsPage!
+  ): CpAdminEnvironmentsPage! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Operator view of one environment by slug, across any org. Null when not found.
   """
   cpEnvironment(
     """Environment slug to look up."""
     slug: String!
-  ): CpAdminEnvironment
+  ): CpAdminEnvironment @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Paginated change orders, optionally filtered by environment. Returns a *Page (rows/total/page/pageSize); page is 1-based.
   """
@@ -2919,14 +2951,14 @@ type Query {
     page: Int! = 1
     """Rows per page (default 50)."""
     pageSize: Int! = 50
-  ): CpChangeOrdersPage!
+  ): CpChangeOrdersPage! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). One change order with its tasks and steps. Null when the id is not found.
   """
   cpChangeOrder(
     """Change order UUID."""
     id: String!
-  ): CpChangeOrderDetail
+  ): CpChangeOrderDetail @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Most recent operator audit entries, newest first, optionally filtered by environment.
   """
@@ -2935,21 +2967,21 @@ type Query {
     environmentId: String
     """Max entries to return (default 200; clamped to 1–1000)."""
     limit: Int! = 200
-  ): [CpAuditEntry!]!
+  ): [CpAuditEntry!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Lists control-plane secret metadata (names/kinds only, never plaintext), optionally filtered by environment.
   """
   cpSecrets(
     """Environment UUID to filter by. Omit/null for all."""
     environmentId: String
-  ): [CpSecretRow!]!
+  ): [CpSecretRow!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Lists environment-delivered secret metadata (names/kinds only, never plaintext) injected into the tenant runtime, optionally filtered by environment.
   """
   cpEnvSecrets(
     """Environment UUID to filter by. Omit/null for all."""
     environmentId: String
-  ): [CpEnvSecretRow!]!
+  ): [CpEnvSecretRow!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). OVH flavor catalog with provider vs. customer pricing for cost analysis, optionally filtered by region. Read-only.
   """
@@ -2958,7 +2990,7 @@ type Query {
     OVH region code to filter by (e.g. 'GRA11'). Omit/null for all regions.
     """
     region: String
-  ): [CpOvhCatalogRow!]!
+  ): [CpOvhCatalogRow!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Per-minute usage summary for any environment by slug (operator equivalent of environmentUsageSummary, not org-scoped). Read-only.
   """
@@ -2967,19 +2999,19 @@ type Query {
     environmentSlug: String!
     """Start of the time window (ISO-8601 DateTime) up to now."""
     since: DateTime!
-  ): CpUsageSummary!
+  ): CpUsageSummary! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). cks-game-api git tags not yet pinned by any environment release, each with the version a publish would create. Read-only.
   """
-  cpUnreleasedGameApiTags: CpUnreleasedGameApiTagsPage!
+  cpUnreleasedGameApiTags: CpUnreleasedGameApiTagsPage! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Environment release manifests merged from git and the database, with the latest available version and git-source availability. Read-only.
   """
-  cpEnvironmentVersions: CpEnvironmentVersionsPage!
+  cpEnvironmentVersions: CpEnvironmentVersionsPage! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Lists users with is_operator or is_super_admin set, ordered by user id. Read-only.
   """
-  operatorUsers: [CpOperatorUser!]!
+  operatorUsers: [CpOperatorUser!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Per-minute replication and GraphQL byte/message usage time series for the apps linked to an environment, plus replication rate peaks and live Buddy rates. Read-only observability. Requires the 'view_usage' org permission.
   """
@@ -2992,7 +3024,7 @@ type Query {
     Start of the time window (ISO-8601 DateTime or relative duration such as 1d, 7d, 1h). Usage is aggregated from this instant up to now.
     """
     since: DateTime!
-  ): EnvironmentUsageSummary!
+  ): EnvironmentUsageSummary! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. Read-only reporting. Requires the 'view_usage' org permission.
   """
@@ -3003,7 +3035,7 @@ type Query {
     Start of the aggregation window (ISO-8601 DateTime or relative duration such as 1d, 7d, 1h) up to now. Defaults to 7d when omitted.
     """
     since: DateTime
-  ): OrgUsageSummary!
+  ): OrgUsageSummary! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Aggregate replication/GraphQL byte totals per environment across the org for the time window. Read-only reporting. Requires the 'view_usage' org permission.
   """
@@ -3014,7 +3046,7 @@ type Query {
     Start of the aggregation window (ISO-8601 DateTime or relative duration such as 1d, 7d, 1h) up to now.
     """
     since: DateTime!
-  ): [EnvironmentUsageRollupRow!]!
+  ): [EnvironmentUsageRollupRow!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Aggregate replication/GraphQL byte totals per app for the apps linked to an environment, over the time window. Read-only reporting. Requires the 'view_usage' org permission.
   """
@@ -3027,7 +3059,7 @@ type Query {
     Start of the aggregation window (ISO-8601 DateTime or relative duration such as 1d, 7d, 1h) up to now.
     """
     since: DateTime!
-  ): [AppUsageRollupRow!]!
+  ): [AppUsageRollupRow!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Top GraphQL operations for an app ranked by bytes over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission.
   """
@@ -3042,7 +3074,7 @@ type Query {
     since: DateTime!
     """Max number of operations to return (default 20)."""
     limit: Int = 20
-  ): [GraphqlOperationUsageRow!]!
+  ): [GraphqlOperationUsageRow!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Replication and GraphQL byte totals plus the top GraphQL operations for one app over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission.
   """
@@ -3057,7 +3089,7 @@ type Query {
     since: DateTime!
     """Max number of top GraphQL operations to include (default 20)."""
     operationLimit: Int = 20
-  ): AppUsageSummary!
+  ): AppUsageSummary! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Linear end-of-month egress projection for one shared app from calendar-month usage so far. Requires at least 3 elapsed days in the month before returning projected values. Requires the 'view_usage' org permission.
   """
@@ -3066,21 +3098,21 @@ type Query {
     orgId: BigInt!
     """Shared app id (BigInt) to project usage for."""
     appId: BigInt!
-  ): AppUsageProjection!
+  ): AppUsageProjection! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Org rollup of per-app monthly egress projections for all shared apps, with upgrade prompts when on track to exceed free tier. Requires the 'view_usage' org permission.
   """
   orgUsageProjection(
     """Organization id (BigInt) to roll up projections for."""
     orgId: BigInt!
-  ): OrgUsageProjection!
+  ): OrgUsageProjection! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission.
   """
   playerPulse(
     """Organization id (BigInt) to report player pulse for."""
     orgId: BigInt!
-  ): PlayerPulse!
+  ): PlayerPulse! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
   List every registered GraphQL API server (both management-api and game-api kinds), regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers).
   """
@@ -3288,7 +3320,7 @@ type Query {
     gridId: BigInt!
     """The user whose effective permissions to read."""
     userId: BigInt!
-  ): GridUserPermissions!
+  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps').
   """
@@ -3297,7 +3329,7 @@ type Query {
     The app, the user, and the low/high chunk corners of the region to scan (corners are normalized).
     """
     input: NearbyGridPermissionsInput!
-  ): [NearbyGridPermissions!]!
+  ): [NearbyGridPermissions!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Read the permission-key whitelist configured for a grid. An empty list means there is no limit (every active runtime permission may be granted on the grid). Requires app-admin ('manage_apps').
   """
@@ -3306,7 +3338,7 @@ type Query {
     appId: BigInt!
     """The grid whose limit whitelist to read."""
     gridId: BigInt!
-  ): GridPermissionLimits!
+  ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List the group/role -> permission-key grants configured on a grid for one group (rows of the `grid_group_grants` input table). These are inputs to the effective ACL, not the materialized result — use `gridUserPermissions` for a specific user's effective keys. Requires app-admin ('manage_apps').
   """
@@ -3317,7 +3349,7 @@ type Query {
     gridId: BigInt!
     """The group whose grants on the grid to list."""
     groupId: BigInt!
-  ): [GridGroupGrant!]!
+  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   The caller's teams in an app, with their roles and effective team permissions. Use this to discover which teams the current user belongs to and what they may do in each.
   """
@@ -3400,7 +3432,7 @@ type Query {
   gameModelContainerTypes(
     """The app (tenant) whose container types to list."""
     appId: BigInt!
-  ): [GmContainerType!]!
+  ): [GmContainerType!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List the property definitions for a container type. Requires app-admin ('manage_apps').
   """
@@ -3409,7 +3441,7 @@ type Query {
     appId: BigInt!
     """The container type whose properties to list."""
     typeName: String!
-  ): [GmPropertyDef!]!
+  ): [GmPropertyDef!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Fetch one studio-defined function by name. Requires app-admin ('manage_apps').
   """
@@ -3418,7 +3450,7 @@ type Query {
     appId: BigInt!
     """The function name to fetch."""
     name: String!
-  ): GmFunction!
+  ): GmFunction! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List studio-defined functions for an app, optionally filtered to those attached to a container type. Requires app-admin ('manage_apps').
   """
@@ -3429,7 +3461,7 @@ type Query {
     Optional: only functions bound to this container type. Omit for all functions.
     """
     containerTypeName: String
-  ): [GmFunction!]!
+  ): [GmFunction!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Fetch a container type's full schema: its property definitions plus the functions available on it. Requires app-admin ('manage_apps').
   """
@@ -3438,14 +3470,14 @@ type Query {
     appId: BigInt!
     """The container type whose schema to fetch."""
     typeName: String!
-  ): GmTypeSchema!
+  ): GmTypeSchema! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List the feature keys defined for an app. Requires app-admin ('manage_apps').
   """
   gameModelFeatures(
     """The app (tenant) whose features to list."""
     appId: BigInt!
-  ): [GmAppFeature!]!
+  ): [GmAppFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List tier -> feature grants for an app, optionally filtered to one tier. Requires app-admin ('manage_apps').
   """
@@ -3454,21 +3486,21 @@ type Query {
     appId: BigInt!
     """Optional: only grants for this access tier. Omit for all tiers."""
     tierId: BigInt
-  ): [GmTierFeature!]!
+  ): [GmTierFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Read the app's game-model runtime policy (session creation policy + default participant role). Requires app-admin ('manage_apps').
   """
   gameModelPolicy(
     """The app (tenant) whose policy to read."""
     appId: BigInt!
-  ): GmAppPolicy!
+  ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List the automations defined for an app. Requires app-admin ('manage_apps').
   """
   gameModelAutomations(
     """The app (tenant) whose automations to list."""
     appId: BigInt!
-  ): [GmAutomation!]!
+  ): [GmAutomation!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Fetch one automation by name, including its circuit-breaker state. Requires app-admin ('manage_apps').
   """
@@ -3477,7 +3509,7 @@ type Query {
     appId: BigInt!
     """The automation name to fetch."""
     name: String!
-  ): GmAutomation!
+  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List automation event triggers for an app, optionally filtered to one automation (by name). Requires app-admin ('manage_apps').
   """
@@ -3486,14 +3518,14 @@ type Query {
     appId: BigInt!
     """Optional: only triggers for this automation. Omit for all."""
     automationName: String
-  ): [GmAutomationTrigger!]!
+  ): [GmAutomationTrigger!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Read the app's automation policy (guardrails / platform ceilings). Requires app-admin ('manage_apps').
   """
   gameModelAutomationPolicy(
     """The app (tenant) whose automation policy to read."""
     appId: BigInt!
-  ): GmAutomationPolicy!
+  ): GmAutomationPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   List automation runs (the monitoring + audit trail of autonomous-process executions) for an app, newest first, optionally filtered by automation name and/or outcome. Each run carries timing, fan-out + invocation counts, billed compute, and any circuit action. Requires app-admin ('manage_apps').
   """
@@ -3508,7 +3540,7 @@ type Query {
     limit: Int
     """Number of runs to skip (pagination)."""
     offset: Int
-  ): [GmAutomationRun!]!
+  ): [GmAutomationRun!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Aggregate automation activity for an app over a recent window (default 60 minutes, max 1440): total/failed runs, failure rate, runs/min, invocations/mutations/compute, and a per-automation breakdown with current circuit state. The "what are my NPCs doing" dashboard query. Requires app-admin ('manage_apps').
   """
@@ -3517,14 +3549,14 @@ type Query {
     appId: BigInt!
     """Look-back window in minutes (default 60, max 1440)."""
     windowMinutes: Int = 60
-  ): GmAutomationStats!
+  ): GmAutomationStats! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   A snapshot of an app's game-model footprint and recent activity: container/property/edge/session/function/automation row counts, total + 24h event volume, failed + automation-driven invocations, and the most-invoked functions. Helps developers understand what is in their game and their database. Requires app-admin ('manage_apps').
   """
   gameModelAppDiagnostics(
     """The app (tenant) to diagnose."""
     appId: BigInt!
-  ): GmAppDiagnostics!
+  ): GmAppDiagnostics! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """Fetch one container (instance) by id. Requires a valid token."""
   gameModelContainer(
     """The app (tenant) that owns the container."""
@@ -3824,7 +3856,7 @@ type Mutation {
     userId: BigInt!
     """true grants super-admin; false revokes it."""
     value: Boolean!
-  ): User!
+  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access.
   """
@@ -3833,7 +3865,7 @@ type Mutation {
     userId: BigInt!
     """true to grant operator access, false to revoke."""
     value: Boolean!
-  ): User!
+  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api.
   """
@@ -3842,7 +3874,7 @@ type Mutation {
     userId: BigInt!
     """true grants the early-access override; false revokes it."""
     value: Boolean!
-  ): User!
+  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Sets the target user’s account `user_type` (e.g. "direct", "deleted"). Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api.
   """
@@ -3851,14 +3883,14 @@ type Mutation {
     userId: BigInt!
     """New user_type string, e.g. "direct"."""
     value: String!
-  ): User!
+  ): User! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api.
   """
   forceLogoutUser(
     """Target user id whose sessions to revoke (BigInt as a decimal string)."""
     userId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token. NOTE: the users table is management-owned, so in cks-game-api this throws ForbiddenException — call cks-management-api instead.
   """
@@ -3875,11 +3907,11 @@ type Mutation {
     orgId: BigInt!
     """New status, e.g. 'active' or 'frozen'."""
     status: String!
-  ): Organization!
+  ): Organization! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Mints a new org API token and returns the plaintext token exactly once - save it, since subsequent queries only show metadata. Requires the 'manage_tokens' permission on the target org (super admins bypass).
   """
-  createOrgToken(input: CreateOrgTokenInput!): OrgTokenWithSecret!
+  createOrgToken(input: CreateOrgTokenInput!): OrgTokenWithSecret! @requiresPermission(scope: "org", permission: "manage_tokens", scopeArg: "input.orgId")
   """
   Updates an org token's metadata (label, expiry, active flag). Requires the 'manage_tokens' permission on the token's org (super admins bypass). Does not rotate the secret value.
   """
@@ -3902,7 +3934,7 @@ type Mutation {
   """
   Adds a user to an organization as a member. Requires the 'manage_members' permission on the target org (super admins bypass).
   """
-  inviteOrgMember(input: InviteOrgMemberInput!): OrgMember!
+  inviteOrgMember(input: InviteOrgMemberInput!): OrgMember! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "input.orgId")
   """
   Removes a user from an organization. Requires the 'manage_members' permission on the org (super admins bypass). DESTRUCTIVE: revokes the user's membership and role assignments in that org. Returns false if the user was not a member.
   """
@@ -3915,7 +3947,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "orgId")
   """
   Replaces the full set of roles assigned to an org member. Requires the 'manage_members' permission on the org (super admins bypass). Pass the complete desired role list; roles not included are removed.
   """
@@ -3928,11 +3960,11 @@ type Mutation {
     Complete desired list of org_role ids (BigInt strings) to assign; replaces the member's current roles.
     """
     roleIds: [BigInt!]!
-  ): OrgMember!
+  ): OrgMember! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "orgId")
   """
   Creates a custom role in an organization with a name, optional description, and permission keys. Requires the 'manage_members' permission on the org (super admins bypass).
   """
-  createOrgRole(input: CreateOrgRoleInput!): OrgRole!
+  createOrgRole(input: CreateOrgRoleInput!): OrgRole! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "input.orgId")
   """
   Updates a role's name, description, and/or permission set. Requires the 'manage_members' permission on the role's org (super admins bypass). If input.permissions is provided it replaces the entire set (empty array clears all); omit to leave permissions unchanged.
   """
@@ -3958,7 +3990,7 @@ type Mutation {
   createApp(
     """Details for the app to create."""
     input: CreateAppInput!
-  ): App!
+  ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
   Update mutable fields of an existing app (name, description, visibility, status, metadata); only fields present in the input are changed. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
   """
@@ -3967,7 +3999,7 @@ type Mutation {
     appId: BigInt!
     """Fields to change; omitted fields are left unchanged."""
     input: UpdateAppInput!
-  ): App!
+  ): App! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Soft-delete an app by setting status=ARCHIVED. The row is retained (NOT hard-deleted) and is excluded from the public marketplace. REVERSIBLE: call updateApp to set status back to DRAFT or LIVE. Requires the 'manage_apps' permission on the app; super admins bypass. Throws if the app id does not exist.
   """
@@ -3978,7 +4010,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): App!
+  ): App! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Super admin only (also requires the management API to be enabled for this deployment). Overrides an app visibility platform-wide, e.g. to take down (PRIVATE/UNLISTED) or relist (PUBLIC) an app. Throws ForbiddenException for non-super-admins or when management APIs are disabled. Throws if the app id does not exist.
   """
@@ -3987,14 +4019,14 @@ type Mutation {
     appId: BigInt!
     """New visibility to set (PUBLIC, UNLISTED, or PRIVATE)."""
     visibility: AppVisibility!
-  ): App!
+  ): App! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user.
   """
   createAccessTier(
     """Definition of the access tier to create."""
     input: CreateAccessTierInput!
-  ): AppAccessTier!
+  ): AppAccessTier! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "input.appId")
   """
   Update an existing access tier (name, ordering, pricing, permissions, etc.); only fields present in the input are changed. Requires the 'manage_access_tiers' permission on the app that owns the tier (resolved from tierId); super admins bypass. SIDE EFFECTS: re-syncs the tier's permissions to the game API. Throws if the tier is not found or the caller lacks permission.
   """
@@ -4021,7 +4053,7 @@ type Mutation {
   grantAppAccess(
     """Who to grant access to, and on which tier."""
     input: GrantAppAccessInput!
-  ): AppUserAccess!
+  ): AppUserAccess! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "input.appId")
   """
   Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess.
   """
@@ -4034,7 +4066,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): AppUserAccess!
+  ): AppUserAccess! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived.
   """
@@ -4098,7 +4130,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): AppBudget!
+  ): AppBudget! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
   """
   Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage.
   """
@@ -4245,39 +4277,39 @@ type Mutation {
   """
   Provisions a new environment. SIDE EFFECTS / COST: creates billable cloud infrastructure (OVH VMs + DNS) and starts hourly wallet charges; fails if the wallet's available balance is below the first-day reserve (see environmentQuote.canCreate). Each selected flavor must be available and customer-priced (use environmentFlavors / environmentDatacenters). When input.slug is omitted the slug is auto-generated as 'e-<12 chars>'. Returns immediately with status 'deploy_requested'; poll orgEnvironment for deploy progress. Requires the 'manage_environments' org permission.
   """
-  createEnvironment(input: CreateEnvironmentInput!): CksEnvironmentDetail!
+  createEnvironment(input: CreateEnvironmentInput!): CksEnvironmentDetail! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   DESTRUCTIVE and IRREVERSIBLE. Tears down all cloud resources for the environment (per-tenant Postgres, game-api, Buddy, and load-balancer VMs plus DNS records) and revokes its service tokens; all tenant data is lost. Sets status to 'destroy_requested' and returns the tracking change order — poll orgEnvironment.destroyProgress. Fails if a destroy is already queued. After it reaches 'destroyed', call purgeEnvironment to remove the record. Requires the 'manage_environments' org permission.
   """
-  destroyEnvironment(input: DestroyEnvironmentInput!): CksEnvironmentChangeOrder!
+  destroyEnvironment(input: DestroyEnvironmentInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   DESTRUCTIVE. Permanently deletes a destroyed environment's record and all cascaded metadata from the platform; returns true on success. The environment must already be in status 'destroyed' (run destroyEnvironment first) and must not have deletion protection enabled, otherwise this fails. Does not touch cloud resources. Requires the 'manage_environments' org permission.
   """
-  purgeEnvironment(input: PurgeEnvironmentInput!): Boolean!
+  purgeEnvironment(input: PurgeEnvironmentInput!): Boolean! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   Resumes a payment-suspended environment, queuing a change order and moving billingStatus to 'resume_queued' (and restarting runtime once it settles). Only valid when billingStatus is grace, suspension_queued, suspended, or resume_failed; otherwise fails. Resumes billable hourly charges. Requires the 'manage_environments' org permission.
   """
-  resumeEnvironment(input: ResumeEnvironmentInput!): CksEnvironmentChangeOrder!
+  resumeEnvironment(input: ResumeEnvironmentInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   Updates a dedicated environment's autoscaling bounds (game-api / Buddy min & max server counts), load-balancer count, and optionally the Caddy flavor, queuing a change order that redeploys the affected tiers. May change the hourly cost. Rejected for 'dev_single' environments and when another change order is already active. Requires the 'manage_environments' org permission.
   """
-  updateEnvironmentScaling(input: UpdateEnvironmentScalingInput!): CksEnvironmentChangeOrder!
+  updateEnvironmentScaling(input: UpdateEnvironmentScalingInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   Updates an environment's three-dimension usage billing tier selections (Buddy, GraphQL, Postgres). Omitted tier fields are left unchanged. Requires the 'manage_environments' org permission.
   """
-  updateEnvironmentBillingTiers(input: UpdateEnvironmentBillingTiersInput!): CksEnvironment!
+  updateEnvironmentBillingTiers(input: UpdateEnvironmentBillingTiersInput!): CksEnvironment! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Requires the 'manage_environments' org permission.
   """
-  redeployEnvironment(input: RedeployEnvironmentInput!): CksEnvironmentChangeOrder!
+  redeployEnvironment(input: RedeployEnvironmentInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale (see CksBuddyHealth.isStale); does not replace cks-udp-api pool fixes. Requires the 'manage_environments' org permission.
   """
-  restartEnvironmentServices(input: RestartEnvironmentServicesInput!): CksEnvironmentChangeOrder!
+  restartEnvironmentServices(input: RestartEnvironmentServicesInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   Links an unlinked app to an existing environment for split-mode routing. Refuses shared apps and apps already linked elsewhere. Requires the 'manage_environments' org permission.
   """
-  linkAppToEnvironment(input: LinkAppToEnvironmentInput!): App!
+  linkAppToEnvironment(input: LinkAppToEnvironmentInput!): App! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
   Operator only (is_operator). Toggles deletion protection on an environment (when enabled, purgeEnvironment is blocked) and writes an audit entry. Returns true on success.
   """
@@ -4286,7 +4318,7 @@ type Mutation {
     environmentId: String!
     """True to enable deletion protection, false to disable."""
     enabled: Boolean!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Creates or overwrites a control-plane secret (encrypted at rest) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned by cpSecrets.
   """
@@ -4299,7 +4331,7 @@ type Mutation {
     plaintext: String!
     """Optional classification/kind tag for the secret."""
     kind: String
-  ): CpSecretRow!
+  ): CpSecretRow! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Deletes a control-plane secret by environment + name and writes an audit entry. Returns true when a secret was removed.
   """
@@ -4308,7 +4340,7 @@ type Mutation {
     environmentId: String!
     """Name/key of the secret to delete."""
     name: String!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Creates or overwrites an environment-delivered secret (injected into the tenant runtime) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned.
   """
@@ -4321,22 +4353,22 @@ type Mutation {
     plaintext: String!
     """Optional classification/kind tag for the secret."""
     kind: String
-  ): CpEnvSecretRow!
+  ): CpEnvSecretRow! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Ingests a release manifest into cks_environment_versions, making the version deployable, and writes an audit entry. Use force to overwrite an existing row.
   """
-  ingestEnvironmentVersion(input: IngestEnvironmentVersionInput!): CpEnvironmentVersionRow!
+  ingestEnvironmentVersion(input: IngestEnvironmentVersionInput!): CpEnvironmentVersionRow! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Cuts a new environment release from a cks-game-api git tag: ingests it as available and commits the manifest to the git ref. SIDE EFFECT: makes the version the new redeploy target and writes to GitHub. Use force to overwrite. Writes an audit entry.
   """
-  publishEnvironmentReleaseFromGameApiTag(input: PublishEnvironmentReleaseFromGameApiTagInput!): CpPublishEnvironmentReleaseResult!
+  publishEnvironmentReleaseFromGameApiTag(input: PublishEnvironmentReleaseFromGameApiTagInput!): CpPublishEnvironmentReleaseResult! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Yanks (withdraws) an environment version so it can no longer be deployed; existing environments are unaffected. Writes an audit entry. Returns true on success.
   """
   yankEnvironmentVersion(
     """Environment version to yank, e.g. 'v0.1.4'."""
     version: String!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar".
   """
@@ -4470,19 +4502,19 @@ type Mutation {
   """
   Upserts ONLY the opaque base64 chunk-level state blob for a chunk, preserving its voxels, per-voxel states and LODs; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass).
   """
-  updateChunkState(input: UpdateChunkStateInput!): Chunk
+  updateChunkState(input: UpdateChunkStateInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Replaces the level-of-detail (LOD) set for a chunk, preserving voxels, per-voxel states, chunk state and owner; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass).
   """
-  updateChunkLods(input: UpdateChunkLodsInput!): Chunk
+  updateChunkLods(input: UpdateChunkLodsInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and (when grids cover the chunk) `update_voxel_data` on a covering grid.
   """
-  updateVoxel(input: UpdateVoxelInput!): Voxel!
+  updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
   """
   Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass).
   """
-  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]!
+  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit within one of the app's grid assignments (its buildable regions); it MAY be nested inside a broader containing grid such as the open-by-default world grid, but must not partially overlap a peer grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS).
   """
@@ -4491,14 +4523,14 @@ type Mutation {
     Target app plus the two opposite corners of the grid box, in chunk coordinates. Corners are normalized to a low/high chunk, so their order does not matter.
     """
     input: CreateGridInput!
-  ): CreateGridResponse!
+  ): CreateGridResponse! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Delete a studio-created peer grid so its chunk box no longer blocks overlapping grid creation. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `gridId` is populated and `error` is NO_ERROR; on failure `gridId` is null and `error` is a UDP-style error code (e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN). The open-by-default world grid and any grid that still contains nested child grids cannot be deleted.
   """
   deleteGrid(
     """The app and grid to delete."""
     input: DeleteGridInput!
-  ): DeleteGridResponse!
+  ): DeleteGridResponse! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Grant one or more runtime permission keys directly to a single user on a grid (writes the `grid_user_direct_grants` input table), then recompute that user's materialized effective ACL on the grid. The target user must already have active app access (otherwise this fails). Requires app-admin ('manage_apps'). Returns the user's full effective permission-key set on the grid. To grant by group/role instead of per-user, use `assignGroupToGrid`.
   """
@@ -4507,7 +4539,7 @@ type Mutation {
     The app, grid, and target user, the runtime permission keys to grant, and an optional expiry timestamp.
     """
     input: GrantGridPermissionsInput!
-  ): GridUserPermissions!
+  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Revoke a user's direct grants on a grid (deletes from the `grid_user_direct_grants` input table) and recompute their materialized effective ACL. Omit `permissionKeys` to remove ALL of the user's direct grants on the grid; pass a subset to remove only those keys. Does not affect permissions the user receives via group grants. Requires app-admin ('manage_apps'). DESTRUCTIVE for the targeted grants. Returns the user's remaining effective permission keys on the grid.
   """
@@ -4516,7 +4548,7 @@ type Mutation {
     The app, grid, and target user; optionally the subset of permission keys to revoke (omit to revoke all of the user's direct grants).
     """
     input: RevokeGridPermissionsInput!
-  ): GridUserPermissions!
+  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid.
   """
@@ -4525,7 +4557,7 @@ type Mutation {
     The app, grid, and the new whitelist of allowed permission keys (empty array = no limit).
     """
     input: SetGridPermissionLimitsInput!
-  ): GridPermissionLimits!
+  ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Grant runtime permission keys to a group (optionally scoped to a single group role) on a grid by writing the `grid_group_grants` input table, then recompute the materialized effective ACL so every affected member gains the keys. Requires app-admin ('manage_apps'). Returns the grid's current group grants for the group. Use `grantGridPermissions` for per-user grants instead.
   """
@@ -4534,7 +4566,7 @@ type Mutation {
     The app, grid, and target group; an optional group role to scope the grant to; the runtime permission keys to grant; and an optional expiry timestamp.
     """
     input: AssignGroupToGridInput!
-  ): [GridGroupGrant!]!
+  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Revoke group/role grants on a grid (deletes from the `grid_group_grants` input table) and recompute the materialized effective ACL. Omit `permissionKeys` to revoke ALL of the group/role's grants on the grid; pass a subset to revoke only those keys. Requires app-admin ('manage_apps'). DESTRUCTIVE: removes the granted permissions from every affected member. Returns the group's remaining grants on the grid.
   """
@@ -4543,7 +4575,7 @@ type Mutation {
     The app, grid, and target group, plus an optional group role; optionally the subset of permission keys to revoke (omit to revoke all of the group/role's grants).
     """
     input: RevokeGroupFromGridInput!
-  ): [GridGroupGrant!]!
+  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams.
   """
@@ -4568,7 +4600,7 @@ type Mutation {
   updateTeam(
     """The team id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateTeamInput!
-  ): Group!
+  ): Group! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "input.groupId")
   """
   Delete a team. Requires the 'manage_group' team permission (app admins bypass). DESTRUCTIVE: cascades to members, roles, and any grid grants the team conferred, and recomputes the effective grid ACL for affected grids. Returns true on success.
   """
@@ -4579,7 +4611,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "groupId")
   """
   Join a team as the caller. Honors the team membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. Banned users are rejected. No special permission required.
   """
@@ -4613,7 +4645,7 @@ type Mutation {
     groupId: BigInt!
     """The user to add or approve."""
     userId: BigInt!
-  ): GroupMember!
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
   Remove a member from a team. Requires the 'manage_members' team permission, except that any member may remove themselves. DESTRUCTIVE: drops the membership and its roles. Returns true if a membership was removed.
   """
@@ -4622,7 +4654,7 @@ type Mutation {
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
     userId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
   Replace a member's roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' team permission (app admins bypass).
   """
@@ -4631,7 +4663,7 @@ type Mutation {
     The team, the target user, and the full list of role ids the member should have.
     """
     input: SetMemberRolesInput!
-  ): GroupMember!
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
   """
   Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs).
   """
@@ -4640,21 +4672,21 @@ type Mutation {
     The team, the role name, the team permission keys to grant, and an optional rank.
     """
     input: CreateGroupRoleInput!
-  ): GroupRole!
+  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
   """
   Update a team role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' team permission (app admins bypass).
   """
   updateTeamRole(
     """The role id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateGroupRoleInput!
-  ): GroupRole!
+  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupRoleId")
   """
   Delete a non-system team role. Requires the 'manage_roles' team permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members and recomputes any grid ACLs the role granted on. Returns true if a role was deleted.
   """
   deleteTeamRole(
     """The team role to delete (must be a non-system role)."""
     groupRoleId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "groupRoleId")
   """
   Set who may create channels in an app and the default membership policy for new channels. Requires app-admin ('manage_apps'). Affects future channel creation only, not existing channels.
   """
@@ -4681,14 +4713,14 @@ type Mutation {
     The channel id plus the fields to change (omitted fields are left as-is).
     """
     input: UpdateChannelInput!
-  ): Group!
+  ): Group! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "input.groupId")
   """
   Delete a channel. Requires the 'manage_group' channel permission (app admins bypass). DESTRUCTIVE: cascades to members and roles and notifies Buddy servers to tear down message routing for the channel. Returns true on success.
   """
   deleteChannel(
     """The channel to delete."""
     groupId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "groupId")
   """
   Join a channel as the caller (subscribe to it). Honors the channel membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. On becoming active, Buddy is notified with the caller's effective send permission so routing starts.
   """
@@ -4718,7 +4750,7 @@ type Mutation {
     groupId: BigInt!
     """The user to add or approve."""
     userId: BigInt!
-  ): GroupMember!
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
   Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed.
   """
@@ -4727,7 +4759,7 @@ type Mutation {
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
     userId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
   Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately.
   """
@@ -4736,7 +4768,7 @@ type Mutation {
     The channel, the target user, and the full list of role ids the member should have.
     """
     input: SetMemberRolesInput!
-  ): GroupMember!
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
   """
   Create a custom (non-system) channel role granting the given channel permission keys (e.g. send_messages for posting rights). Requires the 'manage_roles' channel permission (app admins bypass).
   """
@@ -4745,21 +4777,21 @@ type Mutation {
     The channel, the role name, the channel permission keys to grant, and an optional rank.
     """
     input: CreateGroupRoleInput!
-  ): GroupRole!
+  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
   """
   Update a channel role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' channel permission (app admins bypass). Note: changing send_messages here does not re-push Buddy until affected members' roles are re-applied via setChannelMemberRoles.
   """
   updateChannelRole(
     """The role id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateGroupRoleInput!
-  ): GroupRole!
+  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupRoleId")
   """
   Delete a non-system channel role. Requires the 'manage_roles' channel permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members. Returns true if a role was deleted.
   """
   deleteChannelRole(
     """The channel role to delete (must be a non-system role)."""
     groupRoleId: BigInt!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "groupRoleId")
   """
   Create or update a container type: the studio-defined schema for a kind of runtime entity (like a class). Idempotent on (app, typeName). Requires app-admin ('manage_apps').
   """
@@ -4768,7 +4800,7 @@ type Mutation {
     The app, type name, display name, and optional instantiableBy / default property visibility / metadata.
     """
     input: UpsertContainerTypeInput!
-  ): GmContainerType!
+  ): GmContainerType! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Create or update a property definition on a container type (a typed field with default value, visibility, and writability). Idempotent on (app, containerTypeName, key). Requires app-admin ('manage_apps').
   """
@@ -4777,7 +4809,7 @@ type Mutation {
     The app, container type, property key, value type, and optional default/visibility/writability/description.
     """
     input: UpsertPropertyDefInput!
-  ): GmPropertyDef!
+  ): GmPropertyDef! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Delete a property definition from a container type. Does not remove instance property values already stored on containers. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a definition was deleted.
   """
@@ -4788,7 +4820,7 @@ type Mutation {
     containerTypeName: String!
     """The property key to delete."""
     key: String!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Delete a container type. Also deletes its property definitions. Refuses if live containers of that type exist, or if functions are bound to it — delete those first. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a type was deleted.
   """
@@ -4797,7 +4829,7 @@ type Mutation {
     appId: BigInt!
     """The container type name to delete."""
     typeName: String!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Create or update a studio-defined function: a named, sandboxed behavior with typed parameters, declared property mutations (expressions compiled to an AST server-side, never eval'd), an optional return expression, an invoke scope, and an invoke policy (authority rule tree). Idempotent on (app, name). Requires app-admin ('manage_apps'). Returns the function plus any non-fatal static-analysis warnings.
   """
@@ -4806,7 +4838,7 @@ type Mutation {
     The full function definition: app, name, optional container type binding, parameters, mutations, return expression, invoke scope, and invoke-policy JSON.
     """
     input: UpsertFunctionInput!
-  ): GmFunction!
+  ): GmFunction! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Delete a studio-defined function by name. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a function was deleted.
   """
@@ -4815,7 +4847,7 @@ type Mutation {
     appId: BigInt!
     """The function name to delete."""
     name: String!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Bulk-create game-model definitions (container types, property defs, functions) and optionally instances (containers + edges) in one transaction — used to initialize or import a model. Requires app-admin ('manage_apps'). Returns counts created, warnings, and a map of seed temp_id -> created container UUID.
   """
@@ -4824,7 +4856,7 @@ type Mutation {
     The app, an optional target session for instances, and arrays of container types, property defs, functions, containers, and edges to create.
     """
     input: SeedGameModelInput!
-  ): GmSeedResult!
+  ): GmSeedResult! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Set the app's game-model runtime policy: who may create sessions (admin | member | anyone) and the default participant role. Requires app-admin ('manage_apps').
   """
@@ -4833,28 +4865,28 @@ type Mutation {
     The app plus the session creation policy and/or default participant role to set.
     """
     input: SetGameModelPolicyInput!
-  ): GmAppPolicy!
+  ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps').
   """
   gameModelDefineFeature(
     """The app, the feature key, and an optional description."""
     input: DefineAppFeatureInput!
-  ): GmAppFeature!
+  ): GmAppFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps').
   """
   gameModelGrantTierFeature(
     """The app, the tier id, and the feature key to grant to that tier."""
     input: GrantTierFeatureInput!
-  ): GmTierFeature!
+  ): GmTierFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed.
   """
   gameModelRevokeTierFeature(
     """The app, the tier id, and the feature key to revoke from that tier."""
     input: GrantTierFeatureInput!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps').
   """
@@ -4863,7 +4895,7 @@ type Mutation {
     The automation definition: app, name, entry-point function, target mode + selector, trigger/schedule, run-as identity, and safety budget.
     """
     input: UpsertAutomationInput!
-  ): GmAutomation!
+  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Delete an automation by name (also removes its event triggers). Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if one was deleted.
   """
@@ -4872,7 +4904,7 @@ type Mutation {
     appId: BigInt!
     """The automation name to delete."""
     name: String!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Enable or disable an automation. Re-enabling also resets its circuit breaker (closed, zero failures, no pause) so a tripped automation resumes. Requires app-admin ('manage_apps').
   """
@@ -4883,7 +4915,7 @@ type Mutation {
     name: String!
     """True to enable (and reset the circuit); false to pause."""
     enabled: Boolean!
-  ): GmAutomation!
+  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Create an event trigger that fires an automation in reaction to model activity (a function invocation, a direct property write, or a container creation). Matched in the API server post-commit. Requires app-admin ('manage_apps').
   """
@@ -4892,7 +4924,7 @@ type Mutation {
     The app, the target automation (by name), the model event, and optional filters.
     """
     input: UpsertAutomationTriggerInput!
-  ): GmAutomationTrigger!
+  ): GmAutomationTrigger! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Delete an automation event trigger by id. Requires app-admin ('manage_apps'). Returns true if one was deleted.
   """
@@ -4901,14 +4933,14 @@ type Mutation {
     appId: BigInt!
     """The trigger id (UUID) to delete."""
     triggerId: String!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Set the app's automation policy (platform guardrails): the kill switch, max automations, the minimum schedule interval floor, max fan-out, max event cascade depth, and the aggregate per-minute run ceiling. Requires app-admin ('manage_apps').
   """
   gameModelSetAutomationPolicy(
     """The app plus any guardrail fields to set."""
     input: SetAutomationPolicyInput!
-  ): GmAutomationPolicy!
+  ): GmAutomationPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Run an automation once, immediately (manual trigger), regardless of its schedule. Applies the same guard chain (app gate, rate limit, circuit) and records a run. Useful for testing an NPC. Requires app-admin ('manage_apps').
   """
@@ -4917,7 +4949,7 @@ type Mutation {
     appId: BigInt!
     """The automation name to run now."""
     name: String!
-  ): GmAutomationRun!
+  ): GmAutomationRun! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save). Subject to the app's session creation policy. The caller becomes the creator and a participant. Requires a valid token.
   """
@@ -5006,7 +5038,7 @@ type Mutation {
   """
   disconnectUdpProxy: Boolean!
   """
-  Send an actor (player/NPC) state update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — it does NOT confirm the world applied the update. The applied echo (ActorUpdateResponse) and any failure (GenericErrorResponse) arrive ASYNCHRONOUSLY on the udpNotifications subscription, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Subscribe to udpNotifications before sending so the reply is not missed.
+  Send an actor (player/NPC) state update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — it does NOT confirm the world applied the update. There is NO separate per-request success response: the game server fans the update out to every client in the target chunk INCLUDING the sender, so you observe your own applied update as an ActorUpdateNotification carrying the same sequenceNumber (ActorUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Subscribe to udpNotifications before sending so the self-notification/error is not missed.
   """
   sendActorUpdate(
     """
@@ -5015,7 +5047,7 @@ type Mutation {
     input: ActorUpdateRequestInput!
   ): Boolean!
   """
-  Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. The applied echo (VoxelUpdateResponse) and any failure (GenericErrorResponse) arrive ASYNCHRONOUSLY on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
+  Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
   sendVoxelUpdate(
     """
@@ -5031,7 +5063,7 @@ type Mutation {
     The voice/audio packet to send: target appId, chunk coordinates, 32-byte source uuid, base64 (compressed) audioData, and optional distance/decayRate/sequenceNumber. See ClientAudioPacketInput.
     """
     input: ClientAudioPacketInput!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_voice_chat", scopeArg: "input.appId")
   """
   Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
@@ -5968,6 +6000,10 @@ enum UdpErrorCode {
   GRID_NOT_FOUND
   CANNOT_DELETE_DEFAULT_WORLD_GRID
   GRID_HAS_NESTED_CHILDREN
+  """
+  The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session.
+  """
+  TOKEN_EXPIRED
 }
 
 """
@@ -8872,10 +8908,4 @@ type RealtimeConnectionEvent {
   Whether resubscribing without changing anything may succeed. true for transient failures (e.g. UDP_PROXY_CONNECTION_FAILED) — back off and retry. false for caller errors that must be fixed first (AUTH_REQUIRED needs a fresh/valid game token; APP_ID_REQUIRED needs an appId-scoped subscription).
   """
   retryable: Boolean!
-}
-
-schema {
-  query: Query
-  mutation: Mutation
-  subscription: Subscription
 }
