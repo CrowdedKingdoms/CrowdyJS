@@ -20,6 +20,10 @@ worked reference.
 - `src/operations/<domain>/*.graphql` — the GraphQL documents behind each
   method (e.g. `gameModel/GameModelAutomations.graphql`, `udp/UdpNotifications.graphql`).
 - `src/world.ts` — `client.world(appId)` facade: `actor().join/sendState/sendText/sendToActor`.
+- `src/kit/` — `client.kit(appId)` Game Kit facade over `gameModel`: blueprint
+  builders (`inventoryBlueprint` / `lockBlueprint` / `npcBlueprint`) +
+  `kit.deploy(...)` for admin seeding, and runtime helpers `kit.inventory`,
+  `kit.objects`, `kit.npcs`.
 - `schema.gql` + `src/generated/graphql.ts` — committed schema artifacts; the
   build must never depend on sibling API repos. Refresh with
   `npm run schema:sync:*` + `npm run codegen`, commit both together, and use
@@ -52,6 +56,7 @@ worked reference.
 | Per-block metadata | app-defined blob conventions inside chunk `voxelStates` (see BWF `voxelState.ts`) |
 | Server-side rules & data (inventory, stats, crafting, NPCs) | `gameModel` containers / properties / functions with invoke policies — schema admin-seeded before play |
 | World life with no client online | `gameModel` automations (schedules/triggers invoking `autonomousInvocable` functions) — admin-seeded before play |
+| Ready-made inventory / lockable objects / NPC mappings | `kit(appId)` — blueprints deployed with `kit.deploy` (admin), runtime via `kit.inventory` / `kit.objects` / `kit.npcs` |
 | Smooth client-side simulation authority | `host.heartbeat` election + `is_host` invoke policy for authoritative gating |
 | Proximity voice chat | `udp.sendAudioPacket` + `audio` handler; `use_voice_chat` grid permission |
 | Chat | proximity: `udp.sendTextPacket`; app-wide rooms: `channels.*` + `udp.sendChannelMessage` |
