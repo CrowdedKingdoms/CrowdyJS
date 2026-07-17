@@ -12,7 +12,7 @@ npm install @crowdedkingdoms/crowdyjs
 
 CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must provide browser-compatible globals when opening realtime connections.
 
-> **Server compatibility:** v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define. v6.1's `client.gameApps.deleteGrid` additionally requires release **v0.1.33+** (`cks-game-api >= v0.12.3`).
+> **Server compatibility:** v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define. v6.1's `client.gameApps.deleteGrid` additionally requires release **v0.1.33+** (`cks-game-api >= v0.12.3`). The game-model **permission effects** fields (`permissionEffects` on `gameModel.upsertFunction`/`seed`, `permissionEffectsAppliedJson` on events) require a `cks-game-api` build with the `2026-07-17-model-permission-effects` migration; older servers reject queries/mutations that include them (omit the fields and everything else keeps working).
 
 ## Standalone builds and schema refresh
 
