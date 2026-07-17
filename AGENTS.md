@@ -50,8 +50,8 @@ worked reference.
 | Player presence & movement | `udp.subscribe` + `udp.sendActorUpdate` (chunk-addressed, base64 `state` blob, `distance` fan-out); `world(appId)` helpers |
 | Persistent terrain / world | `chunks.get` / `chunks.byDistance` / `chunks.update` (durable) + `udp.sendVoxelUpdate` (realtime edits) |
 | Per-block metadata | app-defined blob conventions inside chunk `voxelStates` (see BWF `voxelState.ts`) |
-| Server-side rules & data (inventory, stats, crafting, NPCs) | `gameModel` containers / properties / functions with invoke policies |
-| World life with no client online | `gameModel` automations (schedules/triggers invoking `autonomousInvocable` functions) |
+| Server-side rules & data (inventory, stats, crafting, NPCs) | `gameModel` containers / properties / functions with invoke policies — schema admin-seeded before play |
+| World life with no client online | `gameModel` automations (schedules/triggers invoking `autonomousInvocable` functions) — admin-seeded before play |
 | Smooth client-side simulation authority | `host.heartbeat` election + `is_host` invoke policy for authoritative gating |
 | Proximity voice chat | `udp.sendAudioPacket` + `audio` handler; `use_voice_chat` grid permission |
 | Chat | proximity: `udp.sendTextPacket`; app-wide rooms: `channels.*` + `udp.sendChannelMessage` |
@@ -99,24 +99,36 @@ Server-authoritative rules without running a server. Three primitives:
   **Invoke policies** are the authority model: `owner_of_self`, `condition`
   expressions, `is_host`, `is_current_turn`, `allow`, and `and`/`or` combinators.
 
+**The model must be seeded by an admin before players can use it.** Container
+types, property definitions, functions, and policies do not exist until a
+studio-admin token (a user with `manage_apps` on the app) writes them — plan a
+seed script as part of any game build, and run it before the game client ships.
 Author the schema with `gameModel.seed` (idempotent: container types, property
 defs, functions in one call) plus `upsertContainerType` / `upsertPropertyDef` /
-`upsertFunction` / `setPolicy` for incremental changes. Studio authoring needs
-`manage_apps`; runtime ops run with a player's app token. Sessions
-(`createSession` / `joinSession` / `setSessionTurn`) support match/turn
-structures; model-driven `notify_*` effects push updates to subscribed clients.
+`upsertFunction` / `setPolicy` for incremental changes; runtime ops
+(`createContainer`, `invoke`, reads) then run with a player's app token against
+the seeded schema. BWF's `scripts/seed-blocks-world.mjs` is the reference: an
+idempotent, re-runnable Node script that mints an admin app token, seeds the
+schema and definition containers, and versions migrations via a
+`World.version` property compared against the model JSON's schema version.
+Sessions (`createSession` / `joinSession` / `setSessionTurn`) support
+match/turn structures; model-driven `notify_*` effects push updates to
+subscribed clients.
 
 ### Automations API (NPCs & world ticks)
 
 Automations invoke model functions server-side on a schedule or event trigger —
 NPC wander, trader restock, mob spawn ticks, crop growth — with **no client
 connected**. Target functions must declare `autonomousInvocable: true`.
-Surface: `gameModel.upsertAutomation` (name, `functionName`, `targetMode` +
-`targetTypeName`, `triggerType: schedule` + `intervalMs`, selector with
-`where`/`limit`), `upsertAutomationTrigger` (event-driven),
-`setAutomationPolicy` (enable + budgets: `minIntervalMs`, `maxFanout`,
-`maxCascadeDepth`, runs-per-minute), `runAutomation` (manual kick),
-`automationRuns` / `automationStats` (diagnostics).
+Like the model schema, automations are **admin-authored ahead of play**: the
+same seed script that writes the model should upsert the automation policy and
+definitions (BWF registers all four of its automations there); game clients
+only read diagnostics. Surface: `gameModel.upsertAutomation` (name,
+`functionName`, `targetMode` + `targetTypeName`, `triggerType: schedule` +
+`intervalMs`, selector with `where`/`limit`), `upsertAutomationTrigger`
+(event-driven), `setAutomationPolicy` (enable + budgets: `minIntervalMs`,
+`maxFanout`, `maxCascadeDepth`, runs-per-minute), `runAutomation` (manual
+kick), `automationRuns` / `automationStats` (diagnostics).
 
 ### Host election (client-side simulation)
 
