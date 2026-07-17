@@ -28,6 +28,7 @@ import { SubscriptionManager } from './subscriptions.js';
 import type { CrowdyLogger } from './logger.js';
 import type { TokenStore } from './session.js';
 import { WorldClient } from './world.js';
+import { GameKitClient, type GameKitOptions } from './kit/index.js';
 
 import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
@@ -303,6 +304,23 @@ export class CrowdyClient {
    */
   world(appId: string): WorldClient {
     return new WorldClient(appId, this.udp);
+  }
+
+  /**
+   * App-scoped **Game Kit** facade over `client.gameModel`: high-level
+   * building blocks that map traditional game concepts onto Game Models +
+   * Automations — `kit.inventory` (bags/item stacks), `kit.objects` (lockable
+   * doors/chests with custom permissions), `kit.npcs` (server-driven NPCs),
+   * and the studio-side `kit.deploy(blueprints)` that loads the matching
+   * rules/state into the app (requires `manage_apps`). See
+   * {@link GameKitClient} and the "CrowdyJS → Game Kit" docs guide.
+   *
+   * @param appId - The app to scope model calls to (BigInt as a decimal string).
+   * @param options - Optional per-helper config when your blueprints use
+   *   non-default type names/prefixes.
+   */
+  kit(appId: string, options?: GameKitOptions): GameKitClient {
+    return new GameKitClient(appId, this.gameModel, options);
   }
 
   /** Closes the WebSocket and clears the in-memory auth token. */

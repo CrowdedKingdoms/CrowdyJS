@@ -69,6 +69,20 @@ test('client exposes the full management + game sub-client surface', async () =>
     'myAuthorizedApps', 'setAppClientSettings',
   ]);
 
+  // Game Kit facade (app-scoped, over gameModel).
+  const kit = client.kit('1');
+  assertMethods(kit, 'kit', ['deploy', 'objectsFor']);
+  assertMethods(kit.inventory, 'kit.inventory', [
+    'ensure', 'stacks', 'createStack', 'grant', 'consume', 'move', 'transfer',
+    'linkStack', 'contents',
+  ]);
+  assertMethods(kit.objects, 'kit.objects', [
+    'create', 'grantKey', 'keysOf', 'open', 'close', 'isOpen', 'list',
+  ]);
+  assertMethods(kit.npcs, 'kit.npcs', [
+    'spawn', 'list', 'state', 'runNow', 'setEnabled', 'stats', 'runs',
+  ]);
+
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');
   assert.equal(client.admin.billing, client.billing, 'admin.billing aliases client.billing');

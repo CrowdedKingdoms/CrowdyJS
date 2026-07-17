@@ -106,6 +106,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
+| `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |
 
 **Studio-admin surface** (privileged; drive with a server-side / studio token, grouped under `client.admin`):
 
@@ -267,6 +268,45 @@ await actor.sendToActor(
 ```
 
 The world helpers are thin wrappers over `client.udp.*` with the appId pre-bound — convenient for browser games. Advanced callers can always use `client.udp.*` with the generated GraphQL input types directly.
+
+## Game Kit
+
+`client.kit(appId)` maps traditional game concepts onto the abstract game
+model + automations API. Studios **deploy blueprints** (the admin "load the
+state/rules" step, requires `manage_apps`); game clients then use the typed
+runtime helpers. Everything composes `client.gameModel` — no new server
+surface.
+
+```ts
+// Studio setup (admin context):
+import { inventoryBlueprint, lockBlueprint, npcBlueprint } from '@crowdedkingdoms/crowdyjs';
+
+await admin.kit(appId).deploy([
+  inventoryBlueprint(),
+  lockBlueprint({ objectTypeName: 'Door', authority: { kind: 'key' } }),
+  npcBlueprint({
+    behaviors: [{
+      name: 'npc-wander',
+      role: 'wanderer',
+      trigger: { intervalMs: 60000 },
+      mutations: [
+        { target: 'self', property: 'x', expression: 'self.x + rand_int(-2, 2)' },
+        { target: 'self', property: 'z', expression: 'self.z + rand_int(-2, 2)' },
+      ],
+    }],
+  }),
+]);
+
+// Game client (player token):
+const kit = game.kit(appId);
+const bag = await kit.inventory.ensure(me.userId);
+const result = await kit.objects.open(doorId, { keyId });
+if (!result.success) console.warn('locked:', result.errorMessage);
+```
+
+See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/game-api/modeling-game-concepts)
+(the underlying model) and [Game Kit](https://docs.crowdedkingdoms.com/crowdyjs/game-kit)
+(the SDK surface).
 
 ## Errors
 
