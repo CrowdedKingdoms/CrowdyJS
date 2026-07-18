@@ -114,6 +114,17 @@ export {
   type InboxMessage,
   type TypedEvent,
 } from './inbox.js';
+export {
+  AvatarStateStore,
+  HostTracker,
+  SaveStateStore,
+  attachAvatarState,
+  attachHostTracker,
+  attachSaveState,
+  type AvatarStateConfig,
+  type HostTrackerConfig,
+  type SaveStateConfig,
+} from './durable.js';
 
 import {
   LocalActorStore,
@@ -122,6 +133,14 @@ import {
   type RemoteActorsConfig,
 } from './actors.js';
 import { ChunkStore, type ChunkStoreConfig } from './chunks.js';
+import {
+  AvatarStateStore,
+  HostTracker,
+  SaveStateStore,
+  type AvatarStateConfig,
+  type HostTrackerConfig,
+  type SaveStateConfig,
+} from './durable.js';
 import { ErrorStore, type ErrorStoreConfig } from './errors.js';
 import {
   ActorInbox,
@@ -148,6 +167,10 @@ export interface WorldSessionConfig<
   TChunkState = string,
   TChannel = string,
   TDirect = string,
+  TSave = unknown,
+  TAvatarPublic = unknown,
+  TAvatarPrivate = unknown,
+  TAvatarApp = unknown,
 > extends WorldSessionBaseConfig {
   /** Your own actor: identity, typed state, send loop ({@link LocalActorStore}). */
   self?: LocalActorConfig<TSelf>;
@@ -184,6 +207,21 @@ export interface WorldSessionConfig<
    * cache ({@link EventRouter}). Pass `true` for the defaults.
    */
   events?: EventRouterConfig | true;
+  /**
+   * Host election tracking: heartbeat loop + isHost/onHostChanged
+   * ({@link HostTracker}). Pass `true` for the defaults.
+   */
+  host?: HostTrackerConfig | true;
+  /**
+   * Typed per-user app save blob with optional debounced autosave
+   * ({@link SaveStateStore}). Pass `true` for JSON defaults.
+   */
+  save?: SaveStateConfig<TSave> | true;
+  /**
+   * Typed avatar public/private/app state ({@link AvatarStateStore}). Pass
+   * `true` for JSON defaults.
+   */
+  avatar?: AvatarStateConfig<TAvatarPublic, TAvatarPrivate, TAvatarApp> | true;
 }
 
 /** The session returned by {@link createWorldSession}. */
@@ -194,6 +232,10 @@ export interface WorldSession<
   TChunkState = string,
   TChannel = string,
   TDirect = string,
+  TSave = unknown,
+  TAvatarPublic = unknown,
+  TAvatarPrivate = unknown,
+  TAvatarApp = unknown,
 > {
   /** The app this session is scoped to. */
   readonly appId: string;
@@ -211,6 +253,12 @@ export interface WorldSession<
   readonly actorInbox?: ActorInbox<TDirect>;
   /** The typed event router (present when `config.events` was given). */
   readonly events?: EventRouter;
+  /** The host election tracker (present when `config.host` was given). */
+  readonly host?: HostTracker;
+  /** The typed save-state store (present when `config.save` was given). */
+  readonly save?: SaveStateStore<TSave>;
+  /** The typed avatar-state store (present when `config.avatar` was given). */
+  readonly avatar?: AvatarStateStore<TAvatarPublic, TAvatarPrivate, TAvatarApp>;
   /** Close the shared subscription, cancel timers, and release the stores. */
   dispose(): void;
   /** The wiring context (for custom store implementations). */
@@ -243,6 +291,10 @@ export function createWorldSession<
   TChunkState = string,
   TChannel = string,
   TDirect = string,
+  TSave = unknown,
+  TAvatarPublic = unknown,
+  TAvatarPrivate = unknown,
+  TAvatarApp = unknown,
 >(
   client: WorldStoresClient,
   appId: string,
@@ -252,9 +304,24 @@ export function createWorldSession<
     TVoxelState,
     TChunkState,
     TChannel,
-    TDirect
+    TDirect,
+    TSave,
+    TAvatarPublic,
+    TAvatarPrivate,
+    TAvatarApp
   > = {},
-): WorldSession<TSelf, TActors, TVoxelState, TChunkState, TChannel, TDirect> {
+): WorldSession<
+  TSelf,
+  TActors,
+  TVoxelState,
+  TChunkState,
+  TChannel,
+  TDirect,
+  TSave,
+  TAvatarPublic,
+  TAvatarPrivate,
+  TAvatarApp
+> {
   const core = new WorldSessionCore(client, appId, config.ticker);
   // The error store registers the send-tracking sink — construct it first so
   // the very first actor/chunk sends are already attributable.
@@ -292,6 +359,18 @@ export function createWorldSession<
         ...(config.events === true ? {} : config.events),
       })
     : undefined;
+  const host = config.host
+    ? new HostTracker(core, config.host === true ? {} : config.host)
+    : undefined;
+  const save = config.save
+    ? new SaveStateStore<TSave>(core, config.save === true ? {} : config.save)
+    : undefined;
+  const avatar = config.avatar
+    ? new AvatarStateStore<TAvatarPublic, TAvatarPrivate, TAvatarApp>(
+        core,
+        config.avatar === true ? {} : config.avatar,
+      )
+    : undefined;
   return {
     appId,
     context: core,
@@ -302,6 +381,9 @@ export function createWorldSession<
     ...(channelInbox ? { channelInbox } : {}),
     ...(actorInbox ? { actorInbox } : {}),
     ...(events ? { events } : {}),
+    ...(host ? { host } : {}),
+    ...(save ? { save } : {}),
+    ...(avatar ? { avatar } : {}),
     dispose: () => core.dispose(),
   };
 }

@@ -844,6 +844,166 @@ test('ActorInbox + EventRouter: typed direct messages and per-eventType routing'
   session.dispose();
 });
 
+test('HostTracker: heartbeat loop, isHost, host-change events, transient failures', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+
+  let hostUserId = '10';
+  let fail = false;
+  let beats = 0;
+  const hostApi = {
+    async heartbeat() {
+      beats += 1;
+      if (fail) throw new Error('transient');
+      return hostUserId === null ? null : { hostUserId, actorCount: 2 };
+    },
+  };
+  const { client } = fakeClient({ host: hostApi });
+  const ticker = manualTicker();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    host: { myUserId: '10', intervalMs: 3000, heartbeatImmediately: false },
+  });
+
+  const changes = [];
+  session.host.onHostChanged((h) => changes.push(h));
+  assert.equal(session.host.hostUserId, null);
+  assert.equal(session.host.isHost, false);
+
+  ticker.advance(3000);
+  await sleep(0); // let the async beat settle
+  assert.equal(beats, 1);
+  assert.equal(session.host.hostUserId, '10');
+  assert.equal(session.host.isHost, true);
+  assert.deepEqual(changes, ['10']);
+
+  // Transient failure keeps the last known host.
+  fail = true;
+  ticker.advance(3000);
+  await sleep(0);
+  assert.equal(session.host.hostUserId, '10');
+
+  // A new host fires the change event and flips isHost.
+  fail = false;
+  hostUserId = '99';
+  ticker.advance(3000);
+  await sleep(0);
+  assert.equal(session.host.hostUserId, '99');
+  assert.equal(session.host.isHost, false);
+  assert.deepEqual(changes, ['10', '99']);
+
+  session.dispose();
+});
+
+test('SaveStateStore: typed load/set/save cache with debounced autosave', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+
+  let serverBlob = Buffer.from(JSON.stringify({ level: 3 })).toString('base64');
+  const updates = [];
+  const stateApi = {
+    async getOne() {
+      return serverBlob === null ? null : { state: serverBlob };
+    },
+    async update(input) {
+      updates.push(input);
+      serverBlob = input.state;
+      return { state: input.state };
+    },
+  };
+  const { client } = fakeClient({ state: stateApi });
+  const ticker = manualTicker();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    save: { autosaveMs: 500, now: () => ticker.now },
+  });
+  const save = session.save;
+
+  // Hydrate from the server copy.
+  assert.deepEqual(await save.load(), { level: 3 });
+  assert.equal(save.dirty, false);
+
+  // set() caches + marks dirty; autosave persists on the next tick.
+  save.patch({ level: 4 });
+  assert.equal(save.dirty, true);
+  assert.equal(updates.length, 0);
+  ticker.advance(500);
+  await sleep(0);
+  assert.equal(updates.length, 1);
+  assert.equal(save.dirty, false);
+  assert.equal(save.lastSavedAt, 500);
+  assert.deepEqual(JSON.parse(Buffer.from(updates[0].state, 'base64').toString()), {
+    level: 4,
+  });
+
+  // Clean cache → autosave does nothing.
+  ticker.advance(2000);
+  await sleep(0);
+  assert.equal(updates.length, 1);
+
+  // Manual save works without autosave pressure.
+  save.set({ level: 9 });
+  await save.save();
+  assert.equal(updates.length, 2);
+  session.dispose();
+});
+
+test('AvatarStateStore: binds an avatar and round-trips typed public/private/app state', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+
+  const j = (v) => Buffer.from(JSON.stringify(v)).toString('base64');
+  const writes = { identity: [], app: [] };
+  const avatarsApi = {
+    async mine() {
+      return [{ avatarId: '5', name: 'Hero' }];
+    },
+    async get(id) {
+      return {
+        avatarId: id,
+        publicState: j({ title: 'Knight' }),
+        privateState: j({ secrets: 1 }),
+      };
+    },
+    async appState() {
+      return { state: j({ progress: 2 }) };
+    },
+    async updateState(id, input) {
+      writes.identity.push([id, input]);
+      return { avatarId: id };
+    },
+    async updateAppState(input) {
+      writes.app.push(input);
+      return { state: input.state };
+    },
+  };
+  const { client } = fakeClient({ avatars: avatarsApi });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    avatar: true,
+  });
+  const store = session.avatar;
+
+  // Unbound writes are rejected clearly.
+  await assert.rejects(() => store.setAppState({ progress: 3 }), /unbound/i);
+
+  await store.load();
+  assert.equal(store.avatarId, '5', 'bound to the first avatar');
+  assert.deepEqual(store.publicState, { title: 'Knight' });
+  assert.deepEqual(store.privateState, { secrets: 1 });
+  assert.deepEqual(store.appState, { progress: 2 });
+
+  await store.setIdentityState({ publicState: { title: 'Baron' } });
+  assert.deepEqual(store.publicState, { title: 'Baron' });
+  assert.deepEqual(store.privateState, { secrets: 1 }, 'untouched field kept');
+  const [id, identityInput] = writes.identity[0];
+  assert.equal(id, '5');
+  assert.equal(identityInput.privateState, undefined, 'only the given blob written');
+
+  await store.setAppState({ progress: 3 });
+  assert.deepEqual(store.appState, { progress: 3 });
+  assert.equal(writes.app[0].appId, '42');
+
+  session.dispose();
+});
+
 test('caller-supplied tickers are not disposed with the session', async () => {
   const { createWorldSession, manualTicker } = await loadStores();
   const { client } = fakeClient();
