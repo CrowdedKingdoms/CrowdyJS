@@ -87,12 +87,20 @@ export {
   type UuidStore,
 } from './actors.js';
 
+export {
+  ErrorStore,
+  attachErrorStore,
+  type AttributedError,
+  type ErrorStoreConfig,
+} from './errors.js';
+
 import {
   LocalActorStore,
   RemoteActorStore,
   type LocalActorConfig,
   type RemoteActorsConfig,
 } from './actors.js';
+import { ErrorStore, type ErrorStoreConfig } from './errors.js';
 import {
   WorldSessionCore,
   type WorldSessionBaseConfig,
@@ -113,6 +121,11 @@ export interface WorldSessionConfig<TSelf = unknown, TActors = TSelf>
    * automatically; set `selfUuid` yourself otherwise.
    */
   actors?: RemoteActorsConfig<TActors>;
+  /**
+   * Send-error log: attributes `GenericErrorResponse`s to the sends that
+   * caused them ({@link ErrorStore}). Pass `true` for the defaults.
+   */
+  errors?: ErrorStoreConfig | true;
 }
 
 /** The session returned by {@link createWorldSession}. */
@@ -123,6 +136,8 @@ export interface WorldSession<TSelf = unknown, TActors = TSelf> {
   readonly self?: LocalActorStore<TSelf>;
   /** The remote actor registry (present when `config.actors` was given). */
   readonly actors?: RemoteActorStore<TActors>;
+  /** The attributed send-error log (present when `config.errors` was given). */
+  readonly errors?: ErrorStore;
   /** Close the shared subscription, cancel timers, and release the stores. */
   dispose(): void;
   /** The wiring context (for custom store implementations). */
@@ -154,6 +169,11 @@ export function createWorldSession<TSelf = unknown, TActors = TSelf>(
   config: WorldSessionConfig<TSelf, TActors> = {},
 ): WorldSession<TSelf, TActors> {
   const core = new WorldSessionCore(client, appId, config.ticker);
+  // The error store registers the send-tracking sink — construct it first so
+  // the very first actor/chunk sends are already attributable.
+  const errors = config.errors
+    ? new ErrorStore(core, config.errors === true ? {} : config.errors)
+    : undefined;
   const self = config.self ? new LocalActorStore(core, config.self) : undefined;
   const actors = config.actors
     ? new RemoteActorStore(core, {
@@ -167,6 +187,7 @@ export function createWorldSession<TSelf = unknown, TActors = TSelf>(
     context: core,
     ...(self ? { self } : {}),
     ...(actors ? { actors } : {}),
+    ...(errors ? { errors } : {}),
     dispose: () => core.dispose(),
   };
 }

@@ -492,6 +492,63 @@ test('RemoteActorStore lanes: decode once, route to first match', async () => {
   session.dispose();
 });
 
+test('ErrorStore: attributes GenericErrorResponse to tracked sends, ring buffer, per-actor', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const { client, net } = fakeClient();
+
+  const ticker = manualTicker();
+  const codec = jsonCodec();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    errors: { capacity: 3, now: () => ticker.now },
+    self: {
+      codec,
+      initialState: { x: 0 },
+      sendIntervalMs: false,
+      now: () => ticker.now,
+    },
+  });
+
+  const seen = [];
+  session.errors.onError((e) => seen.push(e));
+
+  // A send made through a store is tracked; its error is attributed.
+  await session.self.join({ x: '0', y: '0', z: '0' });
+  const seq = session.self.lastSent.sequenceNumber;
+  net.handlers.genericError({ sequenceNumber: seq, errorCode: 'UNAUTHORIZED' });
+
+  assert.equal(session.errors.total, 1);
+  assert.equal(session.errors.last.errorCode, 'UNAUTHORIZED');
+  assert.equal(session.errors.last.send.kind, 'actorUpdate');
+  assert.equal(session.errors.last.send.uuid, session.self.uuid);
+  assert.equal(seen.length, 1);
+
+  // Per-actor lookup uses the send's uuid.
+  assert.equal(session.errors.lastFor(session.self.uuid).errorCode, 'UNAUTHORIZED');
+  assert.equal(session.errors.lastFor('unknown'), undefined);
+
+  // Untracked sequence numbers still record, just unattributed.
+  net.handlers.genericError({ sequenceNumber: 200, errorCode: 'RATE_LIMITED' });
+  assert.equal(session.errors.last.send, undefined);
+
+  // Ring buffer caps at capacity, newest first; total keeps counting.
+  net.handlers.genericError({ sequenceNumber: 201, errorCode: 'E3' });
+  net.handlers.genericError({ sequenceNumber: 202, errorCode: 'E4' });
+  assert.equal(session.errors.total, 4);
+  assert.deepEqual(
+    session.errors.recent().map((e) => e.errorCode),
+    ['E4', 'E3', 'RATE_LIMITED'],
+  );
+  assert.deepEqual(session.errors.recent(1).map((e) => e.errorCode), ['E4']);
+
+  session.errors.clear();
+  assert.equal(session.errors.recent().length, 0);
+  assert.equal(session.errors.lastFor(session.self.uuid), undefined);
+  assert.equal(session.errors.total, 4, 'total survives clear');
+
+  session.dispose();
+});
+
 test('caller-supplied tickers are not disposed with the session', async () => {
   const { createWorldSession, manualTicker } = await loadStores();
   const { client } = fakeClient();
