@@ -1096,6 +1096,49 @@ test('leaderboardsBlueprint generates trusted submits and season rolls', async (
   assert.equal(arena.automations, undefined);
 });
 
+test('featureGate + policyExtra monetization-gate existing builders', async () => {
+  const { featureGate, andPolicies, plotBlueprint, lockBlueprint } = await loadSdk();
+
+  assert.deepEqual(featureGate('vip'), { type: 'tier_feature', feature: 'vip' });
+  // andPolicies skips empties and composes rules.
+  assert.deepEqual(andPolicies({ type: 'allow' }, undefined), { type: 'allow' });
+  assert.deepEqual(andPolicies({ type: 'allow' }, featureGate('vip')), {
+    type: 'and',
+    rules: [{ type: 'allow' }, { type: 'tier_feature', feature: 'vip' }],
+  });
+
+  // Plot buys gated on a paid tier feature; rent left open.
+  const plots = plotBlueprint({
+    rentable: true,
+    buyPolicyExtra: featureGate('land_owner'),
+  });
+  const buyPolicy = JSON.parse(
+    plots.functions.find((f) => f.name === 'buy_plot').invokePolicyJson,
+  );
+  assert.equal(buyPolicy.type, 'and');
+  assert.deepEqual(buyPolicy.rules[1], {
+    type: 'tier_feature',
+    feature: 'land_owner',
+  });
+  const rentPolicy = JSON.parse(
+    plots.functions.find((f) => f.name === 'rent_plot').invokePolicyJson,
+  );
+  assert.equal(rentPolicy.type, 'condition');
+
+  // VIP door: authorities OR'd, then the gate AND'ed on top.
+  const door = lockBlueprint({
+    objectTypeName: 'VipDoor',
+    authority: [{ kind: 'owner' }, { kind: 'key' }],
+    policyExtra: featureGate('vip'),
+  });
+  const openPolicy = JSON.parse(
+    door.functions.find((f) => f.name === 'open_vip_door').invokePolicyJson,
+  );
+  assert.equal(openPolicy.type, 'and');
+  assert.equal(openPolicy.rules[0].type, 'or');
+  assert.deepEqual(openPolicy.rules[1], { type: 'tier_feature', feature: 'vip' });
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

@@ -103,6 +103,7 @@ export {
   type KitStatusEffect,
 } from './combat.js';
 export { DecksKit, type DecksKitOptions, type KitCard } from './decks.js';
+export { FeaturesKit } from './features.js';
 export {
   EconomyKit,
   type EconomyKitOptions,

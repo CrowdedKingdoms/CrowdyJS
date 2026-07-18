@@ -3,7 +3,13 @@ import type {
   SeedFunctionInput,
   SeedPropertyDefInput,
 } from '../../generated/graphql.js';
-import { kitPolicyJson, toSnakeCase, type KitBlueprint } from './core.js';
+import {
+  andPolicies,
+  kitPolicyJson,
+  toSnakeCase,
+  type KitBlueprint,
+  type KitInvokePolicy,
+} from './core.js';
 
 /** Options for {@link plotBlueprint}. */
 export interface PlotBlueprintOptions {
@@ -27,6 +33,13 @@ export interface PlotBlueprintOptions {
    * property, expiring after `rent_ttl_seconds`. Defaults to false.
    */
   rentable?: boolean;
+  /**
+   * Extra policy rule AND'ed into `buy_plot` — e.g.
+   * `featureGate('land_owner')` to sell land only to a paid tier.
+   */
+  buyPolicyExtra?: KitInvokePolicy;
+  /** Extra policy rule AND'ed into `rent_plot`. */
+  rentPolicyExtra?: KitInvokePolicy;
 }
 
 /** Names derived by {@link plotBlueprint} for a given plot type. */
@@ -70,11 +83,16 @@ export function plotBlueprint(options: PlotBlueprintOptions = {}): KitBlueprint 
   const walletParam: FunctionParamInput[] = [
     { name: 'wallet_id', valueType: 'container_ref', required: true },
   ];
-  const walletGuard = (priceExpr: string) =>
-    kitPolicyJson({
-      type: 'condition',
-      expression: `ref($wallet_id).${walletOwner} == $caller_user_id && ref($wallet_id).${currency} >= ${priceExpr}`,
-    });
+  const walletGuard = (priceExpr: string, extra?: KitInvokePolicy) =>
+    kitPolicyJson(
+      andPolicies(
+        {
+          type: 'condition',
+          expression: `ref($wallet_id).${walletOwner} == $caller_user_id && ref($wallet_id).${currency} >= ${priceExpr}`,
+        },
+        extra,
+      ),
+    );
 
   const propertyDefinitions: SeedPropertyDefInput[] = [
     { containerTypeName: names.plotType, key: 'grid_id', valueType: 'int' },
@@ -126,7 +144,7 @@ export function plotBlueprint(options: PlotBlueprintOptions = {}): KitBlueprint 
         },
       ],
       returnExpression: `ref($wallet_id).${currency}`,
-      invokePolicyJson: walletGuard('self.price'),
+      invokePolicyJson: walletGuard('self.price', options.buyPolicyExtra),
       description:
         'Buy this plot: spend the price AND receive grid permissions atomically.',
     },
@@ -173,7 +191,7 @@ export function plotBlueprint(options: PlotBlueprintOptions = {}): KitBlueprint 
         },
       ],
       returnExpression: `ref($wallet_id).${currency}`,
-      invokePolicyJson: walletGuard('self.rent_price'),
+      invokePolicyJson: walletGuard('self.rent_price', options.rentPolicyExtra),
       description:
         'Rent this plot: spend the rent AND receive an expiring grid grant atomically.',
     });

@@ -13,6 +13,7 @@ import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
 import { CombatKit, type CombatKitOptions } from './combat.js';
 import { DecksKit, type DecksKitOptions } from './decks.js';
 import { EconomyKit, type EconomyKitOptions } from './economy.js';
+import { FeaturesKit } from './features.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { LeaderboardsKit, type LeaderboardsKitOptions } from './leaderboards.js';
 import { LootKit, type LootKitOptions } from './loot.js';
@@ -130,6 +131,8 @@ export class GameKitClient {
   readonly social: SocialKit;
   /** Leaderboard helpers (trusted submits, client-side ranking, seasons). */
   readonly leaderboards: LeaderboardsKit;
+  /** Monetization helpers (feature keys, tier grants, featureGate policies). */
+  readonly features: FeaturesKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -165,6 +168,7 @@ export class GameKitClient {
       options.social,
     );
     this.leaderboards = new LeaderboardsKit(appId, gameModel, options.leaderboards);
+    this.features = new FeaturesKit(appId, gameModel);
   }
 
   /**

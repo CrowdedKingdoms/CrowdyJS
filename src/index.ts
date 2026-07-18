@@ -78,6 +78,7 @@ export {
   CombatKit,
   DecksKit,
   EconomyKit,
+  FeaturesKit,
   GameKitClient,
   InventoryKit,
   LeaderboardsKit,

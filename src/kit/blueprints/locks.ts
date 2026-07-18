@@ -5,6 +5,7 @@ import type {
   SeedPropertyDefInput,
 } from '../../generated/graphql.js';
 import {
+  andPolicies,
   kitPolicyJson,
   toSnakeCase,
   type KitBlueprint,
@@ -58,6 +59,11 @@ export interface LockBlueprintOptions {
   keyTypeName?: string;
   /** One or more authority sources; any one grants access. */
   authority: LockAuthority | LockAuthority[];
+  /**
+   * Extra policy rule AND'ed on top of the OR'd authorities — e.g.
+   * `featureGate('vip')` for members-only doors regardless of keys.
+   */
+  policyExtra?: KitInvokePolicy;
 }
 
 /** Names derived by {@link lockBlueprint} for a given object type. */
@@ -143,7 +149,7 @@ export function lockBlueprint(options: LockBlueprintOptions): KitBlueprint {
   const rules = authorities.map(lockAuthorityRule);
   const policy: KitInvokePolicy =
     rules.length === 1 ? rules[0] : { type: 'or', rules };
-  const policyJson = kitPolicyJson(policy);
+  const policyJson = kitPolicyJson(andPolicies(policy, options.policyExtra));
 
   const parameters: FunctionParamInput[] = usesKey
     ? [{ name: 'key_id', valueType: 'container_ref', required: true }]
