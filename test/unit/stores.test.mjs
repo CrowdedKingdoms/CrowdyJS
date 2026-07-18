@@ -549,6 +549,190 @@ test('ErrorStore: attributes GenericErrorResponse to tracked sends, ring buffer,
   session.dispose();
 });
 
+/** A fake ChunksAPI backed by an in-memory map keyed "x:y:z". */
+function fakeChunks(initial = {}) {
+  const server = new Map(Object.entries(initial));
+  const calls = { byDistance: 0, get: 0, update: [] };
+  const key = (c) => `${c.x}:${c.y}:${c.z}`;
+  const api = {
+    async byDistance({ centerCoordinate, maxDistance }) {
+      calls.byDistance += 1;
+      const center = {
+        x: Number(centerCoordinate.x),
+        y: Number(centerCoordinate.y),
+        z: Number(centerCoordinate.z),
+      };
+      const chunks = [];
+      for (const [k, entry] of server) {
+        const [x, y, z] = k.split(':').map(Number);
+        const dist = Math.max(
+          Math.abs(x - center.x),
+          Math.abs(y - center.y),
+          Math.abs(z - center.z),
+        );
+        if (dist <= maxDistance) {
+          chunks.push({
+            coordinates: { x: String(x), y: String(y), z: String(z) },
+            voxels: entry.voxels ?? null,
+            chunkState: entry.chunkState ?? null,
+          });
+        }
+      }
+      return { chunks };
+    },
+    async get({ coordinates }) {
+      calls.get += 1;
+      const entry = server.get(key(coordinates));
+      if (!entry) return null;
+      return {
+        coordinates,
+        voxels: entry.voxels ?? null,
+        chunkState: entry.chunkState ?? null,
+        voxelStates: entry.voxelStates ?? [],
+      };
+    },
+    async update(input) {
+      calls.update.push(input);
+      server.set(key(input.coordinates), { voxels: input.voxels });
+      return { coordinates: input.coordinates, voxels: input.voxels };
+    },
+  };
+  return { api, calls, server };
+}
+
+test('ChunkStore: bulk load + hydration, realtime merge, optimistic edits, worldgen write-back', async () => {
+  const { createWorldSession, manualTicker, jsonCodec, CHUNK_VOLUME, voxelIndex } =
+    await loadStores();
+
+  // Server knows chunk 0:0:0 (a stone block at (1,2,3) + a sparse state).
+  const dense = new Uint8Array(CHUNK_VOLUME);
+  dense[voxelIndex(1, 2, 3)] = 7;
+  const voxelStateCodec = jsonCodec();
+  const { api: chunksApi, calls, server } = fakeChunks({
+    '0:0:0': {
+      voxels: Buffer.from(dense).toString('base64'),
+      chunkState: Buffer.from(JSON.stringify({ biome: 'forest' })).toString('base64'),
+      voxelStates: [
+        {
+          voxelCoord: { x: 1, y: 2, z: 3 },
+          voxelType: 7,
+          state: voxelStateCodec.encode({ growth: 2 }),
+        },
+      ],
+    },
+  });
+  const { client, net } = fakeClient({ chunks: chunksApi });
+
+  const ticker = manualTicker();
+  const generated = [];
+  const session = createWorldSession(client, '42', {
+    ticker,
+    chunks: {
+      voxelStateCodec,
+      chunkStateCodec: jsonCodec(),
+      writeBackIntervalMs: 100,
+      now: () => ticker.now,
+      onMissing: (coord) => {
+        generated.push(coord);
+        const grid = new Uint8Array(CHUNK_VOLUME);
+        grid[0] = 9;
+        return grid;
+      },
+    },
+  });
+  const store = session.chunks;
+
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 1);
+  // Known chunk: loaded + hydrated with typed states.
+  const loaded = store.get({ x: 0, y: 0, z: 0 });
+  assert.equal(loaded.loadState, 'loaded');
+  assert.equal(loaded.hydrated, true);
+  assert.equal(store.voxelTypeAt({ x: 0, y: 0, z: 0 }, 1, 2, 3), 7);
+  assert.deepEqual(store.voxelStateAt({ x: 0, y: 0, z: 0 }, 1, 2, 3), { growth: 2 });
+  assert.deepEqual(loaded.chunkState, { biome: 'forest' });
+
+  // The other 26 chunks were missing → worldgen seeded them all.
+  assert.equal(generated.length, 26);
+  const seeded = store.get({ x: 1, y: 0, z: 0 });
+  assert.equal(seeded.loadState, 'seeded');
+  assert.equal(seeded.voxels[0], 9);
+  assert.equal(store.pendingWriteBacks, 26);
+
+  // Repeat calls dedupe (nothing new requested).
+  const before = calls.byDistance;
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 1);
+  assert.equal(calls.byDistance, before);
+
+  // Realtime merge into a tracked chunk (typed state decoded).
+  const rev = store.revision;
+  net.handlers.voxelUpdate({
+    chunkX: '0', chunkY: '0', chunkZ: '0',
+    voxelX: 5, voxelY: 5, voxelZ: 5,
+    voxelType: 3,
+    voxelState: voxelStateCodec.encode({ growth: 1 }),
+    uuid: 'w'.repeat(32),
+    sequenceNumber: 1,
+    epochMillis: '2',
+  });
+  assert.equal(store.voxelTypeAt({ x: 0, y: 0, z: 0 }, 5, 5, 5), 3);
+  assert.deepEqual(store.voxelStateAt({ x: 0, y: 0, z: 0 }, 5, 5, 5), { growth: 1 });
+  assert.ok(store.revision > rev);
+
+  // Untracked chunks are ignored by realtime merge.
+  net.handlers.voxelUpdate({
+    chunkX: '99', chunkY: '0', chunkZ: '0',
+    voxelX: 0, voxelY: 0, voxelZ: 0, voxelType: 1, voxelState: '',
+    uuid: 'w'.repeat(32), sequenceNumber: 2, epochMillis: '3',
+  });
+  assert.equal(store.get({ x: 99, y: 0, z: 0 }), undefined);
+
+  // Optimistic setVoxel applies locally AND replicates with a typed state.
+  await store.setVoxel({
+    chunk: { x: 0, y: 0, z: 0 }, x: 9, y: 9, z: 9, voxelType: 4,
+    state: { growth: 0 },
+  });
+  assert.equal(store.voxelTypeAt({ x: 0, y: 0, z: 0 }, 9, 9, 9), 4);
+  const sent = net.sent.find((s) => s.kind === 'voxelUpdate');
+  assert.equal(sent.input.voxelType, 4);
+  assert.deepEqual(voxelStateCodec.decode(sent.input.voxelState), { growth: 0 });
+
+  // Write-back: one throttled chunk per tick, then flush drains the rest.
+  ticker.advance(100);
+  await Promise.resolve();
+  assert.equal(calls.update.length >= 1, true, 'one chunk persisted per tick');
+  await store.flush();
+  assert.equal(store.pendingWriteBacks, 0);
+  assert.equal(calls.update.length, 26);
+  assert.equal(store.get({ x: 1, y: 0, z: 0 }).loadState, 'loaded');
+  assert.equal(server.size, 27, 'worldgen persisted server-side');
+
+  // Prune drops far, clean chunks.
+  store.pruneBeyond({ x: 10, y: 0, z: 0 }, 1);
+  assert.equal(store.get({ x: 0, y: 0, z: 0 }), undefined);
+
+  session.dispose();
+});
+
+test('ChunkStore: change events fire and seed validates the grid size', async () => {
+  const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
+  const { api: chunksApi } = fakeChunks();
+  const { client } = fakeClient({ chunks: chunksApi });
+  const session = createWorldSession(client, '1', {
+    ticker: manualTicker(),
+    chunks: { writeBackIntervalMs: false },
+  });
+
+  const changed = [];
+  session.chunks.onChunkChanged((c) => changed.push(c.key));
+  session.chunks.seed({ x: 2, y: 0, z: 0 }, new Uint8Array(CHUNK_VOLUME));
+  assert.deepEqual(changed, ['2:0:0']);
+  assert.throws(
+    () => session.chunks.seed({ x: 0, y: 0, z: 0 }, new Uint8Array(10)),
+    /4096/,
+  );
+  session.dispose();
+});
+
 test('caller-supplied tickers are not disposed with the session', async () => {
   const { createWorldSession, manualTicker } = await loadStores();
   const { client } = fakeClient();

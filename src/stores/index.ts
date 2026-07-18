@@ -93,6 +93,14 @@ export {
   type AttributedError,
   type ErrorStoreConfig,
 } from './errors.js';
+export {
+  ChunkStore,
+  attachChunkStore,
+  type CachedChunk,
+  type ChunkLoadState,
+  type ChunkStoreConfig,
+  type SetVoxelInput,
+} from './chunks.js';
 
 import {
   LocalActorStore,
@@ -100,6 +108,7 @@ import {
   type LocalActorConfig,
   type RemoteActorsConfig,
 } from './actors.js';
+import { ChunkStore, type ChunkStoreConfig } from './chunks.js';
 import { ErrorStore, type ErrorStoreConfig } from './errors.js';
 import {
   WorldSessionCore,
@@ -111,8 +120,12 @@ import {
  * Configuration for {@link createWorldSession}. Only configured stores are
  * constructed (and only they appear on the returned session's type).
  */
-export interface WorldSessionConfig<TSelf = unknown, TActors = TSelf>
-  extends WorldSessionBaseConfig {
+export interface WorldSessionConfig<
+  TSelf = unknown,
+  TActors = TSelf,
+  TVoxelState = string,
+  TChunkState = string,
+> extends WorldSessionBaseConfig {
   /** Your own actor: identity, typed state, send loop ({@link LocalActorStore}). */
   self?: LocalActorConfig<TSelf>;
   /**
@@ -126,10 +139,22 @@ export interface WorldSessionConfig<TSelf = unknown, TActors = TSelf>
    * caused them ({@link ErrorStore}). Pass `true` for the defaults.
    */
   errors?: ErrorStoreConfig | true;
+  /**
+   * Chunk/voxel cache: bulk loading, typed states, realtime merge,
+   * optimistic edits, worldgen write-back ({@link ChunkStore}). Pass `true`
+   * for the defaults. The outbound sender uuid is wired from `self`
+   * automatically.
+   */
+  chunks?: ChunkStoreConfig<TVoxelState, TChunkState> | true;
 }
 
 /** The session returned by {@link createWorldSession}. */
-export interface WorldSession<TSelf = unknown, TActors = TSelf> {
+export interface WorldSession<
+  TSelf = unknown,
+  TActors = TSelf,
+  TVoxelState = string,
+  TChunkState = string,
+> {
   /** The app this session is scoped to. */
   readonly appId: string;
   /** The local actor store (present when `config.self` was given). */
@@ -138,6 +163,8 @@ export interface WorldSession<TSelf = unknown, TActors = TSelf> {
   readonly actors?: RemoteActorStore<TActors>;
   /** The attributed send-error log (present when `config.errors` was given). */
   readonly errors?: ErrorStore;
+  /** The chunk/voxel cache (present when `config.chunks` was given). */
+  readonly chunks?: ChunkStore<TVoxelState, TChunkState>;
   /** Close the shared subscription, cancel timers, and release the stores. */
   dispose(): void;
   /** The wiring context (for custom store implementations). */
@@ -163,11 +190,16 @@ export interface WorldSession<TSelf = unknown, TActors = TSelf> {
  * session.dispose();
  * ```
  */
-export function createWorldSession<TSelf = unknown, TActors = TSelf>(
+export function createWorldSession<
+  TSelf = unknown,
+  TActors = TSelf,
+  TVoxelState = string,
+  TChunkState = string,
+>(
   client: WorldStoresClient,
   appId: string,
-  config: WorldSessionConfig<TSelf, TActors> = {},
-): WorldSession<TSelf, TActors> {
+  config: WorldSessionConfig<TSelf, TActors, TVoxelState, TChunkState> = {},
+): WorldSession<TSelf, TActors, TVoxelState, TChunkState> {
   const core = new WorldSessionCore(client, appId, config.ticker);
   // The error store registers the send-tracking sink — construct it first so
   // the very first actor/chunk sends are already attributable.
@@ -182,12 +214,20 @@ export function createWorldSession<TSelf = unknown, TActors = TSelf>(
         ...config.actors,
       })
     : undefined;
+  const chunks = config.chunks
+    ? new ChunkStore<TVoxelState, TChunkState>(core, {
+        // Stamp outbound voxel edits with the local actor's uuid.
+        actorUuid: self ? () => self.uuid : undefined,
+        ...(config.chunks === true ? {} : config.chunks),
+      })
+    : undefined;
   return {
     appId,
     context: core,
     ...(self ? { self } : {}),
     ...(actors ? { actors } : {}),
     ...(errors ? { errors } : {}),
+    ...(chunks ? { chunks } : {}),
     dispose: () => core.dispose(),
   };
 }
