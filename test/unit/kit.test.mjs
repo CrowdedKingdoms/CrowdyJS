@@ -499,6 +499,120 @@ test('progressionBlueprint generates the fn: level curve, skills, achievements, 
   );
 });
 
+test('lootBlueprint unrolls weighted tables and wires event-triggered drops', async () => {
+  const { lootBlueprint, lootNames, lootRollFn } = await loadSdk();
+
+  const bp = lootBlueprint({
+    tables: [
+      {
+        tableId: 'goblin',
+        entries: [
+          { itemId: 'coin', weight: 3 },
+          { itemId: 'sword', weight: 1, minQty: 1, maxQty: 2 },
+        ],
+      },
+      { tableId: 'chest', entries: [{ itemId: 'gem', weight: 1, minQty: 2 }] },
+    ],
+    drops: [
+      {
+        name: 'goblin-drop',
+        tableId: 'goblin',
+        onEvent: 'function_invoked',
+        functionName: 'mob_died',
+        debounceMs: 1000,
+      },
+    ],
+  });
+
+  assert.equal(bp.containerTypes[0].typeName, 'LootRoll');
+  assert.equal(bp.containerTypes[0].instantiableBy, 'member');
+
+  // The weighted selection is a build-time unrolled chain over ONE stored
+  // seed: rand() first, then item, then quantity — exact distribution.
+  const roll = bp.functions.find((f) => f.name === 'roll_goblin');
+  assert.deepEqual(
+    roll.mutations.map((m) => m.property),
+    ['seed', 'rolled_item_id', 'rolled_qty'],
+  );
+  assert.equal(roll.mutations[0].expression, 'rand()');
+  assert.equal(
+    roll.mutations[1].expression,
+    'if(self.seed < 0.75, "coin", "sword")',
+  );
+  assert.equal(
+    roll.mutations[2].expression,
+    'if(self.rolled_item_id == "coin", 1, rand_int(1, 2))',
+  );
+  // Trusted by default (server scope), single-roll guarded, and rollable by
+  // the drop automation.
+  assert.equal(roll.invokeScope, 'server');
+  assert.equal(roll.autonomousInvocable, true);
+  const rollPolicy = JSON.parse(roll.invokePolicyJson);
+  assert.match(
+    rollPolicy.rules.find((r) => r.type === 'condition').expression,
+    /self\.table_id == "goblin" && self\.rolled_item_id == ""/,
+  );
+
+  // Single-entry table: constant expressions, no drop wiring.
+  const chest = bp.functions.find((f) => f.name === 'roll_chest');
+  assert.equal(chest.mutations[1].expression, '"gem"');
+  assert.equal(chest.mutations[2].expression, '2');
+  assert.equal(chest.autonomousInvocable, undefined);
+
+  // claim_roll: atomic single-claim + grant, owner + item-match guarded.
+  const claim = bp.functions.find((f) => f.name === 'claim_roll');
+  const claimGuard = JSON.parse(claim.invokePolicyJson).expression;
+  assert.match(claimGuard, /not\(self\.claimed\)/);
+  assert.match(claimGuard, /ref\(\$to_stack_id\)\.item_id == self\.rolled_item_id/);
+  assert.deepEqual(claim.mutations.map((m) => m.property), ['claimed', 'quantity']);
+
+  // Event drop: rolls a pooled unrolled LootRoll of that table.
+  const drop = bp.automations.find((a) => a.name === 'goblin-drop');
+  assert.equal(drop.functionName, 'roll_goblin');
+  assert.equal(drop.triggerType, 'event');
+  assert.deepEqual(JSON.parse(drop.selectorJson), {
+    selfWhere: [
+      { key: 'table_id', op: '==', value: 'goblin' },
+      { key: 'rolled_item_id', op: '==', value: '' },
+    ],
+    pick: 'random',
+  });
+  assert.deepEqual(bp.automationTriggers[0], {
+    automationName: 'goblin-drop',
+    onEvent: 'function_invoked',
+    functionName: 'mob_died',
+    debounceMs: 1000,
+  });
+
+  assert.equal(lootNames('Dungeon').rollType, 'DungeonLootRoll');
+  assert.equal(lootRollFn('goblin', 'Dungeon'), 'dungeon_roll_goblin');
+
+  assert.throws(() => lootBlueprint({ tables: [] }), /at least one table/);
+  assert.throws(
+    () =>
+      lootBlueprint({
+        tables: [
+          {
+            tableId: 'big',
+            entries: Array.from({ length: 17 }, (_, i) => ({
+              itemId: `i${i}`,
+              weight: 1,
+            })),
+          },
+        ],
+      }),
+    /1-16 entries/,
+  );
+  assert.throws(
+    () =>
+      lootBlueprint({
+        tables: [{ tableId: 't', entries: [{ itemId: 'x', weight: 1 }] }],
+        drops: [{ name: 'd', tableId: 'other', onEvent: 'function_invoked' }],
+      }),
+    /unknown table/,
+  );
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

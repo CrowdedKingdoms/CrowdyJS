@@ -95,6 +95,9 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.economy.market, 'kit.economy.market', [
     'list', 'browse', 'buy', 'cancel',
   ]);
+  assertMethods(kit.loot, 'kit.loot', [
+    'createRoll', 'roll', 'claim', 'state', 'rolls', 'history',
+  ]);
   assertMethods(kit.progression, 'kit.progression', [
     'ensure', 'state', 'grantXp', 'skillCatalog', 'defineSkill', 'ensureSkillRank',
     'buySkill', 'skills', 'achievementCatalog', 'defineAchievement', 'achievements',

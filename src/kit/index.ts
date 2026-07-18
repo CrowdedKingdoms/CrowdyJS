@@ -10,6 +10,9 @@ export {
   kitPolicyJson,
   lockBlueprint,
   lockNames,
+  lootBlueprint,
+  lootNames,
+  lootRollFn,
   mergeBlueprints,
   npcBehaviorFunctionName,
   npcBlueprint,
@@ -36,6 +39,11 @@ export {
   type LockAuthority,
   type LockBlueprintOptions,
   type LockNames,
+  type LootBlueprintOptions,
+  type LootDropSpec,
+  type LootEntrySpec,
+  type LootNames,
+  type LootTableSpec,
   type MergedBlueprints,
   type NpcBehaviorSpec,
   type NpcBehaviorTrigger,
@@ -60,6 +68,7 @@ export {
   type KitTradeOffer,
   type KitWallet,
 } from './economy.js';
+export { LootKit, type KitLootRoll, type LootKitOptions } from './loot.js';
 export { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 export { NpcsKit, type NpcsKitOptions, type KitNpc } from './npcs.js';
 export { PlotsKit, type PlotsKitOptions, type KitPlot } from './plots.js';

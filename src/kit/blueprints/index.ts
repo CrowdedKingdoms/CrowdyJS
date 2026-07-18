@@ -38,6 +38,16 @@ export {
   type InventoryNames,
 } from './inventory.js';
 export {
+  lootBlueprint,
+  lootNames,
+  lootRollFn,
+  type LootBlueprintOptions,
+  type LootDropSpec,
+  type LootEntrySpec,
+  type LootNames,
+  type LootTableSpec,
+} from './loot.js';
+export {
   lockBlueprint,
   lockNames,
   type LockAuthority,

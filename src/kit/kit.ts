@@ -9,6 +9,7 @@ import type {
 import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
 import { EconomyKit, type EconomyKitOptions } from './economy.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
+import { LootKit, type LootKitOptions } from './loot.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 import { PlotsKit, type PlotsKitOptions } from './plots.js';
@@ -22,6 +23,7 @@ export interface GameKitOptions {
   plots?: PlotsKitOptions;
   economy?: EconomyKitOptions;
   progression?: ProgressionKitOptions;
+  loot?: LootKitOptions;
 }
 
 /** The result of {@link GameKitClient.deploy}: the seed outcome plus each automation/trigger upserted. */
@@ -84,6 +86,8 @@ export class GameKitClient {
   readonly economy: EconomyKit;
   /** Progression helpers (xp/levels, skills, achievements, rating). */
   readonly progression: ProgressionKit;
+  /** Loot helpers (server-rolled weighted tables, atomic claims). */
+  readonly loot: LootKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -97,6 +101,7 @@ export class GameKitClient {
     this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
     this.economy = new EconomyKit(appId, gameModel, options.economy);
     this.progression = new ProgressionKit(appId, gameModel, options.progression);
+    this.loot = new LootKit(appId, gameModel, options.loot);
   }
 
   /**
