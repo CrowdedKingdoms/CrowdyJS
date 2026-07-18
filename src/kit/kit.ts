@@ -6,7 +6,7 @@ import type {
   GameModelUpsertAutomationTriggerMutation,
   Scalars,
 } from '../generated/graphql.js';
-import { mergeBlueprints, type KitBlueprint } from './blueprints.js';
+import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';

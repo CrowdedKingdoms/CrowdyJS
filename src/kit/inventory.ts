@@ -1,6 +1,6 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { Scalars } from '../generated/graphql.js';
-import { inventoryNames, type InventoryNames } from './blueprints.js';
+import { inventoryNames, type InventoryNames } from './blueprints/index.js';
 import {
   kitContainerProperties,
   kitInvoke,

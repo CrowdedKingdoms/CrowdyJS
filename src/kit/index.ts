@@ -1,4 +1,7 @@
 export {
+  andPolicies,
+  composeBlueprints,
+  featureGate,
   inventoryBlueprint,
   inventoryNames,
   kitPolicyJson,
@@ -7,16 +10,21 @@ export {
   mergeBlueprints,
   npcBehaviorFunctionName,
   npcBlueprint,
+  ownerEqualsCaller,
+  ownerMirrorProperty,
   plotBlueprint,
   plotNames,
   toSnakeCase,
+  trustedAuthorityFields,
   type InventoryBlueprintOptions,
   type InventoryNames,
   type KitAutomationSpec,
   type KitAutomationTriggerSpec,
   type KitBlueprint,
   type KitInvokePolicy,
+  type KitOwnerIdKind,
   type KitSelectorSpec,
+  type KitTrustedAuthority,
   type LockAuthority,
   type LockBlueprintOptions,
   type LockNames,
@@ -27,7 +35,7 @@ export {
   type PlotBlueprintOptions,
   type PlotNames,
   type SelectorPermissionPredicate,
-} from './blueprints.js';
+} from './blueprints/index.js';
 export {
   GameKitClient,
   type GameKitOptions,
