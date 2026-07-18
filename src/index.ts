@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '8.0.1';
+export const VERSION = '8.1.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
