@@ -794,6 +794,74 @@ test('combatBlueprint generates attacks, the effect-tick join automation, and mo
   );
 });
 
+test('matchesBlueprint generates lifecycle functions with channel notifications and turn ticks', async () => {
+  const { matchesBlueprint, matchesNames } = await loadSdk();
+
+  const bp = matchesBlueprint({ turnTick: { intervalMs: 15000 } });
+  assert.deepEqual(
+    bp.containerTypes.map((t) => t.typeName),
+    ['MatchMeta', 'Score'],
+  );
+
+  // Lifecycle functions: creator-or-host gated, state-machine guarded, and
+  // each declares the notify-to-pull channel ping.
+  const start = bp.functions.find((f) => f.name === 'start_match');
+  const startPolicy = JSON.parse(start.invokePolicyJson);
+  assert.equal(startPolicy.type, 'and');
+  const orRule = startPolicy.rules.find((r) => r.type === 'or');
+  assert.deepEqual(orRule.rules.map((r) => r.type), ['is_host', 'condition']);
+  assert.match(
+    orRule.rules[1].expression,
+    /self\.creator_user_id == \$caller_user_id/,
+  );
+  assert.match(
+    startPolicy.rules.find((r) => r.type === 'condition').expression,
+    /self\.state == "lobby"/,
+  );
+  assert.deepEqual(start.notifications, [
+    {
+      kind: 'channel',
+      args: [
+        { name: 'channel_id', expression: 'self.channel_id' },
+        { name: 'payload', expression: '"match_changed"' },
+      ],
+    },
+  ]);
+  assert.deepEqual(
+    start.mutations.map((m) => [m.property, m.expression]),
+    [['state', '"active"'], ['round', '1']],
+  );
+
+  const end = bp.functions.find((f) => f.name === 'end_match');
+  assert.equal(end.parameters[0].name, 'winner_user_id');
+  assert.equal(end.notifications.length, 1);
+
+  // score_points: host-gated by default.
+  const score = bp.functions.find((f) => f.name === 'score_points');
+  assert.deepEqual(JSON.parse(score.invokePolicyJson), { type: 'is_host' });
+
+  // Turn tick: the wall-clock-free timer — interval automation bumping
+  // tick_count on active matches only.
+  const tick = bp.automations.find((a) => a.name === 'match-turn-tick');
+  assert.equal(tick.intervalMs, 15000);
+  assert.deepEqual(JSON.parse(tick.selectorJson), {
+    selfWhere: [{ key: 'state', op: '==', value: 'active' }],
+  });
+  const tickFn = bp.functions.find((f) => f.name === 'turn_tick');
+  assert.equal(tickFn.autonomousInvocable, true);
+  assert.equal(tickFn.mutations[0].expression, 'self.tick_count + 1');
+
+  // No turnTick → no tick surface; server-refereed scoring variant.
+  const ranked = matchesBlueprint({ typePrefix: 'Ranked', scoreAuthority: 'server' });
+  assert.equal(matchesNames('Ranked').startFn, 'ranked_start_match');
+  assert.equal(ranked.automations, undefined);
+  assert.equal(ranked.functions.find((f) => f.name === 'ranked_turn_tick'), undefined);
+  assert.equal(
+    ranked.functions.find((f) => f.name === 'ranked_score_points').invokeScope,
+    'server',
+  );
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

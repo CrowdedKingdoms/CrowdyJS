@@ -15,6 +15,8 @@ export {
   lootBlueprint,
   lootNames,
   lootRollFn,
+  matchesBlueprint,
+  matchesNames,
   mergeBlueprints,
   npcBehaviorFunctionName,
   npcBlueprint,
@@ -50,6 +52,8 @@ export {
   type LootEntrySpec,
   type LootNames,
   type LootTableSpec,
+  type MatchesBlueprintOptions,
+  type MatchesNames,
   type MergedBlueprints,
   type NpcBehaviorSpec,
   type NpcBehaviorTrigger,
@@ -65,9 +69,16 @@ export {
 } from './blueprints/index.js';
 export {
   GameKitClient,
+  type GameKitDomains,
   type GameKitOptions,
   type KitDeployResult,
 } from './kit.js';
+export {
+  MatchesKit,
+  type KitMatch,
+  type KitMatchScore,
+  type MatchesKitOptions,
+} from './matches.js';
 export { InventoryKit, type InventoryKitOptions, type KitItemStack } from './inventory.js';
 export {
   CombatKit,

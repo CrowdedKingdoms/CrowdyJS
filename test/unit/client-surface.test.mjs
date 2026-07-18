@@ -110,6 +110,10 @@ test('client exposes the full management + game sub-client surface', async () =>
     'spawnCombatant', 'state', 'attack', 'applyEffect', 'effects', 'respawn',
     'revive', 'syncCombatant',
   ]);
+  assertMethods(kit.matches, 'kit.matches', [
+    'create', 'open', 'get', 'join', 'start', 'advanceRound', 'myTurn', 'endTurn',
+    'ensureScore', 'score', 'standings', 'finish', 'notifyChanged', 'onMatchChanged',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

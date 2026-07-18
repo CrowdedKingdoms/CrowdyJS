@@ -80,6 +80,12 @@ export {
   type PlotNames,
 } from './plots.js';
 export {
+  matchesBlueprint,
+  matchesNames,
+  type MatchesBlueprintOptions,
+  type MatchesNames,
+} from './matches.js';
+export {
   npcBehaviorFunctionName,
   npcBlueprint,
   type NpcBehaviorSpec,
