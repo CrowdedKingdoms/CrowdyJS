@@ -6,9 +6,11 @@ import type {
 import {
   andPolicies,
   kitPolicyJson,
+  ownerEqualsCaller,
   toSnakeCase,
   type KitBlueprint,
   type KitInvokePolicy,
+  type KitOwnerIdKind,
 } from './core.js';
 
 /** Options for {@link plotBlueprint}. */
@@ -40,6 +42,15 @@ export interface PlotBlueprintOptions {
   buyPolicyExtra?: KitInvokePolicy;
   /** Extra policy rule AND'ed into `rent_plot`. */
   rentPolicyExtra?: KitInvokePolicy;
+  /**
+   * How the `owner_user_id` mirrors are typed on the plot AND the wallet
+   * (see the kit owner-mirroring convention). Defaults to `'int'` (the kit
+   * standard); set `'string'` for models that mirrored owners as strings
+   * (e.g. Blocks with Friends) — generated guards then compare via
+   * `to_string($caller_user_id)`, buying writes the owner as a string, and
+   * an empty string means "for sale".
+   */
+  ownerIdKind?: KitOwnerIdKind;
 }
 
 /** Names derived by {@link plotBlueprint} for a given plot type. */
@@ -79,6 +90,7 @@ export function plotBlueprint(options: PlotBlueprintOptions = {}): KitBlueprint 
   const currency = options.currencyProperty ?? 'gold';
   const walletOwner = options.walletOwnerProperty ?? 'owner_user_id';
   const rentable = options.rentable ?? false;
+  const kind = options.ownerIdKind ?? 'int';
 
   const walletParam: FunctionParamInput[] = [
     { name: 'wallet_id', valueType: 'container_ref', required: true },
@@ -88,7 +100,7 @@ export function plotBlueprint(options: PlotBlueprintOptions = {}): KitBlueprint 
       andPolicies(
         {
           type: 'condition',
-          expression: `ref($wallet_id).${walletOwner} == $caller_user_id && ref($wallet_id).${currency} >= ${priceExpr}`,
+          expression: `${ownerEqualsCaller(`ref($wallet_id).${walletOwner}`, kind)} && ref($wallet_id).${currency} >= ${priceExpr}`,
         },
         extra,
       ),
@@ -100,8 +112,8 @@ export function plotBlueprint(options: PlotBlueprintOptions = {}): KitBlueprint 
     {
       containerTypeName: names.plotType,
       key: 'owner_user_id',
-      valueType: 'int',
-      defaultValueJson: '0',
+      valueType: kind,
+      defaultValueJson: kind === 'string' ? '""' : '0',
     },
   ];
   if (rentable) {
@@ -133,7 +145,12 @@ export function plotBlueprint(options: PlotBlueprintOptions = {}): KitBlueprint 
           property: currency,
           expression: `ref($wallet_id).${currency} - self.price`,
         },
-        { target: 'self', property: 'owner_user_id', expression: '$caller_user_id' },
+        {
+          target: 'self',
+          property: 'owner_user_id',
+          expression:
+            kind === 'string' ? 'to_string($caller_user_id)' : '$caller_user_id',
+        },
       ],
       permissionEffects: [
         {
@@ -163,7 +180,7 @@ export function plotBlueprint(options: PlotBlueprintOptions = {}): KitBlueprint 
       ],
       invokePolicyJson: kitPolicyJson({
         type: 'condition',
-        expression: 'self.owner_user_id == $caller_user_id',
+        expression: ownerEqualsCaller('self.owner_user_id', kind),
       }),
       description: "Revoke a user's permissions on this plot (owner-gated; admins bypass).",
     },

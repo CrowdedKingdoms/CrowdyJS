@@ -104,7 +104,7 @@ export type ActorUpdateRequestInput = {
   uuid: Scalars['String']['input'];
 };
 
-/** Response from the UDP game server for an actor update request. Received via the udpNotifications subscription. */
+/** LEGACY — never emitted. The game server retired the dedicated actor-update response opcode (129); an applied update now arrives as your own ActorUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version. */
 export type ActorUpdateResponse = {
   __typename?: 'ActorUpdateResponse';
   /** The ID of the app where the actor update was processed. */
@@ -6599,7 +6599,7 @@ export enum UdpErrorCode {
   UserNotAuthenticated = 'USER_NOT_AUTHENTICATED'
 }
 
-/** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. */
+/** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version. */
 export type UdpNotification = ActorUpdateNotification | ActorUpdateResponse | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
 
 /** UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md. */
@@ -7283,7 +7283,7 @@ export type VoxelUpdateRequestInput = {
   voxelType: Scalars['Int']['input'];
 };
 
-/** Response from the UDP game server for a voxel update request. Received via the udpNotifications subscription. */
+/** LEGACY — never emitted. The game server retired the dedicated voxel-update response opcode (132); an applied update now arrives as your own VoxelUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version. */
 export type VoxelUpdateResponse = {
   __typename?: 'VoxelUpdateResponse';
   /** The ID of the app where the voxel update was processed. */

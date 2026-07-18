@@ -237,6 +237,35 @@ test('plotBlueprint generates the buy/rent/evict permission-effect loop', async 
   const simple = plotBlueprint();
   assert.equal(simple.functions.find((f) => f.name === 'rent_plot'), undefined);
   assert.equal(plotNames('LandPlot').buyFn, 'buy_land_plot');
+
+  // ownerIdKind 'string' (BWF-style mirrors): string property with "" for
+  // sale, to_string comparisons in guards, and a string owner write on buy.
+  const bwf = plotBlueprint({
+    rentable: true,
+    ownerIdKind: 'string',
+    currencyProperty: 'xp',
+  });
+  const owner = bwf.propertyDefinitions.find((p) => p.key === 'owner_user_id');
+  assert.equal(owner.valueType, 'string');
+  assert.equal(owner.defaultValueJson, '""');
+  const bwfBuy = bwf.functions.find((f) => f.name === 'buy_plot');
+  assert.match(
+    JSON.parse(bwfBuy.invokePolicyJson).expression,
+    /ref\(\$wallet_id\)\.owner_user_id == to_string\(\$caller_user_id\)/,
+  );
+  assert.match(JSON.parse(bwfBuy.invokePolicyJson).expression, /xp >= self\.price/);
+  assert.equal(
+    bwfBuy.mutations.find((m) => m.property === 'owner_user_id').expression,
+    'to_string($caller_user_id)',
+  );
+  const bwfEvict = bwf.functions.find((f) => f.name === 'evict_plot');
+  assert.equal(
+    JSON.parse(bwfEvict.invokePolicyJson).expression,
+    'self.owner_user_id == to_string($caller_user_id)',
+  );
+  // Default stays the kit-standard int.
+  const intOwner = simple.propertyDefinitions.find((p) => p.key === 'owner_user_id');
+  assert.equal(intOwner.valueType, 'int');
 });
 
 test('npcBlueprint selector carries permission predicates through to selectorJson', async () => {
