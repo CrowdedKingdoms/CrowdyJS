@@ -9,6 +9,8 @@ export {
   economyCurrencyFn,
   economyNames,
   featureGate,
+  guildBlueprint,
+  guildNames,
   inventoryBlueprint,
   inventoryNames,
   kitPolicyJson,
@@ -41,6 +43,8 @@ export {
   type DecksNames,
   type EconomyBlueprintOptions,
   type EconomyNames,
+  type GuildBlueprintOptions,
+  type GuildNames,
   type InventoryBlueprintOptions,
   type InventoryNames,
   type KitAutomationSpec,
@@ -122,6 +126,12 @@ export {
   type KitSkillRank,
   type ProgressionKitOptions,
 } from './progression.js';
+export {
+  SocialKit,
+  type KitChatMessage,
+  type KitGroupWithChannel,
+  type SocialKitOptions,
+} from './social.js';
 export {
   WorldsimKit,
   type KitCrop,

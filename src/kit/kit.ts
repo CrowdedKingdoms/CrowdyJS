@@ -21,6 +21,7 @@ import { PlotsKit, type PlotsKitOptions } from './plots.js';
 import { MatchesKit, type MatchesKitOptions } from './matches.js';
 import { ProgressionKit, type ProgressionKitOptions } from './progression.js';
 import { QuestsKit, type QuestsKitOptions } from './quests.js';
+import { SocialKit, type SocialKitOptions } from './social.js';
 import { WorldsimKit, type WorldsimKitOptions } from './worldsim.js';
 
 /** Options for {@link GameKitClient}, configuring the runtime helpers to match your deployed blueprints. */
@@ -37,6 +38,7 @@ export interface GameKitOptions {
   matches?: MatchesKitOptions;
   decks?: DecksKitOptions;
   worldsim?: WorldsimKitOptions;
+  social?: SocialKitOptions;
 }
 
 /**
@@ -122,6 +124,8 @@ export class GameKitClient {
   readonly decks: DecksKit;
   /** World simulation helpers (clock/weather, nodes, crops, wave counters). */
   readonly worldsim: WorldsimKit;
+  /** Social helpers (parties, guilds, chat over teams + channels). */
+  readonly social: SocialKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -148,6 +152,14 @@ export class GameKitClient {
     );
     this.decks = new DecksKit(appId, gameModel, options.decks);
     this.worldsim = new WorldsimKit(appId, gameModel, options.worldsim);
+    this.social = new SocialKit(
+      appId,
+      domains.teams,
+      domains.channels,
+      domains.udp,
+      gameApps,
+      options.social,
+    );
   }
 
   /**

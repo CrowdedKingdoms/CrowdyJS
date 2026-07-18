@@ -1022,6 +1022,39 @@ test('worldsimBlueprint generates clock/regen/growth/wave automations with spati
   );
 });
 
+test('guildBlueprint composes a group-gated hall with a guild-bank inventory', async () => {
+  const { guildBlueprint, guildNames, mergeBlueprints } = await loadSdk();
+
+  const bp = guildBlueprint({ guildGroupId: '77', hallPermission: 'use_hall' });
+  // Composition: the hall lock and the bank inventory in ONE blueprint.
+  assert.deepEqual(
+    bp.containerTypes.map((t) => t.typeName),
+    ['GuildHall', 'GuildBankInventory', 'GuildBankItemStack'],
+  );
+  const open = bp.functions.find((f) => f.name === 'open_guild_hall');
+  assert.deepEqual(JSON.parse(open.invokePolicyJson), {
+    type: 'group_permission',
+    groupId: '77',
+    permission: 'use_hall',
+  });
+  assert.ok(bp.functions.some((f) => f.name === 'guild_bank_grant_stack'));
+
+  const names = guildNames();
+  assert.equal(names.hallType, 'GuildHall');
+  assert.equal(names.bankInventoryType, 'GuildBankInventory');
+  assert.equal(names.openHallFn, 'open_guild_hall');
+
+  // The composite still merges cleanly next to a default inventory.
+  const { inventoryBlueprint } = await loadSdk();
+  const merged = mergeBlueprints('1', [inventoryBlueprint(), bp]);
+  assert.ok(merged.seedInput.containerTypes.length >= 5);
+
+  // No bank variant + missing group id validation.
+  const noBank = guildBlueprint({ guildGroupId: '77', bank: false });
+  assert.deepEqual(noBank.containerTypes.map((t) => t.typeName), ['GuildHall']);
+  assert.throws(() => guildBlueprint({ guildGroupId: '' }), /requires guildGroupId/);
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

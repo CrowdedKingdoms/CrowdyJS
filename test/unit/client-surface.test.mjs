@@ -121,6 +121,15 @@ test('client exposes the full management + game sub-client surface', async () =>
     'ensureWorld', 'worldState', 'setWeather', 'createNode', 'nodes', 'gather',
     'plant', 'crops', 'harvest', 'createSpawner', 'spawners', 'runNow', 'setEnabled',
   ]);
+  assertMethods(kit.social.party, 'kit.social.party', [
+    'create', 'find', 'invite', 'join', 'leave', 'members',
+  ]);
+  assertMethods(kit.social.guild, 'kit.social.guild', [
+    'create', 'find', 'roster', 'roles', 'createRole', 'promote', 'claimTerritory',
+  ]);
+  assertMethods(kit.social.chat, 'kit.social.chat', [
+    'room', 'join', 'send', 'onMessage',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

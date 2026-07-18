@@ -44,6 +44,12 @@ export {
   type EconomyNames,
 } from './economy.js';
 export {
+  guildBlueprint,
+  guildNames,
+  type GuildBlueprintOptions,
+  type GuildNames,
+} from './guild.js';
+export {
   inventoryBlueprint,
   inventoryNames,
   type InventoryBlueprintOptions,
