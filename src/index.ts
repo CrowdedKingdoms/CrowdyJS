@@ -75,6 +75,7 @@ export {
 } from './realtime.js';
 export { WorldClient, ActorClient, type ActorOptions } from './world.js';
 export {
+  CombatKit,
   EconomyKit,
   GameKitClient,
   InventoryKit,
@@ -85,6 +86,8 @@ export {
   ProgressionKit,
   QuestsKit,
   andPolicies,
+  combatBlueprint,
+  combatNames,
   composeBlueprints,
   economyBlueprint,
   economyCurrencyFn,
@@ -113,6 +116,9 @@ export {
   questsNames,
   toKitInvokeResult,
   trustedAuthorityFields,
+  type CombatBlueprintOptions,
+  type CombatKitOptions,
+  type CombatNames,
   type EconomyBlueprintOptions,
   type EconomyKitOptions,
   type EconomyNames,
@@ -125,6 +131,7 @@ export {
   type KitAutomationSpec,
   type KitAutomationTriggerSpec,
   type KitBlueprint,
+  type KitCombatant,
   type KitDeployResult,
   type KitInvokePolicy,
   type KitInvokeResult,
@@ -141,6 +148,7 @@ export {
   type KitShopListing,
   type KitSkillDef,
   type KitSkillRank,
+  type KitStatusEffect,
   type KitTradeOffer,
   type KitTrustedAuthority,
   type KitWallet,

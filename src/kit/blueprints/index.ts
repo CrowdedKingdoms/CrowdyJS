@@ -25,6 +25,12 @@ export {
   type SelectorPermissionPredicate,
 } from './core.js';
 export {
+  combatBlueprint,
+  combatNames,
+  type CombatBlueprintOptions,
+  type CombatNames,
+} from './combat.js';
+export {
   economyBlueprint,
   economyCurrencyFn,
   economyNames,

@@ -1,5 +1,7 @@
 export {
   andPolicies,
+  combatBlueprint,
+  combatNames,
   composeBlueprints,
   economyBlueprint,
   economyCurrencyFn,
@@ -27,6 +29,8 @@ export {
   questsNames,
   toSnakeCase,
   trustedAuthorityFields,
+  type CombatBlueprintOptions,
+  type CombatNames,
   type EconomyBlueprintOptions,
   type EconomyNames,
   type InventoryBlueprintOptions,
@@ -65,6 +69,12 @@ export {
   type KitDeployResult,
 } from './kit.js';
 export { InventoryKit, type InventoryKitOptions, type KitItemStack } from './inventory.js';
+export {
+  CombatKit,
+  type CombatKitOptions,
+  type KitCombatant,
+  type KitStatusEffect,
+} from './combat.js';
 export {
   EconomyKit,
   type EconomyKitOptions,

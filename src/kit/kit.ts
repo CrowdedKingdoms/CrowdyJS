@@ -7,6 +7,7 @@ import type {
   Scalars,
 } from '../generated/graphql.js';
 import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
+import { CombatKit, type CombatKitOptions } from './combat.js';
 import { EconomyKit, type EconomyKitOptions } from './economy.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { LootKit, type LootKitOptions } from './loot.js';
@@ -26,6 +27,7 @@ export interface GameKitOptions {
   progression?: ProgressionKitOptions;
   loot?: LootKitOptions;
   quests?: QuestsKitOptions;
+  combat?: CombatKitOptions;
 }
 
 /** The result of {@link GameKitClient.deploy}: the seed outcome plus each automation/trigger upserted. */
@@ -92,6 +94,8 @@ export class GameKitClient {
   readonly loot: LootKit;
   /** Quest helpers (catalog, progress, atomic reward turn-in, daily resets). */
   readonly quests: QuestsKit;
+  /** Combat helpers (server-authoritative attacks, status effects, respawn). */
+  readonly combat: CombatKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -107,6 +111,7 @@ export class GameKitClient {
     this.progression = new ProgressionKit(appId, gameModel, options.progression);
     this.loot = new LootKit(appId, gameModel, options.loot);
     this.quests = new QuestsKit(appId, gameModel, options.quests);
+    this.combat = new CombatKit(appId, gameModel, options.combat);
   }
 
   /**

@@ -711,6 +711,89 @@ test('questsBlueprint generates progress, atomic claim, and the daily cron reset
   );
 });
 
+test('combatBlueprint generates attacks, the effect-tick join automation, and mode options', async () => {
+  const { combatBlueprint, combatNames } = await loadSdk();
+
+  const bp = combatBlueprint({ hostSynced: true });
+  assert.deepEqual(
+    bp.containerTypes.map((t) => t.typeName),
+    ['Combatant', 'StatusEffect'],
+  );
+
+  // attack: owner-gated with alive guards; damage formula + death flip are
+  // both server-side mutations on the target.
+  const attack = bp.functions.find((f) => f.name === 'attack');
+  const attackPolicy = JSON.parse(attack.invokePolicyJson);
+  assert.ok(attackPolicy.rules.some((r) => r.type === 'owner_of_self'));
+  assert.match(
+    attackPolicy.rules.find((r) => r.type === 'condition').expression,
+    /self\.alive && ref\(\$target_id\)\.alive/,
+  );
+  assert.equal(
+    attack.mutations[0].expression,
+    'max(0, ref($target_id).hp - max(1, self.attack - ref($target_id).defense))',
+  );
+  assert.equal(attack.mutations[1].expression, 'ref($target_id).hp > 0');
+
+  // Effect tick: automation-only fn whose selector JOINS the effect to its
+  // target combatant via combat_key == self.target_key and binds $target.
+  const tick = bp.functions.find((f) => f.name === 'effect_tick');
+  assert.equal(tick.autonomousInvocable, true);
+  assert.deepEqual(JSON.parse(tick.invokePolicyJson), { type: 'is_automation' });
+  const auto = bp.automations.find((a) => a.name === 'effect-tick');
+  assert.equal(auto.intervalMs, 5000);
+  assert.deepEqual(JSON.parse(auto.selectorJson), {
+    selfWhere: [{ key: 'ticks_left', op: '>', value: 0 }],
+    ofType: 'Combatant',
+    where: [{ key: 'combat_key', op: '==', value: 'self.target_key' }],
+    bindAs: { ref: 'target' },
+  });
+
+  // hostSynced adds the is_host-gated durable sync.
+  const sync = bp.functions.find((f) => f.name === 'sync_combatant');
+  assert.deepEqual(JSON.parse(sync.invokePolicyJson), { type: 'is_host' });
+  assert.equal(sync.mutations[0].expression, 'clamp($hp, 0, self.max_hp)');
+
+  // respawn: owner + dead-only.
+  const respawn = bp.functions.find((f) => f.name === 'respawn');
+  assert.match(
+    JSON.parse(respawn.invokePolicyJson).rules.find((r) => r.type === 'condition')
+      .expression,
+    /not\(self\.alive\)/,
+  );
+
+  // turnBased threads is_current_turn into player actions; hostSynced off
+  // omits the sync fn; reviveGroup adds the group-gated revive.
+  const arena = combatBlueprint({
+    typePrefix: 'Arena',
+    turnBased: true,
+    combatantInstantiableBy: 'admin',
+    reviveGroup: { groupId: '42', permission: 'healer' },
+    effectTickIntervalMs: 10000,
+  });
+  assert.equal(combatNames('Arena').attackFn, 'arena_attack');
+  const arenaAttack = arena.functions.find((f) => f.name === 'arena_attack');
+  assert.ok(
+    JSON.parse(arenaAttack.invokePolicyJson).rules.some(
+      (r) => r.type === 'is_current_turn',
+    ),
+  );
+  assert.equal(
+    arena.containerTypes.find((t) => t.typeName === 'ArenaCombatant').instantiableBy,
+    'admin',
+  );
+  assert.equal(arena.functions.find((f) => f.name === 'arena_sync_combatant'), undefined);
+  const revive = arena.functions.find((f) => f.name === 'arena_revive');
+  assert.deepEqual(
+    JSON.parse(revive.invokePolicyJson).rules[0],
+    { type: 'group_permission', groupId: '42', permission: 'healer' },
+  );
+  assert.equal(
+    arena.automations.find((a) => a.name === 'arena-effect-tick').intervalMs,
+    10000,
+  );
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({
