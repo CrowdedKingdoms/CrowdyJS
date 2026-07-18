@@ -103,6 +103,9 @@ test('client exposes the full management + game sub-client surface', async () =>
     'buySkill', 'skills', 'achievementCatalog', 'defineAchievement', 'achievements',
     'unlockAchievement', 'applyMatchResult',
   ]);
+  assertMethods(kit.quests, 'kit.quests', [
+    'catalog', 'defineQuest', 'accept', 'mine', 'state', 'advance', 'claim',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

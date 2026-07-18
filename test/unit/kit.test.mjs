@@ -613,6 +613,104 @@ test('lootBlueprint unrolls weighted tables and wires event-triggered drops', as
   );
 });
 
+test('questsBlueprint generates progress, atomic claim, and the daily cron reset', async () => {
+  const { questsBlueprint, questsNames } = await loadSdk();
+
+  const bp = questsBlueprint({
+    advanceOn: [
+      {
+        name: 'advance-on-craft',
+        questId: 'craft_10',
+        onEvent: 'function_invoked',
+        functionName: 'consume_stack',
+        amount: 2,
+      },
+    ],
+  });
+  assert.deepEqual(
+    bp.containerTypes.map((t) => t.typeName),
+    ['QuestDef', 'QuestProgress'],
+  );
+  assert.equal(bp.containerTypes[0].instantiableBy, 'admin');
+  assert.equal(bp.containerTypes[1].instantiableBy, 'member');
+
+  // advance_quest: trusted, clamped, completion computed server-side; the
+  // event automation requires autonomousInvocable.
+  const advance = bp.functions.find((f) => f.name === 'advance_quest');
+  assert.equal(advance.invokeScope, 'server');
+  assert.equal(advance.autonomousInvocable, true);
+  assert.equal(
+    advance.mutations[0].expression,
+    'min(self.target, self.count + max(0, $amount))',
+  );
+  assert.equal(advance.mutations[1].expression, 'self.count >= self.target');
+
+  // claim_reward: single transaction — claimed flag + item grant + currency
+  // grant; guards cover completion, double-claim, def match, and ownership.
+  const claim = bp.functions.find((f) => f.name === 'claim_reward');
+  assert.deepEqual(
+    claim.parameters.map((p) => p.name),
+    ['def_id', 'to_stack_id', 'wallet_id'],
+  );
+  const claimGuard = JSON.parse(claim.invokePolicyJson).expression;
+  assert.match(claimGuard, /self\.count >= self\.target/);
+  assert.match(claimGuard, /not\(self\.claimed\)/);
+  assert.match(claimGuard, /ref\(\$def_id\)\.quest_id == self\.quest_id/);
+  assert.deepEqual(
+    claim.mutations.map((m) => m.property),
+    ['claimed', 'quantity', 'gold'],
+  );
+  assert.match(
+    claim.mutations[1].expression,
+    /if\(ref\(\$to_stack_id\)\.item_id == ref\(\$def_id\)\.reward_item_id, ref\(\$def_id\)\.reward_qty, 0\)/,
+  );
+
+  // Daily reset: cron automation over daily progress rows.
+  const reset = bp.automations.find((a) => a.name === 'daily-quest-reset');
+  assert.equal(reset.scheduleKind, 'cron');
+  assert.equal(reset.cronExpr, '0 0 * * *');
+  assert.equal(reset.targetTypeName, 'QuestProgress');
+  assert.deepEqual(JSON.parse(reset.selectorJson), {
+    selfWhere: [{ key: 'daily', op: '==', value: true }],
+  });
+  const resetFn = bp.functions.find((f) => f.name === 'reset_daily');
+  assert.deepEqual(JSON.parse(resetFn.invokePolicyJson), { type: 'is_automation' });
+  assert.deepEqual(
+    resetFn.mutations.map((m) => m.property),
+    ['count', 'completed', 'claimed'],
+  );
+
+  // Event-driven advance automation.
+  const onCraft = bp.automations.find((a) => a.name === 'advance-on-craft');
+  assert.equal(onCraft.functionName, 'advance_quest');
+  assert.deepEqual(JSON.parse(onCraft.paramsJson), { amount: 2 });
+  assert.deepEqual(JSON.parse(onCraft.selectorJson).selfWhere, [
+    { key: 'quest_id', op: '==', value: 'craft_10' },
+    { key: 'completed', op: '==', value: false },
+  ]);
+  assert.deepEqual(bp.automationTriggers[0], {
+    automationName: 'advance-on-craft',
+    onEvent: 'function_invoked',
+    functionName: 'consume_stack',
+  });
+
+  // Prefix + custom currency/cron variants.
+  const seasonal = questsBlueprint({
+    typePrefix: 'Seasonal',
+    currencyProperty: 'gems',
+    dailyResetCron: '0 5 * * *',
+  });
+  assert.equal(questsNames('Seasonal').claimFn, 'seasonal_claim_reward');
+  const seasonalClaim = seasonal.functions.find(
+    (f) => f.name === 'seasonal_claim_reward',
+  );
+  assert.equal(seasonalClaim.mutations[2].property, 'gems');
+  assert.equal(
+    seasonal.automations.find((a) => a.name === 'seasonal-daily-quest-reset').cronExpr,
+    '0 5 * * *',
+  );
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

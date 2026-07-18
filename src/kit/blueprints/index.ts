@@ -55,6 +55,13 @@ export {
   type LockNames,
 } from './locks.js';
 export {
+  questsBlueprint,
+  questsNames,
+  type QuestAdvanceSpec,
+  type QuestsBlueprintOptions,
+  type QuestsNames,
+} from './quests.js';
+export {
   progressionBlueprint,
   progressionNames,
   type ProgressionBlueprintOptions,

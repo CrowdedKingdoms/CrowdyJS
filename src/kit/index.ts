@@ -23,6 +23,8 @@ export {
   plotNames,
   progressionBlueprint,
   progressionNames,
+  questsBlueprint,
+  questsNames,
   toSnakeCase,
   trustedAuthorityFields,
   type EconomyBlueprintOptions,
@@ -52,6 +54,9 @@ export {
   type PlotNames,
   type ProgressionBlueprintOptions,
   type ProgressionNames,
+  type QuestAdvanceSpec,
+  type QuestsBlueprintOptions,
+  type QuestsNames,
   type SelectorPermissionPredicate,
 } from './blueprints/index.js';
 export {
@@ -72,6 +77,12 @@ export { LootKit, type KitLootRoll, type LootKitOptions } from './loot.js';
 export { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 export { NpcsKit, type NpcsKitOptions, type KitNpc } from './npcs.js';
 export { PlotsKit, type PlotsKitOptions, type KitPlot } from './plots.js';
+export {
+  QuestsKit,
+  type KitQuestDef,
+  type KitQuestProgress,
+  type QuestsKitOptions,
+} from './quests.js';
 export {
   ProgressionKit,
   type KitAchievementDef,

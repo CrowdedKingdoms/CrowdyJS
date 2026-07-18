@@ -14,6 +14,7 @@ import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 import { PlotsKit, type PlotsKitOptions } from './plots.js';
 import { ProgressionKit, type ProgressionKitOptions } from './progression.js';
+import { QuestsKit, type QuestsKitOptions } from './quests.js';
 
 /** Options for {@link GameKitClient}, configuring the runtime helpers to match your deployed blueprints. */
 export interface GameKitOptions {
@@ -24,6 +25,7 @@ export interface GameKitOptions {
   economy?: EconomyKitOptions;
   progression?: ProgressionKitOptions;
   loot?: LootKitOptions;
+  quests?: QuestsKitOptions;
 }
 
 /** The result of {@link GameKitClient.deploy}: the seed outcome plus each automation/trigger upserted. */
@@ -88,6 +90,8 @@ export class GameKitClient {
   readonly progression: ProgressionKit;
   /** Loot helpers (server-rolled weighted tables, atomic claims). */
   readonly loot: LootKit;
+  /** Quest helpers (catalog, progress, atomic reward turn-in, daily resets). */
+  readonly quests: QuestsKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -102,6 +106,7 @@ export class GameKitClient {
     this.economy = new EconomyKit(appId, gameModel, options.economy);
     this.progression = new ProgressionKit(appId, gameModel, options.progression);
     this.loot = new LootKit(appId, gameModel, options.loot);
+    this.quests = new QuestsKit(appId, gameModel, options.quests);
   }
 
   /**
