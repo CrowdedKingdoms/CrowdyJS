@@ -72,9 +72,13 @@ export interface ChunkStoreConfig<TVoxelState = string, TChunkState = string> {
    * Called for chunks the server has never stored. Return a 4096-byte dense
    * grid to seed it locally (deterministic client-side worldgen) — seeded
    * chunks are queued for write-back so the world persists and stays
-   * identical for everyone.
+   * identical for everyone. Return `{ voxels, writeBack: false }` to seed
+   * locally WITHOUT persisting (e.g. outside your world's write-back radius
+   * or budget).
    */
-  onMissing?: (coord: ChunkCoord) => Uint8Array | undefined | void;
+  onMissing?: (
+    coord: ChunkCoord,
+  ) => Uint8Array | { voxels: Uint8Array; writeBack?: boolean } | undefined | void;
   /**
    * Write-back cadence: one dirty chunk persists per tick (throttled, like
    * the proven BWF pattern). Defaults to 700 ms; `false` disables the timer
@@ -448,7 +452,11 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     chunk.loadState = 'missing';
     this.touch(chunk);
     const generated = this.config.onMissing?.(coord);
-    if (generated) this.seed(coord, generated);
+    if (generated instanceof Uint8Array) {
+      this.seed(coord, generated);
+    } else if (generated) {
+      this.seed(coord, generated.voxels, { writeBack: generated.writeBack ?? true });
+    }
   }
 
   private applyVoxel(
