@@ -6951,6 +6951,22 @@ type GmFunctionNotification {
 }
 
 """
+A declarative grid-permission effect applied transactionally with the function's mutations: grant or revoke runtime grid permissions (the ACL Buddy enforces) driven by game logic.
+"""
+type GmFunctionPermissionEffect {
+  """'grant' or 'revoke'."""
+  action: String!
+  """Runtime permission keys granted/revoked."""
+  permissionKeys: [String!]!
+  """The expression (source) resolving the target user id."""
+  userExpression: String!
+  """The expression (source) resolving the grid id."""
+  gridIdExpression: String!
+  """Grant only: optional expression resolving a TTL in seconds."""
+  ttlSecondsExpression: String
+}
+
+"""
 A studio-defined function: a named, sandboxed behavior over containers (parameters, declared mutations, optional return, and an authority invoke policy).
 """
 type GmFunction {
@@ -6984,6 +7000,10 @@ type GmFunction {
   Declarative realtime notifications the function emits via Buddy after it commits.
   """
   notifications: [GmFunctionNotification!]!
+  """
+  Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations.
+  """
+  permissionEffects: [GmFunctionPermissionEffect!]!
   """Non-fatal static-analysis warnings from the last upload."""
   warnings: [String!]!
 }
@@ -7146,6 +7166,10 @@ type GmEvent {
   paramsJson: String!
   """JSON array of applied mutations."""
   mutationsAppliedJson: String!
+  """
+  JSON array of grid-permission effects this invocation applied (audit trail for model-driven grants/revokes): [{ action, permission_keys, user_id, grid_id, expires_at }].
+  """
+  permissionEffectsAppliedJson: String!
   """JSON-encoded return value."""
   returnValueJson: String
   """True if the invocation succeeded."""
@@ -7974,6 +7998,10 @@ input UpsertFunctionInput {
   Declarative realtime notifications the function emits via Buddy AFTER it commits. Players and automations (NPCs) emit identically; fenced by delivery mode.
   """
   notifications: [FunctionNotificationInput!]
+  """
+  Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations. Max 4 per function.
+  """
+  permissionEffects: [FunctionPermissionEffectInput!]
 }
 
 """A typed parameter declaration for a function."""
@@ -8030,6 +8058,32 @@ input NotificationArgInput {
   Expression string (compiled to AST server-side; evaluated post-mutation).
   """
   expression: String!
+}
+
+"""
+A declarative grid-permission effect the function applies TRANSACTIONALLY with its property mutations: grant or revoke runtime grid permissions (the same ACL Buddy enforces on movement/voxel writes) driven by game logic. Expressions are compiled server-side and evaluated in the invocation context (params plus the injected $caller_user_id / $self_owner_id / $session_id / $current_turn_user_id). If an effect fails, the whole invocation rolls back. Applied effects are recorded on the invocation event.
+"""
+input FunctionPermissionEffectInput {
+  """
+  'grant' (upsert direct grants, optionally expiring) or 'revoke' (delete direct grants for the listed keys).
+  """
+  action: String!
+  """
+  Runtime permission keys to grant/revoke (validated against the runtime_permissions catalog, e.g. 'access', 'teleport', 'update_voxel_data', 'use_voice_chat').
+  """
+  permissionKeys: [String!]!
+  """
+  Expression resolving the target user id (int), e.g. "$caller_user_id" or "self.owner_user_id".
+  """
+  userExpression: String!
+  """
+  Expression resolving the grid id (int) the permissions apply to, e.g. "self.grid_id". The grid must belong to the app.
+  """
+  gridIdExpression: String!
+  """
+  Grant only: optional expression resolving a TTL in seconds (int > 0) after which the grant expires (rentals/leases), e.g. '86400'. Omit for a non-expiring grant.
+  """
+  ttlSecondsExpression: String
 }
 
 """
@@ -8114,6 +8168,10 @@ input SeedFunctionInput {
   Declarative realtime notifications the function emits via Buddy after it commits (see notify_* effects).
   """
   notifications: [FunctionNotificationInput!]
+  """
+  Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations. Max 4 per function.
+  """
+  permissionEffects: [FunctionPermissionEffectInput!]
 }
 
 """A container (instance) to create as part of a seed."""

@@ -179,6 +179,7 @@ query GameModelEvents(
     automationId
     paramsJson
     mutationsAppliedJson
+    permissionEffectsAppliedJson
     returnValueJson
     success
     errorMessage
@@ -216,6 +217,7 @@ query GameModelEventsConnection(
         automationId
         paramsJson
         mutationsAppliedJson
+        permissionEffectsAppliedJson
         returnValueJson
         success
         errorMessage
