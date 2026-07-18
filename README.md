@@ -12,7 +12,7 @@ npm install @crowdedkingdoms/crowdyjs
 
 CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must provide browser-compatible globals when opening realtime connections.
 
-> **Server compatibility:** v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define. v6.1's `client.gameApps.deleteGrid` additionally requires release **v0.1.33+** (`cks-game-api >= v0.12.3`). The game-model **permission effects** fields (`permissionEffects` on `gameModel.upsertFunction`/`seed`, `permissionEffectsAppliedJson` on events) require a `cks-game-api` build with the `2026-07-17-model-permission-effects` migration; older servers reject queries/mutations that include them (omit the fields and everything else keeps working).
+> **Server compatibility:** v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define. v6.1's `client.gameApps.deleteGrid` additionally requires release **v0.1.33+** (`cks-game-api >= v0.12.3`). The game-model **permission effects** fields (`permissionEffects` on `gameModel.upsertFunction`/`seed`, `permissionEffectsAppliedJson` on events) require a `cks-game-api` build with the `2026-07-17-model-permission-effects` migration (v0.13.11+); older servers reject queries/mutations that include them (omit the fields and everything else keeps working). The **permission-read** surface (the `has_grid_permission`/`grid_at`/`has_chunk_permission` expression builtins the kit's `chunkPermission` locks compile to, and selector `*PermissionWhere` predicates) additionally requires `cks-game-api` **v0.13.12+**.
 
 ## Standalone builds and schema refresh
 
@@ -106,7 +106,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
-| `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |
+| `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, `kit.plots` (buy/rent land with transactional, replication-enforced grid grants), plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |
 
 **Studio-admin surface** (privileged; drive with a server-side / studio token, grouped under `client.admin`):
 
@@ -303,6 +303,27 @@ const bag = await kit.inventory.ensure(me.userId);
 const result = await kit.objects.open(doorId, { keyId });
 if (!result.success) console.warn('locked:', result.errorMessage);
 ```
+
+Land sale closes the permission loop end to end (requires game-api v0.13.11+ for
+effects, v0.13.12+ for the chunk-permission reads):
+
+```ts
+// Studio: sell a plot over a grid; doors on it honor the purchase automatically.
+await admin.kit(appId).deploy([
+  plotBlueprint({ rentable: true }),
+  lockBlueprint({ objectTypeName: 'PlotDoor',
+    authority: { kind: 'chunkPermission', key: 'access', mode: 'smallest' } }),
+]);
+
+// Game client: buying spends gold AND grants enforced grid access atomically.
+const buy = await kit.plots.buy(plotId, walletId);
+if (buy.success) await kit.objects.open(doorId); // has_chunk_permission passes now
+```
+
+NPC blueprints can target by permissions too — e.g. a guard automation whose
+selector has `candidatePermissionWhere: [{ userFrom: { property: 'owner_user_id' },
+op: 'lacks', key: 'access', grid: { property: 'grid_id' } }]` reacts only to
+intruders.
 
 See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/game-api/modeling-game-concepts)
 (the underlying model) and [Game Kit](https://docs.crowdedkingdoms.com/crowdyjs/game-kit)

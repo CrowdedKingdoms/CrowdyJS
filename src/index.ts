@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '8.1.0';
+export const VERSION = '8.2.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -79,6 +79,7 @@ export {
   InventoryKit,
   NpcsKit,
   ObjectsKit,
+  PlotsKit,
   inventoryBlueprint,
   inventoryNames,
   kitInvoke,
@@ -88,6 +89,8 @@ export {
   mergeBlueprints,
   npcBehaviorFunctionName,
   npcBlueprint,
+  plotBlueprint,
+  plotNames,
   toKitInvokeResult,
   type GameKitOptions,
   type InventoryBlueprintOptions,
@@ -101,6 +104,8 @@ export {
   type KitInvokeResult,
   type KitItemStack,
   type KitNpc,
+  type KitPlot,
+  type KitSelectorSpec,
   type LockAuthority,
   type LockBlueprintOptions,
   type LockNames,
@@ -110,6 +115,10 @@ export {
   type NpcBlueprintOptions,
   type NpcsKitOptions,
   type ObjectsKitOptions,
+  type PlotBlueprintOptions,
+  type PlotNames,
+  type PlotsKitOptions,
+  type SelectorPermissionPredicate,
 } from './kit/index.js';
 export {
   CrowdyError,

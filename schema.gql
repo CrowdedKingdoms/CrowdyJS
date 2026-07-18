@@ -8271,7 +8271,7 @@ input UpsertAutomationInput {
   """JSON object of static params."""
   paramsJson: String
   """
-  JSON selector resolving candidate refs/scalars over model data into params (e.g. {"pick":"nearest","ofType":"Unit","where":[...],"by":"manhattan","bindAs":{...}}).
+  JSON selector resolving candidate refs/scalars over model data into params (e.g. {"pick":"nearest","ofType":"Unit","where":[...],"by":"manhattan","bindAs":{...}}). Also supports grid-permission filters "selfPermissionWhere"/"candidatePermissionWhere": arrays of {"userFrom":"owner"|{"property":k},"op":"has"|"lacks","key":<runtime permission key>,"grid":<id>|{"property":k}} checked against the live grid ACL (omit "grid" for any-grid).
   """
   selectorJson: String
   """

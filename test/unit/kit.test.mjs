@@ -170,6 +170,107 @@ test('npcBlueprint generates autonomous functions, automations, and triggers', a
   assert.throws(() => npcBlueprint({ behaviors: [] }), /at least one behavior/);
 });
 
+test('lockBlueprint chunkPermission authority gates by the object location', async () => {
+  const { lockBlueprint } = await loadSdk();
+
+  const gate = lockBlueprint({
+    objectTypeName: 'PlotDoor',
+    authority: { kind: 'chunkPermission', key: 'access', mode: 'smallest' },
+  });
+  // The object carries its own chunk coordinates.
+  const keys = gate.propertyDefinitions.map((p) => p.key);
+  for (const k of ['cx', 'cy', 'cz']) assert.ok(keys.includes(k), `${k} property`);
+  const open = gate.functions.find((f) => f.name === 'open_plot_door');
+  const policy = JSON.parse(open.invokePolicyJson);
+  assert.equal(policy.type, 'condition');
+  assert.match(
+    policy.expression,
+    /has_chunk_permission\(\$caller_user_id, "access", self\.cx, self\.cy, self\.cz, "smallest"\)/,
+  );
+
+  // Default mode is 'first' (enforcement parity).
+  const dflt = lockBlueprint({
+    objectTypeName: 'Door',
+    authority: { kind: 'chunkPermission', key: 'access' },
+  });
+  const openDflt = dflt.functions.find((f) => f.name === 'open_door');
+  assert.match(JSON.parse(openDflt.invokePolicyJson).expression, /"first"\)$/);
+});
+
+test('plotBlueprint generates the buy/rent/evict permission-effect loop', async () => {
+  const { plotBlueprint, plotNames } = await loadSdk();
+
+  const bp = plotBlueprint({ rentable: true });
+  assert.equal(bp.containerTypes[0].typeName, 'Plot');
+  assert.equal(bp.containerTypes[0].instantiableBy, 'admin');
+  const propKeys = bp.propertyDefinitions.map((p) => p.key);
+  for (const k of ['grid_id', 'price', 'owner_user_id', 'rent_price', 'rent_ttl_seconds']) {
+    assert.ok(propKeys.includes(k), `property ${k}`);
+  }
+
+  const buy = bp.functions.find((f) => f.name === 'buy_plot');
+  assert.ok(buy, 'buy_plot exists');
+  // Wallet guard: ownership + price, checked server-side.
+  const buyPolicy = JSON.parse(buy.invokePolicyJson);
+  assert.equal(buyPolicy.type, 'condition');
+  assert.match(buyPolicy.expression, /owner_user_id == \$caller_user_id/);
+  assert.match(buyPolicy.expression, /gold >= self\.price/);
+  // Spend + ownership mutation + transactional grant.
+  assert.match(buy.mutations[0].expression, /gold - self\.price/);
+  assert.deepEqual(buy.permissionEffects, [
+    {
+      action: 'grant',
+      permissionKeys: ['access', 'update_voxel_data'],
+      userExpression: '$caller_user_id',
+      gridIdExpression: 'self.grid_id',
+    },
+  ]);
+
+  const rent = bp.functions.find((f) => f.name === 'rent_plot');
+  assert.equal(rent.permissionEffects[0].ttlSecondsExpression, 'self.rent_ttl_seconds');
+
+  const evict = bp.functions.find((f) => f.name === 'evict_plot');
+  assert.equal(evict.permissionEffects[0].action, 'revoke');
+  assert.equal(evict.permissionEffects[0].userExpression, '$target_user_id');
+
+  // Non-rentable variant omits the rent surface.
+  const simple = plotBlueprint();
+  assert.equal(simple.functions.find((f) => f.name === 'rent_plot'), undefined);
+  assert.equal(plotNames('LandPlot').buyFn, 'buy_land_plot');
+});
+
+test('npcBlueprint selector carries permission predicates through to selectorJson', async () => {
+  const { npcBlueprint } = await loadSdk();
+  const bp = npcBlueprint({
+    behaviors: [
+      {
+        name: 'guard-response',
+        trigger: { intervalMs: 30000 },
+        selector: {
+          selfWhere: [{ key: 'role', op: '==', value: 'guard' }],
+          pick: 'nearest',
+          ofType: 'PlayerAvatar',
+          candidatePermissionWhere: [
+            {
+              userFrom: { property: 'owner_user_id' },
+              op: 'lacks',
+              key: 'access',
+              grid: { property: 'grid_id' },
+            },
+          ],
+          bindAs: { ref: 'target_id' },
+        },
+        mutations: [
+          { target: 'self', property: 'behavior_state', expression: '"alert"' },
+        ],
+      },
+    ],
+  });
+  const selector = JSON.parse(bp.automations[0].selectorJson);
+  assert.equal(selector.candidatePermissionWhere[0].op, 'lacks');
+  assert.deepEqual(selector.candidatePermissionWhere[0].grid, { property: 'grid_id' });
+});
+
 test('mergeBlueprints combines payloads and rejects collisions', async () => {
   const { inventoryBlueprint, lockBlueprint, npcBlueprint, mergeBlueprints } =
     await loadSdk();
