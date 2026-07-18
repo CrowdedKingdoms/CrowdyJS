@@ -25,6 +25,8 @@ import {
   SendChannelMessageDocument,
   type SendChannelMessageMutationVariables,
 } from '../generated/graphql.js';
+import type { RealtimeMetrics } from '../metrics.js';
+import { payloadBytesOf } from '../metrics.js';
 import type { SpatialNotification } from '../realtime.js';
 import { SequenceAllocator } from '../utils.js';
 
@@ -67,7 +69,13 @@ export class UdpAPI {
   constructor(
     private gql: GraphQLClient,
     private subs: SubscriptionManager,
+    private metrics?: RealtimeMetrics,
   ) {}
+
+  /** Count a message accepted for sending (see `client.metrics`). */
+  private record(kind: string, input: object): void {
+    this.metrics?.recordSent(kind, payloadBytesOf(input as Record<string, unknown>));
+  }
 
   /**
    * Open (or re-fetch) the UDP proxy session for this game token. Idempotent:
@@ -155,6 +163,7 @@ export class UdpAPI {
     input: SendActorUpdateMutationVariables['input'],
   ): Promise<boolean> {
     const data = await this.gql.request(SendActorUpdateDocument, { input });
+    this.record('actorUpdate', input);
     return data.sendActorUpdate;
   }
 
@@ -235,6 +244,7 @@ export class UdpAPI {
     input: SendVoxelUpdateMutationVariables['input'],
   ): Promise<boolean> {
     const data = await this.gql.request(SendVoxelUpdateDocument, { input });
+    this.record('voxelUpdate', input);
     return data.sendVoxelUpdate;
   }
 
@@ -294,6 +304,7 @@ export class UdpAPI {
     input: SendAudioPacketMutationVariables['input'],
   ): Promise<boolean> {
     const data = await this.gql.request(SendAudioPacketDocument, { input });
+    this.record('audio', input);
     return data.sendAudioPacket;
   }
 
@@ -349,6 +360,7 @@ export class UdpAPI {
     input: SendTextPacketMutationVariables['input'],
   ): Promise<boolean> {
     const data = await this.gql.request(SendTextPacketDocument, { input });
+    this.record('text', input);
     return data.sendTextPacket;
   }
 
@@ -408,6 +420,7 @@ export class UdpAPI {
     input: SendClientEventMutationVariables['input'],
   ): Promise<boolean> {
     const data = await this.gql.request(SendClientEventDocument, { input });
+    this.record('clientEvent', input);
     return data.sendClientEvent;
   }
 
@@ -467,6 +480,7 @@ export class UdpAPI {
     const data = await this.gql.request(SendSingleActorMessageDocument, {
       input,
     });
+    this.record('singleActorMessage', input);
     return data.sendSingleActorMessage;
   }
 
@@ -494,6 +508,7 @@ export class UdpAPI {
     input: SendChannelMessageMutationVariables['input'],
   ): Promise<boolean> {
     const data = await this.gql.request(SendChannelMessageDocument, { input });
+    this.record('channelMessage', input);
     return data.sendChannelMessage;
   }
 

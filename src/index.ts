@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '8.4.6';
+export const VERSION = '8.5.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -73,6 +73,13 @@ export {
   type UdpNotification,
   type UdpNotificationHandlers,
 } from './realtime.js';
+export {
+  RealtimeMetrics,
+  payloadBytesOf,
+  type RealtimeMetricsCounters,
+  type RealtimeMetricsKind,
+  type RealtimeMetricsSnapshot,
+} from './metrics.js';
 export { WorldClient, ActorClient, type ActorOptions } from './world.js';
 export {
   CombatKit,

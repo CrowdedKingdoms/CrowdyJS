@@ -5,6 +5,8 @@ import type { CrowdyLogger } from './logger.js';
 import { silentLogger } from './logger.js';
 import { CrowdyRealtimeError } from './errors.js';
 import type { LbCookieStore } from './lb-cookie-store.js';
+import type { RealtimeMetrics } from './metrics.js';
+import { payloadBytesOf } from './metrics.js';
 import {
   UdpNotificationsDocument,
   type UdpNotificationsSubscription,
@@ -255,10 +257,13 @@ export class RealtimeClient {
    *   the token tears the connection down (emitting an `AUTH_CLEARED`
    *   {@link CrowdyRealtimeError}), while a token change made while connected
    *   forces a reconnect using the new token.
+   * @param metrics - Optional traffic counters (`client.metrics`); each
+   *   delivered notification is recorded once, regardless of subscriber count.
    */
   constructor(
     config: RealtimeConfig = {},
     private readonly session: SessionStore,
+    private readonly metrics?: RealtimeMetrics,
   ) {
     this.wsUrl = config.wsUrl || config.wsEndpoint || 'ws://localhost:3000/graphql';
     this.logger = config.logger ?? silentLogger;
@@ -538,6 +543,10 @@ export class RealtimeClient {
   }
 
   private dispatch(notification: UdpNotification): void {
+    this.metrics?.recordReceived(
+      notificationKind(notification.__typename),
+      payloadBytesOf(notification as Record<string, unknown>),
+    );
     this.resolvePending(notification);
 
     // A non-retryable connection event (e.g. APP_ID_REQUIRED, AUTH_REQUIRED)
@@ -654,6 +663,27 @@ export class RealtimeClient {
       listener(status);
     }
   }
+}
+
+/** GraphQL `__typename` → the handler-style kind name used by `client.metrics`. */
+const NOTIFICATION_KINDS: Record<string, string> = {
+  ActorUpdateNotification: 'actorUpdate',
+  ActorUpdateResponse: 'actorUpdateResponse',
+  VoxelUpdateNotification: 'voxelUpdate',
+  VoxelUpdateResponse: 'voxelUpdateResponse',
+  ClientAudioNotification: 'audio',
+  ClientTextNotification: 'text',
+  ClientEventNotification: 'clientEvent',
+  ServerEventNotification: 'serverEvent',
+  SingleActorMessageNotification: 'singleActorMessage',
+  ChannelMessageNotification: 'channelMessage',
+  GenericErrorResponse: 'genericError',
+  RealtimeConnectionEvent: 'connectionEvent',
+};
+
+function notificationKind(typename: string | undefined): string {
+  if (!typename) return 'unknown';
+  return NOTIFICATION_KINDS[typename] ?? typename;
 }
 
 function isNodeRuntime(): boolean {
