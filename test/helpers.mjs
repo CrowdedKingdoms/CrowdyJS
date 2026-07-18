@@ -103,3 +103,8 @@ export function clientConfig(overrides = {}) {
 export async function loadSdk() {
   return import('../dist/index.js');
 }
+
+/** Lazily import the built World Stores subpath (`@crowdedkingdoms/crowdyjs/stores`). */
+export async function loadStores() {
+  return import('../dist/stores/index.js');
+}
