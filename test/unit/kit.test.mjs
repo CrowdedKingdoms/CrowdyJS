@@ -318,6 +318,111 @@ test('mergeBlueprints combines payloads and rejects collisions', async () => {
   assert.equal(twoInventories.seedInput.containerTypes.length, 4);
 });
 
+test('economyBlueprint generates wallets, shop, escrow trades, and market', async () => {
+  const { economyBlueprint, economyNames, economyCurrencyFn } = await loadSdk();
+
+  const bp = economyBlueprint({
+    currencies: ['gold', 'gems'],
+    restock: { intervalMs: 60000, amount: 5 },
+  });
+  assert.deepEqual(
+    bp.containerTypes.map((t) => t.typeName),
+    ['Wallet', 'ShopListing', 'TradeOffer', 'MarketListing'],
+  );
+  // Player-instantiable wallet/trade/market; admin-priced shop catalog.
+  assert.equal(bp.containerTypes.find((t) => t.typeName === 'Wallet').instantiableBy, 'member');
+  assert.equal(bp.containerTypes.find((t) => t.typeName === 'ShopListing').instantiableBy, 'admin');
+
+  // One balance property per currency, plus the owner mirror.
+  const walletProps = bp.propertyDefinitions
+    .filter((p) => p.containerTypeName === 'Wallet')
+    .map((p) => p.key);
+  assert.deepEqual(walletProps, ['owner_user_id', 'gold', 'gems']);
+
+  // earn is a trusted grant: server scope by default; spend is owner+guarded.
+  const earn = bp.functions.find((f) => f.name === 'earn_gold');
+  assert.equal(earn.invokeScope, 'server');
+  assert.match(earn.mutations[0].expression, /self\.gold \+ max\(0, \$amount\)/);
+  const spend = bp.functions.find((f) => f.name === 'spend_gems');
+  const spendPolicy = JSON.parse(spend.invokePolicyJson);
+  assert.equal(spendPolicy.type, 'and');
+  assert.ok(spendPolicy.rules.some((r) => r.type === 'owner_of_self'));
+  assert.match(
+    spendPolicy.rules.find((r) => r.type === 'condition').expression,
+    /self\.gems >= \$amount/,
+  );
+  assert.equal(economyCurrencyFn('earn', 'gems'), 'earn_gems');
+
+  // buy_listing: single transaction — debit, stock decrement, item grant.
+  const buy = bp.functions.find((f) => f.name === 'buy_listing');
+  assert.deepEqual(
+    buy.parameters.map((p) => p.name),
+    ['wallet_id', 'to_stack_id'],
+  );
+  const buyGuard = JSON.parse(buy.invokePolicyJson).expression;
+  assert.match(buyGuard, /self\.stock > 0/);
+  assert.match(buyGuard, /ref\(\$wallet_id\)\.owner_user_id == \$caller_user_id/);
+  assert.match(buyGuard, /ref\(\$wallet_id\)\.gold >= self\.price/);
+  assert.match(buyGuard, /ref\(\$to_stack_id\)\.item_id == self\.item_id/);
+  assert.equal(buy.mutations.length, 3);
+  assert.equal(buy.mutations[1].property, 'stock');
+
+  // accept_trade: atomic four-stack swap pinned to the recorded escrow refs
+  // and the server-truth offer creator ($self_owner_id).
+  const accept = bp.functions.find((f) => f.name === 'accept_trade');
+  const acceptGuard = JSON.parse(accept.invokePolicyJson).expression;
+  assert.match(acceptGuard, /self\.status == "open"/);
+  assert.match(acceptGuard, /self\.to_user_id == \$caller_user_id/);
+  assert.match(acceptGuard, /\$give_stack_id == self\.give_stack_id/);
+  assert.match(acceptGuard, /\$to_want_stack_id == self\.receive_stack_id/);
+  assert.match(acceptGuard, /ref\(\$give_stack_id\)\.owner_user_id == \$self_owner_id/);
+  assert.match(acceptGuard, /ref\(\$want_stack_id\)\.quantity >= self\.want_qty/);
+  assert.equal(accept.mutations.length, 5);
+  assert.equal(accept.mutations[4].property, 'status');
+
+  // buy_market_listing: buyer wallet → seller wallet + stack transfer.
+  const market = bp.functions.find((f) => f.name === 'buy_market_listing');
+  assert.equal(market.mutations.length, 5);
+  const marketGuard = JSON.parse(market.invokePolicyJson).expression;
+  assert.match(marketGuard, /ref\(\$seller_wallet_id\)\.owner_user_id == \$self_owner_id/);
+  assert.match(marketGuard, /\$from_stack_id == self\.stack_id/);
+  assert.match(market.mutations[1].expression, /ref\(\$seller_wallet_id\)\.gold \+ self\.price/);
+
+  // Restock automation: interval fan-out over understocked listings.
+  const restock = bp.automations.find((a) => a.name === 'shop-restock');
+  assert.equal(restock.functionName, 'restock_listing');
+  assert.equal(restock.intervalMs, 60000);
+  assert.deepEqual(JSON.parse(restock.selectorJson), {
+    selfWhere: [{ key: 'stock', op: '<', value: 'self.max_stock' }],
+  });
+  assert.deepEqual(JSON.parse(restock.paramsJson), { amount: 5 });
+  const restockFn = bp.functions.find((f) => f.name === 'restock_listing');
+  assert.equal(restockFn.autonomousInvocable, true);
+  assert.deepEqual(JSON.parse(restockFn.invokePolicyJson), { type: 'is_automation' });
+
+  // Prefix + authority + ownerIdKind variants.
+  const black = economyBlueprint({
+    typePrefix: 'Black',
+    earnAuthority: 'automation',
+    ownerIdKind: 'string',
+  });
+  assert.equal(economyNames('Black').walletType, 'BlackWallet');
+  const blackEarn = black.functions.find((f) => f.name === 'black_earn_gold');
+  assert.equal(blackEarn.autonomousInvocable, true);
+  assert.deepEqual(JSON.parse(blackEarn.invokePolicyJson), { type: 'is_automation' });
+  const blackBuy = black.functions.find((f) => f.name === 'black_buy_listing');
+  assert.match(
+    JSON.parse(blackBuy.invokePolicyJson).expression,
+    /ref\(\$wallet_id\)\.owner_user_id == to_string\(\$caller_user_id\)/,
+  );
+
+  assert.throws(() => economyBlueprint({ currencies: [] }), /at least one currency/);
+  assert.throws(
+    () => economyBlueprint({ shopCurrency: 'gems' }),
+    /must be one of the declared currencies/,
+  );
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

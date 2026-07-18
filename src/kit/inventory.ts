@@ -106,6 +106,10 @@ export class InventoryKit {
    * Create a new stack owned by the caller (server-assigned ownership).
    * Use {@link grant} afterwards for authority-checked increments; the initial
    * quantity here is a seed value on a container the caller owns anyway.
+   *
+   * Pass `ownerUserId` (the caller's own user id) to also set the
+   * `owner_user_id` mirror property that cross-container guards (economy
+   * trades / market listings) verify.
    */
   async createStack(input: {
     itemId: string;
@@ -113,6 +117,7 @@ export class InventoryKit {
     slot?: number;
     displayName?: string;
     sessionId?: string;
+    ownerUserId?: Scalars['BigInt']['input'];
   }) {
     return this.gameModel.createContainer({
       appId: this.appId,
@@ -123,6 +128,15 @@ export class InventoryKit {
         { key: 'item_id', valueType: 'string', valueJson: JSON.stringify(input.itemId) },
         { key: 'quantity', valueType: 'int', valueJson: String(input.quantity ?? 0) },
         { key: 'slot', valueType: 'int', valueJson: String(input.slot ?? 0) },
+        ...(input.ownerUserId !== undefined
+          ? [
+              {
+                key: 'owner_user_id',
+                valueType: 'int',
+                valueJson: String(input.ownerUserId),
+              },
+            ]
+          : []),
       ],
     });
   }

@@ -350,15 +350,29 @@ export type KitOwnerIdKind = 'int' | 'string';
 
 /**
  * Expression fragment asserting that `ownerExpr` (an `owner_user_id`-style
+ * property read) equals a user-id expression (usually the injected
+ * `$caller_user_id` / `$self_owner_id` system params), honoring
+ * {@link KitOwnerIdKind}.
+ */
+export function ownerEquals(
+  ownerExpr: string,
+  userExpr: string,
+  kind: KitOwnerIdKind = 'int',
+): string {
+  return kind === 'string'
+    ? `${ownerExpr} == to_string(${userExpr})`
+    : `${ownerExpr} == ${userExpr}`;
+}
+
+/**
+ * Expression fragment asserting that `ownerExpr` (an `owner_user_id`-style
  * property read) equals the calling user, honoring {@link KitOwnerIdKind}.
  */
 export function ownerEqualsCaller(
   ownerExpr: string,
   kind: KitOwnerIdKind = 'int',
 ): string {
-  return kind === 'string'
-    ? `${ownerExpr} == to_string($caller_user_id)`
-    : `${ownerExpr} == $caller_user_id`;
+  return ownerEquals(ownerExpr, '$caller_user_id', kind);
 }
 
 /** The `SeedPropertyDefInput` for a kit-standard owner mirror property. */

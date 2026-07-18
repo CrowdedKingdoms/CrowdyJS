@@ -1,6 +1,9 @@
 export {
   andPolicies,
   composeBlueprints,
+  economyBlueprint,
+  economyCurrencyFn,
+  economyNames,
   featureGate,
   inventoryBlueprint,
   inventoryNames,
@@ -10,12 +13,15 @@ export {
   mergeBlueprints,
   npcBehaviorFunctionName,
   npcBlueprint,
+  ownerEquals,
   ownerEqualsCaller,
   ownerMirrorProperty,
   plotBlueprint,
   plotNames,
   toSnakeCase,
   trustedAuthorityFields,
+  type EconomyBlueprintOptions,
+  type EconomyNames,
   type InventoryBlueprintOptions,
   type InventoryNames,
   type KitAutomationSpec,
@@ -42,6 +48,14 @@ export {
   type KitDeployResult,
 } from './kit.js';
 export { InventoryKit, type InventoryKitOptions, type KitItemStack } from './inventory.js';
+export {
+  EconomyKit,
+  type EconomyKitOptions,
+  type KitMarketListing,
+  type KitShopListing,
+  type KitTradeOffer,
+  type KitWallet,
+} from './economy.js';
 export { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 export { NpcsKit, type NpcsKitOptions, type KitNpc } from './npcs.js';
 export { PlotsKit, type PlotsKitOptions, type KitPlot } from './plots.js';

@@ -7,6 +7,7 @@ import type {
   Scalars,
 } from '../generated/graphql.js';
 import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
+import { EconomyKit, type EconomyKitOptions } from './economy.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
@@ -18,6 +19,7 @@ export interface GameKitOptions {
   objects?: ObjectsKitOptions;
   npcs?: NpcsKitOptions;
   plots?: PlotsKitOptions;
+  economy?: EconomyKitOptions;
 }
 
 /** The result of {@link GameKitClient.deploy}: the seed outcome plus each automation/trigger upserted. */
@@ -76,6 +78,8 @@ export class GameKitClient {
   readonly npcs: NpcsKit;
   /** Plot helpers (buy/rent land with transactional, enforced grid grants). */
   readonly plots: PlotsKit;
+  /** Economy helpers (wallets, shops, escrow trades, player market). */
+  readonly economy: EconomyKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -87,6 +91,7 @@ export class GameKitClient {
     this.objects = new ObjectsKit(appId, gameModel, options.objects);
     this.npcs = new NpcsKit(appId, gameModel, options.npcs);
     this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
+    this.economy = new EconomyKit(appId, gameModel, options.economy);
   }
 
   /**

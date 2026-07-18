@@ -85,6 +85,16 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.plots, 'kit.plots', [
     'create', 'list', 'buy', 'rent', 'evict', 'accessOf',
   ]);
+  assertMethods(kit.economy, 'kit.economy', [
+    'ensureWallet', 'balance', 'wallet', 'earn', 'spend',
+  ]);
+  assertMethods(kit.economy.shop, 'kit.economy.shop', ['create', 'list', 'buy']);
+  assertMethods(kit.economy.trades, 'kit.economy.trades', [
+    'offer', 'accept', 'cancel', 'get', 'listMine',
+  ]);
+  assertMethods(kit.economy.market, 'kit.economy.market', [
+    'list', 'browse', 'buy', 'cancel',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

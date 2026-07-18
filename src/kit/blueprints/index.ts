@@ -9,6 +9,7 @@ export {
   featureGate,
   kitPolicyJson,
   mergeBlueprints,
+  ownerEquals,
   ownerEqualsCaller,
   ownerMirrorProperty,
   toSnakeCase,
@@ -23,6 +24,13 @@ export {
   type MergedBlueprints,
   type SelectorPermissionPredicate,
 } from './core.js';
+export {
+  economyBlueprint,
+  economyCurrencyFn,
+  economyNames,
+  type EconomyBlueprintOptions,
+  type EconomyNames,
+} from './economy.js';
 export {
   inventoryBlueprint,
   inventoryNames,

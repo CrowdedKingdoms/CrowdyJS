@@ -83,6 +83,14 @@ export function inventoryBlueprint(
       { containerTypeName: names.stackType, key: 'item_id', valueType: 'string' },
       {
         containerTypeName: names.stackType,
+        key: 'owner_user_id',
+        valueType: 'int',
+        defaultValueJson: '0',
+        description:
+          "Mirror of the stack owner's user id (kit convention), read by cross-container guards such as the economy trade/market functions.",
+      },
+      {
+        containerTypeName: names.stackType,
         key: 'quantity',
         valueType: 'int',
         defaultValueJson: '0',
