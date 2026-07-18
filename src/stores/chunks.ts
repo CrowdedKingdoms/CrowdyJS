@@ -35,7 +35,10 @@ export type ChunkLoadState =
 export interface CachedChunk<TVoxelState = string, TChunkState = string> {
   readonly key: string;
   readonly coord: ChunkCoord;
-  /** Dense voxel-type grid (4096 bytes, `x + y*16 + z*256`), null when unknown. */
+  /**
+   * Dense voxel-type grid (4096 bytes), null when unknown. Indexed
+   * `x + y*16 + z*256` by default; see {@link ChunkStoreConfig.voxelIndex}.
+   */
   voxels: Uint8Array | null;
   /** Sparse typed per-voxel state by voxel index. */
   voxelStates: Map<number, TVoxelState>;
@@ -87,6 +90,14 @@ export interface ChunkStoreConfig<TVoxelState = string, TChunkState = string> {
    * session's local actor automatically; a random uuid otherwise.
    */
   actorUuid?: string | (() => string | null);
+  /**
+   * Within-chunk (x,y,z in 0-15) → dense-grid byte offset. Defaults to the
+   * platform-documented layout `x + y*16 + z*256`. Override for worlds whose
+   * existing dense blobs were written with a different convention (e.g.
+   * Blocks with Friends uses `y*256 + z*16 + x`) — the layout is opaque to
+   * the platform, so all clients of a world just have to agree.
+   */
+  voxelIndex?: (x: number, y: number, z: number) => number;
   /** Clock override for tests. Defaults to `Date.now`. */
   now?: () => number;
 }
@@ -134,6 +145,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   private readonly hydrateStates: boolean;
   private readonly now: () => number;
   private readonly fallbackUuid = generateCrowdyUuid();
+  private readonly voxelIndex: (x: number, y: number, z: number) => number;
   private revisionValue = 0;
   private sequence = 0;
 
@@ -147,6 +159,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
       config.chunkStateCodec ?? (rawCodec as unknown as StateCodec<TChunkState>);
     this.hydrateStates = config.hydrateVoxelStates ?? config.voxelStateCodec !== undefined;
     this.now = config.now ?? Date.now;
+    this.voxelIndex = config.voxelIndex ?? voxelIndex;
 
     // Realtime merge: live edits land in the cache as they replicate.
     ctx.onDispose(
@@ -197,7 +210,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   /** The dense voxel type at a within-chunk coordinate (0 when unknown). */
   voxelTypeAt(coord: ChunkCoord, x: number, y: number, z: number): number {
     const chunk = this.chunks.get(chunkKey(coord));
-    return chunk?.voxels?.[voxelIndex(x, y, z)] ?? 0;
+    return chunk?.voxels?.[this.voxelIndex(x, y, z)] ?? 0;
   }
 
   /** The typed per-voxel state at a within-chunk coordinate, if any. */
@@ -207,7 +220,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     y: number,
     z: number,
   ): TVoxelState | undefined {
-    return this.chunks.get(chunkKey(coord))?.voxelStates.get(voxelIndex(x, y, z));
+    return this.chunks.get(chunkKey(coord))?.voxelStates.get(this.voxelIndex(x, y, z));
   }
 
   /** Subscribe to per-chunk changes (loads, merges, edits). @returns off. */
@@ -290,7 +303,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     if (full.voxels != null) chunk.voxels = decodeBase64(full.voxels);
     chunk.chunkState = this.decodeChunkState(full.chunkState ?? null);
     for (const entry of full.voxelStates ?? []) {
-      const index = voxelIndex(entry.voxelCoord.x, entry.voxelCoord.y, entry.voxelCoord.z);
+      const index = this.voxelIndex(entry.voxelCoord.x, entry.voxelCoord.y, entry.voxelCoord.z);
       if (chunk.voxels) chunk.voxels[index] = entry.voxelType;
       if (entry.state) {
         try {
@@ -448,7 +461,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     decodedState?: TVoxelState,
   ): void {
     if (!chunk.voxels) chunk.voxels = new Uint8Array(CHUNK_VOLUME);
-    const index = voxelIndex(x, y, z);
+    const index = this.voxelIndex(x, y, z);
     chunk.voxels[index] = voxelType;
     let state = decodedState;
     if (state === undefined && encodedState) {
