@@ -398,3 +398,369 @@ export function attachLocalActor<T>(
 ): LocalActorStore<T> {
   return new LocalActorStore(ctx, config);
 }
+
+// ---------------------------------------------------------------------------
+// RemoteActorStore
+// ---------------------------------------------------------------------------
+
+/** One timestamped state sample of a remote actor (newest first in history). */
+export interface RemoteActorSample<T> {
+  state: T;
+  chunk: ChunkCoordinatesInput;
+  /** Server-stamped epoch ms of the update. */
+  epochMillis: number;
+  /** Local receive time (ms). */
+  receivedAt: number;
+}
+
+/**
+ * A tracked remote actor. The object identity is **stable** across updates
+ * (fields mutate in place), so render code can hold references; check the
+ * lane's `revision` for cheap change detection.
+ */
+export interface RemoteActor<T> {
+  readonly uuid: string;
+  /** The latest decoded state. */
+  state: T;
+  /** The chunk of the latest update. */
+  chunk: ChunkCoordinatesInput;
+  /** Replication radius of the latest update. */
+  distance: number;
+  /** Server-stamped epoch ms of the latest update. */
+  epochMillis: number;
+  /** Local receive time of the latest update (ms). */
+  receivedAt: number;
+  /**
+   * Recent samples, newest first (length ≤ `historySize`) — the data an
+   * interpolating renderer needs without keeping its own buffers.
+   */
+  samples: Array<RemoteActorSample<T>>;
+}
+
+/** Options for {@link attachRemoteActors}. */
+export interface RemoteActorsConfig<T> {
+  /** Codec between the base64 wire state and the typed actor state. */
+  codec: StateCodec<T>;
+  /**
+   * The local actor's uuid (or a getter), filtered out as the self-echo.
+   * `createWorldSession` wires this automatically from `config.self`.
+   */
+  selfUuid?: string | (() => string | null);
+  /**
+   * Actors quieter than this are considered gone: excluded from reads and
+   * physically reaped (with `onLeave`) by the reap timer. Defaults to
+   * 12 000 ms. `false` disables staleness entirely.
+   */
+  staleAfterMs?: number | false;
+  /**
+   * Reap-timer cadence (physically deletes stale records and fires
+   * `onLeave`). Defaults to 1000 ms; `false` relies on read-time filtering +
+   * manual {@link RemoteActorStore.reap} only. Reads are always correct
+   * regardless — staleness is ALSO computed at read time, so a throttled
+   * timer can never serve stale actors.
+   */
+  reapIntervalMs?: number | false;
+  /** Samples kept per actor for interpolation. Defaults to 2. */
+  historySize?: number;
+  /**
+   * Named lanes routing one decoded notification to the first matching
+   * sub-registry — e.g. `{ players: (s) => !(s.flags & 2), mobs: (s) => !!(s.flags & 2) }`
+   * lets a player renderer and a mob system share the stream without
+   * double-decoding. Omit for a single implicit lane.
+   */
+  lanes?: Record<string, (state: T, notification: ActorUpdateEcho) => boolean>;
+  /** Clock override for tests. Defaults to `Date.now`. */
+  now?: () => number;
+}
+
+/** One lane's registry of remote actors. */
+export class RemoteActorLane<T> {
+  private readonly actors = new Map<string, RemoteActor<T>>();
+  private readonly joinListeners = new Set<(actor: RemoteActor<T>) => void>();
+  private readonly updateListeners = new Set<(actor: RemoteActor<T>) => void>();
+  private readonly leaveListeners = new Set<(actor: RemoteActor<T>) => void>();
+  private revisionValue = 0;
+
+  constructor(
+    private readonly historySize: number,
+    private readonly staleAfterMs: number | false,
+    private readonly now: () => number,
+  ) {}
+
+  /** Bumped on every change — poll it cheaply from a render loop. */
+  get revision(): number {
+    return this.revisionValue;
+  }
+
+  /** Live actors (stale ones filtered at read time), unordered. */
+  list(): Array<RemoteActor<T>> {
+    const out: Array<RemoteActor<T>> = [];
+    for (const actor of this.actors.values()) {
+      if (!this.isStale(actor)) out.push(actor);
+    }
+    return out;
+  }
+
+  /** One live actor, or undefined when unknown/stale. */
+  get(uuid: string): RemoteActor<T> | undefined {
+    const actor = this.actors.get(uuid);
+    return actor && !this.isStale(actor) ? actor : undefined;
+  }
+
+  /** Live actor count. */
+  get count(): number {
+    return this.list().length;
+  }
+
+  /** A new actor appeared. @returns off. */
+  onJoin(listener: (actor: RemoteActor<T>) => void): () => void {
+    this.joinListeners.add(listener);
+    return () => this.joinListeners.delete(listener);
+  }
+
+  /** An actor's state updated (fires after `onJoin` for the first update). @returns off. */
+  onUpdate(listener: (actor: RemoteActor<T>) => void): () => void {
+    this.updateListeners.add(listener);
+    return () => this.updateListeners.delete(listener);
+  }
+
+  /** An actor went stale and was reaped (or the store was cleared). @returns off. */
+  onLeave(listener: (actor: RemoteActor<T>) => void): () => void {
+    this.leaveListeners.add(listener);
+    return () => this.leaveListeners.delete(listener);
+  }
+
+  /** Apply one decoded update (internal). */
+  apply(
+    uuid: string,
+    state: T,
+    chunk: ChunkCoordinatesInput,
+    distance: number,
+    epochMillis: number,
+  ): void {
+    const receivedAt = this.now();
+    let actor = this.actors.get(uuid);
+    const isNew = !actor;
+    if (!actor) {
+      actor = {
+        uuid,
+        state,
+        chunk,
+        distance,
+        epochMillis,
+        receivedAt,
+        samples: [],
+      };
+      this.actors.set(uuid, actor);
+    }
+    actor.state = state;
+    actor.chunk = chunk;
+    actor.distance = distance;
+    actor.epochMillis = epochMillis;
+    actor.receivedAt = receivedAt;
+    actor.samples.unshift({ state, chunk, epochMillis, receivedAt });
+    if (actor.samples.length > this.historySize) {
+      actor.samples.length = this.historySize;
+    }
+    this.revisionValue += 1;
+    if (isNew) {
+      for (const listener of [...this.joinListeners]) listener(actor);
+    }
+    for (const listener of [...this.updateListeners]) listener(actor);
+  }
+
+  /** Physically delete stale records, firing `onLeave` for each. */
+  reap(): void {
+    for (const [uuid, actor] of this.actors) {
+      if (this.isStale(actor)) {
+        this.actors.delete(uuid);
+        this.revisionValue += 1;
+        for (const listener of [...this.leaveListeners]) listener(actor);
+      }
+    }
+  }
+
+  /** Drop every record (fires `onLeave` for each live one). */
+  clear(): void {
+    for (const [uuid, actor] of this.actors) {
+      this.actors.delete(uuid);
+      this.revisionValue += 1;
+      for (const listener of [...this.leaveListeners]) listener(actor);
+    }
+  }
+
+  private isStale(actor: RemoteActor<T>): boolean {
+    return (
+      this.staleAfterMs !== false && this.now() - actor.receivedAt > this.staleAfterMs
+    );
+  }
+}
+
+/**
+ * The SDK-managed **remote actor registry**: subscribes to `actorUpdate`,
+ * decodes each notification ONCE, filters the local self-echo, and maintains
+ * per-actor records with timestamped sample history, staleness, and
+ * join/update/leave events. With `lanes`, one decoded stream feeds several
+ * consumers (players vs mobs) without double-decoding.
+ *
+ * Reads are synchronous and always live-filtered (staleness is computed at
+ * read time), so render loops can query at any cadence — including after a
+ * backgrounded tab resumes.
+ */
+export class RemoteActorStore<T> {
+  private readonly lanes = new Map<string, RemoteActorLane<T>>();
+  private readonly laneFilters: Array<
+    [string, (state: T, notification: ActorUpdateEcho) => boolean]
+  >;
+  private readonly defaultLane: RemoteActorLane<T> | null;
+  private decodeFailureCount = 0;
+
+  constructor(ctx: WorldSessionContext, private readonly config: RemoteActorsConfig<T>) {
+    const now = config.now ?? Date.now;
+    const historySize = Math.max(1, config.historySize ?? 2);
+    const staleAfterMs = config.staleAfterMs ?? 12_000;
+
+    const laneNames = config.lanes ? Object.keys(config.lanes) : ['default'];
+    for (const name of laneNames) {
+      this.lanes.set(name, new RemoteActorLane<T>(historySize, staleAfterMs, now));
+    }
+    this.laneFilters = config.lanes
+      ? Object.entries(config.lanes)
+      : [['default', () => true]];
+    this.defaultLane = config.lanes ? null : this.lanes.get('default')!;
+
+    ctx.onDispose(
+      ctx.on('actorUpdate', (notification) => {
+        const selfUuid =
+          typeof this.config.selfUuid === 'function'
+            ? this.config.selfUuid()
+            : this.config.selfUuid;
+        if (selfUuid && notification.uuid === selfUuid) return;
+
+        let state: T;
+        try {
+          state = this.config.codec.decode(notification.state);
+        } catch {
+          this.decodeFailureCount += 1;
+          return;
+        }
+        for (const [name, filter] of this.laneFilters) {
+          let matches: boolean;
+          try {
+            matches = filter(state, notification);
+          } catch {
+            continue;
+          }
+          if (!matches) continue;
+          this.lanes.get(name)!.apply(
+            notification.uuid,
+            state,
+            {
+              x: notification.chunkX,
+              y: notification.chunkY,
+              z: notification.chunkZ,
+            },
+            notification.distance,
+            Number(notification.epochMillis),
+          );
+          break; // first matching lane wins
+        }
+      }),
+    );
+
+    const reapInterval = config.reapIntervalMs ?? 1000;
+    if (reapInterval !== false && reapInterval > 0 && staleAfterMs !== false) {
+      ctx.onDispose(ctx.ticker.every(reapInterval, () => this.reap()));
+    }
+  }
+
+  /** A named lane's registry (throws for unknown names). */
+  lane(name: string): RemoteActorLane<T> {
+    const lane = this.lanes.get(name);
+    if (!lane) {
+      throw new Error(
+        `Unknown actor lane '${name}' (configured: ${[...this.lanes.keys()].join(', ')})`,
+      );
+    }
+    return lane;
+  }
+
+  /** Live actors across every lane (the default lane when none configured). */
+  list(): Array<RemoteActor<T>> {
+    if (this.defaultLane) return this.defaultLane.list();
+    const out: Array<RemoteActor<T>> = [];
+    for (const lane of this.lanes.values()) out.push(...lane.list());
+    return out;
+  }
+
+  /** One live actor, searched across lanes. */
+  get(uuid: string): RemoteActor<T> | undefined {
+    for (const lane of this.lanes.values()) {
+      const actor = lane.get(uuid);
+      if (actor) return actor;
+    }
+    return undefined;
+  }
+
+  /** Live actor count across lanes. */
+  get count(): number {
+    let total = 0;
+    for (const lane of this.lanes.values()) total += lane.count;
+    return total;
+  }
+
+  /** Sum of lane revisions — poll it cheaply from a render loop. */
+  get revision(): number {
+    let total = 0;
+    for (const lane of this.lanes.values()) total += lane.revision;
+    return total;
+  }
+
+  /** Notifications whose state failed to decode (foreign layouts). */
+  get decodeFailures(): number {
+    return this.decodeFailureCount;
+  }
+
+  /** A new actor appeared (default/single-lane sugar; use `lane()` with lanes). */
+  onJoin(listener: (actor: RemoteActor<T>) => void): () => void {
+    return this.everyLane((lane) => lane.onJoin(listener));
+  }
+
+  /** An actor updated. */
+  onUpdate(listener: (actor: RemoteActor<T>) => void): () => void {
+    return this.everyLane((lane) => lane.onUpdate(listener));
+  }
+
+  /** An actor was reaped. */
+  onLeave(listener: (actor: RemoteActor<T>) => void): () => void {
+    return this.everyLane((lane) => lane.onLeave(listener));
+  }
+
+  /** Physically delete stale records in every lane. */
+  reap(): void {
+    for (const lane of this.lanes.values()) lane.reap();
+  }
+
+  /** Drop every record in every lane. */
+  clear(): void {
+    for (const lane of this.lanes.values()) lane.clear();
+  }
+
+  private everyLane(register: (lane: RemoteActorLane<T>) => () => void): () => void {
+    const offs = [...this.lanes.values()].map(register);
+    return () => {
+      for (const off of offs) off();
+    };
+  }
+}
+
+/**
+ * Attach a {@link RemoteActorStore} to a world session context. Prefer the
+ * `actors` key of `createWorldSession`'s config.
+ */
+export function attachRemoteActors<T>(
+  ctx: WorldSessionContext,
+  config: RemoteActorsConfig<T>,
+): RemoteActorStore<T> {
+  return new RemoteActorStore(ctx, config);
+}

@@ -67,7 +67,10 @@ export {
 } from './session.js';
 export {
   LocalActorStore,
+  RemoteActorLane,
+  RemoteActorStore,
   attachLocalActor,
+  attachRemoteActors,
   localStorageUuidStore,
   memoryUuidStore,
   type AckedActorUpdate,
@@ -76,12 +79,20 @@ export {
   type GenericErrorEcho,
   type LocalActorConfig,
   type LocalActorStatus,
+  type RemoteActor,
+  type RemoteActorSample,
+  type RemoteActorsConfig,
   type SendReason,
   type SentActorUpdate,
   type UuidStore,
 } from './actors.js';
 
-import { LocalActorStore, type LocalActorConfig } from './actors.js';
+import {
+  LocalActorStore,
+  RemoteActorStore,
+  type LocalActorConfig,
+  type RemoteActorsConfig,
+} from './actors.js';
 import {
   WorldSessionCore,
   type WorldSessionBaseConfig,
@@ -92,17 +103,26 @@ import {
  * Configuration for {@link createWorldSession}. Only configured stores are
  * constructed (and only they appear on the returned session's type).
  */
-export interface WorldSessionConfig<TSelf = unknown> extends WorldSessionBaseConfig {
+export interface WorldSessionConfig<TSelf = unknown, TActors = TSelf>
+  extends WorldSessionBaseConfig {
   /** Your own actor: identity, typed state, send loop ({@link LocalActorStore}). */
   self?: LocalActorConfig<TSelf>;
+  /**
+   * Remote actors: typed registry with lanes, history, staleness
+   * ({@link RemoteActorStore}). The self-echo filter is wired from `self`
+   * automatically; set `selfUuid` yourself otherwise.
+   */
+  actors?: RemoteActorsConfig<TActors>;
 }
 
 /** The session returned by {@link createWorldSession}. */
-export interface WorldSession<TSelf = unknown> {
+export interface WorldSession<TSelf = unknown, TActors = TSelf> {
   /** The app this session is scoped to. */
   readonly appId: string;
   /** The local actor store (present when `config.self` was given). */
   readonly self?: LocalActorStore<TSelf>;
+  /** The remote actor registry (present when `config.actors` was given). */
+  readonly actors?: RemoteActorStore<TActors>;
   /** Close the shared subscription, cancel timers, and release the stores. */
   dispose(): void;
   /** The wiring context (for custom store implementations). */
@@ -128,16 +148,25 @@ export interface WorldSession<TSelf = unknown> {
  * session.dispose();
  * ```
  */
-export function createWorldSession<TSelf = unknown>(
+export function createWorldSession<TSelf = unknown, TActors = TSelf>(
   client: WorldStoresClient,
   appId: string,
-  config: WorldSessionConfig<TSelf> = {},
-): WorldSession<TSelf> {
+  config: WorldSessionConfig<TSelf, TActors> = {},
+): WorldSession<TSelf, TActors> {
   const core = new WorldSessionCore(client, appId, config.ticker);
+  const self = config.self ? new LocalActorStore(core, config.self) : undefined;
+  const actors = config.actors
+    ? new RemoteActorStore(core, {
+        // Filter the local echo automatically when a self store exists.
+        selfUuid: self ? () => self.uuid : undefined,
+        ...config.actors,
+      })
+    : undefined;
   return {
     appId,
     context: core,
-    ...(config.self ? { self: new LocalActorStore(core, config.self) } : {}),
+    ...(self ? { self } : {}),
+    ...(actors ? { actors } : {}),
     dispose: () => core.dispose(),
   };
 }

@@ -367,6 +367,131 @@ test('LocalActorStore: uuid persistence, explicit uuid, manual-send mode', async
   assert.throws(bad, /32/);
 });
 
+/** Build an actorUpdate notification for tests. */
+function actorNote(uuid, state, extra = {}) {
+  return {
+    uuid,
+    state,
+    chunkX: '0',
+    chunkY: '0',
+    chunkZ: '0',
+    distance: 8,
+    decayRate: 1,
+    sequenceNumber: 0,
+    epochMillis: '1000',
+    ...extra,
+  };
+}
+
+test('RemoteActorStore: registry, self-echo filter, history, staleness, events', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const { client, net } = fakeClient();
+
+  const ticker = manualTicker();
+  const codec = jsonCodec();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    self: { codec, initialState: { x: 0 }, sendIntervalMs: false, now: () => ticker.now },
+    actors: { codec, staleAfterMs: 1000, reapIntervalMs: 500, historySize: 3, now: () => ticker.now },
+  });
+  const actors = session.actors;
+
+  const events = [];
+  actors.onJoin((a) => events.push(['join', a.uuid]));
+  actors.onUpdate((a) => events.push(['update', a.uuid, a.state.x]));
+  actors.onLeave((a) => events.push(['leave', a.uuid]));
+
+  const u1 = 'b'.repeat(32);
+  const u2 = 'c'.repeat(32);
+
+  // Self-echo is filtered out of the registry.
+  net.handlers.actorUpdate(actorNote(session.self.uuid, codec.encode({ x: 99 })));
+  assert.equal(actors.count, 0);
+
+  // First update joins; identity is stable across updates; samples accumulate.
+  net.handlers.actorUpdate(actorNote(u1, codec.encode({ x: 1 })));
+  const ref = actors.get(u1);
+  assert.equal(actors.count, 1);
+  ticker.advance(100);
+  net.handlers.actorUpdate(actorNote(u1, codec.encode({ x: 2 }), { chunkX: '5' }));
+  assert.equal(actors.get(u1), ref, 'record identity is stable');
+  assert.equal(ref.state.x, 2);
+  assert.equal(ref.chunk.x, '5');
+  assert.deepEqual(ref.samples.map((s) => s.state.x), [2, 1], 'newest first');
+  net.handlers.actorUpdate(actorNote(u1, codec.encode({ x: 3 })));
+  net.handlers.actorUpdate(actorNote(u1, codec.encode({ x: 4 })));
+  assert.deepEqual(ref.samples.map((s) => s.state.x), [4, 3, 2], 'history capped at 3');
+
+  net.handlers.actorUpdate(actorNote(u2, codec.encode({ x: 10 })));
+  assert.equal(actors.count, 2);
+  assert.deepEqual(events.filter(([k]) => k === 'join').map(([, u]) => u), [u1, u2]);
+
+  // Undecodable payloads are counted, not thrown.
+  net.handlers.actorUpdate(actorNote('d'.repeat(32), '!!!not-base64-json!!!'));
+  assert.equal(actors.decodeFailures, 1);
+  assert.equal(actors.count, 2);
+
+  // Staleness: u2 goes quiet after its t=100 update. Read-time filtering
+  // hides it BEFORE the reap timer catches up; the reap then fires onLeave.
+  const rev = actors.revision;
+  ticker.advance(400); // t=500
+  net.handlers.actorUpdate(actorNote(u1, codec.encode({ x: 5 })));
+  ticker.advance(700); // t=1200: last reap ran at t=1000 (u2 only 900ms quiet)
+  assert.equal(actors.get(u2), undefined, 'read-time filter hides the stale actor');
+  assert.deepEqual(actors.list().map((a) => a.uuid), [u1]);
+  assert.ok(!events.some(([k]) => k === 'leave'), 'not physically reaped yet');
+  net.handlers.actorUpdate(actorNote(u1, codec.encode({ x: 6 }))); // keep u1 fresh
+  ticker.advance(300); // t=1500: reap sees u2 1400ms quiet → deletes + onLeave
+  assert.ok(events.some(([k, u]) => k === 'leave' && u === u2), 'reap fired onLeave');
+  assert.deepEqual(actors.list().map((a) => a.uuid), [u1]);
+  assert.ok(actors.revision > rev);
+
+  session.dispose();
+});
+
+test('RemoteActorStore lanes: decode once, route to first match', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const { client, net } = fakeClient();
+
+  const ticker = manualTicker();
+  const codec = jsonCodec();
+  const session = createWorldSession(client, '1', {
+    ticker,
+    actors: {
+      codec,
+      now: () => ticker.now,
+      staleAfterMs: false,
+      lanes: {
+        mobs: (state) => (state.flags & 2) !== 0,
+        players: () => true,
+      },
+    },
+  });
+  const actors = session.actors;
+
+  const player = 'p'.repeat(32);
+  const mob = 'm'.repeat(32);
+  net.handlers.actorUpdate(actorNote(player, codec.encode({ flags: 0, x: 1 })));
+  net.handlers.actorUpdate(actorNote(mob, codec.encode({ flags: 2, x: 2 })));
+
+  // First matching lane wins: the mob never lands in players.
+  assert.deepEqual(actors.lane('mobs').list().map((a) => a.uuid), [mob]);
+  assert.deepEqual(actors.lane('players').list().map((a) => a.uuid), [player]);
+  assert.equal(actors.count, 2);
+  assert.equal(actors.get(mob).state.x, 2, 'store-level get searches lanes');
+
+  assert.throws(() => actors.lane('npcs'), /Unknown actor lane 'npcs'/);
+
+  // clear() empties every lane and fires leave events.
+  let leaves = 0;
+  actors.onLeave(() => (leaves += 1));
+  actors.clear();
+  assert.equal(actors.count, 0);
+  assert.equal(leaves, 2);
+
+  session.dispose();
+});
+
 test('caller-supplied tickers are not disposed with the session', async () => {
   const { createWorldSession, manualTicker } = await loadStores();
   const { client } = fakeClient();
