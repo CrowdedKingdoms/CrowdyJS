@@ -14,6 +14,8 @@ export {
   inventoryBlueprint,
   inventoryNames,
   kitPolicyJson,
+  leaderboardsBlueprint,
+  leaderboardsNames,
   lockBlueprint,
   lockNames,
   lootBlueprint,
@@ -54,6 +56,8 @@ export {
   type KitOwnerIdKind,
   type KitSelectorSpec,
   type KitTrustedAuthority,
+  type LeaderboardsBlueprintOptions,
+  type LeaderboardsNames,
   type LockAuthority,
   type LockBlueprintOptions,
   type LockNames,
@@ -107,6 +111,11 @@ export {
   type KitTradeOffer,
   type KitWallet,
 } from './economy.js';
+export {
+  LeaderboardsKit,
+  type KitLeaderboardEntry,
+  type LeaderboardsKitOptions,
+} from './leaderboards.js';
 export { LootKit, type KitLootRoll, type LootKitOptions } from './loot.js';
 export { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 export { NpcsKit, type NpcsKitOptions, type KitNpc } from './npcs.js';

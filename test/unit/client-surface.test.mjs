@@ -130,6 +130,9 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.social.chat, 'kit.social.chat', [
     'room', 'join', 'send', 'onMessage',
   ]);
+  assertMethods(kit.leaderboards, 'kit.leaderboards', [
+    'ensureEntry', 'submit', 'board', 'top', 'around', 'season',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

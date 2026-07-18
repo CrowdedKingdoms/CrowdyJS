@@ -14,6 +14,7 @@ import { CombatKit, type CombatKitOptions } from './combat.js';
 import { DecksKit, type DecksKitOptions } from './decks.js';
 import { EconomyKit, type EconomyKitOptions } from './economy.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
+import { LeaderboardsKit, type LeaderboardsKitOptions } from './leaderboards.js';
 import { LootKit, type LootKitOptions } from './loot.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
@@ -39,6 +40,7 @@ export interface GameKitOptions {
   decks?: DecksKitOptions;
   worldsim?: WorldsimKitOptions;
   social?: SocialKitOptions;
+  leaderboards?: LeaderboardsKitOptions;
 }
 
 /**
@@ -126,6 +128,8 @@ export class GameKitClient {
   readonly worldsim: WorldsimKit;
   /** Social helpers (parties, guilds, chat over teams + channels). */
   readonly social: SocialKit;
+  /** Leaderboard helpers (trusted submits, client-side ranking, seasons). */
+  readonly leaderboards: LeaderboardsKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -160,6 +164,7 @@ export class GameKitClient {
       gameApps,
       options.social,
     );
+    this.leaderboards = new LeaderboardsKit(appId, gameModel, options.leaderboards);
   }
 
   /**

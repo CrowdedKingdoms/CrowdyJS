@@ -1055,6 +1055,47 @@ test('guildBlueprint composes a group-gated hall with a guild-bank inventory', a
   assert.throws(() => guildBlueprint({ guildGroupId: '' }), /requires guildGroupId/);
 });
 
+test('leaderboardsBlueprint generates trusted submits and season rolls', async () => {
+  const { leaderboardsBlueprint, leaderboardsNames } = await loadSdk();
+
+  const bp = leaderboardsBlueprint({ seasonCron: '0 0 1 * *' });
+  assert.equal(bp.containerTypes[0].typeName, 'LeaderboardEntry');
+
+  // submit_score: host-gated by default, keeps the best score.
+  const submit = bp.functions.find((f) => f.name === 'submit_score');
+  assert.deepEqual(JSON.parse(submit.invokePolicyJson), { type: 'is_host' });
+  assert.equal(submit.mutations[0].expression, 'max(self.score, $points)');
+
+  // Season roll: cron automation over every entry.
+  const roll = bp.functions.find((f) => f.name === 'roll_season');
+  assert.equal(roll.autonomousInvocable, true);
+  assert.deepEqual(
+    roll.mutations.map((m) => [m.property, m.expression]),
+    [
+      ['season', 'self.season + 1'],
+      ['score', '0'],
+      ['rank', '0'],
+    ],
+  );
+  const auto = bp.automations.find((a) => a.name === 'season-roll');
+  assert.equal(auto.scheduleKind, 'cron');
+  assert.equal(auto.cronExpr, '0 0 1 * *');
+  assert.equal(auto.targetTypeName, 'LeaderboardEntry');
+
+  // Authority + overwrite + no-season variants.
+  const arena = leaderboardsBlueprint({
+    typePrefix: 'Arena',
+    submitAuthority: 'automation',
+    keepBest: false,
+  });
+  assert.equal(leaderboardsNames('Arena').submitFn, 'arena_submit_score');
+  const arenaSubmit = arena.functions.find((f) => f.name === 'arena_submit_score');
+  assert.equal(arenaSubmit.autonomousInvocable, true);
+  assert.deepEqual(JSON.parse(arenaSubmit.invokePolicyJson), { type: 'is_automation' });
+  assert.equal(arenaSubmit.mutations[0].expression, '$points');
+  assert.equal(arena.automations, undefined);
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

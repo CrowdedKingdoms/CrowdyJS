@@ -56,6 +56,12 @@ export {
   type InventoryNames,
 } from './inventory.js';
 export {
+  leaderboardsBlueprint,
+  leaderboardsNames,
+  type LeaderboardsBlueprintOptions,
+  type LeaderboardsNames,
+} from './leaderboards.js';
+export {
   lootBlueprint,
   lootNames,
   lootRollFn,
