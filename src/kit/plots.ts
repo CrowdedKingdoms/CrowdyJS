@@ -20,7 +20,11 @@ export interface KitPlot {
   displayName: string;
   gridId: number;
   price: number;
-  /** 0 when unowned. */
+  /**
+   * 0 when unowned. Parsed numerically for both owner-mirror kinds: with
+   * `ownerIdKind: 'string'` blueprints the stored decimal string converts,
+   * and the for-sale sentinel `""` parses to 0.
+   */
   ownerUserId: number;
   rentPrice?: number;
   rentTtlSeconds?: number;

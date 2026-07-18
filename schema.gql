@@ -3275,11 +3275,11 @@ type Query {
     """
     Maximum number of entries to return. DEFAULTS to 500 when omitted; allowed range is 1-50000.
     """
-    limit: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination.")
+    limit: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination. Removal no earlier than 2027-01-01. (Ignored by voxelUpdateHistoryConnection, which shares these args.)")
     """
     Number of entries to skip for pagination. Defaults to 0 when omitted; allowed range is 0-1000000.
     """
-    offset: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination.")
+    offset: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination. Removal no earlier than 2027-01-01. (Ignored by voxelUpdateHistoryConnection, which shares these args.)")
   ): [VoxelUpdateHistoryEvent!]!
   """
   Relay-style cursor-paginated version of `voxelUpdateHistory`: returns entries from the immutable voxel edit history (voxel_updates_history) for an app, newest first, optionally filtered by user id and a changed-at time window. Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); the legacy `limit`/`offset` args are ignored on this query. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only.
@@ -3298,11 +3298,11 @@ type Query {
     """
     Maximum number of entries to return. DEFAULTS to 500 when omitted; allowed range is 1-50000.
     """
-    limit: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination.")
+    limit: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination. Removal no earlier than 2027-01-01. (Ignored by voxelUpdateHistoryConnection, which shares these args.)")
     """
     Number of entries to skip for pagination. Defaults to 0 when omitted; allowed range is 0-1000000.
     """
-    offset: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination.")
+    offset: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination. Removal no earlier than 2027-01-01. (Ignored by voxelUpdateHistoryConnection, which shares these args.)")
     """Return the first N edges after `after`. Default 50; clamped to 1..200."""
     first: Int
     """
@@ -3630,9 +3630,9 @@ type Query {
     """Optional: filter by outcome (true = succeeded, false = failed)."""
     success: Boolean
     """Max number of events to return (page size)."""
-    limit: Int @deprecated(reason: "Use gameModelEventsConnection(first:, after:) instead. See /overview/pagination.")
+    limit: Int @deprecated(reason: "Use gameModelEventsConnection(first:, after:) instead. See /overview/pagination. Removal no earlier than 2027-01-01.")
     """Number of events to skip (for pagination)."""
-    offset: Int @deprecated(reason: "Use gameModelEventsConnection(first:, after:) instead. See /overview/pagination.")
+    offset: Int @deprecated(reason: "Use gameModelEventsConnection(first:, after:) instead. See /overview/pagination. Removal no earlier than 2027-01-01.")
   ): [GmEvent!]!
   """
   Relay-style cursor-paginated version of `gameModelEvents`: query the function-invocation event log (audit trail) with optional filters. Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`), which replace the legacy `limit`/`offset`. Useful for debugging functions or showing recent activity. Requires a valid token.
@@ -8652,12 +8652,12 @@ type Subscription {
 }
 
 """
-All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed.
+All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version.
 """
 union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | ChannelMessageNotification | GenericErrorResponse | RealtimeConnectionEvent
 
 """
-Response from the UDP game server for an actor update request. Received via the udpNotifications subscription.
+LEGACY — never emitted. The game server retired the dedicated actor-update response opcode (129); an applied update now arrives as your own ActorUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version.
 """
 type ActorUpdateResponse {
   """The ID of the app where the actor update was processed."""
@@ -8711,7 +8711,7 @@ type ActorUpdateNotification {
 }
 
 """
-Response from the UDP game server for a voxel update request. Received via the udpNotifications subscription.
+LEGACY — never emitted. The game server retired the dedicated voxel-update response opcode (132); an applied update now arrives as your own VoxelUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version.
 """
 type VoxelUpdateResponse {
   """The ID of the app where the voxel update was processed."""
