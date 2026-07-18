@@ -115,6 +115,12 @@ export {
   type TypedEvent,
 } from './inbox.js';
 export {
+  ContainerMirror,
+  attachContainerMirror,
+  type ContainerMirrorConfig,
+  type MirroredContainer,
+} from './model.js';
+export {
   AvatarStateStore,
   HostTracker,
   SaveStateStore,
@@ -141,6 +147,7 @@ import {
   type HostTrackerConfig,
   type SaveStateConfig,
 } from './durable.js';
+import { ContainerMirror, type ContainerMirrorConfig } from './model.js';
 import { ErrorStore, type ErrorStoreConfig } from './errors.js';
 import {
   ActorInbox,
@@ -222,6 +229,12 @@ export interface WorldSessionConfig<
    * `true` for JSON defaults.
    */
   avatar?: AvatarStateConfig<TAvatarPublic, TAvatarPrivate, TAvatarApp> | true;
+  /**
+   * Game-model mirror: typed cached container snapshots with coalesced
+   * refresh + notify-to-pull channel binding ({@link ContainerMirror}). Pass
+   * `true` for the defaults.
+   */
+  model?: ContainerMirrorConfig | true;
 }
 
 /** The session returned by {@link createWorldSession}. */
@@ -259,6 +272,8 @@ export interface WorldSession<
   readonly save?: SaveStateStore<TSave>;
   /** The typed avatar-state store (present when `config.avatar` was given). */
   readonly avatar?: AvatarStateStore<TAvatarPublic, TAvatarPrivate, TAvatarApp>;
+  /** The game-model container mirror (present when `config.model` was given). */
+  readonly model?: ContainerMirror;
   /** Close the shared subscription, cancel timers, and release the stores. */
   dispose(): void;
   /** The wiring context (for custom store implementations). */
@@ -371,6 +386,9 @@ export function createWorldSession<
         config.avatar === true ? {} : config.avatar,
       )
     : undefined;
+  const model = config.model
+    ? new ContainerMirror(core, config.model === true ? {} : config.model)
+    : undefined;
   return {
     appId,
     context: core,
@@ -384,6 +402,7 @@ export function createWorldSession<
     ...(host ? { host } : {}),
     ...(save ? { save } : {}),
     ...(avatar ? { avatar } : {}),
+    ...(model ? { model } : {}),
     dispose: () => core.dispose(),
   };
 }

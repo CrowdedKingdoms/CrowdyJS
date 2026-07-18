@@ -1004,6 +1004,84 @@ test('AvatarStateStore: binds an avatar and round-trips typed public/private/app
   session.dispose();
 });
 
+test('ContainerMirror: typed snapshots, change-only events, channel-ping refresh', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+
+  const containers = new Map([
+    ['c-1', { typeName: 'MatchMeta', displayName: 'Match', ownerUserId: '7', props: { state: 'lobby', round: 0 } }],
+    ['c-2', { typeName: 'Score', displayName: 'Score', ownerUserId: '8', props: { points: 0 } }],
+  ]);
+  let pulls = 0;
+  const gameModelApi = {
+    async containerState({ containerId }) {
+      pulls += 1;
+      const entry = containers.get(containerId);
+      return {
+        containerId,
+        typeName: entry.typeName,
+        displayName: entry.displayName,
+        ownerUserId: entry.ownerUserId,
+        propertiesJson: JSON.stringify(entry.props),
+      };
+    },
+  };
+  const { client, net } = fakeClient({ gameModel: gameModelApi });
+  const ticker = manualTicker();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    model: { now: () => ticker.now },
+  });
+  const mirror = session.model;
+
+  const changes = [];
+  mirror.onChange((c) => changes.push([c.containerId, c.revision]));
+
+  // watch() fetches the initial typed snapshot.
+  const match = await mirror.watch('c-1', (props) => ({
+    state: String(props.state),
+    round: Number(props.round),
+  }));
+  await mirror.watch('c-2');
+  assert.deepEqual(match.value, { state: 'lobby', round: 0 });
+  assert.equal(mirror.get('c-1').revision, 1);
+  assert.equal(mirror.list().length, 2);
+  assert.deepEqual(changes, [['c-1', 1], ['c-2', 1]]);
+
+  // Unchanged refreshes bump nothing and fire nothing.
+  await mirror.refresh('c-1');
+  assert.equal(mirror.get('c-1').revision, 1);
+  assert.equal(changes.length, 2);
+
+  // A bound channel ping re-pulls everything; only changed snapshots fire.
+  const off = mirror.bindToChannel('77');
+  containers.get('c-1').props = { state: 'active', round: 1 };
+  net.handlers.channelMessage({ channelId: '77', uuid: 'u'.repeat(32), payload: 'AA==', epochMillis: '1' });
+  await sleep(0);
+  assert.equal(mirror.get('c-1').value.state, 'active');
+  assert.equal(mirror.get('c-1').revision, 2);
+  assert.equal(mirror.get('c-2').revision, 1, 'unchanged container did not bump');
+  assert.deepEqual(changes[2], ['c-1', 2]);
+
+  // Snapshot identity is stable across refreshes.
+  assert.equal(mirror.get('c-1'), match);
+
+  // Pings on unbound channels do nothing; unbinding stops refreshes.
+  const before = pulls;
+  net.handlers.channelMessage({ channelId: '99', uuid: 'u'.repeat(32), payload: 'AA==', epochMillis: '2' });
+  await sleep(0);
+  assert.equal(pulls, before);
+  off();
+  net.handlers.channelMessage({ channelId: '77', uuid: 'u'.repeat(32), payload: 'AA==', epochMillis: '3' });
+  await sleep(0);
+  assert.equal(pulls, before);
+
+  // unwatch drops the snapshot.
+  mirror.unwatch('c-2');
+  assert.equal(mirror.get('c-2'), undefined);
+
+  session.dispose();
+});
+
 test('caller-supplied tickers are not disposed with the session', async () => {
   const { createWorldSession, manualTicker } = await loadStores();
   const { client } = fakeClient();
