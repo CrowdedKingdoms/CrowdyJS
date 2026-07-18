@@ -33,6 +33,8 @@ export {
   questsNames,
   toSnakeCase,
   trustedAuthorityFields,
+  worldsimBlueprint,
+  worldsimNames,
   type CombatBlueprintOptions,
   type CombatNames,
   type DecksBlueprintOptions,
@@ -70,6 +72,8 @@ export {
   type QuestsBlueprintOptions,
   type QuestsNames,
   type SelectorPermissionPredicate,
+  type WorldsimBlueprintOptions,
+  type WorldsimNames,
 } from './blueprints/index.js';
 export {
   GameKitClient,
@@ -118,6 +122,14 @@ export {
   type KitSkillRank,
   type ProgressionKitOptions,
 } from './progression.js';
+export {
+  WorldsimKit,
+  type KitCrop,
+  type KitResourceNode,
+  type KitWaveSpawner,
+  type KitWorldState,
+  type WorldsimKitOptions,
+} from './worldsim.js';
 export {
   kitInvoke,
   toKitInvokeResult,

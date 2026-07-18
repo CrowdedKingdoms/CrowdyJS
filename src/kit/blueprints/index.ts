@@ -98,3 +98,9 @@ export {
   type NpcBehaviorTrigger,
   type NpcBlueprintOptions,
 } from './npcs.js';
+export {
+  worldsimBlueprint,
+  worldsimNames,
+  type WorldsimBlueprintOptions,
+  type WorldsimNames,
+} from './worldsim.js';

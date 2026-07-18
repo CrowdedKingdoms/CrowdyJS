@@ -926,6 +926,102 @@ test('decksBlueprint generates owner-visibility hidden hands and position dealin
   );
 });
 
+test('worldsimBlueprint generates clock/regen/growth/wave automations with spatial notify', async () => {
+  const { worldsimBlueprint, worldsimNames } = await loadSdk();
+
+  const bp = worldsimBlueprint({ waves: { intervalMs: 30000, growth: 2 } });
+  assert.deepEqual(
+    bp.containerTypes.map((t) => t.typeName),
+    ['WorldState', 'ResourceNode', 'Crop', 'WaveSpawner'],
+  );
+
+  // World clock: automation-only, wraps hour/bumps day, re-rolls weather,
+  // and pushes a spatial time-changed ping (no polling for the sky).
+  const clock = bp.functions.find((f) => f.name === 'advance_time');
+  assert.equal(clock.autonomousInvocable, true);
+  assert.deepEqual(JSON.parse(clock.invokePolicyJson), { type: 'is_automation' });
+  assert.equal(
+    clock.mutations.find((m) => m.property === 'time_of_day').expression,
+    '(self.time_of_day + 1) % 24',
+  );
+  assert.equal(
+    clock.mutations.find((m) => m.property === 'day').expression,
+    'if(self.time_of_day >= 23, self.day + 1, self.day)',
+  );
+  assert.ok(clock.mutations.some((m) => m.property === 'weather'));
+  assert.equal(clock.notifications.length, 1);
+  assert.equal(clock.notifications[0].kind, 'spatial');
+  const notifyArgs = Object.fromEntries(
+    clock.notifications[0].args.map((a) => [a.name, a.expression]),
+  );
+  assert.equal(notifyArgs.chunk_x, 'self.cx');
+  assert.equal(notifyArgs.state, 'to_string(self.time_of_day)');
+  assert.equal(notifyArgs.distance, '8');
+
+  // set_weather: not(allow) denies everyone — app admins bypass.
+  const setWeather = bp.functions.find((f) => f.name === 'set_weather');
+  assert.deepEqual(JSON.parse(setWeather.invokePolicyJson), {
+    type: 'not',
+    rule: { type: 'allow' },
+  });
+
+  // Node regen: clamped tick over depleted nodes only.
+  const regen = bp.functions.find((f) => f.name === 'regen_node');
+  assert.equal(
+    regen.mutations[0].expression,
+    'min(self.max_amount, self.amount + self.regen_rate)',
+  );
+  const regenAuto = bp.automations.find((a) => a.name === 'node-regen');
+  assert.deepEqual(JSON.parse(regenAuto.selectorJson), {
+    selfWhere: [{ key: 'amount', op: '<', value: 'self.max_amount' }],
+  });
+
+  // gather_node: atomic node decrement + stack grant with item/owner guards.
+  const gather = bp.functions.find((f) => f.name === 'gather_node');
+  const gatherGuard = JSON.parse(gather.invokePolicyJson).expression;
+  assert.match(gatherGuard, /self\.amount >= \$amount/);
+  assert.match(gatherGuard, /ref\(\$to_stack_id\)\.item_id == self\.resource_item_id/);
+
+  // Crops: growth automation + atomic harvest that resets the stage.
+  const harvest = bp.functions.find((f) => f.name === 'harvest');
+  const harvestPolicy = JSON.parse(harvest.invokePolicyJson);
+  assert.ok(harvestPolicy.rules.some((r) => r.type === 'owner_of_self'));
+  assert.match(
+    harvestPolicy.rules.find((r) => r.type === 'condition').expression,
+    /self\.stage >= self\.max_stage/,
+  );
+  assert.deepEqual(harvest.mutations.map((m) => m.property), ['stage', 'quantity']);
+
+  // Waves: counters only — spawning stays host-side.
+  const wave = bp.functions.find((f) => f.name === 'spawn_wave');
+  assert.equal(wave.mutations[1].expression, 'self.next_wave_size + 2');
+  assert.equal(bp.automations.find((a) => a.name === 'wave-spawner').intervalMs, 30000);
+
+  // Feature toggles + prefix + custom day length.
+  const farm = worldsimBlueprint({
+    typePrefix: 'Farm',
+    time: { intervalMs: 30000, hoursPerDay: 12, weather: false },
+    nodes: false,
+  });
+  assert.equal(worldsimNames('Farm').cropType, 'FarmCrop');
+  assert.equal(
+    farm.containerTypes.find((t) => t.typeName === 'FarmResourceNode'),
+    undefined,
+  );
+  const farmClock = farm.functions.find((f) => f.name === 'farm_advance_time');
+  assert.equal(
+    farmClock.mutations.find((m) => m.property === 'time_of_day').expression,
+    '(self.time_of_day + 1) % 12',
+  );
+  assert.equal(farmClock.mutations.find((m) => m.property === 'weather'), undefined);
+  assert.equal(farm.functions.find((f) => f.name === 'farm_set_weather'), undefined);
+
+  assert.throws(
+    () => worldsimBlueprint({ time: false, nodes: false, crops: false }),
+    /every feature disabled/,
+  );
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

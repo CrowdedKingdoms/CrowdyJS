@@ -117,6 +117,10 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.decks, 'kit.decks', [
     'deal', 'shuffle', 'cards', 'myHand', 'board', 'draw', 'drawCard', 'play', 'discard',
   ]);
+  assertMethods(kit.worldsim, 'kit.worldsim', [
+    'ensureWorld', 'worldState', 'setWeather', 'createNode', 'nodes', 'gather',
+    'plant', 'crops', 'harvest', 'createSpawner', 'spawners', 'runNow', 'setEnabled',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');
