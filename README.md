@@ -106,7 +106,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
-| `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, `kit.plots` (buy/rent land with transactional, replication-enforced grid grants), plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |
+| `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, `kit.plots` (buy/rent land with transactional, replication-enforced grid grants), and the genre layers `kit.economy` (wallets/shops/trades/market), `kit.progression` (xp/skills/achievements/rating), `kit.loot`, `kit.quests`, `kit.combat`, `kit.matches` (session lobbies/turns/scores with notify-to-pull channels), `kit.decks` (hidden hands), `kit.worldsim` (clock/nodes/crops/waves), `kit.social` (parties/guilds/chat over teams+channels), `kit.leaderboards`, `kit.features` (tier gates) — plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |
 
 **Studio-admin surface** (privileged; drive with a server-side / studio token, grouped under `client.admin`):
 
@@ -325,9 +325,27 @@ selector has `candidatePermissionWhere: [{ userFrom: { property: 'owner_user_id'
 op: 'lacks', key: 'access', grid: { property: 'grid_id' } }]` reacts only to
 intruders.
 
+As of 8.3.0 the kit covers the common genre staples end to end — every layer
+is a blueprint builder + typed runtime helper:
+
+| Layer | Builder → helper | Highlights |
+| --- | --- | --- |
+| Economy | `economyBlueprint` → `kit.economy` | multi-currency wallets, atomic shop buys, escrow trades, player market, restock automation |
+| Progression | `progressionBlueprint` → `kit.progression` | xp/levels via the `fn:` curve helper, skill prerequisite chains, achievements, host-gated rating |
+| Loot | `lootBlueprint` → `kit.loot` | weighted tables unrolled into seed-driven expressions, atomic single-claim, event-triggered drops |
+| Quests | `questsBlueprint` → `kit.quests` | event-automation progress, atomic claim into stack+wallet, cron daily resets |
+| Combat | `combatBlueprint` → `kit.combat` | server-side damage/death, status-effect tick automation (selector join), `turnBased`/`hostSynced` |
+| Matches | `matchesBlueprint` → `kit.matches` | session lobbies/rounds/turns/scores, per-match channel + `onMatchChanged` (notify-to-pull) |
+| Decks | `decksBlueprint` → `kit.decks` | hidden hands via owner-visibility `card_id`, shuffle-by-position automation |
+| World sim | `worldsimBlueprint` → `kit.worldsim` | day/night clock with spatial notify, node regen + atomic gather, crops, wave counters |
+| Social | `guildBlueprint` → `kit.social` | parties/guilds/chat over teams+channels, grid territory grants, guild hall + bank composite |
+| Leaderboards | `leaderboardsBlueprint` → `kit.leaderboards` | trusted keep-best submits, client-side ranking, cron seasons |
+| Monetization | `featureGate` → `kit.features` | feature keys, tier grants, `*policyExtra` gating on builders |
+
 See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/game-api/modeling-game-concepts)
-(the underlying model) and [Game Kit](https://docs.crowdedkingdoms.com/crowdyjs/game-kit)
-(the SDK surface).
+(the underlying model + genre map) and [Game Kit](https://docs.crowdedkingdoms.com/crowdyjs/game-kit)
+(the SDK surface + the simulation-tier / notify-to-pull / timer / hidden-info
+/ anti-cheat patterns).
 
 ## Errors
 
