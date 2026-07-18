@@ -1168,6 +1168,68 @@ test('featureGate + policyExtra monetization-gate existing builders', async () =
   assert.deepEqual(openPolicy.rules[1], { type: 'tier_feature', feature: 'vip' });
 });
 
+test('kitInvoke maps FORBIDDEN GraphQL errors from older servers to success:false', async () => {
+  const { kitInvoke, CrowdyGraphQLError } = await loadSdk();
+
+  // Older cks-game-api builds throw FORBIDDEN for invoke policy denials
+  // instead of resolving with success:false — the kit maps that onto the
+  // documented result contract.
+  const denialMessage = "You are not authorized to invoke 'open_door'";
+  const forbidden = new CrowdyGraphQLError([
+    { message: denialMessage, extensions: { code: 'FORBIDDEN' } },
+  ]);
+  const result = await kitInvoke(
+    { invoke: async () => { throw forbidden; } },
+    { appId: '1', functionName: 'open_door', selfContainerId: 'door-1' },
+  );
+  assert.equal(result.success, false);
+  assert.equal(result.errorMessage, denialMessage);
+  assert.equal(result.returnValue, undefined);
+  // The raw result is synthesized (no server payload exists for this case).
+  assert.equal(result.raw.success, false);
+  assert.equal(result.raw.functionName, 'open_door');
+  assert.equal(result.raw.errorMessage, denialMessage);
+  assert.deepEqual(result.raw.mutationsApplied, []);
+
+  // Any other GraphQL error code still throws unchanged.
+  const unauthenticated = new CrowdyGraphQLError([
+    { message: 'token expired', extensions: { code: 'UNAUTHENTICATED' } },
+  ]);
+  await assert.rejects(
+    kitInvoke(
+      { invoke: async () => { throw unauthenticated; } },
+      { appId: '1', functionName: 'open_door', selfContainerId: 'door-1' },
+    ),
+    (err) => err === unauthenticated,
+  );
+
+  // Non-GraphQL errors (network etc.) also propagate unchanged.
+  await assert.rejects(
+    kitInvoke(
+      { invoke: async () => { throw new Error('connection refused'); } },
+      { appId: '1', functionName: 'open_door', selfContainerId: 'door-1' },
+    ),
+    /connection refused/,
+  );
+
+  // The normal resolved path is unaffected.
+  const ok = await kitInvoke(
+    {
+      invoke: async () => ({
+        eventId: 'e-1',
+        functionName: 'open_door',
+        success: true,
+        returnValueJson: '{"opened":true}',
+        errorMessage: null,
+        mutationsApplied: [],
+      }),
+    },
+    { appId: '1', functionName: 'open_door', selfContainerId: 'door-1' },
+  );
+  assert.equal(ok.success, true);
+  assert.deepEqual(ok.returnValue, { opened: true });
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({
