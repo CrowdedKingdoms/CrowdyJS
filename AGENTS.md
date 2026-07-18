@@ -20,6 +20,21 @@ worked reference.
 - `src/operations/<domain>/*.graphql` — the GraphQL documents behind each
   method (e.g. `gameModel/GameModelAutomations.graphql`, `udp/UdpNotifications.graphql`).
 - `src/world.ts` — `client.world(appId)` facade: `actor().join/sendState/sendText/sendToActor`.
+- `src/stores/` — the **World Stores** layer (`@crowdedkingdoms/crowdyjs/stores`
+  subpath; core client never imports it): `createWorldSession(client, appId,
+  config)` opens ONE `udpNotifications` subscription and constructs only the
+  configured stores — `self` (LocalActorStore: persisted uuid, typed state,
+  5 Hz send loop with dedup + keyframes, lastSent/lastAck/status), `actors`
+  (RemoteActorStore: decode-once lanes, sample history, read-time staleness),
+  `errors` (GenericErrorResponse attributed to tracked sends), `chunks`
+  (ChunkStore: byDistance loading + voxelStates hydration, realtime merge,
+  optimistic setVoxel, worldgen write-back), `channelInbox`/`actorInbox`/
+  `events` (typed messaging), `host` (heartbeat tracker), `save`/`avatar`
+  (typed durable blobs), `model` (ContainerMirror, notify-to-pull channel
+  binding). Typed via `StateCodec` (json/text/raw/`structCodec` binary DSL);
+  timers ride a `Ticker` (`workerTicker()` = background-tab-throttling
+  exempt). Conditional session typing: unconfigured stores don't exist on
+  the type.
 - `src/kit/` — `client.kit(appId)` Game Kit facade over `gameModel` (plus
   `channels`/`teams`/`udp` for the social/match layers): blueprint builders in
   `src/kit/blueprints/` (`inventoryBlueprint` / `lockBlueprint` /
@@ -63,7 +78,8 @@ worked reference.
 
 | Game concept | API surface |
 |---|---|
-| Player presence & movement | `udp.subscribe` + `udp.sendActorUpdate` (chunk-addressed, base64 `state` blob, `distance` fan-out); `world(appId)` helpers |
+| Player presence & movement | `udp.subscribe` + `udp.sendActorUpdate` (chunk-addressed, base64 `state` blob, `distance` fan-out); `world(appId)` helpers; SDK-managed: World Stores `session.self` (send loop) + `session.actors` (typed registry) |
+| Client-side game-state bookkeeping (actor registries, chunk caches, codecs, inboxes) | `createWorldSession` from `@crowdedkingdoms/crowdyjs/stores` — opt-in typed stores over one shared subscription |
 | Persistent terrain / world | `chunks.get` / `chunks.byDistance` / `chunks.update` (durable) + `udp.sendVoxelUpdate` (realtime edits) |
 | Per-block metadata | app-defined blob conventions inside chunk `voxelStates` (see BWF `voxelState.ts`) |
 | Server-side rules & data (inventory, stats, crafting, NPCs) | `gameModel` containers / properties / functions with invoke policies — schema admin-seeded before play |

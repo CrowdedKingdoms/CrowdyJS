@@ -221,6 +221,21 @@ export {
   type WorldsimKitOptions,
   type WorldsimNames,
 } from './kit/index.js';
+// -----------------------------------------------------------------------------
+// World Stores (opt-in SDK-managed game state). IMPLEMENTATIONS live behind
+// the `@crowdedkingdoms/crowdyjs/stores` subpath so the core bundle never
+// includes them; only the headline TYPES are re-exported here for
+// convenience. Import the factories (createWorldSession, structCodec, …)
+// from '.../stores'.
+// -----------------------------------------------------------------------------
+export type {
+  StateCodec,
+  Ticker,
+  WorldSession,
+  WorldSessionConfig,
+  WorldStoresClient,
+} from './stores/index.js';
+
 export {
   CrowdyError,
   CrowdyGraphQLError,

@@ -7,7 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSdk } from '../helpers.mjs';
+import { loadSdk, loadStores } from '../helpers.mjs';
 
 function assertMethods(obj, name, methods) {
   assert.ok(obj && typeof obj === 'object', `${name} should be an object`);
@@ -143,5 +143,75 @@ test('client exposes the full management + game sub-client surface', async () =>
   assert.equal(client.admin.environments, client.environments, 'admin.environments aliases client.environments');
   assert.equal(client.admin.grids, client.gameApps, 'admin.grids aliases client.gameApps');
 
+  client.close();
+});
+
+test('World Stores session exposes exactly the configured stores', async () => {
+  const { createCrowdyClient } = await loadSdk();
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const client = createCrowdyClient({
+    managementUrl: 'https://management.invalid',
+    httpUrl: 'https://game.invalid',
+    wsUrl: 'wss://game.invalid',
+  });
+
+  // A CrowdyClient satisfies WorldStoresClient structurally. Stub the
+  // realtime subscription point so this stays an offline wiring test.
+  client.udp.subscribe = () => () => {};
+  const codec = jsonCodec();
+  const session = createWorldSession(client, '1', {
+    ticker: manualTicker(),
+    self: { codec, initialState: {}, sendIntervalMs: false },
+    actors: { codec },
+    errors: true,
+    chunks: true,
+    channelInbox: true,
+    actorInbox: true,
+    events: true,
+    host: { heartbeatImmediately: false },
+    save: true,
+    avatar: true,
+    model: true,
+  });
+
+  assert.equal(session.appId, '1');
+  assertMethods(session, 'session', ['dispose']);
+  assertMethods(session.self, 'session.self', [
+    'setState', 'patchState', 'join', 'moveTo', 'sendNow', 'refresh',
+  ]);
+  assert.equal(session.self.uuid.length, 32);
+  assertMethods(session.actors, 'session.actors', [
+    'lane', 'list', 'get', 'onJoin', 'onUpdate', 'onLeave', 'reap', 'clear',
+  ]);
+  assertMethods(session.errors, 'session.errors', ['recent', 'lastFor', 'onError', 'clear']);
+  assertMethods(session.chunks, 'session.chunks', [
+    'get', 'list', 'voxelTypeAt', 'voxelStateAt', 'onChunkChanged', 'ensureAround',
+    'hydrate', 'setVoxel', 'seed', 'markDirty', 'flush', 'pruneBeyond',
+  ]);
+  assertMethods(session.channelInbox, 'session.channelInbox', [
+    'messages', 'channels', 'onMessage', 'send', 'clear',
+  ]);
+  assertMethods(session.actorInbox, 'session.actorInbox', [
+    'messages', 'onMessage', 'send', 'clear',
+  ]);
+  assertMethods(session.events, 'session.events', ['on', 'lastEvent', 'send']);
+  assertMethods(session.host, 'session.host', ['onHostChanged', 'beat']);
+  assertMethods(session.save, 'session.save', ['load', 'set', 'patch', 'save']);
+  assertMethods(session.avatar, 'session.avatar', [
+    'load', 'setIdentityState', 'setAppState',
+  ]);
+  assertMethods(session.model, 'session.model', [
+    'watch', 'unwatch', 'get', 'list', 'onChange', 'bindToChannel', 'refresh', 'refreshAll',
+  ]);
+
+  // Unconfigured stores are absent at runtime too.
+  const bare = createWorldSession(client, '1', { ticker: manualTicker() });
+  for (const key of ['self', 'actors', 'errors', 'chunks', 'channelInbox',
+    'actorInbox', 'events', 'host', 'save', 'avatar', 'model']) {
+    assert.equal(bare[key], undefined, `bare session has no ${key}`);
+  }
+
+  session.dispose();
+  bare.dispose();
   client.close();
 });

@@ -106,6 +106,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
+| `createWorldSession(client, appId, config)` (from `@crowdedkingdoms/crowdyjs/stores`) | World Stores: opt-in, SDK-managed game state — typed codecs (`structCodec` binary DSL), your own actor with a 5 Hz send loop (`session.self`), a remote-actor registry with lanes/history/staleness (`session.actors`), attributed send errors (`session.errors`), a chunk/voxel cache with realtime merge + worldgen write-back (`session.chunks`), channel/direct-message inboxes + a typed event router, host tracking, typed save/avatar state, and a game-model container mirror. Only configured stores exist (compile-time + runtime); unimported stores tree-shake away. |
 | `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, `kit.plots` (buy/rent land with transactional, replication-enforced grid grants), and the genre layers `kit.economy` (wallets/shops/trades/market), `kit.progression` (xp/skills/achievements/rating), `kit.loot`, `kit.quests`, `kit.combat`, `kit.matches` (session lobbies/turns/scores with notify-to-pull channels), `kit.decks` (hidden hands), `kit.worldsim` (clock/nodes/crops/waves), `kit.social` (parties/guilds/chat over teams+channels), `kit.leaderboards`, `kit.features` (tier gates) — plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |
 
 **Studio-admin surface** (privileged; drive with a server-side / studio token, grouped under `client.admin`):
@@ -268,6 +269,65 @@ await actor.sendToActor(
 ```
 
 The world helpers are thin wrappers over `client.udp.*` with the appId pre-bound — convenient for browser games. Advanced callers can always use `client.udp.*` with the generated GraphQL input types directly.
+
+## World Stores
+
+The core client is a thin transport; the **World Stores** layer
+(`@crowdedkingdoms/crowdyjs/stores`, 8.4+) adds the source-of-truth data
+structures every game otherwise hand-writes: actor registries, chunk/voxel
+caches, error attribution, message inboxes, host tracking, and typed
+durable-state wrappers — all driven by ONE shared `udpNotifications`
+subscription and ONE scheduler.
+
+```ts
+import {
+  createWorldSession, structCodec, f32, u8, jsonCodec, workerTicker,
+} from '@crowdedkingdoms/crowdyjs/stores';
+
+// Describe your replication state ONCE (48-byte binary layouts, declaratively):
+const poseCodec = structCodec({
+  x: f32(), y: f32(), z: f32(), yaw: f32(),
+  flags: u8(), held: u8(),
+});
+
+const session = createWorldSession(game, appId, {
+  ticker: workerTicker(), // keep 5 Hz sends even in backgrounded tabs
+  self:   { codec: poseCodec, initialState: { x: 0, y: 0, z: 0, yaw: 0, flags: 0, held: 0 } },
+  actors: { codec: poseCodec, staleAfterMs: 12_000, historySize: 2 },
+  errors: true,
+  chunks: { voxelStateCodec: jsonCodec<MyVoxelMeta>() },
+});
+
+// Your actor: uuid minted + persisted, presence sent at 5 Hz with
+// send-on-change dedup; just update the typed state from your game loop.
+await session.self.join({ x: '0', y: '0', z: '0' });
+session.self.patchState({ x: 12.5, yaw: 1.57 });
+console.log(session.self.status, session.self.lastAck?.state);
+
+// Everyone else: typed, self-filtered, staleness-managed — render from it.
+for (const actor of session.actors.list()) {
+  render(actor.uuid, actor.state, actor.samples); // samples → interpolation
+}
+
+// Terrain: cached, hydrated, realtime-merged, optimistically editable.
+await session.chunks.ensureAround({ x: 0, y: 0, z: 0 }, 3);
+await session.chunks.setVoxel({ chunk: { x: 0, y: 0, z: 0 }, x: 1, y: 2, z: 3, voxelType: 7 });
+
+// Server-reported send errors, attributed to what you sent:
+session.errors.onError((e) => console.warn(e.errorCode, e.send?.kind));
+
+session.dispose();
+```
+
+Every store is **opt-in twice over**: only configured stores are constructed
+(and only they exist on the session's TYPE — `session.host` without
+`host: ...` in the config is a compile error), and the layer lives behind the
+`./stores` subpath with `"sideEffects": false`, so unimported stores never
+reach your bundle. Reads are synchronous snapshots and writes happen on
+WebSocket events (not `requestAnimationFrame`), so render loops read freely
+and a backgrounded tab keeps ingesting updates; pass `workerTicker()` to also
+keep timer-driven sends at full rate while hidden. See the
+[World Stores guide](https://docs.crowdedkingdoms.com/crowdyjs/stores).
 
 ## Game Kit
 
