@@ -713,6 +713,38 @@ test('ChunkStore: bulk load + hydration, realtime merge, optimistic edits, world
   session.dispose();
 });
 
+test('ChunkStore: custom voxelIndex layout routes every read/merge/edit', async () => {
+  const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
+  // Blocks-with-Friends layout: y*256 + z*16 + x.
+  const bwfIndex = (x, y, z) => y * 256 + z * 16 + x;
+  const dense = new Uint8Array(CHUNK_VOLUME);
+  dense[bwfIndex(1, 2, 3)] = 7;
+  const { api: chunksApi } = fakeChunks({
+    '0:0:0': { voxels: Buffer.from(dense).toString('base64') },
+  });
+  const { client, net } = fakeClient({ chunks: chunksApi });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { voxelIndex: bwfIndex, writeBackIntervalMs: false },
+  });
+  await session.chunks.ensureAround({ x: 0, y: 0, z: 0 }, 1);
+  // Read resolves through the custom layout (default layout would miss).
+  assert.equal(session.chunks.voxelTypeAt({ x: 0, y: 0, z: 0 }, 1, 2, 3), 7);
+  // Realtime merge writes at the custom offset.
+  net.handlers.voxelUpdate({
+    chunkX: '0', chunkY: '0', chunkZ: '0',
+    voxelX: 5, voxelY: 6, voxelZ: 7, voxelType: 3, voxelState: '',
+    uuid: 'w'.repeat(32), sequenceNumber: 1, epochMillis: '2',
+  });
+  assert.equal(session.chunks.get({ x: 0, y: 0, z: 0 }).voxels[bwfIndex(5, 6, 7)], 3);
+  // Local edits too.
+  await session.chunks.setVoxel({
+    chunk: { x: 0, y: 0, z: 0 }, x: 9, y: 8, z: 7, voxelType: 4,
+  });
+  assert.equal(session.chunks.get({ x: 0, y: 0, z: 0 }).voxels[bwfIndex(9, 8, 7)], 4);
+  session.dispose();
+});
+
 test('ChunkStore: change events fire and seed validates the grid size', async () => {
   const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
   const { api: chunksApi } = fakeChunks();
