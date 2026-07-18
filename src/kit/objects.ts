@@ -38,12 +38,16 @@ export class ObjectsKit {
   /**
    * Instantiate a lockable object (admin/studio call — the type is
    * admin-instantiable). For key-gated objects set `requiredKeyId` to the key
-   * id that opens it; for owner-gated objects set `ownerUserId`.
+   * id that opens it; for owner-gated objects set `ownerUserId`; for
+   * chunk-permission-gated objects set `chunk` to where the object stands
+   * (feeds the `has_chunk_permission` policy).
    */
   async create(input: {
     displayName: string;
     requiredKeyId?: string;
     ownerUserId?: Scalars['BigInt']['input'];
+    /** The chunk the object occupies (chunkPermission authority). */
+    chunk?: { x: number; y: number; z: number };
     properties?: SeedPropertyInput[];
     sessionId?: string;
   }) {
@@ -56,6 +60,13 @@ export class ObjectsKit {
               valueType: 'string',
               valueJson: JSON.stringify(input.requiredKeyId),
             },
+          ]
+        : []),
+      ...(input.chunk
+        ? [
+            { key: 'cx', valueType: 'int', valueJson: String(input.chunk.x) },
+            { key: 'cy', valueType: 'int', valueJson: String(input.chunk.y) },
+            { key: 'cz', valueType: 'int', valueJson: String(input.chunk.z) },
           ]
         : []),
       ...(input.properties ?? []),

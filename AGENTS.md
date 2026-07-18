@@ -21,9 +21,11 @@ worked reference.
   method (e.g. `gameModel/GameModelAutomations.graphql`, `udp/UdpNotifications.graphql`).
 - `src/world.ts` — `client.world(appId)` facade: `actor().join/sendState/sendText/sendToActor`.
 - `src/kit/` — `client.kit(appId)` Game Kit facade over `gameModel`: blueprint
-  builders (`inventoryBlueprint` / `lockBlueprint` / `npcBlueprint`) +
-  `kit.deploy(...)` for admin seeding, and runtime helpers `kit.inventory`,
-  `kit.objects`, `kit.npcs`.
+  builders (`inventoryBlueprint` / `lockBlueprint` / `npcBlueprint` /
+  `plotBlueprint`) + `kit.deploy(...)` for admin seeding, and runtime helpers
+  `kit.inventory`, `kit.objects`, `kit.npcs`, `kit.plots`. Locks support a
+  `chunkPermission` authority (`has_chunk_permission` policy); NPC selectors
+  support grid-permission predicates (`KitSelectorSpec`).
 - `schema.gql` + `src/generated/graphql.ts` — committed schema artifacts; the
   build must never depend on sibling API repos. Refresh with
   `npm run schema:sync:*` + `npm run codegen`, commit both together, and use

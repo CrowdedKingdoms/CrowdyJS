@@ -1,3 +1,4 @@
+import type { GameAppsAPI } from '../domains/gameApps.js';
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type {
   GameModelSeedMutation,
@@ -9,12 +10,14 @@ import { mergeBlueprints, type KitBlueprint } from './blueprints.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
+import { PlotsKit, type PlotsKitOptions } from './plots.js';
 
 /** Options for {@link GameKitClient}, configuring the runtime helpers to match your deployed blueprints. */
 export interface GameKitOptions {
   inventory?: InventoryKitOptions;
   objects?: ObjectsKitOptions;
   npcs?: NpcsKitOptions;
+  plots?: PlotsKitOptions;
 }
 
 /** The result of {@link GameKitClient.deploy}: the seed outcome plus each automation/trigger upserted. */
@@ -71,15 +74,19 @@ export class GameKitClient {
   readonly objects: ObjectsKit;
   /** NPC helpers (spawn/read instances, manage the automations behind them). */
   readonly npcs: NpcsKit;
+  /** Plot helpers (buy/rent land with transactional, enforced grid grants). */
+  readonly plots: PlotsKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
     private readonly gameModel: GameModelAPI,
+    gameApps: GameAppsAPI,
     options: GameKitOptions = {},
   ) {
     this.inventory = new InventoryKit(appId, gameModel, options.inventory);
     this.objects = new ObjectsKit(appId, gameModel, options.objects);
     this.npcs = new NpcsKit(appId, gameModel, options.npcs);
+    this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
   }
 
   /**

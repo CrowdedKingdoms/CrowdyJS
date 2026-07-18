@@ -320,7 +320,7 @@ export class CrowdyClient {
    *   non-default type names/prefixes.
    */
   kit(appId: string, options?: GameKitOptions): GameKitClient {
-    return new GameKitClient(appId, this.gameModel, options);
+    return new GameKitClient(appId, this.gameModel, this.gameApps, options);
   }
 
   /** Closes the WebSocket and clears the in-memory auth token. */

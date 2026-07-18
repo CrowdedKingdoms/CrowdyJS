@@ -7,6 +7,8 @@ export {
   mergeBlueprints,
   npcBehaviorFunctionName,
   npcBlueprint,
+  plotBlueprint,
+  plotNames,
   toSnakeCase,
   type InventoryBlueprintOptions,
   type InventoryNames,
@@ -14,6 +16,7 @@ export {
   type KitAutomationTriggerSpec,
   type KitBlueprint,
   type KitInvokePolicy,
+  type KitSelectorSpec,
   type LockAuthority,
   type LockBlueprintOptions,
   type LockNames,
@@ -21,6 +24,9 @@ export {
   type NpcBehaviorSpec,
   type NpcBehaviorTrigger,
   type NpcBlueprintOptions,
+  type PlotBlueprintOptions,
+  type PlotNames,
+  type SelectorPermissionPredicate,
 } from './blueprints.js';
 export {
   GameKitClient,
@@ -30,6 +36,7 @@ export {
 export { InventoryKit, type InventoryKitOptions, type KitItemStack } from './inventory.js';
 export { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 export { NpcsKit, type NpcsKitOptions, type KitNpc } from './npcs.js';
+export { PlotsKit, type PlotsKitOptions, type KitPlot } from './plots.js';
 export {
   kitInvoke,
   toKitInvokeResult,

@@ -82,6 +82,9 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.npcs, 'kit.npcs', [
     'spawn', 'list', 'state', 'runNow', 'setEnabled', 'stats', 'runs',
   ]);
+  assertMethods(kit.plots, 'kit.plots', [
+    'create', 'list', 'buy', 'rent', 'evict', 'accessOf',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

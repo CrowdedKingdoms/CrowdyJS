@@ -6864,7 +6864,7 @@ export type UpsertAutomationInput = {
   runTimeoutMs?: InputMaybe<Scalars['Int']['input']>;
   /** For schedule triggers: interval | cron. */
   scheduleKind?: InputMaybe<Scalars['String']['input']>;
-  /** JSON selector resolving candidate refs/scalars over model data into params (e.g. {"pick":"nearest","ofType":"Unit","where":[...],"by":"manhattan","bindAs":{...}}). */
+  /** JSON selector resolving candidate refs/scalars over model data into params (e.g. {"pick":"nearest","ofType":"Unit","where":[...],"by":"manhattan","bindAs":{...}}). Also supports grid-permission filters "selfPermissionWhere"/"candidatePermissionWhere": arrays of {"userFrom":"owner"|{"property":k},"op":"has"|"lacks","key":<runtime permission key>,"grid":<id>|{"property":k}} checked against the live grid ACL (omit "grid" for any-grid). */
   selectorJson?: InputMaybe<Scalars['String']['input']>;
   /** For target_mode=container: the self container UUID. */
   selfContainerId?: InputMaybe<Scalars['String']['input']>;
