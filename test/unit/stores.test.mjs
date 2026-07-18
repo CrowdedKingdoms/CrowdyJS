@@ -733,6 +733,117 @@ test('ChunkStore: change events fire and seed validates the grid size', async ()
   session.dispose();
 });
 
+test('ChannelInbox: per-channel typed history, filtered subscribe, typed send', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const { client, net } = fakeClient();
+
+  const ticker = manualTicker();
+  const codec = jsonCodec();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    channelInbox: { codec, capacity: 2, now: () => ticker.now },
+  });
+  const inbox = session.channelInbox;
+
+  const all = [];
+  const only7 = [];
+  inbox.onMessage((m) => all.push(m.payload.text));
+  inbox.onMessage((m) => only7.push(m.payload.text), '7');
+
+  const note = (channelId, payload) => ({
+    channelId,
+    uuid: 's'.repeat(32),
+    payload: codec.encode(payload),
+    sequenceNumber: 0,
+    epochMillis: '5',
+  });
+  net.handlers.channelMessage(note('7', { text: 'hi' }));
+  net.handlers.channelMessage(note('8', { text: 'other room' }));
+  net.handlers.channelMessage(note('7', { text: 'again' }));
+  net.handlers.channelMessage(note('7', { text: 'third' }));
+
+  assert.deepEqual(all, ['hi', 'other room', 'again', 'third']);
+  assert.deepEqual(only7, ['hi', 'again', 'third']);
+  // Capacity 2: oldest dropped, chronological order kept.
+  assert.deepEqual(inbox.messages('7').map((m) => m.payload.text), ['again', 'third']);
+  assert.deepEqual(inbox.channels().sort(), ['7', '8']);
+
+  // Undecodable payloads count, not crash.
+  net.handlers.channelMessage({ channelId: '7', uuid: 'x'.repeat(32), payload: '###', epochMillis: '6' });
+  assert.equal(inbox.decodeFailures, 1);
+
+  // Typed send encodes and tracks.
+  await inbox.send('7', { text: 'outbound' });
+  const sent = net.sent.find((s) => s.kind === 'channelMessage');
+  assert.deepEqual(codec.decode(sent.input.payload), { text: 'outbound' });
+
+  inbox.clear('7');
+  assert.deepEqual(inbox.messages('7'), []);
+  session.dispose();
+});
+
+test('ActorInbox + EventRouter: typed direct messages and per-eventType routing', async () => {
+  const { createWorldSession, manualTicker, jsonCodec, structCodec, u16 } =
+    await loadStores();
+  const { client, net } = fakeClient();
+
+  const ticker = manualTicker();
+  const dmCodec = jsonCodec();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    actorInbox: { codec: dmCodec, capacity: 10, now: () => ticker.now },
+    events: { now: () => ticker.now },
+  });
+
+  // Direct messages: decode + history + subscribe + typed send.
+  const dms = [];
+  session.actorInbox.onMessage((m) => dms.push(m.payload));
+  net.handlers.singleActorMessage({
+    uuid: 't'.repeat(32),
+    payload: dmCodec.encode({ t: 'attack', d: 5 }),
+    sequenceNumber: 1,
+    epochMillis: '9',
+  });
+  assert.deepEqual(dms, [{ t: 'attack', d: 5 }]);
+  assert.equal(session.actorInbox.messages().length, 1);
+  await session.actorInbox.send('r'.repeat(32), { t: 'heal', d: 2 }, { x: '0', y: '0', z: '0' });
+  const dmSent = net.sent.find((s) => s.kind === 'singleActorMessage');
+  assert.equal(dmSent.input.targetUuid, 'r'.repeat(32));
+  assert.deepEqual(dmCodec.decode(dmSent.input.payload), { t: 'heal', d: 2 });
+
+  // Events: per-type codec + handler, client AND server origins, lastEvent.
+  const boomCodec = structCodec({ power: u16() });
+  const booms = [];
+  const off = session.events.on(7, boomCodec, (e) => booms.push([e.origin, e.value.power]));
+  const eventNote = (eventType, state) => ({
+    eventType,
+    state,
+    uuid: 'e'.repeat(32),
+    chunkX: '1', chunkY: '2', chunkZ: '3',
+    sequenceNumber: 0,
+    epochMillis: '11',
+  });
+  net.handlers.clientEvent(eventNote(7, boomCodec.encode({ power: 300 })));
+  net.handlers.serverEvent(eventNote(7, boomCodec.encode({ power: 12 })));
+  net.handlers.clientEvent(eventNote(9, 'AA==')); // unregistered type → ignored
+  assert.deepEqual(booms, [['client', 300], ['server', 12]]);
+  assert.equal(session.events.lastEvent(7).value.power, 12);
+  assert.equal(session.events.lastEvent(9), undefined);
+
+  // Typed event send.
+  await session.events.send(7, boomCodec, { power: 55 }, { x: '0', y: '0', z: '0' });
+  const evSent = net.sent.find((s) => s.kind === 'clientEvent');
+  assert.equal(evSent.input.eventType, 7);
+  assert.equal(boomCodec.decode(evSent.input.state).power, 55);
+
+  // Off detaches.
+  off();
+  net.handlers.clientEvent(eventNote(7, boomCodec.encode({ power: 1 })));
+  assert.equal(booms.length, 2);
+
+  session.dispose();
+});
+
 test('caller-supplied tickers are not disposed with the session', async () => {
   const { createWorldSession, manualTicker } = await loadStores();
   const { client } = fakeClient();

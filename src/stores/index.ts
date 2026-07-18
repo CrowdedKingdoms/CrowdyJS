@@ -101,6 +101,19 @@ export {
   type ChunkStoreConfig,
   type SetVoxelInput,
 } from './chunks.js';
+export {
+  ActorInbox,
+  ChannelInbox,
+  EventRouter,
+  attachActorInbox,
+  attachChannelInbox,
+  attachEventRouter,
+  type ActorInboxConfig,
+  type ChannelInboxConfig,
+  type EventRouterConfig,
+  type InboxMessage,
+  type TypedEvent,
+} from './inbox.js';
 
 import {
   LocalActorStore,
@@ -110,6 +123,14 @@ import {
 } from './actors.js';
 import { ChunkStore, type ChunkStoreConfig } from './chunks.js';
 import { ErrorStore, type ErrorStoreConfig } from './errors.js';
+import {
+  ActorInbox,
+  ChannelInbox,
+  EventRouter,
+  type ActorInboxConfig,
+  type ChannelInboxConfig,
+  type EventRouterConfig,
+} from './inbox.js';
 import {
   WorldSessionCore,
   type WorldSessionBaseConfig,
@@ -125,6 +146,8 @@ export interface WorldSessionConfig<
   TActors = TSelf,
   TVoxelState = string,
   TChunkState = string,
+  TChannel = string,
+  TDirect = string,
 > extends WorldSessionBaseConfig {
   /** Your own actor: identity, typed state, send loop ({@link LocalActorStore}). */
   self?: LocalActorConfig<TSelf>;
@@ -146,6 +169,21 @@ export interface WorldSessionConfig<
    * automatically.
    */
   chunks?: ChunkStoreConfig<TVoxelState, TChunkState> | true;
+  /**
+   * Channel message inbox: per-channel typed history + send
+   * ({@link ChannelInbox}). Pass `true` for text-payload defaults.
+   */
+  channelInbox?: ChannelInboxConfig<TChannel> | true;
+  /**
+   * Direct actor-to-actor message inbox ({@link ActorInbox}). Pass `true`
+   * for text-payload defaults.
+   */
+  actorInbox?: ActorInboxConfig<TDirect> | true;
+  /**
+   * App-defined event router: per-eventType codecs + handlers, lastEvent
+   * cache ({@link EventRouter}). Pass `true` for the defaults.
+   */
+  events?: EventRouterConfig | true;
 }
 
 /** The session returned by {@link createWorldSession}. */
@@ -154,6 +192,8 @@ export interface WorldSession<
   TActors = TSelf,
   TVoxelState = string,
   TChunkState = string,
+  TChannel = string,
+  TDirect = string,
 > {
   /** The app this session is scoped to. */
   readonly appId: string;
@@ -165,6 +205,12 @@ export interface WorldSession<
   readonly errors?: ErrorStore;
   /** The chunk/voxel cache (present when `config.chunks` was given). */
   readonly chunks?: ChunkStore<TVoxelState, TChunkState>;
+  /** The channel message inbox (present when `config.channelInbox` was given). */
+  readonly channelInbox?: ChannelInbox<TChannel>;
+  /** The direct-message inbox (present when `config.actorInbox` was given). */
+  readonly actorInbox?: ActorInbox<TDirect>;
+  /** The typed event router (present when `config.events` was given). */
+  readonly events?: EventRouter;
   /** Close the shared subscription, cancel timers, and release the stores. */
   dispose(): void;
   /** The wiring context (for custom store implementations). */
@@ -195,11 +241,20 @@ export function createWorldSession<
   TActors = TSelf,
   TVoxelState = string,
   TChunkState = string,
+  TChannel = string,
+  TDirect = string,
 >(
   client: WorldStoresClient,
   appId: string,
-  config: WorldSessionConfig<TSelf, TActors, TVoxelState, TChunkState> = {},
-): WorldSession<TSelf, TActors, TVoxelState, TChunkState> {
+  config: WorldSessionConfig<
+    TSelf,
+    TActors,
+    TVoxelState,
+    TChunkState,
+    TChannel,
+    TDirect
+  > = {},
+): WorldSession<TSelf, TActors, TVoxelState, TChunkState, TChannel, TDirect> {
   const core = new WorldSessionCore(client, appId, config.ticker);
   // The error store registers the send-tracking sink — construct it first so
   // the very first actor/chunk sends are already attributable.
@@ -221,6 +276,22 @@ export function createWorldSession<
         ...(config.chunks === true ? {} : config.chunks),
       })
     : undefined;
+  const selfUuid = self ? () => self.uuid : undefined;
+  const channelInbox = config.channelInbox
+    ? new ChannelInbox<TChannel>(core, {
+        senderUuid: selfUuid,
+        ...(config.channelInbox === true ? {} : config.channelInbox),
+      })
+    : undefined;
+  const actorInbox = config.actorInbox
+    ? new ActorInbox<TDirect>(core, config.actorInbox === true ? {} : config.actorInbox)
+    : undefined;
+  const events = config.events
+    ? new EventRouter(core, {
+        senderUuid: selfUuid,
+        ...(config.events === true ? {} : config.events),
+      })
+    : undefined;
   return {
     appId,
     context: core,
@@ -228,6 +299,9 @@ export function createWorldSession<
     ...(actors ? { actors } : {}),
     ...(errors ? { errors } : {}),
     ...(chunks ? { chunks } : {}),
+    ...(channelInbox ? { channelInbox } : {}),
+    ...(actorInbox ? { actorInbox } : {}),
+    ...(events ? { events } : {}),
     dispose: () => core.dispose(),
   };
 }
