@@ -713,6 +713,29 @@ test('ChunkStore: bulk load + hydration, realtime merge, optimistic edits, world
   session.dispose();
 });
 
+test('ChunkStore: onMissing can seed without write-back', async () => {
+  const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
+  const { api: chunksApi } = fakeChunks();
+  const { client } = fakeClient({ chunks: chunksApi });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: {
+      writeBackIntervalMs: false,
+      onMissing: (coord) => {
+        const voxels = new Uint8Array(CHUNK_VOLUME);
+        voxels[0] = 9;
+        // Persist only the origin column; render-only elsewhere.
+        return { voxels, writeBack: coord.x === 0 && coord.z === 0 };
+      },
+    },
+  });
+  await session.chunks.ensureAround({ x: 0, y: 0, z: 0 }, 1);
+  assert.equal(session.chunks.get({ x: 1, y: 0, z: 0 }).loadState, 'seeded');
+  assert.equal(session.chunks.get({ x: 1, y: 0, z: 0 }).voxels[0], 9);
+  assert.equal(session.chunks.pendingWriteBacks, 3, 'only the origin column queued');
+  session.dispose();
+});
+
 test('ChunkStore: custom voxelIndex layout routes every read/merge/edit', async () => {
   const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
   // Blocks-with-Friends layout: y*256 + z*16 + x.
