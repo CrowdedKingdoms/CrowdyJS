@@ -13,8 +13,13 @@
     "./generated": {
       "import": "./dist/generated/graphql.js",
       "types": "./dist/generated/graphql.d.ts"
+    },
+    "./stores": {
+      "import": "./dist/stores/index.js",
+      "types": "./dist/stores/index.d.ts"
     }
   },
+  "sideEffects": false,
   "files": [
     "dist",
     "README.md",

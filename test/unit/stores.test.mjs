@@ -1,0 +1,238 @@
+/**
+ * Offline unit tests for the World Stores layer
+ * (`@crowdedkingdoms/crowdyjs/stores`). Stores are wired against mock domain
+ * objects (captured subscribe handlers, recorded sends), so notification
+ * flows are tested without a server.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { loadStores, sleep } from '../helpers.mjs';
+
+/** A fake UdpAPI capturing the single subscription + outbound sends. */
+export function fakeUdp() {
+  const sent = [];
+  const state = {
+    handlers: null,
+    appId: null,
+    subscribeCalls: 0,
+    unsubscribeCalls: 0,
+    sent,
+  };
+  const record = (kind) => async (input) => {
+    sent.push({ kind, input });
+    return true;
+  };
+  const udp = {
+    subscribe(handlers, appId) {
+      state.subscribeCalls += 1;
+      state.handlers = handlers;
+      state.appId = appId;
+      return () => {
+        state.unsubscribeCalls += 1;
+        state.handlers = null;
+      };
+    },
+    sendActorUpdate: record('actorUpdate'),
+    sendVoxelUpdate: record('voxelUpdate'),
+    sendTextPacket: record('text'),
+    sendClientEvent: record('clientEvent'),
+    sendAudioPacket: record('audio'),
+    sendSingleActorMessage: record('singleActorMessage'),
+    sendChannelMessage: record('channelMessage'),
+  };
+  return { udp, state };
+}
+
+/** A minimal WorldStoresClient with only the udp domain live. */
+export function fakeClient(extra = {}) {
+  const { udp, state } = fakeUdp();
+  return {
+    client: { udp, chunks: {}, state: {}, avatars: {}, host: {}, gameModel: {}, ...extra },
+    net: state,
+  };
+}
+
+test('codecs: json, text, raw round-trips', async () => {
+  const { jsonCodec, textCodec, rawCodec } = await loadStores();
+
+  const json = jsonCodec();
+  const value = { hp: 10, name: 'zoë', tags: ['a', 'b'] };
+  assert.deepEqual(json.decode(json.encode(value)), value);
+
+  assert.equal(textCodec.decode(textCodec.encode('hello world ✓')), 'hello world ✓');
+  assert.equal(rawCodec.encode('AA=='), 'AA==');
+  assert.equal(rawCodec.decode('AA=='), 'AA==');
+});
+
+test('structCodec reproduces the 48-byte BWF pose layout declaratively', async () => {
+  const { structCodec, f32, f64, u8, reserved } = await loadStores();
+
+  const poseCodec = structCodec({
+    x: f32(), y: f32(), z: f32(),
+    yaw: f32(), pitch: f32(),
+    vx: f32(), vy: f32(), vz: f32(),
+    flags: u8(), heldBlockId: u8(), _r0: reserved(2),
+    updatedAt: f64(), _r1: reserved(4),
+  });
+  assert.equal(poseCodec.byteLength, 48);
+
+  const pose = {
+    x: 1.5, y: -64, z: 1024.25,
+    yaw: 3.140000104904175, pitch: -0.5,
+    vx: 0.25, vy: 0, vz: -0.125,
+    flags: 0b11, heldBlockId: 42,
+    updatedAt: 1752787200123,
+  };
+  const encoded = poseCodec.encode(pose);
+  // Base64 of exactly 48 bytes.
+  assert.equal(Buffer.from(encoded, 'base64').length, 48);
+  assert.deepEqual(poseCodec.decode(encoded), pose);
+
+  // Short payloads are rejected, not silently misread.
+  assert.throws(() => poseCodec.decode('AA=='), /48/);
+});
+
+test('structCodec field kinds round-trip (ints, bool, bytes, endianness)', async () => {
+  const { structCodec, u16, u32, i8, i16, i32, bool8, bytes } = await loadStores();
+
+  const codec = structCodec({
+    a: u16(), b: u32(), c: i8(), d: i16(), e: i32(), f: bool8(), g: bytes(3),
+  });
+  const value = {
+    a: 65535, b: 4294967295, c: -128, d: -32768, e: -2147483648,
+    f: true, g: new Uint8Array([1, 2, 250]),
+  };
+  const out = codec.decode(codec.encode(value));
+  assert.deepEqual({ ...out, g: [...out.g] }, { ...value, g: [1, 2, 250] });
+
+  // Big-endian option changes the wire bytes but still round-trips.
+  const be = structCodec({ a: u16() }, { littleEndian: false });
+  const le = structCodec({ a: u16() });
+  assert.notEqual(be.encode({ a: 0x0102 }), le.encode({ a: 0x0102 }));
+  assert.equal(be.decode(be.encode({ a: 0x0102 })).a, 0x0102);
+});
+
+test('chunk key math: keys, world mapping, voxel indexing, neighborhoods', async () => {
+  const {
+    CHUNK_VOLUME, chunkKey, parseChunkKey, toChunkInput, fromChunkInput,
+    worldToChunk, worldToLocalVoxel, voxelIndex, voxelCoordFromIndex,
+    chunksAround, chunkDistance,
+  } = await loadStores();
+
+  assert.equal(CHUNK_VOLUME, 4096);
+  assert.equal(chunkKey({ x: -1, y: 0, z: 7 }), '-1:0:7');
+  assert.deepEqual(parseChunkKey('-1:0:7'), { x: -1, y: 0, z: 7 });
+  assert.deepEqual(toChunkInput({ x: -1, y: 0, z: 7 }), { x: '-1', y: '0', z: '7' });
+  assert.deepEqual(fromChunkInput({ x: '-1', y: '0', z: '7' }), { x: -1, y: 0, z: 7 });
+
+  // Negative world coords floor toward -inf; locals stay 0-15.
+  assert.deepEqual(worldToChunk(-1, 16, 31.9), { x: -1, y: 1, z: 1 });
+  assert.deepEqual(worldToLocalVoxel(-1, 16, 31.9), { x: 15, y: 0, z: 15 });
+
+  // Dense index layout x + y*16 + z*256, invertible.
+  assert.equal(voxelIndex(1, 2, 3), 1 + 32 + 768);
+  assert.deepEqual(voxelCoordFromIndex(voxelIndex(15, 0, 7)), { x: 15, y: 0, z: 7 });
+
+  const around = chunksAround({ x: 0, y: 0, z: 0 }, 1);
+  assert.equal(around.length, 27);
+  assert.deepEqual(around[0], { x: 0, y: 0, z: 0 }); // center first
+  assert.equal(chunkDistance({ x: 0, y: 0, z: 0 }, { x: 2, y: -1, z: 1 }), 2);
+});
+
+test('manualTicker fires due callbacks in order; interval/worker tickers schedule', async () => {
+  const { manualTicker, intervalTicker, workerTicker } = await loadStores();
+
+  const ticker = manualTicker();
+  const fired = [];
+  ticker.every(100, () => fired.push(`a@${ticker.now}`));
+  const cancelB = ticker.every(250, () => fired.push(`b@${ticker.now}`));
+  ticker.advance(500);
+  // Simultaneously-due tasks fire in registration order (a before b at 500).
+  assert.deepEqual(fired, ['a@100', 'a@200', 'b@250', 'a@300', 'a@400', 'a@500', 'b@500']);
+  cancelB();
+  fired.length = 0;
+  ticker.advance(250);
+  assert.deepEqual(fired, ['a@600', 'a@700']);
+  ticker.dispose();
+  fired.length = 0;
+  ticker.advance(1000);
+  assert.deepEqual(fired, []);
+
+  // Real interval ticker fires and cancels.
+  const real = intervalTicker();
+  let ticks = 0;
+  const cancel = real.every(5, () => (ticks += 1));
+  await sleep(40);
+  cancel();
+  const settled = ticks;
+  assert.ok(ticks >= 2, `interval ticker fired (${ticks})`);
+  await sleep(20);
+  assert.equal(ticks, settled, 'cancelled schedule stops firing');
+  real.dispose();
+
+  // In Node (no Worker/Blob), workerTicker falls back to a working interval ticker.
+  const worker = workerTicker();
+  let workerTicks = 0;
+  const cancelWorker = worker.every(5, () => (workerTicks += 1));
+  await sleep(40);
+  cancelWorker();
+  assert.ok(workerTicks >= 2, `workerTicker fallback fired (${workerTicks})`);
+  worker.dispose();
+});
+
+test('world session: one lazy subscription, fan-out, isolation, dispose', async () => {
+  const { createWorldSession } = await loadStores();
+  const { client, net } = fakeClient();
+
+  const session = createWorldSession(client, '42');
+  // No listeners yet → no subscription.
+  assert.equal(net.subscribeCalls, 0);
+
+  const seen = [];
+  const offA = session.context.on('actorUpdate', (n) => seen.push(['a', n.uuid]));
+  session.context.on('actorUpdate', () => {
+    throw new Error('listener throws must not starve others');
+  });
+  session.context.on('voxelUpdate', (n) => seen.push(['v', n.voxelType]));
+  assert.equal(net.subscribeCalls, 1, 'first listener opens ONE subscription');
+  assert.equal(net.appId, '42');
+
+  // Fan-out dispatches to the right listener sets, isolating throwers.
+  net.handlers.actorUpdate({ uuid: 'u1' });
+  net.handlers.actorUpdate({ uuid: 'u2' });
+  net.handlers.voxelUpdate({ voxelType: 7 });
+  assert.deepEqual(seen, [['a', 'u1'], ['a', 'u2'], ['v', 7]]);
+
+  // Off detaches just that listener.
+  offA();
+  net.handlers.actorUpdate({ uuid: 'u3' });
+  assert.deepEqual(seen.filter(([k]) => k === 'a').length, 2);
+
+  // trackSend is a no-op until a sink registers, then routes.
+  session.context.trackSend({ kind: 'actorUpdate', sequenceNumber: 1, sentAt: 0 });
+  const tracked = [];
+  session.context.setSendTracker((r) => tracked.push(r));
+  session.context.trackSend({ kind: 'voxelUpdate', sequenceNumber: 2, sentAt: 1 });
+  assert.equal(tracked.length, 1);
+
+  // Dispose closes the subscription and runs cleanups once.
+  let cleanups = 0;
+  session.context.onDispose(() => (cleanups += 1));
+  session.dispose();
+  session.dispose();
+  assert.equal(net.unsubscribeCalls, 1);
+  assert.equal(cleanups, 1);
+});
+
+test('caller-supplied tickers are not disposed with the session', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+  const { client } = fakeClient();
+
+  const ticker = manualTicker();
+  let ticks = 0;
+  ticker.every(10, () => (ticks += 1));
+  const session = createWorldSession(client, '1', { ticker });
+  session.dispose();
+  ticker.advance(20);
+  assert.equal(ticks, 2, 'shared ticker survives session dispose');
+});
