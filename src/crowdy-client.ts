@@ -24,6 +24,7 @@
 import { AuthState } from './auth-state.js';
 import { GraphQLClient } from './client.js';
 import { LbCookieStore } from './lb-cookie-store.js';
+import { RealtimeMetrics } from './metrics.js';
 import { SubscriptionManager } from './subscriptions.js';
 import type { CrowdyLogger } from './logger.js';
 import type { TokenStore } from './session.js';
@@ -126,6 +127,15 @@ export class CrowdyClient {
   readonly graphql: GraphQLClient;
   /** game-api WebSocket subscription manager. */
   readonly realtime: SubscriptionManager;
+  /**
+   * Realtime traffic counters: every `udp.send*` message (including the ones
+   * the World Stores layers issue internally) and every notification delivered
+   * on the shared `udpNotifications` subscription, with totals, a per-kind
+   * breakdown, and ~10 s sliding-window rates. Read with
+   * {@link RealtimeMetrics.snapshot}; byte counts measure app-defined payload
+   * fields (not wire framing). See {@link RealtimeMetrics}.
+   */
+  readonly metrics: RealtimeMetrics;
   /** management-api HTTP client. Same `AuthState` as `graphql`. */
   readonly management: GraphQLClient;
 
@@ -213,6 +223,8 @@ export class CrowdyClient {
       this.session,
     );
 
+    this.metrics = new RealtimeMetrics();
+
     this.realtime = new SubscriptionManager(
       {
         wsUrl: config.wsUrl,
@@ -223,6 +235,7 @@ export class CrowdyClient {
         ...config.realtime,
       },
       this.session,
+      this.metrics,
     );
 
     const managementGraphqlEndpoint =
@@ -265,7 +278,7 @@ export class CrowdyClient {
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);
     this.teams = new TeamsAPI(this.graphql);
-    this.udp = new UdpAPI(this.graphql, this.realtime);
+    this.udp = new UdpAPI(this.graphql, this.realtime, this.metrics);
     this.gameModel = new GameModelAPI(this.graphql);
     this.avatars = new AvatarsAPI(this.graphql);
     this.host = new HostAPI(this.graphql);
