@@ -16,34 +16,26 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 
 ## Standalone builds and schema refresh
 
-CrowdyJS is a standalone public package. A clean external clone must be able to
-run `npm install && npm run build` without sibling CKS API repos checked out.
-For that reason the build uses committed schema artifacts in this repo:
+CrowdyJS is a standalone public package: a clean clone builds with
+`npm install && npm run build` using the schema artifacts committed to this
+repo — no other repositories and no network access required:
 
 - `schema.gql` — merged Management API + Game API SDL.
 - `src/generated/graphql.ts` — generated TypeScript operation types.
 
-Schema refresh is explicit:
+Schema refresh (maintainers) is explicit, from the published SDLs
+([management-api.graphql](https://docs.crowdedkingdoms.com/schema/management-api.graphql),
+[game-api.graphql](https://docs.crowdedkingdoms.com/schema/game-api.graphql)):
 
 ```bash
-# Refresh from the published production SDLs.
 npm run schema:sync:prod
-npm run codegen
-
-# Or, inside the CKS wrapper repo, refresh from local API checkouts.
-npm run schema:sync:local
-npm run codegen
-
-# Or use exact file/URL sources.
-npm run schema:sync:paths -- \
-  --management ../cks-management-api/schema.gql \
-  --game ../cks-game-api/schema.gql
 npm run codegen
 ```
 
-Commit `schema.gql` and `src/generated/graphql.ts` together whenever the public
-GraphQL surface changes. Do not make `npm run build` depend on local API repos or
-network access; use `npm run check:schema` in CI/release work to detect drift.
+(`npm run schema:sync:paths -- --management <file-or-url> --game <file-or-url>`
+accepts explicit sources.) Commit `schema.gql` and `src/generated/graphql.ts`
+together whenever the public GraphQL surface changes; `npm run check:schema`
+detects drift in CI/release work.
 
 ## Quick start
 
