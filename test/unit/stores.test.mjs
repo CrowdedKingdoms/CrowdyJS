@@ -224,6 +224,149 @@ test('world session: one lazy subscription, fan-out, isolation, dispose', async 
   assert.equal(cleanups, 1);
 });
 
+test('LocalActorStore: identity, send loop with dedup + keyframe, ack/error records', async () => {
+  const { createWorldSession, manualTicker, structCodec, f32, u8 } = await loadStores();
+  const { client, net } = fakeClient();
+
+  const ticker = manualTicker();
+  let wallClock = 0;
+  const codec = structCodec({ x: f32(), y: f32(), flags: u8() });
+  const session = createWorldSession(client, '42', {
+    ticker,
+    self: {
+      codec,
+      initialState: { x: 0, y: 0, flags: 0 },
+      now: () => wallClock,
+      keyframeEveryMs: 1000,
+    },
+  });
+  const self = session.self;
+  assert.equal(self.uuid.length, 32, 'uuid minted');
+  assert.equal(self.status, 'idle');
+  assert.equal(self.chunk, null);
+
+  // Loop ticks before join are no-ops.
+  ticker.advance(1000);
+  assert.equal(net.sent.length, 0);
+
+  // join records the chunk and sends immediately.
+  await self.join({ x: '0', y: '1', z: '0' });
+  assert.equal(net.sent.length, 1);
+  assert.equal(net.sent[0].kind, 'actorUpdate');
+  assert.equal(net.sent[0].input.uuid, self.uuid);
+  assert.deepEqual(net.sent[0].input.chunk, { x: '0', y: '1', z: '0' });
+  assert.equal(self.status, 'pending');
+  assert.equal(self.lastSent.reason, 'join');
+  assert.equal(codec.decode(self.lastSent.encoded).x, 0);
+
+  // Unchanged state dedups on loop ticks (within the keyframe window).
+  wallClock = 100;
+  ticker.advance(200);
+  assert.equal(net.sent.length, 1, 'identical state deduped');
+
+  // Changed state replicates on the next tick.
+  self.patchState({ x: 12.5 });
+  wallClock = 300;
+  ticker.advance(200);
+  assert.equal(net.sent.length, 2);
+  assert.equal(net.sent[1].input.sequenceNumber, self.lastSent.sequenceNumber);
+  assert.equal(self.lastSent.reason, 'interval');
+  assert.equal(self.lastSent.state.x, 12.5);
+
+  // After keyframeEveryMs of dedup silence, a keyframe goes out anyway.
+  wallClock = 1400;
+  ticker.advance(200);
+  assert.equal(net.sent.length, 3);
+  assert.equal(self.lastSent.reason, 'keyframe');
+
+  // The self-echo (server fan-out includes the sender) acks the send.
+  net.handlers.actorUpdate({
+    uuid: self.uuid,
+    state: self.lastSent.encoded,
+    sequenceNumber: self.lastSent.sequenceNumber,
+    epochMillis: '1',
+  });
+  assert.equal(self.status, 'acked');
+  assert.equal(self.lastAck.state.x, 12.5);
+
+  // Other actors' updates never touch our ack record.
+  net.handlers.actorUpdate({ uuid: 'x'.repeat(32), state: 'AA==', sequenceNumber: 9 });
+  assert.equal(self.lastAck.state.x, 12.5);
+
+  // A GenericErrorResponse for one of OUR sequence numbers flips status.
+  wallClock = 1500;
+  await self.moveTo({ x: '1', y: '1', z: '0' });
+  assert.equal(self.lastSent.reason, 'move');
+  net.handlers.genericError({
+    sequenceNumber: self.lastSent.sequenceNumber,
+    errorCode: 'UNAUTHORIZED',
+  });
+  assert.equal(self.status, 'error');
+  assert.equal(self.lastError.errorCode, 'UNAUTHORIZED');
+
+  // Unrelated sequence numbers are ignored.
+  net.handlers.genericError({ sequenceNumber: 250, errorCode: 'INTERNAL' });
+  assert.equal(self.lastError.sequenceNumber, self.lastSent.sequenceNumber);
+
+  // Dispose stops the loop.
+  session.dispose();
+  self.patchState({ y: 9 });
+  ticker.advance(2000);
+  assert.equal(net.sent.length, 4);
+});
+
+test('LocalActorStore: uuid persistence, explicit uuid, manual-send mode', async () => {
+  const { createWorldSession, memoryUuidStore, jsonCodec, manualTicker } =
+    await loadStores();
+
+  // A shared UuidStore keeps the identity stable across sessions.
+  const uuidStore = memoryUuidStore();
+  const mk = () => {
+    const { client, net } = fakeClient();
+    const session = createWorldSession(client, '1', {
+      ticker: manualTicker(),
+      self: { codec: jsonCodec(), initialState: { hp: 1 }, uuidStore },
+    });
+    return { session, net };
+  };
+  const first = mk();
+  const second = mk();
+  assert.equal(second.session.self.uuid, first.session.self.uuid);
+  first.session.dispose();
+  second.session.dispose();
+
+  // Explicit uuid wins; invalid uuids are rejected.
+  const { client, net } = fakeClient();
+  const explicit = 'a'.repeat(32);
+  const ticker = manualTicker();
+  const session = createWorldSession(client, '1', {
+    ticker,
+    self: {
+      codec: jsonCodec(),
+      initialState: { hp: 1 },
+      uuid: explicit,
+      sendIntervalMs: false, // manual mode: no loop
+    },
+  });
+  assert.equal(session.self.uuid, explicit);
+
+  await session.self.join({ x: '0', y: '0', z: '0' });
+  ticker.advance(5000);
+  assert.equal(net.sent.length, 1, 'no loop sends in manual mode');
+  session.self.setState({ hp: 5 });
+  await session.self.sendNow();
+  assert.equal(net.sent.length, 2);
+  assert.equal(session.self.lastSent.reason, 'manual');
+  assert.equal(session.self.lastSent.state.hp, 5);
+  session.dispose();
+
+  const bad = () =>
+    createWorldSession(fakeClient().client, '1', {
+      self: { codec: jsonCodec(), initialState: {}, uuid: 'short' },
+    });
+  assert.throws(bad, /32/);
+});
+
 test('caller-supplied tickers are not disposed with the session', async () => {
   const { createWorldSession, manualTicker } = await loadStores();
   const { client } = fakeClient();

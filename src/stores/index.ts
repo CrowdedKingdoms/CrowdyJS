@@ -65,7 +65,23 @@ export {
   type WorldSessionContext,
   type WorldStoresClient,
 } from './session.js';
+export {
+  LocalActorStore,
+  attachLocalActor,
+  localStorageUuidStore,
+  memoryUuidStore,
+  type AckedActorUpdate,
+  type ActorSendError,
+  type ActorUpdateEcho,
+  type GenericErrorEcho,
+  type LocalActorConfig,
+  type LocalActorStatus,
+  type SendReason,
+  type SentActorUpdate,
+  type UuidStore,
+} from './actors.js';
 
+import { LocalActorStore, type LocalActorConfig } from './actors.js';
 import {
   WorldSessionCore,
   type WorldSessionBaseConfig,
@@ -73,16 +89,20 @@ import {
 } from './session.js';
 
 /**
- * Configuration for {@link createWorldSession}. Store-specific keys are
- * added as the store modules land; only configured stores are constructed
- * (and only they appear on the returned session's type).
+ * Configuration for {@link createWorldSession}. Only configured stores are
+ * constructed (and only they appear on the returned session's type).
  */
-export interface WorldSessionConfig extends WorldSessionBaseConfig {}
+export interface WorldSessionConfig<TSelf = unknown> extends WorldSessionBaseConfig {
+  /** Your own actor: identity, typed state, send loop ({@link LocalActorStore}). */
+  self?: LocalActorConfig<TSelf>;
+}
 
 /** The session returned by {@link createWorldSession}. */
-export interface WorldSession {
+export interface WorldSession<TSelf = unknown> {
   /** The app this session is scoped to. */
   readonly appId: string;
+  /** The local actor store (present when `config.self` was given). */
+  readonly self?: LocalActorStore<TSelf>;
   /** Close the shared subscription, cancel timers, and release the stores. */
   dispose(): void;
   /** The wiring context (for custom store implementations). */
@@ -96,22 +116,28 @@ export interface WorldSession {
  * {@link WorldStoresClient} structurally) and the app id.
  *
  * ```ts
- * import { createWorldSession, workerTicker } from '@crowdedkingdoms/crowdyjs/stores';
+ * import { createWorldSession, structCodec, f32, u8, workerTicker } from '@crowdedkingdoms/crowdyjs/stores';
  *
- * const session = createWorldSession(client, appId, { ticker: workerTicker() });
- * // ...configure stores (self / actors / chunks / …) — see each store module.
+ * const poseCodec = structCodec({ x: f32(), y: f32(), z: f32(), flags: u8() });
+ * const session = createWorldSession(client, appId, {
+ *   ticker: workerTicker(), // hold 5 Hz in backgrounded tabs
+ *   self: { codec: poseCodec, initialState: { x: 0, y: 0, z: 0, flags: 0 } },
+ * });
+ * await session.self.join({ x: '0', y: '0', z: '0' });
+ * session.self.patchState({ x: 12.5 }); // next tick replicates it
  * session.dispose();
  * ```
  */
-export function createWorldSession(
+export function createWorldSession<TSelf = unknown>(
   client: WorldStoresClient,
   appId: string,
-  config: WorldSessionConfig = {},
-): WorldSession {
+  config: WorldSessionConfig<TSelf> = {},
+): WorldSession<TSelf> {
   const core = new WorldSessionCore(client, appId, config.ticker);
   return {
     appId,
     context: core,
+    ...(config.self ? { self: new LocalActorStore(core, config.self) } : {}),
     dispose: () => core.dispose(),
   };
 }
