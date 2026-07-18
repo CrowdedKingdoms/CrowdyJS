@@ -1,7 +1,7 @@
 import type { GameAppsAPI } from '../domains/gameApps.js';
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { Scalars, SeedPropertyInput } from '../generated/graphql.js';
-import { plotNames, type PlotNames } from './blueprints.js';
+import { plotNames, type PlotNames } from './blueprints/index.js';
 import {
   kitContainerProperties,
   kitInvoke,

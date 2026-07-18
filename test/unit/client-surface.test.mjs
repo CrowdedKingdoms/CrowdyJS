@@ -85,6 +85,57 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.plots, 'kit.plots', [
     'create', 'list', 'buy', 'rent', 'evict', 'accessOf',
   ]);
+  assertMethods(kit.economy, 'kit.economy', [
+    'ensureWallet', 'balance', 'wallet', 'earn', 'spend',
+  ]);
+  assertMethods(kit.economy.shop, 'kit.economy.shop', ['create', 'list', 'buy']);
+  assertMethods(kit.economy.trades, 'kit.economy.trades', [
+    'offer', 'accept', 'cancel', 'get', 'listMine',
+  ]);
+  assertMethods(kit.economy.market, 'kit.economy.market', [
+    'list', 'browse', 'buy', 'cancel',
+  ]);
+  assertMethods(kit.loot, 'kit.loot', [
+    'createRoll', 'roll', 'claim', 'state', 'rolls', 'history',
+  ]);
+  assertMethods(kit.progression, 'kit.progression', [
+    'ensure', 'state', 'grantXp', 'skillCatalog', 'defineSkill', 'ensureSkillRank',
+    'buySkill', 'skills', 'achievementCatalog', 'defineAchievement', 'achievements',
+    'unlockAchievement', 'applyMatchResult',
+  ]);
+  assertMethods(kit.quests, 'kit.quests', [
+    'catalog', 'defineQuest', 'accept', 'mine', 'state', 'advance', 'claim',
+  ]);
+  assertMethods(kit.combat, 'kit.combat', [
+    'spawnCombatant', 'state', 'attack', 'applyEffect', 'effects', 'respawn',
+    'revive', 'syncCombatant',
+  ]);
+  assertMethods(kit.matches, 'kit.matches', [
+    'create', 'open', 'get', 'join', 'start', 'advanceRound', 'myTurn', 'endTurn',
+    'ensureScore', 'score', 'standings', 'finish', 'notifyChanged', 'onMatchChanged',
+  ]);
+  assertMethods(kit.decks, 'kit.decks', [
+    'deal', 'shuffle', 'cards', 'myHand', 'board', 'draw', 'drawCard', 'play', 'discard',
+  ]);
+  assertMethods(kit.worldsim, 'kit.worldsim', [
+    'ensureWorld', 'worldState', 'setWeather', 'createNode', 'nodes', 'gather',
+    'plant', 'crops', 'harvest', 'createSpawner', 'spawners', 'runNow', 'setEnabled',
+  ]);
+  assertMethods(kit.social.party, 'kit.social.party', [
+    'create', 'find', 'invite', 'join', 'leave', 'members',
+  ]);
+  assertMethods(kit.social.guild, 'kit.social.guild', [
+    'create', 'find', 'roster', 'roles', 'createRole', 'promote', 'claimTerritory',
+  ]);
+  assertMethods(kit.social.chat, 'kit.social.chat', [
+    'room', 'join', 'send', 'onMessage',
+  ]);
+  assertMethods(kit.leaderboards, 'kit.leaderboards', [
+    'ensureEntry', 'submit', 'board', 'top', 'around', 'season',
+  ]);
+  assertMethods(kit.features, 'kit.features', [
+    'define', 'list', 'grantToTier', 'revokeFromTier', 'tierFeatures', 'gate',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

@@ -1,16 +1,30 @@
+import type { ChannelsAPI } from '../domains/channels.js';
 import type { GameAppsAPI } from '../domains/gameApps.js';
 import type { GameModelAPI } from '../domains/gameModel.js';
+import type { TeamsAPI } from '../domains/teams.js';
+import type { UdpAPI } from '../domains/udp.js';
 import type {
   GameModelSeedMutation,
   GameModelUpsertAutomationMutation,
   GameModelUpsertAutomationTriggerMutation,
   Scalars,
 } from '../generated/graphql.js';
-import { mergeBlueprints, type KitBlueprint } from './blueprints.js';
+import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
+import { CombatKit, type CombatKitOptions } from './combat.js';
+import { DecksKit, type DecksKitOptions } from './decks.js';
+import { EconomyKit, type EconomyKitOptions } from './economy.js';
+import { FeaturesKit } from './features.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
+import { LeaderboardsKit, type LeaderboardsKitOptions } from './leaderboards.js';
+import { LootKit, type LootKitOptions } from './loot.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 import { PlotsKit, type PlotsKitOptions } from './plots.js';
+import { MatchesKit, type MatchesKitOptions } from './matches.js';
+import { ProgressionKit, type ProgressionKitOptions } from './progression.js';
+import { QuestsKit, type QuestsKitOptions } from './quests.js';
+import { SocialKit, type SocialKitOptions } from './social.js';
+import { WorldsimKit, type WorldsimKitOptions } from './worldsim.js';
 
 /** Options for {@link GameKitClient}, configuring the runtime helpers to match your deployed blueprints. */
 export interface GameKitOptions {
@@ -18,6 +32,27 @@ export interface GameKitOptions {
   objects?: ObjectsKitOptions;
   npcs?: NpcsKitOptions;
   plots?: PlotsKitOptions;
+  economy?: EconomyKitOptions;
+  progression?: ProgressionKitOptions;
+  loot?: LootKitOptions;
+  quests?: QuestsKitOptions;
+  combat?: CombatKitOptions;
+  matches?: MatchesKitOptions;
+  decks?: DecksKitOptions;
+  worldsim?: WorldsimKitOptions;
+  social?: SocialKitOptions;
+  leaderboards?: LeaderboardsKitOptions;
+}
+
+/**
+ * The extra (non-model) domains some kit helpers compose: channels + udp for
+ * matches (notify-to-pull) and social chat, teams for parties/guilds.
+ * `client.kit(appId)` wires them automatically.
+ */
+export interface GameKitDomains {
+  channels?: ChannelsAPI;
+  teams?: TeamsAPI;
+  udp?: UdpAPI;
 }
 
 /** The result of {@link GameKitClient.deploy}: the seed outcome plus each automation/trigger upserted. */
@@ -76,17 +111,64 @@ export class GameKitClient {
   readonly npcs: NpcsKit;
   /** Plot helpers (buy/rent land with transactional, enforced grid grants). */
   readonly plots: PlotsKit;
+  /** Economy helpers (wallets, shops, escrow trades, player market). */
+  readonly economy: EconomyKit;
+  /** Progression helpers (xp/levels, skills, achievements, rating). */
+  readonly progression: ProgressionKit;
+  /** Loot helpers (server-rolled weighted tables, atomic claims). */
+  readonly loot: LootKit;
+  /** Quest helpers (catalog, progress, atomic reward turn-in, daily resets). */
+  readonly quests: QuestsKit;
+  /** Combat helpers (server-authoritative attacks, status effects, respawn). */
+  readonly combat: CombatKit;
+  /** Match helpers (lobbies, rounds, turns, scores, notify-to-pull channels). */
+  readonly matches: MatchesKit;
+  /** Deck helpers (hidden hands via owner visibility, server-dealt shuffles). */
+  readonly decks: DecksKit;
+  /** World simulation helpers (clock/weather, nodes, crops, wave counters). */
+  readonly worldsim: WorldsimKit;
+  /** Social helpers (parties, guilds, chat over teams + channels). */
+  readonly social: SocialKit;
+  /** Leaderboard helpers (trusted submits, client-side ranking, seasons). */
+  readonly leaderboards: LeaderboardsKit;
+  /** Monetization helpers (feature keys, tier grants, featureGate policies). */
+  readonly features: FeaturesKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
     private readonly gameModel: GameModelAPI,
     gameApps: GameAppsAPI,
     options: GameKitOptions = {},
+    domains: GameKitDomains = {},
   ) {
     this.inventory = new InventoryKit(appId, gameModel, options.inventory);
     this.objects = new ObjectsKit(appId, gameModel, options.objects);
     this.npcs = new NpcsKit(appId, gameModel, options.npcs);
     this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
+    this.economy = new EconomyKit(appId, gameModel, options.economy);
+    this.progression = new ProgressionKit(appId, gameModel, options.progression);
+    this.loot = new LootKit(appId, gameModel, options.loot);
+    this.quests = new QuestsKit(appId, gameModel, options.quests);
+    this.combat = new CombatKit(appId, gameModel, options.combat);
+    this.matches = new MatchesKit(
+      appId,
+      gameModel,
+      domains.channels,
+      domains.udp,
+      options.matches,
+    );
+    this.decks = new DecksKit(appId, gameModel, options.decks);
+    this.worldsim = new WorldsimKit(appId, gameModel, options.worldsim);
+    this.social = new SocialKit(
+      appId,
+      domains.teams,
+      domains.channels,
+      domains.udp,
+      gameApps,
+      options.social,
+    );
+    this.leaderboards = new LeaderboardsKit(appId, gameModel, options.leaderboards);
+    this.features = new FeaturesKit(appId, gameModel);
   }
 
   /**

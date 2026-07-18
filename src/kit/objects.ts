@@ -1,6 +1,6 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { Scalars, SeedPropertyInput } from '../generated/graphql.js';
-import { lockNames, type LockNames } from './blueprints.js';
+import { lockNames, type LockNames } from './blueprints/index.js';
 import {
   kitContainerProperties,
   kitInvoke,
