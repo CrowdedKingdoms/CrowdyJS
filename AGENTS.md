@@ -8,8 +8,10 @@ player concurrency because all realtime traffic is spatially routed by chunk.
 Read [README.md](README.md) first (install, quick start, sub-client tables,
 token model, error classes). [MIGRATION.md](MIGRATION.md) covers breaking
 changes between majors. This file adds what the README does not: **how to map
-game concepts onto the API surface**, with the Blocks with Friends game as the
-worked reference.
+game concepts onto the API surface**. (Patterns below reference *Blocks with
+Friends*, the Minecraft-style voxel MMO built on this SDK — playable at
+crowdy.games; its source is not public, so every pattern is described
+self-contained here or in the public docs.)
 
 ## Repo orientation
 
@@ -52,9 +54,10 @@ worked reference.
   `automation`); `featureGate` + `*policyExtra` options monetization-gate
   builders.
 - `schema.gql` + `src/generated/graphql.ts` — committed schema artifacts; the
-  build must never depend on sibling API repos. Refresh with
-  `npm run schema:sync:*` + `npm run codegen`, commit both together, and use
-  `npm run check:schema` to detect drift (see README "Standalone builds").
+  build must never depend on other repositories or network access. Refresh
+  from the published SDLs with `npm run schema:sync:prod` + `npm run codegen`,
+  commit both together, and use `npm run check:schema` to detect drift (see
+  README "Standalone builds").
 - `test/unit`, `test/e2e` — e2e suites (two-client, gamer-journey, audio,
   voxel, channel) double as usage examples.
 
@@ -81,7 +84,7 @@ worked reference.
 | Player presence & movement | `udp.subscribe` + `udp.sendActorUpdate` (chunk-addressed, base64 `state` blob, `distance` fan-out); `world(appId)` helpers; SDK-managed: World Stores `session.self` (send loop) + `session.actors` (typed registry) |
 | Client-side game-state bookkeeping (actor registries, chunk caches, codecs, inboxes) | `createWorldSession` from `@crowdedkingdoms/crowdyjs/stores` — opt-in typed stores over one shared subscription |
 | Persistent terrain / world | `chunks.get` / `chunks.byDistance` / `chunks.update` (durable) + `udp.sendVoxelUpdate` (realtime edits) |
-| Per-block metadata | app-defined blob conventions inside chunk `voxelStates` (see BWF `voxelState.ts`) |
+| Per-block metadata | app-defined blob conventions inside chunk `voxelStates` (e.g. compact JSON→base64 with orientation/growth/power/container-link fields); type it with a `StateCodec` on the ChunkStore's `voxelStateCodec` |
 | Server-side rules & data (inventory, stats, crafting, NPCs) | `gameModel` containers / properties / functions with invoke policies — schema admin-seeded before play |
 | World life with no client online | `gameModel` automations (schedules/triggers invoking `autonomousInvocable` functions) — admin-seeded before play |
 | Ready-made inventory / lockable objects / NPC mappings | `kit(appId)` — blueprints deployed with `kit.deploy` (admin), runtime via `kit.inventory` / `kit.objects` / `kit.npcs` |
@@ -138,13 +141,16 @@ Server-authoritative rules without running a server. Three primitives:
 types, property definitions, functions, and policies do not exist until a
 studio-admin token (a user with `manage_apps` on the app) writes them — plan a
 seed script as part of any game build, and run it before the game client ships.
-Author the schema with `gameModel.seed` (idempotent: container types, property
-defs, functions in one call) plus `upsertContainerType` / `upsertPropertyDef` /
-`upsertFunction` / `setPolicy` for incremental changes; runtime ops
-(`createContainer`, `invoke`, reads) then run with a player's app token against
-the seeded schema. BWF's `scripts/seed-blocks-world.mjs` is the reference: an
-idempotent, re-runnable Node script that mints an admin app token, seeds the
-schema and definition containers, and versions migrations via a
+Author the schema with `kit.deploy([...blueprints])` (preferred: one
+transactional `gameModel.seed` + automation upserts from plain-data
+blueprints) or `gameModel.seed` directly, plus `upsertContainerType` /
+`upsertPropertyDef` / `upsertFunction` / `setPolicy` for incremental changes;
+runtime ops (`createContainer`, `invoke`, reads) then run with a player's app
+token against the seeded schema. The proven seed shape (used by Blocks with
+Friends): an idempotent, re-runnable Node script that mints an admin app
+token, deploys the schema through `kit.deploy` (kit blueprints for plots /
+locks / NPCs plus one hand-authored blueprint for the game-specific
+remainder), seeds definition containers, and versions migrations via a
 `World.version` property compared against the model JSON's schema version.
 Sessions (`createSession` / `joinSession` / `setSessionTurn`) support
 match/turn structures; model-driven `notify_*` effects push updates to
@@ -157,8 +163,9 @@ NPC wander, trader restock, mob spawn ticks, crop growth — with **no client
 connected**. Target functions must declare `autonomousInvocable: true`.
 Like the model schema, automations are **admin-authored ahead of play**: the
 same seed script that writes the model should upsert the automation policy and
-definitions (BWF registers all four of its automations there); game clients
-only read diagnostics. Surface: `gameModel.upsertAutomation` (name,
+definitions (`kit.deploy` upserts blueprint automations automatically; BWF
+registers all of its automations this way); game clients only read
+diagnostics. Surface: `gameModel.upsertAutomation` (name,
 `functionName`, `targetMode` + `targetTypeName`, `triggerType: schedule` +
 `intervalMs`, selector with `where`/`limit`), `upsertAutomationTrigger`
 (event-driven), `setAutomationPolicy` (enable + budgets: `minIntervalMs`,
@@ -183,35 +190,32 @@ Push-to-talk proximity voice = spatial audio packets: capture mic → downsample
 the `audio` handler; apply per-speaker jitter buffering and distance gain.
 The server enforces the `use_voice_chat` grid permission.
 
-## Reference implementation: Blocks with Friends
+## Reference patterns: Blocks with Friends
 
-The most complete CrowdyJS example is the Minecraft-style voxel MMO in the
-Crowdy-Games repo (sibling checkout in the CKS wrapper:
-`../Crowdy-Games/blocks-with-friends/`; not on npm). Its README has a
-systems→platform table. Where each pattern lives:
+The most complete CrowdyJS consumer is *Blocks with Friends*, a Minecraft-style
+voxel MMO (playable via the Overworld at crowdy.games; source not public). As
+of CrowdyJS 8.4 it runs almost entirely on SDK-managed layers, so every one of
+its patterns maps to a public surface you can adopt directly:
 
-| Pattern | File(s) |
+| Pattern | SDK surface |
 |---|---|
-| Client bootstrap, portal entry, per-app routing, token refresh | `src/network/NetworkManager.ts` |
-| One shared `udp.subscribe` fanned out to game systems | `src/network/NetworkManager.ts` |
-| Actor replication loop (200 ms) + binary pose codec | `src/session/ActorSender.ts`, `src/session/actorCodec.ts` |
-| Chunk streaming + deterministic write-back worldgen | `src/world/WorldStreamer.ts`, `src/world/worldgen.shared.mjs` |
-| Per-voxel metadata blob (orientation, growth, chest links) | `src/world/voxelState.ts` |
-| Model schema: 17 container types, 25 functions with policies, 4 automations | `src/model/blocks-model.json` |
-| Typed wrapper over `gameModel.*` (catalog, inventory, stats, mobs) | `src/model/GameModel.ts` |
-| Host-driven mob simulation over open `mob_update`/`damage_mob` functions | `src/mmo/MobService.ts`, `src/mmo/HostService.ts` |
-| Mu-law push-to-talk proximity voice | `src/audio/VoiceChat.ts` |
-| Guilds (teams), channel chat, claims (grids + model) | `src/mmo/SocialService.ts`, `src/mmo/ClaimService.ts` |
-| Save state, avatars | `src/mmo/WorldSession.ts`, `src/mmo/CharacterService.ts` |
-| Idempotent admin seed (schema, defs, automations, launch chunks, grids) | `scripts/seed-blocks-world.mjs` |
-| Public-API smoke walk (bootstrap → model → replication → state) | `scripts/smoke-mmo.mjs` |
+| One shared session over one `udpNotifications` subscription | `createWorldSession(client, appId, config)` from `@crowdedkingdoms/crowdyjs/stores` |
+| Actor replication (5 Hz send loop, 48-byte binary pose, stable uuid) | `session.self` with a `structCodec` pose; remote players/mobs via `session.actors` lanes |
+| Chunk streaming, hydration, realtime merge, deterministic write-back worldgen | `session.chunks` (`ensureAround`, `onMissing` → seed with optional `writeBack: false`, `setVoxel`); custom dense layouts via `voxelIndex` |
+| Per-voxel metadata (orientation, growth, power, chest links) | a typed `voxelStateCodec` on the ChunkStore (compact JSON→base64 blob) |
+| Send-error attribution | `session.errors.onError` |
+| Host-gated simulation (mobs, growth ticks) | `session.host` (heartbeat + `isHost`), authoritative gating via the `is_host` invoke policy |
+| Save state | `session.save` (typed durable blob over `state.*`) |
+| Sellable land, permission-gated doors, server-driven NPCs | `plotBlueprint` / `lockBlueprint` / `npcBlueprint` deployed with `kit.deploy`; runtime `kit.plots` / `kit.objectsFor(...)` / `kit.npcs` |
+| Game-specific rules (mining/placing validation, stats, crafting, quests) | hand-authored `KitBlueprint` (plain data) deployed alongside the builders |
+| Mu-law push-to-talk proximity voice | `udp.sendAudioPacket` + the `audio` handler (8 kHz mono mu-law, ~120 ms frames) |
+| Guilds, channel chat, claims | `teams.*`, `channels.*`, `gameApps.createGrid`/`grantPermissions` |
 
-Notes when copying from BWF: it gates mob simulation **client-side** on the
-host heartbeat and leaves `mob_update` open (`allow` policy) — acceptable for
-a co-op sandbox; use the `is_host` invoke policy when you need the server to
-enforce host authority. Its seed script drives the studio-admin GraphQL
-surface directly with a minted admin app token; `client.gameModel.seed` /
-`upsertAutomation` are the SDK equivalents.
+Note on host authority: gating simulation client-side on the host heartbeat
+with open (`allow`-policy) model functions is acceptable for a co-op sandbox;
+use the `is_host` invoke policy when the server must enforce host authority.
+The [build-a-game tutorial](https://docs.crowdedkingdoms.com/build-a-game/intro)
+walks the same patterns end to end with public code.
 
 ## Docs
 
@@ -239,9 +243,10 @@ Canonical docs: <https://docs.crowdedkingdoms.com> (agent index:
 - Never hand-edit `src/generated/graphql.ts`. When the public GraphQL surface
   changes: `npm run schema:sync:*` → `npm run codegen` → commit `schema.gql`
   and `src/generated/graphql.ts` together.
-- `npm install && npm run build` must succeed in a clean external clone (no
-  sibling repos, no network schema fetch).
-- Public-surface changes are held to the wrapper repo's
-  `api-agent-readiness-checklist.md` — GraphQL descriptions live in the API
-  repos' NestJS decorators and regenerate into `schema.gql` and the cks-docs
-  reference.
+- `npm install && npm run build` must succeed in a clean clone of this repo
+  alone (no other repositories, no network schema fetch).
+- Public-surface changes are held to the platform's API agent-readiness
+  standard: every public field/argument carries a schema description
+  (authored server-side and regenerated into `schema.gql` and the
+  [docs reference](https://docs.crowdedkingdoms.com/crowdyjs/reference/graphql)),
+  and SDK methods carry TSDoc mirroring those semantics.
