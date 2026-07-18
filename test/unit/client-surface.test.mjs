@@ -114,6 +114,9 @@ test('client exposes the full management + game sub-client surface', async () =>
     'create', 'open', 'get', 'join', 'start', 'advanceRound', 'myTurn', 'endTurn',
     'ensureScore', 'score', 'standings', 'finish', 'notifyChanged', 'onMatchChanged',
   ]);
+  assertMethods(kit.decks, 'kit.decks', [
+    'deal', 'shuffle', 'cards', 'myHand', 'board', 'draw', 'drawCard', 'play', 'discard',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

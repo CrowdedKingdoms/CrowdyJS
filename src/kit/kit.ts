@@ -11,6 +11,7 @@ import type {
 } from '../generated/graphql.js';
 import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
 import { CombatKit, type CombatKitOptions } from './combat.js';
+import { DecksKit, type DecksKitOptions } from './decks.js';
 import { EconomyKit, type EconomyKitOptions } from './economy.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { LootKit, type LootKitOptions } from './loot.js';
@@ -33,6 +34,7 @@ export interface GameKitOptions {
   quests?: QuestsKitOptions;
   combat?: CombatKitOptions;
   matches?: MatchesKitOptions;
+  decks?: DecksKitOptions;
 }
 
 /**
@@ -114,6 +116,8 @@ export class GameKitClient {
   readonly combat: CombatKit;
   /** Match helpers (lobbies, rounds, turns, scores, notify-to-pull channels). */
   readonly matches: MatchesKit;
+  /** Deck helpers (hidden hands via owner visibility, server-dealt shuffles). */
+  readonly decks: DecksKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -138,6 +142,7 @@ export class GameKitClient {
       domains.udp,
       options.matches,
     );
+    this.decks = new DecksKit(appId, gameModel, options.decks);
   }
 
   /**

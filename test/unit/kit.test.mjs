@@ -862,6 +862,70 @@ test('matchesBlueprint generates lifecycle functions with channel notifications 
   );
 });
 
+test('decksBlueprint generates owner-visibility hidden hands and position dealing', async () => {
+  const { decksBlueprint, decksNames } = await loadSdk();
+
+  const bp = decksBlueprint();
+  assert.deepEqual(
+    bp.containerTypes.map((t) => t.typeName),
+    ['CardDef', 'CardInstance'],
+  );
+
+  // The two-property hidden-info trick: card_id is owner-visible only,
+  // revealed_card_id is public and empty until played.
+  const cardId = bp.propertyDefinitions.find(
+    (p) => p.containerTypeName === 'CardInstance' && p.key === 'card_id',
+  );
+  assert.equal(cardId.visibility, 'owner');
+  const revealed = bp.propertyDefinitions.find(
+    (p) => p.containerTypeName === 'CardInstance' && p.key === 'revealed_card_id',
+  );
+  assert.equal(revealed.visibility, undefined);
+  assert.equal(revealed.defaultValueJson, '""');
+
+  // draw: owner + deck-zone guard; play: reveal + zone flip in one txn.
+  const draw = bp.functions.find((f) => f.name === 'draw_card');
+  const drawPolicy = JSON.parse(draw.invokePolicyJson);
+  assert.ok(drawPolicy.rules.some((r) => r.type === 'owner_of_self'));
+  assert.match(
+    drawPolicy.rules.find((r) => r.type === 'condition').expression,
+    /self\.zone == "deck"/,
+  );
+  const play = bp.functions.find((f) => f.name === 'play_card');
+  assert.deepEqual(
+    play.mutations.map((m) => [m.property, m.expression]),
+    [
+      ['zone', '"board"'],
+      ['revealed_card_id', 'self.card_id'],
+    ],
+  );
+
+  // Shuffle: manual type-fan-out automation dealing rand_int positions to
+  // deck-zone cards (the supported server-side shuffle pattern).
+  const assign = bp.functions.find((f) => f.name === 'assign_position');
+  assert.equal(assign.autonomousInvocable, true);
+  assert.equal(assign.mutations[0].expression, 'rand_int(0, 1000000)');
+  const shuffle = bp.automations.find((a) => a.name === 'deck-shuffle');
+  assert.equal(shuffle.triggerType, 'manual');
+  assert.equal(shuffle.maxTargets, 200);
+  assert.deepEqual(JSON.parse(shuffle.selectorJson), {
+    selfWhere: [{ key: 'zone', op: '==', value: 'deck' }],
+  });
+
+  // turnBased threads is_current_turn into the player actions.
+  const tarot = decksBlueprint({ typePrefix: 'Tarot', turnBased: true, shuffleMaxTargets: 78 });
+  assert.equal(decksNames('Tarot').drawFn, 'tarot_draw_card');
+  assert.ok(
+    JSON.parse(
+      tarot.functions.find((f) => f.name === 'tarot_draw_card').invokePolicyJson,
+    ).rules.some((r) => r.type === 'is_current_turn'),
+  );
+  assert.equal(
+    tarot.automations.find((a) => a.name === 'tarot-deck-shuffle').maxTargets,
+    78,
+  );
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

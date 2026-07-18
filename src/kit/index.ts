@@ -3,6 +3,8 @@ export {
   combatBlueprint,
   combatNames,
   composeBlueprints,
+  decksBlueprint,
+  decksNames,
   economyBlueprint,
   economyCurrencyFn,
   economyNames,
@@ -33,6 +35,8 @@ export {
   trustedAuthorityFields,
   type CombatBlueprintOptions,
   type CombatNames,
+  type DecksBlueprintOptions,
+  type DecksNames,
   type EconomyBlueprintOptions,
   type EconomyNames,
   type InventoryBlueprintOptions,
@@ -86,6 +90,7 @@ export {
   type KitCombatant,
   type KitStatusEffect,
 } from './combat.js';
+export { DecksKit, type DecksKitOptions, type KitCard } from './decks.js';
 export {
   EconomyKit,
   type EconomyKitOptions,

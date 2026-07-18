@@ -31,6 +31,12 @@ export {
   type CombatNames,
 } from './combat.js';
 export {
+  decksBlueprint,
+  decksNames,
+  type DecksBlueprintOptions,
+  type DecksNames,
+} from './decks.js';
+export {
   economyBlueprint,
   economyCurrencyFn,
   economyNames,
