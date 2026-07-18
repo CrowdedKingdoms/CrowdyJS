@@ -12,6 +12,7 @@ import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 import { PlotsKit, type PlotsKitOptions } from './plots.js';
+import { ProgressionKit, type ProgressionKitOptions } from './progression.js';
 
 /** Options for {@link GameKitClient}, configuring the runtime helpers to match your deployed blueprints. */
 export interface GameKitOptions {
@@ -20,6 +21,7 @@ export interface GameKitOptions {
   npcs?: NpcsKitOptions;
   plots?: PlotsKitOptions;
   economy?: EconomyKitOptions;
+  progression?: ProgressionKitOptions;
 }
 
 /** The result of {@link GameKitClient.deploy}: the seed outcome plus each automation/trigger upserted. */
@@ -80,6 +82,8 @@ export class GameKitClient {
   readonly plots: PlotsKit;
   /** Economy helpers (wallets, shops, escrow trades, player market). */
   readonly economy: EconomyKit;
+  /** Progression helpers (xp/levels, skills, achievements, rating). */
+  readonly progression: ProgressionKit;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -92,6 +96,7 @@ export class GameKitClient {
     this.npcs = new NpcsKit(appId, gameModel, options.npcs);
     this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
     this.economy = new EconomyKit(appId, gameModel, options.economy);
+    this.progression = new ProgressionKit(appId, gameModel, options.progression);
   }
 
   /**

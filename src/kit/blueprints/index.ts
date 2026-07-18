@@ -45,6 +45,12 @@ export {
   type LockNames,
 } from './locks.js';
 export {
+  progressionBlueprint,
+  progressionNames,
+  type ProgressionBlueprintOptions,
+  type ProgressionNames,
+} from './progression.js';
+export {
   plotBlueprint,
   plotNames,
   type PlotBlueprintOptions,

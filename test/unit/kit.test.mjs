@@ -423,6 +423,82 @@ test('economyBlueprint generates wallets, shop, escrow trades, and market', asyn
   );
 });
 
+test('progressionBlueprint generates the fn: level curve, skills, achievements, rating', async () => {
+  const { progressionBlueprint, progressionNames } = await loadSdk();
+
+  const bp = progressionBlueprint({ skillPointsPerLevel: 2, initialRating: 1200 });
+  assert.deepEqual(
+    bp.containerTypes.map((t) => t.typeName),
+    ['Progress', 'SkillDef', 'SkillRank', 'AchievementDef', 'AchievementUnlock'],
+  );
+
+  // The XP curve is ONE internal function read via fn: calls.
+  const curve = bp.functions.find((f) => f.name === 'xp_for_level');
+  assert.equal(curve.invokeScope, 'internal');
+  assert.equal(curve.returnExpression, '100 * $level * $level');
+
+  // grant_xp: trusted (server scope default); ordered mutations — xp first,
+  // then skill points, then the level bump, all reading the fn: helper.
+  const grant = bp.functions.find((f) => f.name === 'grant_xp');
+  assert.equal(grant.invokeScope, 'server');
+  assert.deepEqual(
+    grant.mutations.map((m) => m.property),
+    ['xp', 'skill_points', 'level'],
+  );
+  assert.match(
+    grant.mutations[2].expression,
+    /if\(self\.xp >= fn:xp_for_level\(self\.level \+ 1\), self\.level \+ 1, self\.level\)/,
+  );
+  assert.match(grant.mutations[1].expression, /\+ if\(.*, 2, 0\)/);
+
+  // Rating defaults + host-gated adjust.
+  const rating = bp.propertyDefinitions.find(
+    (p) => p.containerTypeName === 'Progress' && p.key === 'rating',
+  );
+  assert.equal(rating.defaultValueJson, '1200');
+  const adjust = bp.functions.find((f) => f.name === 'adjust_rating');
+  assert.deepEqual(JSON.parse(adjust.invokePolicyJson), { type: 'is_host' });
+  assert.match(adjust.mutations[0].expression, /max\(0, self\.rating \+ \$delta\)/);
+
+  // spend_skill_point: cost, max rank, and prerequisite chain guards.
+  const buy = bp.functions.find((f) => f.name === 'spend_skill_point');
+  assert.deepEqual(
+    buy.parameters.map((p) => p.name),
+    ['progress_id', 'def_id', 'prereq_id'],
+  );
+  const buyGuard = JSON.parse(buy.invokePolicyJson).expression;
+  assert.match(buyGuard, /ref\(\$progress_id\)\.skill_points >= ref\(\$def_id\)\.cost/);
+  assert.match(buyGuard, /self\.rank < ref\(\$def_id\)\.max_rank/);
+  assert.match(
+    buyGuard,
+    /if\(ref\(\$def_id\)\.requires_skill_id == "", true, ref\(\$prereq_id\)\.skill_id == ref\(\$def_id\)\.requires_skill_id && ref\(\$prereq_id\)\.rank >= 1/,
+  );
+  // The spend and the rank-up are one transaction.
+  assert.deepEqual(buy.mutations.map((m) => m.property), ['skill_points', 'rank']);
+
+  // unlock_achievement: threshold guard, idempotent unlock.
+  const unlock = bp.functions.find((f) => f.name === 'unlock_achievement');
+  assert.match(
+    JSON.parse(unlock.invokePolicyJson).expression,
+    /ref\(\$progress_id\)\.xp >= ref\(\$def_id\)\.threshold/,
+  );
+
+  // Prefix + custom curve + authority variants.
+  const pvp = progressionBlueprint({
+    typePrefix: 'Pvp',
+    xpAuthority: 'automation',
+    xpForLevelExpression: '50 * $level',
+  });
+  assert.equal(progressionNames('Pvp').grantXpFn, 'pvp_grant_xp');
+  const pvpGrant = pvp.functions.find((f) => f.name === 'pvp_grant_xp');
+  assert.equal(pvpGrant.autonomousInvocable, true);
+  assert.match(pvpGrant.mutations[2].expression, /fn:pvp_xp_for_level/);
+  assert.equal(
+    pvp.functions.find((f) => f.name === 'pvp_xp_for_level').returnExpression,
+    '50 * $level',
+  );
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

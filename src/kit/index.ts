@@ -18,6 +18,8 @@ export {
   ownerMirrorProperty,
   plotBlueprint,
   plotNames,
+  progressionBlueprint,
+  progressionNames,
   toSnakeCase,
   trustedAuthorityFields,
   type EconomyBlueprintOptions,
@@ -40,6 +42,8 @@ export {
   type NpcBlueprintOptions,
   type PlotBlueprintOptions,
   type PlotNames,
+  type ProgressionBlueprintOptions,
+  type ProgressionNames,
   type SelectorPermissionPredicate,
 } from './blueprints/index.js';
 export {
@@ -59,6 +63,15 @@ export {
 export { ObjectsKit, type ObjectsKitOptions } from './objects.js';
 export { NpcsKit, type NpcsKitOptions, type KitNpc } from './npcs.js';
 export { PlotsKit, type PlotsKitOptions, type KitPlot } from './plots.js';
+export {
+  ProgressionKit,
+  type KitAchievementDef,
+  type KitAchievementUnlock,
+  type KitProgress,
+  type KitSkillDef,
+  type KitSkillRank,
+  type ProgressionKitOptions,
+} from './progression.js';
 export {
   kitInvoke,
   toKitInvokeResult,

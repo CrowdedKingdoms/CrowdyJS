@@ -95,6 +95,11 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.economy.market, 'kit.economy.market', [
     'list', 'browse', 'buy', 'cancel',
   ]);
+  assertMethods(kit.progression, 'kit.progression', [
+    'ensure', 'state', 'grantXp', 'skillCatalog', 'defineSkill', 'ensureSkillRank',
+    'buySkill', 'skills', 'achievementCatalog', 'defineAchievement', 'achievements',
+    'unlockAchievement', 'applyMatchResult',
+  ]);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');
