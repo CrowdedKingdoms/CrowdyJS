@@ -86,6 +86,10 @@ export {
   liveopsNames,
   type LiveopsBlueprintOptions,
   type LiveopsNames,
+  moderationBlueprint,
+  moderationNames,
+  type ModerationBlueprintOptions,
+  type ModerationNames,
 } from './blueprints/index.js';
 export {
   GameKitClient,
@@ -152,6 +156,36 @@ export {
   type LiveopsKitOptions,
   type ZoneChangeEvent,
 } from './liveops.js';
+export {
+  AbilitiesKit,
+  type AbilitiesKitOptions,
+  type KitAbility,
+} from './abilities.js';
+export {
+  MovementKit,
+  type KitViolations,
+  type MovementKitOptions,
+} from './movement.js';
+export {
+  TerritoryKit,
+  type KitControlPoint,
+  type TerritoryKitOptions,
+} from './territory.js';
+export {
+  RacingKit,
+  type KitRaceRun,
+  type RacingKitOptions,
+} from './racing.js';
+export {
+  ModerationKit,
+  type KitModReport,
+  type ModerationKitOptions,
+} from './moderation.js';
+export {
+  TelemetryKit,
+  telemetryBlueprint,
+  type TelemetryKitOptions,
+} from './telemetry.js';
 export {
   InstancesKit,
   type InstancesKitOptions,

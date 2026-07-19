@@ -122,3 +122,9 @@ export {
   type LiveopsBlueprintOptions,
   type LiveopsNames,
 } from './liveops.js';
+export {
+  moderationBlueprint,
+  moderationNames,
+  type ModerationBlueprintOptions,
+  type ModerationNames,
+} from './moderation.js';
