@@ -61,10 +61,16 @@ export class PetsKit {
     return this.engines.has(this.moduleName);
   }
 
-  /** Adopt a pet: creates the caller-owned Pet container (active). */
+  /**
+   * Adopt a pet: creates the caller-owned Pet container (active). Member
+   * instantiation defaults the owner to the caller; admin tokens must pass
+   * `ownerUserId` explicitly (the engine validates ownership on every
+   * summon/dismiss/rename).
+   */
   async adopt(input: {
     species: string;
     name: string;
+    ownerUserId?: Scalars['BigInt']['input'];
     position?: { x: number; y: number; z: number };
     properties?: SeedPropertyInput[];
   }) {
@@ -72,6 +78,7 @@ export class PetsKit {
       appId: this.appId,
       typeName: this.typeName,
       displayName: input.name,
+      ...(input.ownerUserId !== undefined ? { ownerUserId: input.ownerUserId } : {}),
       properties: [
         { key: 'species', valueType: 'string', valueJson: JSON.stringify(input.species) },
         { key: 'name', valueType: 'string', valueJson: JSON.stringify(input.name) },
