@@ -180,6 +180,105 @@ export class QuestsKit {
     return Promise.all(mine.map((c) => this.state(c.containerId)));
   }
 
+  // -- FTUE / tutorial step sequencing (Wave 2) -----------------------------
+
+  /**
+   * STUDIO (admin) — define an ordered tutorial chain as quest defs. Steps
+   * are plain quests whose `questId` encodes the chain + index
+   * (`"<chain>:<i>"`), so no new server surface is involved: the sequencing
+   * is a read-side convention enforced by {@link tutorial} /
+   * {@link acceptNextTutorialStep} (a step is `locked` until every earlier
+   * step completes).
+   */
+  async defineTutorial(input: {
+    /** Chain id (one app can ship several tutorials). Defaults to `'ftue'`. */
+    chain?: string;
+    steps: Array<{
+      displayName: string;
+      targetCount?: number;
+      rewardItemId?: string;
+      rewardQty?: number;
+      rewardGold?: number;
+    }>;
+  }) {
+    const chain = input.chain ?? 'ftue';
+    const created = [];
+    for (const [index, step] of input.steps.entries()) {
+      created.push(
+        await this.defineQuest({
+          questId: `${chain}:${index}`,
+          displayName: step.displayName,
+          targetCount: step.targetCount ?? 1,
+          rewardItemId: step.rewardItemId,
+          rewardQty: step.rewardQty,
+          rewardGold: step.rewardGold,
+        }),
+      );
+    }
+    return created;
+  }
+
+  /** One tutorial step joined with the player's progress. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- documented shape
+  /**
+   * A player's view of a tutorial chain: steps in order, each `locked`
+   * (an earlier step is incomplete), `active` (the first incomplete step),
+   * or `complete`. The client shows/drives only the `active` step; the
+   * trusted advance authority is unchanged (players still cannot complete
+   * their own quests).
+   */
+  async tutorial(
+    ownerUserId: Scalars['BigInt']['input'],
+    chain = 'ftue',
+  ): Promise<
+    Array<{
+      stepIndex: number;
+      def: KitQuestDef;
+      progress: KitQuestProgress | null;
+      status: 'locked' | 'active' | 'complete';
+    }>
+  > {
+    const prefix = `${chain}:`;
+    const defs = (await this.catalog())
+      .filter((def) => def.questId.startsWith(prefix))
+      .map((def) => ({ def, stepIndex: Number(def.questId.slice(prefix.length)) }))
+      .filter(({ stepIndex }) => Number.isFinite(stepIndex))
+      .sort((a, b) => a.stepIndex - b.stepIndex);
+    const progressRows = await this.mine(ownerUserId);
+    let blocked = false;
+    return defs.map(({ def, stepIndex }) => {
+      const progress = progressRows.find((p) => p.questId === def.questId) ?? null;
+      const complete = progress?.completed === true;
+      const status: 'locked' | 'active' | 'complete' = complete
+        ? 'complete'
+        : blocked
+          ? 'locked'
+          : 'active';
+      if (!complete) blocked = true;
+      return { stepIndex, def, progress, status };
+    });
+  }
+
+  /**
+   * Ensure the player's ACTIVE tutorial step has a progress row (accepting
+   * it when missing) and return the step. Returns null when the chain is
+   * complete. Calling this for a locked step is impossible by construction —
+   * it always targets the first incomplete step.
+   */
+  async acceptNextTutorialStep(
+    ownerUserId: Scalars['BigInt']['input'],
+    chain = 'ftue',
+    options: { sessionId?: string } = {},
+  ) {
+    const steps = await this.tutorial(ownerUserId, chain);
+    const active = steps.find((step) => step.status === 'active');
+    if (!active) return null;
+    if (active.progress) return active;
+    await this.accept(ownerUserId, active.def.containerId, options);
+    const refreshed = await this.tutorial(ownerUserId, chain);
+    return refreshed.find((step) => step.stepIndex === active.stepIndex) ?? null;
+  }
+
   /** Read one progress row. */
   async state(progressId: string): Promise<KitQuestProgress> {
     const container = await this.gameModel.container({

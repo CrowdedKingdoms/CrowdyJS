@@ -1,4 +1,5 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
+import type { EngineDetector } from './engine.js';
 import type { Scalars } from '../generated/graphql.js';
 import { decksNames, type DecksNames } from './blueprints/index.js';
 import {
@@ -9,6 +10,11 @@ import {
 
 /** Options for {@link DecksKit}. Must match the deployed decks blueprint. */
 export interface DecksKitOptions {
+  /**
+   * The compute module holding hidden hands when the app runs a deck
+   * engine. Defaults to `'deck-engine'`.
+   */
+  engineModuleName?: string;
   /** The `typePrefix` the decks blueprint was deployed with. */
   typePrefix?: string;
 }
@@ -45,8 +51,71 @@ export class DecksKit {
     private readonly appId: Scalars['BigInt']['input'],
     private readonly gameModel: GameModelAPI,
     options: DecksKitOptions = {},
+    private readonly engines?: EngineDetector,
   ) {
     this.names = decksNames(options.typePrefix ?? '');
+    this.engineModuleName = options.engineModuleName ?? 'deck-engine';
+  }
+
+  private readonly engineModuleName: string;
+
+  // -- Engine path (Wave 2): true hidden information over the deck engine --
+
+  /**
+   * Is a deck compute engine deployed + enabled (cached per session)? When
+   * true, hands and deck order live in MODULE state (server-held secrets);
+   * the blueprint's owner-visibility hands remain for model-only apps.
+   */
+  engineAvailable(): Promise<boolean> {
+    if (!this.engines) return Promise.resolve(false);
+    return this.engines.has(this.engineModuleName);
+  }
+
+  /** Create an engine table with seeded shuffle + hidden deals (creator seats itself). */
+  async engineNewTable(input: {
+    tableId: string;
+    players: string[];
+    handSize?: number;
+    deckDef?: string;
+  }) {
+    return this.engineInvoke('new_table', input as unknown as Record<string, unknown>);
+  }
+
+  /** YOUR hidden hand (the only read path; opponents can never see it). */
+  async engineHand(tableId: string): Promise<string[]> {
+    const body = await this.engineInvoke('hand', { tableId });
+    return Array.isArray(body.hand) ? (body.hand as unknown[]).map(String) : [];
+  }
+
+  /** Draw one card into your hidden hand. */
+  async engineDraw(tableId: string) {
+    return this.engineInvoke('draw', { tableId });
+  }
+
+  /** Play (reveal) a card from your hand into a public zone. */
+  async enginePlay(tableId: string, card: string, zone = 'table') {
+    return this.engineInvoke('play', { tableId, card, zone });
+  }
+
+  /** Collect a public zone to the discard (trick taken). */
+  async engineTakeZone(tableId: string, zone: string) {
+    return this.engineInvoke('take_zone', { tableId, zone });
+  }
+
+  /** The public table view (counts + zones — never hidden hands). */
+  async engineTable(tableId: string) {
+    return this.engineInvoke('table', { tableId });
+  }
+
+  private async engineInvoke(exportName: string, params: Record<string, unknown>) {
+    if (!this.engines) {
+      throw new Error('deck engine unavailable: compute domain not wired');
+    }
+    const result = await this.engines.invoke(this.engineModuleName, exportName, params);
+    if (!result.success) {
+      throw new Error(`decks.${exportName} failed: ${result.reason ?? 'unknown'}`);
+    }
+    return result.body;
   }
 
   /**

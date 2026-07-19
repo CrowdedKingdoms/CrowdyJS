@@ -1,4 +1,5 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
+import type { EngineDetector } from './engine.js';
 import type { Scalars, SeedPropertyInput } from '../generated/graphql.js';
 import {
   economyCurrencyFn,
@@ -17,6 +18,8 @@ export interface EconomyKitOptions {
   typePrefix?: string;
   /** The `currencies` the blueprint was deployed with. Defaults to `['gold']`. */
   currencies?: string[];
+  /** The order-book market engine module. Defaults to `'market-engine'`. */
+  marketModuleName?: string;
 }
 
 /** A parsed view of one wallet. */
@@ -90,11 +93,21 @@ export class EconomyKit {
     private readonly appId: Scalars['BigInt']['input'],
     private readonly gameModel: GameModelAPI,
     options: EconomyKitOptions = {},
+    engines?: EngineDetector,
   ) {
     this.typePrefix = options.typePrefix ?? '';
     this.names = economyNames(this.typePrefix);
     this.currencies = options.currencies ?? ['gold'];
+    this.orderBook = new MarketKit(engines, options.marketModuleName ?? 'market-engine');
   }
+
+  /**
+   * The order-book market (Wave 2 engine): bid/ask methods over the
+   * market-engine's escrowed order books. The model-side listing `market`
+   * on this kit keeps working without it (fixed-price stack listings);
+   * `orderBook` adds real price discovery when the engine is deployed.
+   */
+  readonly orderBook: MarketKit;
 
   private get defaultCurrency(): string {
     return this.currencies[0];
@@ -561,5 +574,76 @@ export class EconomyKit {
       wantQty: Number(props.want_qty ?? 0),
       status: String(props.status ?? ''),
     };
+  }
+}
+
+/**
+ * Order-book market methods over the market-engine (Wave 2): price-time
+ * priority matching with escrowed settlement. Deposits/withdrawals bridge
+ * to the game's wallets via compute events the game layer consumes.
+ *
+ * Obtained via `client.kit(appId).economy.market`.
+ */
+export class MarketKit {
+  constructor(
+    private readonly engines: EngineDetector | undefined,
+    private readonly moduleName: string,
+  ) {}
+
+  /** Is the market engine deployed + enabled (cached per session)? */
+  engineAvailable(): Promise<boolean> {
+    if (!this.engines) return Promise.resolve(false);
+    return this.engines.has(this.moduleName);
+  }
+
+  /** Move coins into your market account (escrow source for bids). */
+  async depositCoins(amount: number) {
+    return this.invoke('deposit_coins', { amount });
+  }
+
+  /** Move items into your market account (escrow source for asks). */
+  async depositItems(item: string, quantity: number) {
+    return this.invoke('deposit_items', { item, quantity });
+  }
+
+  /** Place a limit bid: locks coins at your limit; fills at maker price. */
+  async bid(item: string, price: number, quantity: number) {
+    return this.invoke('place', { item, side: 'buy', price, quantity });
+  }
+
+  /** Place a limit ask: locks items until filled or cancelled. */
+  async ask(item: string, price: number, quantity: number) {
+    return this.invoke('place', { item, side: 'sell', price, quantity });
+  }
+
+  /** Cancel a resting order (owner only); escrow refunds instantly. */
+  async cancel(item: string, orderId: number) {
+    return this.invoke('cancel', { item, orderId });
+  }
+
+  /** Book depth: best bids/asks as [price, quantity] levels. */
+  async book(item: string) {
+    return this.invoke('book', { item });
+  }
+
+  /** Your market account (settled + locked balances). */
+  async account() {
+    return this.invoke('account', {});
+  }
+
+  /** Withdraw settled balances back to the game layer. */
+  async withdraw(input: { coins?: number; item?: string; quantity?: number }) {
+    return this.invoke('withdraw', input as Record<string, unknown>);
+  }
+
+  private async invoke(exportName: string, params: Record<string, unknown>) {
+    if (!this.engines) {
+      throw new Error('market engine unavailable: compute domain not wired');
+    }
+    const result = await this.engines.invoke(this.moduleName, exportName, params);
+    if (!result.success) {
+      throw new Error(`market.${exportName} failed: ${result.reason ?? 'unknown'}`);
+    }
+    return result.body;
   }
 }

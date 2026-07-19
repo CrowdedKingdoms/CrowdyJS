@@ -12,13 +12,17 @@ import type {
 import type { ComputeAPI } from '../domains/compute.js';
 import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
 import { CombatKit, type CombatKitOptions } from './combat.js';
+import { DirectorKit, type DirectorKitOptions } from './director.js';
 import { DecksKit, type DecksKitOptions } from './decks.js';
 import { EconomyKit, type EconomyKitOptions } from './economy.js';
 import { EngineDetector } from './engine.js';
 import { FeaturesKit } from './features.js';
+import { InstancesKit, type InstancesKitOptions } from './instances.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { LeaderboardsKit, type LeaderboardsKitOptions } from './leaderboards.js';
 import { LootKit, type LootKitOptions } from './loot.js';
+import { MatchmakingKit, type MatchmakingKitOptions } from './matchmaking.js';
+import { MinigamesKit, type MinigamesKitOptions } from './minigames.js';
 import { MobsKit, type MobsKitOptions } from './mobs.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
@@ -48,6 +52,10 @@ export interface GameKitOptions {
   leaderboards?: LeaderboardsKitOptions;
   mobs?: MobsKitOptions;
   pets?: PetsKitOptions;
+  instances?: InstancesKitOptions;
+  director?: DirectorKitOptions;
+  matchmaking?: MatchmakingKitOptions;
+  minigames?: MinigamesKitOptions;
 }
 
 /**
@@ -143,6 +151,14 @@ export class GameKitClient {
   readonly features: FeaturesKit;
   /** Mob-engine helpers (defs/slots, refereed attacks, contact events). */
   readonly mobs: MobsKit;
+  /** Instance helpers (private world slices, seeded runs). */
+  readonly instances: InstancesKit;
+  /** Director helpers (encounter defs, run state, kill/boss reports). */
+  readonly director: DirectorKit;
+  /** Matchmaking helpers (queues, proposals, rating). */
+  readonly matchmaking: MatchmakingKit;
+  /** Minigame helpers (thin invoke wrapper for invoke-loop games). */
+  readonly minigames: MinigamesKit;
   /** Pet helpers (adopt/summon/dismiss/rename over the npc engine). */
   readonly pets: PetsKit;
   /** Compute-engine capability detection shared by the engine-aware kits. */
@@ -160,7 +176,7 @@ export class GameKitClient {
     this.objects = new ObjectsKit(appId, gameModel, options.objects);
     this.npcs = new NpcsKit(appId, gameModel, options.npcs, this.engines);
     this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
-    this.economy = new EconomyKit(appId, gameModel, options.economy);
+    this.economy = new EconomyKit(appId, gameModel, options.economy, this.engines);
     this.progression = new ProgressionKit(appId, gameModel, options.progression);
     this.loot = new LootKit(appId, gameModel, options.loot);
     this.quests = new QuestsKit(appId, gameModel, options.quests);
@@ -171,11 +187,16 @@ export class GameKitClient {
       domains.channels,
       domains.udp,
       options.matches,
+      this.engines,
     );
-    this.decks = new DecksKit(appId, gameModel, options.decks);
+    this.decks = new DecksKit(appId, gameModel, options.decks, this.engines);
     this.worldsim = new WorldsimKit(appId, gameModel, options.worldsim, this.engines);
     this.mobs = new MobsKit(appId, gameModel, this.engines, options.mobs);
     this.pets = new PetsKit(appId, gameModel, this.engines, options.pets);
+    this.instances = new InstancesKit(appId, this.engines, options.instances);
+    this.director = new DirectorKit(appId, gameModel, this.engines, options.director);
+    this.matchmaking = new MatchmakingKit(appId, this.engines, options.matchmaking);
+    this.minigames = new MinigamesKit(appId, this.engines, options.minigames);
     this.social = new SocialKit(
       appId,
       domains.teams,
@@ -184,7 +205,7 @@ export class GameKitClient {
       gameApps,
       options.social,
     );
-    this.leaderboards = new LeaderboardsKit(appId, gameModel, options.leaderboards);
+    this.leaderboards = new LeaderboardsKit(appId, gameModel, options.leaderboards, this.engines);
     this.features = new FeaturesKit(appId, gameModel);
   }
 

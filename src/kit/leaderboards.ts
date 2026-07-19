@@ -1,4 +1,5 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
+import type { EngineDetector } from './engine.js';
 import type { Scalars } from '../generated/graphql.js';
 import {
   leaderboardsNames,
@@ -12,6 +13,8 @@ import {
 
 /** Options for {@link LeaderboardsKit}. Must match the deployed blueprint. */
 export interface LeaderboardsKitOptions {
+  /** The board engine module for server-computed rankings. Defaults to `'board-engine'`. */
+  engineModuleName?: string;
   /** The `typePrefix` the leaderboards blueprint was deployed with. */
   typePrefix?: string;
 }
@@ -44,8 +47,55 @@ export class LeaderboardsKit {
     private readonly appId: Scalars['BigInt']['input'],
     private readonly gameModel: GameModelAPI,
     options: LeaderboardsKitOptions = {},
+    private readonly engines?: EngineDetector,
   ) {
     this.names = leaderboardsNames(options.typePrefix ?? '');
+    this.engineModuleName = options.engineModuleName ?? 'board-engine';
+  }
+
+  private readonly engineModuleName: string;
+
+  // -- Engine path (Wave 2): server-computed rankings --------------------------
+
+  /**
+   * Is a board compute engine deployed + enabled (cached per session)? When
+   * true, rankings are computed SERVER-side (tie-aware ranks, percentiles,
+   * pages) instead of the blueprint's client-sorted reads.
+   */
+  engineAvailable(): Promise<boolean> {
+    if (!this.engines) return Promise.resolve(false);
+    return this.engines.has(this.engineModuleName);
+  }
+
+  /** A server-ranked page (rank/percentile computed module-side). */
+  async engineTop(boardId: string, page = 0, perPage = 10) {
+    return this.engineInvoke('top', { boardId, page, perPage });
+  }
+
+  /** Your (or a subject's) server-computed ranked row. */
+  async engineRankOf(boardId: string, subjectId?: string) {
+    return this.engineInvoke('rank_of', subjectId ? { boardId, subjectId } : { boardId });
+  }
+
+  /** Submit YOUR OWN score (personal-best semantics) to an engine board. */
+  async engineSubmitSelf(boardId: string, score: number) {
+    return this.engineInvoke('submit_self', { boardId, score });
+  }
+
+  /** Frozen season snapshots (top rows per rolled season). */
+  async engineSeasons(boardId: string) {
+    return this.engineInvoke('seasons', { boardId });
+  }
+
+  private async engineInvoke(exportName: string, params: Record<string, unknown>) {
+    if (!this.engines) {
+      throw new Error('board engine unavailable: compute domain not wired');
+    }
+    const result = await this.engines.invoke(this.engineModuleName, exportName, params);
+    if (!result.success) {
+      throw new Error(`leaderboards.${exportName} failed: ${result.reason ?? 'unknown'}`);
+    }
+    return result.body;
   }
 
   /** Find-or-create a player's entry on a board. */

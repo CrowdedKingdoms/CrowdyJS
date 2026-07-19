@@ -107,6 +107,7 @@ export { DecksKit, type DecksKitOptions, type KitCard } from './decks.js';
 export { FeaturesKit } from './features.js';
 export {
   EconomyKit,
+  MarketKit,
   type EconomyKitOptions,
   type KitMarketListing,
   type KitShopListing,
@@ -141,6 +142,23 @@ export {
 } from './pets.js';
 export { EngineDetector, type EngineInvokeResult } from './engine.js';
 export {
+  InstancesKit,
+  type InstancesKitOptions,
+  type KitInstance,
+} from './instances.js';
+export {
+  DirectorKit,
+  type DirectorKitOptions,
+  type KitDirectorRun,
+  type KitWaveSpec,
+} from './director.js';
+export {
+  MatchmakingKit,
+  type KitQueueStatus,
+  type MatchmakingKitOptions,
+} from './matchmaking.js';
+export { MinigamesKit, type MinigamesKitOptions } from './minigames.js';
+export {
   EVENT_CONTACT_DAMAGE,
   EVENT_WEATHER,
   FLAG_GROUNDED,
@@ -154,10 +172,19 @@ export {
   enginePoseCodec,
   parseContactDamage,
   parseEngineEvent,
+  parseProposalEvent,
+  parseScoreEvent,
+  parseTurnEvent,
   parseWeatherEvent,
   poseSuffix,
+  EVENT_PROPOSAL,
+  EVENT_SCORE,
+  EVENT_TURN,
   type ContactDamageEvent,
   type EnginePose,
+  type ProposalEvent,
+  type ScoreEvent,
+  type TurnEvent,
   type WeatherEvent,
 } from './wire.js';
 export { PlotsKit, type PlotsKitOptions, type KitPlot } from './plots.js';
