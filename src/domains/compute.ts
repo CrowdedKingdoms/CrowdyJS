@@ -49,6 +49,12 @@ import {
   type ComputeModuleLogsQuery,
   type ComputeModuleLogsQueryVariables,
   ComputeAppDiagnosticsDocument,
+  ComputeDeployTemplateDocument,
+  type ComputeDeployTemplateMutation,
+  type ComputeDeployTemplateMutationVariables,
+  ComputeTemplatesDocument,
+  type ComputeTemplatesQuery,
+  type ComputeTemplatesQueryVariables,
   type ComputeAppDiagnosticsQuery,
   type ComputeAppDiagnosticsQueryVariables,
 } from '../generated/graphql.js';
@@ -263,6 +269,29 @@ export class ComputeAPI {
   ): Promise<ComputeModuleVersionsQuery['computeModuleVersions']> {
     const data = await this.gql.request(ComputeModuleVersionsDocument, variables);
     return data.computeModuleVersions;
+  }
+
+  /**
+   * The platform's engine-template registry: ready-made engines deployable
+   * by name with {@link deployTemplate}.
+   */
+  async templates(
+    variables: ComputeTemplatesQueryVariables
+  ): Promise<ComputeTemplatesQuery['computeTemplates']> {
+    const data = await this.gql.request(ComputeTemplatesDocument, variables);
+    return data.computeTemplates;
+  }
+
+  /**
+   * Deploy a named engine template from the platform registry — one call
+   * instead of the upsert/deploy/trigger/enable sequence. Compilation runs
+   * asynchronously; follow with {@link waitForCompile}.
+   */
+  async deployTemplate(
+    variables: ComputeDeployTemplateMutationVariables
+  ): Promise<ComputeDeployTemplateMutation['computeDeployTemplate']> {
+    const data = await this.gql.request(ComputeDeployTemplateDocument, variables);
+    return data.computeDeployTemplate;
   }
 
   /**

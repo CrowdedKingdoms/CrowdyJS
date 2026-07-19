@@ -90,6 +90,8 @@ export interface KitDeployResult {
   seed: GameModelSeedMutation['gameModelSeed'];
   automations: GameModelUpsertAutomationMutation['gameModelUpsertAutomation'][];
   automationTriggers: GameModelUpsertAutomationTriggerMutation['gameModelUpsertAutomationTrigger'][];
+  /** Engine templates deployed alongside (when `engines` was passed). */
+  engines: Array<{ templateName: string; moduleName: string; compileStatus: string }>;
   /** Non-fatal static-analysis warnings from the seed. */
   warnings: string[];
 }
@@ -191,6 +193,7 @@ export class GameKitClient {
   readonly pets: PetsKit;
   /** Compute-engine capability detection shared by the engine-aware kits. */
   readonly engines: EngineDetector;
+  private readonly compute?: ComputeAPI;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -199,6 +202,7 @@ export class GameKitClient {
     options: GameKitOptions = {},
     domains: GameKitDomains = {},
   ) {
+    this.compute = domains.compute;
     this.engines = new EngineDetector(String(appId), domains.compute);
     this.inventory = new InventoryKit(appId, gameModel, options.inventory);
     this.objects = new ObjectsKit(appId, gameModel, options.objects);
@@ -206,7 +210,7 @@ export class GameKitClient {
     this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
     this.economy = new EconomyKit(appId, gameModel, options.economy, this.engines);
     this.progression = new ProgressionKit(appId, gameModel, options.progression);
-    this.loot = new LootKit(appId, gameModel, options.loot);
+    this.loot = new LootKit(appId, gameModel, options.loot, this.engines);
     this.quests = new QuestsKit(appId, gameModel, options.quests);
     this.combat = new CombatKit(appId, gameModel, options.combat, this.engines);
     this.matches = new MatchesKit(
@@ -275,7 +279,18 @@ export class GameKitClient {
    */
   async deploy(
     blueprints: KitBlueprint | KitBlueprint[],
-    options: { sessionId?: string } = {},
+    options: {
+      sessionId?: string;
+      /**
+       * Engine templates to deploy from the platform registry alongside the
+       * blueprints (`computeDeployTemplate` — requires the compute domain +
+       * 'manage_compute'). Each entry is a template name, optionally
+       * `'template:module'` to override the module name.
+       */
+      engines?: string[];
+      /** Wait for engine compiles (default true). */
+      waitForEngines?: boolean;
+    } = {},
   ): Promise<KitDeployResult> {
     const list = Array.isArray(blueprints) ? blueprints : [blueprints];
     const merged = mergeBlueprints(this.appId, list, options);
@@ -291,10 +306,30 @@ export class GameKitClient {
       automationTriggers.push(await this.gameModel.upsertAutomationTrigger(trigger));
     }
 
+    const engines: KitDeployResult['engines'] = [];
+    for (const entry of options.engines ?? []) {
+      if (!this.compute) {
+        throw new Error('kit.deploy engines requires the compute domain (createCrowdyClient default)');
+      }
+      const [templateName, moduleOverride] = entry.split(':');
+      const module = await this.compute.deployTemplate({
+        appId: this.appId,
+        templateName,
+        ...(moduleOverride ? { moduleName: moduleOverride } : {}),
+      });
+      let compileStatus = 'pending';
+      if (options.waitForEngines !== false) {
+        const compiled = await this.compute.waitForCompile(this.appId, module.name);
+        compileStatus = compiled.compileStatus;
+      }
+      engines.push({ templateName, moduleName: module.name, compileStatus });
+    }
+
     return {
       seed,
       automations,
       automationTriggers,
+      engines,
       warnings: [...(seed.warnings ?? [])],
     };
   }

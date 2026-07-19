@@ -1,4 +1,5 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
+import type { EngineDetector } from './engine.js';
 import type { Scalars } from '../generated/graphql.js';
 import { lootNames, lootRollFn, type LootNames } from './blueprints/index.js';
 import {
@@ -9,6 +10,11 @@ import {
 
 /** Options for {@link LootKit}. Must match the deployed loot blueprint. */
 export interface LootKitOptions {
+  /**
+   * The big-table loot module (pity timers, audit trails). Defaults to
+   * `'loot-engine'`; the gacha-shrine example ships this contract.
+   */
+  engineModuleName?: string;
   /** The `typePrefix` the loot blueprint was deployed with. */
   typePrefix?: string;
 }
@@ -42,9 +48,48 @@ export class LootKit {
     private readonly appId: Scalars['BigInt']['input'],
     private readonly gameModel: GameModelAPI,
     options: LootKitOptions = {},
+    private readonly engines?: EngineDetector,
   ) {
     this.typePrefix = options.typePrefix ?? '';
     this.names = lootNames(this.typePrefix);
+    this.engineModuleName = options.engineModuleName ?? 'loot-engine';
+  }
+
+  private readonly engineModuleName: string;
+
+  /**
+   * Is a big-table loot module deployed + enabled (cached per session)?
+   * When true, {@link enginePull} routes rolls through server-held RNG with
+   * pity timers + audit trails; the blueprint's weighted model rolls stay
+   * for small tables (the coexistence policy — "the server picks the path").
+   */
+  engineAvailable(): Promise<boolean> {
+    if (!this.engines) return Promise.resolve(false);
+    return this.engines.has(this.engineModuleName);
+  }
+
+  /** Pull from the module's table (pity-timer path); count caps at 10. */
+  async enginePull(count = 1) {
+    if (!this.engines) throw new Error('loot engine unavailable: compute domain not wired');
+    const result = await this.engines.invoke(this.engineModuleName, 'pull', { count });
+    if (!result.success) throw new Error(`loot.pull failed: ${result.reason ?? 'unknown'}`);
+    return result.body;
+  }
+
+  /** Your pity counters + roll totals from the module. */
+  async enginePity() {
+    if (!this.engines) throw new Error('loot engine unavailable: compute domain not wired');
+    const result = await this.engines.invoke(this.engineModuleName, 'pity', {});
+    if (!result.success) throw new Error(`loot.pity failed: ${result.reason ?? 'unknown'}`);
+    return result.body;
+  }
+
+  /** Your rolling audit trail from the module (dispute resolution). */
+  async engineAudit() {
+    if (!this.engines) throw new Error('loot engine unavailable: compute domain not wired');
+    const result = await this.engines.invoke(this.engineModuleName, 'audit', {});
+    if (!result.success) throw new Error(`loot.audit failed: ${result.reason ?? 'unknown'}`);
+    return result.body;
   }
 
   /**
