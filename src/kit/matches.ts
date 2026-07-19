@@ -1,4 +1,5 @@
 import type { ChannelsAPI } from '../domains/channels.js';
+import type { EngineDetector } from './engine.js';
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { UdpAPI } from '../domains/udp.js';
 import type { Scalars } from '../generated/graphql.js';
@@ -12,6 +13,11 @@ import {
 
 /** Options for {@link MatchesKit}. Must match the deployed matches blueprint. */
 export interface MatchesKitOptions {
+  /**
+   * The compute module driving server-side match lifecycle when the app
+   * runs an engine. Defaults to `'match-engine'`.
+   */
+  engineModuleName?: string;
   /** The `typePrefix` the matches blueprint was deployed with. */
   typePrefix?: string;
   /**
@@ -60,6 +66,7 @@ export interface KitMatchScore {
 export class MatchesKit {
   private readonly names: MatchesNames;
   private readonly actorUuid: string;
+  private readonly engineModuleName: string;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -67,8 +74,10 @@ export class MatchesKit {
     private readonly channels: ChannelsAPI | undefined,
     private readonly udp: UdpAPI | undefined,
     options: MatchesKitOptions = {},
+    private readonly engines?: EngineDetector,
   ) {
     this.names = matchesNames(options.typePrefix ?? '');
+    this.engineModuleName = options.engineModuleName ?? 'match-engine';
     this.actorUuid = options.actorUuid ?? generateCrowdyUuid();
   }
 
@@ -360,5 +369,64 @@ export class MatchesKit {
         ? { tickCount: Number(props.tick_count) }
         : {}),
     };
+  }
+
+  // -- Engine path (Wave 2): server-driven lifecycle over the match engine --
+
+  /**
+   * Is a match compute engine deployed + enabled (cached per session)? When
+   * true the engine owns transitions (ready checks, turn order + timeouts,
+   * authoritative scoring); the blueprint's creator-driven functions remain
+   * for model-only deployments.
+   */
+  engineAvailable(): Promise<boolean> {
+    if (!this.engines) return Promise.resolve(false);
+    return this.engines.has(this.engineModuleName);
+  }
+
+  /**
+   * Declare ready on an engine match (a MatchMeta container id). The match
+   * starts server-side once every expected player is ready.
+   */
+  async engineReady(matchId: string) {
+    return this.engineInvoke('ready', { matchId });
+  }
+
+  /** Submit your move (the engine validates the turn + resolves). */
+  async engineSubmitMove(matchId: string, params: Record<string, unknown> = {}) {
+    return this.engineInvoke('submit_move', { matchId, ...params });
+  }
+
+  /** Forfeit an engine match. */
+  async engineForfeit(matchId: string) {
+    return this.engineInvoke('forfeit', { matchId });
+  }
+
+  /** The engine's live view: turn holder, timers, standings, summary. */
+  async engineStatus(matchId: string) {
+    return this.engineInvoke('status', { matchId });
+  }
+
+  /**
+   * Resolve a matchmaking proposal to the match the engine created for it
+   * (poll after everyone accepts; see `kit.matchmaking`).
+   */
+  async findByProposal(proposalId: string): Promise<string | null> {
+    if (!this.engines) return null;
+    const result = await this.engines.invoke(this.engineModuleName, 'find_by_proposal', {
+      proposalId,
+    });
+    return result.success ? String(result.body.matchId ?? '') || null : null;
+  }
+
+  private async engineInvoke(exportName: string, params: Record<string, unknown>) {
+    if (!this.engines) {
+      throw new Error('match engine unavailable: compute domain not wired');
+    }
+    const result = await this.engines.invoke(this.engineModuleName, exportName, params);
+    if (!result.success) {
+      throw new Error(`matches.${exportName} failed: ${result.reason ?? 'unknown'}`);
+    }
+    return result.body;
   }
 }

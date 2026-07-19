@@ -1,3 +1,45 @@
+# CrowdyJS v8.8 Notes
+
+## Added
+
+**Session-genre engine surfaces** — client counterparts of the Wave 2
+`crowdy-game-kit` engines. Additive; no breaking changes; everything is
+capability-detected and degrades to the blueprint behavior.
+
+- **`kit.matches`** — `engineReady` / `engineSubmitMove` / `engineForfeit` /
+  `engineStatus` (server-driven turn order, timeouts, authoritative
+  scoring) + `findByProposal` (the matchmaking handoff).
+- **`kit.decks`** — `engineNewTable` / `engineHand` (caller-scoped: hidden
+  hands never replicate) / `engineDraw` / `enginePlay` / `engineTakeZone` /
+  `engineTable`.
+- **`kit.instances`** (new) — open/join/complete/state over the
+  instance-engine (per-run seeds, disjoint chunk volumes).
+- **`kit.director`** (new) — `defineEncounter` (admin), `startRun`,
+  `reportKill`, `reportBossHp`, `skipWave`, `runState`.
+- **`kit.matchmaking`** (new) — `queueJoin` (party blocks, optional
+  explicit rating), `queueLeave`, `queueStatus`, `accept`, `reportResult`
+  (Elo-lite).
+- **`kit.economy.orderBook`** (new) — escrowed order-book market:
+  `depositCoins`/`depositItems`, `bid`/`ask` (maker-price fills), `cancel`,
+  `book`, `account`, `withdraw`.
+- **`kit.leaderboards`** — `engineTop` (server-ranked pages with tie-aware
+  ranks + percentiles), `engineRankOf`, `engineSubmitSelf`,
+  `engineSeasons`.
+- **`kit.minigames`** (new) — thin invoke wrapper for invoke-loop games
+  (the `minigame` scaffold pattern); denials resolve, never throw.
+- **`kit.quests`** — FTUE tutorial sequencing: `defineTutorial` (admin),
+  `tutorial(owner)` (ordered steps as locked/active/complete),
+  `acceptNextTutorialStep`.
+- **`kit/wire`** — reserved engine event types 91 (turn), 92 (score),
+  93 (proposal) + `parseTurnEvent` / `parseScoreEvent` /
+  `parseProposalEvent`.
+
+## Server compatibility
+
+Engine surfaces need the Wave 2 engines deployed on a `cks-game-api` from
+the compute dev line; without them `engineAvailable()` is false and the
+blueprint paths behave exactly as in 8.7.
+
 # CrowdyJS v8.7 Notes
 
 ## Added

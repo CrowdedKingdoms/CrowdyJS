@@ -140,6 +140,12 @@ export function engineLanes(): Record<string, (state: EnginePose) => boolean> {
 export const EVENT_CONTACT_DAMAGE = 77;
 /** Weather/season transition from a world engine (kit-sim weather). */
 export const EVENT_WEATHER = 90;
+/** Turn changed (kit-play turns; match engines). */
+export const EVENT_TURN = 91;
+/** Score / match summary (kit-play score). */
+export const EVENT_SCORE = 92;
+/** Match proposal (matchmaking → matches handoff). */
+export const EVENT_PROPOSAL = 93;
 
 /** Split an engine server-event payload into its type + JSON body. */
 export function parseEngineEvent(
@@ -195,6 +201,74 @@ export function parseWeatherEvent(bytes: Uint8Array): WeatherEvent | null {
     weather: String(parsed.body.weather ?? ''),
     sinceMs: Number(parsed.body.sinceMs ?? 0),
     untilMs: Number(parsed.body.untilMs ?? 0),
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-91 turn-changed event (match engines). */
+export interface TurnEvent {
+  actorId: string;
+  round: number;
+  turnInRound: number;
+  body: Record<string, unknown>;
+}
+
+/** Parse a turn event; null when the payload is another type. */
+export function parseTurnEvent(bytes: Uint8Array): TurnEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_TURN) return null;
+  return {
+    actorId: String(parsed.body.actorId ?? ''),
+    round: Number(parsed.body.round ?? 0),
+    turnInRound: Number(parsed.body.turnInRound ?? 0),
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-92 score/summary event (match engines). */
+export interface ScoreEvent {
+  /** Per-actor standings when present. */
+  standings: Array<{ actorId: string; score: number; rank: number }>;
+  winnerId: string | null;
+  body: Record<string, unknown>;
+}
+
+/** Parse a score event; null when the payload is another type. */
+export function parseScoreEvent(bytes: Uint8Array): ScoreEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_SCORE) return null;
+  const standings = Array.isArray(parsed.body.standings)
+    ? (parsed.body.standings as Array<Record<string, unknown>>).map((s) => ({
+        actorId: String(s.actorId ?? ''),
+        score: Number(s.score ?? 0),
+        rank: Number(s.rank ?? 0),
+      }))
+    : [];
+  return {
+    standings,
+    winnerId: parsed.body.winnerId != null ? String(parsed.body.winnerId) : null,
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-93 match-proposal event (matchmaking handoff). */
+export interface ProposalEvent {
+  proposalId: string;
+  mode: string;
+  players: string[];
+  body: Record<string, unknown>;
+}
+
+/** Parse a proposal event; null when the payload is another type. */
+export function parseProposalEvent(bytes: Uint8Array): ProposalEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_PROPOSAL) return null;
+  return {
+    proposalId: String(parsed.body.proposalId ?? ''),
+    mode: String(parsed.body.mode ?? ''),
+    players: Array.isArray(parsed.body.players)
+      ? (parsed.body.players as unknown[]).map(String)
+      : [],
     body: parsed.body,
   };
 }
