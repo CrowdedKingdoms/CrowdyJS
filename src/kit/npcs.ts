@@ -1,11 +1,29 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { Scalars, SeedPropertyInput } from '../generated/graphql.js';
+import type { EngineDetector } from './engine.js';
 import { kitContainerProperties } from './shared.js';
+import type { EnginePose } from './wire.js';
 
 /** Options for {@link NpcsKit}. Must match the deployed NPC blueprint. */
 export interface NpcsKitOptions {
   /** The `typeName` the NPC blueprint was deployed with. Defaults to `'Npc'`. */
   typeName?: string;
+  /**
+   * The compute module driving NPC movement when the app runs an engine
+   * (smooth FLAG_NPC actor emits instead of property nudges). Defaults to
+   * `'npc-engine'`.
+   */
+  moduleName?: string;
+}
+
+/**
+ * The minimal shape of a live actor entry {@link overlayLivePoses} reads —
+ * matches the world-session `RemoteActor<EnginePose>` without importing it.
+ */
+export interface LiveNpcPose {
+  uuid: string;
+  state: Pick<EnginePose, 'x' | 'y' | 'z'>;
+  receivedAt: number;
 }
 
 /** A parsed view of one live NPC. */
@@ -35,13 +53,48 @@ export interface KitNpc {
  */
 export class NpcsKit {
   private readonly typeName: string;
+  private readonly moduleName: string;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
     private readonly gameModel: GameModelAPI,
     options: NpcsKitOptions = {},
+    private readonly engines?: EngineDetector,
   ) {
     this.typeName = options.typeName ?? 'Npc';
+    this.moduleName = options.moduleName ?? 'npc-engine';
+  }
+
+  /**
+   * Is an NPC compute engine deployed + enabled (cached per session)? When
+   * true, NPCs stream smooth FLAG_NPC actor poses — overlay them with
+   * {@link overlayLivePoses}. When false (model-only deployment), the polled
+   * container positions are all there is, exactly as before.
+   */
+  engineAvailable(): Promise<boolean> {
+    if (!this.engines) return Promise.resolve(false);
+    return this.engines.has(this.moduleName);
+  }
+
+  /**
+   * Overlay live engine-driven poses onto a polled NPC snapshot (the
+   * generalized BWF `NpcService.withLivePoses` pattern): each NPC whose
+   * `actor_uuid` has a fresh pose in the npcs actor lane gets its position
+   * replaced; the rest keep their durable container position, so NPCs stand
+   * at their last synced spot instead of disappearing.
+   *
+   * @param npcs - The polled snapshot (from {@link list}).
+   * @param lane - The live actors, e.g. `session.actors.lane('npcs').list()`.
+   */
+  overlayLivePoses(npcs: KitNpc[], lane: LiveNpcPose[]): KitNpc[] {
+    if (lane.length === 0) return npcs;
+    const poses = new Map(lane.map((actor) => [actor.uuid, actor]));
+    return npcs.map((npc) => {
+      const uuid = String(npc.properties.actor_uuid ?? '');
+      const live = uuid ? poses.get(uuid) : undefined;
+      if (!live) return npc;
+      return { ...npc, x: live.state.x, y: live.state.y, z: live.state.z };
+    });
   }
 
   /** Spawn a live NPC instance (admin — the type is admin-instantiable). */

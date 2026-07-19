@@ -1,3 +1,42 @@
+# CrowdyJS v8.7 Notes
+
+## Added
+
+**Engine kit surfaces** — client counterparts of the `crowdy-game-kit`
+compute-module engines (Wave 1). Additive; no breaking changes.
+
+- **`kit/wire`** (exported from the package root): the engine actor wire
+  registry mirroring the server's `kit-core::wire` — `POSE_BYTES`, the
+  `FLAG_GROUNDED`/`FLAG_MOB`/`FLAG_NPC` flag bits, `encodeEnginePose` /
+  `decodeEnginePose` (+ container-id `suffix` extraction), `enginePoseCodec`
+  (a `StateCodec` for World Stores), `engineLanes()` (ready-made
+  players/mobs/npcs lane predicates for `createWorldSession`), and the
+  server-event parsers `parseContactDamage` (type 77) / `parseWeatherEvent`
+  (type 90).
+- **`kit.mobs`** — mob-engine helpers: `attack(containerId, amount)` through
+  the server referee (`{success, health, killed, reason}`), `defs()` /
+  `slots()` durable reads, `status()`, `parseContactDamage`.
+- **`kit.pets`** — npc-engine pets: `adopt`, `list`, `summon` / `dismiss` /
+  `rename` (owner-validated engine-side).
+- **`kit.combat.attackRouted`** — one attack call for both deployments:
+  routes through the compute referee when the engine is present
+  (capability-detected), else today's model attack function.
+- **`kit.worldsim`** — `engineAvailable()`, `forecast()` (current front +
+  day phase from a world engine), `parseWeather`.
+- **`kit.npcs`** — `engineAvailable()` + `overlayLivePoses(npcs, lane)` (the
+  live-pose overlay pattern for engine-driven NPCs).
+- **`kit.engines`** — the shared `EngineDetector` (per-session cached module
+  probes + the `{success, reason}` invoke envelope).
+
+Capability detection degrades gracefully: on model-only deployments every
+engine-aware helper reports `engineAvailable() === false` and the model paths
+behave exactly as in 8.6.
+
+## Server compatibility
+
+Engine helpers need engines deployed on a `cks-game-api` from the Wave 0/1
+compute dev line; without them the helpers fall back as described above.
+
 # CrowdyJS v8.6 Notes
 
 ## Added

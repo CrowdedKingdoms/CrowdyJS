@@ -1,16 +1,34 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { Scalars, SeedPropertyInput } from '../generated/graphql.js';
 import { worldsimNames, type WorldsimNames } from './blueprints/index.js';
+import type { EngineDetector, EngineInvokeResult } from './engine.js';
 import {
   kitContainerProperties,
   kitInvoke,
   type KitInvokeResult,
 } from './shared.js';
+import { parseWeatherEvent, type WeatherEvent } from './wire.js';
 
 /** Options for {@link WorldsimKit}. Must match the deployed worldsim blueprint. */
 export interface WorldsimKitOptions {
   /** The `typePrefix` the worldsim blueprint was deployed with. */
   typePrefix?: string;
+  /**
+   * The compute module serving `forecast` when the app runs a world engine.
+   * Defaults to `'world-engine'`.
+   */
+  moduleName?: string;
+}
+
+/** A world engine's forecast (current front + day phase). */
+export interface KitForecast {
+  weather: string;
+  /** Day phase in [0, 1) when the engine reports it. */
+  dayPhase?: number;
+  isNight?: boolean;
+  /** Milliseconds until the current front rolls. */
+  remainingMs?: number;
+  body: Record<string, unknown>;
 }
 
 /** A parsed view of the world clock/weather state. */
@@ -66,13 +84,53 @@ export interface KitWaveSpawner {
  */
 export class WorldsimKit {
   private readonly names: WorldsimNames;
+  private readonly moduleName: string;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
     private readonly gameModel: GameModelAPI,
     options: WorldsimKitOptions = {},
+    private readonly engines?: EngineDetector,
   ) {
     this.names = worldsimNames(options.typePrefix ?? '');
+    this.moduleName = options.moduleName ?? 'world-engine';
+  }
+
+  /** Is a world compute engine deployed + enabled (cached per session)? */
+  engineAvailable(): Promise<boolean> {
+    if (!this.engines) return Promise.resolve(false);
+    return this.engines.has(this.moduleName);
+  }
+
+  /**
+   * The world engine's `forecast` invoke: the current weather front plus
+   * day-phase fields. Late joiners call this once, then track transitions
+   * from the type-90 event stream ({@link parseWeather}).
+   */
+  async forecast(): Promise<KitForecast> {
+    const result: EngineInvokeResult = this.engines
+      ? await this.engines.invoke(this.moduleName, 'forecast')
+      : { success: false, reason: 'compute domain unavailable', body: {} };
+    if (!result.success) {
+      throw new Error(`forecast unavailable: ${result.reason ?? 'engine missing'}`);
+    }
+    return {
+      weather: String(result.body.weather ?? ''),
+      dayPhase: typeof result.body.dayPhase === 'number' ? result.body.dayPhase : undefined,
+      isNight: typeof result.body.isNight === 'boolean' ? result.body.isNight : undefined,
+      remainingMs:
+        typeof result.body.remainingMs === 'number' ? result.body.remainingMs : undefined,
+      body: result.body,
+    };
+  }
+
+  /**
+   * Parse a server-event payload as a world-engine weather transition
+   * (type 90), or null when it is another event type. Feed it your world
+   * session's server-event stream.
+   */
+  parseWeather(payload: Uint8Array): WeatherEvent | null {
+    return parseWeatherEvent(payload);
   }
 
   /**

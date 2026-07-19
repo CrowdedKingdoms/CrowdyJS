@@ -341,6 +341,7 @@ export class CrowdyClient {
       channels: this.channels,
       teams: this.teams,
       udp: this.udp,
+      compute: this.compute,
     });
   }
 

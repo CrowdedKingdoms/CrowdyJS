@@ -9,16 +9,20 @@ import type {
   GameModelUpsertAutomationTriggerMutation,
   Scalars,
 } from '../generated/graphql.js';
+import type { ComputeAPI } from '../domains/compute.js';
 import { mergeBlueprints, type KitBlueprint } from './blueprints/index.js';
 import { CombatKit, type CombatKitOptions } from './combat.js';
 import { DecksKit, type DecksKitOptions } from './decks.js';
 import { EconomyKit, type EconomyKitOptions } from './economy.js';
+import { EngineDetector } from './engine.js';
 import { FeaturesKit } from './features.js';
 import { InventoryKit, type InventoryKitOptions } from './inventory.js';
 import { LeaderboardsKit, type LeaderboardsKitOptions } from './leaderboards.js';
 import { LootKit, type LootKitOptions } from './loot.js';
+import { MobsKit, type MobsKitOptions } from './mobs.js';
 import { NpcsKit, type NpcsKitOptions } from './npcs.js';
 import { ObjectsKit, type ObjectsKitOptions } from './objects.js';
+import { PetsKit, type PetsKitOptions } from './pets.js';
 import { PlotsKit, type PlotsKitOptions } from './plots.js';
 import { MatchesKit, type MatchesKitOptions } from './matches.js';
 import { ProgressionKit, type ProgressionKitOptions } from './progression.js';
@@ -42,17 +46,21 @@ export interface GameKitOptions {
   worldsim?: WorldsimKitOptions;
   social?: SocialKitOptions;
   leaderboards?: LeaderboardsKitOptions;
+  mobs?: MobsKitOptions;
+  pets?: PetsKitOptions;
 }
 
 /**
  * The extra (non-model) domains some kit helpers compose: channels + udp for
- * matches (notify-to-pull) and social chat, teams for parties/guilds.
+ * matches (notify-to-pull) and social chat, teams for parties/guilds, and
+ * compute for the engine-backed helpers (mobs/pets, capability detection).
  * `client.kit(appId)` wires them automatically.
  */
 export interface GameKitDomains {
   channels?: ChannelsAPI;
   teams?: TeamsAPI;
   udp?: UdpAPI;
+  compute?: ComputeAPI;
 }
 
 /** The result of {@link GameKitClient.deploy}: the seed outcome plus each automation/trigger upserted. */
@@ -133,6 +141,12 @@ export class GameKitClient {
   readonly leaderboards: LeaderboardsKit;
   /** Monetization helpers (feature keys, tier grants, featureGate policies). */
   readonly features: FeaturesKit;
+  /** Mob-engine helpers (defs/slots, refereed attacks, contact events). */
+  readonly mobs: MobsKit;
+  /** Pet helpers (adopt/summon/dismiss/rename over the npc engine). */
+  readonly pets: PetsKit;
+  /** Compute-engine capability detection shared by the engine-aware kits. */
+  readonly engines: EngineDetector;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -141,15 +155,16 @@ export class GameKitClient {
     options: GameKitOptions = {},
     domains: GameKitDomains = {},
   ) {
+    this.engines = new EngineDetector(String(appId), domains.compute);
     this.inventory = new InventoryKit(appId, gameModel, options.inventory);
     this.objects = new ObjectsKit(appId, gameModel, options.objects);
-    this.npcs = new NpcsKit(appId, gameModel, options.npcs);
+    this.npcs = new NpcsKit(appId, gameModel, options.npcs, this.engines);
     this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
     this.economy = new EconomyKit(appId, gameModel, options.economy);
     this.progression = new ProgressionKit(appId, gameModel, options.progression);
     this.loot = new LootKit(appId, gameModel, options.loot);
     this.quests = new QuestsKit(appId, gameModel, options.quests);
-    this.combat = new CombatKit(appId, gameModel, options.combat);
+    this.combat = new CombatKit(appId, gameModel, options.combat, this.engines);
     this.matches = new MatchesKit(
       appId,
       gameModel,
@@ -158,7 +173,9 @@ export class GameKitClient {
       options.matches,
     );
     this.decks = new DecksKit(appId, gameModel, options.decks);
-    this.worldsim = new WorldsimKit(appId, gameModel, options.worldsim);
+    this.worldsim = new WorldsimKit(appId, gameModel, options.worldsim, this.engines);
+    this.mobs = new MobsKit(appId, gameModel, this.engines, options.mobs);
+    this.pets = new PetsKit(appId, gameModel, this.engines, options.pets);
     this.social = new SocialKit(
       appId,
       domains.teams,

@@ -100,6 +100,7 @@ export {
   CombatKit,
   type CombatKitOptions,
   type KitCombatant,
+  type KitRoutedAttack,
   type KitStatusEffect,
 } from './combat.js';
 export { DecksKit, type DecksKitOptions, type KitCard } from './decks.js';
@@ -119,7 +120,46 @@ export {
 } from './leaderboards.js';
 export { LootKit, type KitLootRoll, type LootKitOptions } from './loot.js';
 export { ObjectsKit, type ObjectsKitOptions } from './objects.js';
-export { NpcsKit, type NpcsKitOptions, type KitNpc } from './npcs.js';
+export {
+  NpcsKit,
+  type KitNpc,
+  type LiveNpcPose,
+  type NpcsKitOptions,
+} from './npcs.js';
+export {
+  MobsKit,
+  type KitAttackResult,
+  type KitMobDef,
+  type KitMobSlot,
+  type MobsKitOptions,
+} from './mobs.js';
+export {
+  PetsKit,
+  type KitPet,
+  type KitPetResult,
+  type PetsKitOptions,
+} from './pets.js';
+export { EngineDetector, type EngineInvokeResult } from './engine.js';
+export {
+  EVENT_CONTACT_DAMAGE,
+  EVENT_WEATHER,
+  FLAG_GROUNDED,
+  FLAG_MOB,
+  FLAG_NPC,
+  FLAG_RESERVED3,
+  POSE_BYTES,
+  decodeEnginePose,
+  encodeEnginePose,
+  engineLanes,
+  enginePoseCodec,
+  parseContactDamage,
+  parseEngineEvent,
+  parseWeatherEvent,
+  poseSuffix,
+  type ContactDamageEvent,
+  type EnginePose,
+  type WeatherEvent,
+} from './wire.js';
 export { PlotsKit, type PlotsKitOptions, type KitPlot } from './plots.js';
 export {
   QuestsKit,
@@ -145,6 +185,7 @@ export {
 export {
   WorldsimKit,
   type KitCrop,
+  type KitForecast,
   type KitResourceNode,
   type KitWaveSpawner,
   type KitWorldState,
