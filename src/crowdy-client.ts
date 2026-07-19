@@ -59,6 +59,7 @@ import { ChannelsAPI } from './domains/channels.js';
 import { TeamsAPI } from './domains/teams.js';
 import { UdpAPI } from './domains/udp.js';
 import { GameModelAPI } from './domains/gameModel.js';
+import { ComputeAPI } from './domains/compute.js';
 
 export interface CrowdyClientConfig {
   // ----- Game API (default endpoint) -----
@@ -200,6 +201,8 @@ export class CrowdyClient {
   readonly udp: UdpAPI;
   /** Abstract game model: containers, properties, functions, sessions. */
   readonly gameModel: GameModelAPI;
+  /** Compute Modules: server-side Rust/WASM logic (manage, invoke, observe). */
+  readonly compute: ComputeAPI;
   /** Durable avatars + per-app avatar state (owner-aware reads). */
   readonly avatars: AvatarsAPI;
   /** Game-host election + actor liveness heartbeat. */
@@ -280,6 +283,7 @@ export class CrowdyClient {
     this.teams = new TeamsAPI(this.graphql);
     this.udp = new UdpAPI(this.graphql, this.realtime, this.metrics);
     this.gameModel = new GameModelAPI(this.graphql);
+    this.compute = new ComputeAPI(this.graphql);
     this.avatars = new AvatarsAPI(this.graphql);
     this.host = new HostAPI(this.graphql);
     this.gameApps = new GameAppsAPI(this.graphql);

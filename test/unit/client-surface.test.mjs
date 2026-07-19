@@ -32,6 +32,14 @@ test('client exposes the full management + game sub-client surface', async () =>
     assert.ok(client[k], `client.${k} should exist`);
   }
 
+  // Compute Modules (server-side Rust/WASM logic).
+  assertMethods(client.compute, 'compute', [
+    'upsertModule', 'deployVersion', 'setModuleEnabled', 'deleteModule',
+    'upsertTrigger', 'deleteTrigger', 'setPolicy', 'invoke', 'waitForCompile',
+    'modules', 'module', 'moduleVersions', 'moduleTriggers', 'modulePolicy',
+    'moduleRuns', 'moduleStats', 'moduleLogs', 'appDiagnostics',
+  ]);
+
   // New management admin sub-clients.
   assertMethods(client.organizations, 'organizations', ['get', 'bySlug', 'mine', 'create', 'createToken', 'inviteMember', 'createRole']);
   assertMethods(client.appAccess, 'appAccess', ['tiers', 'myAccess', 'createTier', 'grant', 'revoke']);
