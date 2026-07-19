@@ -116,3 +116,9 @@ export {
   type WorldsimBlueprintOptions,
   type WorldsimNames,
 } from './worldsim.js';
+export {
+  liveopsBlueprint,
+  liveopsNames,
+  type LiveopsBlueprintOptions,
+  type LiveopsNames,
+} from './liveops.js';

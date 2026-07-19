@@ -32,6 +32,7 @@ import { MatchesKit, type MatchesKitOptions } from './matches.js';
 import { ProgressionKit, type ProgressionKitOptions } from './progression.js';
 import { QuestsKit, type QuestsKitOptions } from './quests.js';
 import { SocialKit, type SocialKitOptions } from './social.js';
+import { LiveopsKit, type LiveopsKitOptions } from './liveops.js';
 import { WorldsimKit, type WorldsimKitOptions } from './worldsim.js';
 
 /** Options for {@link GameKitClient}, configuring the runtime helpers to match your deployed blueprints. */
@@ -48,6 +49,7 @@ export interface GameKitOptions {
   matches?: MatchesKitOptions;
   decks?: DecksKitOptions;
   worldsim?: WorldsimKitOptions;
+  liveops?: LiveopsKitOptions;
   social?: SocialKitOptions;
   leaderboards?: LeaderboardsKitOptions;
   mobs?: MobsKitOptions;
@@ -143,6 +145,8 @@ export class GameKitClient {
   readonly decks: DecksKit;
   /** World simulation helpers (clock/weather, nodes, crops, wave counters). */
   readonly worldsim: WorldsimKit;
+  /** Liveops helpers (event windows, seasons, battle-pass composition). */
+  readonly liveops: LiveopsKit;
   /** Social helpers (parties, guilds, chat over teams + channels). */
   readonly social: SocialKit;
   /** Leaderboard helpers (trusted submits, client-side ranking, seasons). */
@@ -191,6 +195,7 @@ export class GameKitClient {
     );
     this.decks = new DecksKit(appId, gameModel, options.decks, this.engines);
     this.worldsim = new WorldsimKit(appId, gameModel, options.worldsim, this.engines);
+    this.liveops = new LiveopsKit(appId, gameModel, options.liveops, this.engines);
     this.mobs = new MobsKit(appId, gameModel, this.engines, options.mobs);
     this.pets = new PetsKit(appId, gameModel, this.engines, options.pets);
     this.instances = new InstancesKit(appId, this.engines, options.instances);

@@ -146,6 +146,16 @@ export const EVENT_TURN = 91;
 export const EVENT_SCORE = 92;
 /** Match proposal (matchmaking → matches handoff). */
 export const EVENT_PROPOSAL = 93;
+/** Ability cast/impact (kit-play abilities). */
+export const EVENT_ABILITY = 94;
+/** Movement-envelope violation (movement-warden, observe/flag). */
+export const EVENT_MOVEMENT_VIOLATION = 95;
+/** Control-point state change (territory). */
+export const EVENT_CONTROL_POINT = 96;
+/** Race timing: checkpoint/lap/finish (kit-play timing). */
+export const EVENT_RACE_TIMING = 97;
+/** Zone change: shrinking circles, event areas (kit-sim zones). */
+export const EVENT_ZONE_CHANGE = 98;
 
 /** Split an engine server-event payload into its type + JSON body. */
 export function parseEngineEvent(
@@ -269,6 +279,93 @@ export function parseProposalEvent(bytes: Uint8Array): ProposalEvent | null {
     players: Array.isArray(parsed.body.players)
       ? (parsed.body.players as unknown[]).map(String)
       : [],
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-94 ability cast/impact event. */
+export interface AbilityEvent {
+  /** `'cast'` or `'impact'`. */
+  kind: string;
+  abilityId: string;
+  casterId: string;
+  victimId: string | null;
+  damage: number;
+  body: Record<string, unknown>;
+}
+
+/** Parse an ability event; null when the payload is another type. */
+export function parseAbilityEvent(bytes: Uint8Array): AbilityEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_ABILITY) return null;
+  return {
+    kind: String(parsed.body.kind ?? ''),
+    abilityId: String(parsed.body.abilityId ?? ''),
+    casterId: String(parsed.body.casterId ?? ''),
+    victimId: parsed.body.victimId != null ? String(parsed.body.victimId) : null,
+    damage: Number(parsed.body.damage ?? 0),
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-95 movement-violation event (observe/flag posture). */
+export interface MovementViolationEvent {
+  /** `'speed'`, `'teleport'`, or `'bounds'`. */
+  kind: string;
+  userId: string;
+  detail: string;
+  body: Record<string, unknown>;
+}
+
+/** Parse a movement-violation event; null when the payload is another type. */
+export function parseMovementViolation(bytes: Uint8Array): MovementViolationEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_MOVEMENT_VIOLATION) return null;
+  return {
+    kind: String(parsed.body.kind ?? ''),
+    userId: String(parsed.body.userId ?? ''),
+    detail: String(parsed.body.detail ?? ''),
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-96 control-point state event (territory flips). */
+export interface ControlPointEvent {
+  pointId: string;
+  owner: string;
+  previousOwner: string;
+  body: Record<string, unknown>;
+}
+
+/** Parse a control-point event; null when the payload is another type. */
+export function parseControlPointEvent(bytes: Uint8Array): ControlPointEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_CONTROL_POINT) return null;
+  return {
+    pointId: String(parsed.body.pointId ?? ''),
+    owner: String(parsed.body.owner ?? ''),
+    previousOwner: String(parsed.body.previousOwner ?? ''),
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-97 race-timing event (checkpoint/lap/finish). */
+export interface RaceTimingEvent {
+  /** `'started'`, `'checkpoint'`, `'lap'`, or `'finished'`. */
+  kind: string;
+  courseId: string;
+  userId: string;
+  body: Record<string, unknown>;
+}
+
+/** Parse a race-timing event; null when the payload is another type. */
+export function parseRaceTimingEvent(bytes: Uint8Array): RaceTimingEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_RACE_TIMING) return null;
+  return {
+    kind: String(parsed.body.kind ?? ''),
+    courseId: String(parsed.body.courseId ?? ''),
+    userId: String(parsed.body.userId ?? ''),
     body: parsed.body,
   };
 }
