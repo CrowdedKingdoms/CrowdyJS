@@ -3656,6 +3656,13 @@ type Query {
     success: Boolean
   ): GameModelEventsConnection!
   """
+  The platform's engine-template registry: ready-made compute engines (mob/world/match/deck/instance/director/matchmaking/market/board/minigame/abilities/movement-warden/territory/racing/...) deployable by name with computeDeployTemplate. Requires the org 'manage_compute' permission.
+  """
+  computeTemplates(
+    """The app (tenant) asking (permission scope)."""
+    appId: BigInt!
+  ): [ComputeTemplateInfo!]! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
   List the compute modules defined for an app. Requires the org 'view_compute_diagnostics' permission.
   """
   computeModules(
@@ -5114,6 +5121,19 @@ type Mutation {
     """
     input: InvokeFunctionInput!
   ): GmInvokeResult!
+  """
+  Deploy a named engine template from the platform registry: upserts the module, publishes the template source (deduped by hash), binds its triggers, and enables it — one call instead of the upsert/deploy/trigger/enable sequence. Compilation proceeds asynchronously; poll computeModuleVersions for compile status. Templates are data-driven (behavior comes from model containers such as MobDef/EncounterDef/Course), so most games parameterize rather than fork. Requires the org 'manage_compute' permission.
+  """
+  computeDeployTemplate(
+    """The app (tenant) to deploy into."""
+    appId: BigInt!
+    """The registry template to deploy (see computeTemplates)."""
+    templateName: String!
+    """
+    Optional module name override (defaults to the template name); use it to run two parameterizations side by side.
+    """
+    moduleName: String
+  ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
   Create or update a WASM compute module (metadata only). Modules hold developer-authored Rust compiled to sandboxed WASM on game-api instances; upload source with computeDeployVersion. New modules start disabled. Upsert key is (app, name). Requires the org 'manage_compute' permission.
   """
@@ -7701,6 +7721,18 @@ type WasmAppDiagnostics {
   fuelUsed24h: BigInt!
   """Most-active modules in the last 24h."""
   topModules: [WasmTopModule!]!
+}
+
+"""
+One entry in the platform's engine-template registry (deployable by name via computeDeployTemplate).
+"""
+type ComputeTemplateInfo {
+  """The template name (e.g. 'mob-engine', 'matchmaking')."""
+  name: String!
+  """What the template does (from its deploy manifest)."""
+  description: String!
+  """The invoke exports the template binds (its client surface)."""
+  exports: [String!]!
 }
 
 input ActorFilterInput {

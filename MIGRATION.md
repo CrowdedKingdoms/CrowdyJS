@@ -1,3 +1,46 @@
+# CrowdyJS v8.9 Notes
+
+## Added
+
+**Realtime + live-ops surfaces** — the Wave 3 close-out of the game-kit
+catalog. Additive; capability-detected; model-only deployments unchanged.
+
+- **`kit.abilities`** (new) — `defineAbility` (admin), `cast(abilityId,
+  targetX, targetZ)` (your position is your live pose — unspoofable),
+  `loadout`, `book` (resource + cooldowns), type-94 cast/impact parsing.
+- **`kit.movement`** (new) — the movement-warden (observe/flag):
+  `violations`, `config`, `defineConfig` (admin), type-95 parsing. The
+  warden never corrects; client prediction stays yours.
+- **`kit.territory`** (new) — `points` (live capture state), `factions`,
+  admin map CRUD (`defineFaction`/`enroll`/`definePoint`), type-96 parsing.
+- **`kit.racing`** (new) — `defineCourse` (admin), `enter`, `raceStatus`,
+  `best`, `ghostPlay` (record replay on the actor lane), type-97 parsing;
+  plus the possession ball: `joinMatch`/`claim`/`pass`/`shoot`/`matchState`.
+- **`kit.liveops`** (new) + `liveopsBlueprint` — event windows (scheduler-
+  aware `activeWindows`), seasons with battle-pass composition
+  (`pass_track` + `pass_features`), type-98 zone-change parsing.
+- **`kit.moderation`** (new) + `moderationBlueprint` — reports, the admin
+  escalation queue, resolve dispositions, personal mutes.
+- **`kit.telemetry`** (new) + `telemetryBlueprint` — `track(name, props)`
+  fire-and-forget over sampled counters.
+- **`kit.loot` engine path** — `engineAvailable`/`enginePull`/`enginePity`/
+  `engineAudit` route big-table pity rolls through a loot module; the
+  blueprint's weighted model rolls stay for small tables.
+- **`client.compute.templates()` / `deployTemplate()`** — the platform's
+  server-side engine-template registry (`computeDeployTemplate`): deploy a
+  canonical engine by name, no client-held Rust.
+- **`kit.deploy({ engines: [...] })`** — blueprints + engine templates in
+  one call (`'template'` or `'template:moduleName'` entries).
+- **`kit/wire`** — reserved event types 94 (ability), 95 (movement
+  violation), 96 (control point), 97 (race timing), 98 (zone change) with
+  parsers.
+
+## Server compatibility
+
+The new surfaces need a `cks-game-api` from the Wave 3 dev line (engine
+event types 94–98, `computeDeployTemplate`). Without the engines deployed,
+`engineAvailable()` is false everywhere and 8.8 behavior is unchanged.
+
 # CrowdyJS v8.8 Notes
 
 ## Added

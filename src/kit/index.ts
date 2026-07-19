@@ -82,6 +82,14 @@ export {
   type SelectorPermissionPredicate,
   type WorldsimBlueprintOptions,
   type WorldsimNames,
+  liveopsBlueprint,
+  liveopsNames,
+  type LiveopsBlueprintOptions,
+  type LiveopsNames,
+  moderationBlueprint,
+  moderationNames,
+  type ModerationBlueprintOptions,
+  type ModerationNames,
 } from './blueprints/index.js';
 export {
   GameKitClient,
@@ -142,6 +150,43 @@ export {
 } from './pets.js';
 export { EngineDetector, type EngineInvokeResult } from './engine.js';
 export {
+  LiveopsKit,
+  type KitEventWindow,
+  type KitSeason,
+  type LiveopsKitOptions,
+  type ZoneChangeEvent,
+} from './liveops.js';
+export {
+  AbilitiesKit,
+  type AbilitiesKitOptions,
+  type KitAbility,
+} from './abilities.js';
+export {
+  MovementKit,
+  type KitViolations,
+  type MovementKitOptions,
+} from './movement.js';
+export {
+  TerritoryKit,
+  type KitControlPoint,
+  type TerritoryKitOptions,
+} from './territory.js';
+export {
+  RacingKit,
+  type KitRaceRun,
+  type RacingKitOptions,
+} from './racing.js';
+export {
+  ModerationKit,
+  type KitModReport,
+  type ModerationKitOptions,
+} from './moderation.js';
+export {
+  TelemetryKit,
+  telemetryBlueprint,
+  type TelemetryKitOptions,
+} from './telemetry.js';
+export {
   InstancesKit,
   type InstancesKitOptions,
   type KitInstance,
@@ -170,19 +215,32 @@ export {
   encodeEnginePose,
   engineLanes,
   enginePoseCodec,
+  parseAbilityEvent,
   parseContactDamage,
+  parseControlPointEvent,
   parseEngineEvent,
+  parseMovementViolation,
   parseProposalEvent,
+  parseRaceTimingEvent,
   parseScoreEvent,
   parseTurnEvent,
   parseWeatherEvent,
   poseSuffix,
+  EVENT_ABILITY,
+  EVENT_CONTROL_POINT,
+  EVENT_MOVEMENT_VIOLATION,
   EVENT_PROPOSAL,
+  EVENT_RACE_TIMING,
   EVENT_SCORE,
   EVENT_TURN,
+  EVENT_ZONE_CHANGE,
+  type AbilityEvent,
   type ContactDamageEvent,
+  type ControlPointEvent,
   type EnginePose,
+  type MovementViolationEvent,
   type ProposalEvent,
+  type RaceTimingEvent,
   type ScoreEvent,
   type TurnEvent,
   type WeatherEvent,

@@ -32,6 +32,13 @@ import { MatchesKit, type MatchesKitOptions } from './matches.js';
 import { ProgressionKit, type ProgressionKitOptions } from './progression.js';
 import { QuestsKit, type QuestsKitOptions } from './quests.js';
 import { SocialKit, type SocialKitOptions } from './social.js';
+import { AbilitiesKit, type AbilitiesKitOptions } from './abilities.js';
+import { LiveopsKit, type LiveopsKitOptions } from './liveops.js';
+import { MovementKit, type MovementKitOptions } from './movement.js';
+import { RacingKit, type RacingKitOptions } from './racing.js';
+import { TerritoryKit, type TerritoryKitOptions } from './territory.js';
+import { ModerationKit, type ModerationKitOptions } from './moderation.js';
+import { TelemetryKit, type TelemetryKitOptions } from './telemetry.js';
 import { WorldsimKit, type WorldsimKitOptions } from './worldsim.js';
 
 /** Options for {@link GameKitClient}, configuring the runtime helpers to match your deployed blueprints. */
@@ -48,6 +55,13 @@ export interface GameKitOptions {
   matches?: MatchesKitOptions;
   decks?: DecksKitOptions;
   worldsim?: WorldsimKitOptions;
+  liveops?: LiveopsKitOptions;
+  moderation?: ModerationKitOptions;
+  telemetry?: TelemetryKitOptions;
+  abilities?: AbilitiesKitOptions;
+  movement?: MovementKitOptions;
+  territory?: TerritoryKitOptions;
+  racing?: RacingKitOptions;
   social?: SocialKitOptions;
   leaderboards?: LeaderboardsKitOptions;
   mobs?: MobsKitOptions;
@@ -76,6 +90,8 @@ export interface KitDeployResult {
   seed: GameModelSeedMutation['gameModelSeed'];
   automations: GameModelUpsertAutomationMutation['gameModelUpsertAutomation'][];
   automationTriggers: GameModelUpsertAutomationTriggerMutation['gameModelUpsertAutomationTrigger'][];
+  /** Engine templates deployed alongside (when `engines` was passed). */
+  engines: Array<{ templateName: string; moduleName: string; compileStatus: string }>;
   /** Non-fatal static-analysis warnings from the seed. */
   warnings: string[];
 }
@@ -143,6 +159,20 @@ export class GameKitClient {
   readonly decks: DecksKit;
   /** World simulation helpers (clock/weather, nodes, crops, wave counters). */
   readonly worldsim: WorldsimKit;
+  /** Liveops helpers (event windows, seasons, battle-pass composition). */
+  readonly liveops: LiveopsKit;
+  /** Moderation helpers (reports, admin queue, personal mutes). */
+  readonly moderation: ModerationKit;
+  /** Telemetry helpers (track + sampled counters). */
+  readonly telemetry: TelemetryKit;
+  /** Realtime ability casts (abilities engine, type-94 events). */
+  readonly abilities: AbilitiesKit;
+  /** Movement-warden reads (observe/flag posture, type-95 events). */
+  readonly movement: MovementKit;
+  /** Control points + factions (territory engine, type-96 events). */
+  readonly territory: TerritoryKit;
+  /** Racing + possession (type-97 events, ghosts, the ball). */
+  readonly racing: RacingKit;
   /** Social helpers (parties, guilds, chat over teams + channels). */
   readonly social: SocialKit;
   /** Leaderboard helpers (trusted submits, client-side ranking, seasons). */
@@ -163,6 +193,7 @@ export class GameKitClient {
   readonly pets: PetsKit;
   /** Compute-engine capability detection shared by the engine-aware kits. */
   readonly engines: EngineDetector;
+  private readonly compute?: ComputeAPI;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -171,6 +202,7 @@ export class GameKitClient {
     options: GameKitOptions = {},
     domains: GameKitDomains = {},
   ) {
+    this.compute = domains.compute;
     this.engines = new EngineDetector(String(appId), domains.compute);
     this.inventory = new InventoryKit(appId, gameModel, options.inventory);
     this.objects = new ObjectsKit(appId, gameModel, options.objects);
@@ -178,7 +210,7 @@ export class GameKitClient {
     this.plots = new PlotsKit(appId, gameModel, gameApps, options.plots);
     this.economy = new EconomyKit(appId, gameModel, options.economy, this.engines);
     this.progression = new ProgressionKit(appId, gameModel, options.progression);
-    this.loot = new LootKit(appId, gameModel, options.loot);
+    this.loot = new LootKit(appId, gameModel, options.loot, this.engines);
     this.quests = new QuestsKit(appId, gameModel, options.quests);
     this.combat = new CombatKit(appId, gameModel, options.combat, this.engines);
     this.matches = new MatchesKit(
@@ -191,6 +223,13 @@ export class GameKitClient {
     );
     this.decks = new DecksKit(appId, gameModel, options.decks, this.engines);
     this.worldsim = new WorldsimKit(appId, gameModel, options.worldsim, this.engines);
+    this.liveops = new LiveopsKit(appId, gameModel, options.liveops, this.engines);
+    this.moderation = new ModerationKit(appId, gameModel, options.moderation);
+    this.telemetry = new TelemetryKit(appId, gameModel, options.telemetry);
+    this.abilities = new AbilitiesKit(appId, gameModel, this.engines, options.abilities);
+    this.movement = new MovementKit(appId, gameModel, this.engines, options.movement);
+    this.territory = new TerritoryKit(appId, gameModel, this.engines, options.territory);
+    this.racing = new RacingKit(appId, gameModel, this.engines, options.racing);
     this.mobs = new MobsKit(appId, gameModel, this.engines, options.mobs);
     this.pets = new PetsKit(appId, gameModel, this.engines, options.pets);
     this.instances = new InstancesKit(appId, this.engines, options.instances);
@@ -240,7 +279,18 @@ export class GameKitClient {
    */
   async deploy(
     blueprints: KitBlueprint | KitBlueprint[],
-    options: { sessionId?: string } = {},
+    options: {
+      sessionId?: string;
+      /**
+       * Engine templates to deploy from the platform registry alongside the
+       * blueprints (`computeDeployTemplate` — requires the compute domain +
+       * 'manage_compute'). Each entry is a template name, optionally
+       * `'template:module'` to override the module name.
+       */
+      engines?: string[];
+      /** Wait for engine compiles (default true). */
+      waitForEngines?: boolean;
+    } = {},
   ): Promise<KitDeployResult> {
     const list = Array.isArray(blueprints) ? blueprints : [blueprints];
     const merged = mergeBlueprints(this.appId, list, options);
@@ -256,10 +306,30 @@ export class GameKitClient {
       automationTriggers.push(await this.gameModel.upsertAutomationTrigger(trigger));
     }
 
+    const engines: KitDeployResult['engines'] = [];
+    for (const entry of options.engines ?? []) {
+      if (!this.compute) {
+        throw new Error('kit.deploy engines requires the compute domain (createCrowdyClient default)');
+      }
+      const [templateName, moduleOverride] = entry.split(':');
+      const module = await this.compute.deployTemplate({
+        appId: this.appId,
+        templateName,
+        ...(moduleOverride ? { moduleName: moduleOverride } : {}),
+      });
+      let compileStatus = 'pending';
+      if (options.waitForEngines !== false) {
+        const compiled = await this.compute.waitForCompile(this.appId, module.name);
+        compileStatus = compiled.compileStatus;
+      }
+      engines.push({ templateName, moduleName: module.name, compileStatus });
+    }
+
     return {
       seed,
       automations,
       automationTriggers,
+      engines,
       warnings: [...(seed.warnings ?? [])],
     };
   }

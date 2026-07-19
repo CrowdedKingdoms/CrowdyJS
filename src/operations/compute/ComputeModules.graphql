@@ -233,3 +233,17 @@ query ComputeAppDiagnostics($appId: BigInt!) {
     }
   }
 }
+
+query ComputeTemplates($appId: BigInt!) {
+  computeTemplates(appId: $appId) {
+    name
+    description
+    exports
+  }
+}
+
+mutation ComputeDeployTemplate($appId: BigInt!, $templateName: String!, $moduleName: String) {
+  computeDeployTemplate(appId: $appId, templateName: $templateName, moduleName: $moduleName) {
+    ...ComputeModuleFields
+  }
+}
