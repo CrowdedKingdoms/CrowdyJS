@@ -1,3 +1,30 @@
+# CrowdyJS v8.6 Notes
+
+## Added
+
+**`client.compute` — Compute Modules** (server-side Rust/WebAssembly logic on
+the Game API). Additive; no breaking changes.
+
+- Authoring: `upsertModule`, `deployVersion({ appId, moduleName, sourceFiles })`
+  (stringifies the source map and defaults the SDK/ABI pins), `waitForCompile`
+  (polls the newest version until the compile settles), `setModuleEnabled`,
+  `deleteModule`, `upsertTrigger` (tick / event / invoke), `deleteTrigger`,
+  `setPolicy`.
+- Invoke: `invoke({ appId, moduleName, exportName, paramsJson })` — synchronous
+  RPC to a module's client-callable export.
+- Monitoring: `modules`, `module`, `moduleVersions`, `moduleTriggers`,
+  `modulePolicy`, `moduleRuns`, `moduleStats`, `moduleLogs`, `appDiagnostics`.
+- Exports: `ComputeAPI`, `COMPUTE_SDK_VERSION`, `COMPUTE_ABI_VERSION`.
+
+Modules execute **server-only**; the SDK manages, invokes, and observes them.
+Guide: https://docs.crowdedkingdoms.com/game-api/compute-modules
+
+## Server compatibility
+
+Requires a `cks-game-api` build that serves the `compute*` root fields
+(v0.13.13+ dev line). Older servers reject compute operations with a GraphQL
+validation error; every other sub-client is unaffected.
+
 # CrowdyJS v8 — Passwordless & federated sign-in (BREAKING)
 
 **Crowded Kingdoms is passwordless.** Email + password login is removed. Update

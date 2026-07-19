@@ -3656,6 +3656,91 @@ type Query {
     success: Boolean
   ): GameModelEventsConnection!
   """
+  List the compute modules defined for an app. Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeModules(
+    """The app (tenant) whose modules to list."""
+    appId: BigInt!
+  ): [WasmModule!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Read one compute module by name. Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeModule(
+    """The app (tenant) that owns the module."""
+    appId: BigInt!
+    """The module name."""
+    name: String!
+  ): WasmModule! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  List a module's source versions, newest first, including compile status/logs. Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeModuleVersions(
+    """The app (tenant) that owns the module."""
+    appId: BigInt!
+    """The module whose versions to list."""
+    moduleName: String!
+    """Max versions to return (default 20, max 100)."""
+    limit: Int
+  ): [WasmModuleVersion!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  List trigger bindings for an app, optionally filtered to one module. Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeModuleTriggers(
+    """The app (tenant) whose triggers to list."""
+    appId: BigInt!
+    """Optional: only triggers of this module."""
+    moduleName: String
+  ): [WasmModuleTrigger!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Read the app's compute policy (platform defaults when unset). Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeModulePolicy(
+    """The app (tenant) whose compute policy to read."""
+    appId: BigInt!
+  ): WasmModulePolicy! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  List compute-module runs (the monitoring + audit trail of executions), newest first, optionally filtered by module and/or outcome. Rows are written by the runtime; empty until modules execute (Phase 2). Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeModuleRuns(
+    """The app (tenant) whose runs to list."""
+    appId: BigInt!
+    """Optional: only runs of this module. Omit for all."""
+    moduleName: String
+    """Optional: filter by outcome (true = succeeded, false = failed)."""
+    success: Boolean
+    """Max runs to return (default 50, max 200)."""
+    limit: Int
+    """Number of runs to skip (pagination)."""
+    offset: Int
+  ): [WasmModuleRun!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Aggregate compute activity for an app over a recent window: run/failure counts, fuel, egress, and a per-module breakdown. Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeModuleStats(
+    """The app (tenant) whose compute activity to summarize."""
+    appId: BigInt!
+    """Look-back window in minutes (default 60, max 1440)."""
+    windowMinutes: Int = 60
+  ): WasmComputeStats! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Diagnostic log lines for an app's compute modules, newest first. Phase 1 surfaces failed-run errors; the runtime adds guest log output when modules execute. Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeModuleLogs(
+    """The app (tenant) whose logs to read."""
+    appId: BigInt!
+    """Optional: only lines from this module."""
+    moduleName: String
+    """Max lines to return (default 100, max 500)."""
+    limit: Int
+  ): [WasmModuleLogEntry!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  A snapshot of an app's compute footprint: module/version/trigger counts plus 24h run activity and the most-active modules. Requires the org 'view_compute_diagnostics' permission.
+  """
+  computeAppDiagnostics(
+    """The app (tenant) to diagnose."""
+    appId: BigInt!
+  ): WasmAppDiagnostics! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
   UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
   """
   udpProxyConnectionStatus: UdpProxyConnectionStatus!
@@ -5021,7 +5106,7 @@ type Mutation {
     edgeId: String!
   ): Boolean!
   """
-  Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here.
+  Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). Invoke-policy denials are gameplay verdicts, NOT exceptions: they return success=false with errorMessage and log a failure event (observable via gameModelEvents). Scope violations (calling a server-scope function as a non-admin, or an internal function directly) are misconfigurations and throw FORBIDDEN. This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here.
   """
   gameModelInvoke(
     """
@@ -5029,6 +5114,78 @@ type Mutation {
     """
     input: InvokeFunctionInput!
   ): GmInvokeResult!
+  """
+  Create or update a WASM compute module (metadata only). Modules hold developer-authored Rust compiled to sandboxed WASM on game-api instances; upload source with computeDeployVersion. New modules start disabled. Upsert key is (app, name). Requires the org 'manage_compute' permission.
+  """
+  computeUpsertModule(
+    """The app, module name (upsert key), and metadata."""
+    input: UpsertComputeModuleInput!
+  ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
+  Upload a new immutable source version of a compute module and make it the deployed version. The source map is validated (Cargo.toml + src/*.rs only, size caps, platform crate allowlist, no build-time code) and parked as compile_status=pending; a game-api instance compiles it before it can run. Requires the org 'manage_compute' permission.
+  """
+  computeDeployVersion(
+    """
+    The app, module name, source-file map (JSON), and SDK/ABI version pins.
+    """
+    input: DeployComputeVersionInput!
+  ): WasmModuleVersion! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
+  Enable or disable a compute module. Enabling requires a deployed version and resets the module's circuit breaker; disabling stops all scheduling. Requires the org 'manage_compute' permission.
+  """
+  computeSetModuleEnabled(
+    """The app (tenant) that owns the module."""
+    appId: BigInt!
+    """The module name."""
+    name: String!
+    """True to enable (and reset the circuit); false to stop."""
+    enabled: Boolean!
+  ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Delete a compute module and (via cascade) its versions, triggers, and lease. Run history is retained for auditing. Returns true when a module was deleted. Requires the org 'manage_compute' permission.
+  """
+  computeDeleteModule(
+    """The app (tenant) that owns the module."""
+    appId: BigInt!
+    """The module name to delete."""
+    name: String!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Bind a trigger to a compute module: a tick loop (tickHz, clamped by policy), an event subscription (model or compute events), or a client-invokable export (with an optional invoke policy). Requires the org 'manage_compute' permission.
+  """
+  computeUpsertTrigger(
+    """The app, module name, trigger type, and type-specific fields."""
+    input: UpsertComputeTriggerInput!
+  ): WasmModuleTrigger! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
+  Delete a compute-module trigger by id. Returns true when a trigger was deleted. Requires the org 'manage_compute' permission.
+  """
+  computeDeleteTrigger(
+    """The app (tenant) that owns the trigger."""
+    appId: BigInt!
+    """The trigger id (UUID) to delete."""
+    triggerId: String!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Set the app's compute policy (platform guardrails): the kill switch, module count / tick-rate / fuel / memory / runtime / host-op / egress ceilings, and circuit-breaker tuning. Omitted fields keep current values. Requires the org 'manage_compute' permission.
+  """
+  computeSetPolicy(
+    """The app plus any guardrail fields to set."""
+    input: SetComputePolicyInput!
+  ): WasmModulePolicy! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
+  Invoke a compute module's client-callable export (a trigger with triggerType=invoke). Synchronous RPC: the module runs and returns its result directly (unlike the spatial send surface's dual-success model). Authorization: the export's invoke policy (authority tree) — or holders of 'manage_compute' only when no policy is set. Requires a valid app token.
+  """
+  computeInvoke(
+    """The app (tenant) that owns the module."""
+    appId: BigInt!
+    """The module to invoke."""
+    moduleName: String!
+    """The invoke export (must match an invoke trigger)."""
+    exportName: String!
+    """JSON object of parameters passed to the module."""
+    paramsJson: String
+  ): ComputeInvokeResult!
   """
   Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first.
   """
@@ -7262,6 +7419,290 @@ type GameModelEventsConnection {
   totalCount: Int
 }
 
+"""
+A WASM compute module: developer-authored Rust compiled to sandboxed WASM on game-api instances. Holds metadata, the deployed version pointer, and circuit-breaker state; source lives in versions.
+"""
+type WasmModule {
+  """Unique module id (UUID)."""
+  moduleId: String!
+  """The app (tenant) that owns the module."""
+  appId: BigInt!
+  """Module name (unique per app); the upsert key."""
+  name: String!
+  """Optional description."""
+  description: String
+  """
+  Whether the module may run. New modules start disabled; enable after a successful compile.
+  """
+  enabled: Boolean!
+  """
+  Whether the module runs without active players (world simulation). Policy-gated.
+  """
+  alwaysOn: Boolean!
+  """The deployed version id (UUID). Null until first deploy."""
+  currentVersionId: String
+  """Circuit-breaker state: closed | open | half_open."""
+  circuitState: String!
+  """Current consecutive-failure count."""
+  consecutiveFailures: Int!
+  """When the open circuit may retry (half-open)."""
+  cooldownUntil: DateTime
+  """Last error recorded for this module."""
+  lastError: String
+  """When the module was created."""
+  createdAt: DateTime!
+  """When the module was last updated."""
+  updatedAt: DateTime!
+}
+
+"""
+An immutable source version of a compute module, plus its compile pipeline status. Rows are created pending; a game-api instance compiles them (Phase 2 runtime).
+"""
+type WasmModuleVersion {
+  """Unique version id (UUID)."""
+  versionId: String!
+  """The module this version belongs to."""
+  moduleId: String!
+  """The app (tenant)."""
+  appId: BigInt!
+  """Monotonic version number within the module."""
+  versionNo: Int!
+  """
+  JSON object mapping relative paths to file contents (the uploaded Rust source).
+  """
+  sourceFilesJson: String!
+  """
+  sha256 of the canonicalized source map; keys the compiled-artifact cache together with toolchain/SDK/ABI versions.
+  """
+  sourceHash: String!
+  """The crowdy-compute-sdk version the source targets."""
+  sdkVersion: String!
+  """The guest ABI version the source targets."""
+  abiVersion: Int!
+  """Compile status: pending | compiling | succeeded | failed."""
+  compileStatus: String!
+  """Compiler output (populated when compilation runs)."""
+  compileLog: String
+  """Size of the compiled artifact in bytes (after compile)."""
+  compiledSizeBytes: BigInt
+  """When this version became the deployed version."""
+  publishedAt: DateTime
+  """When this version was uploaded."""
+  createdAt: DateTime!
+}
+
+"""
+A trigger binding on a compute module: a tick loop, a model/compute event subscription, or a client-invokable export.
+"""
+type WasmModuleTrigger {
+  """Unique trigger id (UUID)."""
+  triggerId: String!
+  """The app (tenant)."""
+  appId: BigInt!
+  """The module this trigger drives."""
+  moduleId: String!
+  """Trigger type: tick | event | invoke."""
+  triggerType: String!
+  """For tick triggers: the tick rate in Hz."""
+  tickHz: Float
+  """
+  For event triggers: function_invoked | property_changed | container_created | compute_event.
+  """
+  onEvent: String
+  """Event filter: only this model function name."""
+  functionName: String
+  """Event filter: only this container type."""
+  containerTypeName: String
+  """Event filter: only this property key."""
+  propertyKey: String
+  """Event filter: only compute events with this name."""
+  eventName: String
+  """Debounce/coalesce window in ms."""
+  debounceMs: Int!
+  """For invoke triggers: the exported guest function name."""
+  exportName: String
+  """
+  For invoke triggers: JSON authority tree gating who may invoke. Null = app admins only.
+  """
+  invokePolicyJson: String
+  """When the trigger was created."""
+  createdAt: DateTime!
+}
+
+"""
+Per-app guardrails / platform ceilings for compute modules. A missing row means platform defaults.
+"""
+type WasmModulePolicy {
+  """The app (tenant) the policy applies to."""
+  appId: BigInt!
+  """App-wide kill switch for all compute modules."""
+  enabled: Boolean!
+  """Max modules the app may define."""
+  maxModules: Int!
+  """Max tick rate (Hz) any module may request."""
+  maxTickHz: Float!
+  """Fuel budget per tick call."""
+  fuelPerTick: BigInt!
+  """Fuel budget per invoke/event call."""
+  fuelPerInvoke: BigInt!
+  """Max guest linear memory (MB)."""
+  maxMemoryMb: Int!
+  """Wall-clock watchdog budget per entry call (ms)."""
+  maxRunMs: Int!
+  """Max host data-API operations per tick."""
+  maxDbOpsPerTick: Int!
+  """Max replication messages a module may emit per minute."""
+  maxEgressMsgsPerMin: Int!
+  """Max replication bytes a module may emit per minute."""
+  maxEgressBytesPerMin: BigInt!
+  """Consecutive failures that open a module circuit."""
+  failureThreshold: Int!
+  """Cooldown (ms) while a module circuit is open."""
+  cooldownMs: Int!
+}
+
+"""
+One recorded compute execution (init / tick batch / event / invoke): timing, fuel, host-call counts, outcome. Written by the runtime (Phase 2); empty until modules execute.
+"""
+type WasmModuleRun {
+  """Unique run id (UUID)."""
+  runId: String!
+  """The app (tenant)."""
+  appId: BigInt!
+  """The module that ran."""
+  moduleId: String!
+  """The module name at run time."""
+  moduleName: String!
+  """What ran: init | tick | event | invoke."""
+  triggerSource: String!
+  """The guest entry point (e.g. an invoke export name)."""
+  entry: String
+  """When the run started."""
+  startedAt: DateTime!
+  """Wall-clock duration in microseconds."""
+  durationUs: Int!
+  """Fuel consumed by the run."""
+  fuelUsed: BigInt!
+  """Host data-API reads performed."""
+  dbReads: Int!
+  """Host data-API writes performed."""
+  dbWrites: Int!
+  """Replication messages emitted."""
+  egressMsgs: Int!
+  """Replication bytes emitted."""
+  egressBytes: BigInt!
+  """Whether the run succeeded."""
+  success: Boolean!
+  """Error message when the run failed (trap, fuel, watchdog)."""
+  errorMessage: String
+  """Circuit action taken (e.g. opened, half_open_retry)."""
+  circuitAction: String
+}
+
+"""
+A diagnostic log line for a compute module. Phase 1 surfaces failed-run errors; the Phase 2 runtime adds guest ck.log output.
+"""
+type WasmModuleLogEntry {
+  """When the line was recorded."""
+  ts: DateTime!
+  """The module name."""
+  moduleName: String!
+  """Log level: debug | info | warn | error."""
+  level: String!
+  """The log message."""
+  message: String!
+  """The entry that produced the line: init | tick | event | invoke."""
+  triggerSource: String
+}
+
+"""Per-module rollup within a stats window."""
+type WasmComputeStat {
+  """The module name."""
+  moduleName: String!
+  """Runs in the window."""
+  runs: Int!
+  """Failed runs in the window."""
+  failures: Int!
+  """Total fuel consumed."""
+  fuelUsed: BigInt!
+  """Average run duration (microseconds)."""
+  avgDurationUs: Int!
+  """Current circuit-breaker state: closed | open | half_open."""
+  circuitState: String!
+}
+
+"""
+Aggregate compute activity for an app over a recent window: throughput, failure rate, fuel, egress, and a per-module breakdown.
+"""
+type WasmComputeStats {
+  """The window size in minutes."""
+  windowMinutes: Int!
+  """Total runs in the window."""
+  totalRuns: Int!
+  """Failed runs in the window."""
+  failedRuns: Int!
+  """Failure rate as a percentage (0-100)."""
+  failureRatePct: Float!
+  """Total fuel consumed in the window."""
+  totalFuelUsed: BigInt!
+  """Total replication messages emitted in the window."""
+  totalEgressMsgs: BigInt!
+  """Average run duration in microseconds."""
+  avgDurationUs: Int!
+  """Per-module breakdown."""
+  byModule: [WasmComputeStat!]!
+}
+
+"""
+The synchronous result of a computeInvoke call. Unlike the spatial send surface (dual-success), this is direct RPC: the module ran and this is its output.
+"""
+type ComputeInvokeResult {
+  """The module's raw response bytes, base64-encoded."""
+  resultBase64: String!
+  """
+  The response decoded as JSON text when it parses as JSON; null otherwise.
+  """
+  resultJson: String
+  """Fuel consumed by the call."""
+  fuelUsed: BigInt!
+  """Wall-clock duration in microseconds."""
+  durationUs: Int!
+}
+
+"""A module and its recent run counts (diagnostics)."""
+type WasmTopModule {
+  """The module name."""
+  moduleName: String!
+  """Runs in the window."""
+  runs: Int!
+  """Failed runs in the window."""
+  failures: Int!
+}
+
+"""
+A snapshot of an app's compute footprint: module/version/trigger counts plus recent run activity. Helps developers understand what compute is deployed and doing.
+"""
+type WasmAppDiagnostics {
+  """The app (tenant)."""
+  appId: BigInt!
+  """Modules defined."""
+  moduleCount: Int!
+  """Modules currently enabled."""
+  enabledModuleCount: Int!
+  """Source versions uploaded (all modules)."""
+  versionCount: Int!
+  """Trigger bindings defined."""
+  triggerCount: Int!
+  """Runs in the last 24h."""
+  runs24h: Int!
+  """Failed runs in the last 24h."""
+  failedRuns24h: Int!
+  """Fuel consumed in the last 24h."""
+  fuelUsed24h: BigInt!
+  """Most-active modules in the last 24h."""
+  topModules: [WasmTopModule!]!
+}
+
 input ActorFilterInput {
   """Restrict to actors in this app. BigInt sent as a decimal string."""
   appId: BigInt
@@ -8436,6 +8877,118 @@ input InvokeFunctionInput {
   sessionId: String
   """JSON object of params."""
   paramsJson: String
+}
+
+"""
+Create or update a WASM compute module (metadata only; source is uploaded with computeDeployVersion). Upsert key is (app, name).
+"""
+input UpsertComputeModuleInput {
+  """The app (tenant) that owns the module."""
+  appId: BigInt!
+  """
+  Module name (unique per app, lowercase crate-style: [a-z][a-z0-9_-]*). The upsert key.
+  """
+  name: String!
+  """Optional description."""
+  description: String
+  """
+  Run without active players (world simulation). Policy-gated; defaults to false.
+  """
+  alwaysOn: Boolean
+}
+
+"""
+Upload a new immutable source version of a module. The source is validated (size caps, crate allowlist, no build-time code) and parked as compile_status=pending until an instance compiles it.
+"""
+input DeployComputeVersionInput {
+  """The app (tenant) that owns the module."""
+  appId: BigInt!
+  """The module (by name) this version belongs to."""
+  moduleName: String!
+  """
+  JSON object mapping relative paths to file contents. Must include Cargo.toml and src/lib.rs; only .rs files under src/ plus Cargo.toml are allowed. Dependencies are restricted to the platform crate allowlist; build.rs and [build-dependencies] are rejected.
+  """
+  sourceFilesJson: String!
+  """
+  The crowdy-compute-sdk version the source targets (must be a platform-supported version, e.g. '0.0.1').
+  """
+  sdkVersion: String!
+  """
+  The guest ABI version the source targets (must be platform-supported; currently 0).
+  """
+  abiVersion: Int!
+}
+
+"""
+Bind a trigger to a module: a tick loop (tick_hz), a model/compute event subscription, or a client-invokable export.
+"""
+input UpsertComputeTriggerInput {
+  """The app (tenant)."""
+  appId: BigInt!
+  """The module (by name) this trigger drives."""
+  moduleName: String!
+  """Trigger type: tick | event | invoke."""
+  triggerType: String!
+  """
+  For tick triggers: the tick rate in Hz (clamped by the app policy's maxTickHz).
+  """
+  tickHz: Float
+  """
+  For event triggers: function_invoked | property_changed | container_created | compute_event.
+  """
+  onEvent: String
+  """Event filter: only this model function name."""
+  functionName: String
+  """Event filter: only this container type."""
+  containerTypeName: String
+  """Event filter: only this property key."""
+  propertyKey: String
+  """
+  Event filter: only compute events with this name (on_event=compute_event).
+  """
+  eventName: String
+  """Debounce/coalesce window in ms for event triggers."""
+  debounceMs: Int
+  """
+  For invoke triggers: the exported guest function name computeInvoke routes to.
+  """
+  exportName: String
+  """
+  For invoke triggers: JSON authority tree gating who may invoke (same shape as game-model function invoke policies). Null = app admins only.
+  """
+  invokePolicyJson: String
+}
+
+"""
+Set the per-app compute policy (guardrails / platform ceilings). Omitted fields keep their current (or default) values.
+"""
+input SetComputePolicyInput {
+  """The app (tenant)."""
+  appId: BigInt!
+  """App-wide kill switch for all compute modules."""
+  enabled: Boolean
+  """Max modules the app may define."""
+  maxModules: Int
+  """Max tick rate (Hz) any module may request."""
+  maxTickHz: Float
+  """Fuel budget per tick call."""
+  fuelPerTick: BigInt
+  """Fuel budget per invoke/event call."""
+  fuelPerInvoke: BigInt
+  """Max guest linear memory (MB)."""
+  maxMemoryMb: Int
+  """Wall-clock watchdog budget per entry call (ms)."""
+  maxRunMs: Int
+  """Max host data-API operations per tick."""
+  maxDbOpsPerTick: Int
+  """Max replication messages a module may emit per minute."""
+  maxEgressMsgsPerMin: Int
+  """Max replication bytes a module may emit per minute."""
+  maxEgressBytesPerMin: BigInt
+  """Consecutive failures that open a module circuit."""
+  failureThreshold: Int
+  """Cooldown (ms) while a module circuit is open."""
+  cooldownMs: Int
 }
 
 """

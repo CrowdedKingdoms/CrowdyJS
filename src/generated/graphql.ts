@@ -1392,6 +1392,19 @@ export type CompleteLoginLinkInput = {
   token: Scalars['String']['input'];
 };
 
+/** The synchronous result of a computeInvoke call. Unlike the spatial send surface (dual-success), this is direct RPC: the module ran and this is its output. */
+export type ComputeInvokeResult = {
+  __typename?: 'ComputeInvokeResult';
+  /** Wall-clock duration in microseconds. */
+  durationUs: Scalars['Int']['output'];
+  /** Fuel consumed by the call. */
+  fuelUsed: Scalars['BigInt']['output'];
+  /** The module's raw response bytes, base64-encoded. */
+  resultBase64: Scalars['String']['output'];
+  /** The response decoded as JSON text when it parses as JSON; null otherwise. */
+  resultJson: Maybe<Scalars['String']['output']>;
+};
+
 /** Relay-style pagination metadata for a connection. */
 export type ConnectionPageInfo = {
   __typename?: 'ConnectionPageInfo';
@@ -1969,6 +1982,20 @@ export type DeleteGridResponse = {
   error: UdpErrorCode;
   /** The deleted grid id on success; null when `error` is non-zero. */
   gridId: Maybe<Scalars['BigInt']['output']>;
+};
+
+/** Upload a new immutable source version of a module. The source is validated (size caps, crate allowlist, no build-time code) and parked as compile_status=pending until an instance compiles it. */
+export type DeployComputeVersionInput = {
+  /** The guest ABI version the source targets (must be platform-supported; currently 0). */
+  abiVersion: Scalars['Int']['input'];
+  /** The app (tenant) that owns the module. */
+  appId: Scalars['BigInt']['input'];
+  /** The module (by name) this version belongs to. */
+  moduleName: Scalars['String']['input'];
+  /** The crowdy-compute-sdk version the source targets (must be a platform-supported version, e.g. '0.0.1'). */
+  sdkVersion: Scalars['String']['input'];
+  /** JSON object mapping relative paths to file contents. Must include Cargo.toml and src/lib.rs; only .rs files under src/ plus Cargo.toml are allowed. Dependencies are restricted to the platform crate allowlist; build.rs and [build-dependencies] are rejected. */
+  sourceFilesJson: Scalars['String']['input'];
 };
 
 export type DestroyEnvironmentInput = {
@@ -3231,6 +3258,22 @@ export type Mutation = {
   claimFreeAppAccess: AppUserAccess;
   /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. */
   completeLoginLink: AuthResponse;
+  /** Delete a compute module and (via cascade) its versions, triggers, and lease. Run history is retained for auditing. Returns true when a module was deleted. Requires the org 'manage_compute' permission. */
+  computeDeleteModule: Scalars['Boolean']['output'];
+  /** Delete a compute-module trigger by id. Returns true when a trigger was deleted. Requires the org 'manage_compute' permission. */
+  computeDeleteTrigger: Scalars['Boolean']['output'];
+  /** Upload a new immutable source version of a compute module and make it the deployed version. The source map is validated (Cargo.toml + src/*.rs only, size caps, platform crate allowlist, no build-time code) and parked as compile_status=pending; a game-api instance compiles it before it can run. Requires the org 'manage_compute' permission. */
+  computeDeployVersion: WasmModuleVersion;
+  /** Invoke a compute module's client-callable export (a trigger with triggerType=invoke). Synchronous RPC: the module runs and returns its result directly (unlike the spatial send surface's dual-success model). Authorization: the export's invoke policy (authority tree) — or holders of 'manage_compute' only when no policy is set. Requires a valid app token. */
+  computeInvoke: ComputeInvokeResult;
+  /** Enable or disable a compute module. Enabling requires a deployed version and resets the module's circuit breaker; disabling stops all scheduling. Requires the org 'manage_compute' permission. */
+  computeSetModuleEnabled: WasmModule;
+  /** Set the app's compute policy (platform guardrails): the kill switch, module count / tick-rate / fuel / memory / runtime / host-op / egress ceilings, and circuit-breaker tuning. Omitted fields keep current values. Requires the org 'manage_compute' permission. */
+  computeSetPolicy: WasmModulePolicy;
+  /** Create or update a WASM compute module (metadata only). Modules hold developer-authored Rust compiled to sandboxed WASM on game-api instances; upload source with computeDeployVersion. New modules start disabled. Upsert key is (app, name). Requires the org 'manage_compute' permission. */
+  computeUpsertModule: WasmModule;
+  /** Bind a trigger to a compute module: a tick loop (tickHz, clamped by policy), an event subscription (model or compute events), or a client-invokable export (with an optional invoke policy). Requires the org 'manage_compute' permission. */
+  computeUpsertTrigger: WasmModuleTrigger;
   /** Confirms a user email address using the token from the confirmation email (also enables password sign-in for the account). Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call). */
   confirmEmail: Scalars['Boolean']['output'];
   /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
@@ -3323,7 +3366,7 @@ export type Mutation = {
   gameModelDeletePropertyDef: Scalars['Boolean']['output'];
   /** Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps'). */
   gameModelGrantTierFeature: GmTierFeature;
-  /** Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here. */
+  /** Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). Invoke-policy denials are gameplay verdicts, NOT exceptions: they return success=false with errorMessage and log a failure event (observable via gameModelEvents). Scope violations (calling a server-scope function as a non-admin, or an internal function directly) are misconfigurations and throw FORBIDDEN. This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here. */
   gameModelInvoke: GmInvokeResult;
   /** Join an existing session as a participant, optionally with a role. Requires a valid token and app access. */
   gameModelJoinSession: GmSessionParticipant;
@@ -3610,6 +3653,53 @@ export type MutationClaimFreeAppAccessArgs = {
 
 export type MutationCompleteLoginLinkArgs = {
   input: CompleteLoginLinkInput;
+};
+
+
+export type MutationComputeDeleteModuleArgs = {
+  appId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationComputeDeleteTriggerArgs = {
+  appId: Scalars['BigInt']['input'];
+  triggerId: Scalars['String']['input'];
+};
+
+
+export type MutationComputeDeployVersionArgs = {
+  input: DeployComputeVersionInput;
+};
+
+
+export type MutationComputeInvokeArgs = {
+  appId: Scalars['BigInt']['input'];
+  exportName: Scalars['String']['input'];
+  moduleName: Scalars['String']['input'];
+  paramsJson?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationComputeSetModuleEnabledArgs = {
+  appId: Scalars['BigInt']['input'];
+  enabled: Scalars['Boolean']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationComputeSetPolicyArgs = {
+  input: SetComputePolicyInput;
+};
+
+
+export type MutationComputeUpsertModuleArgs = {
+  input: UpsertComputeModuleInput;
+};
+
+
+export type MutationComputeUpsertTriggerArgs = {
+  input: UpsertComputeTriggerInput;
 };
 
 
@@ -4924,6 +5014,24 @@ export type Query = {
   checkouts: CheckoutsPage;
   /** Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckoutsConnection` instead. Relay cursor connection; prefer this over the offset-based checkouts. */
   checkoutsConnection: CheckoutsConnection;
+  /** A snapshot of an app's compute footprint: module/version/trigger counts plus 24h run activity and the most-active modules. Requires the org 'view_compute_diagnostics' permission. */
+  computeAppDiagnostics: WasmAppDiagnostics;
+  /** Read one compute module by name. Requires the org 'view_compute_diagnostics' permission. */
+  computeModule: WasmModule;
+  /** Diagnostic log lines for an app's compute modules, newest first. Phase 1 surfaces failed-run errors; the runtime adds guest log output when modules execute. Requires the org 'view_compute_diagnostics' permission. */
+  computeModuleLogs: Array<WasmModuleLogEntry>;
+  /** Read the app's compute policy (platform defaults when unset). Requires the org 'view_compute_diagnostics' permission. */
+  computeModulePolicy: WasmModulePolicy;
+  /** List compute-module runs (the monitoring + audit trail of executions), newest first, optionally filtered by module and/or outcome. Rows are written by the runtime; empty until modules execute (Phase 2). Requires the org 'view_compute_diagnostics' permission. */
+  computeModuleRuns: Array<WasmModuleRun>;
+  /** Aggregate compute activity for an app over a recent window: run/failure counts, fuel, egress, and a per-module breakdown. Requires the org 'view_compute_diagnostics' permission. */
+  computeModuleStats: WasmComputeStats;
+  /** List trigger bindings for an app, optionally filtered to one module. Requires the org 'view_compute_diagnostics' permission. */
+  computeModuleTriggers: Array<WasmModuleTrigger>;
+  /** List a module's source versions, newest first, including compile status/logs. Requires the org 'view_compute_diagnostics' permission. */
+  computeModuleVersions: Array<WasmModuleVersion>;
+  /** List the compute modules defined for an app. Requires the org 'view_compute_diagnostics' permission. */
+  computeModules: Array<WasmModule>;
   /** Operator only (is_operator). Most recent operator audit entries, newest first, optionally filtered by environment. */
   cpAudit: Array<CpAuditEntry>;
   /** Operator only (is_operator). One change order with its tasks and steps. Null when the id is not found. */
@@ -5347,6 +5455,62 @@ export type QueryCheckoutsConnectionArgs = {
   after?: InputMaybe<Scalars['String']['input']>;
   filter?: InputMaybe<CheckoutFilterInput>;
   first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryComputeAppDiagnosticsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryComputeModuleArgs = {
+  appId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type QueryComputeModuleLogsArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryComputeModulePolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryComputeModuleRunsArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  success?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryComputeModuleStatsArgs = {
+  appId: Scalars['BigInt']['input'];
+  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryComputeModuleTriggersArgs = {
+  appId: Scalars['BigInt']['input'];
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryComputeModuleVersionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  moduleName: Scalars['String']['input'];
+};
+
+
+export type QueryComputeModulesArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -6339,6 +6503,36 @@ export type SetChannelPolicyInput = {
   maxMembers?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/** Set the per-app compute policy (guardrails / platform ceilings). Omitted fields keep their current (or default) values. */
+export type SetComputePolicyInput = {
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['input'];
+  /** Cooldown (ms) while a module circuit is open. */
+  cooldownMs?: InputMaybe<Scalars['Int']['input']>;
+  /** App-wide kill switch for all compute modules. */
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Consecutive failures that open a module circuit. */
+  failureThreshold?: InputMaybe<Scalars['Int']['input']>;
+  /** Fuel budget per invoke/event call. */
+  fuelPerInvoke?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Fuel budget per tick call. */
+  fuelPerTick?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Max host data-API operations per tick. */
+  maxDbOpsPerTick?: InputMaybe<Scalars['Int']['input']>;
+  /** Max replication bytes a module may emit per minute. */
+  maxEgressBytesPerMin?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Max replication messages a module may emit per minute. */
+  maxEgressMsgsPerMin?: InputMaybe<Scalars['Int']['input']>;
+  /** Max guest linear memory (MB). */
+  maxMemoryMb?: InputMaybe<Scalars['Int']['input']>;
+  /** Max modules the app may define. */
+  maxModules?: InputMaybe<Scalars['Int']['input']>;
+  /** Wall-clock watchdog budget per entry call (ms). */
+  maxRunMs?: InputMaybe<Scalars['Int']['input']>;
+  /** Max tick rate (Hz) any module may request. */
+  maxTickHz?: InputMaybe<Scalars['Float']['input']>;
+};
+
 /** Set one property value on a container directly. */
 export type SetContainerPropertyInput = {
   /** The app (tenant) that owns the container. */
@@ -6896,6 +7090,46 @@ export type UpsertAutomationTriggerInput = {
   propertyKey?: InputMaybe<Scalars['String']['input']>;
 };
 
+/** Create or update a WASM compute module (metadata only; source is uploaded with computeDeployVersion). Upsert key is (app, name). */
+export type UpsertComputeModuleInput = {
+  /** Run without active players (world simulation). Policy-gated; defaults to false. */
+  alwaysOn?: InputMaybe<Scalars['Boolean']['input']>;
+  /** The app (tenant) that owns the module. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional description. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Module name (unique per app, lowercase crate-style: [a-z][a-z0-9_-]*). The upsert key. */
+  name: Scalars['String']['input'];
+};
+
+/** Bind a trigger to a module: a tick loop (tick_hz), a model/compute event subscription, or a client-invokable export. */
+export type UpsertComputeTriggerInput = {
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['input'];
+  /** Event filter: only this container type. */
+  containerTypeName?: InputMaybe<Scalars['String']['input']>;
+  /** Debounce/coalesce window in ms for event triggers. */
+  debounceMs?: InputMaybe<Scalars['Int']['input']>;
+  /** Event filter: only compute events with this name (on_event=compute_event). */
+  eventName?: InputMaybe<Scalars['String']['input']>;
+  /** For invoke triggers: the exported guest function name computeInvoke routes to. */
+  exportName?: InputMaybe<Scalars['String']['input']>;
+  /** Event filter: only this model function name. */
+  functionName?: InputMaybe<Scalars['String']['input']>;
+  /** For invoke triggers: JSON authority tree gating who may invoke (same shape as game-model function invoke policies). Null = app admins only. */
+  invokePolicyJson?: InputMaybe<Scalars['String']['input']>;
+  /** The module (by name) this trigger drives. */
+  moduleName: Scalars['String']['input'];
+  /** For event triggers: function_invoked | property_changed | container_created | compute_event. */
+  onEvent?: InputMaybe<Scalars['String']['input']>;
+  /** Event filter: only this property key. */
+  propertyKey?: InputMaybe<Scalars['String']['input']>;
+  /** For tick triggers: the tick rate in Hz (clamped by the app policy's maxTickHz). */
+  tickHz?: InputMaybe<Scalars['Float']['input']>;
+  /** Trigger type: tick | event | invoke. */
+  triggerType: Scalars['String']['input'];
+};
+
 /** Create or update a container type (schema for a kind of entity). */
 export type UpsertContainerTypeInput = {
   /** The app (tenant) that owns the type. */
@@ -7361,6 +7595,256 @@ export type WalletTransactionsConnection = {
   pageInfo: ConnectionPageInfo;
   /** Total matching records across all pages, when known (null for sources that do not compute a total). */
   totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** A snapshot of an app's compute footprint: module/version/trigger counts plus recent run activity. Helps developers understand what compute is deployed and doing. */
+export type WasmAppDiagnostics = {
+  __typename?: 'WasmAppDiagnostics';
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['output'];
+  /** Modules currently enabled. */
+  enabledModuleCount: Scalars['Int']['output'];
+  /** Failed runs in the last 24h. */
+  failedRuns24h: Scalars['Int']['output'];
+  /** Fuel consumed in the last 24h. */
+  fuelUsed24h: Scalars['BigInt']['output'];
+  /** Modules defined. */
+  moduleCount: Scalars['Int']['output'];
+  /** Runs in the last 24h. */
+  runs24h: Scalars['Int']['output'];
+  /** Most-active modules in the last 24h. */
+  topModules: Array<WasmTopModule>;
+  /** Trigger bindings defined. */
+  triggerCount: Scalars['Int']['output'];
+  /** Source versions uploaded (all modules). */
+  versionCount: Scalars['Int']['output'];
+};
+
+/** Per-module rollup within a stats window. */
+export type WasmComputeStat = {
+  __typename?: 'WasmComputeStat';
+  /** Average run duration (microseconds). */
+  avgDurationUs: Scalars['Int']['output'];
+  /** Current circuit-breaker state: closed | open | half_open. */
+  circuitState: Scalars['String']['output'];
+  /** Failed runs in the window. */
+  failures: Scalars['Int']['output'];
+  /** Total fuel consumed. */
+  fuelUsed: Scalars['BigInt']['output'];
+  /** The module name. */
+  moduleName: Scalars['String']['output'];
+  /** Runs in the window. */
+  runs: Scalars['Int']['output'];
+};
+
+/** Aggregate compute activity for an app over a recent window: throughput, failure rate, fuel, egress, and a per-module breakdown. */
+export type WasmComputeStats = {
+  __typename?: 'WasmComputeStats';
+  /** Average run duration in microseconds. */
+  avgDurationUs: Scalars['Int']['output'];
+  /** Per-module breakdown. */
+  byModule: Array<WasmComputeStat>;
+  /** Failed runs in the window. */
+  failedRuns: Scalars['Int']['output'];
+  /** Failure rate as a percentage (0-100). */
+  failureRatePct: Scalars['Float']['output'];
+  /** Total replication messages emitted in the window. */
+  totalEgressMsgs: Scalars['BigInt']['output'];
+  /** Total fuel consumed in the window. */
+  totalFuelUsed: Scalars['BigInt']['output'];
+  /** Total runs in the window. */
+  totalRuns: Scalars['Int']['output'];
+  /** The window size in minutes. */
+  windowMinutes: Scalars['Int']['output'];
+};
+
+/** A WASM compute module: developer-authored Rust compiled to sandboxed WASM on game-api instances. Holds metadata, the deployed version pointer, and circuit-breaker state; source lives in versions. */
+export type WasmModule = {
+  __typename?: 'WasmModule';
+  /** Whether the module runs without active players (world simulation). Policy-gated. */
+  alwaysOn: Scalars['Boolean']['output'];
+  /** The app (tenant) that owns the module. */
+  appId: Scalars['BigInt']['output'];
+  /** Circuit-breaker state: closed | open | half_open. */
+  circuitState: Scalars['String']['output'];
+  /** Current consecutive-failure count. */
+  consecutiveFailures: Scalars['Int']['output'];
+  /** When the open circuit may retry (half-open). */
+  cooldownUntil: Maybe<Scalars['DateTime']['output']>;
+  /** When the module was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** The deployed version id (UUID). Null until first deploy. */
+  currentVersionId: Maybe<Scalars['String']['output']>;
+  /** Optional description. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Whether the module may run. New modules start disabled; enable after a successful compile. */
+  enabled: Scalars['Boolean']['output'];
+  /** Last error recorded for this module. */
+  lastError: Maybe<Scalars['String']['output']>;
+  /** Unique module id (UUID). */
+  moduleId: Scalars['String']['output'];
+  /** Module name (unique per app); the upsert key. */
+  name: Scalars['String']['output'];
+  /** When the module was last updated. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** A diagnostic log line for a compute module. Phase 1 surfaces failed-run errors; the Phase 2 runtime adds guest ck.log output. */
+export type WasmModuleLogEntry = {
+  __typename?: 'WasmModuleLogEntry';
+  /** Log level: debug | info | warn | error. */
+  level: Scalars['String']['output'];
+  /** The log message. */
+  message: Scalars['String']['output'];
+  /** The module name. */
+  moduleName: Scalars['String']['output'];
+  /** The entry that produced the line: init | tick | event | invoke. */
+  triggerSource: Maybe<Scalars['String']['output']>;
+  /** When the line was recorded. */
+  ts: Scalars['DateTime']['output'];
+};
+
+/** Per-app guardrails / platform ceilings for compute modules. A missing row means platform defaults. */
+export type WasmModulePolicy = {
+  __typename?: 'WasmModulePolicy';
+  /** The app (tenant) the policy applies to. */
+  appId: Scalars['BigInt']['output'];
+  /** Cooldown (ms) while a module circuit is open. */
+  cooldownMs: Scalars['Int']['output'];
+  /** App-wide kill switch for all compute modules. */
+  enabled: Scalars['Boolean']['output'];
+  /** Consecutive failures that open a module circuit. */
+  failureThreshold: Scalars['Int']['output'];
+  /** Fuel budget per invoke/event call. */
+  fuelPerInvoke: Scalars['BigInt']['output'];
+  /** Fuel budget per tick call. */
+  fuelPerTick: Scalars['BigInt']['output'];
+  /** Max host data-API operations per tick. */
+  maxDbOpsPerTick: Scalars['Int']['output'];
+  /** Max replication bytes a module may emit per minute. */
+  maxEgressBytesPerMin: Scalars['BigInt']['output'];
+  /** Max replication messages a module may emit per minute. */
+  maxEgressMsgsPerMin: Scalars['Int']['output'];
+  /** Max guest linear memory (MB). */
+  maxMemoryMb: Scalars['Int']['output'];
+  /** Max modules the app may define. */
+  maxModules: Scalars['Int']['output'];
+  /** Wall-clock watchdog budget per entry call (ms). */
+  maxRunMs: Scalars['Int']['output'];
+  /** Max tick rate (Hz) any module may request. */
+  maxTickHz: Scalars['Float']['output'];
+};
+
+/** One recorded compute execution (init / tick batch / event / invoke): timing, fuel, host-call counts, outcome. Written by the runtime (Phase 2); empty until modules execute. */
+export type WasmModuleRun = {
+  __typename?: 'WasmModuleRun';
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['output'];
+  /** Circuit action taken (e.g. opened, half_open_retry). */
+  circuitAction: Maybe<Scalars['String']['output']>;
+  /** Host data-API reads performed. */
+  dbReads: Scalars['Int']['output'];
+  /** Host data-API writes performed. */
+  dbWrites: Scalars['Int']['output'];
+  /** Wall-clock duration in microseconds. */
+  durationUs: Scalars['Int']['output'];
+  /** Replication bytes emitted. */
+  egressBytes: Scalars['BigInt']['output'];
+  /** Replication messages emitted. */
+  egressMsgs: Scalars['Int']['output'];
+  /** The guest entry point (e.g. an invoke export name). */
+  entry: Maybe<Scalars['String']['output']>;
+  /** Error message when the run failed (trap, fuel, watchdog). */
+  errorMessage: Maybe<Scalars['String']['output']>;
+  /** Fuel consumed by the run. */
+  fuelUsed: Scalars['BigInt']['output'];
+  /** The module that ran. */
+  moduleId: Scalars['String']['output'];
+  /** The module name at run time. */
+  moduleName: Scalars['String']['output'];
+  /** Unique run id (UUID). */
+  runId: Scalars['String']['output'];
+  /** When the run started. */
+  startedAt: Scalars['DateTime']['output'];
+  /** Whether the run succeeded. */
+  success: Scalars['Boolean']['output'];
+  /** What ran: init | tick | event | invoke. */
+  triggerSource: Scalars['String']['output'];
+};
+
+/** A trigger binding on a compute module: a tick loop, a model/compute event subscription, or a client-invokable export. */
+export type WasmModuleTrigger = {
+  __typename?: 'WasmModuleTrigger';
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['output'];
+  /** Event filter: only this container type. */
+  containerTypeName: Maybe<Scalars['String']['output']>;
+  /** When the trigger was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Debounce/coalesce window in ms. */
+  debounceMs: Scalars['Int']['output'];
+  /** Event filter: only compute events with this name. */
+  eventName: Maybe<Scalars['String']['output']>;
+  /** For invoke triggers: the exported guest function name. */
+  exportName: Maybe<Scalars['String']['output']>;
+  /** Event filter: only this model function name. */
+  functionName: Maybe<Scalars['String']['output']>;
+  /** For invoke triggers: JSON authority tree gating who may invoke. Null = app admins only. */
+  invokePolicyJson: Maybe<Scalars['String']['output']>;
+  /** The module this trigger drives. */
+  moduleId: Scalars['String']['output'];
+  /** For event triggers: function_invoked | property_changed | container_created | compute_event. */
+  onEvent: Maybe<Scalars['String']['output']>;
+  /** Event filter: only this property key. */
+  propertyKey: Maybe<Scalars['String']['output']>;
+  /** For tick triggers: the tick rate in Hz. */
+  tickHz: Maybe<Scalars['Float']['output']>;
+  /** Unique trigger id (UUID). */
+  triggerId: Scalars['String']['output'];
+  /** Trigger type: tick | event | invoke. */
+  triggerType: Scalars['String']['output'];
+};
+
+/** An immutable source version of a compute module, plus its compile pipeline status. Rows are created pending; a game-api instance compiles them (Phase 2 runtime). */
+export type WasmModuleVersion = {
+  __typename?: 'WasmModuleVersion';
+  /** The guest ABI version the source targets. */
+  abiVersion: Scalars['Int']['output'];
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['output'];
+  /** Compiler output (populated when compilation runs). */
+  compileLog: Maybe<Scalars['String']['output']>;
+  /** Compile status: pending | compiling | succeeded | failed. */
+  compileStatus: Scalars['String']['output'];
+  /** Size of the compiled artifact in bytes (after compile). */
+  compiledSizeBytes: Maybe<Scalars['BigInt']['output']>;
+  /** When this version was uploaded. */
+  createdAt: Scalars['DateTime']['output'];
+  /** The module this version belongs to. */
+  moduleId: Scalars['String']['output'];
+  /** When this version became the deployed version. */
+  publishedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The crowdy-compute-sdk version the source targets. */
+  sdkVersion: Scalars['String']['output'];
+  /** JSON object mapping relative paths to file contents (the uploaded Rust source). */
+  sourceFilesJson: Scalars['String']['output'];
+  /** sha256 of the canonicalized source map; keys the compiled-artifact cache together with toolchain/SDK/ABI versions. */
+  sourceHash: Scalars['String']['output'];
+  /** Unique version id (UUID). */
+  versionId: Scalars['String']['output'];
+  /** Monotonic version number within the module. */
+  versionNo: Scalars['Int']['output'];
+};
+
+/** A module and its recent run counts (diagnostics). */
+export type WasmTopModule = {
+  __typename?: 'WasmTopModule';
+  /** Failed runs in the window. */
+  failures: Scalars['Int']['output'];
+  /** The module name. */
+  moduleName: Scalars['String']['output'];
+  /** Runs in the window. */
+  runs: Scalars['Int']['output'];
 };
 
 export type ActorQueryVariables = Exact<{
@@ -7926,6 +8410,153 @@ export type UpdateChunkStateMutationVariables = Exact<{
 
 
 export type UpdateChunkStateMutation = { __typename?: 'Mutation', updateChunkState: { __typename?: 'Chunk', chunkId: string, appId: string, chunkState: string | null, updatedAt: string, coordinates: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string } } | null };
+
+export type ComputeModuleFieldsFragment = { __typename?: 'WasmModule', moduleId: string, appId: string, name: string, description: string | null, enabled: boolean, alwaysOn: boolean, currentVersionId: string | null, circuitState: string, consecutiveFailures: number, cooldownUntil: string | null, lastError: string | null, createdAt: string, updatedAt: string };
+
+export type ComputeVersionFieldsFragment = { __typename?: 'WasmModuleVersion', versionId: string, moduleId: string, appId: string, versionNo: number, sourceHash: string, sdkVersion: string, abiVersion: number, compileStatus: string, compileLog: string | null, compiledSizeBytes: string | null, publishedAt: string | null, createdAt: string };
+
+export type ComputeTriggerFieldsFragment = { __typename?: 'WasmModuleTrigger', triggerId: string, appId: string, moduleId: string, triggerType: string, tickHz: number | null, onEvent: string | null, functionName: string | null, containerTypeName: string | null, propertyKey: string | null, eventName: string | null, debounceMs: number, exportName: string | null, invokePolicyJson: string | null, createdAt: string };
+
+export type ComputePolicyFieldsFragment = { __typename?: 'WasmModulePolicy', appId: string, enabled: boolean, maxModules: number, maxTickHz: number, fuelPerTick: string, fuelPerInvoke: string, maxMemoryMb: number, maxRunMs: number, maxDbOpsPerTick: number, maxEgressMsgsPerMin: number, maxEgressBytesPerMin: string, failureThreshold: number, cooldownMs: number };
+
+export type ComputeRunFieldsFragment = { __typename?: 'WasmModuleRun', runId: string, appId: string, moduleId: string, moduleName: string, triggerSource: string, entry: string | null, startedAt: string, durationUs: number, fuelUsed: string, dbReads: number, dbWrites: number, egressMsgs: number, egressBytes: string, success: boolean, errorMessage: string | null, circuitAction: string | null };
+
+export type ComputeUpsertModuleMutationVariables = Exact<{
+  input: UpsertComputeModuleInput;
+}>;
+
+
+export type ComputeUpsertModuleMutation = { __typename?: 'Mutation', computeUpsertModule: { __typename?: 'WasmModule', moduleId: string, appId: string, name: string, description: string | null, enabled: boolean, alwaysOn: boolean, currentVersionId: string | null, circuitState: string, consecutiveFailures: number, cooldownUntil: string | null, lastError: string | null, createdAt: string, updatedAt: string } };
+
+export type ComputeDeployVersionMutationVariables = Exact<{
+  input: DeployComputeVersionInput;
+}>;
+
+
+export type ComputeDeployVersionMutation = { __typename?: 'Mutation', computeDeployVersion: { __typename?: 'WasmModuleVersion', versionId: string, moduleId: string, appId: string, versionNo: number, sourceHash: string, sdkVersion: string, abiVersion: number, compileStatus: string, compileLog: string | null, compiledSizeBytes: string | null, publishedAt: string | null, createdAt: string } };
+
+export type ComputeSetModuleEnabledMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+  enabled: Scalars['Boolean']['input'];
+}>;
+
+
+export type ComputeSetModuleEnabledMutation = { __typename?: 'Mutation', computeSetModuleEnabled: { __typename?: 'WasmModule', moduleId: string, appId: string, name: string, description: string | null, enabled: boolean, alwaysOn: boolean, currentVersionId: string | null, circuitState: string, consecutiveFailures: number, cooldownUntil: string | null, lastError: string | null, createdAt: string, updatedAt: string } };
+
+export type ComputeDeleteModuleMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+}>;
+
+
+export type ComputeDeleteModuleMutation = { __typename?: 'Mutation', computeDeleteModule: boolean };
+
+export type ComputeUpsertTriggerMutationVariables = Exact<{
+  input: UpsertComputeTriggerInput;
+}>;
+
+
+export type ComputeUpsertTriggerMutation = { __typename?: 'Mutation', computeUpsertTrigger: { __typename?: 'WasmModuleTrigger', triggerId: string, appId: string, moduleId: string, triggerType: string, tickHz: number | null, onEvent: string | null, functionName: string | null, containerTypeName: string | null, propertyKey: string | null, eventName: string | null, debounceMs: number, exportName: string | null, invokePolicyJson: string | null, createdAt: string } };
+
+export type ComputeDeleteTriggerMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  triggerId: Scalars['String']['input'];
+}>;
+
+
+export type ComputeDeleteTriggerMutation = { __typename?: 'Mutation', computeDeleteTrigger: boolean };
+
+export type ComputeSetPolicyMutationVariables = Exact<{
+  input: SetComputePolicyInput;
+}>;
+
+
+export type ComputeSetPolicyMutation = { __typename?: 'Mutation', computeSetPolicy: { __typename?: 'WasmModulePolicy', appId: string, enabled: boolean, maxModules: number, maxTickHz: number, fuelPerTick: string, fuelPerInvoke: string, maxMemoryMb: number, maxRunMs: number, maxDbOpsPerTick: number, maxEgressMsgsPerMin: number, maxEgressBytesPerMin: string, failureThreshold: number, cooldownMs: number } };
+
+export type ComputeInvokeMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  moduleName: Scalars['String']['input'];
+  exportName: Scalars['String']['input'];
+  paramsJson?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ComputeInvokeMutation = { __typename?: 'Mutation', computeInvoke: { __typename?: 'ComputeInvokeResult', resultBase64: string, resultJson: string | null, fuelUsed: string, durationUs: number } };
+
+export type ComputeModulesQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type ComputeModulesQuery = { __typename?: 'Query', computeModules: Array<{ __typename?: 'WasmModule', moduleId: string, appId: string, name: string, description: string | null, enabled: boolean, alwaysOn: boolean, currentVersionId: string | null, circuitState: string, consecutiveFailures: number, cooldownUntil: string | null, lastError: string | null, createdAt: string, updatedAt: string }> };
+
+export type ComputeModuleQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+}>;
+
+
+export type ComputeModuleQuery = { __typename?: 'Query', computeModule: { __typename?: 'WasmModule', moduleId: string, appId: string, name: string, description: string | null, enabled: boolean, alwaysOn: boolean, currentVersionId: string | null, circuitState: string, consecutiveFailures: number, cooldownUntil: string | null, lastError: string | null, createdAt: string, updatedAt: string } };
+
+export type ComputeModuleVersionsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  moduleName: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ComputeModuleVersionsQuery = { __typename?: 'Query', computeModuleVersions: Array<{ __typename?: 'WasmModuleVersion', versionId: string, moduleId: string, appId: string, versionNo: number, sourceHash: string, sdkVersion: string, abiVersion: number, compileStatus: string, compileLog: string | null, compiledSizeBytes: string | null, publishedAt: string | null, createdAt: string }> };
+
+export type ComputeModuleTriggersQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ComputeModuleTriggersQuery = { __typename?: 'Query', computeModuleTriggers: Array<{ __typename?: 'WasmModuleTrigger', triggerId: string, appId: string, moduleId: string, triggerType: string, tickHz: number | null, onEvent: string | null, functionName: string | null, containerTypeName: string | null, propertyKey: string | null, eventName: string | null, debounceMs: number, exportName: string | null, invokePolicyJson: string | null, createdAt: string }> };
+
+export type ComputeModulePolicyQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type ComputeModulePolicyQuery = { __typename?: 'Query', computeModulePolicy: { __typename?: 'WasmModulePolicy', appId: string, enabled: boolean, maxModules: number, maxTickHz: number, fuelPerTick: string, fuelPerInvoke: string, maxMemoryMb: number, maxRunMs: number, maxDbOpsPerTick: number, maxEgressMsgsPerMin: number, maxEgressBytesPerMin: string, failureThreshold: number, cooldownMs: number } };
+
+export type ComputeModuleRunsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+  success?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ComputeModuleRunsQuery = { __typename?: 'Query', computeModuleRuns: Array<{ __typename?: 'WasmModuleRun', runId: string, appId: string, moduleId: string, moduleName: string, triggerSource: string, entry: string | null, startedAt: string, durationUs: number, fuelUsed: string, dbReads: number, dbWrites: number, egressMsgs: number, egressBytes: string, success: boolean, errorMessage: string | null, circuitAction: string | null }> };
+
+export type ComputeModuleStatsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ComputeModuleStatsQuery = { __typename?: 'Query', computeModuleStats: { __typename?: 'WasmComputeStats', windowMinutes: number, totalRuns: number, failedRuns: number, failureRatePct: number, totalFuelUsed: string, totalEgressMsgs: string, avgDurationUs: number, byModule: Array<{ __typename?: 'WasmComputeStat', moduleName: string, runs: number, failures: number, fuelUsed: string, avgDurationUs: number, circuitState: string }> } };
+
+export type ComputeModuleLogsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ComputeModuleLogsQuery = { __typename?: 'Query', computeModuleLogs: Array<{ __typename?: 'WasmModuleLogEntry', ts: string, moduleName: string, level: string, message: string, triggerSource: string | null }> };
+
+export type ComputeAppDiagnosticsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type ComputeAppDiagnosticsQuery = { __typename?: 'Query', computeAppDiagnostics: { __typename?: 'WasmAppDiagnostics', appId: string, moduleCount: number, enabledModuleCount: number, versionCount: number, triggerCount: number, runs24h: number, failedRuns24h: number, fuelUsed24h: string, topModules: Array<{ __typename?: 'WasmTopModule', moduleName: string, runs: number, failures: number }> } };
 
 export type CpEnvironmentsQueryVariables = Exact<{
   page?: InputMaybe<Scalars['Int']['input']>;
@@ -9510,6 +10141,11 @@ export type VoxelUpdateHistoryConnectionQueryVariables = Exact<{
 
 export type VoxelUpdateHistoryConnectionQuery = { __typename?: 'Query', voxelUpdateHistoryConnection: { __typename?: 'VoxelUpdateHistoryConnection', totalCount: number | null, edges: Array<{ __typename?: 'VoxelUpdateHistoryEventEdge', cursor: string, node: { __typename?: 'VoxelUpdateHistoryEvent', id: string, appId: string, oldVoxelType: number | null, newVoxelType: number | null, changedBy: string | null, changedAt: string, coordinates: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string }, location: { __typename?: 'VoxelCoordinates', x: number, y: number, z: number } } }>, pageInfo: { __typename?: 'ConnectionPageInfo', hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null } } };
 
+export const ComputeModuleFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"alwaysOn"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ComputeModuleFieldsFragment, unknown>;
+export const ComputeVersionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"sourceHash"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"compileStatus"}},{"kind":"Field","name":{"kind":"Name","value":"compileLog"}},{"kind":"Field","name":{"kind":"Name","value":"compiledSizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<ComputeVersionFieldsFragment, unknown>;
+export const ComputeTriggerFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeTriggerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleTrigger"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"triggerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerType"}},{"kind":"Field","name":{"kind":"Name","value":"tickHz"}},{"kind":"Field","name":{"kind":"Name","value":"onEvent"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyKey"}},{"kind":"Field","name":{"kind":"Name","value":"eventName"}},{"kind":"Field","name":{"kind":"Name","value":"debounceMs"}},{"kind":"Field","name":{"kind":"Name","value":"exportName"}},{"kind":"Field","name":{"kind":"Name","value":"invokePolicyJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<ComputeTriggerFieldsFragment, unknown>;
+export const ComputePolicyFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputePolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModulePolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}}]}}]} as unknown as DocumentNode<ComputePolicyFieldsFragment, unknown>;
+export const ComputeRunFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"entry"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"dbReads"}},{"kind":"Field","name":{"kind":"Name","value":"dbWrites"}},{"kind":"Field","name":{"kind":"Name","value":"egressMsgs"}},{"kind":"Field","name":{"kind":"Name","value":"egressBytes"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"circuitAction"}}]}}]} as unknown as DocumentNode<ComputeRunFieldsFragment, unknown>;
 export const GmAutomationFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomation"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"targetMode"}},{"kind":"Field","name":{"kind":"Name","value":"selfContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"targetTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"paramsJson"}},{"kind":"Field","name":{"kind":"Name","value":"selectorJson"}},{"kind":"Field","name":{"kind":"Name","value":"runAsUserId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerType"}},{"kind":"Field","name":{"kind":"Name","value":"scheduleKind"}},{"kind":"Field","name":{"kind":"Name","value":"intervalMs"}},{"kind":"Field","name":{"kind":"Name","value":"cronExpr"}},{"kind":"Field","name":{"kind":"Name","value":"maxTargets"}},{"kind":"Field","name":{"kind":"Name","value":"maxFnDepth"}},{"kind":"Field","name":{"kind":"Name","value":"gasLimit"}},{"kind":"Field","name":{"kind":"Name","value":"runTimeoutMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"pausedUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}}]}}]} as unknown as DocumentNode<GmAutomationFieldsFragment, unknown>;
 export const GmAutomationTriggerFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationTriggerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomationTrigger"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"triggerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"onEvent"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyKey"}},{"kind":"Field","name":{"kind":"Name","value":"debounceMs"}}]}}]} as unknown as DocumentNode<GmAutomationTriggerFieldsFragment, unknown>;
 export const GmAutomationPolicyFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationPolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomationPolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxAutomations"}},{"kind":"Field","name":{"kind":"Name","value":"minIntervalMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxFanout"}},{"kind":"Field","name":{"kind":"Name","value":"maxCascadeDepth"}},{"kind":"Field","name":{"kind":"Name","value":"globalRunsPerMinute"}}]}}]} as unknown as DocumentNode<GmAutomationPolicyFieldsFragment, unknown>;
@@ -9597,6 +10233,23 @@ export const GetVoxelListDocument = {"kind":"Document","definitions":[{"kind":"O
 export const UpdateChunkDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunk"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ChunkUpdateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunk"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"voxels"}},{"kind":"Field","name":{"kind":"Name","value":"chunkState"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkMutation, UpdateChunkMutationVariables>;
 export const UpdateChunkLodsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunkLods"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateChunkLodsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunkLods"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lods"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"data"}}]}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkLodsMutation, UpdateChunkLodsMutationVariables>;
 export const UpdateChunkStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateChunkState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateChunkStateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateChunkState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chunkId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"coordinates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"chunkState"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateChunkStateMutation, UpdateChunkStateMutationVariables>;
+export const ComputeUpsertModuleDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeUpsertModule"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertComputeModuleInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeUpsertModule"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeModuleFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"alwaysOn"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ComputeUpsertModuleMutation, ComputeUpsertModuleMutationVariables>;
+export const ComputeDeployVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeDeployVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DeployComputeVersionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeDeployVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeVersionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"sourceHash"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"compileStatus"}},{"kind":"Field","name":{"kind":"Name","value":"compileLog"}},{"kind":"Field","name":{"kind":"Name","value":"compiledSizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<ComputeDeployVersionMutation, ComputeDeployVersionMutationVariables>;
+export const ComputeSetModuleEnabledDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeSetModuleEnabled"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeSetModuleEnabled"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeModuleFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"alwaysOn"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ComputeSetModuleEnabledMutation, ComputeSetModuleEnabledMutationVariables>;
+export const ComputeDeleteModuleDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeDeleteModule"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeDeleteModule"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}}]}]}}]} as unknown as DocumentNode<ComputeDeleteModuleMutation, ComputeDeleteModuleMutationVariables>;
+export const ComputeUpsertTriggerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeUpsertTrigger"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertComputeTriggerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeUpsertTrigger"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeTriggerFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeTriggerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleTrigger"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"triggerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerType"}},{"kind":"Field","name":{"kind":"Name","value":"tickHz"}},{"kind":"Field","name":{"kind":"Name","value":"onEvent"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyKey"}},{"kind":"Field","name":{"kind":"Name","value":"eventName"}},{"kind":"Field","name":{"kind":"Name","value":"debounceMs"}},{"kind":"Field","name":{"kind":"Name","value":"exportName"}},{"kind":"Field","name":{"kind":"Name","value":"invokePolicyJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<ComputeUpsertTriggerMutation, ComputeUpsertTriggerMutationVariables>;
+export const ComputeDeleteTriggerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeDeleteTrigger"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"triggerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeDeleteTrigger"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"triggerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"triggerId"}}}]}]}}]} as unknown as DocumentNode<ComputeDeleteTriggerMutation, ComputeDeleteTriggerMutationVariables>;
+export const ComputeSetPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeSetPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetComputePolicyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeSetPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputePolicyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputePolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModulePolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}}]}}]} as unknown as DocumentNode<ComputeSetPolicyMutation, ComputeSetPolicyMutationVariables>;
+export const ComputeInvokeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeInvoke"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"exportName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"paramsJson"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeInvoke"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}},{"kind":"Argument","name":{"kind":"Name","value":"exportName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"exportName"}}},{"kind":"Argument","name":{"kind":"Name","value":"paramsJson"},"value":{"kind":"Variable","name":{"kind":"Name","value":"paramsJson"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resultBase64"}},{"kind":"Field","name":{"kind":"Name","value":"resultJson"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}}]}}]}}]} as unknown as DocumentNode<ComputeInvokeMutation, ComputeInvokeMutationVariables>;
+export const ComputeModulesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeModules"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeModules"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeModuleFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"alwaysOn"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ComputeModulesQuery, ComputeModulesQueryVariables>;
+export const ComputeModuleDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeModule"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeModule"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeModuleFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"alwaysOn"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ComputeModuleQuery, ComputeModuleQueryVariables>;
+export const ComputeModuleVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeModuleVersions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeModuleVersions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeVersionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"sourceHash"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"compileStatus"}},{"kind":"Field","name":{"kind":"Name","value":"compileLog"}},{"kind":"Field","name":{"kind":"Name","value":"compiledSizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<ComputeModuleVersionsQuery, ComputeModuleVersionsQueryVariables>;
+export const ComputeModuleTriggersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeModuleTriggers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeModuleTriggers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeTriggerFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeTriggerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleTrigger"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"triggerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerType"}},{"kind":"Field","name":{"kind":"Name","value":"tickHz"}},{"kind":"Field","name":{"kind":"Name","value":"onEvent"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyKey"}},{"kind":"Field","name":{"kind":"Name","value":"eventName"}},{"kind":"Field","name":{"kind":"Name","value":"debounceMs"}},{"kind":"Field","name":{"kind":"Name","value":"exportName"}},{"kind":"Field","name":{"kind":"Name","value":"invokePolicyJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<ComputeModuleTriggersQuery, ComputeModuleTriggersQueryVariables>;
+export const ComputeModulePolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeModulePolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeModulePolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputePolicyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputePolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModulePolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}}]}}]} as unknown as DocumentNode<ComputeModulePolicyQuery, ComputeModulePolicyQueryVariables>;
+export const ComputeModuleRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeModuleRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"success"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeModuleRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}},{"kind":"Argument","name":{"kind":"Name","value":"success"},"value":{"kind":"Variable","name":{"kind":"Name","value":"success"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeRunFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"entry"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"dbReads"}},{"kind":"Field","name":{"kind":"Name","value":"dbWrites"}},{"kind":"Field","name":{"kind":"Name","value":"egressMsgs"}},{"kind":"Field","name":{"kind":"Name","value":"egressBytes"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"circuitAction"}}]}}]} as unknown as DocumentNode<ComputeModuleRunsQuery, ComputeModuleRunsQueryVariables>;
+export const ComputeModuleStatsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeModuleStats"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"windowMinutes"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeModuleStats"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"windowMinutes"},"value":{"kind":"Variable","name":{"kind":"Name","value":"windowMinutes"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"windowMinutes"}},{"kind":"Field","name":{"kind":"Name","value":"totalRuns"}},{"kind":"Field","name":{"kind":"Name","value":"failedRuns"}},{"kind":"Field","name":{"kind":"Name","value":"failureRatePct"}},{"kind":"Field","name":{"kind":"Name","value":"totalFuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"totalEgressMsgs"}},{"kind":"Field","name":{"kind":"Name","value":"avgDurationUs"}},{"kind":"Field","name":{"kind":"Name","value":"byModule"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"runs"}},{"kind":"Field","name":{"kind":"Name","value":"failures"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"avgDurationUs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}}]}}]}}]}}]} as unknown as DocumentNode<ComputeModuleStatsQuery, ComputeModuleStatsQueryVariables>;
+export const ComputeModuleLogsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeModuleLogs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeModuleLogs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ts"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}}]}}]}}]} as unknown as DocumentNode<ComputeModuleLogsQuery, ComputeModuleLogsQueryVariables>;
+export const ComputeAppDiagnosticsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeAppDiagnostics"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeAppDiagnostics"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleCount"}},{"kind":"Field","name":{"kind":"Name","value":"enabledModuleCount"}},{"kind":"Field","name":{"kind":"Name","value":"versionCount"}},{"kind":"Field","name":{"kind":"Name","value":"triggerCount"}},{"kind":"Field","name":{"kind":"Name","value":"runs24h"}},{"kind":"Field","name":{"kind":"Name","value":"failedRuns24h"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed24h"}},{"kind":"Field","name":{"kind":"Name","value":"topModules"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"runs"}},{"kind":"Field","name":{"kind":"Name","value":"failures"}}]}}]}}]}}]} as unknown as DocumentNode<ComputeAppDiagnosticsQuery, ComputeAppDiagnosticsQueryVariables>;
 export const CpEnvironmentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpEnvironments"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"page"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"pageSize"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpEnvironments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"page"},"value":{"kind":"Variable","name":{"kind":"Name","value":"page"}}},{"kind":"Argument","name":{"kind":"Name","value":"pageSize"},"value":{"kind":"Variable","name":{"kind":"Name","value":"pageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rows"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"primaryCloud"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"deletionProtectionEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"subdomainHandle"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"total"}},{"kind":"Field","name":{"kind":"Name","value":"page"}},{"kind":"Field","name":{"kind":"Name","value":"pageSize"}}]}}]}}]} as unknown as DocumentNode<CpEnvironmentsQuery, CpEnvironmentsQueryVariables>;
 export const CpEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"primaryCloud"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"deletionProtectionEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"deletionProtectionSetAt"}},{"kind":"Field","name":{"kind":"Name","value":"deletionProtectionSetByEmail"}},{"kind":"Field","name":{"kind":"Name","value":"subdomainHandle"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CpEnvironmentQuery, CpEnvironmentQueryVariables>;
 export const CpChangeOrdersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpChangeOrders"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"page"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"pageSize"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpChangeOrders"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"page"},"value":{"kind":"Variable","name":{"kind":"Name","value":"page"}}},{"kind":"Argument","name":{"kind":"Name","value":"pageSize"},"value":{"kind":"Variable","name":{"kind":"Name","value":"pageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rows"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"claimedBy"}},{"kind":"Field","name":{"kind":"Name","value":"claimedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"total"}},{"kind":"Field","name":{"kind":"Name","value":"page"}},{"kind":"Field","name":{"kind":"Name","value":"pageSize"}}]}}]}}]} as unknown as DocumentNode<CpChangeOrdersQuery, CpChangeOrdersQueryVariables>;

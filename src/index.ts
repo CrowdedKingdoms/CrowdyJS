@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '8.5.0';
+export const VERSION = '8.6.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -342,6 +342,13 @@ export { ChannelsAPI } from './domains/channels.js';
 export { TeamsAPI } from './domains/teams.js';
 export { UdpAPI } from './domains/udp.js';
 export { GameModelAPI } from './domains/gameModel.js';
+export {
+  ComputeAPI,
+  COMPUTE_SDK_VERSION,
+  COMPUTE_ABI_VERSION,
+  type DeployVersionOptions,
+  type WaitForCompileOptions,
+} from './domains/compute.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from
