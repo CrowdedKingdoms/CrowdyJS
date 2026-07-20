@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '8.12.0';
+export const VERSION = '8.13.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -160,6 +160,7 @@ export {
   inventoryBlueprint,
   inventoryCraftFunctionName,
   inventoryNames,
+  isKitVerdictError,
   kitInvoke,
   kitPolicyJson,
   runOptimisticAction,

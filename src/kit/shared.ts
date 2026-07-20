@@ -34,6 +34,30 @@ export interface KitInvokeResult<T = unknown> {
   raw: RawInvokeResult;
 }
 
+/**
+ * Is this thrown error a **gameplay verdict** rather than a transport/user
+ * error — i.e. should a kit invoke helper resolve `{ success: false }`
+ * instead of rethrowing? Two server shapes qualify:
+ *
+ * 1. `FORBIDDEN` — older `cks-game-api` builds threw this for invoke-policy
+ *    denials instead of resolving with `success: false`.
+ * 2. `BAD_REQUEST` with a message starting `"Invoke params violate"` — the
+ *    typed invoke-contract violation `computeInvoke` raises when declared
+ *    params fail pre-sandbox validation (game-api 2026-07-19+). To a kit
+ *    caller that is a referee "no", not an exception.
+ *
+ * Anything else (UNAUTHENTICATED, rate limits, network failures, other
+ * BAD_REQUESTs like a disabled module) stays a thrown error.
+ */
+export function isKitVerdictError(error: unknown): error is CrowdyGraphQLError {
+  if (!(error instanceof CrowdyGraphQLError)) return false;
+  if (error.code === 'FORBIDDEN') return true;
+  return (
+    error.code === 'BAD_REQUEST' &&
+    error.message.startsWith('Invoke params violate')
+  );
+}
+
 /** Wrap a raw invoke result, parsing the JSON return value. */
 export function toKitInvokeResult<T>(raw: RawInvokeResult): KitInvokeResult<T> {
   let returnValue: T | undefined;
@@ -58,10 +82,11 @@ export function toKitInvokeResult<T>(raw: RawInvokeResult): KitInvokeResult<T> {
  * Server-generation tolerance: current `cks-game-api` builds resolve policy
  * denials with `success: false` (the kit contract), but older builds throw a
  * {@link CrowdyGraphQLError} with `extensions.code === 'FORBIDDEN'` instead.
- * This helper catches that specific error and maps it to a
- * `{ success: false, errorMessage }` result with a synthesized {@link
- * KitInvokeResult.raw}, so kit callers see one contract against both server
- * generations. Any other error is rethrown unchanged.
+ * This helper catches every {@link isKitVerdictError | gameplay-verdict
+ * error} (the legacy FORBIDDEN denial and the typed invoke-contract
+ * violation) and maps it to a `{ success: false, errorMessage }` result with
+ * a synthesized {@link KitInvokeResult.raw}, so kit callers see one contract
+ * against both server generations. Any other error is rethrown unchanged.
  */
 export async function kitInvoke<T = unknown>(
   gameModel: GameModelAPI,
@@ -83,7 +108,7 @@ export async function kitInvoke<T = unknown>(
       ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
     });
   } catch (error) {
-    if (error instanceof CrowdyGraphQLError && error.code === 'FORBIDDEN') {
+    if (isKitVerdictError(error)) {
       return {
         success: false,
         returnValue: undefined,

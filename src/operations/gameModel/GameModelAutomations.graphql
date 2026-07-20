@@ -58,6 +58,7 @@ fragment GmAutomationPolicyFields on GmAutomationPolicy {
 fragment GmAutomationRunFields on GmAutomationRun {
   runId
   appId
+  flowId
   automationId
   automationName
   triggerSource

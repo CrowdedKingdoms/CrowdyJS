@@ -66,6 +66,7 @@ fragment ComputePolicyFields on WasmModulePolicy {
 fragment ComputeRunFields on WasmModuleRun {
   runId
   appId
+  flowId
   moduleId
   moduleName
   triggerSource

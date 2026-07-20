@@ -286,6 +286,7 @@ export {
   type WorldsimKitOptions,
 } from './worldsim.js';
 export {
+  isKitVerdictError,
   kitInvoke,
   toKitInvokeResult,
   type KitInvokeResult,

@@ -145,6 +145,36 @@ test('EngineDetector: caches probes and parses invoke envelopes', async () => {
   assert.equal(await offline.has('anything'), false);
 });
 
+test('EngineDetector.invoke resolves contract violations as gameplay verdicts', async () => {
+  const { EngineDetector, CrowdyGraphQLError } = await loadSdk();
+
+  // computeInvoke's typed-contract validation throws BAD_REQUEST
+  // "Invoke params violate ..." — the engine invoke path resolves it as
+  // { success: false, reason } instead of throwing (verdict semantics).
+  const message =
+    "Invoke params violate the 'attack_mob' contract: params.amount must be an integer";
+  const compute = fakeCompute();
+  compute.invoke = async () => {
+    throw new CrowdyGraphQLError([
+      { message, extensions: { code: 'BAD_REQUEST' } },
+    ]);
+  };
+  const detector = new EngineDetector('1', compute);
+  const verdict = await detector.invoke('mob-engine', 'attack_mob', { amount: 'x' });
+  assert.equal(verdict.success, false);
+  assert.equal(verdict.reason, message);
+
+  // Non-GraphQL (transport) errors still throw.
+  compute.invoke = async () => {
+    throw new Error('connection refused');
+  };
+  detector.reset();
+  await assert.rejects(
+    detector.invoke('mob-engine', 'attack_mob', {}),
+    /connection refused/,
+  );
+});
+
 test('MobsKit.attack routes through the referee envelope', async () => {
   const { EngineDetector, MobsKit } = await loadSdk();
   const compute = fakeCompute({

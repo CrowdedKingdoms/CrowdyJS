@@ -55,6 +55,9 @@ import {
   GameModelEventsDocument,
   type GameModelEventsQuery,
   type GameModelEventsQueryVariables,
+  GameModelFlowDocument,
+  type GameModelFlowQuery,
+  type GameModelFlowQueryVariables,
   // Studio authoring ops
   GameModelSeedDocument,
   type GameModelSeedMutation,
@@ -679,6 +682,40 @@ export class GameModelAPI {
       variables,
     );
     return data.gameModelEventsConnection;
+  }
+
+  /**
+   * **Diagnostics** — stitch one flow correlation id into a single
+   * cross-engine timeline: the model **events** ({@link events} rows), the
+   * **automationRuns**, and the compute **moduleRuns** that share the
+   * `flowId` minted at the entry edge (a player {@link invoke}, an automation
+   * run, or a `computeInvoke`) and propagated across `model_invoke`, the
+   * event bus, and `emit_compute_event`. Each array is ordered by time
+   * ascending, so the three together read as one causal trace — "what
+   * happened to this kill's reward" in one query instead of three
+   * hand-joined ones. Take the `flowId` from the `flowId` field on any
+   * {@link GmEvent}, {@link GmAutomationRun}, or {@link WasmModuleRun}
+   * (selected by the default fragments since SDK 8.13.0).
+   *
+   * Requires the app-admin **`manage_apps`** permission (a diagnostics
+   * surface, like {@link automationRuns}) and a game-api with the
+   * `gameModelFlow` query (2026-07-19 or later; older servers reject the
+   * operation with a validation error).
+   *
+   * @param variables - `{ appId, flowId }`: `appId` (decimal string) and the
+   *   flow correlation id (a UUID string). An unknown `flowId` returns three
+   *   empty arrays.
+   * @returns The {@link GmFlowTimeline}: `flowId`, `events`,
+   *   `automationRuns`, and `moduleRuns`, each time-ascending.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`,
+   *   `FORBIDDEN` (`requiredPermission === 'manage_apps'`), or `BAD_REQUEST`
+   *   if `flowId` is not a UUID.
+   */
+  async flow(
+    variables: GameModelFlowQueryVariables,
+  ): Promise<GameModelFlowQuery['gameModelFlow']> {
+    const data = await this.gql.request(GameModelFlowDocument, variables);
+    return data.gameModelFlow;
   }
 
   // -- Studio authoring -------------------------------------------------------
