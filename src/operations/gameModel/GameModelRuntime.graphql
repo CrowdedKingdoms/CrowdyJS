@@ -206,6 +206,7 @@ query GameModelEvents(
     offset: $offset
   ) {
     eventId
+    flowId
     sessionId
     functionName
     selfContainerId
@@ -244,6 +245,7 @@ query GameModelEventsConnection(
       cursor
       node {
         eventId
+        flowId
         sessionId
         functionName
         selfContainerId
@@ -266,5 +268,36 @@ query GameModelEventsConnection(
       endCursor
     }
     totalCount
+  }
+}
+
+# Cross-engine flow timeline: reuses GmAutomationRunFields
+# (GameModelAutomations.graphql) and ComputeRunFields (ComputeModules.graphql).
+query GameModelFlow($appId: BigInt!, $flowId: String!) {
+  gameModelFlow(appId: $appId, flowId: $flowId) {
+    flowId
+    events {
+      eventId
+      flowId
+      sessionId
+      functionName
+      selfContainerId
+      callerUserId
+      callerKind
+      automationId
+      paramsJson
+      mutationsAppliedJson
+      permissionEffectsAppliedJson
+      returnValueJson
+      success
+      errorMessage
+      executedAt
+    }
+    automationRuns {
+      ...GmAutomationRunFields
+    }
+    moduleRuns {
+      ...ComputeRunFields
+    }
   }
 }

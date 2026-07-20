@@ -1284,6 +1284,44 @@ test('kitInvoke maps FORBIDDEN GraphQL errors from older servers to success:fals
   assert.deepEqual(ok.returnValue, { opened: true });
 });
 
+test('kitInvoke maps typed invoke-contract violations to success:false', async () => {
+  const { kitInvoke, isKitVerdictError, CrowdyGraphQLError } = await loadSdk();
+
+  // computeInvoke's pre-sandbox contract validation raises BAD_REQUEST with
+  // an "Invoke params violate ..." message — a referee "no", not an
+  // exception, so the kit maps it onto the KitInvokeResult contract.
+  const violationMessage =
+    "Invoke params violate the 'mine' contract: params.x must be an integer";
+  const violation = new CrowdyGraphQLError([
+    { message: violationMessage, extensions: { code: 'BAD_REQUEST' } },
+  ]);
+  assert.equal(isKitVerdictError(violation), true);
+  const result = await kitInvoke(
+    { invoke: async () => { throw violation; } },
+    { appId: '1', functionName: 'mine', selfContainerId: 'c-1' },
+  );
+  assert.equal(result.success, false);
+  assert.equal(result.errorMessage, violationMessage);
+  assert.equal(result.raw.success, false);
+  assert.deepEqual(result.raw.mutationsApplied, []);
+
+  // Other BAD_REQUESTs (e.g. a disabled module) are NOT verdicts: rethrow.
+  const disabled = new CrowdyGraphQLError([
+    { message: "Module 'bwf-actions' is disabled", extensions: { code: 'BAD_REQUEST' } },
+  ]);
+  assert.equal(isKitVerdictError(disabled), false);
+  await assert.rejects(
+    kitInvoke(
+      { invoke: async () => { throw disabled; } },
+      { appId: '1', functionName: 'mine', selfContainerId: 'c-1' },
+    ),
+    (err) => err === disabled,
+  );
+
+  // Non-GraphQL errors are never verdicts.
+  assert.equal(isKitVerdictError(new Error('Invoke params violate x')), false);
+});
+
 test('kitPolicyJson serializes policy trees', async () => {
   const { kitPolicyJson } = await loadSdk();
   const json = kitPolicyJson({

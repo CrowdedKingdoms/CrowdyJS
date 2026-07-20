@@ -54,7 +54,12 @@ export class EngineDetector {
 
   /**
    * Invoke an engine export and parse the `{success, ...}` envelope.
-   * Envelope failures (denials) resolve — only transport/user errors throw.
+   * Envelope failures (denials) resolve; every GraphQL-level error
+   * (invoke-policy FORBIDDEN, the typed invoke-contract violation —
+   * `BAD_REQUEST` "Invoke params violate ..." — a disabled module, ...) also
+   * resolves as `{ success: false, reason }` so kit callers always get
+   * gameplay-verdict semantics from compute invokes. Only non-GraphQL
+   * (transport) errors throw.
    */
   async invoke<T = Record<string, unknown>>(
     moduleName: string,
