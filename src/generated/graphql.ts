@@ -1524,6 +1524,33 @@ export type CpChangeOrdersPage = {
   total: Scalars['Int']['output'];
 };
 
+/** Operator-set platform ceilings for the per-app WASM compute policy. Each field caps the matching wasm_module_policy knob platform-wide: game-api rejects computeSetPolicy values above the ceiling. A null field means no operator override is stored — game-api falls back to its COMPUTE_PLATFORM_MAX_* env var (bootstrap default), then to the built-in code default. Edits propagate to game-api replicas via replica sync and apply within ~30 seconds, without a game-api restart. */
+export type CpComputePlatformCeilings = {
+  __typename?: 'CpComputePlatformCeilings';
+  /** Max deterministic fuel budget per invoke (fuel_per_invoke ceiling; decimal string). Null = no override (game-api bootstrap default 50000000000). */
+  fuelPerInvoke: Maybe<Scalars['BigInt']['output']>;
+  /** Max deterministic fuel budget per tick (fuel_per_tick ceiling; decimal string). Null = no override (game-api bootstrap default 10000000000). */
+  fuelPerTick: Maybe<Scalars['BigInt']['output']>;
+  /** Max host data-API operations per tick (max_db_ops_per_tick ceiling). Null = no override (game-api bootstrap default 500). */
+  maxDbOpsPerTick: Maybe<Scalars['Int']['output']>;
+  /** Max module-emitted replication bytes per minute (max_egress_bytes_per_min ceiling; decimal string). Null = no override (game-api bootstrap default 100000000). */
+  maxEgressBytesPerMin: Maybe<Scalars['BigInt']['output']>;
+  /** Max module-emitted replication messages per minute (max_egress_msgs_per_min ceiling). Null = no override (game-api bootstrap default 60000). */
+  maxEgressMsgsPerMin: Maybe<Scalars['Int']['output']>;
+  /** Max WASM linear memory per module instance in MiB (max_memory_mb ceiling). Null = no override (game-api bootstrap default 512). */
+  maxMemoryMb: Maybe<Scalars['Int']['output']>;
+  /** Max compute modules per app (wasm_module_policy.max_modules ceiling). Null = no override (game-api bootstrap default 100). */
+  maxModules: Maybe<Scalars['Int']['output']>;
+  /** Max wall-clock watchdog deadline per entry call in milliseconds (max_run_ms ceiling). Null = no override (game-api bootstrap default 5000). */
+  maxRunMs: Maybe<Scalars['Int']['output']>;
+  /** Max tick trigger rate in Hz per module (max_tick_hz ceiling). Null = no override (game-api bootstrap default 60). */
+  maxTickHz: Maybe<Scalars['Int']['output']>;
+  /** When the ceilings row was last updated (UTC). */
+  updatedAt: Scalars['DateTime']['output'];
+  /** users.user_id of the operator who last updated the ceilings. Null when never edited. */
+  updatedByUserId: Maybe<Scalars['String']['output']>;
+};
+
 export type CpEnvSecretRow = {
   __typename?: 'CpEnvSecretRow';
   createdAt: Scalars['DateTime']['output'];
@@ -1614,6 +1641,28 @@ export type CpSecretRow = {
   kind: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   rotatedAt: Maybe<Scalars['DateTime']['output']>;
+};
+
+/** Patch for cpSetComputePlatformCeilings. Omitted fields stay unchanged; a field set to an explicit null clears that override (game-api falls back to its COMPUTE_PLATFORM_MAX_* env var, then the code default); a value sets the ceiling. All values must be > 0. At least one field is required. */
+export type CpSetComputePlatformCeilingsInput = {
+  /** Max fuel per invoke (decimal string). > 0; explicit null clears the override; omit to leave unchanged. */
+  fuelPerInvoke?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Max fuel per tick (decimal string). > 0; explicit null clears the override; omit to leave unchanged. */
+  fuelPerTick?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Max host data-API operations per tick. > 0; explicit null clears the override; omit to leave unchanged. */
+  maxDbOpsPerTick?: InputMaybe<Scalars['Int']['input']>;
+  /** Max module-emitted replication bytes per minute (decimal string). > 0; explicit null clears the override; omit to leave unchanged. */
+  maxEgressBytesPerMin?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Max module-emitted replication messages per minute. > 0; explicit null clears the override; omit to leave unchanged. */
+  maxEgressMsgsPerMin?: InputMaybe<Scalars['Int']['input']>;
+  /** Max WASM memory per module instance in MiB. > 0; explicit null clears the override; omit to leave unchanged. */
+  maxMemoryMb?: InputMaybe<Scalars['Int']['input']>;
+  /** Max compute modules per app. > 0; explicit null clears the override; omit to leave unchanged. */
+  maxModules?: InputMaybe<Scalars['Int']['input']>;
+  /** Max watchdog deadline per entry call in milliseconds. > 0; explicit null clears the override; omit to leave unchanged. */
+  maxRunMs?: InputMaybe<Scalars['Int']['input']>;
+  /** Max tick rate in Hz per module. > 0; explicit null clears the override; omit to leave unchanged. */
+  maxTickHz?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type CpStepRow = {
@@ -3345,6 +3394,8 @@ export type Mutation = {
   confirmEmail: Scalars['Boolean']['output'];
   /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
   connectUdpProxy: UdpProxyConnectionStatus;
+  /** Operator only (is_operator). Patches the platform compute ceilings: omitted fields stay unchanged, an explicit null clears that override (game-api falls back to env/default), a value (> 0) sets it. SIDE EFFECTS: fans a replica notify out to every game-api so the new ceilings clamp computeSetPolicy within ~30 seconds without a restart, and writes an audit entry. Lowering a ceiling does not shrink already-stored per-app policies; it rejects future computeSetPolicy values above the new ceiling. Returns the updated ceilings row. */
+  cpSetComputePlatformCeilings: CpComputePlatformCeilings;
   /** Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user. */
   createAccessTier: AppAccessTier;
   /** Creates an actor (a player’s presence/instance in an app world) owned by the authenticated user and returns the persisted row (including the server-set `createdAt`). Requires a valid game token. If `input.avatarId` is set it must reference an avatar the caller owns (throws Unauthorized otherwise). `input.uuid` must be the 32-character ASCII actor id used on the UDP wire (NOT a hyphenated RFC-4122 UUID). */
@@ -3779,6 +3830,11 @@ export type MutationComputeUpsertTriggerArgs = {
 
 export type MutationConfirmEmailArgs = {
   token: Scalars['String']['input'];
+};
+
+
+export type MutationCpSetComputePlatformCeilingsArgs = {
+  input: CpSetComputePlatformCeilingsInput;
 };
 
 
@@ -5114,6 +5170,8 @@ export type Query = {
   cpChangeOrder: Maybe<CpChangeOrderDetail>;
   /** Operator only (is_operator). Paginated change orders, optionally filtered by environment. Returns a *Page (rows/total/page/pageSize); page is 1-based. */
   cpChangeOrders: CpChangeOrdersPage;
+  /** Operator only (is_operator). The stored platform ceilings for the per-app WASM compute policy (the nine knobs computeSetPolicy clamps against). Null fields mean no operator override: game-api uses its COMPUTE_PLATFORM_MAX_* env var, then the code default. Read-only. */
+  cpComputePlatformCeilings: CpComputePlatformCeilings;
   /** Operator only (is_operator). Lists environment-delivered secret metadata (names/kinds only, never plaintext) injected into the tenant runtime, optionally filtered by environment. */
   cpEnvSecrets: Array<CpEnvSecretRow>;
   /** Operator only (is_operator). Operator view of one environment by slug, across any org. Null when not found. */
@@ -8827,6 +8885,18 @@ export type YankEnvironmentVersionMutationVariables = Exact<{
 
 export type YankEnvironmentVersionMutation = { __typename?: 'Mutation', yankEnvironmentVersion: boolean };
 
+export type CpComputePlatformCeilingsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type CpComputePlatformCeilingsQuery = { __typename?: 'Query', cpComputePlatformCeilings: { __typename?: 'CpComputePlatformCeilings', maxModules: number | null, maxTickHz: number | null, fuelPerTick: string | null, fuelPerInvoke: string | null, maxMemoryMb: number | null, maxRunMs: number | null, maxDbOpsPerTick: number | null, maxEgressMsgsPerMin: number | null, maxEgressBytesPerMin: string | null, updatedAt: string, updatedByUserId: string | null } };
+
+export type CpSetComputePlatformCeilingsMutationVariables = Exact<{
+  input: CpSetComputePlatformCeilingsInput;
+}>;
+
+
+export type CpSetComputePlatformCeilingsMutation = { __typename?: 'Mutation', cpSetComputePlatformCeilings: { __typename?: 'CpComputePlatformCeilings', maxModules: number | null, maxTickHz: number | null, fuelPerTick: string | null, fuelPerInvoke: string | null, maxMemoryMb: number | null, maxRunMs: number | null, maxDbOpsPerTick: number | null, maxEgressMsgsPerMin: number | null, maxEgressBytesPerMin: string | null, updatedAt: string, updatedByUserId: string | null } };
+
 export type CreateEnvironmentMutationVariables = Exact<{
   input: CreateEnvironmentInput;
 }>;
@@ -10420,6 +10490,8 @@ export const PutCpEnvSecretDocument = {"kind":"Document","definitions":[{"kind":
 export const IngestEnvironmentVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"IngestEnvironmentVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"IngestEnvironmentVersionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ingestEnvironmentVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"releasedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}},{"kind":"Field","name":{"kind":"Name","value":"inGit"}},{"kind":"Field","name":{"kind":"Name","value":"inDb"}},{"kind":"Field","name":{"kind":"Name","value":"isLatestAvailable"}}]}}]}}]} as unknown as DocumentNode<IngestEnvironmentVersionMutation, IngestEnvironmentVersionMutationVariables>;
 export const PublishEnvironmentReleaseFromGameApiTagDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PublishEnvironmentReleaseFromGameApiTag"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PublishEnvironmentReleaseFromGameApiTagInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishEnvironmentReleaseFromGameApiTag"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}}]}},{"kind":"Field","name":{"kind":"Name","value":"schemaChanged"}},{"kind":"Field","name":{"kind":"Name","value":"committedToGit"}},{"kind":"Field","name":{"kind":"Name","value":"gitCommitError"}}]}}]}}]} as unknown as DocumentNode<PublishEnvironmentReleaseFromGameApiTagMutation, PublishEnvironmentReleaseFromGameApiTagMutationVariables>;
 export const YankEnvironmentVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"YankEnvironmentVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"version"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"yankEnvironmentVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"version"},"value":{"kind":"Variable","name":{"kind":"Name","value":"version"}}}]}]}}]} as unknown as DocumentNode<YankEnvironmentVersionMutation, YankEnvironmentVersionMutationVariables>;
+export const CpComputePlatformCeilingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpComputePlatformCeilings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpComputePlatformCeilings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedByUserId"}}]}}]}}]} as unknown as DocumentNode<CpComputePlatformCeilingsQuery, CpComputePlatformCeilingsQueryVariables>;
+export const CpSetComputePlatformCeilingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CpSetComputePlatformCeilings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CpSetComputePlatformCeilingsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpSetComputePlatformCeilings"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedByUserId"}}]}}]}}]} as unknown as DocumentNode<CpSetComputePlatformCeilingsMutation, CpSetComputePlatformCeilingsMutationVariables>;
 export const CreateEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"billingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"desiredEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"changeOrders"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateEnvironmentMutation, CreateEnvironmentMutationVariables>;
 export const DestroyEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DestroyEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DestroyEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"destroyEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"requestedBy"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<DestroyEnvironmentMutation, DestroyEnvironmentMutationVariables>;
 export const EnvironmentDatacentersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentDatacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentDatacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"city"}},{"kind":"Field","name":{"kind":"Name","value":"continent"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"isAvailable"}},{"kind":"Field","name":{"kind":"Name","value":"selectableInstanceCount"}},{"kind":"Field","name":{"kind":"Name","value":"syncedAt"}}]}}]}}]} as unknown as DocumentNode<EnvironmentDatacentersQuery, EnvironmentDatacentersQueryVariables>;

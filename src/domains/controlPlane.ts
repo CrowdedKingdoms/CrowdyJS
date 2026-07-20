@@ -8,6 +8,8 @@ import {
   CpSecretsDocument,
   CpEnvSecretsDocument,
   CpOvhCatalogSummaryDocument,
+  CpComputePlatformCeilingsDocument,
+  CpSetComputePlatformCeilingsDocument,
   CpUsageSummaryDocument,
   CpUnreleasedGameApiTagsDocument,
   CpEnvironmentVersionsDocument,
@@ -27,6 +29,9 @@ import {
   type CpSecretsQuery,
   type CpEnvSecretsQuery,
   type CpOvhCatalogSummaryQuery,
+  type CpComputePlatformCeilingsQuery,
+  type CpSetComputePlatformCeilingsMutation,
+  type CpSetComputePlatformCeilingsInput,
   type CpUsageSummaryQuery,
   type CpUnreleasedGameApiTagsQuery,
   type CpEnvironmentVersionsQuery,
@@ -175,6 +180,45 @@ export class ControlPlaneAPI {
       region,
     });
     return data.cpOvhCatalogSummary;
+  }
+
+  /**
+   * Platform-wide compute ceilings (the maxima `computeSetPolicy` clamps to).
+   * Every knob is nullable: `null` means no operator override, so the
+   * env-var/bootstrap default applies on the game-api side.
+   *
+   * @returns The stored ceiling overrides plus updatedAt/updatedByUserId.
+   */
+  async computePlatformCeilings(): Promise<
+    CpComputePlatformCeilingsQuery['cpComputePlatformCeilings']
+  > {
+    const data = await this.management.request(
+      CpComputePlatformCeilingsDocument,
+    );
+    return data.cpComputePlatformCeilings;
+  }
+
+  /**
+   * Patch the platform compute ceilings. Patch semantics per knob: omit =
+   * unchanged, explicit `null` = clear the override (fall back to the
+   * game-api bootstrap default), positive value = set. Changes replica-sync
+   * to game-api and take effect on the next `computeSetPolicy` call (no
+   * restart), within a 30s cache bound. Writes a
+   * `compute.platform_ceilings_set` audit entry.
+   *
+   * @param input - The per-knob patch.
+   * @returns The stored ceilings after the patch.
+   */
+  async setComputePlatformCeilings(
+    input: CpSetComputePlatformCeilingsInput,
+  ): Promise<
+    CpSetComputePlatformCeilingsMutation['cpSetComputePlatformCeilings']
+  > {
+    const data = await this.management.request(
+      CpSetComputePlatformCeilingsDocument,
+      { input },
+    );
+    return data.cpSetComputePlatformCeilings;
   }
 
   /**
