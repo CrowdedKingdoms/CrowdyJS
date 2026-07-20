@@ -51,9 +51,13 @@ export {
 } from './guild.js';
 export {
   inventoryBlueprint,
+  inventoryBarterFunctionName,
+  inventoryCraftFunctionName,
   inventoryNames,
+  type InventoryBarterSpec,
   type InventoryBlueprintOptions,
   type InventoryNames,
+  type InventoryRecipeSpec,
 } from './inventory.js';
 export {
   leaderboardsBlueprint,

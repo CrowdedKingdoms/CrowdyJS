@@ -58,9 +58,10 @@ export interface KitStatusEffect {
 /**
  * Runtime helpers for the {@link combatBlueprint} conventions: spawn
  * combatants, attack (server-side damage formula + death flip), arm status
- * effects the tick automation applies over time, respawn, and — with
- * `hostSynced` — persist host-simulated hp. Denials resolve with
- * `success: false`.
+ * effects the tick automation applies over time, respawn, and route
+ * competitive realtime attacks through a compute referee. `hostSynced`
+ * remains a low-stakes/legacy fallback for persisting elected-host state;
+ * it is not an anti-cheat boundary. Denials resolve with `success: false`.
  *
  * Obtained via `client.kit(appId).combat`.
  */

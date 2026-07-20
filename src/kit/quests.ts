@@ -1,6 +1,10 @@
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { Scalars, SeedPropertyInput } from '../generated/graphql.js';
-import { questsNames, type QuestsNames } from './blueprints/index.js';
+import {
+  questsNames,
+  type KitOwnerIdKind,
+  type QuestsNames,
+} from './blueprints/index.js';
 import {
   kitContainerProperties,
   kitInvoke,
@@ -11,6 +15,8 @@ import {
 export interface QuestsKitOptions {
   /** The `typePrefix` the quests blueprint was deployed with. */
   typePrefix?: string;
+  /** Must match questsBlueprint.ownerIdKind. Defaults to `int`. */
+  ownerIdKind?: KitOwnerIdKind;
 }
 
 /** A parsed view of one quest catalog row. */
@@ -49,6 +55,7 @@ export interface KitQuestProgress {
  */
 export class QuestsKit {
   private readonly names: QuestsNames;
+  private readonly ownerIdKind: KitOwnerIdKind;
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -56,6 +63,7 @@ export class QuestsKit {
     options: QuestsKitOptions = {},
   ) {
     this.names = questsNames(options.typePrefix ?? '');
+    this.ownerIdKind = options.ownerIdKind ?? 'int';
   }
 
   /** List the quest catalog (admin-seeded QuestDef containers). */
@@ -152,7 +160,14 @@ export class QuestsKit {
       displayName: options.displayName ?? `Quest ${questId} ${ownerUserId}`,
       ...(options.sessionId !== undefined ? { sessionId: options.sessionId } : {}),
       properties: [
-        { key: 'owner_user_id', valueType: 'int', valueJson: String(ownerUserId) },
+        {
+          key: 'owner_user_id',
+          valueType: this.ownerIdKind,
+          valueJson:
+            this.ownerIdKind === 'string'
+              ? JSON.stringify(String(ownerUserId))
+              : String(ownerUserId),
+        },
         { key: 'quest_id', valueType: 'string', valueJson: JSON.stringify(questId) },
         {
           key: 'target',

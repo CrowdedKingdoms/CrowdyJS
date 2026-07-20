@@ -60,7 +60,7 @@ import {
 } from '../generated/graphql.js';
 
 /** The crowdy-compute-sdk version the platform toolchain currently pins. */
-export const COMPUTE_SDK_VERSION = '0.1.0';
+export const COMPUTE_SDK_VERSION = '0.1.3';
 /** The guest ABI version the platform currently supports. */
 export const COMPUTE_ABI_VERSION = 0;
 

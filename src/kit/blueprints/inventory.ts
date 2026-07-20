@@ -1,5 +1,12 @@
 import type { SeedPropertyDefInput } from '../../generated/graphql.js';
-import { kitPolicyJson, toSnakeCase, type KitBlueprint } from './core.js';
+import {
+  kitPolicyJson,
+  ownerEqualsCaller,
+  ownerMirrorProperty,
+  toSnakeCase,
+  type KitBlueprint,
+  type KitOwnerIdKind,
+} from './core.js';
 
 /** Options for {@link inventoryBlueprint}. */
 export interface InventoryBlueprintOptions {
@@ -14,6 +21,50 @@ export interface InventoryBlueprintOptions {
   maxSlots?: number;
   /** Exclusive upper bound for stack `slot` indexes. Defaults to 64. */
   slotCount?: number;
+  /**
+   * Recipes compiled into atomic Model functions. Each generated function
+   * consumes every input stack and grants the output stack in ONE
+   * transaction; all refs must be caller-owned and item ids must match.
+   */
+  recipes?: InventoryRecipeSpec[];
+  /** Item-for-item offers compiled into atomic barter functions. */
+  barters?: InventoryBarterSpec[];
+  /** Owner mirror representation. Defaults to `int`; legacy worlds may use `string`. */
+  ownerIdKind?: KitOwnerIdKind;
+  /**
+   * Who may instantiate ItemStack rows. Defaults to `member` for backwards
+   * compatibility; competitive games should use `admin` and create empty
+   * stacks through a trusted compute/bootstrap path.
+   */
+  stackInstantiableBy?: 'member' | 'admin';
+  /**
+   * Who may call the generic grant function. `owner` preserves the original
+   * sandbox-friendly behavior; competitive games should use `server` and
+   * grant only through trusted transactions/referees.
+   */
+  grantAuthority?: 'owner' | 'server';
+}
+
+export interface InventoryRecipeSpec {
+  recipeId: string;
+  inputs: Array<{ itemId: string; quantity: number }>;
+  output: { itemId: string; quantity: number };
+}
+
+export interface InventoryBarterSpec {
+  barterId: string;
+  pay: { itemId: string; quantity: number };
+  receive: { itemId: string; quantity: number };
+}
+
+export function inventoryCraftFunctionName(recipeId: string, typePrefix = ''): string {
+  const prefix = typePrefix ? `${toSnakeCase(typePrefix)}_` : '';
+  return `${prefix}craft_${toSnakeCase(recipeId)}`;
+}
+
+export function inventoryBarterFunctionName(barterId: string, typePrefix = ''): string {
+  const prefix = typePrefix ? `${toSnakeCase(typePrefix)}_` : '';
+  return `${prefix}barter_${toSnakeCase(barterId)}`;
 }
 
 /** Names derived by {@link inventoryBlueprint} for a given prefix. */
@@ -53,9 +104,110 @@ export function inventoryNames(typePrefix = ''): InventoryNames {
 export function inventoryBlueprint(
   options: InventoryBlueprintOptions = {},
 ): KitBlueprint {
-  const { typePrefix = '', maxSlots = 24, slotCount = 64 } = options;
+  const {
+    typePrefix = '',
+    maxSlots = 24,
+    slotCount = 64,
+    recipes = [],
+    barters = [],
+    ownerIdKind = 'int',
+    stackInstantiableBy = 'member',
+    grantAuthority = 'owner',
+  } = options;
   const names = inventoryNames(typePrefix);
   const ownerOnly = kitPolicyJson({ type: 'owner_of_self' });
+  for (const recipe of recipes) {
+    if (recipe.inputs.length === 0 || recipe.inputs.length > 6) {
+      throw new Error(`inventory recipe '${recipe.recipeId}' must have 1-6 inputs`);
+    }
+  }
+
+  const recipeFunctions = recipes.map((recipe) => {
+    const inputParams = recipe.inputs.map((_, index) => ({
+      name: `input_${index}_id`,
+      valueType: 'container_ref',
+      required: true,
+    }));
+    const guards = recipe.inputs.flatMap((input, index) => [
+      ownerEqualsCaller(`ref($input_${index}_id).owner_user_id`, ownerIdKind),
+      `ref($input_${index}_id).item_id == "${input.itemId}"`,
+      `ref($input_${index}_id).quantity >= ${input.quantity}`,
+    ]);
+    guards.push(ownerEqualsCaller('ref($output_id).owner_user_id', ownerIdKind));
+    guards.push(`ref($output_id).item_id == "${recipe.output.itemId}"`);
+    return {
+      name: inventoryCraftFunctionName(recipe.recipeId, typePrefix),
+      containerTypeName: names.inventoryType,
+      returnType: 'int',
+      parameters: [
+        ...inputParams,
+        { name: 'output_id', valueType: 'container_ref', required: true },
+      ],
+      mutations: [
+        ...recipe.inputs.map((input, index) => ({
+          target: `ref($input_${index}_id)`,
+          property: 'quantity',
+          expression: `ref($input_${index}_id).quantity - ${input.quantity}`,
+        })),
+        {
+          target: 'ref($output_id)',
+          property: 'quantity',
+          expression: `ref($output_id).quantity + ${recipe.output.quantity}`,
+        },
+      ],
+      returnExpression: 'ref($output_id).quantity',
+      invokePolicyJson: kitPolicyJson({
+        type: 'and',
+        rules: [
+          { type: 'owner_of_self' },
+          { type: 'condition', expression: guards.join(' && ') },
+        ],
+      }),
+      autonomousInvocable: true,
+      description: `Atomically craft '${recipe.recipeId}': consume all inputs and grant the output, or write nothing.`,
+    };
+  });
+
+  const barterFunctions = barters.map((barter) => ({
+    name: inventoryBarterFunctionName(barter.barterId, typePrefix),
+    containerTypeName: names.inventoryType,
+    returnType: 'int',
+    parameters: [
+      { name: 'pay_id', valueType: 'container_ref', required: true },
+      { name: 'receive_id', valueType: 'container_ref', required: true },
+    ],
+    mutations: [
+      {
+        target: 'ref($pay_id)',
+        property: 'quantity',
+        expression: `ref($pay_id).quantity - ${barter.pay.quantity}`,
+      },
+      {
+        target: 'ref($receive_id)',
+        property: 'quantity',
+        expression: `ref($receive_id).quantity + ${barter.receive.quantity}`,
+      },
+    ],
+    returnExpression: 'ref($receive_id).quantity',
+    invokePolicyJson: kitPolicyJson({
+      type: 'and',
+      rules: [
+        { type: 'owner_of_self' },
+        {
+          type: 'condition',
+          expression: [
+            ownerEqualsCaller('ref($pay_id).owner_user_id', ownerIdKind),
+            `ref($pay_id).item_id == "${barter.pay.itemId}"`,
+            `ref($pay_id).quantity >= ${barter.pay.quantity}`,
+            ownerEqualsCaller('ref($receive_id).owner_user_id', ownerIdKind),
+            `ref($receive_id).item_id == "${barter.receive.itemId}"`,
+          ].join(' && '),
+        },
+      ],
+    }),
+    autonomousInvocable: true,
+    description: `Atomically execute barter '${barter.barterId}', or write nothing.`,
+  }));
 
   return {
     name: names.inventoryType,
@@ -69,7 +221,7 @@ export function inventoryBlueprint(
       {
         typeName: names.stackType,
         displayName: names.stackType,
-        instantiableBy: 'member',
+        instantiableBy: stackInstantiableBy,
         description: 'One stack of a single item type in an inventory slot.',
       },
     ],
@@ -81,14 +233,7 @@ export function inventoryBlueprint(
         defaultValueJson: String(maxSlots),
       },
       { containerTypeName: names.stackType, key: 'item_id', valueType: 'string' },
-      {
-        containerTypeName: names.stackType,
-        key: 'owner_user_id',
-        valueType: 'int',
-        defaultValueJson: '0',
-        description:
-          "Mirror of the stack owner's user id (kit convention), read by cross-container guards such as the economy trade/market functions.",
-      },
+      ownerMirrorProperty(names.stackType, ownerIdKind),
       {
         containerTypeName: names.stackType,
         key: 'quantity',
@@ -116,8 +261,16 @@ export function inventoryBlueprint(
           },
         ],
         returnExpression: 'self.quantity',
-        invokePolicyJson: ownerOnly,
-        description: 'Add items to a stack the caller owns.',
+        invokePolicyJson:
+          grantAuthority === 'server'
+            ? kitPolicyJson({ type: 'is_automation' })
+            : ownerOnly,
+        invokeScope: grantAuthority === 'server' ? 'internal' : undefined,
+        autonomousInvocable: grantAuthority === 'server' ? true : undefined,
+        description:
+          grantAuthority === 'server'
+            ? 'Trusted server/compute grant; players cannot mint items.'
+            : 'Add items to a stack the caller owns.',
       },
       {
         name: names.consumeFn,
@@ -187,6 +340,8 @@ export function inventoryBlueprint(
         description:
           'Atomically move items between two stacks of the same item type.',
       },
+      ...recipeFunctions,
+      ...barterFunctions,
     ],
   };
 }
