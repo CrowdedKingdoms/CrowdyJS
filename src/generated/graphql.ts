@@ -2073,6 +2073,30 @@ export type DevLoginInput = {
   email: Scalars['String']['input'];
 };
 
+/** One manifest component's change in a redeploy plan: what the environment currently runs vs what the target release pins. */
+export type EnvironmentComponentChange = {
+  __typename?: 'EnvironmentComponentChange';
+  /** True when the redeploy would change this component. */
+  changed: Scalars['Boolean']['output'];
+  /** Manifest component kind (e.g. 'game_api_environment', 'buddy', 'game_api_base_image'). */
+  component: Scalars['String']['output'];
+  /** Version the environment currently runs for this component (observed, falling back to last-desired). Null when never deployed. */
+  fromVersion: Maybe<Scalars['String']['output']>;
+  /** Version the target release pins for this component. Null when the target manifest omits the component. */
+  toVersion: Maybe<Scalars['String']['output']>;
+};
+
+/** A task the redeploy pipeline would enqueue, with its step kinds in execution order. Enumerated from the same planner the real change order uses. */
+export type EnvironmentPlannedTask = {
+  __typename?: 'EnvironmentPlannedTask';
+  /** Task kinds this task waits on before starting. */
+  dependsOn: Array<Scalars['String']['output']>;
+  /** Task kind (e.g. 'apply_schema_in_place', 'update_game_api_1'). */
+  kind: Scalars['String']['output'];
+  /** Step kinds in order (e.g. 'pg:apply_schema', 'ssh:install_wasm_toolchain'). */
+  steps: Array<Scalars['String']['output']>;
+};
+
 /** Input for environmentQuote. Mirrors CreateEnvironmentInput’s class/flavor shape: dedicated needs the four per-role flavors + counts; dev_single needs only the single flavor. */
 export type EnvironmentQuoteInput = {
   /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. Required for dedicated. */
@@ -2096,6 +2120,33 @@ export type EnvironmentQuoteInput = {
   udpBuddyFlavor?: InputMaybe<Scalars['String']['input']>;
   udpBuddyMaxServers?: InputMaybe<Scalars['Int']['input']>;
   udpBuddyMinServers?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** DRY RUN preview of redeployEnvironment: exactly what moving the environment to a target release version would do — component version diffs (game-api, Buddy, base images), whether game-DB schema DDL applies, and the pipeline tasks/steps that would run — WITHOUT creating a change order or touching any VM. Blockers list everything that would make the real mutation fail. */
+export type EnvironmentRedeployPlan = {
+  __typename?: 'EnvironmentRedeployPlan';
+  /** Why the real redeployEnvironment call would be rejected right now (active change order, missing flavors, version not deployable, ...). Empty when the redeploy would proceed. */
+  blockers: Array<Scalars['String']['output']>;
+  /** Change-order kind the real mutation would enqueue ('redeploy_environment_services' or 'deploy_environment_version'). */
+  changeOrderKind: Maybe<Scalars['String']['output']>;
+  /** Per-component version diff between what the environment runs and what the target release pins. */
+  componentChanges: Array<EnvironmentComponentChange>;
+  /** Release version the environment currently observes (null before first deploy). */
+  currentVersion: Maybe<Scalars['String']['output']>;
+  /** How the redeploy would run: 'services' (in-place bump on existing VMs) or 'full' (full reprovision). Null when blocked before resolution. */
+  deployMode: Maybe<Scalars['String']['output']>;
+  /** Environment slug. */
+  environmentSlug: Scalars['String']['output'];
+  /** Human-readable highlights of what the redeploy does (game-api tag movement, Buddy artifact resolution, schema apply/skip, VM counts). */
+  notes: Array<Scalars['String']['output']>;
+  /** Git ref whose create-schema.sql would be applied. */
+  schemaGitRef: Maybe<Scalars['String']['output']>;
+  /** True when the plan applies the game schema (create-schema.sql at the target's schemaGitRef) to the tenant game DB in place. False when the observed schema ref already matches (apply skipped) or when blocked. */
+  schemaWillApply: Scalars['Boolean']['output'];
+  /** Release version the redeploy would move to (the requested version, or the latest available for the class when omitted). Null when no version resolves — see blockers. */
+  targetVersion: Maybe<Scalars['String']['output']>;
+  /** Pipeline tasks the change order would run (enumerated for 'services' mode; empty for 'full' mode and when blocked). */
+  tasks: Array<EnvironmentPlannedTask>;
 };
 
 /** Aggregate byte totals for one environment over the requested window. All *Bytes fields are string counters (may exceed Int range). */
@@ -3554,7 +3605,7 @@ export type Mutation = {
   putCpEnvSecret: CpEnvSecretRow;
   /** Operator only (is_operator). Creates or overwrites a control-plane secret (encrypted at rest) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned by cpSecrets. */
   putCpSecret: CpSecretRow;
-  /** Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Requires the 'manage_environments' org permission. */
+  /** Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Preview first with environmentRedeployPlan (the dry run). Requires the 'manage_environments' org permission. */
   redeployEnvironment: CksEnvironmentChangeOrder;
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. */
   refreshAppToken: AppTokenResponse;
@@ -5198,6 +5249,8 @@ export type Query = {
   environmentForwardVersions: Array<CksEnvironmentVersion>;
   /** Pricing quote for the selected flavors plus the org wallet balance and a canCreate gate. Read-only — provisions nothing. Fails if any flavor is unavailable, hidden, or lacks customer pricing. Requires the 'view_billing' org permission. */
   environmentQuote: CksEnvironmentQuote;
+  /** DRY RUN of redeployEnvironment: previews exactly what moving the environment to a target release version (input.version, or latest for its class when omitted) would do — component version diffs (game-api, Buddy, base images), whether game-DB schema DDL applies or is skipped, Buddy artifact resolution, and the pipeline tasks/steps that would run — WITHOUT creating a change order or touching any VM. Anything that would make the real mutation fail is returned in `blockers`. Read-only; requires the 'view_environments' org permission. */
+  environmentRedeployPlan: EnvironmentRedeployPlan;
   /** Aggregate replication/GraphQL byte totals per app for the apps linked to an environment, over the time window. Read-only reporting. Requires the 'view_usage' org permission. */
   environmentUsageByApp: Array<AppUsageRollupRow>;
   /** Per-minute replication and GraphQL byte/message usage time series for the apps linked to an environment, plus replication rate peaks and live Buddy rates. Read-only observability. Requires the 'view_usage' org permission. */
@@ -5726,6 +5779,11 @@ export type QueryEnvironmentForwardVersionsArgs = {
 
 export type QueryEnvironmentQuoteArgs = {
   input: EnvironmentQuoteInput;
+};
+
+
+export type QueryEnvironmentRedeployPlanArgs = {
+  input: RedeployEnvironmentInput;
 };
 
 
@@ -8942,6 +9000,13 @@ export type EnvironmentQuoteQueryVariables = Exact<{
 
 export type EnvironmentQuoteQuery = { __typename?: 'Query', environmentQuote: { __typename?: 'CksEnvironmentQuote', datacenter: string, databaseFlavor: string, gameApiFlavor: string, udpBuddyFlavor: string, caddyFlavor: string, gameApiMinServers: number, gameApiMaxServers: number, udpBuddyMinServers: number, udpBuddyMaxServers: number, loadBalancerCount: number, environmentClass: string, singleBoxFlavor: string | null, hourlyCostCents: string, firstDayReserveCents: string, walletBalanceCents: string, availableBalanceCents: string, currency: string, canCreate: boolean } };
 
+export type EnvironmentRedeployPlanQueryVariables = Exact<{
+  input: RedeployEnvironmentInput;
+}>;
+
+
+export type EnvironmentRedeployPlanQuery = { __typename?: 'Query', environmentRedeployPlan: { __typename?: 'EnvironmentRedeployPlan', environmentSlug: string, currentVersion: string | null, targetVersion: string | null, deployMode: string | null, changeOrderKind: string | null, schemaWillApply: boolean, schemaGitRef: string | null, blockers: Array<string>, notes: Array<string>, componentChanges: Array<{ __typename?: 'EnvironmentComponentChange', component: string, fromVersion: string | null, toVersion: string | null, changed: boolean }>, tasks: Array<{ __typename?: 'EnvironmentPlannedTask', kind: string, dependsOn: Array<string>, steps: Array<string> }> } };
+
 export type EnvironmentVersionsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -10502,6 +10567,7 @@ export const EnvironmentDatacentersDocument = {"kind":"Document","definitions":[
 export const EnvironmentFlavorsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentFlavors"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"datacenter"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentFlavors"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"datacenter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"datacenter"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"flavorName"}},{"kind":"Field","name":{"kind":"Name","value":"flavorType"}},{"kind":"Field","name":{"kind":"Name","value":"vcpus"}},{"kind":"Field","name":{"kind":"Name","value":"ramMb"}},{"kind":"Field","name":{"kind":"Name","value":"diskGb"}},{"kind":"Field","name":{"kind":"Name","value":"quotaAvailable"}},{"kind":"Field","name":{"kind":"Name","value":"customerHourlyPriceCents"}},{"kind":"Field","name":{"kind":"Name","value":"customerMonthlyPriceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"availabilityStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pricingMode"}},{"kind":"Field","name":{"kind":"Name","value":"syncedAt"}}]}}]}}]} as unknown as DocumentNode<EnvironmentFlavorsQuery, EnvironmentFlavorsQueryVariables>;
 export const EnvironmentForwardVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentForwardVersions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentForwardVersions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"releasedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}}]}}]}}]} as unknown as DocumentNode<EnvironmentForwardVersionsQuery, EnvironmentForwardVersionsQueryVariables>;
 export const EnvironmentQuoteDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentQuote"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentQuoteInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentQuote"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"datacenter"}},{"kind":"Field","name":{"kind":"Name","value":"databaseFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"caddyFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"loadBalancerCount"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"singleBoxFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"hourlyCostCents"}},{"kind":"Field","name":{"kind":"Name","value":"firstDayReserveCents"}},{"kind":"Field","name":{"kind":"Name","value":"walletBalanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"availableBalanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"canCreate"}}]}}]}}]} as unknown as DocumentNode<EnvironmentQuoteQuery, EnvironmentQuoteQueryVariables>;
+export const EnvironmentRedeployPlanDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentRedeployPlan"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RedeployEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentRedeployPlan"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentSlug"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"targetVersion"}},{"kind":"Field","name":{"kind":"Name","value":"deployMode"}},{"kind":"Field","name":{"kind":"Name","value":"changeOrderKind"}},{"kind":"Field","name":{"kind":"Name","value":"schemaWillApply"}},{"kind":"Field","name":{"kind":"Name","value":"schemaGitRef"}},{"kind":"Field","name":{"kind":"Name","value":"componentChanges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"component"}},{"kind":"Field","name":{"kind":"Name","value":"fromVersion"}},{"kind":"Field","name":{"kind":"Name","value":"toVersion"}},{"kind":"Field","name":{"kind":"Name","value":"changed"}}]}},{"kind":"Field","name":{"kind":"Name","value":"tasks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"dependsOn"}},{"kind":"Field","name":{"kind":"Name","value":"steps"}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockers"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}}]}}]}}]} as unknown as DocumentNode<EnvironmentRedeployPlanQuery, EnvironmentRedeployPlanQueryVariables>;
 export const EnvironmentVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentVersions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentVersions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"releasedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}}]}}]}}]} as unknown as DocumentNode<EnvironmentVersionsQuery, EnvironmentVersionsQueryVariables>;
 export const LinkAppToEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"LinkAppToEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"LinkAppToEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"linkAppToEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentTarget"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<LinkAppToEnvironmentMutation, LinkAppToEnvironmentMutationVariables>;
 export const OrgEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"OrgEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"billingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"singleBoxFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"desiredEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"loadBalancerCount"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"components"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"desiredVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedVersion"}}]}},{"kind":"Field","name":{"kind":"Name","value":"changeOrders"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"outputs"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"valueKind"}}]}}]}}]}}]} as unknown as DocumentNode<OrgEnvironmentQuery, OrgEnvironmentQueryVariables>;

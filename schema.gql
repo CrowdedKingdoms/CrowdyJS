@@ -1922,6 +1922,86 @@ type PlayerPulse {
 }
 
 """
+One manifest component's change in a redeploy plan: what the environment currently runs vs what the target release pins.
+"""
+type EnvironmentComponentChange {
+  """
+  Manifest component kind (e.g. 'game_api_environment', 'buddy', 'game_api_base_image').
+  """
+  component: String!
+  """
+  Version the environment currently runs for this component (observed, falling back to last-desired). Null when never deployed.
+  """
+  fromVersion: String
+  """
+  Version the target release pins for this component. Null when the target manifest omits the component.
+  """
+  toVersion: String
+  """True when the redeploy would change this component."""
+  changed: Boolean!
+}
+
+"""
+A task the redeploy pipeline would enqueue, with its step kinds in execution order. Enumerated from the same planner the real change order uses.
+"""
+type EnvironmentPlannedTask {
+  """Task kind (e.g. 'apply_schema_in_place', 'update_game_api_1')."""
+  kind: String!
+  """Task kinds this task waits on before starting."""
+  dependsOn: [String!]!
+  """
+  Step kinds in order (e.g. 'pg:apply_schema', 'ssh:install_wasm_toolchain').
+  """
+  steps: [String!]!
+}
+
+"""
+DRY RUN preview of redeployEnvironment: exactly what moving the environment to a target release version would do — component version diffs (game-api, Buddy, base images), whether game-DB schema DDL applies, and the pipeline tasks/steps that would run — WITHOUT creating a change order or touching any VM. Blockers list everything that would make the real mutation fail.
+"""
+type EnvironmentRedeployPlan {
+  """Environment slug."""
+  environmentSlug: String!
+  """
+  Release version the environment currently observes (null before first deploy).
+  """
+  currentVersion: String
+  """
+  Release version the redeploy would move to (the requested version, or the latest available for the class when omitted). Null when no version resolves — see blockers.
+  """
+  targetVersion: String
+  """
+  How the redeploy would run: 'services' (in-place bump on existing VMs) or 'full' (full reprovision). Null when blocked before resolution.
+  """
+  deployMode: String
+  """
+  Change-order kind the real mutation would enqueue ('redeploy_environment_services' or 'deploy_environment_version').
+  """
+  changeOrderKind: String
+  """
+  True when the plan applies the game schema (create-schema.sql at the target's schemaGitRef) to the tenant game DB in place. False when the observed schema ref already matches (apply skipped) or when blocked.
+  """
+  schemaWillApply: Boolean!
+  """Git ref whose create-schema.sql would be applied."""
+  schemaGitRef: String
+  """
+  Per-component version diff between what the environment runs and what the target release pins.
+  """
+  componentChanges: [EnvironmentComponentChange!]!
+  """
+  Pipeline tasks the change order would run (enumerated for 'services' mode; empty for 'full' mode and when blocked).
+  """
+  tasks: [EnvironmentPlannedTask!]!
+  """
+  Why the real redeployEnvironment call would be rejected right now (active change order, missing flavors, version not deployable, ...). Empty when the redeploy would proceed.
+  """
+  blockers: [String!]!
+  """
+  Human-readable highlights of what the redeploy does (game-api tag movement, Buddy artifact resolution, schema apply/skip, VM counts).
+  """
+  notes: [String!]!
+}
+
+"""
 A single step within a deploy/destroy task, with its retry attempt and any error.
 """
 type CksDeployProgressStep {
@@ -2964,6 +3044,10 @@ type Query {
   """
   environmentQuote(input: EnvironmentQuoteInput!): CksEnvironmentQuote! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "input.orgId")
   """
+  DRY RUN of redeployEnvironment: previews exactly what moving the environment to a target release version (input.version, or latest for its class when omitted) would do — component version diffs (game-api, Buddy, base images), whether game-DB schema DDL applies or is skipped, Buddy artifact resolution, and the pipeline tasks/steps that would run — WITHOUT creating a change order or touching any VM. Anything that would make the real mutation fail is returned in `blockers`. Read-only; requires the 'view_environments' org permission.
+  """
+  environmentRedeployPlan(input: RedeployEnvironmentInput!): EnvironmentRedeployPlan! @requiresPermission(scope: "org", permission: "view_environments", scopeArg: "input.orgId")
+  """
   Public read-only catalog of active Buddy (UDP replication) billing tiers.
   """
   buddyBillingTiers: [BuddyBillingTier!]!
@@ -3372,7 +3456,7 @@ type Query {
     gridId: BigInt!
     """The user whose effective permissions to read."""
     userId: BigInt!
-  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GridUserPermissions!
   """
   List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps').
   """
@@ -3381,7 +3465,7 @@ type Query {
     The app, the user, and the low/high chunk corners of the region to scan (corners are normalized).
     """
     input: NearbyGridPermissionsInput!
-  ): [NearbyGridPermissions!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): [NearbyGridPermissions!]!
   """
   Read the permission-key whitelist configured for a grid. An empty list means there is no limit (every active runtime permission may be granted on the grid). Requires app-admin ('manage_apps').
   """
@@ -3390,7 +3474,7 @@ type Query {
     appId: BigInt!
     """The grid whose limit whitelist to read."""
     gridId: BigInt!
-  ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GridPermissionLimits!
   """
   List the group/role -> permission-key grants configured on a grid for one group (rows of the `grid_group_grants` input table). These are inputs to the effective ACL, not the materialized result — use `gridUserPermissions` for a specific user's effective keys. Requires app-admin ('manage_apps').
   """
@@ -3401,7 +3485,7 @@ type Query {
     gridId: BigInt!
     """The group whose grants on the grid to list."""
     groupId: BigInt!
-  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GridGroupGrant!]!
   """
   The caller's teams in an app, with their roles and effective team permissions. Use this to discover which teams the current user belongs to and what they may do in each.
   """
@@ -3484,7 +3568,7 @@ type Query {
   gameModelContainerTypes(
     """The app (tenant) whose container types to list."""
     appId: BigInt!
-  ): [GmContainerType!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmContainerType!]!
   """
   List the property definitions for a container type. Requires app-admin ('manage_apps').
   """
@@ -3493,7 +3577,7 @@ type Query {
     appId: BigInt!
     """The container type whose properties to list."""
     typeName: String!
-  ): [GmPropertyDef!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmPropertyDef!]!
   """
   Fetch one studio-defined function by name. Requires app-admin ('manage_apps').
   """
@@ -3502,7 +3586,7 @@ type Query {
     appId: BigInt!
     """The function name to fetch."""
     name: String!
-  ): GmFunction! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmFunction!
   """
   List studio-defined functions for an app, optionally filtered to those attached to a container type. Requires app-admin ('manage_apps').
   """
@@ -3513,7 +3597,7 @@ type Query {
     Optional: only functions bound to this container type. Omit for all functions.
     """
     containerTypeName: String
-  ): [GmFunction!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmFunction!]!
   """
   Fetch a container type's full schema: its property definitions plus the functions available on it. Requires app-admin ('manage_apps').
   """
@@ -3522,14 +3606,14 @@ type Query {
     appId: BigInt!
     """The container type whose schema to fetch."""
     typeName: String!
-  ): GmTypeSchema! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmTypeSchema!
   """
   List the feature keys defined for an app. Requires app-admin ('manage_apps').
   """
   gameModelFeatures(
     """The app (tenant) whose features to list."""
     appId: BigInt!
-  ): [GmAppFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmAppFeature!]!
   """
   List tier -> feature grants for an app, optionally filtered to one tier. Requires app-admin ('manage_apps').
   """
@@ -3538,21 +3622,21 @@ type Query {
     appId: BigInt!
     """Optional: only grants for this access tier. Omit for all tiers."""
     tierId: BigInt
-  ): [GmTierFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmTierFeature!]!
   """
   Read the app's game-model runtime policy (session creation policy + default participant role). Requires app-admin ('manage_apps').
   """
   gameModelPolicy(
     """The app (tenant) whose policy to read."""
     appId: BigInt!
-  ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmAppPolicy!
   """
   List the automations defined for an app. Requires app-admin ('manage_apps').
   """
   gameModelAutomations(
     """The app (tenant) whose automations to list."""
     appId: BigInt!
-  ): [GmAutomation!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmAutomation!]!
   """
   Fetch one automation by name, including its circuit-breaker state. Requires app-admin ('manage_apps').
   """
@@ -3561,7 +3645,7 @@ type Query {
     appId: BigInt!
     """The automation name to fetch."""
     name: String!
-  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmAutomation!
   """
   List automation event triggers for an app, optionally filtered to one automation (by name). Requires app-admin ('manage_apps').
   """
@@ -3570,14 +3654,14 @@ type Query {
     appId: BigInt!
     """Optional: only triggers for this automation. Omit for all."""
     automationName: String
-  ): [GmAutomationTrigger!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmAutomationTrigger!]!
   """
   Read the app's automation policy (guardrails / platform ceilings). Requires app-admin ('manage_apps').
   """
   gameModelAutomationPolicy(
     """The app (tenant) whose automation policy to read."""
     appId: BigInt!
-  ): GmAutomationPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmAutomationPolicy!
   """
   List automation runs (the monitoring + audit trail of autonomous-process executions) for an app, newest first, optionally filtered by automation name and/or outcome. Each run carries timing, fan-out + invocation counts, billed compute, and any circuit action. Requires app-admin ('manage_apps').
   """
@@ -3592,7 +3676,7 @@ type Query {
     limit: Int
     """Number of runs to skip (pagination)."""
     offset: Int
-  ): [GmAutomationRun!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): [GmAutomationRun!]!
   """
   Aggregate automation activity for an app over a recent window (default 60 minutes, max 1440): total/failed runs, failure rate, runs/min, invocations/mutations/compute, and a per-automation breakdown with current circuit state. The "what are my NPCs doing" dashboard query. Requires app-admin ('manage_apps').
   """
@@ -3601,14 +3685,14 @@ type Query {
     appId: BigInt!
     """Look-back window in minutes (default 60, max 1440)."""
     windowMinutes: Int = 60
-  ): GmAutomationStats! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmAutomationStats!
   """
   A snapshot of an app's game-model footprint and recent activity: container/property/edge/session/function/automation row counts, total + 24h event volume, failed + automation-driven invocations, and the most-invoked functions. Helps developers understand what is in their game and their database. Requires app-admin ('manage_apps').
   """
   gameModelAppDiagnostics(
     """The app (tenant) to diagnose."""
     appId: BigInt!
-  ): GmAppDiagnostics! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmAppDiagnostics!
   """
   Diagnostics surface: stitch one flow correlation id into a single cross-engine timeline — the model events (gm event log), automation runs, and compute module runs that share the flowId minted at the entry edge (player gameModelInvoke / automation run / computeInvoke) and propagated across model_invoke, the event bus, and emit_compute_event. Each array is ordered by time ascending; an unknown flowId returns three empty arrays. Answers "what happened to this kill's reward" in one query instead of three hand-joined ones. Requires app-admin ('manage_apps').
   """
@@ -3619,7 +3703,7 @@ type Query {
     The flow correlation id (UUID) — from the flowId field of a GmEvent, GmAutomationRun, or WasmModuleRun.
     """
     flowId: String!
-  ): GmFlowTimeline! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmFlowTimeline!
   """Fetch one container (instance) by id. Requires a valid token."""
   gameModelContainer(
     """The app (tenant) that owns the container."""
@@ -3732,14 +3816,14 @@ type Query {
   computeTemplates(
     """The app (tenant) asking (permission scope)."""
     appId: BigInt!
-  ): [ComputeTemplateInfo!]! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  ): [ComputeTemplateInfo!]!
   """
   List the compute modules defined for an app. Requires the org 'view_compute_diagnostics' permission.
   """
   computeModules(
     """The app (tenant) whose modules to list."""
     appId: BigInt!
-  ): [WasmModule!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): [WasmModule!]!
   """
   Read one compute module by name. Requires the org 'view_compute_diagnostics' permission.
   """
@@ -3748,7 +3832,7 @@ type Query {
     appId: BigInt!
     """The module name."""
     name: String!
-  ): WasmModule! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): WasmModule!
   """
   List a module's source versions, newest first, including compile status/logs. Requires the org 'view_compute_diagnostics' permission.
   """
@@ -3759,7 +3843,7 @@ type Query {
     moduleName: String!
     """Max versions to return (default 20, max 100)."""
     limit: Int
-  ): [WasmModuleVersion!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): [WasmModuleVersion!]!
   """
   List trigger bindings for an app, optionally filtered to one module. Requires the org 'view_compute_diagnostics' permission.
   """
@@ -3768,14 +3852,14 @@ type Query {
     appId: BigInt!
     """Optional: only triggers of this module."""
     moduleName: String
-  ): [WasmModuleTrigger!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): [WasmModuleTrigger!]!
   """
   Read the app's compute policy (platform defaults when unset). Requires the org 'view_compute_diagnostics' permission.
   """
   computeModulePolicy(
     """The app (tenant) whose compute policy to read."""
     appId: BigInt!
-  ): WasmModulePolicy! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): WasmModulePolicy!
   """
   List compute-module runs (the monitoring + audit trail of executions), newest first, optionally filtered by module and/or outcome. Rows are written by the runtime; empty until modules execute (Phase 2). Requires the org 'view_compute_diagnostics' permission.
   """
@@ -3790,7 +3874,7 @@ type Query {
     limit: Int
     """Number of runs to skip (pagination)."""
     offset: Int
-  ): [WasmModuleRun!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): [WasmModuleRun!]!
   """
   Aggregate compute activity for an app over a recent window: run/failure counts, fuel, egress, and a per-module breakdown. Requires the org 'view_compute_diagnostics' permission.
   """
@@ -3799,7 +3883,7 @@ type Query {
     appId: BigInt!
     """Look-back window in minutes (default 60, max 1440)."""
     windowMinutes: Int = 60
-  ): WasmComputeStats! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): WasmComputeStats!
   """
   Diagnostic log lines for an app's compute modules, newest first. Phase 1 surfaces failed-run errors; the runtime adds guest log output when modules execute. Requires the org 'view_compute_diagnostics' permission.
   """
@@ -3810,14 +3894,14 @@ type Query {
     moduleName: String
     """Max lines to return (default 100, max 500)."""
     limit: Int
-  ): [WasmModuleLogEntry!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): [WasmModuleLogEntry!]!
   """
   A snapshot of an app's compute footprint: module/version/trigger counts plus 24h run activity and the most-active modules. Requires the org 'view_compute_diagnostics' permission.
   """
   computeAppDiagnostics(
     """The app (tenant) to diagnose."""
     appId: BigInt!
-  ): WasmAppDiagnostics! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  ): WasmAppDiagnostics!
   """
   UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
   """
@@ -3907,6 +3991,33 @@ input EnvironmentQuoteInput {
   udpBuddyMinServers: Int
   udpBuddyMaxServers: Int
   loadBalancerCount: Int
+}
+
+input RedeployEnvironmentInput {
+  orgId: BigInt!
+  slug: String!
+  """
+  Target environment version. When omitted, redeploys to the latest available version for the class. Must be available, deployable by this class, and not older than the current version (forward-only — no rollback).
+  """
+  version: String
+  """
+  How to roll out the version. When omitted, routes to services-only when active runtime VMs exist, otherwise full.
+  """
+  deployMode: RedeployDeployMode
+}
+
+"""
+How redeployEnvironment rolls out a new version. Omit for automatic routing (services-only when active runtime VMs exist, otherwise full).
+"""
+enum RedeployDeployMode {
+  """
+  Replace the runtime VMs (reprovision game-api / Buddy instances). Slower; use when the box image or infra must change.
+  """
+  FULL
+  """
+  Update services in place on the existing runtime VMs (no VM replacement). Faster; only valid when active runtime VMs exist.
+  """
+  SERVICES
 }
 
 type Mutation {
@@ -4462,7 +4573,7 @@ type Mutation {
   """
   updateEnvironmentBillingTiers(input: UpdateEnvironmentBillingTiersInput!): CksEnvironment! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
-  Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Requires the 'manage_environments' org permission.
+  Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Preview first with environmentRedeployPlan (the dry run). Requires the 'manage_environments' org permission.
   """
   redeployEnvironment(input: RedeployEnvironmentInput!): CksEnvironmentChangeOrder! @requiresPermission(scope: "org", permission: "manage_environments", scopeArg: "input.orgId")
   """
@@ -4674,19 +4785,19 @@ type Mutation {
   """
   Upserts ONLY the opaque base64 chunk-level state blob for a chunk, preserving its voxels, per-voxel states and LODs; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass).
   """
-  updateChunkState(input: UpdateChunkStateInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  updateChunkState(input: UpdateChunkStateInput!): Chunk
   """
   Replaces the level-of-detail (LOD) set for a chunk, preserving voxels, per-voxel states, chunk state and owner; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass).
   """
-  updateChunkLods(input: UpdateChunkLodsInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  updateChunkLods(input: UpdateChunkLodsInput!): Chunk
   """
   Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and (when grids cover the chunk) `update_voxel_data` on a covering grid.
   """
-  updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
+  updateVoxel(input: UpdateVoxelInput!): Voxel!
   """
   Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass).
   """
-  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]!
   """
   Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit within one of the app's grid assignments (its buildable regions); it MAY be nested inside a broader containing grid such as the open-by-default world grid, but must not partially overlap a peer grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS).
   """
@@ -4695,14 +4806,14 @@ type Mutation {
     Target app plus the two opposite corners of the grid box, in chunk coordinates. Corners are normalized to a low/high chunk, so their order does not matter.
     """
     input: CreateGridInput!
-  ): CreateGridResponse! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): CreateGridResponse!
   """
   Delete a studio-created peer grid so its chunk box no longer blocks overlapping grid creation. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `gridId` is populated and `error` is NO_ERROR; on failure `gridId` is null and `error` is a UDP-style error code (e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN). The open-by-default world grid and any grid that still contains nested child grids cannot be deleted.
   """
   deleteGrid(
     """The app and grid to delete."""
     input: DeleteGridInput!
-  ): DeleteGridResponse! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): DeleteGridResponse!
   """
   Grant one or more runtime permission keys directly to a single user on a grid (writes the `grid_user_direct_grants` input table), then recompute that user's materialized effective ACL on the grid. The target user must already have active app access (otherwise this fails). Requires app-admin ('manage_apps'). Returns the user's full effective permission-key set on the grid. To grant by group/role instead of per-user, use `assignGroupToGrid`.
   """
@@ -4711,7 +4822,7 @@ type Mutation {
     The app, grid, and target user, the runtime permission keys to grant, and an optional expiry timestamp.
     """
     input: GrantGridPermissionsInput!
-  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GridUserPermissions!
   """
   Revoke a user's direct grants on a grid (deletes from the `grid_user_direct_grants` input table) and recompute their materialized effective ACL. Omit `permissionKeys` to remove ALL of the user's direct grants on the grid; pass a subset to remove only those keys. Does not affect permissions the user receives via group grants. Requires app-admin ('manage_apps'). DESTRUCTIVE for the targeted grants. Returns the user's remaining effective permission keys on the grid.
   """
@@ -4720,7 +4831,7 @@ type Mutation {
     The app, grid, and target user; optionally the subset of permission keys to revoke (omit to revoke all of the user's direct grants).
     """
     input: RevokeGridPermissionsInput!
-  ): GridUserPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GridUserPermissions!
   """
   Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid.
   """
@@ -4729,7 +4840,7 @@ type Mutation {
     The app, grid, and the new whitelist of allowed permission keys (empty array = no limit).
     """
     input: SetGridPermissionLimitsInput!
-  ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GridPermissionLimits!
   """
   Grant runtime permission keys to a group (optionally scoped to a single group role) on a grid by writing the `grid_group_grants` input table, then recompute the materialized effective ACL so every affected member gains the keys. Requires app-admin ('manage_apps'). Returns the grid's current group grants for the group. Use `grantGridPermissions` for per-user grants instead.
   """
@@ -4738,7 +4849,7 @@ type Mutation {
     The app, grid, and target group; an optional group role to scope the grant to; the runtime permission keys to grant; and an optional expiry timestamp.
     """
     input: AssignGroupToGridInput!
-  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): [GridGroupGrant!]!
   """
   Revoke group/role grants on a grid (deletes from the `grid_group_grants` input table) and recompute the materialized effective ACL. Omit `permissionKeys` to revoke ALL of the group/role's grants on the grid; pass a subset to revoke only those keys. Requires app-admin ('manage_apps'). DESTRUCTIVE: removes the granted permissions from every affected member. Returns the group's remaining grants on the grid.
   """
@@ -4747,7 +4858,7 @@ type Mutation {
     The app, grid, and target group, plus an optional group role; optionally the subset of permission keys to revoke (omit to revoke all of the group/role's grants).
     """
     input: RevokeGroupFromGridInput!
-  ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): [GridGroupGrant!]!
   """
   Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams.
   """
@@ -4772,7 +4883,7 @@ type Mutation {
   updateTeam(
     """The team id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateTeamInput!
-  ): Group! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "input.groupId")
+  ): Group!
   """
   Delete a team. Requires the 'manage_group' team permission (app admins bypass). DESTRUCTIVE: cascades to members, roles, and any grid grants the team conferred, and recomputes the effective grid ACL for affected grids. Returns true on success.
   """
@@ -4783,7 +4894,7 @@ type Mutation {
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
     idempotencyKey: String
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "groupId")
+  ): Boolean!
   """
   Join a team as the caller. Honors the team membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. Banned users are rejected. No special permission required.
   """
@@ -4817,7 +4928,7 @@ type Mutation {
     groupId: BigInt!
     """The user to add or approve."""
     userId: BigInt!
-  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  ): GroupMember!
   """
   Remove a member from a team. Requires the 'manage_members' team permission, except that any member may remove themselves. DESTRUCTIVE: drops the membership and its roles. Returns true if a membership was removed.
   """
@@ -4826,7 +4937,7 @@ type Mutation {
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
     userId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  ): Boolean!
   """
   Replace a member's roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' team permission (app admins bypass).
   """
@@ -4835,7 +4946,7 @@ type Mutation {
     The team, the target user, and the full list of role ids the member should have.
     """
     input: SetMemberRolesInput!
-  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
+  ): GroupMember!
   """
   Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs).
   """
@@ -4844,21 +4955,21 @@ type Mutation {
     The team, the role name, the team permission keys to grant, and an optional rank.
     """
     input: CreateGroupRoleInput!
-  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
+  ): GroupRole!
   """
   Update a team role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' team permission (app admins bypass).
   """
   updateTeamRole(
     """The role id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateGroupRoleInput!
-  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupRoleId")
+  ): GroupRole!
   """
   Delete a non-system team role. Requires the 'manage_roles' team permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members and recomputes any grid ACLs the role granted on. Returns true if a role was deleted.
   """
   deleteTeamRole(
     """The team role to delete (must be a non-system role)."""
     groupRoleId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "groupRoleId")
+  ): Boolean!
   """
   Set who may create channels in an app and the default membership policy for new channels. Requires app-admin ('manage_apps'). Affects future channel creation only, not existing channels.
   """
@@ -4885,14 +4996,14 @@ type Mutation {
     The channel id plus the fields to change (omitted fields are left as-is).
     """
     input: UpdateChannelInput!
-  ): Group! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "input.groupId")
+  ): Group!
   """
   Delete a channel. Requires the 'manage_group' channel permission (app admins bypass). DESTRUCTIVE: cascades to members and roles and notifies Buddy servers to tear down message routing for the channel. Returns true on success.
   """
   deleteChannel(
     """The channel to delete."""
     groupId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_group", scopeArg: "groupId")
+  ): Boolean!
   """
   Join a channel as the caller (subscribe to it). Honors the channel membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. On becoming active, Buddy is notified with the caller's effective send permission so routing starts.
   """
@@ -4922,7 +5033,7 @@ type Mutation {
     groupId: BigInt!
     """The user to add or approve."""
     userId: BigInt!
-  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  ): GroupMember!
   """
   Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed.
   """
@@ -4931,7 +5042,7 @@ type Mutation {
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
     userId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  ): Boolean!
   """
   Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately.
   """
@@ -4940,7 +5051,7 @@ type Mutation {
     The channel, the target user, and the full list of role ids the member should have.
     """
     input: SetMemberRolesInput!
-  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
+  ): GroupMember!
   """
   Create a custom (non-system) channel role granting the given channel permission keys (e.g. send_messages for posting rights). Requires the 'manage_roles' channel permission (app admins bypass).
   """
@@ -4949,21 +5060,21 @@ type Mutation {
     The channel, the role name, the channel permission keys to grant, and an optional rank.
     """
     input: CreateGroupRoleInput!
-  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupId")
+  ): GroupRole!
   """
   Update a channel role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' channel permission (app admins bypass). Note: changing send_messages here does not re-push Buddy until affected members' roles are re-applied via setChannelMemberRoles.
   """
   updateChannelRole(
     """The role id plus the fields to change (omitted fields are left as-is)."""
     input: UpdateGroupRoleInput!
-  ): GroupRole! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "input.groupRoleId")
+  ): GroupRole!
   """
   Delete a non-system channel role. Requires the 'manage_roles' channel permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members. Returns true if a role was deleted.
   """
   deleteChannelRole(
     """The channel role to delete (must be a non-system role)."""
     groupRoleId: BigInt!
-  ): Boolean! @requiresPermission(scope: "group", permission: "manage_roles", scopeArg: "groupRoleId")
+  ): Boolean!
   """
   Create or update a container type: the studio-defined schema for a kind of runtime entity (like a class). Idempotent on (app, typeName). Requires app-admin ('manage_apps').
   """
@@ -4972,7 +5083,7 @@ type Mutation {
     The app, type name, display name, and optional instantiableBy / default property visibility / metadata.
     """
     input: UpsertContainerTypeInput!
-  ): GmContainerType! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmContainerType!
   """
   Create or update a property definition on a container type (a typed field with default value, visibility, and writability). Idempotent on (app, containerTypeName, key). Requires app-admin ('manage_apps').
   """
@@ -4981,7 +5092,7 @@ type Mutation {
     The app, container type, property key, value type, and optional default/visibility/writability/description.
     """
     input: UpsertPropertyDefInput!
-  ): GmPropertyDef! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmPropertyDef!
   """
   Delete a property definition from a container type. Does not remove instance property values already stored on containers. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a definition was deleted.
   """
@@ -4992,7 +5103,7 @@ type Mutation {
     containerTypeName: String!
     """The property key to delete."""
     key: String!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): Boolean!
   """
   Delete a container type. Also deletes its property definitions. Refuses if live containers of that type exist, or if functions are bound to it — delete those first. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a type was deleted.
   """
@@ -5001,7 +5112,7 @@ type Mutation {
     appId: BigInt!
     """The container type name to delete."""
     typeName: String!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): Boolean!
   """
   Create or update a studio-defined function: a named, sandboxed behavior with typed parameters, declared property mutations (expressions compiled to an AST server-side, never eval'd), an optional return expression, an invoke scope, and an invoke policy (authority rule tree). Idempotent on (app, name). Requires app-admin ('manage_apps'). Returns the function plus any non-fatal static-analysis warnings.
   """
@@ -5010,7 +5121,7 @@ type Mutation {
     The full function definition: app, name, optional container type binding, parameters, mutations, return expression, invoke scope, and invoke-policy JSON.
     """
     input: UpsertFunctionInput!
-  ): GmFunction! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmFunction!
   """
   Delete a studio-defined function by name. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a function was deleted.
   """
@@ -5019,7 +5130,7 @@ type Mutation {
     appId: BigInt!
     """The function name to delete."""
     name: String!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): Boolean!
   """
   Bulk-create game-model definitions (container types, property defs, functions) and optionally instances (containers + edges) in one transaction — used to initialize or import a model. Requires app-admin ('manage_apps'). Returns counts created, warnings, and a map of seed temp_id -> created container UUID.
   """
@@ -5028,7 +5139,7 @@ type Mutation {
     The app, an optional target session for instances, and arrays of container types, property defs, functions, containers, and edges to create.
     """
     input: SeedGameModelInput!
-  ): GmSeedResult! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmSeedResult!
   """
   Set the app's game-model runtime policy: who may create sessions (admin | member | anyone) and the default participant role. Requires app-admin ('manage_apps').
   """
@@ -5037,28 +5148,28 @@ type Mutation {
     The app plus the session creation policy and/or default participant role to set.
     """
     input: SetGameModelPolicyInput!
-  ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmAppPolicy!
   """
   Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps').
   """
   gameModelDefineFeature(
     """The app, the feature key, and an optional description."""
     input: DefineAppFeatureInput!
-  ): GmAppFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmAppFeature!
   """
   Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps').
   """
   gameModelGrantTierFeature(
     """The app, the tier id, and the feature key to grant to that tier."""
     input: GrantTierFeatureInput!
-  ): GmTierFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmTierFeature!
   """
   Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed.
   """
   gameModelRevokeTierFeature(
     """The app, the tier id, and the feature key to revoke from that tier."""
     input: GrantTierFeatureInput!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): Boolean!
   """
   Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps').
   """
@@ -5067,7 +5178,7 @@ type Mutation {
     The automation definition: app, name, entry-point function, target mode + selector, trigger/schedule, run-as identity, and safety budget.
     """
     input: UpsertAutomationInput!
-  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmAutomation!
   """
   Delete an automation by name (also removes its event triggers). Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if one was deleted.
   """
@@ -5076,7 +5187,7 @@ type Mutation {
     appId: BigInt!
     """The automation name to delete."""
     name: String!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): Boolean!
   """
   Enable or disable an automation. Re-enabling also resets its circuit breaker (closed, zero failures, no pause) so a tripped automation resumes. Requires app-admin ('manage_apps').
   """
@@ -5087,7 +5198,7 @@ type Mutation {
     name: String!
     """True to enable (and reset the circuit); false to pause."""
     enabled: Boolean!
-  ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmAutomation!
   """
   Create an event trigger that fires an automation in reaction to model activity (a function invocation, a direct property write, or a container creation). Matched in the API server post-commit. Requires app-admin ('manage_apps').
   """
@@ -5096,7 +5207,7 @@ type Mutation {
     The app, the target automation (by name), the model event, and optional filters.
     """
     input: UpsertAutomationTriggerInput!
-  ): GmAutomationTrigger! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmAutomationTrigger!
   """
   Delete an automation event trigger by id. Requires app-admin ('manage_apps'). Returns true if one was deleted.
   """
@@ -5105,14 +5216,14 @@ type Mutation {
     appId: BigInt!
     """The trigger id (UUID) to delete."""
     triggerId: String!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): Boolean!
   """
   Set the app's automation policy (platform guardrails): the kill switch, max automations, the minimum schedule interval floor, max fan-out, max event cascade depth, and the aggregate per-minute run ceiling. Requires app-admin ('manage_apps').
   """
   gameModelSetAutomationPolicy(
     """The app plus any guardrail fields to set."""
     input: SetAutomationPolicyInput!
-  ): GmAutomationPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  ): GmAutomationPolicy!
   """
   Run an automation once, immediately (manual trigger), regardless of its schedule. Applies the same guard chain (app gate, rate limit, circuit) and records a run. Useful for testing an NPC. Requires app-admin ('manage_apps').
   """
@@ -5121,7 +5232,7 @@ type Mutation {
     appId: BigInt!
     """The automation name to run now."""
     name: String!
-  ): GmAutomationRun! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  ): GmAutomationRun!
   """
   Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save). Subject to the app's session creation policy. The caller becomes the creator and a participant. Requires a valid token.
   """
@@ -5213,14 +5324,14 @@ type Mutation {
     Optional module name override (defaults to the template name); use it to run two parameterizations side by side.
     """
     moduleName: String
-  ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  ): WasmModule!
   """
   Create or update a WASM compute module (metadata only). Modules hold developer-authored Rust compiled to sandboxed WASM on game-api instances; upload source with computeDeployVersion. New modules start disabled. Upsert key is (app, name). Requires the org 'manage_compute' permission.
   """
   computeUpsertModule(
     """The app, module name (upsert key), and metadata."""
     input: UpsertComputeModuleInput!
-  ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  ): WasmModule!
   """
   Upload a new immutable source version of a compute module and make it the deployed version. The source map is validated (Cargo.toml + src/*.rs only, size caps, platform crate allowlist, no build-time code) and parked as compile_status=pending; a game-api instance compiles it before it can run. Requires the org 'manage_compute' permission.
   """
@@ -5229,7 +5340,7 @@ type Mutation {
     The app, module name, source-file map (JSON), and SDK/ABI version pins.
     """
     input: DeployComputeVersionInput!
-  ): WasmModuleVersion! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  ): WasmModuleVersion!
   """
   Enable or disable a compute module. Enabling requires a deployed version and resets the module's circuit breaker; disabling stops all scheduling. Requires the org 'manage_compute' permission.
   """
@@ -5240,7 +5351,7 @@ type Mutation {
     name: String!
     """True to enable (and reset the circuit); false to stop."""
     enabled: Boolean!
-  ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  ): WasmModule!
   """
   Delete a compute module and (via cascade) its versions, triggers, and lease. Run history is retained for auditing. Returns true when a module was deleted. Requires the org 'manage_compute' permission.
   """
@@ -5249,14 +5360,14 @@ type Mutation {
     appId: BigInt!
     """The module name to delete."""
     name: String!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  ): Boolean!
   """
   Bind a trigger to a compute module: a tick loop (tickHz, clamped by policy), an event subscription (model or compute events), or a client-invokable export (with an optional invoke policy). Requires the org 'manage_compute' permission.
   """
   computeUpsertTrigger(
     """The app, module name, trigger type, and type-specific fields."""
     input: UpsertComputeTriggerInput!
-  ): WasmModuleTrigger! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  ): WasmModuleTrigger!
   """
   Delete a compute-module trigger by id. Returns true when a trigger was deleted. Requires the org 'manage_compute' permission.
   """
@@ -5265,14 +5376,14 @@ type Mutation {
     appId: BigInt!
     """The trigger id (UUID) to delete."""
     triggerId: String!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  ): Boolean!
   """
   Set the app's compute policy (platform guardrails): the kill switch, module count / tick-rate / fuel / memory / runtime / host-op / egress ceilings, and circuit-breaker tuning. Omitted fields keep current values. Requires the org 'manage_compute' permission.
   """
   computeSetPolicy(
     """The app plus any guardrail fields to set."""
     input: SetComputePolicyInput!
-  ): WasmModulePolicy! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  ): WasmModulePolicy!
   """
   Invoke a compute module's client-callable export (a trigger with triggerType=invoke). Synchronous RPC: the module runs and returns its result directly (unlike the spatial send surface's dual-success model). Authorization: the export's invoke policy (authority tree) — or holders of 'manage_compute' only when no policy is set. Requires a valid app token.
   """
@@ -5320,7 +5431,7 @@ type Mutation {
     The voice/audio packet to send: target appId, chunk coordinates, 32-byte source uuid, base64 (compressed) audioData, and optional distance/decayRate/sequenceNumber. See ClientAudioPacketInput.
     """
     input: ClientAudioPacketInput!
-  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_voice_chat", scopeArg: "input.appId")
+  ): Boolean!
   """
   Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
@@ -5943,33 +6054,6 @@ input UpdateEnvironmentBillingTiersInput {
   graphqlBillingTier: Int
   """Postgres billing tier level from postgresBillingTiers."""
   postgresBillingTier: Int
-}
-
-input RedeployEnvironmentInput {
-  orgId: BigInt!
-  slug: String!
-  """
-  Target environment version. When omitted, redeploys to the latest available version for the class. Must be available, deployable by this class, and not older than the current version (forward-only — no rollback).
-  """
-  version: String
-  """
-  How to roll out the version. When omitted, routes to services-only when active runtime VMs exist, otherwise full.
-  """
-  deployMode: RedeployDeployMode
-}
-
-"""
-How redeployEnvironment rolls out a new version. Omit for automatic routing (services-only when active runtime VMs exist, otherwise full).
-"""
-enum RedeployDeployMode {
-  """
-  Replace the runtime VMs (reprovision game-api / Buddy instances). Slower; use when the box image or infra must change.
-  """
-  FULL
-  """
-  Update services in place on the existing runtime VMs (no VM replacement). Faster; only valid when active runtime VMs exist.
-  """
-  SERVICES
 }
 
 input RestartEnvironmentServicesInput {
