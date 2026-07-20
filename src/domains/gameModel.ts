@@ -1,4 +1,6 @@
 import type { GraphQLClient } from '../client.js';
+import { createClient as createWsClient } from 'graphql-ws';
+import { print } from 'graphql';
 
 import {
   // Runtime (player) ops
@@ -32,6 +34,9 @@ import {
   GameModelContainerDocument,
   type GameModelContainerQuery,
   type GameModelContainerQueryVariables,
+  GameModelContainerChangedDocument,
+  GameModelContainerChangedSubscription,
+  GameModelContainerChangedSubscriptionVariables,
   GameModelContainersDocument,
   type GameModelContainersQuery,
   type GameModelContainersQueryVariables,
@@ -232,8 +237,87 @@ import {
  * if (!result.success) console.warn(result.errorMessage); // authority/eval failures don't throw
  * ```
  */
+/** One container-change push from {@link GameModelAPI.containerChanged}. */
+export type GmContainerChangeEvent =
+  GameModelContainerChangedSubscription['gameModelContainerChanged'];
+
+/** Handlers for {@link GameModelAPI.containerChanged}. */
+export interface ContainerChangedHandlers {
+  /** A container changed (metadata only — pull state on receipt). */
+  next: (change: GmContainerChangeEvent) => void;
+  /** Transport/GraphQL errors (the subscription retries on socket drops). */
+  error?: (error: unknown) => void;
+  /** The server ended the stream. */
+  complete?: () => void;
+  /**
+   * WebSocket constructor for runtimes without a global `WebSocket` (Node
+   * ≤ 21): pass `(await import('ws')).default`.
+   */
+  webSocketImpl?: unknown;
+}
+
 export class GameModelAPI {
-  constructor(private gql: GraphQLClient) {}
+  constructor(
+    private gql: GraphQLClient,
+    private readonly ws?: { wsUrl?: string; getToken: () => string | null },
+  ) {}
+
+  /**
+   * **Subscriptions** — stream container-change notifications for an app
+   * (`gameModelContainerChanged`): an invoke mutated a container, a direct
+   * `setProperty` wrote it, or it was created/deleted. Events are
+   * **metadata only** (containerId, typeName, changedKeys — no property
+   * values): pull the visibility-filtered state with {@link containerState}
+   * on receipt. Post-commit and best-effort, exactly like model-driven
+   * notifications — replaces interval polling with pull-on-push. Requires a
+   * game-api with the container-change feed (2026-07+) and a `wsUrl` in the
+   * client config.
+   *
+   * @param variables - `{ appId, typeName?, sessionId? }` delivery filters.
+   * @param handlers - `next` per change; optional `error` / `complete`.
+   * @returns An unsubscribe function (closes this subscription's socket).
+   */
+  containerChanged(
+    variables: GameModelContainerChangedSubscriptionVariables,
+    handlers: ContainerChangedHandlers,
+  ): () => void {
+    if (!this.ws?.wsUrl) {
+      throw new Error(
+        'containerChanged requires a wsUrl in the client config (graphql-transport-ws endpoint)',
+      );
+    }
+    const client = createWsClient({
+      url: this.ws.wsUrl,
+      lazy: false,
+      retryAttempts: 8,
+      ...(handlers.webSocketImpl
+        ? { webSocketImpl: handlers.webSocketImpl as never }
+        : {}),
+      connectionParams: () => {
+        const token = this.ws?.getToken();
+        return token ? { Authorization: `Bearer ${token}` } : {};
+      },
+    });
+    const dispose = client.subscribe(
+      { query: print(GameModelContainerChangedDocument), variables },
+      {
+        next: (msg: { data?: unknown; errors?: unknown }) => {
+          const data = msg.data as GameModelContainerChangedSubscription | undefined;
+          if (data?.gameModelContainerChanged) {
+            handlers.next(data.gameModelContainerChanged);
+          } else if (msg.errors) {
+            handlers.error?.(msg.errors);
+          }
+        },
+        error: (err) => handlers.error?.(err),
+        complete: () => handlers.complete?.(),
+      },
+    );
+    return () => {
+      dispose();
+      void client.dispose();
+    };
+  }
 
   // -- Runtime (player) -------------------------------------------------------
 

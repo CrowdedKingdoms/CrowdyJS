@@ -116,6 +116,27 @@ query GameModelContainers(
   }
 }
 
+subscription GameModelContainerChanged(
+  $appId: BigInt!
+  $typeName: String
+  $sessionId: String
+) {
+  gameModelContainerChanged(
+    appId: $appId
+    typeName: $typeName
+    sessionId: $sessionId
+  ) {
+    appId
+    containerId
+    typeName
+    sessionId
+    source
+    functionName
+    changedKeys
+    occurredAt
+  }
+}
+
 query GameModelContainerState($appId: BigInt!, $containerId: String!) {
   gameModelContainerState(appId: $appId, containerId: $containerId) {
     containerId

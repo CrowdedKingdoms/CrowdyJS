@@ -1,4 +1,9 @@
 export {
+  runOptimisticAction,
+  type OptimisticActionOutcome,
+  type OptimisticActionSpec,
+} from './actions.js';
+export {
   andPolicies,
   combatBlueprint,
   combatNames,
