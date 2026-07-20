@@ -7199,6 +7199,14 @@ type WasmAppDiagnostics {
   fuelUsed24h: BigInt!
   """Most-active modules in the last 24h."""
   topModules: [WasmTopModule!]!
+  """
+  Rust compiler version of the toolchain on the replica that served this query (the boot-logged fingerprint; replicas with skewed toolchains produce disjoint compile-cache keys). Null when the toolchain is not provisioned on this host.
+  """
+  toolchainRustVersion: String
+  """
+  wasm-opt version of the toolchain on the replica that served this query. Null when the toolchain is not provisioned on this host.
+  """
+  toolchainWasmOptVersion: String
 }
 
 """
