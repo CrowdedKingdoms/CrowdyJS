@@ -4,7 +4,10 @@ fragment GmAutomationFields on GmAutomation {
   name
   description
   enabled
+  actionKind
   functionName
+  computeModuleName
+  computeExport
   targetMode
   selfContainerId
   targetTypeName

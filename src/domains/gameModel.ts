@@ -453,13 +453,21 @@ export class GameModelAPI {
 
   /**
    * **Containers** — list containers in an app, optionally narrowed by container
-   * type and/or session.
+   * type and/or session, filtered by property predicates, and paged.
    *
-   * @param variables - `{ appId, typeName?, sessionId? }`: `appId` (decimal
-   *   string); optional `typeName` (omit for all types); optional `sessionId`
-   *   (omit for all containers, including app-global ones).
+   * @param variables - `{ appId, typeName?, sessionId?, where?, limit?, offset? }`:
+   *   `appId` (decimal string); optional `typeName` (omit for all types);
+   *   optional `sessionId` (omit for all containers, including app-global
+   *   ones); optional `where` (max 8 AND-combined
+   *   `{ key, op, valueJson }` predicates — ops `==`, `!=`, `<`, `>`, `<=`,
+   *   `>=`; requires `typeName`; missing properties fall back to the type
+   *   default — the same predicate shape automation selectors use); optional
+   *   `limit`/`offset` paging applied after filtering over the stable
+   *   created-at ordering. Requires game-api with container predicates
+   *   (2026-07 or later); older servers reject the new arguments.
    * @returns The matching {@link GmContainer}s.
-   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`, or
+   *   `BAD_USER_INPUT` for `where` without `typeName` / unsupported ops.
    */
   async containers(
     variables: GameModelContainersQueryVariables,
@@ -979,9 +987,14 @@ export class GameModelAPI {
    * Requires the app-admin **`manage_apps`** permission.
    *
    * @param input - {@link UpsertAutomationInput}: `appId`; `name` (upsert key);
-   *   `functionName`; `targetMode` (`container | type | global`) with
-   *   `selfContainerId` / `targetTypeName`; optional `sessionId`, `paramsJson`,
-   *   `selectorJson` (model-data candidate selection), `runAsUserId`; the trigger
+   *   the action — `actionKind: 'model_function'` (default) with
+   *   `functionName`, or `actionKind: 'compute_invoke'` with
+   *   `computeModuleName` + `computeExport` (invokes a compute-module invoke
+   *   export on the trusted server path; `targetMode` forced to `global`,
+   *   selectors don't apply — requires game-api 2026-07+); `targetMode`
+   *   (`container | type | global`) with `selfContainerId` /
+   *   `targetTypeName`; optional `sessionId`, `paramsJson`, `selectorJson`
+   *   (model-data candidate selection), `runAsUserId`; the trigger
    *   (`triggerType`, `scheduleKind`, `intervalMs` / `cronExpr`); and the safety
    *   budget (`maxTargets`, `maxFnDepth`, `gasLimit`, `runTimeoutMs`,
    *   `maxRunsPerMinute`, `failureThreshold`, `cooldownMs`).
