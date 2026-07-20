@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '8.9.0';
+export const VERSION = '8.10.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -156,7 +156,9 @@ export {
   featureGate,
   guildBlueprint,
   guildNames,
+  inventoryBarterFunctionName,
   inventoryBlueprint,
+  inventoryCraftFunctionName,
   inventoryNames,
   kitInvoke,
   kitPolicyJson,
@@ -205,9 +207,11 @@ export {
   type GameKitOptions,
   type GuildBlueprintOptions,
   type GuildNames,
+  type InventoryBarterSpec,
   type InventoryBlueprintOptions,
   type InventoryKitOptions,
   type InventoryNames,
+  type InventoryRecipeSpec,
   type KitAchievementDef,
   type KitAchievementUnlock,
   type KitAutomationSpec,

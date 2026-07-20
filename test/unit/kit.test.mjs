@@ -49,6 +49,60 @@ test('inventoryBlueprint generates owner-gated types and functions', async () =>
   assert.equal(inventoryNames('Bank').grantFn, 'bank_grant_stack');
 });
 
+test('inventoryBlueprint generates atomic crafting and barter transactions', async () => {
+  const { inventoryBlueprint } = await loadSdk();
+  const bp = inventoryBlueprint({
+    recipes: [
+      {
+        recipeId: 'wood-planks',
+        inputs: [{ itemId: 'wood', quantity: 2 }],
+        output: { itemId: 'plank', quantity: 4 },
+      },
+    ],
+    barters: [
+      {
+        barterId: 'wheat-for-emerald',
+        pay: { itemId: 'wheat', quantity: 5 },
+        receive: { itemId: 'emerald', quantity: 1 },
+      },
+    ],
+  });
+  const craft = bp.functions.find((fn) => fn.name === 'craft_wood_planks');
+  assert.ok(craft);
+  assert.equal(craft.autonomousInvocable, true);
+  assert.deepEqual(
+    craft.mutations.map((m) => [m.target, m.property]),
+    [
+      ['ref($input_0_id)', 'quantity'],
+      ['ref($output_id)', 'quantity'],
+    ],
+  );
+  const craftGuard = JSON.parse(craft.invokePolicyJson).rules.find(
+    (rule) => rule.type === 'condition',
+  ).expression;
+  assert.match(craftGuard, /item_id == "wood"/);
+  assert.match(craftGuard, /quantity >= 2/);
+  assert.match(craftGuard, /item_id == "plank"/);
+
+  const barter = bp.functions.find((fn) => fn.name === 'barter_wheat_for_emerald');
+  assert.ok(barter);
+  assert.equal(barter.autonomousInvocable, true);
+  assert.equal(barter.mutations.length, 2);
+  assert.throws(
+    () =>
+      inventoryBlueprint({
+        recipes: [
+          {
+            recipeId: 'too-many',
+            inputs: new Array(7).fill({ itemId: 'x', quantity: 1 }),
+            output: { itemId: 'y', quantity: 1 },
+          },
+        ],
+      }),
+    /1-6 inputs/,
+  );
+});
+
 test('lockBlueprint maps authority sources onto invoke policies', async () => {
   const { lockBlueprint } = await loadSdk();
 

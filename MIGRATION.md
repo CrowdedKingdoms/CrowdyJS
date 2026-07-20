@@ -1,3 +1,19 @@
+# CrowdyJS v8.10 Notes
+
+## Added
+
+- `inventoryBlueprint({ recipes, barters })` generates atomic Model
+  transactions; `kit.inventory.craft(...)` and `.barter(...)` invoke them.
+- Competitive inventory posture:
+  `stackInstantiableBy: 'admin'`, `grantAuthority: 'server'`, plus matching
+  runtime `ownerIdKind` for legacy string-owner worlds.
+- Compute SDK default `0.1.3`, including transactional `model_invoke` and
+  explicitly owned module-created containers.
+
+This release is additive. The default inventory posture remains
+member-created/owner-grant for compatibility; competitive games should opt
+into the hardened posture and provide a trusted stack bootstrap.
+
 # CrowdyJS v8.9 Notes
 
 ## Added
