@@ -14,6 +14,7 @@ import {
   UpdateEnvironmentScalingDocument,
   UpdateEnvironmentBillingTiersDocument,
   RedeployEnvironmentDocument,
+  EnvironmentRedeployPlanDocument,
   RestartEnvironmentServicesDocument,
   LinkAppToEnvironmentDocument,
   type OrgEnvironmentsQuery,
@@ -30,6 +31,7 @@ import {
   type UpdateEnvironmentScalingMutation,
   type UpdateEnvironmentBillingTiersMutation,
   type RedeployEnvironmentMutation,
+  type EnvironmentRedeployPlanQuery,
   type RestartEnvironmentServicesMutation,
   type LinkAppToEnvironmentMutation,
   type EnvironmentQuoteInput,
@@ -279,8 +281,29 @@ export class EnvironmentsAPI {
   }
 
   /**
+   * DRY RUN of {@link redeploy}: what moving the environment to a target
+   * release version would do — component version diffs (game-api, Buddy),
+   * whether game-DB schema DDL applies or is skipped, and the pipeline
+   * tasks/steps that would run — without creating a change order or touching
+   * any VM. Anything that would make the real mutation fail is returned in
+   * `blockers`. Read-only; requires `view_environments`.
+   *
+   * @param input - {@link RedeployEnvironmentInput} (same shape as redeploy).
+   * @returns The plan preview.
+   */
+  async redeployPlan(
+    input: RedeployEnvironmentInput,
+  ): Promise<EnvironmentRedeployPlanQuery['environmentRedeployPlan']> {
+    const data = await this.management.request(
+      EnvironmentRedeployPlanDocument,
+      { input },
+    );
+    return data.environmentRedeployPlan;
+  }
+
+  /**
    * Deploy a (forward-only) environment release version. Requires
-   * `manage_environments`.
+   * `manage_environments`. Preview first with {@link redeployPlan}.
    *
    * @param input - {@link RedeployEnvironmentInput} (target version).
    * @returns The deploy {@link CksEnvironmentChangeOrder}.

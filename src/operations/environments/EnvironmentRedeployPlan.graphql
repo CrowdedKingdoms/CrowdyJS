@@ -1,0 +1,24 @@
+query EnvironmentRedeployPlan($input: RedeployEnvironmentInput!) {
+  environmentRedeployPlan(input: $input) {
+    environmentSlug
+    currentVersion
+    targetVersion
+    deployMode
+    changeOrderKind
+    schemaWillApply
+    schemaGitRef
+    componentChanges {
+      component
+      fromVersion
+      toVersion
+      changed
+    }
+    tasks {
+      kind
+      dependsOn
+      steps
+    }
+    blockers
+    notes
+  }
+}
