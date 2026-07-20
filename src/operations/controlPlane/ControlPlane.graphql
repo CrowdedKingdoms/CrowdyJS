@@ -312,3 +312,35 @@ mutation PublishEnvironmentReleaseFromGameApiTag(
 mutation YankEnvironmentVersion($version: String!) {
   yankEnvironmentVersion(version: $version)
 }
+
+query CpComputePlatformCeilings {
+  cpComputePlatformCeilings {
+    maxModules
+    maxTickHz
+    fuelPerTick
+    fuelPerInvoke
+    maxMemoryMb
+    maxRunMs
+    maxDbOpsPerTick
+    maxEgressMsgsPerMin
+    maxEgressBytesPerMin
+    updatedAt
+    updatedByUserId
+  }
+}
+
+mutation CpSetComputePlatformCeilings($input: CpSetComputePlatformCeilingsInput!) {
+  cpSetComputePlatformCeilings(input: $input) {
+    maxModules
+    maxTickHz
+    fuelPerTick
+    fuelPerInvoke
+    maxMemoryMb
+    maxRunMs
+    maxDbOpsPerTick
+    maxEgressMsgsPerMin
+    maxEgressBytesPerMin
+    updatedAt
+    updatedByUserId
+  }
+}
