@@ -7435,6 +7435,32 @@ type GmSeedResult {
   idMapJson: String!
 }
 
+"""
+One container-change notification from gameModelContainerChanged. Metadata only (no property values): clients pull the visibility-filtered state with gameModelContainerState on receipt. Delivery is post-commit and best-effort, like model-driven notifications.
+"""
+type GmContainerChange {
+  """The app (tenant)."""
+  appId: BigInt!
+  """The container that changed."""
+  containerId: String!
+  """The container type (null if the type is unknown)."""
+  typeName: String
+  """The session scope of the change, when any."""
+  sessionId: String
+  """
+  What changed it: 'function' (invoke mutation), 'direct' (gameModelSetProperty), 'created', or 'deleted'.
+  """
+  source: String!
+  """For source='function': the function that mutated it."""
+  functionName: String
+  """
+  The property keys the change touched (empty for created/deleted; clamped to 32 keys).
+  """
+  changedKeys: [String!]!
+  """When the change committed."""
+  occurredAt: DateTime!
+}
+
 """An edge in a GmEvent connection."""
 type GmEventEdge {
   """Opaque cursor for this edge."""
@@ -7563,6 +7589,10 @@ type WasmModuleTrigger {
   For invoke triggers: JSON authority tree gating who may invoke. Null = app admins only.
   """
   invokePolicyJson: String
+  """
+  For invoke triggers: the typed contract (JSON: params/result field maps with int|float|string|bool|object|array types). The platform validates computeInvoke params against it pre-sandbox; client codegen reads it for typed wrappers. Null = undeclared.
+  """
+  contractJson: String
   """When the trigger was created."""
   createdAt: DateTime!
 }
@@ -9033,6 +9063,10 @@ input UpsertComputeTriggerInput {
   For invoke triggers: JSON authority tree gating who may invoke (same shape as game-model function invoke policies). Null = app admins only.
   """
   invokePolicyJson: String
+  """
+  For invoke triggers: optional typed contract (JSON): {"params": {name: {type, required?, description?}}, "result": {...}, "description"?}. Types: int|float|string|bool|object|array. Declared params are validated on computeInvoke BEFORE the sandbox runs (required presence + type; undeclared params pass through); result is documentation/codegen only. Null = no validation.
+  """
+  contractJson: String
 }
 
 """
@@ -9274,6 +9308,17 @@ input ChannelMessageInput {
 }
 
 type Subscription {
+  """
+  Push notification whenever a container in the app changes: an invoke mutated it, a direct gameModelSetProperty wrote it, or it was created/deleted. Metadata only (containerId, typeName, changedKeys — no property values); pull the visibility-filtered state with gameModelContainerState on receipt. Post-commit and best-effort (a dropped event costs one missed pull, never correctness) — durable reads remain the source of truth. Optional typeName/sessionId filters narrow delivery. Fans out across all API replicas. Requires a valid token. Replaces interval polling with pull-on-push.
+  """
+  gameModelContainerChanged(
+    """The app (tenant) whose container changes to stream."""
+    appId: BigInt!
+    """Optional: only changes to containers of this type."""
+    typeName: String
+    """Optional: only changes scoped to this session."""
+    sessionId: String
+  ): GmContainerChange!
   """
   Realtime downlink from the game server: spatial notifications and responses, GenericErrorResponse (errors from your sends, correlated by sequenceNumber), and RealtimeConnectionEvent (lifecycle/setup failures). Requires a bearer game token AND an appId-scoped connection — the appId is read from the graphql-transport-ws connection (game tokens are app-agnostic and one UDP socket is shared across apps, so an app-agnostic subscription is rejected with a RealtimeConnectionEvent code APP_ID_REQUIRED, and a missing/invalid token with AUTH_REQUIRED). On subscribe, opens a UDP proxy session if none exists (binds to the least-loaded game server); open/transport failures are delivered as RealtimeConnectionEvent (code UDP_PROXY_CONNECTION_FAILED) and then the stream ends. Only this app’s spatial fan-out is delivered; appId-less control frames always pass. Subscribe before/while sending so async results are not missed. Unsubscribing stops delivery only — it does NOT close the UDP session; call disconnectUdpProxy (or rely on the server inactivity timeout) to release it.
   """

@@ -282,7 +282,10 @@ export class CrowdyClient {
     this.channels = new ChannelsAPI(this.graphql);
     this.teams = new TeamsAPI(this.graphql);
     this.udp = new UdpAPI(this.graphql, this.realtime, this.metrics);
-    this.gameModel = new GameModelAPI(this.graphql);
+    this.gameModel = new GameModelAPI(this.graphql, {
+      wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
+      getToken: () => this.session.getToken(),
+    });
     this.compute = new ComputeAPI(this.graphql);
     this.avatars = new AvatarsAPI(this.graphql);
     this.host = new HostAPI(this.graphql);
