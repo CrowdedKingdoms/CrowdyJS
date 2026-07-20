@@ -3565,7 +3565,7 @@ type Query {
     containerId: String!
   ): GmContainer!
   """
-  List containers in an app, optionally filtered by container type and/or session. Requires a valid token.
+  List containers in an app, optionally filtered by container type and/or session, by property predicates (`where`, requires typeName; the same predicate shape automation selectors use — missing properties fall back to the type default), and paged with offset/limit over the stable created-at ordering. Requires a valid token.
   """
   gameModelContainers(
     """The app (tenant) whose containers to list."""
@@ -3576,6 +3576,14 @@ type Query {
     Optional: only containers in this session. Omit for all (including app-global).
     """
     sessionId: String
+    """
+    Optional property predicates (max 8, AND-combined). Requires typeName. Ops: '==', '!=', '<', '>', '<=', '>='. Values are JSON-encoded.
+    """
+    where: [GmPropertyPredicateInput!]
+    """Optional page size (applied after `where` filtering)."""
+    limit: Int
+    """Optional page offset (applied after `where` filtering)."""
+    offset: Int
   ): [GmContainer!]!
   """
   Fetch a container with its property values filtered to what the CALLER may see (public always; owner/hidden depend on the caller's relationship to the container). Use this for a player-facing view of an entity. Requires a valid token.
@@ -6801,8 +6809,18 @@ type GmAutomation {
   description: String
   """Whether the automation is eligible to run."""
   enabled: Boolean!
-  """The entry-point function name (must be autonomous_invocable)."""
-  functionName: String!
+  """
+  Action kind: model_function (invoke a Model function) or compute_invoke (invoke a compute-module export).
+  """
+  actionKind: String!
+  """
+  The entry-point function name (must be autonomous_invocable). Null for compute_invoke actions.
+  """
+  functionName: String
+  """For action_kind=compute_invoke: the compute module name invoked."""
+  computeModuleName: String
+  """For action_kind=compute_invoke: the module invoke export called."""
+  computeExport: String
   """Target resolution mode: container | type | global."""
   targetMode: String!
   """For target_mode=container: the specific self container UUID."""
@@ -7885,6 +7903,18 @@ input NearbyGridPermissionsInput {
   highChunk: ChunkCoordinatesInput!
 }
 
+"""
+One property predicate for filtered container lists (the same shape automation selectors use): compare a property value against a JSON literal. Missing properties fall back to the type default.
+"""
+input GmPropertyPredicateInput {
+  """Property key to compare."""
+  key: String!
+  """Comparison operator: '==', '!=', '<', '>', '<=' or '>='."""
+  op: String!
+  """JSON-encoded comparison value (e.g. '"enemy"', 'true', '10')."""
+  valueJson: String!
+}
+
 input CreateAvatarInput {
   """Optional avatar name; defaults to "Default Avatar" when omitted."""
   name: String
@@ -8731,9 +8761,23 @@ input UpsertAutomationInput {
   description: String
   """Whether it may run. Defaults to true."""
   enabled: Boolean
-  """Entry-point function name (must be autonomous_invocable)."""
-  functionName: String!
-  """Target mode: container | type | global. Defaults to container."""
+  """
+  Action kind: model_function (default — invoke a Model function) or compute_invoke (invoke a compute-module export directly; the trusted server path, no invoke policy evaluation).
+  """
+  actionKind: String
+  """
+  Entry-point function name (must be autonomous_invocable). Required for action_kind=model_function; ignored for compute_invoke.
+  """
+  functionName: String
+  """For action_kind=compute_invoke: the compute module name to invoke."""
+  computeModuleName: String
+  """
+  For action_kind=compute_invoke: the module invoke export to call (must be bound as an invoke trigger on the module).
+  """
+  computeExport: String
+  """
+  Target mode: container | type | global. Defaults to container (model_function) / global (compute_invoke).
+  """
   targetMode: String
   """For target_mode=container: the self container UUID."""
   selfContainerId: String
