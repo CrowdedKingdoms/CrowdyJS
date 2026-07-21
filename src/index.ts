@@ -457,6 +457,13 @@ export {
 } from './domains/compute.js';
 export { PlayerComputeAPI } from './domains/playerCompute.js';
 export { PlayerModelAPI } from './domains/playerModel.js';
+export {
+  PlayerCodeBroker,
+  type PlayerCodeBrokerOptions,
+  type PlayerCodeGridBounds,
+  type PlayerCodeHostCall,
+  type PlayerCodeWorkerLike,
+} from './player-runtime/player-code-broker.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from
