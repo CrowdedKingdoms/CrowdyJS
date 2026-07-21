@@ -7,6 +7,8 @@ import {
   SetPlayerSpendCapDocument,
   PlayerAutoBillingDocument,
   SetPlayerAutoBillingDocument,
+  BeginPlayerCardSetupDocument,
+  type BeginPlayerCardSetupMutation,
   PlayerRuntimeStatesDocument,
   PlayerWasmPoliciesDocument,
   SetPlayerWasmPolicyDocument,
@@ -122,6 +124,18 @@ export class PlayerWalletAPI {
       variables,
     );
     return data.setPlayerAutoBilling;
+  }
+
+  /**
+   * Begin vaulting a card on the caller's player wallet (P4b): returns the
+   * Stripe SetupIntent client secret + publishable key the browser confirms.
+   * On success the card is saved for wallet auto-recharge and rent auto-renew.
+   */
+  async beginCardSetup(): Promise<
+    BeginPlayerCardSetupMutation['beginPlayerCardSetup']
+  > {
+    const data = await this.graphql.request(BeginPlayerCardSetupDocument, {});
+    return data.beginPlayerCardSetup;
   }
 
   /** The caller's per-app gate states (absence means active). */

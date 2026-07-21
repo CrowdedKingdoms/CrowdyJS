@@ -123,6 +123,14 @@ query PlayerAutoBilling {
   }
 }
 
+mutation BeginPlayerCardSetup {
+  beginPlayerCardSetup {
+    clientSecret
+    publishableKey
+    externalCustomerId
+  }
+}
+
 mutation SetPlayerAutoBilling(
   $enabled: Boolean!
   $limitCents: BigInt

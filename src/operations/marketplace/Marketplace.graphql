@@ -31,6 +31,9 @@ fragment PlayerCodeAcquisitionFields on PlayerCodeAcquisition {
   appId
   mode
   status
+  expiresAt
+  unitBudget
+  unitsConsumed
   acquiredAt
 }
 
@@ -272,4 +275,134 @@ mutation MarketplaceSetGridClaimPolicy(
     policy: $policy
     approverUserIds: $approverUserIds
   )
+}
+
+# ---- P4b: paid modes, grid commerce, seller payouts ---------------------------
+
+mutation MarketplaceRenewAcquisition($appId: BigInt!, $acquisitionId: String!) {
+  renewPlayerCodeAcquisition(appId: $appId, acquisitionId: $acquisitionId) {
+    ...PlayerCodeAcquisitionFields
+  }
+}
+
+mutation MarketplaceTopUpAcquisition($appId: BigInt!, $acquisitionId: String!) {
+  topUpPlayerCodeAcquisition(appId: $appId, acquisitionId: $acquisitionId) {
+    ...PlayerCodeAcquisitionFields
+  }
+}
+
+mutation MarketplaceRefundAcquisition($appId: BigInt!, $acquisitionId: String!) {
+  refundPlayerCodeAcquisition(appId: $appId, acquisitionId: $acquisitionId)
+}
+
+query MarketplaceGridListings($appId: BigInt!) {
+  gridListings(appId: $appId) {
+    gridListingId
+    appId
+    kind
+    name
+    description
+    priceCents
+    conferredPermissionKeys
+    resalePolicy
+  }
+}
+
+mutation MarketplacePurchaseGrid(
+  $appId: BigInt!
+  $gridListingId: String!
+  $chunkX: Int
+  $chunkY: Int
+  $chunkZ: Int
+) {
+  purchaseGrid(
+    appId: $appId
+    gridListingId: $gridListingId
+    chunkX: $chunkX
+    chunkY: $chunkY
+    chunkZ: $chunkZ
+  ) {
+    gridId
+    ownershipAssigned
+  }
+}
+
+# ---- P4b management: pricing, seller onboarding/payouts, grid listing CRUD -----
+
+mutation MarketplaceSetListingPricing($input: SetListingPricingInput!) {
+  setListingPricing(input: $input)
+}
+
+mutation MarketplaceSetOrgShare($appId: BigInt!, $bps: Int!) {
+  setAppMarketplaceOrgShare(appId: $appId, bps: $bps)
+}
+
+mutation MarketplaceBeginSellerOnboarding($country: String!) {
+  beginSellerOnboarding(country: $country) {
+    status
+    onboardingUrl
+    unavailableReason
+  }
+}
+
+mutation MarketplaceBeginOrgSellerOnboarding($orgId: BigInt!, $country: String!) {
+  beginOrgSellerOnboarding(orgId: $orgId, country: $country) {
+    status
+    onboardingUrl
+    unavailableReason
+  }
+}
+
+query MarketplaceMySellerBalance {
+  mySellerPayoutBalance {
+    partyKind
+    partyRef
+    pendingCents
+    payableCents
+    reservedCents
+    onboardingStatus
+    payoutsFrozen
+  }
+}
+
+mutation MarketplaceRequestPayout {
+  requestSellerPayout
+}
+
+mutation MarketplaceSpendPayoutToWallet($amountCents: Int!) {
+  spendPayoutBalanceToWallet(amountCents: $amountCents)
+}
+
+query MarketplaceCommerceRiskQueue($appId: BigInt!) {
+  commerceRiskQueue(appId: $appId) {
+    flagId
+    appId
+    kind
+    orderId
+    subjectKind
+    subjectRef
+    detail
+    status
+    createdAt
+  }
+}
+
+mutation MarketplaceDecideRiskFlag(
+  $appId: BigInt!
+  $flagId: String!
+  $release: Boolean!
+) {
+  decideCommerceRiskFlag(appId: $appId, flagId: $flagId, release: $release)
+}
+
+mutation MarketplaceCreateGridListing($input: CreateGridListingInput!) {
+  createGridListing(input: $input) {
+    gridListingId
+    appId
+    kind
+    name
+    priceCents
+    resalePolicy
+    status
+  }
 }

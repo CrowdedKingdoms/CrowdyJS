@@ -23,6 +23,42 @@ import {
   MarketplaceTransferListingDocument,
   MarketplaceSetListingStatusDocument,
   MarketplaceSetGridClaimPolicyDocument,
+  MarketplaceRenewAcquisitionDocument,
+  MarketplaceTopUpAcquisitionDocument,
+  MarketplaceRefundAcquisitionDocument,
+  MarketplaceGridListingsDocument,
+  MarketplacePurchaseGridDocument,
+  MarketplaceSetListingPricingDocument,
+  MarketplaceSetOrgShareDocument,
+  MarketplaceBeginSellerOnboardingDocument,
+  MarketplaceBeginOrgSellerOnboardingDocument,
+  MarketplaceMySellerBalanceDocument,
+  MarketplaceRequestPayoutDocument,
+  MarketplaceSpendPayoutToWalletDocument,
+  MarketplaceCommerceRiskQueueDocument,
+  MarketplaceDecideRiskFlagDocument,
+  MarketplaceCreateGridListingDocument,
+  type MarketplaceRenewAcquisitionMutationVariables,
+  type MarketplaceTopUpAcquisitionMutationVariables,
+  type MarketplaceRefundAcquisitionMutationVariables,
+  type MarketplaceGridListingsQueryVariables,
+  type MarketplacePurchaseGridMutationVariables,
+  type MarketplaceSetListingPricingMutationVariables,
+  type MarketplaceSetOrgShareMutationVariables,
+  type MarketplaceBeginSellerOnboardingMutationVariables,
+  type MarketplaceBeginOrgSellerOnboardingMutationVariables,
+  type MarketplaceRequestPayoutMutationVariables,
+  type MarketplaceSpendPayoutToWalletMutationVariables,
+  type MarketplaceCommerceRiskQueueQueryVariables,
+  type MarketplaceDecideRiskFlagMutationVariables,
+  type MarketplaceCreateGridListingMutationVariables,
+  type MarketplaceGridListingsQuery,
+  type MarketplacePurchaseGridMutation,
+  type MarketplaceBeginSellerOnboardingMutation,
+  type MarketplaceBeginOrgSellerOnboardingMutation,
+  type MarketplaceMySellerBalanceQuery,
+  type MarketplaceCommerceRiskQueueQuery,
+  type MarketplaceCreateGridListingMutation,
   type MarketplaceListingsQuery,
   type MarketplaceListingsQueryVariables,
   type MarketplaceListingVersionsQuery,
@@ -385,5 +421,172 @@ export class MarketplaceAPI {
         variables,
       );
     return data.setAppGridClaimPolicy;
+  }
+
+  // -- P4b: paid modes + grid commerce (Game API) --------------------------------
+
+  /** Renew a RENT / extend a TIME_LIMITED acquisition (a wallet charge). */
+  async renewAcquisition(variables: MarketplaceRenewAcquisitionMutationVariables) {
+    const data = await this.game.request(
+      MarketplaceRenewAcquisitionDocument,
+      variables,
+    );
+    return data.renewPlayerCodeAcquisition;
+  }
+
+  /** Top up a COST_LIMITED acquisition's unit budget (a wallet charge). */
+  async topUpAcquisition(variables: MarketplaceTopUpAcquisitionMutationVariables) {
+    const data = await this.game.request(
+      MarketplaceTopUpAcquisitionDocument,
+      variables,
+    );
+    return data.topUpPlayerCodeAcquisition;
+  }
+
+  /** Refund a paid acquisition (within window, before meaningful use). Returns cents. */
+  async refundAcquisition(
+    variables: MarketplaceRefundAcquisitionMutationVariables,
+  ): Promise<number> {
+    const data = await this.game.request(
+      MarketplaceRefundAcquisitionDocument,
+      variables,
+    );
+    return data.refundPlayerCodeAcquisition;
+  }
+
+  /** Browse the app's grid listings. */
+  async gridListings(
+    variables: MarketplaceGridListingsQueryVariables,
+  ): Promise<MarketplaceGridListingsQuery['gridListings']> {
+    const data = await this.game.request(
+      MarketplaceGridListingsDocument,
+      variables,
+    );
+    return data.gridListings;
+  }
+
+  /** Buy a grid listing (wallet debit + atomic ownership; refund on failure). */
+  async purchaseGrid(
+    variables: MarketplacePurchaseGridMutationVariables,
+  ): Promise<MarketplacePurchaseGridMutation['purchaseGrid']> {
+    const data = await this.game.request(
+      MarketplacePurchaseGridDocument,
+      variables,
+    );
+    return data.purchaseGrid;
+  }
+
+  // -- P4b: pricing, seller payouts, grid catalog, risk (Management API) ----------
+
+  /** Author-only: set a listing's acquisition mode + price. */
+  async setListingPricing(
+    variables: MarketplaceSetListingPricingMutationVariables,
+  ): Promise<boolean> {
+    const data = await this.management.request(
+      MarketplaceSetListingPricingDocument,
+      variables,
+    );
+    return data.setListingPricing;
+  }
+
+  /** Set the app's marketplace org revenue share (bps; manage_billing). */
+  async setOrgShare(
+    variables: MarketplaceSetOrgShareMutationVariables,
+  ): Promise<number> {
+    const data = await this.management.request(
+      MarketplaceSetOrgShareDocument,
+      variables,
+    );
+    return data.setAppMarketplaceOrgShare;
+  }
+
+  /** Begin Stripe Connect Express onboarding for the calling player-seller. */
+  async beginSellerOnboarding(
+    variables: MarketplaceBeginSellerOnboardingMutationVariables,
+  ): Promise<MarketplaceBeginSellerOnboardingMutation['beginSellerOnboarding']> {
+    const data = await this.management.request(
+      MarketplaceBeginSellerOnboardingDocument,
+      variables,
+    );
+    return data.beginSellerOnboarding;
+  }
+
+  /** Begin onboarding for an org payout account (manage_billing in the org). */
+  async beginOrgSellerOnboarding(
+    variables: MarketplaceBeginOrgSellerOnboardingMutationVariables,
+  ): Promise<
+    MarketplaceBeginOrgSellerOnboardingMutation['beginOrgSellerOnboarding']
+  > {
+    const data = await this.management.request(
+      MarketplaceBeginOrgSellerOnboardingDocument,
+      variables,
+    );
+    return data.beginOrgSellerOnboarding;
+  }
+
+  /** The calling player's seller payout balance. */
+  async mySellerBalance(): Promise<
+    MarketplaceMySellerBalanceQuery['mySellerPayoutBalance']
+  > {
+    const data = await this.management.request(
+      MarketplaceMySellerBalanceDocument,
+      {},
+    );
+    return data.mySellerPayoutBalance;
+  }
+
+  /** Pay out the calling player's payable balance to their Connect account. */
+  async requestPayout(
+    variables: MarketplaceRequestPayoutMutationVariables = {},
+  ): Promise<number> {
+    const data = await this.management.request(
+      MarketplaceRequestPayoutDocument,
+      variables,
+    );
+    return data.requestSellerPayout;
+  }
+
+  /** Earn-to-mod: convert payable balance into the player wallet. Returns cents. */
+  async spendPayoutToWallet(
+    variables: MarketplaceSpendPayoutToWalletMutationVariables,
+  ): Promise<number> {
+    const data = await this.management.request(
+      MarketplaceSpendPayoutToWalletDocument,
+      variables,
+    );
+    return data.spendPayoutBalanceToWallet;
+  }
+
+  /** The app's open T11 commerce risk queue (manage_compute). */
+  async commerceRiskQueue(
+    variables: MarketplaceCommerceRiskQueueQueryVariables,
+  ): Promise<MarketplaceCommerceRiskQueueQuery['commerceRiskQueue']> {
+    const data = await this.management.request(
+      MarketplaceCommerceRiskQueueDocument,
+      variables,
+    );
+    return data.commerceRiskQueue;
+  }
+
+  /** Release or confirm a T11 risk flag (manage_compute). */
+  async decideRiskFlag(
+    variables: MarketplaceDecideRiskFlagMutationVariables,
+  ): Promise<boolean> {
+    const data = await this.management.request(
+      MarketplaceDecideRiskFlagDocument,
+      variables,
+    );
+    return data.decideCommerceRiskFlag;
+  }
+
+  /** Studio: create a grid listing (blueprint or concrete; manage_apps). */
+  async createGridListing(
+    variables: MarketplaceCreateGridListingMutationVariables,
+  ): Promise<MarketplaceCreateGridListingMutation['createGridListing']> {
+    const data = await this.management.request(
+      MarketplaceCreateGridListingDocument,
+      variables,
+    );
+    return data.createGridListing;
   }
 }
