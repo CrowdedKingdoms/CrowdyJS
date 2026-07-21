@@ -42,6 +42,17 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.playerCompute, 'playerCompute', [
     'deploy', 'setEnabled', 'invoke', 'myModules', 'versions', 'delete',
   ]);
+  // P4a marketplace (free mode): store + installs + consent + claim flows
+  // (game API) and studio moderation (management API).
+  assertMethods(client.marketplace, 'marketplace', [
+    'listings', 'versions', 'myAcquisitions', 'myInstalls',
+    'publishListing', 'publishVersion', 'acquire', 'install', 'uninstall',
+    'gridClientMods', 'consentGridClientMod', 'clientArtifact',
+    'clientArtifactBytes', 'gridClaimPolicy', 'gridClaimRequests',
+    'claimGridOwnership', 'decideGridClaim', 'issueGridClaimInvite',
+    'admissionQueue', 'appListings', 'appAcquisitions', 'transferListing',
+    'setListingStatus', 'setGridClaimPolicy',
+  ]);
   assertMethods(client.playerModel, 'playerModel', [
     'containers', 'container', 'createContainer', 'setProperty',
     'deleteContainer', 'automations', 'createAutomation',

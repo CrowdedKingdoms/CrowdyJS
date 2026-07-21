@@ -167,6 +167,7 @@ mutation PlayerComputeSetSwitch(
   $disabled: Boolean!
   $scopeRef: BigInt
   $reason: String
+  $listingRef: String
 ) {
   playerComputeSetSwitch(
     appId: $appId
@@ -174,6 +175,7 @@ mutation PlayerComputeSetSwitch(
     disabled: $disabled
     scopeRef: $scopeRef
     reason: $reason
+    listingRef: $listingRef
   )
 }
 
@@ -183,6 +185,7 @@ query PlayerComputeSwitches($appId: BigInt!) {
     appId
     scope
     scopeRef
+    listingRef
     reason
     disabledAt
   }
