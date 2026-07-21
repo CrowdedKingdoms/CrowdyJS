@@ -3800,12 +3800,16 @@ export type Mutation = {
   createGridListing: GridListing;
   /** Creates a custom role in an organization with a name, optional description, and permission keys. Requires the 'manage_members' permission on the org (super admins bypass). */
   createOrgRole: OrgRole;
+  /** Create an embedded-components Account Session for an ORG's payout account (org-owned listings, DN-9). Requires 'manage_billing' in the org. */
+  createOrgSellerAccountSession: SellerAccountSession;
   /** Mints a new org API token and returns the plaintext token exactly once - save it, since subsequent queries only show metadata. Requires the 'manage_tokens' permission on the target org (super admins bypass). */
   createOrgToken: OrgTokenWithSecret;
   /** Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token. */
   createOrganization: Organization;
   /** Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Requires a SESSION token. */
   createPortalAuthorizationCode: PortalAuthorizationCode;
+  /** Create an Account Session for Stripe's EMBEDDED Connect components on the calling player's seller account (created on first call): the browser initializes Connect.js with the returned publishable key + client secret and mounts account-onboarding / payouts / balances INSIDE the platform UI. Client secrets are short-lived — re-request on expiry. The hosted-link flow (beginSellerOnboarding) remains the fallback. */
+  createSellerAccountSession: SellerAccountSession;
   /** Create a team. Whether the caller may create one is governed by the per-app team policy (app_group_policies: admin | member | anyone). The caller becomes the owner and is granted a system 'leader' role holding every team permission. New teams default to the app's default membership policy unless overridden. */
   createTeam: Group;
   /** Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs). */
@@ -4391,6 +4395,12 @@ export type MutationCreateOrgRoleArgs = {
 };
 
 
+export type MutationCreateOrgSellerAccountSessionArgs = {
+  country: Scalars['String']['input'];
+  orgId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationCreateOrgTokenArgs = {
   input: CreateOrgTokenInput;
 };
@@ -4403,6 +4413,11 @@ export type MutationCreateOrganizationArgs = {
 
 export type MutationCreatePortalAuthorizationCodeArgs = {
   input: CreatePortalAuthorizationCodeInput;
+};
+
+
+export type MutationCreateSellerAccountSessionArgs = {
+  country: Scalars['String']['input'];
 };
 
 
@@ -8133,6 +8148,21 @@ export type SeedPropertyInput = {
   valueType: Scalars['String']['input'];
 };
 
+/** An Account Session for Stripe's EMBEDDED Connect components: the browser initializes Connect.js with the publishable key + this short-lived client secret and mounts the account-onboarding / payouts / balances components INSIDE the platform UI — sellers never leave for a Stripe-hosted page. Re-request on expiry. The hosted-link flow (beginSellerOnboarding) remains the fallback. */
+export type SellerAccountSession = {
+  __typename?: 'SellerAccountSession';
+  /** The connected account the session is scoped to (provider ref only). */
+  accountRef: Scalars['String']['output'];
+  /** Short-lived Account Session client secret for Connect.js. */
+  clientSecret: Scalars['String']['output'];
+  /** When the client secret expires; re-request after this. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** Whether onboarding is already complete (payouts enabled) — render the payouts/balances components instead of onboarding. */
+  onboardingComplete: Scalars['Boolean']['output'];
+  /** Stripe publishable key the browser initializes Connect.js with. */
+  publishableKey: Maybe<Scalars['String']['output']>;
+};
+
 /** Result of beginning seller onboarding: the Stripe Connect Express account link the seller opens to finish KYC. */
 export type SellerOnboardingLink = {
   __typename?: 'SellerOnboardingLink';
@@ -11668,6 +11698,21 @@ export type MarketplaceBeginSellerOnboardingMutationVariables = Exact<{
 
 export type MarketplaceBeginSellerOnboardingMutation = { __typename?: 'Mutation', beginSellerOnboarding: { __typename?: 'SellerOnboardingLink', status: SellerOnboardingStatus, onboardingUrl: string | null, unavailableReason: string | null } };
 
+export type MarketplaceCreateAccountSessionMutationVariables = Exact<{
+  country: Scalars['String']['input'];
+}>;
+
+
+export type MarketplaceCreateAccountSessionMutation = { __typename?: 'Mutation', createSellerAccountSession: { __typename?: 'SellerAccountSession', clientSecret: string, publishableKey: string | null, accountRef: string, onboardingComplete: boolean, expiresAt: string | null } };
+
+export type MarketplaceCreateOrgAccountSessionMutationVariables = Exact<{
+  orgId: Scalars['BigInt']['input'];
+  country: Scalars['String']['input'];
+}>;
+
+
+export type MarketplaceCreateOrgAccountSessionMutation = { __typename?: 'Mutation', createOrgSellerAccountSession: { __typename?: 'SellerAccountSession', clientSecret: string, publishableKey: string | null, accountRef: string, onboardingComplete: boolean, expiresAt: string | null } };
+
 export type MarketplaceBeginOrgSellerOnboardingMutationVariables = Exact<{
   orgId: Scalars['BigInt']['input'];
   country: Scalars['String']['input'];
@@ -13112,6 +13157,8 @@ export const MarketplacePurchaseGridDocument = {"kind":"Document","definitions":
 export const MarketplaceSetListingPricingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceSetListingPricing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetListingPricingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setListingPricing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<MarketplaceSetListingPricingMutation, MarketplaceSetListingPricingMutationVariables>;
 export const MarketplaceSetOrgShareDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceSetOrgShare"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"bps"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAppMarketplaceOrgShare"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"bps"},"value":{"kind":"Variable","name":{"kind":"Name","value":"bps"}}}]}]}}]} as unknown as DocumentNode<MarketplaceSetOrgShareMutation, MarketplaceSetOrgShareMutationVariables>;
 export const MarketplaceBeginSellerOnboardingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceBeginSellerOnboarding"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"country"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"beginSellerOnboarding"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"country"},"value":{"kind":"Variable","name":{"kind":"Name","value":"country"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingUrl"}},{"kind":"Field","name":{"kind":"Name","value":"unavailableReason"}}]}}]}}]} as unknown as DocumentNode<MarketplaceBeginSellerOnboardingMutation, MarketplaceBeginSellerOnboardingMutationVariables>;
+export const MarketplaceCreateAccountSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceCreateAccountSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"country"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createSellerAccountSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"country"},"value":{"kind":"Variable","name":{"kind":"Name","value":"country"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"clientSecret"}},{"kind":"Field","name":{"kind":"Name","value":"publishableKey"}},{"kind":"Field","name":{"kind":"Name","value":"accountRef"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingComplete"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]} as unknown as DocumentNode<MarketplaceCreateAccountSessionMutation, MarketplaceCreateAccountSessionMutationVariables>;
+export const MarketplaceCreateOrgAccountSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceCreateOrgAccountSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"country"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgSellerAccountSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"country"},"value":{"kind":"Variable","name":{"kind":"Name","value":"country"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"clientSecret"}},{"kind":"Field","name":{"kind":"Name","value":"publishableKey"}},{"kind":"Field","name":{"kind":"Name","value":"accountRef"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingComplete"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]} as unknown as DocumentNode<MarketplaceCreateOrgAccountSessionMutation, MarketplaceCreateOrgAccountSessionMutationVariables>;
 export const MarketplaceBeginOrgSellerOnboardingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceBeginOrgSellerOnboarding"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"country"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"beginOrgSellerOnboarding"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"country"},"value":{"kind":"Variable","name":{"kind":"Name","value":"country"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingUrl"}},{"kind":"Field","name":{"kind":"Name","value":"unavailableReason"}}]}}]}}]} as unknown as DocumentNode<MarketplaceBeginOrgSellerOnboardingMutation, MarketplaceBeginOrgSellerOnboardingMutationVariables>;
 export const MarketplaceMySellerBalanceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceMySellerBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mySellerPayoutBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"partyKind"}},{"kind":"Field","name":{"kind":"Name","value":"partyRef"}},{"kind":"Field","name":{"kind":"Name","value":"pendingCents"}},{"kind":"Field","name":{"kind":"Name","value":"payableCents"}},{"kind":"Field","name":{"kind":"Name","value":"reservedCents"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"payoutsFrozen"}}]}}]}}]} as unknown as DocumentNode<MarketplaceMySellerBalanceQuery, MarketplaceMySellerBalanceQueryVariables>;
 export const MarketplaceRequestPayoutDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceRequestPayout"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestSellerPayout"}}]}}]} as unknown as DocumentNode<MarketplaceRequestPayoutMutation, MarketplaceRequestPayoutMutationVariables>;

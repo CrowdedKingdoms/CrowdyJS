@@ -32,6 +32,12 @@ import {
   MarketplaceSetOrgShareDocument,
   MarketplaceBeginSellerOnboardingDocument,
   MarketplaceBeginOrgSellerOnboardingDocument,
+  MarketplaceCreateAccountSessionDocument,
+  MarketplaceCreateOrgAccountSessionDocument,
+  type MarketplaceCreateAccountSessionMutation,
+  type MarketplaceCreateAccountSessionMutationVariables,
+  type MarketplaceCreateOrgAccountSessionMutation,
+  type MarketplaceCreateOrgAccountSessionMutationVariables,
   MarketplaceMySellerBalanceDocument,
   MarketplaceRequestPayoutDocument,
   MarketplaceSpendPayoutToWalletDocument,
@@ -498,6 +504,38 @@ export class MarketplaceAPI {
       variables,
     );
     return data.setAppMarketplaceOrgShare;
+  }
+
+  /**
+   * Account Session for the EMBEDDED Connect components: initialize
+   * Connect.js with the returned publishableKey + clientSecret and mount
+   * account-onboarding / payouts / balances INSIDE your UI (no Stripe-hosted
+   * redirect). Client secrets are short-lived — pass this method as the
+   * fetchClientSecret callback so Connect.js refreshes automatically.
+   */
+  async createAccountSession(
+    variables: MarketplaceCreateAccountSessionMutationVariables,
+  ): Promise<
+    MarketplaceCreateAccountSessionMutation['createSellerAccountSession']
+  > {
+    const data = await this.management.request(
+      MarketplaceCreateAccountSessionDocument,
+      variables,
+    );
+    return data.createSellerAccountSession;
+  }
+
+  /** Embedded-components Account Session for an ORG payout account (manage_billing). */
+  async createOrgAccountSession(
+    variables: MarketplaceCreateOrgAccountSessionMutationVariables,
+  ): Promise<
+    MarketplaceCreateOrgAccountSessionMutation['createOrgSellerAccountSession']
+  > {
+    const data = await this.management.request(
+      MarketplaceCreateOrgAccountSessionDocument,
+      variables,
+    );
+    return data.createOrgSellerAccountSession;
   }
 
   /** Begin Stripe Connect Express onboarding for the calling player-seller. */

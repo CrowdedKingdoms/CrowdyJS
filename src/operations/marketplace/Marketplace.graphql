@@ -349,6 +349,26 @@ mutation MarketplaceBeginSellerOnboarding($country: String!) {
   }
 }
 
+mutation MarketplaceCreateAccountSession($country: String!) {
+  createSellerAccountSession(country: $country) {
+    clientSecret
+    publishableKey
+    accountRef
+    onboardingComplete
+    expiresAt
+  }
+}
+
+mutation MarketplaceCreateOrgAccountSession($orgId: BigInt!, $country: String!) {
+  createOrgSellerAccountSession(orgId: $orgId, country: $country) {
+    clientSecret
+    publishableKey
+    accountRef
+    onboardingComplete
+    expiresAt
+  }
+}
+
 mutation MarketplaceBeginOrgSellerOnboarding($orgId: BigInt!, $country: String!) {
   beginOrgSellerOnboarding(orgId: $orgId, country: $country) {
     status
