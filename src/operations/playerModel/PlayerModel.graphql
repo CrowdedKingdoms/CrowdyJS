@@ -1,0 +1,142 @@
+query PlayerModelContainers($appId: BigInt!, $gridId: BigInt!) {
+  playerModelContainers(appId: $appId, gridId: $gridId) {
+    containerId
+    appId
+    gridId
+    ownerUserId
+    typeKey
+    displayName
+    stateJson
+    propertiesJson
+    createdAt
+    updatedAt
+  }
+}
+
+query PlayerModelContainer($input: PlayerModelContainerRefInput!) {
+  playerModelContainer(input: $input) {
+    containerId
+    appId
+    gridId
+    ownerUserId
+    typeKey
+    displayName
+    stateJson
+    propertiesJson
+    createdAt
+    updatedAt
+  }
+}
+
+mutation PlayerModelCreateContainer($input: CreatePlayerModelContainerInput!) {
+  playerModelCreateContainer(input: $input) {
+    containerId
+    appId
+    gridId
+    ownerUserId
+    typeKey
+    displayName
+    stateJson
+    propertiesJson
+    createdAt
+    updatedAt
+  }
+}
+
+mutation PlayerModelSetProperty($input: SetPlayerModelPropertyInput!) {
+  playerModelSetProperty(input: $input) {
+    containerId
+    appId
+    gridId
+    ownerUserId
+    typeKey
+    displayName
+    stateJson
+    propertiesJson
+    createdAt
+    updatedAt
+  }
+}
+
+mutation PlayerModelDeleteContainer($input: PlayerModelContainerRefInput!) {
+  playerModelDeleteContainer(input: $input)
+}
+
+query PlayerAutomations($appId: BigInt!, $gridId: BigInt!) {
+  playerAutomations(appId: $appId, gridId: $gridId) {
+    automationId
+    appId
+    gridId
+    ownerUserId
+    name
+    description
+    enabled
+    triggerJson
+    actionJson
+    maxRunsPerMinute
+    failureThreshold
+    cooldownMs
+    circuitState
+    consecutiveFailures
+    pausedUntil
+    lastError
+    lastRunAt
+    nextRunAt
+    createdAt
+    updatedAt
+  }
+}
+
+mutation PlayerAutomationCreate($input: CreatePlayerAutomationInput!) {
+  playerAutomationCreate(input: $input) {
+    automationId
+    appId
+    gridId
+    ownerUserId
+    name
+    description
+    enabled
+    triggerJson
+    actionJson
+    maxRunsPerMinute
+    failureThreshold
+    cooldownMs
+    circuitState
+    consecutiveFailures
+    pausedUntil
+    lastError
+    lastRunAt
+    nextRunAt
+    createdAt
+    updatedAt
+  }
+}
+
+mutation PlayerAutomationSetEnabled($input: SetPlayerAutomationEnabledInput!) {
+  playerAutomationSetEnabled(input: $input) {
+    automationId
+    appId
+    gridId
+    ownerUserId
+    name
+    description
+    enabled
+    triggerJson
+    actionJson
+    maxRunsPerMinute
+    failureThreshold
+    cooldownMs
+    circuitState
+    consecutiveFailures
+    pausedUntil
+    lastError
+    lastRunAt
+    nextRunAt
+    createdAt
+    updatedAt
+  }
+}
+
+mutation PlayerAutomationDelete($input: PlayerAutomationRefInput!) {
+  playerAutomationDelete(input: $input)
+}

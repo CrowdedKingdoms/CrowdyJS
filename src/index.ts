@@ -455,6 +455,42 @@ export {
   type DeployVersionOptions,
   type WaitForCompileOptions,
 } from './domains/compute.js';
+export { PlayerComputeAPI } from './domains/playerCompute.js';
+export { PlayerWalletAPI } from './domains/playerWallet.js';
+export { MarketplaceAPI } from './domains/marketplace.js';
+export { PlayerModelAPI } from './domains/playerModel.js';
+export {
+  PlayerCodeBroker,
+  type PlayerCodeBrokerOptions,
+  type PlayerCodeGridBounds,
+  type PlayerCodeHostCall,
+  type PlayerCodeWorkerLike,
+  type PlayerCodePresentation,
+} from './player-runtime/player-code-broker.js';
+export {
+  GLUE_HOST_FUNCTIONS,
+  buildImportObject,
+  parseFuelBudget,
+  runWithWatchdog,
+  type GlueInitMessage,
+  type GlueDispatchResult,
+} from './player-runtime/player-glue-worker.js';
+export {
+  LiveCodingController,
+  type LiveCodingControllerOptions,
+  type LiveCodingStatus,
+  type LiveCodingTarget,
+} from './live-coding/live-coding-controller.js';
+export {
+  mountLiveCoding,
+  type MountLiveCodingOptions,
+  type LiveCodingHandle,
+} from './live-coding/mount.js';
+export {
+  PLAYER_CODE_TEMPLATES,
+  templateById,
+  type PlayerCodeTemplate,
+} from './live-coding/templates.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from
@@ -472,6 +508,12 @@ export type {
   UdpProxyConnectionStatus,
   RealtimeConnectionEvent,
   GameClientBootstrap,
+  PlayerWasmModule,
+  PlayerWasmModuleVersion,
+  DeployPlayerComputeInput,
+  GridOwnership,
+  AssignGridOwnershipInput,
+  TransferGridOwnershipInput,
 
   // Management-api auth surface (used by AuthAPI / UsersAPI).
   UpdateGamertagInput,
@@ -585,6 +627,16 @@ export type {
   CreateCheckoutInput,
   CheckoutFilterInput,
   SetQuotaInput,
+  AppCodeAdmission,
+  AdmitAppCodeInput,
 } from './generated/graphql.js';
 
-export { ServerState, AppVisibility } from './generated/graphql.js';
+export {
+  ServerState,
+  AppVisibility,
+  PlayerComputeTarget,
+  GridOwnerKind,
+  GridTenure,
+  CodeAdmissionMode,
+  CodeAdmissionSubjectKind,
+} from './generated/graphql.js';

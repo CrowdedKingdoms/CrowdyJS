@@ -1,3 +1,33 @@
+fragment GridOwnershipFields on GridOwnership {
+  gridOwnershipId
+  gridId
+  appId
+  ownerKind
+  ownerRef
+  tenure
+  acquiredVia
+  acquiredAt
+  expiresAt
+}
+
+query GridOwnership($appId: BigInt!, $gridId: BigInt!) {
+  gridOwnership(appId: $appId, gridId: $gridId) {
+    ...GridOwnershipFields
+  }
+}
+
+mutation AssignGridOwnership($input: AssignGridOwnershipInput!) {
+  assignGridOwnership(input: $input) {
+    ...GridOwnershipFields
+  }
+}
+
+mutation TransferGridOwnership($input: TransferGridOwnershipInput!) {
+  transferGridOwnership(input: $input) {
+    ...GridOwnershipFields
+  }
+}
+
 query GridUserPermissions($appId: BigInt!, $gridId: BigInt!, $userId: BigInt!) {
   gridUserPermissions(appId: $appId, gridId: $gridId, userId: $userId) {
     appId

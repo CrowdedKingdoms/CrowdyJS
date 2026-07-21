@@ -1,0 +1,200 @@
+fragment PlayerWalletFields on PlayerWallet {
+  walletId
+  userId
+  balanceCents
+  currency
+  createdAt
+}
+
+fragment PlayerWalletTransactionFields on PlayerWalletTransaction {
+  transactionId
+  walletId
+  userId
+  amountCents
+  balanceAfter
+  transactionType
+  description
+  referenceId
+  appId
+  createdAt
+}
+
+fragment PlayerSpendCapFields on PlayerSpendCap {
+  userId
+  scope
+  scopeRef
+  dailyLimitCents
+  monthlyLimitCents
+  currentDayUsageCents
+  currentMonthUsageCents
+}
+
+fragment PlayerAutoBillingFields on PlayerAutoBilling {
+  userId
+  enabled
+  limitCents
+  autoBilledThisPeriodCents
+  rechargeAmountCents
+  lowWaterThresholdCents
+  hasPaymentMethod
+  lastError
+}
+
+fragment PlayerUsageChargeFields on PlayerUsageCharge {
+  chargeId
+  userId
+  appId
+  periodStart
+  periodEnd
+  amountCents
+  platformCents
+  markupCents
+  currency
+  usageSnapshotJson
+  createdAt
+}
+
+fragment PlayerWasmPolicyFields on PlayerWasmPolicy {
+  policyId
+  appId
+  scope
+  scopeRef
+  enabled
+  maxModulesPerGrid
+  maxModulesTotal
+  maxTickHz
+  fuelPerTick
+  fuelPerInvoke
+  maxMemoryMb
+  maxRunMs
+  maxDbOpsPerTick
+  maxEgressMsgsPerMin
+  maxEgressBytesPerMin
+  unitsPerHour
+  unitsPerDay
+  maxCompilesPerHour
+  maxContainerCreatesDay
+  clientFuelPerDispatch
+}
+
+query PlayerWalletBalance {
+  playerWalletBalance {
+    ...PlayerWalletFields
+  }
+}
+
+query PlayerWalletTransactions($limit: Int, $offset: Int) {
+  playerWalletTransactions(limit: $limit, offset: $offset) {
+    ...PlayerWalletTransactionFields
+  }
+}
+
+query PlayerUsageCharges($appId: BigInt, $limit: Int) {
+  playerUsageCharges(appId: $appId, limit: $limit) {
+    ...PlayerUsageChargeFields
+  }
+}
+
+query PlayerSpendCaps {
+  playerSpendCaps {
+    ...PlayerSpendCapFields
+  }
+}
+
+mutation SetPlayerSpendCap(
+  $scope: String!
+  $appId: BigInt
+  $dailyLimitCents: BigInt
+  $monthlyLimitCents: BigInt
+) {
+  setPlayerSpendCap(
+    scope: $scope
+    appId: $appId
+    dailyLimitCents: $dailyLimitCents
+    monthlyLimitCents: $monthlyLimitCents
+  ) {
+    ...PlayerSpendCapFields
+  }
+}
+
+query PlayerAutoBilling {
+  playerAutoBilling {
+    ...PlayerAutoBillingFields
+  }
+}
+
+mutation BeginPlayerCardSetup {
+  beginPlayerCardSetup {
+    clientSecret
+    publishableKey
+    externalCustomerId
+  }
+}
+
+mutation SetPlayerAutoBilling(
+  $enabled: Boolean!
+  $limitCents: BigInt
+  $rechargeAmountCents: BigInt
+  $lowWaterThresholdCents: BigInt
+) {
+  setPlayerAutoBilling(
+    enabled: $enabled
+    limitCents: $limitCents
+    rechargeAmountCents: $rechargeAmountCents
+    lowWaterThresholdCents: $lowWaterThresholdCents
+  ) {
+    ...PlayerAutoBillingFields
+  }
+}
+
+query PlayerRuntimeStates {
+  playerRuntimeStates {
+    userId
+    appId
+    status
+    reason
+    updatedAt
+  }
+}
+
+query PlayerWasmPolicies($appId: BigInt!) {
+  playerWasmPolicies(appId: $appId) {
+    ...PlayerWasmPolicyFields
+  }
+}
+
+mutation SetPlayerWasmPolicy($input: SetPlayerWasmPolicyInput!) {
+  setPlayerWasmPolicy(input: $input) {
+    ...PlayerWasmPolicyFields
+  }
+}
+
+mutation DeletePlayerWasmPolicy(
+  $appId: BigInt!
+  $scope: String!
+  $scopeRef: BigInt
+) {
+  deletePlayerWasmPolicy(appId: $appId, scope: $scope, scopeRef: $scopeRef)
+}
+
+query PlayerRateMarkup($appId: BigInt!) {
+  playerRateMarkup(appId: $appId)
+}
+
+mutation SetPlayerRateMarkup($appId: BigInt!, $markupBps: Int!) {
+  setPlayerRateMarkup(appId: $appId, markupBps: $markupBps)
+}
+
+query AppPlayerUsage($appId: BigInt!, $hours: Int) {
+  appPlayerUsage(appId: $appId, hours: $hours) {
+    userId
+    computeUnits
+    automationUnits
+    compileCount
+    chargedCents
+  }
+}
+
+query AppPlayerMarkupAccrued($appId: BigInt!) {
+  appPlayerMarkupAccrued(appId: $appId)
+}
