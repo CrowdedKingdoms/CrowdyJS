@@ -39,7 +39,7 @@ test('PlayerCodeBroker keeps a host allowlist and grid clamp', async () => {
       return { accepted: true };
     },
   });
-  broker.start(new ArrayBuffer(8));
+  await broker.start(new ArrayBuffer(8));
 
   worker.receive({
     type: 'hostcall',

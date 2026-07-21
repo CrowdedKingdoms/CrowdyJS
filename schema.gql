@@ -4265,6 +4265,19 @@ type Query {
     appId: BigInt!
   ): PlayerComputeUsage!
   """
+  Fetch a compiled CLIENT player artifact plus the metadata the browser broker needs to run it (player compute P3). Fail-closed: the caller must currently own the grid, be the version's author, hold run_client_code at app and grid scope, and the code must be admitted under the app's mode. Returns the gas-injected wasm bytes (base64), the declared client contract, and the per-dispatch fuel budget the glue worker enforces. Acquired (bought/rented) client code is served through the marketplace path in a later phase.
+  """
+  playerComputeArtifact(
+    """App containing the owned grid."""
+    appId: BigInt!
+    """Owned grid containing the module."""
+    gridId: BigInt!
+    """Module name within the grid."""
+    name: String!
+    """Optional specific version UUID; defaults to the current version."""
+    versionId: String
+  ): PlayerClientArtifact!
+  """
   List executions of player modules on a grid the caller currently owns, newest first. Every run is attributed to the grid owner it executed as; author identity never appears here.
   """
   playerComputeRuns(
@@ -8751,6 +8764,10 @@ type PlayerWasmModule {
   enabled: Boolean!
   """Currently deployed immutable version UUID."""
   currentVersionId: String
+  """
+  Draft mode: the module runs for its author but its spatial egress is suppressed server-side (live-coding iteration).
+  """
+  draft: Boolean!
   """closed, open, or half_open."""
   circuitState: String!
   """Last runtime/transfer error."""
@@ -8879,6 +8896,30 @@ type PlayerComputeSwitch {
   reason: String
   """When execution was stopped."""
   disabledAt: DateTime!
+}
+
+"""
+A compiled CLIENT-target player artifact plus the metadata the browser broker needs to run it (player compute P3). Served only to the current grid owner who authored the version, holding run_client_code, when the app's admission mode admits the code. The bytes are the gas-injected wasm32-unknown-unknown module; clientFuelPerDispatch is the per-dispatch fuel budget the glue worker enforces locally.
+"""
+type PlayerClientArtifact {
+  """The served version UUID."""
+  versionId: String!
+  """Content hash of the artifact (also the cache key stem)."""
+  artifactHash: String!
+  """The gas-injected client WASM artifact, base64-encoded."""
+  artifactBase64: String!
+  """Artifact size in bytes (<= 512 KiB)."""
+  sizeBytes: Int!
+  """ABI version the artifact was built for."""
+  abiVersion: Int!
+  """
+  Declared client interop contract (bridge messages) as JSON, when the version pins one.
+  """
+  contractJson: String
+  """
+  Per-dispatch client fuel budget from the resolved player policy; the broker's glue worker traps when a dispatch exceeds it.
+  """
+  clientFuelPerDispatch: BigInt!
 }
 
 """
@@ -10552,6 +10593,10 @@ input DeployPlayerComputeInput {
   Optional server tick rate in Hz. Omit for invoke/event-only modules or CLIENT artifacts. Clamped by the effective player/app policy.
   """
   tickHz: Float
+  """
+  Deploy in draft mode (live-coding iteration): the module runs for its author but its spatial egress is suppressed server-side, so no other session in the grid observes its world effects. Omit or false for a normal deploy.
+  """
+  draft: Boolean
 }
 
 """

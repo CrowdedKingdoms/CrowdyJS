@@ -11,6 +11,9 @@ import {
   PlayerComputeLogsDocument,
   PlayerComputeSetSwitchDocument,
   PlayerComputeSwitchesDocument,
+  PlayerComputeArtifactDocument,
+  type PlayerComputeArtifactQuery,
+  type PlayerComputeArtifactQueryVariables,
   type PlayerComputeUsageQuery,
   type PlayerComputeUsageQueryVariables,
   type PlayerComputeRunsQuery,
@@ -181,5 +184,49 @@ export class PlayerComputeAPI {
       variables,
     );
     return data.playerComputeSwitches;
+  }
+
+  /**
+   * Fetch a compiled CLIENT artifact + metadata for the browser broker (P3).
+   * Fail-closed server-side (ownership, authorship, run_client_code,
+   * admission). Returns the metadata as-is; use {@link artifactBytes} to get
+   * the decoded ArrayBuffer ready to hand {@link PlayerCodeBroker.start}.
+   */
+  async artifact(
+    variables: PlayerComputeArtifactQueryVariables,
+  ): Promise<PlayerComputeArtifactQuery['playerComputeArtifact']> {
+    const data = await this.graphql.request(
+      PlayerComputeArtifactDocument,
+      variables,
+    );
+    return data.playerComputeArtifact;
+  }
+
+  /**
+   * Fetch a client artifact and decode its bytes to an ArrayBuffer plus the
+   * broker inputs (content hash for side-load verification, per-dispatch fuel
+   * budget). Convenience over {@link artifact} for the live-coding client
+   * deploy loop.
+   */
+  async artifactBytes(
+    variables: PlayerComputeArtifactQueryVariables,
+  ): Promise<{
+    bytes: ArrayBuffer;
+    artifactHash: string;
+    fuelPerDispatch: bigint;
+    contractJson: string | null;
+    versionId: string;
+  }> {
+    const a = await this.artifact(variables);
+    const binary = atob(a.artifactBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return {
+      bytes: bytes.buffer,
+      artifactHash: a.artifactHash,
+      fuelPerDispatch: BigInt(a.clientFuelPerDispatch),
+      contractJson: a.contractJson ?? null,
+      versionId: a.versionId,
+    };
   }
 }

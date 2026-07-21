@@ -464,7 +464,32 @@ export {
   type PlayerCodeGridBounds,
   type PlayerCodeHostCall,
   type PlayerCodeWorkerLike,
+  type PlayerCodePresentation,
 } from './player-runtime/player-code-broker.js';
+export {
+  GLUE_HOST_FUNCTIONS,
+  buildImportObject,
+  parseFuelBudget,
+  runWithWatchdog,
+  type GlueInitMessage,
+  type GlueDispatchResult,
+} from './player-runtime/player-glue-worker.js';
+export {
+  LiveCodingController,
+  type LiveCodingControllerOptions,
+  type LiveCodingStatus,
+  type LiveCodingTarget,
+} from './live-coding/live-coding-controller.js';
+export {
+  mountLiveCoding,
+  type MountLiveCodingOptions,
+  type LiveCodingHandle,
+} from './live-coding/mount.js';
+export {
+  PLAYER_CODE_TEMPLATES,
+  templateById,
+  type PlayerCodeTemplate,
+} from './live-coding/templates.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from

@@ -7,6 +7,7 @@ fragment PlayerWasmModuleFields on PlayerWasmModule {
   authorUserId
   authorOrgId
   enabled
+  draft
   currentVersionId
   circuitState
   lastError
@@ -184,5 +185,27 @@ query PlayerComputeSwitches($appId: BigInt!) {
     scopeRef
     reason
     disabledAt
+  }
+}
+
+query PlayerComputeArtifact(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+  $versionId: String
+) {
+  playerComputeArtifact(
+    appId: $appId
+    gridId: $gridId
+    name: $name
+    versionId: $versionId
+  ) {
+    versionId
+    artifactHash
+    artifactBase64
+    sizeBytes
+    abiVersion
+    contractJson
+    clientFuelPerDispatch
   }
 }
