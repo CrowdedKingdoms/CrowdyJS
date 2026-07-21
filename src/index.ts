@@ -455,6 +455,8 @@ export {
   type DeployVersionOptions,
   type WaitForCompileOptions,
 } from './domains/compute.js';
+export { PlayerComputeAPI } from './domains/playerCompute.js';
+export { PlayerModelAPI } from './domains/playerModel.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from
@@ -472,6 +474,12 @@ export type {
   UdpProxyConnectionStatus,
   RealtimeConnectionEvent,
   GameClientBootstrap,
+  PlayerWasmModule,
+  PlayerWasmModuleVersion,
+  DeployPlayerComputeInput,
+  GridOwnership,
+  AssignGridOwnershipInput,
+  TransferGridOwnershipInput,
 
   // Management-api auth surface (used by AuthAPI / UsersAPI).
   UpdateGamertagInput,
@@ -585,6 +593,16 @@ export type {
   CreateCheckoutInput,
   CheckoutFilterInput,
   SetQuotaInput,
+  AppCodeAdmission,
+  AdmitAppCodeInput,
 } from './generated/graphql.js';
 
-export { ServerState, AppVisibility } from './generated/graphql.js';
+export {
+  ServerState,
+  AppVisibility,
+  PlayerComputeTarget,
+  GridOwnerKind,
+  GridTenure,
+  CodeAdmissionMode,
+  CodeAdmissionSubjectKind,
+} from './generated/graphql.js';

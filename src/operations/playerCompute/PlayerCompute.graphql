@@ -1,0 +1,74 @@
+fragment PlayerWasmModuleFields on PlayerWasmModule {
+  moduleId
+  appId
+  gridId
+  name
+  description
+  authorUserId
+  authorOrgId
+  enabled
+  currentVersionId
+  circuitState
+  lastError
+  createdAt
+  updatedAt
+}
+
+fragment PlayerWasmModuleVersionFields on PlayerWasmModuleVersion {
+  versionId
+  moduleId
+  versionNo
+  target
+  sourceFilesJson
+  openSource
+  compileStatus
+  compileLog
+  compiledSizeBytes
+  createdAt
+}
+
+mutation PlayerComputeDeploy($input: DeployPlayerComputeInput!) {
+  playerComputeDeploy(input: $input) {
+    ...PlayerWasmModuleVersionFields
+  }
+}
+
+mutation PlayerComputeSetEnabled(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+  $enabled: Boolean!
+) {
+  playerComputeSetEnabled(
+    appId: $appId
+    gridId: $gridId
+    name: $name
+    enabled: $enabled
+  ) {
+    ...PlayerWasmModuleFields
+  }
+}
+
+query PlayerComputeMyModules($appId: BigInt!) {
+  playerComputeMyModules(appId: $appId) {
+    ...PlayerWasmModuleFields
+  }
+}
+
+query PlayerComputeVersions(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+) {
+  playerComputeVersions(appId: $appId, gridId: $gridId, name: $name) {
+    ...PlayerWasmModuleVersionFields
+  }
+}
+
+mutation PlayerComputeDelete(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+) {
+  playerComputeDelete(appId: $appId, gridId: $gridId, name: $name)
+}

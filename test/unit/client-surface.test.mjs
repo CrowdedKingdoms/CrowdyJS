@@ -39,6 +39,14 @@ test('client exposes the full management + game sub-client surface', async () =>
     'modules', 'module', 'moduleVersions', 'moduleTriggers', 'modulePolicy',
     'moduleRuns', 'moduleStats', 'moduleLogs', 'appDiagnostics',
   ]);
+  assertMethods(client.playerCompute, 'playerCompute', [
+    'deploy', 'setEnabled', 'myModules', 'versions', 'delete',
+  ]);
+  assertMethods(client.playerModel, 'playerModel', [
+    'containers', 'container', 'createContainer', 'setProperty',
+    'deleteContainer', 'automations', 'createAutomation',
+    'setAutomationEnabled', 'deleteAutomation',
+  ]);
 
   // New management admin sub-clients.
   assertMethods(client.organizations, 'organizations', ['get', 'bySlug', 'mine', 'create', 'createToken', 'inviteMember', 'createRole']);
@@ -56,7 +64,15 @@ test('client exposes the full management + game sub-client surface', async () =>
   // New game-side sub-clients.
   assertMethods(client.avatars, 'avatars', ['listForUser', 'get', 'mine', 'appState', 'create', 'update', 'delete', 'updateState', 'updateAppState']);
   assertMethods(client.host, 'host', ['get', 'heartbeat']);
-  assertMethods(client.gameApps, 'gameApps', ['userPermissions', 'nearbyPermissions', 'permissionLimits', 'createGrid', 'grantPermissions', 'assignGroup']);
+  assertMethods(client.gameApps, 'gameApps', [
+    'ownership', 'assignOwnership', 'transferOwnership', 'userPermissions',
+    'nearbyPermissions', 'permissionLimits', 'createGrid', 'grantPermissions',
+    'assignGroup',
+  ]);
+  assertMethods(client.apps, 'apps', [
+    'codeAdmissionMode', 'codeAdmissions', 'setCodeAdmissionMode', 'admitCode',
+    'revokeCodeAdmission',
+  ]);
 
   // Passwordless auth surface (v8): no password login/register.
   assertMethods(client.auth, 'auth', [
@@ -147,10 +163,81 @@ test('client exposes the full management + game sub-client surface', async () =>
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');
+  assert.equal(client.admin.apps, client.apps, 'admin.apps aliases client.apps');
   assert.equal(client.admin.billing, client.billing, 'admin.billing aliases client.billing');
   assert.equal(client.admin.environments, client.environments, 'admin.environments aliases client.environments');
   assert.equal(client.admin.grids, client.gameApps, 'admin.grids aliases client.gameApps');
 
+  client.close();
+});
+
+test('player runtime wrappers route to the correct GraphQL planes', async () => {
+  const { createCrowdyClient, CodeAdmissionMode } = await loadSdk();
+  const client = createCrowdyClient({
+    managementUrl: 'https://management.invalid',
+    httpUrl: 'https://game.invalid',
+  });
+  const gameCalls = [];
+  const managementCalls = [];
+  const gameResults = [
+    { gridOwnership: { gridOwnershipId: 'ownership-1' } },
+    { assignGridOwnership: { gridOwnershipId: 'ownership-2' } },
+    { transferGridOwnership: { gridOwnershipId: 'ownership-3' } },
+    { playerComputeDeploy: { versionId: 'version-1' } },
+    { playerComputeSetEnabled: { moduleId: 'module-1' } },
+    { playerComputeMyModules: [{ moduleId: 'module-1' }] },
+    { playerComputeVersions: [{ versionId: 'version-1' }] },
+    { playerComputeDelete: true },
+  ];
+  client.graphql.request = async (_document, variables) => {
+    gameCalls.push(variables);
+    return gameResults.shift();
+  };
+  const managementResults = [
+    { appCodeAdmissionMode: CodeAdmissionMode.ImplicitAllow },
+    { appCodeAdmissions: [{ admissionId: 'admission-1' }] },
+    { setAppCodeAdmissionMode: CodeAdmissionMode.AllowList },
+    { admitAppCode: { admissionId: 'admission-2' } },
+    { revokeAppCodeAdmission: { admissionId: 'admission-2' } },
+  ];
+  client.management.request = async (_document, variables) => {
+    managementCalls.push(variables);
+    return managementResults.shift();
+  };
+
+  await client.gameApps.ownership('1', '2');
+  await client.gameApps.assignOwnership({ appId: '1', gridId: '2', ownerUserId: '3' });
+  await client.gameApps.transferOwnership({ appId: '1', gridId: '2', newOwnerUserId: '4' });
+  await client.playerCompute.deploy({
+    appId: '1', gridId: '2', name: 'weather', target: 'SERVER',
+    sourceFilesJson: '{}',
+  });
+  await client.playerCompute.setEnabled({
+    appId: '1', gridId: '2', name: 'weather', enabled: true,
+  });
+  await client.playerCompute.myModules({ appId: '1' });
+  await client.playerCompute.versions({ appId: '1', gridId: '2', name: 'weather' });
+  await client.playerCompute.delete({ appId: '1', gridId: '2', name: 'weather' });
+
+  await client.apps.codeAdmissionMode('1');
+  await client.apps.codeAdmissions('1', true);
+  await client.apps.setCodeAdmissionMode('1', CodeAdmissionMode.AllowList);
+  await client.apps.admitCode({
+    appId: '1', subjectKind: 'AUTHOR', subjectRef: '3',
+  });
+  await client.apps.revokeCodeAdmission('1', 'admission-2');
+
+  assert.deepEqual(gameCalls[0], { appId: '1', gridId: '2' });
+  assert.deepEqual(gameCalls[4], {
+    appId: '1', gridId: '2', name: 'weather', enabled: true,
+  });
+  assert.deepEqual(managementCalls, [
+    { appId: '1' },
+    { appId: '1', includeRevoked: true },
+    { appId: '1', mode: CodeAdmissionMode.AllowList },
+    { input: { appId: '1', subjectKind: 'AUTHOR', subjectRef: '3' } },
+    { appId: '1', admissionId: 'admission-2' },
+  ]);
   client.close();
 });
 

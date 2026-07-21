@@ -10,6 +10,11 @@ import {
   UpdateAppDocument,
   ArchiveAppDocument,
   SetAppVisibilityDocument,
+  AppCodeAdmissionModeDocument,
+  AppCodeAdmissionsDocument,
+  SetAppCodeAdmissionModeDocument,
+  AdmitAppCodeDocument,
+  RevokeAppCodeAdmissionDocument,
   type AppQuery,
   type AppQueryVariables,
   type AppBySlugQuery,
@@ -24,9 +29,17 @@ import {
   type UpdateAppMutation,
   type ArchiveAppMutation,
   type SetAppVisibilityMutation,
+  type AppCodeAdmissionModeQuery,
+  type AppCodeAdmissionsQuery,
+  type SetAppCodeAdmissionModeMutation,
+  type AdmitAppCodeMutation,
+  type RevokeAppCodeAdmissionMutation,
+  type AppCodeAdmissionsQueryVariables,
   type CreateAppInput,
   type UpdateAppInput,
+  type AdmitAppCodeInput,
   type AppVisibility,
+  type CodeAdmissionMode,
 } from '../generated/graphql.js';
 
 /**
@@ -109,6 +122,81 @@ function appRouteFromAppRow(row: unknown): AppRoute | null {
  */
 export class AppsAPI {
   constructor(private readonly management: GraphQLClient) {}
+
+  /**
+   * Read the app's player-code admission mode. Requires
+   * `view_compute_diagnostics`.
+   */
+  async codeAdmissionMode(
+    appId: string,
+  ): Promise<AppCodeAdmissionModeQuery['appCodeAdmissionMode']> {
+    const data = await this.management.request(AppCodeAdmissionModeDocument, {
+      appId,
+    });
+    return data.appCodeAdmissionMode;
+  }
+
+  /**
+   * List code/author/org allow-list entries newest-first. Revoked audit rows
+   * are omitted unless `includeRevoked` is true. Requires
+   * `view_compute_diagnostics`.
+   */
+  async codeAdmissions(
+    appId: string,
+    includeRevoked = false,
+  ): Promise<AppCodeAdmissionsQuery['appCodeAdmissions']> {
+    const variables: AppCodeAdmissionsQueryVariables = {
+      appId,
+      includeRevoked,
+    };
+    const data = await this.management.request(
+      AppCodeAdmissionsDocument,
+      variables,
+    );
+    return data.appCodeAdmissions;
+  }
+
+  /**
+   * Set the app's admission mode. Switching to `ALLOW_LIST` drains unadmitted
+   * code at activation while leaving deploy/compile available. Requires
+   * `manage_compute`.
+   */
+  async setCodeAdmissionMode(
+    appId: string,
+    mode: CodeAdmissionMode,
+  ): Promise<SetAppCodeAdmissionModeMutation['setAppCodeAdmissionMode']> {
+    const data = await this.management.request(SetAppCodeAdmissionModeDocument, {
+      appId,
+      mode,
+    });
+    return data.setAppCodeAdmissionMode;
+  }
+
+  /**
+   * Admit one code listing, author, or org to the app allow list. Admission
+   * controls execution only and never grants source visibility.
+   */
+  async admitCode(
+    input: AdmitAppCodeInput,
+  ): Promise<AdmitAppCodeMutation['admitAppCode']> {
+    const data = await this.management.request(AdmitAppCodeDocument, { input });
+    return data.admitAppCode;
+  }
+
+  /**
+   * Revoke an active admission. The server audit-logs and replica-syncs the
+   * change, then drains affected server modules and blocks client artifacts.
+   */
+  async revokeCodeAdmission(
+    appId: string,
+    admissionId: string,
+  ): Promise<RevokeAppCodeAdmissionMutation['revokeAppCodeAdmission']> {
+    const data = await this.management.request(
+      RevokeAppCodeAdmissionDocument,
+      { appId, admissionId },
+    );
+    return data.revokeAppCodeAdmission;
+  }
 
   /**
    * Fetch a single app by its numeric id. Requires authentication (any signed-in

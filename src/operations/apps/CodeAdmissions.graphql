@@ -1,0 +1,42 @@
+fragment AppCodeAdmissionFields on AppCodeAdmission {
+  admissionId
+  appId
+  subjectKind
+  subjectRef
+  versionRange
+  admittedBy
+  admittedAt
+  revokedAt
+}
+
+query AppCodeAdmissionMode($appId: BigInt!) {
+  appCodeAdmissionMode(appId: $appId)
+}
+
+query AppCodeAdmissions($appId: BigInt!, $includeRevoked: Boolean) {
+  appCodeAdmissions(appId: $appId, includeRevoked: $includeRevoked) {
+    ...AppCodeAdmissionFields
+  }
+}
+
+mutation SetAppCodeAdmissionMode(
+  $appId: BigInt!
+  $mode: CodeAdmissionMode!
+) {
+  setAppCodeAdmissionMode(appId: $appId, mode: $mode)
+}
+
+mutation AdmitAppCode($input: AdmitAppCodeInput!) {
+  admitAppCode(input: $input) {
+    ...AppCodeAdmissionFields
+  }
+}
+
+mutation RevokeAppCodeAdmission(
+  $appId: BigInt!
+  $admissionId: String!
+) {
+  revokeAppCodeAdmission(appId: $appId, admissionId: $admissionId) {
+    ...AppCodeAdmissionFields
+  }
+}

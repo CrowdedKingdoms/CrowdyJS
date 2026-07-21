@@ -1,5 +1,8 @@
 import type { GraphQLClient } from '../client.js';
 import {
+  GridOwnershipDocument,
+  AssignGridOwnershipDocument,
+  TransferGridOwnershipDocument,
   GridUserPermissionsDocument,
   NearbyGridPermissionsDocument,
   GridPermissionLimitsDocument,
@@ -11,6 +14,9 @@ import {
   SetGridPermissionLimitsDocument,
   AssignGroupToGridDocument,
   RevokeGroupFromGridDocument,
+  type GridOwnershipQuery,
+  type AssignGridOwnershipMutation,
+  type TransferGridOwnershipMutation,
   type GridUserPermissionsQuery,
   type NearbyGridPermissionsQuery,
   type GridPermissionLimitsQuery,
@@ -22,6 +28,8 @@ import {
   type SetGridPermissionLimitsMutation,
   type AssignGroupToGridMutation,
   type RevokeGroupFromGridMutation,
+  type AssignGridOwnershipInput,
+  type TransferGridOwnershipInput,
   type NearbyGridPermissionsInput,
   type CreateGridInput,
   type DeleteGridInput,
@@ -46,6 +54,44 @@ import {
  */
 export class GameAppsAPI {
   constructor(private readonly graphql: GraphQLClient) {}
+
+  /**
+   * Read the current first-class title record for a grid. Returns `null` when
+   * the grid has no current or unexpired owner. Requires authentication.
+   */
+  async ownership(
+    appId: string,
+    gridId: string,
+  ): Promise<GridOwnershipQuery['gridOwnership']> {
+    const data = await this.graphql.request(GridOwnershipDocument, {
+      appId,
+      gridId,
+    });
+    return data.gridOwnership;
+  }
+
+  /**
+   * Assign an unowned grid to one user. This bootstrap path requires
+   * `manage_apps` and assigns title only; grant runtime permissions separately.
+   */
+  async assignOwnership(
+    input: AssignGridOwnershipInput,
+  ): Promise<AssignGridOwnershipMutation['assignGridOwnership']> {
+    const data = await this.graphql.request(AssignGridOwnershipDocument, { input });
+    return data.assignGridOwnership;
+  }
+
+  /**
+   * Transfer title as the current user owner or an app admin. This security-
+   * sensitive operation disables player modules, wipes their state, removes
+   * the old owner's direct grants, and gives the new owner no implicit grants.
+   */
+  async transferOwnership(
+    input: TransferGridOwnershipInput,
+  ): Promise<TransferGridOwnershipMutation['transferGridOwnership']> {
+    const data = await this.graphql.request(TransferGridOwnershipDocument, { input });
+    return data.transferGridOwnership;
+  }
 
   /**
    * Read a user's effective (materialized) runtime permission keys on a grid.
