@@ -8,6 +8,10 @@ fragment PlayerCodeListingFields on PlayerCodeListing {
   mediaJson
   licenseMode
   acquisitionMode
+  priceCents
+  rentIntervalDays
+  windowDays
+  unitBudget
   status
   createdAt
 }

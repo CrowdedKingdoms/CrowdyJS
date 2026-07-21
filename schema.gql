@@ -1720,7 +1720,9 @@ type PlayerCodeListing {
   mediaJson: String!
   """Source-access mode for new versions."""
   licenseMode: PlayerCodeLicenseMode!
-  """Acquisition mode; always FREE in P4a (paid modes are P4b)."""
+  """
+  Acquisition mode: FREE, or a paid mode (BUY / RENT / TIME_LIMITED / COST_LIMITED; P4b). Free listings carry no price.
+  """
   acquisitionMode: PlayerCodeAcquisitionMode!
   """Catalog status (active / delisted / killed)."""
   status: PlayerCodeListingStatus!
@@ -1728,6 +1730,14 @@ type PlayerCodeListing {
   createdAt: DateTime!
   """When the listing was last updated."""
   updatedAt: DateTime!
+  """Price in cents for paid modes; null when FREE."""
+  priceCents: Int
+  """Rent billing interval in days (RENT mode)."""
+  rentIntervalDays: Int
+  """Fixed access window in days (TIME_LIMITED mode)."""
+  windowDays: Int
+  """Compute-unit budget per purchase (COST_LIMITED mode)."""
+  unitBudget: BigInt
   """
   The listing's admission standing in this app. In implicit_allow apps this is always ADMITTED; in allow_list apps PENDING listings can be acquired but not installed.
   """
