@@ -40,7 +40,7 @@ test('client exposes the full management + game sub-client surface', async () =>
     'moduleRuns', 'moduleStats', 'moduleLogs', 'appDiagnostics',
   ]);
   assertMethods(client.playerCompute, 'playerCompute', [
-    'deploy', 'setEnabled', 'myModules', 'versions', 'delete',
+    'deploy', 'setEnabled', 'invoke', 'myModules', 'versions', 'delete',
   ]);
   assertMethods(client.playerModel, 'playerModel', [
     'containers', 'container', 'createContainer', 'setProperty',

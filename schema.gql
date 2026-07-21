@@ -5643,6 +5643,21 @@ type Mutation {
     enabled: Boolean!
   ): PlayerWasmModule!
   """
+  Synchronously invoke a server player-module export as the current grid owner. Requires the module to be enabled, compiled, admitted, and covered by run_server_code at app and grid scope. The runtime payload carries callerUserId/gridId; author identity never participates.
+  """
+  playerComputeInvoke(
+    """App containing the owned grid."""
+    appId: BigInt!
+    """Owned grid containing the module."""
+    gridId: BigInt!
+    """Module name within the grid."""
+    moduleName: String!
+    """Guest router export name."""
+    exportName: String!
+    """Optional JSON object passed to the export."""
+    paramsJson: String
+  ): PlayerComputeInvokeResult!
+  """
   Delete a self-authored player module and its source versions. Only the code author may delete it, and they must still own the target grid. Returns false when no matching module exists.
   """
   playerComputeDelete(
@@ -8374,6 +8389,20 @@ Execution target for player-authored Rust. SERVER runs as the grid owner in game
 enum PlayerComputeTarget {
   SERVER
   CLIENT
+}
+
+"""
+Synchronous result from invoking an admitted server player-module export as the current grid owner.
+"""
+type PlayerComputeInvokeResult {
+  """Raw module result bytes encoded as base64."""
+  resultBase64: String!
+  """UTF-8 result when it is valid JSON; otherwise null."""
+  resultJson: String
+  """Instrumented fuel consumed."""
+  fuelUsed: BigInt!
+  """Wall-clock execution duration in µs."""
+  durationUs: Int!
 }
 
 """

@@ -5,6 +5,7 @@ import {
   PlayerComputeMyModulesDocument,
   PlayerComputeVersionsDocument,
   PlayerComputeDeleteDocument,
+  PlayerComputeInvokeDocument,
   type PlayerComputeDeployMutation,
   type PlayerComputeDeployMutationVariables,
   type PlayerComputeSetEnabledMutation,
@@ -15,6 +16,8 @@ import {
   type PlayerComputeVersionsQueryVariables,
   type PlayerComputeDeleteMutation,
   type PlayerComputeDeleteMutationVariables,
+  type PlayerComputeInvokeMutation,
+  type PlayerComputeInvokeMutationVariables,
 } from '../generated/graphql.js';
 
 /**
@@ -87,5 +90,16 @@ export class PlayerComputeAPI {
   ): Promise<PlayerComputeDeleteMutation['playerComputeDelete']> {
     const data = await this.graphql.request(PlayerComputeDeleteDocument, variables);
     return data.playerComputeDelete;
+  }
+
+  /** Invoke an enabled/admitted server module synchronously as the grid owner. */
+  async invoke(
+    variables: PlayerComputeInvokeMutationVariables,
+  ): Promise<PlayerComputeInvokeMutation['playerComputeInvoke']> {
+    const data = await this.graphql.request(
+      PlayerComputeInvokeDocument,
+      variables,
+    );
+    return data.playerComputeInvoke;
   }
 }

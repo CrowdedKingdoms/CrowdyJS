@@ -72,3 +72,24 @@ mutation PlayerComputeDelete(
 ) {
   playerComputeDelete(appId: $appId, gridId: $gridId, name: $name)
 }
+
+mutation PlayerComputeInvoke(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $moduleName: String!
+  $exportName: String!
+  $paramsJson: String
+) {
+  playerComputeInvoke(
+    appId: $appId
+    gridId: $gridId
+    moduleName: $moduleName
+    exportName: $exportName
+    paramsJson: $paramsJson
+  ) {
+    resultBase64
+    resultJson
+    fuelUsed
+    durationUs
+  }
+}
