@@ -662,7 +662,7 @@ type AppCodeAdmission {
   """Stable id of the admitted subject (listing UUID, user id, or org id)."""
   subjectRef: String!
   """
-  Optional version-range expression. Null admits all versions; capability-widening updates still require re-review.
+  Optional P1 version range: exact "3", inclusive "2-5", ">=4", or "<=9". Null admits all versions; invalid expressions fail closed at runtime.
   """
   versionRange: String
   """Numeric user id of the org member who admitted the subject."""
@@ -972,13 +972,17 @@ enum PaymentProvider {
 }
 
 """
-Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens; SHARED_APP_SUBSCRIPTION activates a paid shared-environment app slot.
+Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; PLAYER_WALLET_TOPUP credits the caller's player_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens; SHARED_APP_SUBSCRIPTION activates a paid shared-environment app slot.
 """
 enum CheckoutPurpose {
   """
   Add funds to an organization wallet. Requires orgId and amountCents, and the caller must hold the org "manage_billing" permission. Credits the org wallet on completion.
   """
   ORG_WALLET_TOPUP
+  """
+  Add funds to the caller's own player wallet (player compute P2). Requires amountCents only — any authenticated user may fund their own wallet; no org permission is involved. Credits the player wallet idempotently on completion.
+  """
+  PLAYER_WALLET_TOPUP
   """
   Purchase a user's access to an app at a given tier. Requires appId and tierId. Upserts app_user_access on completion.
   """
@@ -2557,6 +2561,200 @@ type CpComputePlatformCeilings {
 }
 
 """
+The caller's player wallet (player compute P2, DN-5): a platform-scoped balance funding that player's grid compute across every org/app they play in. Out-of-band from org wallets — player usage never touches an org's money.
+"""
+type PlayerWallet {
+  """Wallet id."""
+  walletId: BigInt!
+  """The owning player user id."""
+  userId: BigInt!
+  """Current balance in cents (may go negative on a closed hour)."""
+  balanceCents: BigInt!
+  """ISO currency code (lowercase)."""
+  currency: String!
+  """Wallet creation time."""
+  createdAt: DateTime!
+}
+
+"""
+One player-wallet ledger entry: top-ups, hourly usage debits, auto-recharges, refunds, and adjustments. Usage debits carry the app and reference the hour's charge row, whose snapshot splits platform vs studio-markup components.
+"""
+type PlayerWalletTransaction {
+  """Transaction id."""
+  transactionId: BigInt!
+  """The wallet."""
+  walletId: BigInt!
+  """The owning player user id."""
+  userId: BigInt!
+  """Signed amount in cents (debits negative)."""
+  amountCents: BigInt!
+  """Balance after this entry."""
+  balanceAfter: BigInt!
+  """
+  One of 'topup', 'usage_debit', 'auto_recharge', 'refund', 'adjustment'.
+  """
+  transactionType: String!
+  """Human description."""
+  description: String
+  """External reference (checkout/PaymentIntent id)."""
+  referenceId: String
+  """The app a usage debit covers; null for wallet-level entries."""
+  appId: BigInt
+  """Entry time."""
+  createdAt: DateTime!
+}
+
+"""
+A player's self-set spend cap (06 §2a): a daily/monthly ceiling globally or per app. The effective runtime limit is min(developer policy, self-cap, wallet balance); hitting a cap pauses that player's mods with PLAYER_SPEND_CAP, never their play.
+"""
+type PlayerSpendCap {
+  """The owning player user id."""
+  userId: BigInt!
+  """Cap scope: 'global' or 'app'."""
+  scope: String!
+  """The app id for app scope; null for global."""
+  scopeRef: BigInt
+  """Daily ceiling in cents; null = no daily cap."""
+  dailyLimitCents: BigInt
+  """Calendar-month ceiling in cents; null = no monthly cap."""
+  monthlyLimitCents: BigInt
+  """Spend counted against the daily cap so far today."""
+  currentDayUsageCents: BigInt!
+  """Spend counted against the monthly cap so far this month."""
+  currentMonthUsageCents: BigInt!
+}
+
+"""
+Off-session auto-recharge settings for the player wallet (the org auto-billing twin): when enabled with a vaulted card, the player gate tops the wallet up before denying for insufficient funds.
+"""
+type PlayerAutoBilling {
+  """The owning player user id."""
+  userId: BigInt!
+  """Whether auto-recharge is enabled."""
+  enabled: Boolean!
+  """Per-period auto-recharge ceiling in cents; null = no limit."""
+  limitCents: BigInt
+  """Amount auto-billed so far this period."""
+  autoBilledThisPeriodCents: BigInt!
+  """Amount charged per auto-recharge."""
+  rechargeAmountCents: BigInt!
+  """Balance threshold that triggers a recharge."""
+  lowWaterThresholdCents: BigInt!
+  """Whether an active vaulted card is attached."""
+  hasPaymentMethod: Boolean!
+  """Last auto-recharge failure, if any."""
+  lastError: String
+}
+
+"""
+One posted player usage charge: a (player, app, closed clock hour) row. amountCents = platformCents + markupCents — players see what the platform charges and what the studio adds (06 §4). The UNIQUE hour key makes the billing tick idempotent.
+"""
+type PlayerUsageCharge {
+  """Charge id."""
+  chargeId: BigInt!
+  """The owning player user id."""
+  userId: BigInt!
+  """The app the usage ran in."""
+  appId: BigInt!
+  """Billed hour start (inclusive)."""
+  periodStart: DateTime!
+  """Billed hour end (exclusive)."""
+  periodEnd: DateTime!
+  """Total debited cents."""
+  amountCents: BigInt!
+  """Platform component (base rate card)."""
+  platformCents: BigInt!
+  """Studio markup component (the app's player_rate_markup_bps)."""
+  markupCents: BigInt!
+  """ISO currency code."""
+  currency: String!
+  """JSON per-metric usage/billing snapshot for the hour."""
+  usageSnapshotJson: String!
+  """When the charge posted."""
+  createdAt: DateTime!
+}
+
+"""
+The caller's per-app player runtime gate state (the app runtime_status twin, player-scoped): 'active', 'grace', or 'denied' with a typed reason. Non-active pauses the player's grid compute only — an unfunded wallet stops your mods, not your game.
+"""
+type PlayerRuntimeState {
+  """The player user id."""
+  userId: BigInt!
+  """The app."""
+  appId: BigInt!
+  """'active', 'grace', or 'denied'."""
+  status: String!
+  """PLAYER_WALLET_EMPTY or PLAYER_SPEND_CAP when not active."""
+  reason: String
+  """Last gate evaluation that changed state."""
+  updatedAt: DateTime!
+}
+
+"""
+Per-player usage row for studio diagnostics (top spenders / quota utilization): one (player, app) aggregate over a window.
+"""
+type AppPlayerUsageRow {
+  """The player (grid owner)."""
+  userId: BigInt!
+  """Player compute units used."""
+  computeUnits: BigInt!
+  """Player automation units used."""
+  automationUnits: BigInt!
+  """Compile submissions."""
+  compileCount: Int!
+  """Cents charged in the window."""
+  chargedCents: BigInt!
+}
+
+"""
+One player-compute policy row (06 §3): developer-set per-player/cohort clamps evaluated most-specific-wins (user > grid > tier > app_default), every knob additionally clamped by the app's studio policy at runtime. Management is authoritative in P2; rows replica-sync to the game runtime.
+"""
+type PlayerWasmPolicy {
+  """Policy row UUID."""
+  policyId: String!
+  """The app."""
+  appId: BigInt!
+  """'app_default', 'tier', 'grid', or 'user'."""
+  scope: String!
+  """Tier/grid/user id; null for app_default."""
+  scopeRef: BigInt
+  """Whether this row is applied."""
+  enabled: Boolean!
+  """Max player modules per grid."""
+  maxModulesPerGrid: Int!
+  """Max player modules across all grids one player owns."""
+  maxModulesTotal: Int!
+  """Max tick rate in Hz."""
+  maxTickHz: Float!
+  """Fuel budget per tick."""
+  fuelPerTick: BigInt!
+  """Fuel budget per invoke/event."""
+  fuelPerInvoke: BigInt!
+  """Sandbox memory ceiling (MiB)."""
+  maxMemoryMb: Int!
+  """Watchdog wall-clock ceiling (ms)."""
+  maxRunMs: Int!
+  """Host data-API ops per tick."""
+  maxDbOpsPerTick: Int!
+  """Module replication messages per minute."""
+  maxEgressMsgsPerMin: Int!
+  """Module replication bytes per minute."""
+  maxEgressBytesPerMin: BigInt!
+  """
+  Hourly compute-unit quota (PLAYER_QUOTA_EXHAUSTED pause); null = uncapped.
+  """
+  unitsPerHour: BigInt
+  """Daily compute-unit quota; null = uncapped."""
+  unitsPerDay: BigInt
+  """Deploys (compiles) allowed per player per hour."""
+  maxCompilesPerHour: Int!
+  """Player model containers created per player per day."""
+  maxContainerCreatesDay: Int!
+  """Client-target fuel budget per browser dispatch (04 §3)."""
+  clientFuelPerDispatch: BigInt!
+}
+
+"""
 Arbitrary-precision signed integer (used for 64-bit ids and chunk coordinates such as appId, userId and chunk x/y/z). ALWAYS transmitted as a base-10 decimal STRING in BOTH directions — send it quoted (e.g. "1024", "-5") and read it back as a string; never use a raw JSON number, because large values overflow IEEE-754 doubles. The server rejects any value that is not a valid integer string.
 """
 scalar BigInt
@@ -3315,6 +3513,70 @@ type Query {
   """
   cpComputePlatformCeilings: CpComputePlatformCeilings! @requiresPermission(scope: "operator", permission: "is_operator")
   """
+  The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet funds the player's grid compute across every org/app (DN-5); org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP.
+  """
+  playerWalletBalance: PlayerWallet!
+  """
+  The caller's player-wallet ledger, newest first: top-ups, hourly usage debits (per app), auto-recharges, refunds, and adjustments. Usage-debit hours are broken down by playerUsageCharges, whose snapshot splits the platform and studio-markup components.
+  """
+  playerWalletTransactions(
+    """Max entries (default 50, max 200)."""
+    limit: Int
+    """Entries to skip (pagination)."""
+    offset: Int
+  ): [PlayerWalletTransaction!]!
+  """
+  The caller's posted hourly player-usage charges, newest first, optionally filtered by app. Each charge splits platformCents (base rate card) from markupCents (the studio's configured markup) with a per-metric snapshot — players always see what the platform charges and what the studio adds.
+  """
+  playerUsageCharges(
+    """Optional: only charges for this app."""
+    appId: BigInt
+    """Max entries (default 50, max 200)."""
+    limit: Int
+  ): [PlayerUsageCharge!]!
+  """
+  The caller's self-set spend caps (global and per-app) with running counters. The effective runtime limit is min(developer policy, self-cap, wallet balance).
+  """
+  playerSpendCaps: [PlayerSpendCap!]!
+  """
+  The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds).
+  """
+  playerAutoBilling: PlayerAutoBilling!
+  """
+  The caller's per-app player runtime gate states. Only apps where the gate has ever acted appear; absence means active. 'denied' with PLAYER_WALLET_EMPTY or PLAYER_SPEND_CAP pauses that player's grid compute only — play is never touched.
+  """
+  playerRuntimeStates: [PlayerRuntimeState!]!
+  """
+  List an app's player-compute policy rows (developer cost/rate clamps per player or cohort, 06 §3), most general first. Requires 'view_compute_diagnostics'. Management is authoritative; rows replica-sync to the game runtime on change.
+  """
+  playerWasmPolicies(
+    """App whose player policies to list."""
+    appId: BigInt!
+  ): [PlayerWasmPolicy!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  The app's player rate-card markup in basis points on the platform base price (06 §4): the studio's usage-revenue stream, shown to players as a separate spend-history component. 0 = no markup (the BWF posture). Requires 'view_billing'.
+  """
+  playerRateMarkup(
+    """App whose markup to read."""
+    appId: BigInt!
+  ): Int! @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId")
+  """
+  Per-player usage aggregate for an app over a trailing window (top spenders / quota utilization, 06 §5): compute units, automation units, compiles, and cents charged per player. Requires 'view_compute_diagnostics'.
+  """
+  appPlayerUsage(
+    """App whose player usage to aggregate."""
+    appId: BigInt!
+    """Trailing window in hours (default 24, max 744)."""
+    hours: Int
+  ): [AppPlayerUsageRow!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Total player rate-card markup accrued to this app's org income line, in cents (payouts arrive with the P4b ledger). Requires 'view_billing'.
+  """
+  appPlayerMarkupAccrued(
+    """App whose accrued markup to total."""
+    appId: BigInt!
+  ): BigInt! @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId")
+  """
   Lists the avatars owned by `userId`. Requires a valid game token. Owner-aware: when the caller is NOT the owner, each avatar’s `privateState` is stripped (returned null); `publicState` is always included. State blobs are base64-encoded binary.
   """
   userAvatars(
@@ -3995,6 +4257,50 @@ type Query {
     """Module name within the grid."""
     name: String!
   ): [PlayerWasmModuleVersion!]!
+  """
+  The caller's player-compute spend and quota view for one app (P2): compute units used in the current clock hour/day vs the effective units_per_hour/units_per_day policy caps, compile-quota utilization, and the wallet/spend-cap gate state with its typed reason. This is the remaining-budget source the live-coding panel consumes.
+  """
+  playerComputeUsage(
+    """App whose player usage to report."""
+    appId: BigInt!
+  ): PlayerComputeUsage!
+  """
+  List executions of player modules on a grid the caller currently owns, newest first. Every run is attributed to the grid owner it executed as; author identity never appears here.
+  """
+  playerComputeRuns(
+    """App containing the owned grid."""
+    appId: BigInt!
+    """Owned grid whose runs to list."""
+    gridId: BigInt!
+    """Optional: only runs of this module. Omit for all."""
+    moduleName: String
+    """Optional: filter by outcome (true = succeeded, false = failed)."""
+    success: Boolean
+    """Max runs to return (default 50, max 200)."""
+    limit: Int
+    """Number of runs to skip (pagination)."""
+    offset: Int
+  ): [PlayerWasmModuleRun!]!
+  """
+  Failed-run diagnostics for player modules on a grid the caller currently owns: the failing runs with their typed error kinds, newest first. The owner-scoped twin of computeModuleLogs.
+  """
+  playerComputeLogs(
+    """App containing the owned grid."""
+    appId: BigInt!
+    """Owned grid whose failures to list."""
+    gridId: BigInt!
+    """Optional: only failures of this module. Omit for all."""
+    moduleName: String
+    """Max entries to return (default 50, max 200)."""
+    limit: Int
+  ): [PlayerWasmModuleRun!]!
+  """
+  Active player-compute kill switches for an app, newest first. Requires the org 'view_compute_diagnostics' permission.
+  """
+  playerComputeSwitches(
+    """App whose switches to list."""
+    appId: BigInt!
+  ): [PlayerComputeSwitch!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
   List flexible player-model containers owned by the caller in one currently owned grid. Requires an app-scoped token and current grid ownership; never returns app-wide or foreign-owner rows.
   """
@@ -4790,6 +5096,59 @@ type Mutation {
     """
     input: CpSetComputePlatformCeilingsInput!
   ): CpComputePlatformCeilings! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Set (or clear, by passing both limits null) one of the caller's self-set spend caps: a global or per-app daily/monthly ceiling in cents. Hitting a cap pauses that player's mods with PLAYER_SPEND_CAP until the window rolls — play is untouched. Changes replica-sync to the game runtime.
+  """
+  setPlayerSpendCap(
+    """'global' or 'app'."""
+    scope: String!
+    """The app for app scope; omit for global."""
+    appId: BigInt
+    """Daily ceiling in cents; null = no daily cap."""
+    dailyLimitCents: BigInt
+    """Monthly ceiling in cents; null = no monthly cap."""
+    monthlyLimitCents: BigInt
+  ): [PlayerSpendCap!]!
+  """
+  Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method.
+  """
+  setPlayerAutoBilling(
+    """Whether auto-recharge is enabled."""
+    enabled: Boolean!
+    """Per-period auto-recharge ceiling; null = no limit."""
+    limitCents: BigInt
+    """Amount per recharge (default 1000)."""
+    rechargeAmountCents: BigInt
+    """Balance threshold that triggers a recharge."""
+    lowWaterThresholdCents: BigInt
+  ): PlayerAutoBilling!
+  """
+  Create or update a player-compute policy row at app_default, tier, grid, or user scope. Omitted knobs keep their current value; unitsPerHour/unitsPerDay set the PLAYER_QUOTA_EXHAUSTED budgets (null = uncapped). Every knob is additionally clamped by the app's studio compute policy at runtime, so a player policy can only tighten. Requires 'manage_compute'.
+  """
+  setPlayerWasmPolicy(
+    """Scope + the knobs to set."""
+    input: SetPlayerWasmPolicyInput!
+  ): PlayerWasmPolicy! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
+  Delete a player-compute policy row; covered players fall back to the next most general scope. Returns false when no matching row exists. Requires 'manage_compute'.
+  """
+  deletePlayerWasmPolicy(
+    """App owning the policy row."""
+    appId: BigInt!
+    """'app_default', 'tier', 'grid', or 'user'."""
+    scope: String!
+    """Tier/grid/user id; omit for app_default."""
+    scopeRef: BigInt
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income accrues per charge to the org's income line and is paid out via the P4b payout ledger. Requires 'manage_billing'.
+  """
+  setPlayerRateMarkup(
+    """App whose markup to set."""
+    appId: BigInt!
+    """Markup in basis points (0..10000)."""
+    markupBps: Int!
+  ): Int! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
   """
   Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar".
   """
@@ -5658,6 +6017,23 @@ type Mutation {
     paramsJson: String
   ): PlayerComputeInvokeResult!
   """
+  Throw or release a player-compute kill switch at player, grid, or app scope (the 03 §7 kill ladder). Throwing a switch stops the covered modules on the next scheduler pass; quota state is retained, and releasing resumes normally. Module-level disable is playerComputeSetEnabled; listing scope arrives with the marketplace. Requires the org 'manage_compute' permission.
+  """
+  playerComputeSetSwitch(
+    """App the switch applies to."""
+    appId: BigInt!
+    """Switch scope: 'player', 'grid', or 'app'."""
+    scope: String!
+    """True to stop execution at this scope; false to release."""
+    disabled: Boolean!
+    """
+    The player user id (player scope) or grid id (grid scope); omit for app scope.
+    """
+    scopeRef: BigInt
+    """Operator note recorded on the switch row."""
+    reason: String
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
   Delete a self-authored player module and its source versions. Only the code author may delete it, and they must still own the target grid. Returns false when no matching module exists.
   """
   playerComputeDelete(
@@ -5915,7 +6291,9 @@ input AdmitAppCodeInput {
   Stable id of the subject (listing UUID, numeric user id, or numeric org id).
   """
   subjectRef: String!
-  """Optional version-range expression. Omit to admit all current versions."""
+  """
+  Optional P1 version range: exact "3", inclusive "2-5", ">=4", or "<=9". Omit to admit all versions.
+  """
   versionRange: String
 }
 
@@ -6393,6 +6771,34 @@ input CpSetComputePlatformCeilingsInput {
   Max module-emitted replication bytes per minute (decimal string). > 0; explicit null clears the override; omit to leave unchanged.
   """
   maxEgressBytesPerMin: BigInt
+}
+
+"""
+Upsert one player policy row. Omitted knobs keep their current value (or the platform default on first insert). unitsPerHour/unitsPerDay accept null to clear the quota.
+"""
+input SetPlayerWasmPolicyInput {
+  """The app."""
+  appId: BigInt!
+  """'app_default', 'tier', 'grid', or 'user'."""
+  scope: String!
+  """Tier/grid/user id; required unless scope is app_default."""
+  scopeRef: BigInt
+  enabled: Boolean
+  maxModulesPerGrid: Int
+  maxModulesTotal: Int
+  maxTickHz: Float
+  fuelPerTick: BigInt
+  fuelPerInvoke: BigInt
+  maxMemoryMb: Int
+  maxRunMs: Int
+  maxDbOpsPerTick: Int
+  maxEgressMsgsPerMin: Int
+  maxEgressBytesPerMin: BigInt
+  unitsPerHour: BigInt
+  unitsPerDay: BigInt
+  maxCompilesPerHour: Int
+  maxContainerCreatesDay: Int
+  clientFuelPerDispatch: BigInt
 }
 
 type Avatar {
@@ -8389,6 +8795,90 @@ Execution target for player-authored Rust. SERVER runs as the grid owner in game
 enum PlayerComputeTarget {
   SERVER
   CLIENT
+}
+
+"""
+The caller's player-compute spend and quota view for one app (P2): unit usage in the current clock hour/day, the effective policy limits, compile-quota utilization, and the replica-synced wallet/spend-cap gate state. Units follow the platform formula GREATEST(cpu ms, fuel/22M); player automation units are included.
+"""
+type PlayerComputeUsage {
+  """The app this view covers."""
+  appId: BigInt!
+  """
+  Compute units consumed in the current clock hour (modules + automations, all owned grids aggregated).
+  """
+  hourUnitsUsed: BigInt!
+  """Compute units consumed in the current clock day."""
+  dayUnitsUsed: BigInt!
+  """
+  Effective units_per_hour developer-policy cap; null when the app sets no hourly quota.
+  """
+  unitsPerHour: BigInt
+  """
+  Effective units_per_day developer-policy cap; null when the app sets no daily quota.
+  """
+  unitsPerDay: BigInt
+  """Compile submissions counted in the current clock hour."""
+  compilesThisHour: Int!
+  """Effective max_compiles_per_hour policy cap."""
+  maxCompilesPerHour: Int!
+  """
+  Replica-synced management player gate for this app: 'active', 'grace', or 'denied'. Non-active pauses this player's modules only; play is untouched.
+  """
+  gateStatus: String!
+  """
+  Typed pause reason when gated: PLAYER_WALLET_EMPTY, PLAYER_SPEND_CAP, PLAYER_QUOTA_EXHAUSTED, or PLAYER_COMPUTE_KILLED.
+  """
+  gateReason: String
+}
+
+"""
+One execution of a player module (init/tick/invoke/event), attributed to the grid owner it ran as. The per-run twin of the studio WasmModuleRun, scoped to grids the caller currently owns.
+"""
+type PlayerWasmModuleRun {
+  """Unique run id (UUID)."""
+  runId: String!
+  """The app (tenant)."""
+  appId: BigInt!
+  """The owned grid the module ran in."""
+  gridId: BigInt!
+  """The module that ran."""
+  moduleId: String!
+  """The module name at run time."""
+  moduleName: String!
+  """Execution identity: the grid owner the run executed as."""
+  executedAsUserId: BigInt!
+  """Flow correlation id shared across the entry call."""
+  flowId: String
+  """What ran: init | tick | event | invoke."""
+  triggerSource: String!
+  """When the run started."""
+  startedAt: DateTime!
+  """Wall-clock duration in microseconds."""
+  durationUs: Int!
+  """Fuel consumed by the run."""
+  fuelUsed: BigInt!
+  """Whether the run succeeded."""
+  success: Boolean!
+  """Typed failure kind when the run failed."""
+  errorMessage: String
+}
+
+"""
+A kill-ladder switch row (P2, 03 §7): a studio-set immediate stop at player, grid, or app scope. Module-level disable lives on the module itself; listing scope arrives with the marketplace. Quota state is retained across a kill.
+"""
+type PlayerComputeSwitch {
+  """Switch row UUID."""
+  switchId: String!
+  """The app the switch applies to."""
+  appId: BigInt!
+  """Scope: 'player', 'grid', or 'app'."""
+  scope: String!
+  """The player user id or grid id; null for app scope."""
+  scopeRef: BigInt
+  """Operator note recorded when the switch was thrown."""
+  reason: String
+  """When execution was stopped."""
+  disabledAt: DateTime!
 }
 
 """

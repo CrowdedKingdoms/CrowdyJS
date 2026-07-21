@@ -61,6 +61,7 @@ import { UdpAPI } from './domains/udp.js';
 import { GameModelAPI } from './domains/gameModel.js';
 import { ComputeAPI } from './domains/compute.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
+import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { PlayerModelAPI } from './domains/playerModel.js';
 
 export interface CrowdyClientConfig {
@@ -207,6 +208,8 @@ export class CrowdyClient {
   readonly compute: ComputeAPI;
   /** Player-authored Rust/WASM bound to player-owned grids. */
   readonly playerCompute: PlayerComputeAPI;
+  /** Player wallet, spend caps, hourly usage charges, and player policy (P2). */
+  readonly playerWallet: PlayerWalletAPI;
   /** Player-owned flexible model data and grid-confined automations. */
   readonly playerModel: PlayerModelAPI;
   /** Durable avatars + per-app avatar state (owner-aware reads). */
@@ -294,6 +297,7 @@ export class CrowdyClient {
     });
     this.compute = new ComputeAPI(this.graphql);
     this.playerCompute = new PlayerComputeAPI(this.graphql);
+    this.playerWallet = new PlayerWalletAPI(this.management);
     this.playerModel = new PlayerModelAPI(this.graphql);
     this.avatars = new AvatarsAPI(this.graphql);
     this.host = new HostAPI(this.graphql);

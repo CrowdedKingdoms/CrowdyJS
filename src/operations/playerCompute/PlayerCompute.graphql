@@ -93,3 +93,96 @@ mutation PlayerComputeInvoke(
     durationUs
   }
 }
+
+fragment PlayerWasmModuleRunFields on PlayerWasmModuleRun {
+  runId
+  appId
+  gridId
+  moduleId
+  moduleName
+  executedAsUserId
+  flowId
+  triggerSource
+  startedAt
+  durationUs
+  fuelUsed
+  success
+  errorMessage
+}
+
+query PlayerComputeUsage($appId: BigInt!) {
+  playerComputeUsage(appId: $appId) {
+    appId
+    hourUnitsUsed
+    dayUnitsUsed
+    unitsPerHour
+    unitsPerDay
+    compilesThisHour
+    maxCompilesPerHour
+    gateStatus
+    gateReason
+  }
+}
+
+query PlayerComputeRuns(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $moduleName: String
+  $success: Boolean
+  $limit: Int
+  $offset: Int
+) {
+  playerComputeRuns(
+    appId: $appId
+    gridId: $gridId
+    moduleName: $moduleName
+    success: $success
+    limit: $limit
+    offset: $offset
+  ) {
+    ...PlayerWasmModuleRunFields
+  }
+}
+
+query PlayerComputeLogs(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $moduleName: String
+  $limit: Int
+) {
+  playerComputeLogs(
+    appId: $appId
+    gridId: $gridId
+    moduleName: $moduleName
+    limit: $limit
+  ) {
+    ...PlayerWasmModuleRunFields
+  }
+}
+
+mutation PlayerComputeSetSwitch(
+  $appId: BigInt!
+  $scope: String!
+  $disabled: Boolean!
+  $scopeRef: BigInt
+  $reason: String
+) {
+  playerComputeSetSwitch(
+    appId: $appId
+    scope: $scope
+    disabled: $disabled
+    scopeRef: $scopeRef
+    reason: $reason
+  )
+}
+
+query PlayerComputeSwitches($appId: BigInt!) {
+  playerComputeSwitches(appId: $appId) {
+    switchId
+    appId
+    scope
+    scopeRef
+    reason
+    disabledAt
+  }
+}

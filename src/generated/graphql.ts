@@ -161,7 +161,7 @@ export type AdmitAppCodeInput = {
   subjectKind: CodeAdmissionSubjectKind;
   /** Stable id of the subject (listing UUID, numeric user id, or numeric org id). */
   subjectRef: Scalars['String']['input'];
-  /** Optional version-range expression. Omit to admit all current versions. */
+  /** Optional P1 version range: exact "3", inclusive "2-5", ">=4", or "<=9". Omit to admit all versions. */
   versionRange?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -317,7 +317,7 @@ export type AppCodeAdmission = {
   subjectKind: CodeAdmissionSubjectKind;
   /** Stable id of the admitted subject (listing UUID, user id, or org id). */
   subjectRef: Scalars['String']['output'];
-  /** Optional version-range expression. Null admits all versions; capability-widening updates still require re-review. */
+  /** Optional P1 version range: exact "3", inclusive "2-5", ">=4", or "<=9". Null admits all versions; invalid expressions fail closed at runtime. */
   versionRange: Maybe<Scalars['String']['output']>;
 };
 
@@ -374,6 +374,21 @@ export type AppMarketplaceFilterInput = {
   orgSlug?: InputMaybe<Scalars['String']['input']>;
   /** Free-text search applied to app name and description (case-insensitive substring match). Omit for no text filter. */
   query?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Per-player usage row for studio diagnostics (top spenders / quota utilization): one (player, app) aggregate over a window. */
+export type AppPlayerUsageRow = {
+  __typename?: 'AppPlayerUsageRow';
+  /** Player automation units used. */
+  automationUnits: Scalars['BigInt']['output'];
+  /** Cents charged in the window. */
+  chargedCents: Scalars['BigInt']['output'];
+  /** Compile submissions. */
+  compileCount: Scalars['Int']['output'];
+  /** Player compute units used. */
+  computeUnits: Scalars['BigInt']['output'];
+  /** The player (grid owner). */
+  userId: Scalars['BigInt']['output'];
 };
 
 /** The shared-environment runtime gate + current billing-window usage for an app. */
@@ -821,7 +836,7 @@ export type CheckoutFilterInput = {
   userId?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
-/** Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens; SHARED_APP_SUBSCRIPTION activates a paid shared-environment app slot. */
+/** Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; PLAYER_WALLET_TOPUP credits the caller's player_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens; SHARED_APP_SUBSCRIPTION activates a paid shared-environment app slot. */
 export enum CheckoutPurpose {
   /** Purchase a user's access to an app at a given tier. Requires appId and tierId. Upserts app_user_access on completion. */
   AppAccessPurchase = 'APP_ACCESS_PURCHASE',
@@ -832,6 +847,8 @@ export enum CheckoutPurpose {
   Donation = 'DONATION',
   /** Add funds to an organization wallet. Requires orgId and amountCents, and the caller must hold the org "manage_billing" permission. Credits the org wallet on completion. */
   OrgWalletTopup = 'ORG_WALLET_TOPUP',
+  /** Add funds to the caller's own player wallet (player compute P2). Requires amountCents only — any authenticated user may fund their own wallet; no org permission is involved. Credits the player wallet idempotently on completion. */
+  PlayerWalletTopup = 'PLAYER_WALLET_TOPUP',
   /**
    * Deprecated. Historically a purchase of in-world property tokens. No longer purchasable and rejected at runtime by createCheckout.
    * @deprecated No longer purchasable; use ORG_WALLET_TOPUP or APP_ACCESS_PURCHASE. Retained for historical checkouts.
@@ -3650,6 +3667,8 @@ export type Mutation = {
   deleteMyAccount: Scalars['Boolean']['output'];
   /** Deletes an organization role. Requires the 'manage_members' permission on the role's org (super admins bypass). DESTRUCTIVE: removes the role and unassigns it from all members. Returns false if the role does not exist. */
   deleteOrgRole: Scalars['Boolean']['output'];
+  /** Delete a player-compute policy row; covered players fall back to the next most general scope. Returns false when no matching row exists. Requires 'manage_compute'. */
+  deletePlayerWasmPolicy: Scalars['Boolean']['output'];
   /** Permanently deletes a quota enforcement rule by id. Returns true if a rule was removed, or false if no quota with that id exists. Destructive and not reversible: once removed, the metric falls back to the next-most-specific rule or the free-tier default. Requires the 'manage_quotas' permission on the same scope (app or org) the quota belongs to, or super admin for global quotas. */
   deleteQuota: Scalars['Boolean']['output'];
   /** Delete a team. Requires the 'manage_group' team permission (app admins bypass). DESTRUCTIVE: cascades to members, roles, and any grid grants the team conferred, and recomputes the effective grid ACL for affected grids. Returns true on success. */
@@ -3766,6 +3785,8 @@ export type Mutation = {
   playerComputeInvoke: PlayerComputeInvokeResult;
   /** Enable or disable a player module. Enabling requires current grid ownership, the target's run permission, a successful compile, and admission when the app uses strict ALLOW_LIST mode. Write permission is not sufficient to run code. */
   playerComputeSetEnabled: PlayerWasmModule;
+  /** Throw or release a player-compute kill switch at player, grid, or app scope (the 03 §7 kill ladder). Throwing a switch stops the covered modules on the next scheduler pass; quota state is retained, and releasing resumes normally. Module-level disable is playerComputeSetEnabled; listing scope arrives with the marketplace. Requires the org 'manage_compute' permission. */
+  playerComputeSetSwitch: Scalars['Boolean']['output'];
   /** Create a flexible player-model instance in a currently owned grid. The server forces ownerUserId to the caller; this cannot author studio types or app-wide rows. */
   playerModelCreateContainer: PlayerModelContainer;
   /** Delete one caller-owned player-model container and its properties from the specified currently owned grid. Destructive; foreign or absent IDs return NOT_FOUND. */
@@ -3868,6 +3889,14 @@ export type Mutation = {
   setOperator: User;
   /** Super admin only. Used to freeze/unfreeze orgs platform-wide. SIDE EFFECT: sets organizations.status, which gates the org's platform access. */
   setOrgStatus: Organization;
+  /** Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method. */
+  setPlayerAutoBilling: PlayerAutoBilling;
+  /** Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income accrues per charge to the org's income line and is paid out via the P4b payout ledger. Requires 'manage_billing'. */
+  setPlayerRateMarkup: Scalars['Int']['output'];
+  /** Set (or clear, by passing both limits null) one of the caller's self-set spend caps: a global or per-app daily/monthly ceiling in cents. Hitting a cap pauses that player's mods with PLAYER_SPEND_CAP until the window rolls — play is untouched. Changes replica-sync to the game runtime. */
+  setPlayerSpendCap: Array<PlayerSpendCap>;
+  /** Create or update a player-compute policy row at app_default, tier, grid, or user scope. Omitted knobs keep their current value; unitsPerHour/unitsPerDay set the PLAYER_QUOTA_EXHAUSTED budgets (null = uncapped). Every knob is additionally clamped by the app's studio compute policy at runtime, so a player policy can only tighten. Requires 'manage_compute'. */
+  setPlayerWasmPolicy: PlayerWasmPolicy;
   /** Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage. */
   setQuota: ServiceQuota;
   /** ADMIN PRIVILEGE CHANGE: grants or revokes platform super-admin on the target user, changing their privileges across the whole platform. Requires a super-admin bearer game token (and the management API enabled). NOTE: in cks-game-api super-admin checks always fail and the users table is management-owned — perform this via cks-management-api. */
@@ -4196,6 +4225,13 @@ export type MutationDeleteOrgRoleArgs = {
 };
 
 
+export type MutationDeletePlayerWasmPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+  scope: Scalars['String']['input'];
+  scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
 export type MutationDeleteQuotaArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   quotaId: Scalars['BigInt']['input'];
@@ -4494,6 +4530,15 @@ export type MutationPlayerComputeSetEnabledArgs = {
 };
 
 
+export type MutationPlayerComputeSetSwitchArgs = {
+  appId: Scalars['BigInt']['input'];
+  disabled: Scalars['Boolean']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+  scope: Scalars['String']['input'];
+  scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
 export type MutationPlayerModelCreateContainerArgs = {
   input: CreatePlayerModelContainerInput;
 };
@@ -4779,6 +4824,33 @@ export type MutationSetOperatorArgs = {
 export type MutationSetOrgStatusArgs = {
   orgId: Scalars['BigInt']['input'];
   status: Scalars['String']['input'];
+};
+
+
+export type MutationSetPlayerAutoBillingArgs = {
+  enabled: Scalars['Boolean']['input'];
+  limitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  lowWaterThresholdCents?: InputMaybe<Scalars['BigInt']['input']>;
+  rechargeAmountCents?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type MutationSetPlayerRateMarkupArgs = {
+  appId: Scalars['BigInt']['input'];
+  markupBps: Scalars['Int']['input'];
+};
+
+
+export type MutationSetPlayerSpendCapArgs = {
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  dailyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  monthlyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  scope: Scalars['String']['input'];
+};
+
+
+export type MutationSetPlayerWasmPolicyArgs = {
+  input: SetPlayerWasmPolicyInput;
 };
 
 
@@ -5307,6 +5379,27 @@ export type PlatformConfig = {
   sharedGameApiWsUrl: Maybe<Scalars['String']['output']>;
 };
 
+/** Off-session auto-recharge settings for the player wallet (the org auto-billing twin): when enabled with a vaulted card, the player gate tops the wallet up before denying for insufficient funds. */
+export type PlayerAutoBilling = {
+  __typename?: 'PlayerAutoBilling';
+  /** Amount auto-billed so far this period. */
+  autoBilledThisPeriodCents: Scalars['BigInt']['output'];
+  /** Whether auto-recharge is enabled. */
+  enabled: Scalars['Boolean']['output'];
+  /** Whether an active vaulted card is attached. */
+  hasPaymentMethod: Scalars['Boolean']['output'];
+  /** Last auto-recharge failure, if any. */
+  lastError: Maybe<Scalars['String']['output']>;
+  /** Per-period auto-recharge ceiling in cents; null = no limit. */
+  limitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Balance threshold that triggers a recharge. */
+  lowWaterThresholdCents: Scalars['BigInt']['output'];
+  /** Amount charged per auto-recharge. */
+  rechargeAmountCents: Scalars['BigInt']['output'];
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
 /** A player-owned automation confined to one app and grid. Trigger/action JSON has been structurally validated. */
 export type PlayerAutomation = {
   __typename?: 'PlayerAutomation';
@@ -5375,11 +5468,51 @@ export type PlayerComputeInvokeResult = {
   resultJson: Maybe<Scalars['String']['output']>;
 };
 
+/** A kill-ladder switch row (P2, 03 §7): a studio-set immediate stop at player, grid, or app scope. Module-level disable lives on the module itself; listing scope arrives with the marketplace. Quota state is retained across a kill. */
+export type PlayerComputeSwitch = {
+  __typename?: 'PlayerComputeSwitch';
+  /** The app the switch applies to. */
+  appId: Scalars['BigInt']['output'];
+  /** When execution was stopped. */
+  disabledAt: Scalars['DateTime']['output'];
+  /** Operator note recorded when the switch was thrown. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Scope: 'player', 'grid', or 'app'. */
+  scope: Scalars['String']['output'];
+  /** The player user id or grid id; null for app scope. */
+  scopeRef: Maybe<Scalars['BigInt']['output']>;
+  /** Switch row UUID. */
+  switchId: Scalars['String']['output'];
+};
+
 /** Execution target for player-authored Rust. SERVER runs as the grid owner in game-api; CLIENT runs as the actual player in the browser worker sandbox. */
 export enum PlayerComputeTarget {
   Client = 'CLIENT',
   Server = 'SERVER'
 }
+
+/** The caller's player-compute spend and quota view for one app (P2): unit usage in the current clock hour/day, the effective policy limits, compile-quota utilization, and the replica-synced wallet/spend-cap gate state. Units follow the platform formula GREATEST(cpu ms, fuel/22M); player automation units are included. */
+export type PlayerComputeUsage = {
+  __typename?: 'PlayerComputeUsage';
+  /** The app this view covers. */
+  appId: Scalars['BigInt']['output'];
+  /** Compile submissions counted in the current clock hour. */
+  compilesThisHour: Scalars['Int']['output'];
+  /** Compute units consumed in the current clock day. */
+  dayUnitsUsed: Scalars['BigInt']['output'];
+  /** Typed pause reason when gated: PLAYER_WALLET_EMPTY, PLAYER_SPEND_CAP, PLAYER_QUOTA_EXHAUSTED, or PLAYER_COMPUTE_KILLED. */
+  gateReason: Maybe<Scalars['String']['output']>;
+  /** Replica-synced management player gate for this app: 'active', 'grace', or 'denied'. Non-active pauses this player's modules only; play is untouched. */
+  gateStatus: Scalars['String']['output'];
+  /** Compute units consumed in the current clock hour (modules + automations, all owned grids aggregated). */
+  hourUnitsUsed: Scalars['BigInt']['output'];
+  /** Effective max_compiles_per_hour policy cap. */
+  maxCompilesPerHour: Scalars['Int']['output'];
+  /** Effective units_per_day developer-policy cap; null when the app sets no daily quota. */
+  unitsPerDay: Maybe<Scalars['BigInt']['output']>;
+  /** Effective units_per_hour developer-policy cap; null when the app sets no hourly quota. */
+  unitsPerHour: Maybe<Scalars['BigInt']['output']>;
+};
 
 /** A flexible player-owned model container confined to exactly one app, grid, and current owner. */
 export type PlayerModelContainer = {
@@ -5433,6 +5566,107 @@ export type PlayerPulse = {
   poolSize: Scalars['Int']['output'];
 };
 
+/** The caller's per-app player runtime gate state (the app runtime_status twin, player-scoped): 'active', 'grace', or 'denied' with a typed reason. Non-active pauses the player's grid compute only — an unfunded wallet stops your mods, not your game. */
+export type PlayerRuntimeState = {
+  __typename?: 'PlayerRuntimeState';
+  /** The app. */
+  appId: Scalars['BigInt']['output'];
+  /** PLAYER_WALLET_EMPTY or PLAYER_SPEND_CAP when not active. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** 'active', 'grace', or 'denied'. */
+  status: Scalars['String']['output'];
+  /** Last gate evaluation that changed state. */
+  updatedAt: Scalars['DateTime']['output'];
+  /** The player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A player's self-set spend cap (06 §2a): a daily/monthly ceiling globally or per app. The effective runtime limit is min(developer policy, self-cap, wallet balance); hitting a cap pauses that player's mods with PLAYER_SPEND_CAP, never their play. */
+export type PlayerSpendCap = {
+  __typename?: 'PlayerSpendCap';
+  /** Spend counted against the daily cap so far today. */
+  currentDayUsageCents: Scalars['BigInt']['output'];
+  /** Spend counted against the monthly cap so far this month. */
+  currentMonthUsageCents: Scalars['BigInt']['output'];
+  /** Daily ceiling in cents; null = no daily cap. */
+  dailyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Calendar-month ceiling in cents; null = no monthly cap. */
+  monthlyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Cap scope: 'global' or 'app'. */
+  scope: Scalars['String']['output'];
+  /** The app id for app scope; null for global. */
+  scopeRef: Maybe<Scalars['BigInt']['output']>;
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** One posted player usage charge: a (player, app, closed clock hour) row. amountCents = platformCents + markupCents — players see what the platform charges and what the studio adds (06 §4). The UNIQUE hour key makes the billing tick idempotent. */
+export type PlayerUsageCharge = {
+  __typename?: 'PlayerUsageCharge';
+  /** Total debited cents. */
+  amountCents: Scalars['BigInt']['output'];
+  /** The app the usage ran in. */
+  appId: Scalars['BigInt']['output'];
+  /** Charge id. */
+  chargeId: Scalars['BigInt']['output'];
+  /** When the charge posted. */
+  createdAt: Scalars['DateTime']['output'];
+  /** ISO currency code. */
+  currency: Scalars['String']['output'];
+  /** Studio markup component (the app's player_rate_markup_bps). */
+  markupCents: Scalars['BigInt']['output'];
+  /** Billed hour end (exclusive). */
+  periodEnd: Scalars['DateTime']['output'];
+  /** Billed hour start (inclusive). */
+  periodStart: Scalars['DateTime']['output'];
+  /** Platform component (base rate card). */
+  platformCents: Scalars['BigInt']['output'];
+  /** JSON per-metric usage/billing snapshot for the hour. */
+  usageSnapshotJson: Scalars['String']['output'];
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** The caller's player wallet (player compute P2, DN-5): a platform-scoped balance funding that player's grid compute across every org/app they play in. Out-of-band from org wallets — player usage never touches an org's money. */
+export type PlayerWallet = {
+  __typename?: 'PlayerWallet';
+  /** Current balance in cents (may go negative on a closed hour). */
+  balanceCents: Scalars['BigInt']['output'];
+  /** Wallet creation time. */
+  createdAt: Scalars['DateTime']['output'];
+  /** ISO currency code (lowercase). */
+  currency: Scalars['String']['output'];
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+  /** Wallet id. */
+  walletId: Scalars['BigInt']['output'];
+};
+
+/** One player-wallet ledger entry: top-ups, hourly usage debits, auto-recharges, refunds, and adjustments. Usage debits carry the app and reference the hour's charge row, whose snapshot splits platform vs studio-markup components. */
+export type PlayerWalletTransaction = {
+  __typename?: 'PlayerWalletTransaction';
+  /** Signed amount in cents (debits negative). */
+  amountCents: Scalars['BigInt']['output'];
+  /** The app a usage debit covers; null for wallet-level entries. */
+  appId: Maybe<Scalars['BigInt']['output']>;
+  /** Balance after this entry. */
+  balanceAfter: Scalars['BigInt']['output'];
+  /** Entry time. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Human description. */
+  description: Maybe<Scalars['String']['output']>;
+  /** External reference (checkout/PaymentIntent id). */
+  referenceId: Maybe<Scalars['String']['output']>;
+  /** Transaction id. */
+  transactionId: Scalars['BigInt']['output'];
+  /** One of 'topup', 'usage_debit', 'auto_recharge', 'refund', 'adjustment'. */
+  transactionType: Scalars['String']['output'];
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+  /** The wallet. */
+  walletId: Scalars['BigInt']['output'];
+};
+
 /** A grid-bound player compute module. Runtime identity is never stored here; it resolves from the grid current owner at activation. */
 export type PlayerWasmModule = {
   __typename?: 'PlayerWasmModule';
@@ -5464,6 +5698,37 @@ export type PlayerWasmModule = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** One execution of a player module (init/tick/invoke/event), attributed to the grid owner it ran as. The per-run twin of the studio WasmModuleRun, scoped to grids the caller currently owns. */
+export type PlayerWasmModuleRun = {
+  __typename?: 'PlayerWasmModuleRun';
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['output'];
+  /** Wall-clock duration in microseconds. */
+  durationUs: Scalars['Int']['output'];
+  /** Typed failure kind when the run failed. */
+  errorMessage: Maybe<Scalars['String']['output']>;
+  /** Execution identity: the grid owner the run executed as. */
+  executedAsUserId: Scalars['BigInt']['output'];
+  /** Flow correlation id shared across the entry call. */
+  flowId: Maybe<Scalars['String']['output']>;
+  /** Fuel consumed by the run. */
+  fuelUsed: Scalars['BigInt']['output'];
+  /** The owned grid the module ran in. */
+  gridId: Scalars['BigInt']['output'];
+  /** The module that ran. */
+  moduleId: Scalars['String']['output'];
+  /** The module name at run time. */
+  moduleName: Scalars['String']['output'];
+  /** Unique run id (UUID). */
+  runId: Scalars['String']['output'];
+  /** When the run started. */
+  startedAt: Scalars['DateTime']['output'];
+  /** Whether the run succeeded. */
+  success: Scalars['Boolean']['output'];
+  /** What ran: init | tick | event | invoke. */
+  triggerSource: Scalars['String']['output'];
+};
+
 /** An immutable player-code source version. sourceFilesJson is returned only to its personal author (org-owned source requires the future org-authoring path) or when openSource is true. */
 export type PlayerWasmModuleVersion = {
   __typename?: 'PlayerWasmModuleVersion';
@@ -5487,6 +5752,51 @@ export type PlayerWasmModuleVersion = {
   versionId: Scalars['String']['output'];
   /** Monotonic version number. */
   versionNo: Scalars['Int']['output'];
+};
+
+/** One player-compute policy row (06 §3): developer-set per-player/cohort clamps evaluated most-specific-wins (user > grid > tier > app_default), every knob additionally clamped by the app's studio policy at runtime. Management is authoritative in P2; rows replica-sync to the game runtime. */
+export type PlayerWasmPolicy = {
+  __typename?: 'PlayerWasmPolicy';
+  /** The app. */
+  appId: Scalars['BigInt']['output'];
+  /** Client-target fuel budget per browser dispatch (04 §3). */
+  clientFuelPerDispatch: Scalars['BigInt']['output'];
+  /** Whether this row is applied. */
+  enabled: Scalars['Boolean']['output'];
+  /** Fuel budget per invoke/event. */
+  fuelPerInvoke: Scalars['BigInt']['output'];
+  /** Fuel budget per tick. */
+  fuelPerTick: Scalars['BigInt']['output'];
+  /** Deploys (compiles) allowed per player per hour. */
+  maxCompilesPerHour: Scalars['Int']['output'];
+  /** Player model containers created per player per day. */
+  maxContainerCreatesDay: Scalars['Int']['output'];
+  /** Host data-API ops per tick. */
+  maxDbOpsPerTick: Scalars['Int']['output'];
+  /** Module replication bytes per minute. */
+  maxEgressBytesPerMin: Scalars['BigInt']['output'];
+  /** Module replication messages per minute. */
+  maxEgressMsgsPerMin: Scalars['Int']['output'];
+  /** Sandbox memory ceiling (MiB). */
+  maxMemoryMb: Scalars['Int']['output'];
+  /** Max player modules per grid. */
+  maxModulesPerGrid: Scalars['Int']['output'];
+  /** Max player modules across all grids one player owns. */
+  maxModulesTotal: Scalars['Int']['output'];
+  /** Watchdog wall-clock ceiling (ms). */
+  maxRunMs: Scalars['Int']['output'];
+  /** Max tick rate in Hz. */
+  maxTickHz: Scalars['Float']['output'];
+  /** Policy row UUID. */
+  policyId: Scalars['String']['output'];
+  /** 'app_default', 'tier', 'grid', or 'user'. */
+  scope: Scalars['String']['output'];
+  /** Tier/grid/user id; null for app_default. */
+  scopeRef: Maybe<Scalars['BigInt']['output']>;
+  /** Daily compute-unit quota; null = uncapped. */
+  unitsPerDay: Maybe<Scalars['BigInt']['output']>;
+  /** Hourly compute-unit quota (PLAYER_QUOTA_EXHAUSTED pause); null = uncapped. */
+  unitsPerHour: Maybe<Scalars['BigInt']['output']>;
 };
 
 /** A one-time portal authorization code. Redirect the player to `redirectUri` carrying `code`; the destination game exchanges it (with its PKCE verifier) via exchangePortalCode for an app token. Single-use and short-lived. */
@@ -5587,6 +5897,10 @@ export type Query = {
   appGrantMemberCandidates: Array<AppGrantMemberCandidate>;
   /** Top GraphQL operations for an app ranked by bytes over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission. */
   appGraphqlOperations: Array<GraphqlOperationUsageRow>;
+  /** Total player rate-card markup accrued to this app's org income line, in cents (payouts arrive with the P4b ledger). Requires 'view_billing'. */
+  appPlayerMarkupAccrued: Scalars['BigInt']['output'];
+  /** Per-player usage aggregate for an app over a trailing window (top spenders / quota utilization, 06 §5): compute units, automation units, compiles, and cents charged per player. Requires 'view_compute_diagnostics'. */
+  appPlayerUsage: Array<AppPlayerUsageRow>;
   /** Shared-environment runtime gate decision plus current hour/day billing-window usage for an app. Read this to learn why an app is not running (runtimeDenialReason). Caller must be a member of the app's org. */
   appRuntimeState: AppRuntimeState;
   /** An app's paid shared-environment subscription, or null when it has none (e.g. unpublished or on the free quota). Caller must be a member of the app's org. */
@@ -5845,10 +6159,20 @@ export type Query = {
   paymentEventsConnection: PaymentEventsConnection;
   /** Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required. */
   platformConfig: PlatformConfig;
+  /** The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds). */
+  playerAutoBilling: PlayerAutoBilling;
   /** List only the caller-owned player automations in one currently owned grid. Requires an app-scoped token; no app-wide listing exists. */
   playerAutomations: Array<PlayerAutomation>;
+  /** Failed-run diagnostics for player modules on a grid the caller currently owns: the failing runs with their typed error kinds, newest first. The owner-scoped twin of computeModuleLogs. */
+  playerComputeLogs: Array<PlayerWasmModuleRun>;
   /** List player modules the caller authored or that are installed on grids they currently own. Requires a valid app token; closed source is never included here. */
   playerComputeMyModules: Array<PlayerWasmModule>;
+  /** List executions of player modules on a grid the caller currently owns, newest first. Every run is attributed to the grid owner it executed as; author identity never appears here. */
+  playerComputeRuns: Array<PlayerWasmModuleRun>;
+  /** Active player-compute kill switches for an app, newest first. Requires the org 'view_compute_diagnostics' permission. */
+  playerComputeSwitches: Array<PlayerComputeSwitch>;
+  /** The caller's player-compute spend and quota view for one app (P2): compute units used in the current clock hour/day vs the effective units_per_hour/units_per_day policy caps, compile-quota utilization, and the wallet/spend-cap gate state with its typed reason. This is the remaining-budget source the live-coding panel consumes. */
+  playerComputeUsage: PlayerComputeUsage;
   /** List immutable versions for one player module. Source and compile logs are returned only to the personal author, or source when that version is open-source. There is intentionally no studio/operator moderation override. */
   playerComputeVersions: Array<PlayerWasmModuleVersion>;
   /** Return one caller-owned player-model container in the specified app/grid, or null when it is absent or outside that owner scope. Requires current grid ownership. */
@@ -5857,6 +6181,20 @@ export type Query = {
   playerModelContainers: Array<PlayerModelContainer>;
   /** Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission. */
   playerPulse: PlayerPulse;
+  /** The app's player rate-card markup in basis points on the platform base price (06 §4): the studio's usage-revenue stream, shown to players as a separate spend-history component. 0 = no markup (the BWF posture). Requires 'view_billing'. */
+  playerRateMarkup: Scalars['Int']['output'];
+  /** The caller's per-app player runtime gate states. Only apps where the gate has ever acted appear; absence means active. 'denied' with PLAYER_WALLET_EMPTY or PLAYER_SPEND_CAP pauses that player's grid compute only — play is never touched. */
+  playerRuntimeStates: Array<PlayerRuntimeState>;
+  /** The caller's self-set spend caps (global and per-app) with running counters. The effective runtime limit is min(developer policy, self-cap, wallet balance). */
+  playerSpendCaps: Array<PlayerSpendCap>;
+  /** The caller's posted hourly player-usage charges, newest first, optionally filtered by app. Each charge splits platformCents (base rate card) from markupCents (the studio's configured markup) with a per-metric snapshot — players always see what the platform charges and what the studio adds. */
+  playerUsageCharges: Array<PlayerUsageCharge>;
+  /** The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet funds the player's grid compute across every org/app (DN-5); org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP. */
+  playerWalletBalance: PlayerWallet;
+  /** The caller's player-wallet ledger, newest first: top-ups, hourly usage debits (per app), auto-recharges, refunds, and adjustments. Usage-debit hours are broken down by playerUsageCharges, whose snapshot splits the platform and studio-markup components. */
+  playerWalletTransactions: Array<PlayerWalletTransaction>;
+  /** List an app's player-compute policy rows (developer cost/rate clamps per player or cohort, 06 §3), most general first. Requires 'view_compute_diagnostics'. Management is authoritative; rows replica-sync to the game runtime on change. */
+  playerWasmPolicies: Array<PlayerWasmPolicy>;
   /** Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token. */
   portalConsent: PortalConsentState;
   /** Public read-only catalog of active Postgres billing tiers. Usage metering deferred. */
@@ -5980,6 +6318,17 @@ export type QueryAppGraphqlOperationsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   orgId: Scalars['BigInt']['input'];
   since: Scalars['DateTime']['input'];
+};
+
+
+export type QueryAppPlayerMarkupAccruedArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppPlayerUsageArgs = {
+  appId: Scalars['BigInt']['input'];
+  hours?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -6608,7 +6957,35 @@ export type QueryPlayerAutomationsArgs = {
 };
 
 
+export type QueryPlayerComputeLogsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type QueryPlayerComputeMyModulesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPlayerComputeRunsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  success?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryPlayerComputeSwitchesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPlayerComputeUsageArgs = {
   appId: Scalars['BigInt']['input'];
 };
 
@@ -6633,6 +7010,28 @@ export type QueryPlayerModelContainersArgs = {
 
 export type QueryPlayerPulseArgs = {
   orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPlayerRateMarkupArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPlayerUsageChargesArgs = {
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryPlayerWalletTransactionsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryPlayerWasmPoliciesArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -7305,6 +7704,32 @@ export type SetPlayerModelPropertyInput = {
   propertyKey: Scalars['String']['input'];
   /** JSON-encoded property value. Any valid JSON value is accepted. */
   valueJson: Scalars['String']['input'];
+};
+
+/** Upsert one player policy row. Omitted knobs keep their current value (or the platform default on first insert). unitsPerHour/unitsPerDay accept null to clear the quota. */
+export type SetPlayerWasmPolicyInput = {
+  /** The app. */
+  appId: Scalars['BigInt']['input'];
+  clientFuelPerDispatch?: InputMaybe<Scalars['BigInt']['input']>;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  fuelPerInvoke?: InputMaybe<Scalars['BigInt']['input']>;
+  fuelPerTick?: InputMaybe<Scalars['BigInt']['input']>;
+  maxCompilesPerHour?: InputMaybe<Scalars['Int']['input']>;
+  maxContainerCreatesDay?: InputMaybe<Scalars['Int']['input']>;
+  maxDbOpsPerTick?: InputMaybe<Scalars['Int']['input']>;
+  maxEgressBytesPerMin?: InputMaybe<Scalars['BigInt']['input']>;
+  maxEgressMsgsPerMin?: InputMaybe<Scalars['Int']['input']>;
+  maxMemoryMb?: InputMaybe<Scalars['Int']['input']>;
+  maxModulesPerGrid?: InputMaybe<Scalars['Int']['input']>;
+  maxModulesTotal?: InputMaybe<Scalars['Int']['input']>;
+  maxRunMs?: InputMaybe<Scalars['Int']['input']>;
+  maxTickHz?: InputMaybe<Scalars['Float']['input']>;
+  /** 'app_default', 'tier', 'grid', or 'user'. */
+  scope: Scalars['String']['input'];
+  /** Tier/grid/user id; required unless scope is app_default. */
+  scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
+  unitsPerDay?: InputMaybe<Scalars['BigInt']['input']>;
+  unitsPerHour?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
 export type SetQuotaInput = {
@@ -10472,6 +10897,55 @@ export type PlayerComputeInvokeMutationVariables = Exact<{
 
 export type PlayerComputeInvokeMutation = { __typename?: 'Mutation', playerComputeInvoke: { __typename?: 'PlayerComputeInvokeResult', resultBase64: string, resultJson: string | null, fuelUsed: string, durationUs: number } };
 
+export type PlayerWasmModuleRunFieldsFragment = { __typename?: 'PlayerWasmModuleRun', runId: string, appId: string, gridId: string, moduleId: string, moduleName: string, executedAsUserId: string, flowId: string | null, triggerSource: string, startedAt: string, durationUs: number, fuelUsed: string, success: boolean, errorMessage: string | null };
+
+export type PlayerComputeUsageQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type PlayerComputeUsageQuery = { __typename?: 'Query', playerComputeUsage: { __typename?: 'PlayerComputeUsage', appId: string, hourUnitsUsed: string, dayUnitsUsed: string, unitsPerHour: string | null, unitsPerDay: string | null, compilesThisHour: number, maxCompilesPerHour: number, gateStatus: string, gateReason: string | null } };
+
+export type PlayerComputeRunsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+  success?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type PlayerComputeRunsQuery = { __typename?: 'Query', playerComputeRuns: Array<{ __typename?: 'PlayerWasmModuleRun', runId: string, appId: string, gridId: string, moduleId: string, moduleName: string, executedAsUserId: string, flowId: string | null, triggerSource: string, startedAt: string, durationUs: number, fuelUsed: string, success: boolean, errorMessage: string | null }> };
+
+export type PlayerComputeLogsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  moduleName?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type PlayerComputeLogsQuery = { __typename?: 'Query', playerComputeLogs: Array<{ __typename?: 'PlayerWasmModuleRun', runId: string, appId: string, gridId: string, moduleId: string, moduleName: string, executedAsUserId: string, flowId: string | null, triggerSource: string, startedAt: string, durationUs: number, fuelUsed: string, success: boolean, errorMessage: string | null }> };
+
+export type PlayerComputeSetSwitchMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  scope: Scalars['String']['input'];
+  disabled: Scalars['Boolean']['input'];
+  scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
+  reason?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type PlayerComputeSetSwitchMutation = { __typename?: 'Mutation', playerComputeSetSwitch: boolean };
+
+export type PlayerComputeSwitchesQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type PlayerComputeSwitchesQuery = { __typename?: 'Query', playerComputeSwitches: Array<{ __typename?: 'PlayerComputeSwitch', switchId: string, appId: string, scope: string, scopeRef: string | null, reason: string | null, disabledAt: string }> };
+
 export type PlayerModelContainersQueryVariables = Exact<{
   appId: Scalars['BigInt']['input'];
   gridId: Scalars['BigInt']['input'];
@@ -10536,6 +11010,127 @@ export type PlayerAutomationDeleteMutationVariables = Exact<{
 
 
 export type PlayerAutomationDeleteMutation = { __typename?: 'Mutation', playerAutomationDelete: boolean };
+
+export type PlayerWalletFieldsFragment = { __typename?: 'PlayerWallet', walletId: string, userId: string, balanceCents: string, currency: string, createdAt: string };
+
+export type PlayerWalletTransactionFieldsFragment = { __typename?: 'PlayerWalletTransaction', transactionId: string, walletId: string, userId: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string };
+
+export type PlayerSpendCapFieldsFragment = { __typename?: 'PlayerSpendCap', userId: string, scope: string, scopeRef: string | null, dailyLimitCents: string | null, monthlyLimitCents: string | null, currentDayUsageCents: string, currentMonthUsageCents: string };
+
+export type PlayerAutoBillingFieldsFragment = { __typename?: 'PlayerAutoBilling', userId: string, enabled: boolean, limitCents: string | null, autoBilledThisPeriodCents: string, rechargeAmountCents: string, lowWaterThresholdCents: string, hasPaymentMethod: boolean, lastError: string | null };
+
+export type PlayerUsageChargeFieldsFragment = { __typename?: 'PlayerUsageCharge', chargeId: string, userId: string, appId: string, periodStart: string, periodEnd: string, amountCents: string, platformCents: string, markupCents: string, currency: string, usageSnapshotJson: string, createdAt: string };
+
+export type PlayerWasmPolicyFieldsFragment = { __typename?: 'PlayerWasmPolicy', policyId: string, appId: string, scope: string, scopeRef: string | null, enabled: boolean, maxModulesPerGrid: number, maxModulesTotal: number, maxTickHz: number, fuelPerTick: string, fuelPerInvoke: string, maxMemoryMb: number, maxRunMs: number, maxDbOpsPerTick: number, maxEgressMsgsPerMin: number, maxEgressBytesPerMin: string, unitsPerHour: string | null, unitsPerDay: string | null, maxCompilesPerHour: number, maxContainerCreatesDay: number, clientFuelPerDispatch: string };
+
+export type PlayerWalletBalanceQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PlayerWalletBalanceQuery = { __typename?: 'Query', playerWalletBalance: { __typename?: 'PlayerWallet', walletId: string, userId: string, balanceCents: string, currency: string, createdAt: string } };
+
+export type PlayerWalletTransactionsQueryVariables = Exact<{
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type PlayerWalletTransactionsQuery = { __typename?: 'Query', playerWalletTransactions: Array<{ __typename?: 'PlayerWalletTransaction', transactionId: string, walletId: string, userId: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string }> };
+
+export type PlayerUsageChargesQueryVariables = Exact<{
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type PlayerUsageChargesQuery = { __typename?: 'Query', playerUsageCharges: Array<{ __typename?: 'PlayerUsageCharge', chargeId: string, userId: string, appId: string, periodStart: string, periodEnd: string, amountCents: string, platformCents: string, markupCents: string, currency: string, usageSnapshotJson: string, createdAt: string }> };
+
+export type PlayerSpendCapsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PlayerSpendCapsQuery = { __typename?: 'Query', playerSpendCaps: Array<{ __typename?: 'PlayerSpendCap', userId: string, scope: string, scopeRef: string | null, dailyLimitCents: string | null, monthlyLimitCents: string | null, currentDayUsageCents: string, currentMonthUsageCents: string }> };
+
+export type SetPlayerSpendCapMutationVariables = Exact<{
+  scope: Scalars['String']['input'];
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  dailyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  monthlyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+}>;
+
+
+export type SetPlayerSpendCapMutation = { __typename?: 'Mutation', setPlayerSpendCap: Array<{ __typename?: 'PlayerSpendCap', userId: string, scope: string, scopeRef: string | null, dailyLimitCents: string | null, monthlyLimitCents: string | null, currentDayUsageCents: string, currentMonthUsageCents: string }> };
+
+export type PlayerAutoBillingQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PlayerAutoBillingQuery = { __typename?: 'Query', playerAutoBilling: { __typename?: 'PlayerAutoBilling', userId: string, enabled: boolean, limitCents: string | null, autoBilledThisPeriodCents: string, rechargeAmountCents: string, lowWaterThresholdCents: string, hasPaymentMethod: boolean, lastError: string | null } };
+
+export type SetPlayerAutoBillingMutationVariables = Exact<{
+  enabled: Scalars['Boolean']['input'];
+  limitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  rechargeAmountCents?: InputMaybe<Scalars['BigInt']['input']>;
+  lowWaterThresholdCents?: InputMaybe<Scalars['BigInt']['input']>;
+}>;
+
+
+export type SetPlayerAutoBillingMutation = { __typename?: 'Mutation', setPlayerAutoBilling: { __typename?: 'PlayerAutoBilling', userId: string, enabled: boolean, limitCents: string | null, autoBilledThisPeriodCents: string, rechargeAmountCents: string, lowWaterThresholdCents: string, hasPaymentMethod: boolean, lastError: string | null } };
+
+export type PlayerRuntimeStatesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PlayerRuntimeStatesQuery = { __typename?: 'Query', playerRuntimeStates: Array<{ __typename?: 'PlayerRuntimeState', userId: string, appId: string, status: string, reason: string | null, updatedAt: string }> };
+
+export type PlayerWasmPoliciesQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type PlayerWasmPoliciesQuery = { __typename?: 'Query', playerWasmPolicies: Array<{ __typename?: 'PlayerWasmPolicy', policyId: string, appId: string, scope: string, scopeRef: string | null, enabled: boolean, maxModulesPerGrid: number, maxModulesTotal: number, maxTickHz: number, fuelPerTick: string, fuelPerInvoke: string, maxMemoryMb: number, maxRunMs: number, maxDbOpsPerTick: number, maxEgressMsgsPerMin: number, maxEgressBytesPerMin: string, unitsPerHour: string | null, unitsPerDay: string | null, maxCompilesPerHour: number, maxContainerCreatesDay: number, clientFuelPerDispatch: string }> };
+
+export type SetPlayerWasmPolicyMutationVariables = Exact<{
+  input: SetPlayerWasmPolicyInput;
+}>;
+
+
+export type SetPlayerWasmPolicyMutation = { __typename?: 'Mutation', setPlayerWasmPolicy: { __typename?: 'PlayerWasmPolicy', policyId: string, appId: string, scope: string, scopeRef: string | null, enabled: boolean, maxModulesPerGrid: number, maxModulesTotal: number, maxTickHz: number, fuelPerTick: string, fuelPerInvoke: string, maxMemoryMb: number, maxRunMs: number, maxDbOpsPerTick: number, maxEgressMsgsPerMin: number, maxEgressBytesPerMin: string, unitsPerHour: string | null, unitsPerDay: string | null, maxCompilesPerHour: number, maxContainerCreatesDay: number, clientFuelPerDispatch: string } };
+
+export type DeletePlayerWasmPolicyMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  scope: Scalars['String']['input'];
+  scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
+}>;
+
+
+export type DeletePlayerWasmPolicyMutation = { __typename?: 'Mutation', deletePlayerWasmPolicy: boolean };
+
+export type PlayerRateMarkupQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type PlayerRateMarkupQuery = { __typename?: 'Query', playerRateMarkup: number };
+
+export type SetPlayerRateMarkupMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  markupBps: Scalars['Int']['input'];
+}>;
+
+
+export type SetPlayerRateMarkupMutation = { __typename?: 'Mutation', setPlayerRateMarkup: number };
+
+export type AppPlayerUsageQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  hours?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type AppPlayerUsageQuery = { __typename?: 'Query', appPlayerUsage: Array<{ __typename?: 'AppPlayerUsageRow', userId: string, computeUnits: string, automationUnits: string, compileCount: number, chargedCents: string }> };
+
+export type AppPlayerMarkupAccruedQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type AppPlayerMarkupAccruedQuery = { __typename?: 'Query', appPlayerMarkupAccrued: string };
 
 export type DeleteQuotaMutationVariables = Exact<{
   quotaId: Scalars['BigInt']['input'];
@@ -11168,6 +11763,13 @@ export const GmFunctionFieldsFragmentDoc = {"kind":"Document","definitions":[{"k
 export const GmPropertyDefFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmPropertyDefFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmPropertyDef"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"writable"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]} as unknown as DocumentNode<GmPropertyDefFieldsFragment, unknown>;
 export const PlayerWasmModuleFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"authorUserId"}},{"kind":"Field","name":{"kind":"Name","value":"authorOrgId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleFieldsFragment, unknown>;
 export const PlayerWasmModuleVersionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"sourceFilesJson"}},{"kind":"Field","name":{"kind":"Name","value":"openSource"}},{"kind":"Field","name":{"kind":"Name","value":"compileStatus"}},{"kind":"Field","name":{"kind":"Name","value":"compileLog"}},{"kind":"Field","name":{"kind":"Name","value":"compiledSizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleVersionFieldsFragment, unknown>;
+export const PlayerWasmModuleRunFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"executedAsUserId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleRunFieldsFragment, unknown>;
+export const PlayerWalletFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWallet"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletFieldsFragment, unknown>;
+export const PlayerWalletTransactionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletTransactionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWalletTransaction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletTransactionFieldsFragment, unknown>;
+export const PlayerSpendCapFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerSpendCapFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerSpendCap"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"dailyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentDayUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}}]}}]} as unknown as DocumentNode<PlayerSpendCapFieldsFragment, unknown>;
+export const PlayerAutoBillingFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerAutoBillingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerAutoBilling"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"limitCents"}},{"kind":"Field","name":{"kind":"Name","value":"autoBilledThisPeriodCents"}},{"kind":"Field","name":{"kind":"Name","value":"rechargeAmountCents"}},{"kind":"Field","name":{"kind":"Name","value":"lowWaterThresholdCents"}},{"kind":"Field","name":{"kind":"Name","value":"hasPaymentMethod"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}}]}}]} as unknown as DocumentNode<PlayerAutoBillingFieldsFragment, unknown>;
+export const PlayerUsageChargeFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerUsageChargeFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerUsageCharge"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chargeId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"periodEnd"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"platformCents"}},{"kind":"Field","name":{"kind":"Name","value":"markupCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"usageSnapshotJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerUsageChargeFieldsFragment, unknown>;
+export const PlayerWasmPolicyFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmPolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmPolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"policyId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxModulesPerGrid"}},{"kind":"Field","name":{"kind":"Name","value":"maxModulesTotal"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"unitsPerHour"}},{"kind":"Field","name":{"kind":"Name","value":"unitsPerDay"}},{"kind":"Field","name":{"kind":"Name","value":"maxCompilesPerHour"}},{"kind":"Field","name":{"kind":"Name","value":"maxContainerCreatesDay"}},{"kind":"Field","name":{"kind":"Name","value":"clientFuelPerDispatch"}}]}}]} as unknown as DocumentNode<PlayerWasmPolicyFieldsFragment, unknown>;
 export const ActorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Actor"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"actor"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"chunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ActorQuery, ActorQueryVariables>;
 export const ActorsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Actors"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ActorFilterInput"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"actors"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"chunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ActorsQuery, ActorsQueryVariables>;
 export const ActorsConnectionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ActorsConnection"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ActorFilterInput"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"actorsConnection"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}},{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"chunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"privateState"}},{"kind":"Field","name":{"kind":"Name","value":"publicState"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}},{"kind":"Field","name":{"kind":"Name","value":"startCursor"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"totalCount"}}]}}]}}]} as unknown as DocumentNode<ActorsConnectionQuery, ActorsConnectionQueryVariables>;
@@ -11411,6 +12013,11 @@ export const PlayerComputeMyModulesDocument = {"kind":"Document","definitions":[
 export const PlayerComputeVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerComputeVersions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeVersions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWasmModuleVersionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"sourceFilesJson"}},{"kind":"Field","name":{"kind":"Name","value":"openSource"}},{"kind":"Field","name":{"kind":"Name","value":"compileStatus"}},{"kind":"Field","name":{"kind":"Name","value":"compileLog"}},{"kind":"Field","name":{"kind":"Name","value":"compiledSizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerComputeVersionsQuery, PlayerComputeVersionsQueryVariables>;
 export const PlayerComputeDeleteDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerComputeDelete"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeDelete"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}}]}]}}]} as unknown as DocumentNode<PlayerComputeDeleteMutation, PlayerComputeDeleteMutationVariables>;
 export const PlayerComputeInvokeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerComputeInvoke"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"exportName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"paramsJson"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeInvoke"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}},{"kind":"Argument","name":{"kind":"Name","value":"exportName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"exportName"}}},{"kind":"Argument","name":{"kind":"Name","value":"paramsJson"},"value":{"kind":"Variable","name":{"kind":"Name","value":"paramsJson"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resultBase64"}},{"kind":"Field","name":{"kind":"Name","value":"resultJson"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}}]}}]}}]} as unknown as DocumentNode<PlayerComputeInvokeMutation, PlayerComputeInvokeMutationVariables>;
+export const PlayerComputeUsageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerComputeUsage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeUsage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"hourUnitsUsed"}},{"kind":"Field","name":{"kind":"Name","value":"dayUnitsUsed"}},{"kind":"Field","name":{"kind":"Name","value":"unitsPerHour"}},{"kind":"Field","name":{"kind":"Name","value":"unitsPerDay"}},{"kind":"Field","name":{"kind":"Name","value":"compilesThisHour"}},{"kind":"Field","name":{"kind":"Name","value":"maxCompilesPerHour"}},{"kind":"Field","name":{"kind":"Name","value":"gateStatus"}},{"kind":"Field","name":{"kind":"Name","value":"gateReason"}}]}}]}}]} as unknown as DocumentNode<PlayerComputeUsageQuery, PlayerComputeUsageQueryVariables>;
+export const PlayerComputeRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerComputeRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"success"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}},{"kind":"Argument","name":{"kind":"Name","value":"success"},"value":{"kind":"Variable","name":{"kind":"Name","value":"success"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWasmModuleRunFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"executedAsUserId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}}]}}]} as unknown as DocumentNode<PlayerComputeRunsQuery, PlayerComputeRunsQueryVariables>;
+export const PlayerComputeLogsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerComputeLogs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeLogs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWasmModuleRunFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"executedAsUserId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}}]}}]} as unknown as DocumentNode<PlayerComputeLogsQuery, PlayerComputeLogsQueryVariables>;
+export const PlayerComputeSetSwitchDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerComputeSetSwitch"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"scope"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"disabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"scopeRef"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"reason"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeSetSwitch"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"scope"},"value":{"kind":"Variable","name":{"kind":"Name","value":"scope"}}},{"kind":"Argument","name":{"kind":"Name","value":"disabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"disabled"}}},{"kind":"Argument","name":{"kind":"Name","value":"scopeRef"},"value":{"kind":"Variable","name":{"kind":"Name","value":"scopeRef"}}},{"kind":"Argument","name":{"kind":"Name","value":"reason"},"value":{"kind":"Variable","name":{"kind":"Name","value":"reason"}}}]}]}}]} as unknown as DocumentNode<PlayerComputeSetSwitchMutation, PlayerComputeSetSwitchMutationVariables>;
+export const PlayerComputeSwitchesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerComputeSwitches"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeSwitches"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"switchId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"disabledAt"}}]}}]}}]} as unknown as DocumentNode<PlayerComputeSwitchesQuery, PlayerComputeSwitchesQueryVariables>;
 export const PlayerModelContainersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerModelContainers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerModelContainers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"typeKey"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"stateJson"}},{"kind":"Field","name":{"kind":"Name","value":"propertiesJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerModelContainersQuery, PlayerModelContainersQueryVariables>;
 export const PlayerModelContainerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerModelContainer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerModelContainerRefInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerModelContainer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"typeKey"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"stateJson"}},{"kind":"Field","name":{"kind":"Name","value":"propertiesJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerModelContainerQuery, PlayerModelContainerQueryVariables>;
 export const PlayerModelCreateContainerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerModelCreateContainer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreatePlayerModelContainerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerModelCreateContainer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"typeKey"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"stateJson"}},{"kind":"Field","name":{"kind":"Name","value":"propertiesJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerModelCreateContainerMutation, PlayerModelCreateContainerMutationVariables>;
@@ -11420,6 +12027,21 @@ export const PlayerAutomationsDocument = {"kind":"Document","definitions":[{"kin
 export const PlayerAutomationCreateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerAutomationCreate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreatePlayerAutomationInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerAutomationCreate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"triggerJson"}},{"kind":"Field","name":{"kind":"Name","value":"actionJson"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"pausedUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerAutomationCreateMutation, PlayerAutomationCreateMutationVariables>;
 export const PlayerAutomationSetEnabledDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerAutomationSetEnabled"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetPlayerAutomationEnabledInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerAutomationSetEnabled"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"triggerJson"}},{"kind":"Field","name":{"kind":"Name","value":"actionJson"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"pausedUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerAutomationSetEnabledMutation, PlayerAutomationSetEnabledMutationVariables>;
 export const PlayerAutomationDeleteDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerAutomationDelete"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerAutomationRefInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerAutomationDelete"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<PlayerAutomationDeleteMutation, PlayerAutomationDeleteMutationVariables>;
+export const PlayerWalletBalanceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerWalletBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerWalletBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWalletFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWallet"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletBalanceQuery, PlayerWalletBalanceQueryVariables>;
+export const PlayerWalletTransactionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerWalletTransactions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerWalletTransactions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWalletTransactionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletTransactionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWalletTransaction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletTransactionsQuery, PlayerWalletTransactionsQueryVariables>;
+export const PlayerUsageChargesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerUsageCharges"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerUsageCharges"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerUsageChargeFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerUsageChargeFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerUsageCharge"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chargeId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"periodEnd"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"platformCents"}},{"kind":"Field","name":{"kind":"Name","value":"markupCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"usageSnapshotJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerUsageChargesQuery, PlayerUsageChargesQueryVariables>;
+export const PlayerSpendCapsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerSpendCaps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerSpendCaps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerSpendCapFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerSpendCapFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerSpendCap"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"dailyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentDayUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}}]}}]} as unknown as DocumentNode<PlayerSpendCapsQuery, PlayerSpendCapsQueryVariables>;
+export const SetPlayerSpendCapDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetPlayerSpendCap"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"scope"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"dailyLimitCents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"monthlyLimitCents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setPlayerSpendCap"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"scope"},"value":{"kind":"Variable","name":{"kind":"Name","value":"scope"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"dailyLimitCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"dailyLimitCents"}}},{"kind":"Argument","name":{"kind":"Name","value":"monthlyLimitCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"monthlyLimitCents"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerSpendCapFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerSpendCapFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerSpendCap"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"dailyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentDayUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}}]}}]} as unknown as DocumentNode<SetPlayerSpendCapMutation, SetPlayerSpendCapMutationVariables>;
+export const PlayerAutoBillingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerAutoBilling"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerAutoBilling"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerAutoBillingFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerAutoBillingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerAutoBilling"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"limitCents"}},{"kind":"Field","name":{"kind":"Name","value":"autoBilledThisPeriodCents"}},{"kind":"Field","name":{"kind":"Name","value":"rechargeAmountCents"}},{"kind":"Field","name":{"kind":"Name","value":"lowWaterThresholdCents"}},{"kind":"Field","name":{"kind":"Name","value":"hasPaymentMethod"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}}]}}]} as unknown as DocumentNode<PlayerAutoBillingQuery, PlayerAutoBillingQueryVariables>;
+export const SetPlayerAutoBillingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetPlayerAutoBilling"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limitCents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"rechargeAmountCents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"lowWaterThresholdCents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setPlayerAutoBilling"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}},{"kind":"Argument","name":{"kind":"Name","value":"limitCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limitCents"}}},{"kind":"Argument","name":{"kind":"Name","value":"rechargeAmountCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"rechargeAmountCents"}}},{"kind":"Argument","name":{"kind":"Name","value":"lowWaterThresholdCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"lowWaterThresholdCents"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerAutoBillingFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerAutoBillingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerAutoBilling"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"limitCents"}},{"kind":"Field","name":{"kind":"Name","value":"autoBilledThisPeriodCents"}},{"kind":"Field","name":{"kind":"Name","value":"rechargeAmountCents"}},{"kind":"Field","name":{"kind":"Name","value":"lowWaterThresholdCents"}},{"kind":"Field","name":{"kind":"Name","value":"hasPaymentMethod"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}}]}}]} as unknown as DocumentNode<SetPlayerAutoBillingMutation, SetPlayerAutoBillingMutationVariables>;
+export const PlayerRuntimeStatesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerRuntimeStates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerRuntimeStates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerRuntimeStatesQuery, PlayerRuntimeStatesQueryVariables>;
+export const PlayerWasmPoliciesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerWasmPolicies"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerWasmPolicies"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWasmPolicyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmPolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmPolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"policyId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxModulesPerGrid"}},{"kind":"Field","name":{"kind":"Name","value":"maxModulesTotal"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"unitsPerHour"}},{"kind":"Field","name":{"kind":"Name","value":"unitsPerDay"}},{"kind":"Field","name":{"kind":"Name","value":"maxCompilesPerHour"}},{"kind":"Field","name":{"kind":"Name","value":"maxContainerCreatesDay"}},{"kind":"Field","name":{"kind":"Name","value":"clientFuelPerDispatch"}}]}}]} as unknown as DocumentNode<PlayerWasmPoliciesQuery, PlayerWasmPoliciesQueryVariables>;
+export const SetPlayerWasmPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetPlayerWasmPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetPlayerWasmPolicyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setPlayerWasmPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWasmPolicyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmPolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmPolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"policyId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxModulesPerGrid"}},{"kind":"Field","name":{"kind":"Name","value":"maxModulesTotal"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"unitsPerHour"}},{"kind":"Field","name":{"kind":"Name","value":"unitsPerDay"}},{"kind":"Field","name":{"kind":"Name","value":"maxCompilesPerHour"}},{"kind":"Field","name":{"kind":"Name","value":"maxContainerCreatesDay"}},{"kind":"Field","name":{"kind":"Name","value":"clientFuelPerDispatch"}}]}}]} as unknown as DocumentNode<SetPlayerWasmPolicyMutation, SetPlayerWasmPolicyMutationVariables>;
+export const DeletePlayerWasmPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeletePlayerWasmPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"scope"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"scopeRef"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deletePlayerWasmPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"scope"},"value":{"kind":"Variable","name":{"kind":"Name","value":"scope"}}},{"kind":"Argument","name":{"kind":"Name","value":"scopeRef"},"value":{"kind":"Variable","name":{"kind":"Name","value":"scopeRef"}}}]}]}}]} as unknown as DocumentNode<DeletePlayerWasmPolicyMutation, DeletePlayerWasmPolicyMutationVariables>;
+export const PlayerRateMarkupDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerRateMarkup"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerRateMarkup"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}]}]}}]} as unknown as DocumentNode<PlayerRateMarkupQuery, PlayerRateMarkupQueryVariables>;
+export const SetPlayerRateMarkupDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetPlayerRateMarkup"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"markupBps"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setPlayerRateMarkup"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"markupBps"},"value":{"kind":"Variable","name":{"kind":"Name","value":"markupBps"}}}]}]}}]} as unknown as DocumentNode<SetPlayerRateMarkupMutation, SetPlayerRateMarkupMutationVariables>;
+export const AppPlayerUsageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppPlayerUsage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"hours"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appPlayerUsage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"hours"},"value":{"kind":"Variable","name":{"kind":"Name","value":"hours"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"computeUnits"}},{"kind":"Field","name":{"kind":"Name","value":"automationUnits"}},{"kind":"Field","name":{"kind":"Name","value":"compileCount"}},{"kind":"Field","name":{"kind":"Name","value":"chargedCents"}}]}}]}}]} as unknown as DocumentNode<AppPlayerUsageQuery, AppPlayerUsageQueryVariables>;
+export const AppPlayerMarkupAccruedDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppPlayerMarkupAccrued"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appPlayerMarkupAccrued"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}]}]}}]} as unknown as DocumentNode<AppPlayerMarkupAccruedQuery, AppPlayerMarkupAccruedQueryVariables>;
 export const DeleteQuotaDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteQuota"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"quotaId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteQuota"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"quotaId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"quotaId"}}}]}]}}]} as unknown as DocumentNode<DeleteQuotaMutation, DeleteQuotaMutationVariables>;
 export const EffectiveQuotaDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EffectiveQuota"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"metric"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"effectiveQuota"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"metric"},"value":{"kind":"Variable","name":{"kind":"Name","value":"metric"}}},{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"tierId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tierId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotaId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"metric"}},{"kind":"Field","name":{"kind":"Name","value":"limitValue"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}}]}}]}}]} as unknown as DocumentNode<EffectiveQuotaQuery, EffectiveQuotaQueryVariables>;
 export const QuotasForAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"QuotasForApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotasForApp"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"quotaId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"tierId"}},{"kind":"Field","name":{"kind":"Name","value":"metric"}},{"kind":"Field","name":{"kind":"Name","value":"limitValue"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<QuotasForAppQuery, QuotasForAppQueryVariables>;

@@ -456,6 +456,7 @@ export {
   type WaitForCompileOptions,
 } from './domains/compute.js';
 export { PlayerComputeAPI } from './domains/playerCompute.js';
+export { PlayerWalletAPI } from './domains/playerWallet.js';
 export { PlayerModelAPI } from './domains/playerModel.js';
 export {
   PlayerCodeBroker,
