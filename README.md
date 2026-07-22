@@ -119,6 +119,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.playerModel` | Player-owned flexible model containers and grid-confined automations (`containers`, `createContainer`, `setProperty`, `automations`, `createAutomation`, …). |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
+| `client.refreshGameplayToken()` | Safely rotates an active game client's app token: disconnects the old-token UDP proxy, refreshes/stores the token, and opens the new-token proxy while existing realtime handlers resubscribe in place. |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
 
 `PlayerCodeBroker` is the P1 page-side browser security skeleton: it transfers
@@ -160,8 +161,15 @@ Auth, user reads, and the studio-admin / operator surfaces target `managementUrl
 3. Subscribe to UDP proxy notifications with `game.udp.subscribe(handlers, appId)` — `appId` is **required** (the SDK opens the realtime socket on demand and scopes it to that app).
 4. Join a chunk by sending an initial actor update.
 5. Send actor, voxel, text, audio, and client-event updates through `game.udp` or the higher-level `game.world(appId)` helpers.
-6. Call `game.udp.disconnect()` when leaving the world; `game.portal.refresh()` before the token expires to keep playing.
+6. Before the app token expires, call `game.refreshGameplayToken()` while gameplay is active. It closes the old-token UDP proxy before rotating the token, opens the new-token proxy, and lets the existing realtime subscription restart without adding handlers. Use `game.portal.refresh()` directly only when no UDP proxy lifecycle needs to be preserved.
 7. Call `client.close()` (and `game.close()`) when disposing the SDK instances.
+
+`refreshGameplayToken()` deliberately stops on the first failed stage. If the
+old proxy cannot confirm disconnect, no refresh is attempted and the old token
+remains active. If refresh fails, the old token is still retained (although its
+proxy was closed and may be reopened). If the new proxy connect fails, the
+fresh token remains stored; surface the error and retry `game.udp.connect()`
+instead of rotating again.
 
 ## Per-app routing
 
@@ -502,9 +510,14 @@ location.assign(await overworld.portal.handleAuthorizeRequest());
 
 // Game origin, on callback boot: exchange code+verifier -> app token (stored).
 const entered = await game.portal.completeEntry();
-// Keep playing past expiry without re-portaling (same app):
-await game.portal.refresh();
+// Keep active UDP gameplay running past expiry without orphaning the old proxy:
+await game.refreshGameplayToken();
 ```
+
+`portal.refresh()` remains available for clients with no active UDP lifecycle.
+Once a proxy or realtime gameplay session is active, prefer
+`refreshGameplayToken()` so the old Bearer closes its proxy before the token is
+revoked.
 
 Game-to-game routes through the Overworld for a fresh per-game token. New
 realtime codes: `APP_TOKEN_REQUIRED`, `APP_SCOPE_MISMATCH`; new `UdpErrorCode`:
