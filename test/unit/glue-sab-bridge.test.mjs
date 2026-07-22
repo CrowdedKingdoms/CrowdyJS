@@ -34,9 +34,17 @@ test('synchronous host_call round-trips through the SAB while the worker blocks'
       setTimeout(() => {
         const view = wrapGlueSab(msg.reply);
         if (msg.fn === 'actors_list') {
-          writeGlueResult(view, { ok: true, data: { actors: [{ id: 'a1' }] } });
+          writeGlueResult(
+            view,
+            { ok: true, data: { actors: [{ id: 'a1' }] } },
+            msg.id,
+          );
         } else {
-          writeGlueResult(view, { ok: false, error: { kind: 'denied' } });
+          writeGlueResult(
+            view,
+            { ok: false, error: { kind: 'denied' } },
+            msg.id,
+          );
         }
       }, 15);
     } else if (msg.type === 'done') {

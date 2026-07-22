@@ -15,13 +15,15 @@ import {
 
 const sab = createGlueSab();
 const order = [];
+let requestId = 0;
 
 function hostCallSync(fn, args) {
-  armGlueRequest(sab);
+  const id = ++requestId;
+  armGlueRequest(sab, id);
   order.push(fn);
-  parentPort.postMessage({ type: 'hostcall', fn, args, reply: sab.sab });
+  parentPort.postMessage({ type: 'hostcall', id, fn, args, reply: sab.sab });
   // Blocks here until the parent writes the SAB + notifies.
-  const bytes = waitAndReadGlueReply(sab);
+  const bytes = waitAndReadGlueReply(sab, id);
   order.push('blocked_reply');
   return JSON.parse(glueDecoder.decode(bytes));
 }

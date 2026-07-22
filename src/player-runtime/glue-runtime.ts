@@ -47,13 +47,19 @@ export interface GlueInitMessage {
   type: 'init';
   artifact: ArrayBuffer;
   authority: 'player';
+  /** Server-authored budget loaded into an injected mutable `ck_fuel` global. */
   fuelPerDispatch?: string;
+  /** Legacy metadata; the hard watchdog is owned by the page-side broker. */
   watchdogMs?: number;
+  hostCallTimeoutMs?: number;
   /** Local client tick cadence in ms (0/undefined => no self-tick). */
   tickIntervalMs?: number;
 }
 
-/** Parse the fuel budget the broker forwards; undefined/invalid => unbounded (server still meters). */
+/**
+ * Parse the server-authored budget used to refill an instrumented artifact's
+ * mutable `ck_fuel` global before every guest dispatch.
+ */
 export function parseFuelBudget(raw: string | undefined): bigint | null {
   if (raw == null) return null;
   try {
@@ -70,9 +76,9 @@ export type GlueDispatchResult =
   | { ok: false; reason: 'fuel' | 'watchdog' | 'trap'; detail?: string };
 
 /**
- * Wrap a single guest dispatch with the wall-clock watchdog. The fuel trap is
- * enforced inside the gas-injected module; this guards against a hang that
- * spins without consuming fuel. Pure and unit-testable.
+ * Classify a completed guest dispatch by elapsed wall time. This cannot
+ * interrupt synchronous WASM; the page-side PlayerCodeBroker owns the hard
+ * dispatch watchdog and terminates a worker whose dispatch never returns.
  */
 export async function runWithWatchdog(
   dispatch: () => unknown,
@@ -98,6 +104,7 @@ export async function runWithWatchdog(
 /** The minimal guest-instance surface the runtime drives (a real WebAssembly.Instance satisfies it). */
 export interface GuestExports {
   memory: { buffer: ArrayBuffer };
+  ck_fuel?: WebAssembly.Global;
   ck_alloc(len: number): number;
   ck_free?(ptr: number, len: number): void;
   init?(): void;
@@ -114,9 +121,28 @@ export interface GlueRuntimeOptions {
   /** Deterministic-enough randomness for the guest `random_get` (defaults to crypto). */
   randomFill?: (buf: Uint8Array) => void;
   now?: () => number;
+  fuelPerDispatch?: bigint | null;
 }
 
 const textDecoder = new TextDecoder();
+
+function assertMemoryRange(
+  buffer: ArrayBuffer,
+  ptr: number,
+  len: number,
+  operation: string,
+): void {
+  if (
+    !Number.isSafeInteger(ptr) ||
+    !Number.isSafeInteger(len) ||
+    ptr < 0 ||
+    len < 0 ||
+    ptr > buffer.byteLength ||
+    len > buffer.byteLength - ptr
+  ) {
+    throw new RangeError(`${operation} is outside guest memory`);
+  }
+}
 
 function defaultRandomFill(buf: Uint8Array): void {
   const c = (globalThis as { crypto?: Crypto }).crypto;
@@ -143,6 +169,15 @@ export class GlueRuntime {
 
   constructor(private readonly options: GlueRuntimeOptions) {}
 
+  private resetFuel(): void {
+    const fuel = this.exports?.ck_fuel;
+    if (!fuel) return;
+    if (this.options.fuelPerDispatch == null) {
+      throw new Error('instrumented artifact is missing a fuel budget');
+    }
+    fuel.value = this.options.fuelPerDispatch;
+  }
+
   /** The import object handed to `WebAssembly.instantiate`. Guest sees only these. */
   buildImports(getExports: () => GuestExports | null): WebAssembly.Imports {
     const mem = (): DataView => {
@@ -153,16 +188,20 @@ export class GlueRuntime {
     const bytesAt = (ptr: number, len: number): Uint8Array => {
       const ex = getExports();
       if (!ex) throw new Error('guest not instantiated');
+      const buffer = ex.memory.buffer;
+      assertMemoryRange(buffer, ptr, len, 'guest memory read');
       // Copy into a fresh ArrayBuffer-backed view — the guest buffer may
       // detach/grow between calls (and may be a SharedArrayBuffer).
       const out = new Uint8Array(len);
-      out.set(new Uint8Array(ex.memory.buffer, ptr, len));
+      out.set(new Uint8Array(buffer, ptr, len));
       return out;
     };
     const writeAt = (ptr: number, src: Uint8Array): void => {
       const ex = getExports();
       if (!ex) throw new Error('guest not instantiated');
-      new Uint8Array(ex.memory.buffer, ptr, src.length).set(src);
+      const buffer = ex.memory.buffer;
+      assertMemoryRange(buffer, ptr, src.length, 'guest memory write');
+      new Uint8Array(buffer, ptr, src.length).set(src);
     };
     const now = this.options.now ?? (() => Date.now());
     const randomFill = this.options.randomFill ?? defaultRandomFill;
@@ -191,6 +230,9 @@ export class GlueRuntime {
         const ex = getExports();
         if (!ex) throw new Error('guest not instantiated');
         const outPtr = ex.ck_alloc(respBytes.length);
+        if (respBytes.length > 0 && outPtr === 0) {
+          throw new RangeError('ck_alloc returned a null reply pointer');
+        }
         writeAt(outPtr, respBytes);
         // Packed (ptr << 32 | len); the guest reads then ck_frees it.
         return (BigInt(outPtr) << 32n) | BigInt(respBytes.length >>> 0);
@@ -199,9 +241,12 @@ export class GlueRuntime {
 
     const wasi = {
       random_get: (ptr: number, len: number): number => {
-        const buf = new Uint8Array(len);
+        const ex = getExports();
+        if (!ex) throw new Error('guest not instantiated');
+        const buffer = ex.memory.buffer;
+        assertMemoryRange(buffer, ptr, len, 'random_get write');
+        const buf = new Uint8Array(buffer, ptr, len);
         randomFill(buf);
-        writeAt(ptr, buf);
         return 0;
       },
       // A player artifact may pull in a few benign wasi stubs; keep them inert.
@@ -238,11 +283,13 @@ export class GlueRuntime {
 
   /** Run the module's `init` export (once, after instantiate). */
   init(): void {
+    this.resetFuel();
     this.exports?.init?.();
   }
 
   /** Run one `tick(dt_ms)`. Throws propagate to the caller's watchdog wrapper. */
   tick(dtMs: number): void {
+    this.resetFuel();
     this.exports?.tick?.(dtMs);
   }
 
@@ -251,12 +298,21 @@ export class GlueRuntime {
     const ex = this.exports;
     if (!ex || typeof ex.handle_invoke !== 'function') return new Uint8Array(0);
     const ptr = ex.ck_alloc(payload.length);
+    if (payload.length > 0 && ptr === 0) {
+      throw new RangeError('ck_alloc returned a null invoke pointer');
+    }
+    assertMemoryRange(ex.memory.buffer, ptr, payload.length, 'invoke request write');
     new Uint8Array(ex.memory.buffer, ptr, payload.length).set(payload);
+    this.resetFuel();
     const packed = BigInt(ex.handle_invoke(ptr, payload.length));
     ex.ck_free?.(ptr, payload.length);
     const outPtr = Number(packed >> 32n);
     const outLen = Number(packed & 0xffffffffn);
     if (outLen === 0) return new Uint8Array(0);
+    if (outPtr === 0) {
+      throw new RangeError('guest returned a null invoke reply pointer');
+    }
+    assertMemoryRange(ex.memory.buffer, outPtr, outLen, 'invoke reply read');
     const out = new Uint8Array(ex.memory.buffer, outPtr, outLen).slice();
     ex.ck_free?.(outPtr, outLen);
     return out;
