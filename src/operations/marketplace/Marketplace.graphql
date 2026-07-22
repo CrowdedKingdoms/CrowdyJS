@@ -22,6 +22,10 @@ fragment PlayerCodeListingVersionFields on PlayerCodeListingVersion {
   versionNo
   serverArtifactHashes
   clientArtifactHashes
+  requirements {
+    serverArtifactHash
+    clientArtifactHash
+  }
   capabilitySummaryJson
   capabilityHash
   openSource
@@ -96,21 +100,32 @@ query MarketplaceGridClientMods($appId: BigInt!, $gridId: BigInt!) {
     listingId
     listingName
     versionId
+    sourceKind
+    authorKind
+    authorRef
+    serverVersionId
+    clientVersionId
+    clientArtifactHash
     gridId
     capabilitySummaryJson
     capabilityHash
+    authorCapabilitySummaryJson
+    authorCapabilityHash
     callerConsented
+    callerTrustsAuthor
   }
 }
 
 query MarketplaceClientArtifact(
   $appId: BigInt!
-  $listingId: String!
+  $listingId: String
+  $attachmentId: String
   $versionId: String
 ) {
   playerCodeClientArtifact(
     appId: $appId
     listingId: $listingId
+    attachmentId: $attachmentId
     versionId: $versionId
   ) {
     versionId
@@ -121,6 +136,22 @@ query MarketplaceClientArtifact(
     contractJson
     clientFuelPerDispatch
   }
+}
+
+mutation MarketplaceTrustGridAuthor(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $authorKind: PlayerCodeOwnerKind!
+  $authorRef: BigInt!
+  $consentCapabilityHash: String!
+) {
+  trustGridAuthor(
+    appId: $appId
+    gridId: $gridId
+    authorKind: $authorKind
+    authorRef: $authorRef
+    consentCapabilityHash: $consentCapabilityHash
+  )
 }
 
 mutation MarketplacePublishListing($input: PublishPlayerCodeInput!) {

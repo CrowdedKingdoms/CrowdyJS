@@ -2,6 +2,7 @@ import type { GraphQLClient } from '../client.js';
 import {
   PlayerComputeDeployDocument,
   PlayerComputeSetEnabledDocument,
+  PlayerComputeSetRequiresDocument,
   PlayerComputeMyModulesDocument,
   PlayerComputeVersionsDocument,
   PlayerComputeDeleteDocument,
@@ -28,6 +29,8 @@ import {
   type PlayerComputeDeployMutationVariables,
   type PlayerComputeSetEnabledMutation,
   type PlayerComputeSetEnabledMutationVariables,
+  type PlayerComputeSetRequiresMutation,
+  type PlayerComputeSetRequiresMutationVariables,
   type PlayerComputeMyModulesQuery,
   type PlayerComputeMyModulesQueryVariables,
   type PlayerComputeVersionsQuery,
@@ -75,6 +78,21 @@ export class PlayerComputeAPI {
       variables,
     );
     return data.playerComputeSetEnabled;
+  }
+
+  /**
+   * Set or clear the required CLIENT companion for the current SERVER module
+   * version. Both modules must be caller-authored, compiled, and in the same
+   * owned grid; pass `requiredClientName: null` to clear the edge.
+   */
+  async setRequires(
+    variables: PlayerComputeSetRequiresMutationVariables,
+  ): Promise<PlayerComputeSetRequiresMutation['playerComputeSetRequires']> {
+    const data = await this.graphql.request(
+      PlayerComputeSetRequiresDocument,
+      variables,
+    );
+    return data.playerComputeSetRequires;
   }
 
   /**

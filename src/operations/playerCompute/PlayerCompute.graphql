@@ -9,6 +9,7 @@ fragment PlayerWasmModuleFields on PlayerWasmModule {
   enabled
   draft
   currentVersionId
+  currentTarget
   circuitState
   lastError
   createdAt
@@ -48,6 +49,20 @@ mutation PlayerComputeSetEnabled(
   ) {
     ...PlayerWasmModuleFields
   }
+}
+
+mutation PlayerComputeSetRequires(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $serverName: String!
+  $requiredClientName: String
+) {
+  playerComputeSetRequires(
+    appId: $appId
+    gridId: $gridId
+    serverName: $serverName
+    requiredClientName: $requiredClientName
+  )
 }
 
 query PlayerComputeMyModules($appId: BigInt!) {

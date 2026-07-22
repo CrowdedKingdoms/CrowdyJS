@@ -503,6 +503,10 @@ export {
   type LiveCodingHandle,
 } from './live-coding/mount.js';
 export {
+  mountLiveCodingIDE,
+  type MountLiveCodingIDEOptions,
+} from './live-coding/ide.js';
+export {
   PLAYER_CODE_TEMPLATES,
   templateById,
   type PlayerCodeTemplate,

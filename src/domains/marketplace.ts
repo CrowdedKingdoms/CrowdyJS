@@ -12,6 +12,7 @@ import {
   MarketplaceInstallDocument,
   MarketplaceUninstallDocument,
   MarketplaceConsentGridClientModDocument,
+  MarketplaceTrustGridAuthorDocument,
   MarketplaceGridClaimPolicyDocument,
   MarketplaceGridClaimRequestsDocument,
   MarketplaceClaimGridOwnershipDocument,
@@ -87,6 +88,8 @@ import {
   type MarketplaceInstallMutationVariables,
   type MarketplaceUninstallMutationVariables,
   type MarketplaceConsentGridClientModMutationVariables,
+  type MarketplaceTrustGridAuthorMutation,
+  type MarketplaceTrustGridAuthorMutationVariables,
   type MarketplaceGridClaimPolicyQuery,
   type MarketplaceGridClaimPolicyQueryVariables,
   type MarketplaceGridClaimRequestsQuery,
@@ -255,6 +258,21 @@ export class MarketplaceAPI {
         variables,
       );
     return data.consentGridClientMod;
+  }
+
+  /**
+   * Trust one author's active attachments in a grid at the exact aggregate
+   * capability hash returned by `gridClientMods`. Capability widening changes
+   * the hash and requires another explicit call.
+   */
+  async trustGridAuthor(
+    variables: MarketplaceTrustGridAuthorMutationVariables,
+  ): Promise<MarketplaceTrustGridAuthorMutation['trustGridAuthor']> {
+    const data = await this.game.request(
+      MarketplaceTrustGridAuthorDocument,
+      variables,
+    );
+    return data.trustGridAuthor;
   }
 
   /** Fetch an acquired/attached listing's client artifact (base64 + metadata). */
