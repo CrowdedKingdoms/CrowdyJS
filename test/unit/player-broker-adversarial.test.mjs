@@ -18,6 +18,9 @@ class FakeWorker {
   terminated = false;
   postMessage(message) {
     this.sent.push(message);
+    if (message?.type === 'init') {
+      queueMicrotask(() => this.receive({ type: 'ready' }));
+    }
   }
   addEventListener(_type, listener) {
     this.listener = listener;

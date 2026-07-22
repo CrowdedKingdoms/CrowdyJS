@@ -1,4 +1,9 @@
-import { wrapGlueSab, writeGlueResult } from './glue-sab.js';
+import {
+  GLUE_HOST_CALL_TIMEOUT_MS,
+  SAB_HEADER_BYTES,
+  wrapGlueSab,
+  writeGlueResult,
+} from './glue-sab.js';
 
 export interface PlayerCodeGridBounds {
   low: { x: bigint; y: bigint; z: bigint };
@@ -43,7 +48,10 @@ export interface PlayerCodeBrokerOptions {
    * run (09 T7). Compute it from the same bytes the game-api served.
    */
   artifactHash?: string;
-  /** Per-dispatch client fuel budget (from playerComputeArtifact); the glue traps past it. */
+  /**
+   * Informational server-authored fuel metadata. The browser does not enforce
+   * this value; metering must be injected into the platform artifact.
+   */
   fuelPerDispatch?: bigint;
   onHostCall: (call: PlayerCodeHostCall) => Promise<unknown>;
   /** Optional sink for HUD/overlay presentation the mod emits (BWF wires this). */
@@ -55,6 +63,10 @@ export interface PlayerCodeBrokerOptions {
   hashArtifact?: (artifact: ArrayBuffer) => Promise<string>;
   /** Wall-clock ms allowed per dispatch before the broker recycles the worker. */
   dispatchWatchdogMs?: number;
+  /** Wall-clock ms allowed for worker creation + WASM instantiation. */
+  startupWatchdogMs?: number;
+  /** Wall-clock ms allowed while an async SDK host call is outstanding. */
+  hostCallTimeoutMs?: number;
   /**
    * Local tick cadence (ms) for a client mod: the worker self-drives `tick`
    * at this interval. Omit/0 for invoke-only mods (no periodic tick). A HUD
@@ -125,6 +137,22 @@ for (const [group, fns] of Object.entries(ALLOWED_HOST_CALLS)) {
 
 const RATE_WINDOW_MS = 1000;
 const CIRCUIT_TRIP_THRESHOLD = 5;
+const GLOBAL_HOST_CALL_CAP = 1000;
+const MAX_HOST_CALL_FN_BYTES = 128;
+const MAX_HOST_CALL_ARGS_BYTES = 256 * 1024;
+const HOST_CALL_ENVELOPE_KEYS = new Set([
+  'type',
+  'id',
+  'fn',
+  'args',
+  'reply',
+]);
+const FORBIDDEN_BINDING_KEYS = new Set([
+  'authority',
+  'bindingKind',
+  'binding_kind',
+]);
+const utf8Encoder = new TextEncoder();
 
 /**
  * Page-side security broker for browser-target player WASM (production shape,
@@ -148,52 +176,58 @@ const CIRCUIT_TRIP_THRESHOLD = 5;
  */
 export class PlayerCodeBroker {
   private worker: PlayerCodeWorkerLike | null = null;
+  private workerListener:
+    | ((event: MessageEvent<unknown>) => void)
+    | null = null;
+  private artifact: ArrayBuffer | null = null;
   private circuitOpen = false;
   private consecutiveTraps = 0;
+  private hardTimeouts = 0;
   private readonly rateBuckets = new Map<string, number[]>();
-  private readonly onMessage = (event: MessageEvent<unknown>) => {
-    void this.handleMessage(event.data);
-  };
+  private globalCallBucket: number[] = [];
+  private generation = 0;
+  private lifecycleVersion = 0;
+  private starting = false;
+  private workerReady = false;
+  private startupTimer: ReturnType<typeof setTimeout> | null = null;
+  private dispatchTimer: ReturnType<typeof setTimeout> | null = null;
+  private activeDispatch:
+    | { generation: number; id: number; kind: string }
+    | null = null;
 
   constructor(private readonly options: PlayerCodeBrokerOptions) {}
 
   /**
    * Start the worker on a platform-fetched artifact. Verifies the artifact
-   * hash (side-load refusal, T7) before handing bytes to the worker, and
-   * forwards the fuel budget so the glue can trap a runaway dispatch.
+   * hash (side-load refusal, T7) before handing bytes to the worker. A retained
+   * copy allows the page-side hard watchdog to replace a wedged worker.
    */
   async start(artifact: ArrayBuffer): Promise<void> {
-    if (this.worker) throw new Error('PlayerCodeBroker is already started');
+    if (this.worker || this.starting) {
+      throw new Error('PlayerCodeBroker is already started');
+    }
     if (this.circuitOpen) {
       throw new Error('player code circuit is open; reset before starting');
     }
-    if (this.options.artifactHash) {
-      const actual = await this.hash(artifact);
-      if (actual !== this.options.artifactHash) {
-        throw new Error(
-          'refusing to run an artifact that was not fetched from the platform',
-        );
+    const lifecycleVersion = ++this.lifecycleVersion;
+    this.starting = true;
+    try {
+      if (this.options.artifactHash) {
+        const actual = await this.hash(artifact);
+        if (actual !== this.options.artifactHash) {
+          throw new Error(
+            'refusing to run an artifact that was not fetched from the platform',
+          );
+        }
       }
+      if (lifecycleVersion !== this.lifecycleVersion) {
+        throw new Error('PlayerCodeBroker start was cancelled');
+      }
+      this.artifact = artifact.slice(0);
+      this.spawnWorker();
+    } finally {
+      if (lifecycleVersion === this.lifecycleVersion) this.starting = false;
     }
-    const factory =
-      this.options.workerFactory ??
-      ((url: string | URL) => new Worker(url, { type: 'module' }));
-    this.worker = factory(this.options.workerUrl);
-    this.worker.addEventListener('message', this.onMessage);
-    this.worker.postMessage(
-      {
-        type: 'init',
-        artifact,
-        authority: 'player',
-        fuelPerDispatch:
-          this.options.fuelPerDispatch != null
-            ? this.options.fuelPerDispatch.toString()
-            : undefined,
-        watchdogMs: this.options.dispatchWatchdogMs ?? 250,
-        tickIntervalMs: this.options.tickIntervalMs ?? 0,
-      },
-      [artifact],
-    );
   }
 
   /** Terminate + respawn on a fresh artifact — the client hot-reload path. */
@@ -203,44 +237,125 @@ export class PlayerCodeBroker {
   }
 
   stop(): void {
-    if (!this.worker) return;
-    this.worker.removeEventListener('message', this.onMessage);
-    this.worker.terminate();
-    this.worker = null;
+    this.lifecycleVersion += 1;
+    this.starting = false;
+    this.stopWorker();
+    this.artifact = null;
   }
 
   /** Clear a tripped circuit so the caller can start again after a fix. */
   resetCircuit(): void {
     this.circuitOpen = false;
     this.consecutiveTraps = 0;
+    this.hardTimeouts = 0;
     this.rateBuckets.clear();
+    this.globalCallBucket = [];
   }
 
-  private async handleMessage(raw: unknown): Promise<void> {
-    if (!this.worker || !isRecord(raw)) return;
+  private async handleMessage(
+    raw: unknown,
+    generation: number,
+    sourceWorker: PlayerCodeWorkerLike,
+  ): Promise<void> {
+    if (
+      this.worker !== sourceWorker ||
+      generation !== this.generation ||
+      !isRecord(raw)
+    ) {
+      return;
+    }
+    if (raw.type === 'ready') {
+      this.workerReady = true;
+      this.clearStartupTimer();
+      return;
+    }
+    if (raw.type === 'dispatch-start') {
+      if (!Number.isSafeInteger(raw.id) || (raw.id as number) <= 0) {
+        this.recycleWorker('invalid dispatch-start id');
+        return;
+      }
+      if (this.activeDispatch) {
+        this.recycleWorker('overlapping guest dispatches');
+        return;
+      }
+      this.activeDispatch = {
+        generation,
+        id: raw.id as number,
+        kind: typeof raw.kind === 'string' ? raw.kind : 'unknown',
+      };
+      this.armDispatchTimer(generation, raw.id as number);
+      return;
+    }
     if (raw.type === 'trap') {
-      this.recordTrap(typeof raw.reason === 'string' ? raw.reason : 'trap');
+      this.finishDispatch(generation, raw.id);
+      const reason = typeof raw.reason === 'string' ? raw.reason : 'trap';
+      const detail = typeof raw.detail === 'string' ? raw.detail : '';
+      const trapKind = typeof raw.kind === 'string' ? raw.kind : '';
+      if (reason === 'watchdog' || /host call timed out/i.test(detail)) {
+        this.recycleWorker(
+          /host call timed out/i.test(detail) ? 'hostcall-timeout' : reason,
+        );
+      } else if (trapKind === 'startup' || trapKind === 'init') {
+        this.stopWorker();
+        this.recordTrap(reason);
+      } else {
+        this.recordTrap(reason);
+      }
       return;
     }
     if (raw.type === 'dispatch-ok') {
-      this.consecutiveTraps = 0;
+      const kind = this.activeDispatch?.kind;
+      this.finishDispatch(generation, raw.id);
+      if (kind && kind !== 'init') {
+        this.consecutiveTraps = 0;
+        this.hardTimeouts = 0;
+      }
       return;
     }
     if (raw.type !== 'hostcall') return;
+    this.armHostCallTimer(generation);
+    if (!this.enforceGlobalRate()) return;
     const id = raw.id;
     try {
-      if (typeof id !== 'number') throw new Error('invalid hostcall id');
+      if (!Number.isSafeInteger(id) || (id as number) < 0) {
+        throw new Error('invalid hostcall id');
+      }
+      for (const key of Object.keys(raw)) {
+        if (!HOST_CALL_ENVELOPE_KEYS.has(key)) {
+          throw new Error(`unexpected hostcall envelope field '${key}'`);
+        }
+      }
       if (typeof raw.fn !== 'string') throw new Error('missing host call fn');
+      if (
+        raw.fn.length === 0 ||
+        utf8Encoder.encode(raw.fn).length > MAX_HOST_CALL_FN_BYTES
+      ) {
+        throw new Error('invalid host call fn');
+      }
       const group = FN_TO_GROUP.get(raw.fn);
       if (!group) {
         throw new Error('host call is not allowed in the player browser sandbox');
       }
-      if (!isRecord(raw.args)) {
+      if (!isPlainRecord(raw.args)) {
         // Confused-deputy guard: reject malformed payloads outright rather
         // than coercing them (09 T7).
-        throw new Error('host call args must be an object');
+        throw new Error('host call args must be a plain object');
       }
       const args = raw.args;
+      for (const key of FORBIDDEN_BINDING_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(args, key)) {
+          throw new Error(`host call cannot override '${key}'`);
+        }
+      }
+      let encodedArgs: Uint8Array;
+      try {
+        encodedArgs = utf8Encoder.encode(JSON.stringify(args));
+      } catch {
+        throw new Error('host call args must be JSON-serializable');
+      }
+      if (encodedArgs.length > MAX_HOST_CALL_ARGS_BYTES) {
+        throw new Error('host call args exceed the browser sandbox limit');
+      }
       this.enforceRate(group, raw.fn);
       this.assertGridScope(raw.fn, args);
       let data: unknown;
@@ -253,7 +368,12 @@ export class PlayerCodeBroker {
           low: { x: low.x.toString(), y: low.y.toString(), z: low.z.toString() },
           high: { x: high.x.toString(), y: high.y.toString(), z: high.z.toString() },
         };
-        this.reply(raw.reply, id, { type: 'hostcall-result', id, ok: true, data });
+        this.reply(sourceWorker, generation, raw.reply, id, {
+          type: 'hostcall-result',
+          id,
+          ok: true,
+          data,
+        });
         return;
       }
       if (PRESENTATION_FUNCTIONS.has(raw.fn)) {
@@ -267,9 +387,14 @@ export class PlayerCodeBroker {
       } else {
         data = await this.options.onHostCall({ fn: raw.fn, args });
       }
-      this.reply(raw.reply, id, { type: 'hostcall-result', id, ok: true, data });
+      this.reply(sourceWorker, generation, raw.reply, id, {
+        type: 'hostcall-result',
+        id,
+        ok: true,
+        data,
+      });
     } catch (error) {
-      this.reply(raw.reply, id, {
+      this.reply(sourceWorker, generation, raw.reply, id, {
         type: 'hostcall-result',
         id,
         ok: false,
@@ -288,18 +413,198 @@ export class PlayerCodeBroker {
    * the browser; the postMessage is harmless there.
    */
   private reply(
+    sourceWorker: PlayerCodeWorkerLike,
+    generation: number,
     replyBuffer: unknown,
-    _id: number,
+    id: number,
     message: { type: string; id: number; ok: boolean; data?: unknown; error?: unknown },
   ): void {
-    this.worker?.postMessage(message);
-    if (typeof SharedArrayBuffer !== 'undefined' && replyBuffer instanceof SharedArrayBuffer) {
-      const view = wrapGlueSab(replyBuffer);
-      const envelope = message.ok
-        ? { ok: true, data: message.data }
-        : { ok: false, error: message.error };
-      writeGlueResult(view, envelope);
+    if (this.worker !== sourceWorker || generation !== this.generation) return;
+    let sabAttempted = false;
+    let delivered = false;
+    if (
+      typeof SharedArrayBuffer !== 'undefined' &&
+      replyBuffer instanceof SharedArrayBuffer &&
+      replyBuffer.byteLength >= SAB_HEADER_BYTES
+    ) {
+      sabAttempted = true;
+      try {
+        const view = wrapGlueSab(replyBuffer);
+        const envelope = message.ok
+          ? { ok: true, data: message.data }
+          : { ok: false, error: message.error };
+        delivered = writeGlueResult(view, envelope, id);
+      } catch {
+        // The async postMessage result above is still delivered. A forged or
+        // undersized SAB must not turn a denied worker request into an
+        // unhandled page-side rejection.
+      }
     }
+    if (!sabAttempted || delivered) {
+      try {
+        sourceWorker.postMessage(message);
+      } catch {
+        // The SAB is authoritative in production. An async mirror that cannot
+        // be cloned must not strand a successfully delivered synchronous reply.
+      }
+    }
+    if (delivered) this.resumeDispatchWatchdog(generation);
+  }
+
+  private spawnWorker(): void {
+    if (!this.artifact || this.circuitOpen) return;
+    const factory: (url: string | URL) => PlayerCodeWorkerLike =
+      this.options.workerFactory ??
+      ((url: string | URL) =>
+        new Worker(url, { type: 'module' }) as unknown as PlayerCodeWorkerLike);
+    const worker = factory(this.options.workerUrl);
+    const generation = ++this.generation;
+    const listener = (event: MessageEvent<unknown>) => {
+      void this.handleMessage(event.data, generation, worker);
+    };
+    this.worker = worker;
+    this.workerListener = listener;
+    this.workerReady = false;
+    worker.addEventListener('message', listener);
+    const workerArtifact = this.artifact.slice(0);
+    try {
+      worker.postMessage(
+        {
+          type: 'init',
+          artifact: workerArtifact,
+          authority: 'player',
+          fuelPerDispatch: this.options.fuelPerDispatch?.toString(),
+          hostCallTimeoutMs:
+            this.options.hostCallTimeoutMs ?? GLUE_HOST_CALL_TIMEOUT_MS,
+          tickIntervalMs: this.options.tickIntervalMs ?? 0,
+        },
+        [workerArtifact],
+      );
+      this.armStartupTimer(generation);
+    } catch (error) {
+      this.stopWorker();
+      throw error;
+    }
+  }
+
+  private stopWorker(): void {
+    this.clearStartupTimer();
+    this.clearDispatchTimer();
+    this.activeDispatch = null;
+    this.workerReady = false;
+    const worker = this.worker;
+    const listener = this.workerListener;
+    this.worker = null;
+    this.workerListener = null;
+    if (!worker) return;
+    if (listener) worker.removeEventListener('message', listener);
+    worker.terminate();
+  }
+
+  private armStartupTimer(generation: number): void {
+    this.clearStartupTimer();
+    const timeoutMs =
+      this.options.startupWatchdogMs ??
+      Math.max(5000, (this.options.dispatchWatchdogMs ?? 250) * 4);
+    this.startupTimer = setTimeout(() => {
+      if (
+        generation === this.generation &&
+        this.worker &&
+        !this.workerReady
+      ) {
+        this.recycleWorker('startup-watchdog');
+      }
+    }, timeoutMs);
+  }
+
+  private clearStartupTimer(): void {
+    if (this.startupTimer) clearTimeout(this.startupTimer);
+    this.startupTimer = null;
+  }
+
+  private armDispatchTimer(generation: number, id: number): void {
+    this.clearDispatchTimer();
+    this.dispatchTimer = setTimeout(() => {
+      if (
+        this.activeDispatch?.generation === generation &&
+        this.activeDispatch.id === id
+      ) {
+        this.recycleWorker('dispatch-watchdog');
+      }
+    }, this.options.dispatchWatchdogMs ?? 250);
+  }
+
+  private armHostCallTimer(generation: number): void {
+    if (
+      this.activeDispatch?.generation !== generation ||
+      !this.worker
+    ) {
+      return;
+    }
+    const id = this.activeDispatch.id;
+    this.clearDispatchTimer();
+    this.dispatchTimer = setTimeout(() => {
+      if (
+        this.activeDispatch?.generation === generation &&
+        this.activeDispatch.id === id
+      ) {
+        this.recycleWorker('hostcall-timeout');
+      }
+    }, this.options.hostCallTimeoutMs ?? GLUE_HOST_CALL_TIMEOUT_MS);
+  }
+
+  private resumeDispatchWatchdog(generation: number): void {
+    if (this.activeDispatch?.generation !== generation) return;
+    this.armDispatchTimer(generation, this.activeDispatch.id);
+  }
+
+  private finishDispatch(generation: number, id: unknown): void {
+    if (
+      !Number.isSafeInteger(id) ||
+      this.activeDispatch?.generation !== generation ||
+      this.activeDispatch.id !== id
+    ) {
+      return;
+    }
+    this.clearDispatchTimer();
+    this.activeDispatch = null;
+  }
+
+  private clearDispatchTimer(): void {
+    if (this.dispatchTimer) clearTimeout(this.dispatchTimer);
+    this.dispatchTimer = null;
+  }
+
+  private recycleWorker(reason: string): void {
+    if (!this.worker || this.circuitOpen) return;
+    this.hardTimeouts += 1;
+    this.consecutiveTraps += 1;
+    this.stopWorker();
+    if (this.hardTimeouts >= CIRCUIT_TRIP_THRESHOLD) {
+      this.openCircuit(reason);
+      return;
+    }
+    this.spawnWorker();
+  }
+
+  private openCircuit(reason: string): void {
+    if (this.circuitOpen) return;
+    this.circuitOpen = true;
+    this.stopWorker();
+    this.options.onCircuitOpen?.(reason);
+  }
+
+  private enforceGlobalRate(): boolean {
+    const now = Date.now();
+    this.globalCallBucket = this.globalCallBucket.filter(
+      (timestamp) => now - timestamp < RATE_WINDOW_MS,
+    );
+    if (this.globalCallBucket.length >= GLOBAL_HOST_CALL_CAP) {
+      this.openCircuit('global host-call rate exceeded');
+      return false;
+    }
+    this.globalCallBucket.push(now);
+    return true;
   }
 
   private enforceRate(group: string, fn: string): void {
@@ -318,9 +623,7 @@ export class PlayerCodeBroker {
   private recordTrap(reason: string): void {
     this.consecutiveTraps += 1;
     if (this.consecutiveTraps >= CIRCUIT_TRIP_THRESHOLD && !this.circuitOpen) {
-      this.circuitOpen = true;
-      this.stop();
-      this.options.onCircuitOpen?.(reason);
+      this.openCircuit(reason);
     }
   }
 
@@ -362,7 +665,32 @@ function isRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function toBigInt(value: unknown): bigint {
+  if (
+    typeof value === 'string' &&
+    !/^-?(0|[1-9][0-9]*)$/.test(value)
+  ) {
+    throw new Error('chunk coordinates must be decimal integer strings');
+  }
+  if (
+    typeof value === 'number' &&
+    (!Number.isSafeInteger(value) || !Number.isFinite(value))
+  ) {
+    throw new Error('chunk coordinates must be safe integers or decimal strings');
+  }
+  if (
+    typeof value !== 'string' &&
+    typeof value !== 'number' &&
+    typeof value !== 'bigint'
+  ) {
+    throw new Error('chunk coordinates must be integers');
+  }
   try {
     return BigInt(value as string | number | bigint);
   } catch {
