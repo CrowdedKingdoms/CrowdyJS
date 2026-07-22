@@ -16,6 +16,23 @@ function assertMethods(obj, name, methods) {
   }
 }
 
+test('client normalizes routed WebSocket base URLs to the GraphQL endpoint', async () => {
+  const { createCrowdyClient } = await loadSdk();
+  const fromBase = createCrowdyClient({
+    httpUrl: 'https://game.invalid',
+    wsUrl: 'wss://game.invalid',
+  });
+  const fromEndpoint = createCrowdyClient({
+    httpUrl: 'https://game.invalid/graphql',
+    wsUrl: 'wss://game.invalid/graphql',
+  });
+
+  assert.equal(fromBase.realtime.wsUrl, 'wss://game.invalid/graphql');
+  assert.equal(fromEndpoint.realtime.wsUrl, 'wss://game.invalid/graphql');
+  fromBase.close();
+  fromEndpoint.close();
+});
+
 test('client exposes the full management + game sub-client surface', async () => {
   const { createCrowdyClient } = await loadSdk();
   const client = createCrowdyClient({
