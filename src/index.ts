@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '8.15.0';
+export const VERSION = '8.18.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -469,12 +469,28 @@ export {
 } from './player-runtime/player-code-broker.js';
 export {
   GLUE_HOST_FUNCTIONS,
-  buildImportObject,
   parseFuelBudget,
   runWithWatchdog,
+  GlueRuntime,
+  startGlueWorker,
   type GlueInitMessage,
   type GlueDispatchResult,
 } from './player-runtime/player-glue-worker.js';
+export {
+  type GuestExports,
+  type GlueRuntimeOptions,
+} from './player-runtime/glue-runtime.js';
+export {
+  createGlueSab,
+  wrapGlueSab,
+  armGlueRequest,
+  waitAndReadGlueReply,
+  writeGlueResult,
+  writeGlueReply,
+  glueEncoder,
+  glueDecoder,
+  type GlueSab,
+} from './player-runtime/glue-sab.js';
 export {
   LiveCodingController,
   type LiveCodingControllerOptions,

@@ -46,6 +46,8 @@ export interface LiveCodingControllerOptions {
   /** Page-side host-call router for the broker (World Stores reads + owner effects). */
   onHostCall: PlayerCodeBrokerOptions['onHostCall'];
   onPresentation?: PlayerCodeBrokerOptions['onPresentation'];
+  /** Client tick cadence (ms); the worker self-drives `tick` for HUD-style mods. */
+  clientTickIntervalMs?: number;
   onStatus?: (status: LiveCodingStatus) => void;
   /** Poll interval for compile status (ms). */
   pollMs?: number;
@@ -189,6 +191,7 @@ export class LiveCodingController {
       fuelPerDispatch: artifact.fuelPerDispatch,
       onHostCall: this.options.onHostCall,
       onPresentation: this.options.onPresentation,
+      tickIntervalMs: this.options.clientTickIntervalMs ?? 1000,
     };
     const broker =
       this.options.brokerFactory?.(options) ?? new PlayerCodeBroker(options);
