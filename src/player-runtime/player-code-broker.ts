@@ -1,3 +1,5 @@
+import { wrapGlueSab, writeGlueResult } from './glue-sab.js';
+
 export interface PlayerCodeGridBounds {
   low: { x: bigint; y: bigint; z: bigint };
   high: { x: bigint; y: bigint; z: bigint };
@@ -53,6 +55,12 @@ export interface PlayerCodeBrokerOptions {
   hashArtifact?: (artifact: ArrayBuffer) => Promise<string>;
   /** Wall-clock ms allowed per dispatch before the broker recycles the worker. */
   dispatchWatchdogMs?: number;
+  /**
+   * Local tick cadence (ms) for a client mod: the worker self-drives `tick`
+   * at this interval. Omit/0 for invoke-only mods (no periodic tick). A HUD
+   * mod typically ticks ~1 Hz; the per-dispatch watchdog still bounds each.
+   */
+  tickIntervalMs?: number;
 }
 
 /**
@@ -85,7 +93,9 @@ const ALLOWED_HOST_CALLS: Record<string, ReadonlySet<string>> = {
   world_write: new Set(['voxel_set']),
   egress: new Set(['emit_spatial']),
   present: new Set(['hud_set', 'overlay_draw']),
-  meta: new Set(['grid_permission_check']),
+  // grid_info is answered by the broker itself (the mod's own clamped bounds),
+  // so a client mod can address its grid without a server round-trip.
+  meta: new Set(['grid_permission_check', 'grid_info']),
 };
 
 /** Per-call-family rate caps (calls per rolling second); flood one, others hold. */
@@ -180,6 +190,7 @@ export class PlayerCodeBroker {
             ? this.options.fuelPerDispatch.toString()
             : undefined,
         watchdogMs: this.options.dispatchWatchdogMs ?? 250,
+        tickIntervalMs: this.options.tickIntervalMs ?? 0,
       },
       [artifact],
     );
@@ -233,6 +244,18 @@ export class PlayerCodeBroker {
       this.enforceRate(group, raw.fn);
       this.assertGridScope(raw.fn, args);
       let data: unknown;
+      if (raw.fn === 'grid_info') {
+        // Answered locally: the mod's own clamped grid bounds, so it can
+        // address its chunks without knowing world coordinates or a server
+        // round-trip. Chunk coords cross as decimal strings (may exceed 2^53).
+        const { low, high } = this.options.grid;
+        data = {
+          low: { x: low.x.toString(), y: low.y.toString(), z: low.z.toString() },
+          high: { x: high.x.toString(), y: high.y.toString(), z: high.z.toString() },
+        };
+        this.reply(raw.reply, id, { type: 'hostcall-result', id, ok: true, data });
+        return;
+      }
       if (PRESENTATION_FUNCTIONS.has(raw.fn)) {
         // Presentation never reaches the SDK/server: it goes only to the
         // game-declared channel. A game that offers no sink silently drops it.
@@ -244,14 +267,38 @@ export class PlayerCodeBroker {
       } else {
         data = await this.options.onHostCall({ fn: raw.fn, args });
       }
-      this.worker?.postMessage({ type: 'hostcall-result', id, ok: true, data });
+      this.reply(raw.reply, id, { type: 'hostcall-result', id, ok: true, data });
     } catch (error) {
-      this.worker?.postMessage({
+      this.reply(raw.reply, id, {
         type: 'hostcall-result',
         id,
         ok: false,
         error: { kind: 'denied', message: (error as Error).message },
       });
+    }
+  }
+
+  /**
+   * Deliver a host-call reply. Always posts the message (the offline test
+   * shape + any async-transport consumer), and — when the worker shared a
+   * SharedArrayBuffer for this call — ALSO writes the SDK Response envelope
+   * into it and wakes the worker blocked in Atomics.wait. The synchronous
+   * guest can only receive the reply through the SAB (a blocked worker never
+   * runs its message handler), so the SAB write is the load-bearing path in
+   * the browser; the postMessage is harmless there.
+   */
+  private reply(
+    replyBuffer: unknown,
+    _id: number,
+    message: { type: string; id: number; ok: boolean; data?: unknown; error?: unknown },
+  ): void {
+    this.worker?.postMessage(message);
+    if (typeof SharedArrayBuffer !== 'undefined' && replyBuffer instanceof SharedArrayBuffer) {
+      const view = wrapGlueSab(replyBuffer);
+      const envelope = message.ok
+        ? { ok: true, data: message.data }
+        : { ok: false, error: message.error };
+      writeGlueResult(view, envelope);
     }
   }
 
