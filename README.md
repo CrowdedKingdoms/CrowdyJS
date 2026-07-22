@@ -22,6 +22,13 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 > `client.apps` require the 2026-07-20 game-api/management-api player-runtime
 > schemas. Older servers reject only those operations during GraphQL validation.
 
+> **Player-code authoring DX:** `playerCompute.setRequires`,
+> `marketplace.trustGridAuthor`, self-authored `gridClientMods` fields, and
+> attachment-keyed client artifact fetches require the 2026-07-22 authoring-DX
+> migration. `mountLiveCodingIDE` lazy-loads Monaco and rust-analyzer LSP support
+> when given an authenticated language-service URL and app-token getter; without
+> them it preserves the dependency-free textarea fallback.
+
 > **v8.10 inventory authority:** generated craft/barter transactions work on
 > existing Model servers. Compute-refereed durable commits require Compute SDK
 > `0.1.3` / the `model_invoke` host call.
