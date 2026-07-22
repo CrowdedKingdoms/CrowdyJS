@@ -28,13 +28,18 @@ import { RealtimeMetrics } from './metrics.js';
 import { SubscriptionManager } from './subscriptions.js';
 import type { CrowdyLogger } from './logger.js';
 import type { TokenStore } from './session.js';
+import { CrowdyProtocolError } from './errors.js';
 import { WorldClient } from './world.js';
 import { GameKitClient, type GameKitOptions } from './kit/index.js';
 
 import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
 import { AppsAPI } from './domains/apps.js';
-import { PortalAPI, type PkceStore } from './domains/portal.js';
+import {
+  PortalAPI,
+  type AppTokenResponse,
+  type PkceStore,
+} from './domains/portal.js';
 import { PlatformAPI } from './domains/platform.js';
 import { OrganizationsAPI } from './domains/organizations.js';
 import { AppAccessAPI } from './domains/appAccess.js';
@@ -126,6 +131,8 @@ export interface CrowdyClientConfig {
 }
 
 export class CrowdyClient {
+  private gameplayTokenRefresh: Promise<AppTokenResponse> | null = null;
+
   /** Shared token state for both game-api and management-api requests. */
   readonly session: AuthState;
   /** game-api HTTP client. */
@@ -330,6 +337,59 @@ export class CrowdyClient {
   /** Read the current Bearer token (null if no session). */
   getToken(): string | null {
     return this.session.getToken();
+  }
+
+  /**
+   * Rotate an active gameplay token without orphaning its old UDP proxy.
+   *
+   * This is the supported refresh path while a game client has an open UDP
+   * proxy: it disconnects that proxy while the old Bearer token is still
+   * active, calls {@link PortalAPI.refresh} to rotate and store the new token,
+   * then opens a proxy authenticated by the new token. The session token
+   * listener restarts the existing realtime subscription in place, so its
+   * registered notification handlers are retained rather than duplicated.
+   * Concurrent calls share one in-flight rotation.
+   *
+   * Failure semantics:
+   * - If the old proxy disconnect rejects or does not confirm closure, rotation
+   *   is aborted and the old token remains active.
+   * - If refresh rejects, the old token remains active (the old proxy has
+   *   already closed and can be opened again with {@link UdpAPI.connect}).
+   * - If opening the new proxy rejects, the fresh token remains active. Surface
+   *   the error and retry {@link UdpAPI.connect}; do not repeat the rotation
+   *   merely to retry that connection.
+   *
+   * @returns The fresh app-scoped token response stored on this client.
+   * @throws {CrowdyProtocolError} if the old proxy does not confirm closure.
+   * @throws Transport or GraphQL errors from the disconnect, refresh, or
+   *   reconnect step, with token state preserved as described above.
+   */
+  async refreshGameplayToken(): Promise<AppTokenResponse> {
+    if (this.gameplayTokenRefresh) return this.gameplayTokenRefresh;
+
+    const operation = this.performGameplayTokenRefresh();
+    this.gameplayTokenRefresh = operation;
+    try {
+      return await operation;
+    } finally {
+      if (this.gameplayTokenRefresh === operation) {
+        this.gameplayTokenRefresh = null;
+      }
+    }
+  }
+
+  private async performGameplayTokenRefresh(): Promise<AppTokenResponse> {
+    const disconnected = await this.udp.disconnect();
+    if (!disconnected) {
+      throw new CrowdyProtocolError({
+        message:
+          'UDP proxy did not confirm disconnect; gameplay token rotation was aborted',
+      });
+    }
+
+    const token = await this.portal.refresh();
+    await this.udp.connect();
+    return token;
   }
 
   /**
