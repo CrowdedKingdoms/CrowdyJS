@@ -250,7 +250,6 @@ export class CrowdyClient {
 
     this.realtime = new SubscriptionManager(
       {
-        wsUrl: config.wsUrl,
         wsEndpoint:
           config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
         logger: config.logger,

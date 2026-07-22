@@ -25,6 +25,11 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 > corresponding 2026-07-22 Game API claim schema. Older servers reject only
 > those operations during GraphQL validation.
 
+> **v8.21.1 Node realtime routing hotfix:** app-routing responses provide a
+> WebSocket base URL. CrowdyJS now normalizes that base to `/graphql` before
+> constructing the realtime client; previously Node/bot clients connected to
+> the origin root and remained stuck in `connecting` with no notifications.
+>
 > **Player-code authoring DX:** `playerCompute.setRequires`,
 > `marketplace.trustGridAuthor`, self-authored `gridClientMods` fields, and
 > attachment-keyed client artifact fetches require the 2026-07-22 authoring-DX
