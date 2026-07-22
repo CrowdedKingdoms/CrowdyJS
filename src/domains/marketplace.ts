@@ -16,6 +16,8 @@ import {
   MarketplaceGridClaimPolicyDocument,
   MarketplaceGridClaimRequestsDocument,
   MarketplaceClaimGridOwnershipDocument,
+  MarketplaceClaimGridChunkDocument,
+  MarketplaceReleaseClaimedGridDocument,
   MarketplaceDecideGridClaimDocument,
   MarketplaceIssueGridClaimInviteDocument,
   MarketplaceAdmissionQueueDocument,
@@ -96,6 +98,10 @@ import {
   type MarketplaceGridClaimRequestsQueryVariables,
   type MarketplaceClaimGridOwnershipMutation,
   type MarketplaceClaimGridOwnershipMutationVariables,
+  type MarketplaceClaimGridChunkMutation,
+  type MarketplaceClaimGridChunkMutationVariables,
+  type MarketplaceReleaseClaimedGridMutation,
+  type MarketplaceReleaseClaimedGridMutationVariables,
   type MarketplaceDecideGridClaimMutation,
   type MarketplaceDecideGridClaimMutationVariables,
   type MarketplaceIssueGridClaimInviteMutationVariables,
@@ -346,6 +352,35 @@ export class MarketplaceAPI {
       variables,
     );
     return data.claimGridOwnership;
+  }
+
+  /**
+   * Atomically create and claim one chunk under the app's SELF_CLAIM policy.
+   * Uses the authenticated player, rejects protected/overlapping chunks, and
+   * returns authoritative bounds plus effective build/mod permissions.
+   */
+  async claimGridChunk(
+    variables: MarketplaceClaimGridChunkMutationVariables,
+  ): Promise<MarketplaceClaimGridChunkMutation['claimGridChunk']> {
+    const data = await this.game.request(
+      MarketplaceClaimGridChunkDocument,
+      variables,
+    );
+    return data.claimGridChunk;
+  }
+
+  /**
+   * Release a one-chunk grid created by `claimGridChunk`. The authenticated
+   * caller must still own the claim; other grid origins cannot be released.
+   */
+  async releaseClaimedGrid(
+    variables: MarketplaceReleaseClaimedGridMutationVariables,
+  ): Promise<MarketplaceReleaseClaimedGridMutation['releaseClaimedGrid']> {
+    const data = await this.game.request(
+      MarketplaceReleaseClaimedGridDocument,
+      variables,
+    );
+    return data.releaseClaimedGrid;
   }
 
   /** Approve or deny a pending claim request (approvers/staff). */

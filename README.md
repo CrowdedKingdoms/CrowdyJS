@@ -20,7 +20,10 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 > `client.playerModel` (owner/grid-confined flexible data + automations), first-class grid
 > ownership methods on `client.gameApps`, and app code-admission methods on
 > `client.apps` require the 2026-07-20 game-api/management-api player-runtime
-> schemas. Older servers reject only those operations during GraphQL validation.
+> schemas. Player-authorized one-chunk claims and owner release through
+> `marketplace.claimGridChunk` / `marketplace.releaseClaimedGrid` require the
+> corresponding 2026-07-22 Game API claim schema. Older servers reject only
+> those operations during GraphQL validation.
 
 > **Player-code authoring DX:** `playerCompute.setRequires`,
 > `marketplace.trustGridAuthor`, self-authored `gridClientMods` fields, and
@@ -117,6 +120,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.compute` | **Compute Modules** — server-side Rust/WASM logic: author + deploy source (`upsertModule`, `deployVersion`, `waitForCompile`), triggers + policy, synchronous `invoke`, and monitoring (`moduleRuns`, `moduleStats`, `moduleLogs`, `appDiagnostics`). Modules run server-only; see [Compute Modules docs](https://docs.crowdedkingdoms.com/game-api/compute-modules). |
 | `client.playerCompute` | Player-authored SERVER/CLIENT Rust/WASM bound to player-owned grids: deploy source, activate/deactivate, list modules/versions, and delete self-authored modules. |
 | `client.playerModel` | Player-owned flexible model containers and grid-confined automations (`containers`, `createContainer`, `setProperty`, `automations`, `createAutomation`, …). |
+| `client.marketplace` | Player-code store/install/consent flows plus player-authorized grid claims: `claimGridOwnership` preserves the existing-grid policy flow, while `claimGridChunk` atomically creates and owns one chunk under `SELF_CLAIM` and `releaseClaimedGrid` releases an eligible owner-created claim. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token: disconnects the old-token UDP proxy, refreshes/stores the token, and opens the new-token proxy while existing realtime handlers resubscribe in place. |

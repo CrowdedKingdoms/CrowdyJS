@@ -228,6 +228,55 @@ mutation MarketplaceClaimGridOwnership($appId: BigInt!, $gridId: BigInt!) {
   }
 }
 
+mutation MarketplaceClaimGridChunk(
+  $appId: BigInt!
+  $chunk: ChunkCoordinatesInput!
+) {
+  claimGridChunk(appId: $appId, chunk: $chunk) {
+    gridId
+    lowChunk {
+      x
+      y
+      z
+    }
+    highChunk {
+      x
+      y
+      z
+    }
+    policy
+    ownership {
+      gridOwnershipId
+      ownerKind
+      ownerRef
+      tenure
+      acquiredVia
+      acquiredAt
+      expiresAt
+    }
+    moddable
+    effectivePermissionKeys
+  }
+}
+
+mutation MarketplaceReleaseClaimedGrid($appId: BigInt!, $gridId: BigInt!) {
+  releaseClaimedGrid(appId: $appId, gridId: $gridId) {
+    gridId
+    lowChunk {
+      x
+      y
+      z
+    }
+    highChunk {
+      x
+      y
+      z
+    }
+    policy
+    released
+  }
+}
+
 mutation MarketplaceDecideGridClaim(
   $appId: BigInt!
   $requestId: String!

@@ -926,6 +926,25 @@ export type Chunk = {
   voxels: Maybe<Scalars['String']['output']>;
 };
 
+/** Authoritative result of an ordinary player claiming one chunk as a new grid under SELF_CLAIM. Grid creation, title assignment, and direct ACL grants are committed atomically. */
+export type ChunkClaimResult = {
+  __typename?: 'ChunkClaimResult';
+  /** Full effective runtime permission-key set materialized for the caller on the new grid after grid limits are applied. */
+  effectivePermissionKeys: Array<Scalars['String']['output']>;
+  /** Id of the one-chunk grid created for this claim. */
+  gridId: Scalars['BigInt']['output'];
+  /** High corner of the claimed grid. It equals lowChunk because a player claim covers exactly one chunk. */
+  highChunk: ChunkCoordinates;
+  /** Low corner of the claimed grid. It equals highChunk because a player claim covers exactly one chunk. */
+  lowChunk: ChunkCoordinates;
+  /** True when the effective ACL contains both write and run permission for at least one player-code target (server or client). */
+  moddable: Scalars['Boolean']['output'];
+  /** New current user ownership record created atomically with the grid. */
+  ownership: GridOwnership;
+  /** App claim policy applied by the server. This mutation succeeds only for SELF_CLAIM. */
+  policy: GridClaimPolicy;
+};
+
 /** Integer (x, y, z) address of a 16x16x16-voxel chunk within an app's world grid. Each unit step moves one whole chunk (16 voxels) along that axis. Components are signed 64-bit integers serialized as decimal strings (see the BigInt scalar). */
 export type ChunkCoordinates = {
   __typename?: 'ChunkCoordinates';
@@ -3766,6 +3785,8 @@ export type Mutation = {
   changePassword: Scalars['Boolean']['output'];
   /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
   claimFreeAppAccess: AppUserAccess;
+  /** Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus player-code keys already carried by the caller's tier, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain. */
+  claimGridChunk: ChunkClaimResult;
   /** Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses (ownership arrives only via grid purchase, P4b). The grid must exist and have no current owner; game rules gate who may attempt a claim. */
   claimGridOwnership: GridClaimResult;
   /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. */
@@ -4008,6 +4029,8 @@ export type Mutation = {
   refundPlayerCodeAcquisition: Scalars['Int']['output'];
   /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email (e.g. created via magic link/social), the password is attached pending email confirmation and no session is returned (throws CONFLICT). Public. */
   register: AuthResponse;
+  /** Release a one-chunk grid previously created through claimGridChunk. Requires an ordinary app-scoped player token and the caller must still be its current user owner. Refuses foreign grids, studio/marketplace grids, and grids assigned through legacy claimGridOwnership. Atomically removes active install attachments, self-claim ownership, direct/effective ACL rows, and the grid so its chunk can be claimed again. Player modules on the grid are deleted by the grid cascade. */
+  releaseClaimedGrid: ReleaseClaimedGridResult;
   /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
   removeChannelMember: Scalars['Boolean']['output'];
   /** Removes a user from an organization. Requires the 'manage_members' permission on the org (super admins bypass). DESTRUCTIVE: revokes the user's membership and role assignments in that org. Returns false if the user was not a member. */
@@ -4277,6 +4300,12 @@ export type MutationChangePasswordArgs = {
 
 export type MutationClaimFreeAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationClaimGridChunkArgs = {
+  appId: Scalars['BigInt']['input'];
+  chunk: ChunkCoordinatesInput;
 };
 
 
@@ -4928,6 +4957,12 @@ export type MutationRefundPlayerCodeAcquisitionArgs = {
 
 export type MutationRegisterArgs = {
   registerUserInput: RegisterUserInput;
+};
+
+
+export type MutationReleaseClaimedGridArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
 };
 
 
@@ -7959,6 +7994,21 @@ export type RegisterUserInput = {
   gamertag?: InputMaybe<Scalars['String']['input']>;
   /** Password for the new account (min 8 characters). */
   password: Scalars['String']['input'];
+};
+
+/** Result of releasing a grid created by the caller through claimGridChunk. The ownership, direct/effective ACL, and grid have been removed atomically, making its chunk claimable again. */
+export type ReleaseClaimedGridResult = {
+  __typename?: 'ReleaseClaimedGridResult';
+  /** Id of the self-claimed grid that was removed. */
+  gridId: Scalars['BigInt']['output'];
+  /** High corner of the removed one-chunk grid. */
+  highChunk: ChunkCoordinates;
+  /** Low corner of the removed one-chunk grid. */
+  lowChunk: ChunkCoordinates;
+  /** Claim policy under which the removed grid was created. */
+  policy: GridClaimPolicy;
+  /** True after the ownership, ACL rows, and grid were removed in one committed transaction. */
+  released: Scalars['Boolean']['output'];
 };
 
 /** Request an emailed magic-link to sign in (passwordless). */
@@ -11636,6 +11686,22 @@ export type MarketplaceClaimGridOwnershipMutationVariables = Exact<{
 
 export type MarketplaceClaimGridOwnershipMutation = { __typename?: 'Mutation', claimGridOwnership: { __typename?: 'GridClaimResult', policy: GridClaimPolicy, ownershipAssigned: boolean, claimRequestId: string | null } };
 
+export type MarketplaceClaimGridChunkMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  chunk: ChunkCoordinatesInput;
+}>;
+
+
+export type MarketplaceClaimGridChunkMutation = { __typename?: 'Mutation', claimGridChunk: { __typename?: 'ChunkClaimResult', gridId: string, policy: GridClaimPolicy, moddable: boolean, effectivePermissionKeys: Array<string>, lowChunk: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string }, highChunk: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string }, ownership: { __typename?: 'GridOwnership', gridOwnershipId: string, ownerKind: GridOwnerKind, ownerRef: string, tenure: GridTenure, acquiredVia: string, acquiredAt: string, expiresAt: string | null } } };
+
+export type MarketplaceReleaseClaimedGridMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+}>;
+
+
+export type MarketplaceReleaseClaimedGridMutation = { __typename?: 'Mutation', releaseClaimedGrid: { __typename?: 'ReleaseClaimedGridResult', gridId: string, policy: GridClaimPolicy, released: boolean, lowChunk: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string }, highChunk: { __typename?: 'ChunkCoordinates', x: string, y: string, z: string } } };
+
 export type MarketplaceDecideGridClaimMutationVariables = Exact<{
   appId: Scalars['BigInt']['input'];
   requestId: Scalars['String']['input'];
@@ -13219,6 +13285,8 @@ export const MarketplaceConsentGridClientModDocument = {"kind":"Document","defin
 export const MarketplaceGridClaimPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceGridClaimPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridClaimPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}]}]}}]} as unknown as DocumentNode<MarketplaceGridClaimPolicyQuery, MarketplaceGridClaimPolicyQueryVariables>;
 export const MarketplaceGridClaimRequestsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceGridClaimRequests"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridClaimRequests"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GridClaimRequestFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridClaimRequestFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridClaimRequest"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"requesterUserId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<MarketplaceGridClaimRequestsQuery, MarketplaceGridClaimRequestsQueryVariables>;
 export const MarketplaceClaimGridOwnershipDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceClaimGridOwnership"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"claimGridOwnership"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"policy"}},{"kind":"Field","name":{"kind":"Name","value":"ownershipAssigned"}},{"kind":"Field","name":{"kind":"Name","value":"claimRequestId"}}]}}]}}]} as unknown as DocumentNode<MarketplaceClaimGridOwnershipMutation, MarketplaceClaimGridOwnershipMutationVariables>;
+export const MarketplaceClaimGridChunkDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceClaimGridChunk"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"chunk"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ChunkCoordinatesInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"claimGridChunk"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"chunk"},"value":{"kind":"Variable","name":{"kind":"Name","value":"chunk"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"lowChunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"highChunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"policy"}},{"kind":"Field","name":{"kind":"Name","value":"ownership"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"moddable"}},{"kind":"Field","name":{"kind":"Name","value":"effectivePermissionKeys"}}]}}]}}]} as unknown as DocumentNode<MarketplaceClaimGridChunkMutation, MarketplaceClaimGridChunkMutationVariables>;
+export const MarketplaceReleaseClaimedGridDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceReleaseClaimedGrid"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"releaseClaimedGrid"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"lowChunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"highChunk"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"x"}},{"kind":"Field","name":{"kind":"Name","value":"y"}},{"kind":"Field","name":{"kind":"Name","value":"z"}}]}},{"kind":"Field","name":{"kind":"Name","value":"policy"}},{"kind":"Field","name":{"kind":"Name","value":"released"}}]}}]}}]} as unknown as DocumentNode<MarketplaceReleaseClaimedGridMutation, MarketplaceReleaseClaimedGridMutationVariables>;
 export const MarketplaceDecideGridClaimDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceDecideGridClaim"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"requestId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"approve"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"decideGridClaim"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"requestId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"requestId"}}},{"kind":"Argument","name":{"kind":"Name","value":"approve"},"value":{"kind":"Variable","name":{"kind":"Name","value":"approve"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GridClaimRequestFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridClaimRequestFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridClaimRequest"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"requesterUserId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<MarketplaceDecideGridClaimMutation, MarketplaceDecideGridClaimMutationVariables>;
 export const MarketplaceIssueGridClaimInviteDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceIssueGridClaimInvite"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"inviteeUserId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issueGridClaimInvite"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}},{"kind":"Argument","name":{"kind":"Name","value":"inviteeUserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"inviteeUserId"}}}]}]}}]} as unknown as DocumentNode<MarketplaceIssueGridClaimInviteMutation, MarketplaceIssueGridClaimInviteMutationVariables>;
 export const MarketplaceAdmissionQueueDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceAdmissionQueue"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appCodeAdmissionQueue"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"listing"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeListingFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"admissionState"}},{"kind":"Field","name":{"kind":"Name","value":"admissionId"}},{"kind":"Field","name":{"kind":"Name","value":"matchedSubjectKind"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeListingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeListing"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"mediaJson"}},{"kind":"Field","name":{"kind":"Name","value":"licenseMode"}},{"kind":"Field","name":{"kind":"Name","value":"acquisitionMode"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"rentIntervalDays"}},{"kind":"Field","name":{"kind":"Name","value":"windowDays"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<MarketplaceAdmissionQueueQuery, MarketplaceAdmissionQueueQueryVariables>;

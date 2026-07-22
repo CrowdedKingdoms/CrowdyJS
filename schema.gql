@@ -6758,6 +6758,24 @@ type Mutation {
     gridId: BigInt!
   ): GridClaimResult!
   """
+  Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus player-code keys already carried by the caller's tier, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain.
+  """
+  claimGridChunk(
+    """App in which to claim the chunk. The bearer app token must be scoped to this app."""
+    appId: BigInt!
+    """Exact chunk coordinate to claim; the created grid has this coordinate as both its low and high corner."""
+    chunk: ChunkCoordinatesInput!
+  ): ChunkClaimResult!
+  """
+  Release a one-chunk grid previously created through claimGridChunk. Requires an ordinary app-scoped player token and the caller must still be its current user owner. Refuses foreign grids, studio/marketplace grids, and grids assigned through legacy claimGridOwnership. Atomically removes active install attachments, self-claim ownership, direct/effective ACL rows, and the grid so its chunk can be claimed again. Player modules on the grid are deleted by the grid cascade.
+  """
+  releaseClaimedGrid(
+    """App containing the claimed grid. The bearer app token must be scoped to this app."""
+    appId: BigInt!
+    """Id returned by claimGridChunk for the owner-created self-claimed grid to release."""
+    gridId: BigInt!
+  ): ReleaseClaimedGridResult!
+  """
   Approve or deny a pending grid claim request (claim policy APPROVAL). Callable by the app's designated approver users or studio staff holding manage_compute. Approval assigns grid_ownership to the requester.
   """
   decideGridClaim(
@@ -9887,6 +9905,42 @@ type GridClaimResult {
   ownershipAssigned: Boolean!
   """UUID of the created claim request in APPROVAL mode; null otherwise."""
   claimRequestId: String
+}
+
+"""
+Authoritative result of an ordinary player claiming one chunk as a new grid under SELF_CLAIM. Grid creation, title assignment, and direct ACL grants are committed atomically.
+"""
+type ChunkClaimResult {
+  """Id of the one-chunk grid created for this claim."""
+  gridId: BigInt!
+  """Low corner of the claimed grid. It equals highChunk because a player claim covers exactly one chunk."""
+  lowChunk: ChunkCoordinates!
+  """High corner of the claimed grid. It equals lowChunk because a player claim covers exactly one chunk."""
+  highChunk: ChunkCoordinates!
+  """App claim policy applied by the server. This mutation succeeds only for SELF_CLAIM."""
+  policy: GridClaimPolicy!
+  """New current user ownership record created atomically with the grid."""
+  ownership: GridOwnership!
+  """
+  True when the effective ACL contains both write and run permission for at least one player-code target (server or client).
+  """
+  moddable: Boolean!
+  """Full effective runtime permission-key set materialized for the caller on the new grid after grid limits are applied."""
+  effectivePermissionKeys: [String!]!
+}
+
+"""Result of releasing a grid created by the caller through claimGridChunk. The ownership, direct/effective ACL, and grid have been removed atomically, making its chunk claimable again."""
+type ReleaseClaimedGridResult {
+  """Id of the self-claimed grid that was removed."""
+  gridId: BigInt!
+  """Low corner of the removed one-chunk grid."""
+  lowChunk: ChunkCoordinates!
+  """High corner of the removed one-chunk grid."""
+  highChunk: ChunkCoordinates!
+  """Claim policy under which the removed grid was created."""
+  policy: GridClaimPolicy!
+  """True after the ownership, ACL rows, and grid were removed in one committed transaction."""
+  released: Boolean!
 }
 
 """

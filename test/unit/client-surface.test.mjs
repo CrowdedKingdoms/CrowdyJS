@@ -50,7 +50,8 @@ test('client exposes the full management + game sub-client surface', async () =>
     'publishListing', 'publishVersion', 'acquire', 'install', 'uninstall',
     'gridClientMods', 'consentGridClientMod', 'clientArtifact',
     'clientArtifactBytes', 'gridClaimPolicy', 'gridClaimRequests',
-    'claimGridOwnership', 'decideGridClaim', 'issueGridClaimInvite',
+    'claimGridOwnership', 'claimGridChunk', 'releaseClaimedGrid',
+    'decideGridClaim', 'issueGridClaimInvite',
     'admissionQueue', 'appListings', 'appAcquisitions', 'transferListing',
     'setListingStatus', 'setGridClaimPolicy',
   ]);
@@ -180,6 +181,92 @@ test('client exposes the full management + game sub-client surface', async () =>
   assert.equal(client.admin.environments, client.environments, 'admin.environments aliases client.environments');
   assert.equal(client.admin.grids, client.gameApps, 'admin.grids aliases client.gameApps');
 
+  client.close();
+});
+
+test('marketplace chunk claim wrappers map variables, results, and documents', async () => {
+  const { createCrowdyClient } = await loadSdk();
+  const client = createCrowdyClient({
+    managementUrl: 'https://management.invalid',
+    httpUrl: 'https://game.invalid',
+  });
+  const calls = [];
+  const claimed = {
+    gridId: '42',
+    lowChunk: { x: '-2', y: '3', z: '7' },
+    highChunk: { x: '-2', y: '3', z: '7' },
+    policy: 'SELF_CLAIM',
+    ownership: {
+      gridOwnershipId: 'ownership-42',
+      ownerKind: 'USER',
+      ownerRef: '7',
+      tenure: 'OWNED',
+      acquiredVia: 'self_claim_chunk',
+      acquiredAt: '2026-07-22T00:00:00.000Z',
+      expiresAt: null,
+    },
+    moddable: true,
+    effectivePermissionKeys: [
+      'access',
+      'update_voxel_data',
+      'write_server_code',
+      'run_server_code',
+    ],
+  };
+  const released = {
+    gridId: '42',
+    lowChunk: claimed.lowChunk,
+    highChunk: claimed.highChunk,
+    policy: 'SELF_CLAIM',
+    released: true,
+  };
+  client.graphql.request = async (document, variables) => {
+    calls.push({ document, variables });
+    return calls.length === 1
+      ? { claimGridChunk: claimed }
+      : { releaseClaimedGrid: released };
+  };
+
+  const claimVariables = {
+    appId: '2',
+    chunk: { x: '-2', y: '3', z: '7' },
+  };
+  assert.deepEqual(
+    await client.marketplace.claimGridChunk(claimVariables),
+    claimed,
+  );
+  assert.deepEqual(
+    await client.marketplace.releaseClaimedGrid({ appId: '2', gridId: '42' }),
+    released,
+  );
+
+  assert.deepEqual(calls.map(({ variables }) => variables), [
+    claimVariables,
+    { appId: '2', gridId: '42' },
+  ]);
+  const operations = calls.map(({ document }) =>
+    document.definitions.find((definition) =>
+      definition.kind === 'OperationDefinition'));
+  assert.deepEqual(
+    operations.map((operation) => operation.name.value),
+    ['MarketplaceClaimGridChunk', 'MarketplaceReleaseClaimedGrid'],
+  );
+  const claimFields =
+    operations[0].selectionSet.selections[0].selectionSet.selections
+      .map((selection) => selection.name.value);
+  assert.deepEqual(claimFields, [
+    'gridId',
+    'lowChunk',
+    'highChunk',
+    'policy',
+    'ownership',
+    'moddable',
+    'effectivePermissionKeys',
+  ]);
+  assert.equal(
+    operations[1].selectionSet.selections[0].name.value,
+    'releaseClaimedGrid',
+  );
   client.close();
 });
 
