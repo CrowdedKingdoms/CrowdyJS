@@ -1044,7 +1044,7 @@ export type CksBuddyHealth = {
   updatedAt: Maybe<Scalars['DateTime']['output']>;
 };
 
-/** Live progress for the active (or most recent failed) deploy/destroy change order, with per-task counts and a retry hint. */
+/** Progress for the active or most recent deploy/destroy change order, with per-task counts and a retry hint. Durable change orders may expose read-only projected tasks and steps; planned work remains pending until an outcome is observed or inferred. */
 export type CksDeployProgress = {
   __typename?: 'CksDeployProgress';
   /** Redeploy is allowed (failed deploy or stuck order cleared) */
@@ -1067,25 +1067,28 @@ export type CksDeployProgress = {
   tasksTotal: Scalars['Int']['output'];
 };
 
-/** A single step within a deploy/destroy task, with its retry attempt and any error. */
+/** A single step within a deploy/destroy task. Progress may be recorded directly or exposed as a read-only projection for a durable change order. Planned steps remain pending until an outcome is observed or inferred. */
 export type CksDeployProgressStep = {
   __typename?: 'CksDeployProgressStep';
+  /** Attempt count. For projected progress, 0 means no attempt or outcome has been observed or inferred; 1 means an attempt or outcome has been observed or inferred. */
   attempt: Scalars['Int']['output'];
   error: Maybe<Scalars['String']['output']>;
   id: Scalars['String']['output'];
   kind: Scalars['String']['output'];
   /** Human-readable step label for the org UI */
   label: Scalars['String']['output'];
+  /** Execution status. For projected progress, pending means the step is planned and no terminal outcome is available yet. */
   status: Scalars['String']['output'];
 };
 
-/** A task in a deploy/destroy pipeline, containing ordered steps. */
+/** A task in a deploy/destroy pipeline, containing ordered steps. Durable change orders may expose task progress as a read-only projection. */
 export type CksDeployProgressTask = {
   __typename?: 'CksDeployProgressTask';
   error: Maybe<Scalars['String']['output']>;
   id: Scalars['String']['output'];
   kind: Scalars['String']['output'];
   label: Scalars['String']['output'];
+  /** Execution status derived from available step outcomes. Active projected tasks may contain pending steps when exact live state is unavailable. */
   status: Scalars['String']['output'];
   steps: Array<CksDeployProgressStep>;
 };
@@ -1216,9 +1219,9 @@ export type CksEnvironmentDetail = {
   buddyHealth: Maybe<CksBuddyHealth>;
   changeOrders: Array<CksEnvironmentChangeOrder>;
   components: Array<CksEnvironmentComponent>;
-  /** Live deploy task/step progress for the active or most recent failed deploy */
+  /** Deploy task/step progress for the active or most recent deploy. Durable change orders may expose read-only projected progress, with planned work pending until an outcome is observed or inferred. */
   deployProgress: Maybe<CksDeployProgress>;
-  /** Destroy tear-down progress for game-api and platform change orders */
+  /** Destroy tear-down progress for game-api and platform change orders. Durable change orders may expose read-only projected progress and show planned work as pending. */
   destroyProgress: Array<CksDeployProgress>;
   environment: CksEnvironment;
   outputs: Array<CksEnvironmentOutput>;
@@ -1627,6 +1630,7 @@ export type CpChangeOrder = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** Change-order detail with ordered task and step progress. Durable change orders may return read-only projected rows when exact live execution details are unavailable. */
 export type CpChangeOrderDetail = {
   __typename?: 'CpChangeOrderDetail';
   order: CpChangeOrder;
@@ -1788,8 +1792,10 @@ export type CpSetComputePlatformCeilingsInput = {
   maxTickHz?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/** Operator step progress. Rows may contain recorded execution progress or a read-only projection. Fields unavailable for projected progress remain null. */
 export type CpStepRow = {
   __typename?: 'CpStepRow';
+  /** Attempt indicator. For projected progress, 0 means no attempt or outcome has been observed or inferred; 1 means an attempt or outcome has been observed or inferred. */
   attempt: Scalars['Int']['output'];
   claimedBy: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
@@ -1805,11 +1811,13 @@ export type CpStepRow = {
   payloadJson: Maybe<Scalars['String']['output']>;
   recheckAt: Maybe<Scalars['DateTime']['output']>;
   startedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Execution status. For projected progress, pending means the step is planned and no terminal outcome is available yet. */
   status: Scalars['String']['output'];
   taskId: Scalars['String']['output'];
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** Operator task progress. Rows may contain recorded execution progress or a read-only projection for a durable change order. */
 export type CpTaskRow = {
   __typename?: 'CpTaskRow';
   changeOrderId: Scalars['String']['output'];
@@ -1824,6 +1832,7 @@ export type CpTaskRow = {
   kind: Scalars['String']['output'];
   ordinal: Scalars['Int']['output'];
   startedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Execution status. For projected progress, pending means the task is planned and no terminal outcome is available yet. */
   status: Scalars['String']['output'];
   updatedAt: Scalars['DateTime']['output'];
 };
@@ -2142,6 +2151,48 @@ export type CreatePlayerAutomationInput = {
   name: Scalars['String']['input'];
   /** Strict trigger JSON. Schedule: {"kind":"schedule","scheduleKind":"interval","intervalMs":2000} or cron with cronExpr. Event: {"kind":"event","eventKind":"owner_container_changed|grid_actor_changed|grid_voxel_changed|compute_event"}; compute_event may include eventName. */
   triggerJson: Scalars['String']['input'];
+};
+
+/** Lazily create a private project by copying the authenticated author’s latest source versions from existing self-authored player modules. */
+export type CreatePlayerCodeProjectFromModulesInput = {
+  /** App tenant containing the authored modules. */
+  appId: Scalars['BigInt']['input'];
+  /** Existing self-authored CLIENT module name to copy; at least one module name is required. */
+  clientModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** Grid containing the authored modules. Current ownership is not required to recover one’s own source, but deployment is rechecked separately. */
+  gridId: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key. The operation also returns an already-created active project with the same module affinity. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Optional project name. Omit to derive a bounded name from the imported module name(s). */
+  projectName?: InputMaybe<Scalars['String']['input']>;
+  /** Existing self-authored SERVER module name to copy; at least one module name is required. */
+  serverModuleName?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Create a private player-owned project, optionally with bounded initial files for either target. */
+export type CreatePlayerCodeProjectInput = {
+  /** Supported guest ABI pin; defaults to ABI 0. */
+  abiVersion?: InputMaybe<Scalars['Int']['input']>;
+  /** App tenant. Requires an app-scoped token for this exact app; the project is owned by the authenticated user. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional stable crate-style CLIENT module name. It must differ from the server name. */
+  clientModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** Optional private project description. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Optional grid affinity in the same app. Affinity does not grant deployment permission and survives ownership transfer. */
+  gridId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional retry key. Same user, operation, key, and input replay the first result for 24 hours; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Optional initial source files. At most 16 total and at most 8/256 KiB independently per target. */
+  initialFiles?: InputMaybe<Array<PlayerCodeProjectFileInput>>;
+  /** Player-facing project name. */
+  name: Scalars['String']['input'];
+  /** Optional editor pairing preference; defaults to PAIRED. */
+  pairingPreference?: InputMaybe<PlayerCodePairingPreference>;
+  /** Supported crowdy-compute-sdk pin; defaults to the current 0.1.5 authoring pin. */
+  sdkVersion?: InputMaybe<Scalars['String']['input']>;
+  /** Optional stable crate-style SERVER module name. Deployment rechecks current authority. */
+  serverModuleName?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** Create a flexible player-owned model container inside one grid. The caller must currently own the grid; owner identity cannot be supplied. */
@@ -3504,7 +3555,7 @@ export type GridOwnership = {
   __typename?: 'GridOwnership';
   /** When this ownership began. */
   acquiredAt: Scalars['DateTime']['output'];
-  /** Audit origin of this ownership (for example studio_grant, transfer, or marketplace). */
+  /** Audit origin of this ownership (for example studio_grant, self_claim, self_claim_chunk, transfer, or marketplace). self_claim_chunk identifies a grid created by claimGridChunk and eligible for owner release. */
   acquiredVia: Scalars['String']['output'];
   /** App that contains the grid. */
   appId: Scalars['BigInt']['output'];
@@ -3633,6 +3684,26 @@ export type GroupRole = {
   rank: Scalars['Int']['output'];
   /** Role display name (unique within the group). */
   roleName: Scalars['String']['output'];
+};
+
+/** Copy a private library revision or immutable published common version into a project by value. */
+export type ImportPlayerCodeProjectFileInput = {
+  /** App tenant shared by the project and import source. */
+  appId: Scalars['BigInt']['input'];
+  /** Immutable common version UUID; required only for COMMON imports. */
+  commonVersionId?: InputMaybe<Scalars['String']['input']>;
+  /** Optional safe destination path. Omit to use the source entry’s path or path hint. */
+  destinationPath?: InputMaybe<Scalars['String']['input']>;
+  /** Current project revision; the copy and revision increment are atomic. */
+  expectedProjectRevision: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Caller-owned library file UUID; required only for LIBRARY imports. */
+  libraryFileId?: InputMaybe<Scalars['String']['input']>;
+  /** Destination project UUID. */
+  projectId: Scalars['String']['input'];
+  /** Private LIBRARY or app-curated COMMON source. */
+  source: PlayerCodeImportSource;
 };
 
 export type IngestEnvironmentVersionInput = {
@@ -3987,6 +4058,26 @@ export type Mutation = {
   playerAutomationDelete: Scalars['Boolean']['output'];
   /** Enable or disable one caller-owned player automation. Enabling requires effective run_server_code and, in strict mode, author admission. Interval/cron triggers compute the first due time; the P1 dispatcher executes scheduled studio-model actions while event delivery and player-compute actions remain typed pending paths. */
   playerAutomationSetEnabled: PlayerAutomation;
+  /** Publish a new immutable version of an app-scoped studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
+  playerCodeCommonPublish: PlayerCodeCommonFile;
+  /** Create or optimistically update one private personal-library source file. Requires an app-scoped token; ownership is always the authenticated player and cannot be delegated. Safe source paths, 64-KiB content, revision, and configurable bounded aggregate library storage are enforced atomically. */
+  playerCodeLibrarySave: PlayerCodeLibraryFile;
+  /** Archive or restore one caller-owned personal-library file under optimistic revision control. Requires an app-scoped token and exact app/user ownership; archived entries remain retained but cannot be imported until restored. */
+  playerCodeLibrarySetArchived: PlayerCodeLibraryFile;
+  /** Create a private revisioned Mod Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically. */
+  playerCodeProjectCreate: PlayerCodeProject;
+  /** Lazily create a private project by copying the authenticated author’s latest source from an existing self-authored SERVER module, CLIENT module, or both. Requires an app-scoped token and authorship of every requested module; current grid ownership is deliberately not required for private source recovery after transfer, while any later deploy still rechecks ownership and target permissions. Repeated requests reuse the matching active project. */
+  playerCodeProjectCreateFromModules: PlayerCodeProject;
+  /** Copy one active caller-owned library revision or one immutable published app-common version into a private project by value. Requires an app-scoped token and exact project ownership. The source is re-authorized, content/provenance are snapshotted, project caps and aggregate storage are checked, and the project revision advances atomically. */
+  playerCodeProjectImportFile: PlayerCodeProject;
+  /** Atomically save selected private project metadata and a batch of file upserts/deletes under one expected project revision. Requires an app-scoped token and exact project ownership. No partial metadata or file changes survive validation, target-cap, aggregate-storage, module-binding, or revision failures. */
+  playerCodeProjectSave: PlayerCodeProject;
+  /** Apply a batch of project-file upserts and deletes in one transaction under one expected project revision. Requires an app-scoped token and exact project ownership. No partial writes survive path, manifest, independent 8-file/64-KiB-file/256-KiB-target caps, aggregate storage, or revision failures. */
+  playerCodeProjectSaveFiles: PlayerCodeProject;
+  /** Optimistically save selected private project metadata and increment its monotonic revision. Requires an app-scoped token and exact project ownership. A stale expectedRevision returns CONFLICT; grid affinity remains an authoring hint and never bypasses player-compute deployment checks. */
+  playerCodeProjectSaveMetadata: PlayerCodeProject;
+  /** Archive or restore a private project without deleting any source or provenance, using optimistic revision control. Requires an app-scoped token and exact owner match. Archived projects remain readable by their owner but are read-only until restored. */
+  playerCodeProjectSetArchived: PlayerCodeProject;
   /** Delete a self-authored player module and its source versions. Only the code author may delete it, and they must still own the target grid. Returns false when no matching module exists. */
   playerComputeDelete: Scalars['Boolean']['output'];
   /** Deploy player-authored Rust into a grid the caller currently owns. Requires the target's write permission at both app-tier and grid ACL layers. One call creates/updates the module and publishes an immutable pending version; the shared compiler builds it asynchronously. Authoring is never admission-gated, but only the original author may replace closed source. */
@@ -4824,6 +4915,56 @@ export type MutationPlayerAutomationDeleteArgs = {
 
 export type MutationPlayerAutomationSetEnabledArgs = {
   input: SetPlayerAutomationEnabledInput;
+};
+
+
+export type MutationPlayerCodeCommonPublishArgs = {
+  input: PublishPlayerCodeCommonFileInput;
+};
+
+
+export type MutationPlayerCodeLibrarySaveArgs = {
+  input: SavePlayerCodeLibraryFileInput;
+};
+
+
+export type MutationPlayerCodeLibrarySetArchivedArgs = {
+  input: SetPlayerCodeLibraryFileArchivedInput;
+};
+
+
+export type MutationPlayerCodeProjectCreateArgs = {
+  input: CreatePlayerCodeProjectInput;
+};
+
+
+export type MutationPlayerCodeProjectCreateFromModulesArgs = {
+  input: CreatePlayerCodeProjectFromModulesInput;
+};
+
+
+export type MutationPlayerCodeProjectImportFileArgs = {
+  input: ImportPlayerCodeProjectFileInput;
+};
+
+
+export type MutationPlayerCodeProjectSaveArgs = {
+  input: SavePlayerCodeProjectInput;
+};
+
+
+export type MutationPlayerCodeProjectSaveFilesArgs = {
+  input: SavePlayerCodeProjectFilesInput;
+};
+
+
+export type MutationPlayerCodeProjectSaveMetadataArgs = {
+  input: SavePlayerCodeProjectMetadataInput;
+};
+
+
+export type MutationPlayerCodeProjectSetArchivedArgs = {
+  input: SetPlayerCodeProjectArchivedInput;
 };
 
 
@@ -5969,6 +6110,73 @@ export enum PlayerCodeAdmissionState {
   Revoked = 'REVOKED'
 }
 
+/** A studio-curated app-scoped common file at its current immutable published version. Unlike personal source, this content is intentionally readable by app-scoped players. */
+export type PlayerCodeCommonFile = {
+  __typename?: 'PlayerCodeCommonFile';
+  /** App tenant whose players may read this published entry. */
+  appId: Scalars['BigInt']['output'];
+  /** Stable common catalog entry UUID. */
+  commonFileId: Scalars['String']['output'];
+  /** Published UTF-8 source text for this immutable version. */
+  content: Scalars['String']['output'];
+  /** Lowercase SHA-256 digest of the exact UTF-8 content bytes. */
+  contentSha256: Scalars['String']['output'];
+  /** Catalog entry creation timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional studio-authored catalog description. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Safe recommended project destination path. */
+  path: Scalars['String']['output'];
+  /** Timestamp when the current immutable version was published. */
+  publishedAt: Scalars['DateTime']['output'];
+  /** Studio user that published the current immutable version. */
+  publishedByUserId: Scalars['BigInt']['output'];
+  /** Stable lowercase URL-safe catalog slug. */
+  slug: Scalars['String']['output'];
+  /** Catalog lifecycle state; ordinary player queries expose only PUBLISHED. */
+  status: PlayerCodeCommonStatus;
+  /** Normalized studio-curated discovery tags. */
+  tags: Array<Scalars['String']['output']>;
+  /** Compatible project target for this catalog entry. */
+  target: PlayerCodeTarget;
+  /** Studio-authored catalog title. */
+  title: Scalars['String']['output'];
+  /** Timestamp of the latest catalog publication. */
+  updatedAt: Scalars['DateTime']['output'];
+  /** Current immutable content-version UUID. */
+  versionId: Scalars['String']['output'];
+  /** Monotonic immutable version number within the catalog entry. */
+  versionNo: Scalars['BigInt']['output'];
+};
+
+/** Studio-controlled catalog visibility. Player catalog queries return only published entries. */
+export enum PlayerCodeCommonStatus {
+  /** Retained for provenance but hidden from new player catalog reads and imports. */
+  Archived = 'ARCHIVED',
+  /** Studio work in progress; hidden from player common-file queries. */
+  Draft = 'DRAFT',
+  /** Available to app-scoped players for reading and copy-by-value import. */
+  Published = 'PUBLISHED'
+}
+
+/** How a project file entered the project. Imported content is copied by value; provenance is informational and does not create a live link. */
+export enum PlayerCodeFileProvenance {
+  /** The owner authored or directly saved this project file. */
+  Authored = 'AUTHORED',
+  /** The file was copied from a specific immutable version of the app’s studio-curated common catalog. */
+  Common = 'COMMON',
+  /** The file was copied from a specific revision of the owner’s private personal library. */
+  Library = 'LIBRARY'
+}
+
+/** The source catalog used for a copy-by-value project file import. */
+export enum PlayerCodeImportSource {
+  /** Import from an immutable published common-file version in the requested app. */
+  Common = 'COMMON',
+  /** Import from a private personal-library file owned by the authenticated caller. */
+  Library = 'LIBRARY'
+}
+
 /** An install of an acquired listing: the pinned version, the consent hash acknowledged, and (for server halves) the owned target grid. Installs pin their version; updating to a newer version is a new consent + install update, never automatic. */
 export type PlayerCodeInstall = {
   __typename?: 'PlayerCodeInstall';
@@ -5990,6 +6198,37 @@ export type PlayerCodeInstall = {
   status: Scalars['String']['output'];
   /** Owned grid the server half (and any bundled client attachment) was installed into; null for personal client-only installs. */
   targetGridId: Maybe<Scalars['BigInt']['output']>;
+};
+
+/** A reusable private text file in the authenticated player’s app-scoped personal library. */
+export type PlayerCodeLibraryFile = {
+  __typename?: 'PlayerCodeLibraryFile';
+  /** App tenant that isolates this private library entry. */
+  appId: Scalars['BigInt']['output'];
+  /** Whether this entry is archived and unavailable for new imports. */
+  archived: Scalars['Boolean']['output'];
+  /** Archive timestamp, or null while active. */
+  archivedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Private UTF-8 source text, visible only to the app-scoped owner. */
+  content: Scalars['String']['output'];
+  /** Library entry creation timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable personal-library file UUID. */
+  libraryFileId: Scalars['String']['output'];
+  /** User that exclusively owns this library entry. */
+  ownerUserId: Scalars['BigInt']['output'];
+  /** Safe suggested destination path; imports may choose another safe path. */
+  pathHint: Scalars['String']['output'];
+  /** Monotonic optimistic-concurrency revision. */
+  revision: Scalars['BigInt']['output'];
+  /** Normalized search tags, each lowercase and hyphen-safe. */
+  tags: Array<Scalars['String']['output']>;
+  /** Compatible project target for this reusable file. */
+  target: PlayerCodeTarget;
+  /** Player-facing library title. */
+  title: Scalars['String']['output'];
+  /** Timestamp of the latest successful library mutation. */
+  updatedAt: Scalars['DateTime']['output'];
 };
 
 /** Source-access mode of a listing: CLOSED (artifacts + contracts only) or OPEN_SOURCE (source readable; irreversible per published version). */
@@ -6079,6 +6318,104 @@ export enum PlayerCodeOwnerKind {
   User = 'USER'
 }
 
+/** Editor preference describing how the project presents its server and client targets; it never grants deployment or runtime authority. */
+export enum PlayerCodePairingPreference {
+  /** Present only the client-target authoring workflow. */
+  ClientOnly = 'CLIENT_ONLY',
+  /** Present server and client sources independently without an implied requirement edge. */
+  Independent = 'INDEPENDENT',
+  /** Present server and client sources as two coordinated halves of one mod. */
+  Paired = 'PAIRED',
+  /** Present only the server-target authoring workflow. */
+  ServerOnly = 'SERVER_ONLY'
+}
+
+/** A private, revisioned Mod Studio project owned by one user in one app. Optional grid affinity and module names are authoring hints only; deployment still rechecks current grid ownership and target-specific permissions. */
+export type PlayerCodeProject = {
+  __typename?: 'PlayerCodeProject';
+  /** Pinned guest ABI version used when constructing deploy input. */
+  abiVersion: Scalars['Int']['output'];
+  /** App tenant that isolates this project and all of its source. */
+  appId: Scalars['BigInt']['output'];
+  /** Whether the project is archived. Archived projects remain private and retained but are read-only until unarchived. */
+  archived: Scalars['Boolean']['output'];
+  /** Archive timestamp, or null while the project is active. */
+  archivedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Stable crate-style CLIENT module name used when the owner chooses to deploy, or null when unassigned. */
+  clientModuleName: Maybe<Scalars['String']['output']>;
+  /** Project creation timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional private project description. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Total file count across both targets; each target is independently capped at eight. */
+  fileCount: Scalars['Int']['output'];
+  /** Private project files ordered by target and path. Bounded to eight files per target. */
+  files: Array<PlayerCodeProjectFile>;
+  /** Optional grid affinity. It survives a grid transfer and does not itself grant deploy authority. */
+  gridId: Maybe<Scalars['BigInt']['output']>;
+  /** Player-facing project name. */
+  name: Scalars['String']['output'];
+  /** User that exclusively owns and may read or modify this project source. */
+  ownerUserId: Scalars['BigInt']['output'];
+  /** Editor presentation preference for the two source targets. */
+  pairingPreference: PlayerCodePairingPreference;
+  /** Stable project UUID. */
+  projectId: Scalars['String']['output'];
+  /** Monotonic project revision required by optimistic metadata, file, import, and archive mutations. */
+  revision: Scalars['BigInt']['output'];
+  /** Pinned crowdy-compute-sdk version used when constructing deploy input. */
+  sdkVersion: Scalars['String']['output'];
+  /** Stable crate-style SERVER module name used when the owner chooses to deploy, or null when unassigned. */
+  serverModuleName: Maybe<Scalars['String']['output']>;
+  /** Total UTF-8 source bytes across both targets, bounded by target and aggregate owner quotas. */
+  totalBytes: Scalars['BigInt']['output'];
+  /** Timestamp of the latest successful project mutation. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** One private text file in a player-owned project. It is returned only when both app id and authenticated owner match the project. */
+export type PlayerCodeProjectFile = {
+  __typename?: 'PlayerCodeProjectFile';
+  /** Private UTF-8 source text. Grid ownership and studio permissions never override project ownership. */
+  content: Scalars['String']['output'];
+  /** Timestamp when this target/path entry was first created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Safe compute-source relative path: Cargo.toml or a Rust file below src/. */
+  path: Scalars['String']['output'];
+  /** Copy provenance. Imported bytes remain unchanged if the source catalog entry later changes. */
+  provenance: PlayerCodeFileProvenance;
+  /** Immutable common-file version UUID copied into this file, or null when common provenance does not apply. */
+  provenanceCommonVersionId: Maybe<Scalars['String']['output']>;
+  /** Private library file UUID used for the copy, or null for authored/common content. */
+  provenanceLibraryFileId: Maybe<Scalars['String']['output']>;
+  /** Library revision copied into this file, or null when library provenance does not apply. */
+  provenanceLibraryRevision: Maybe<Scalars['BigInt']['output']>;
+  /** Monotonic revision of this target/path entry, incremented on every successful upsert. */
+  revision: Scalars['BigInt']['output'];
+  /** Server or client target whose independent 8-file/256-KiB deploy cap includes this file. */
+  target: PlayerCodeTarget;
+  /** Timestamp of the latest successful content/provenance save. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** A target/path key removed atomically by playerCodeProjectSaveFiles. */
+export type PlayerCodeProjectFileDeleteInput = {
+  /** Safe relative path of the file to remove. */
+  path: Scalars['String']['input'];
+  /** Project target containing the file to remove. */
+  target: PlayerCodeTarget;
+};
+
+/** One direct-authored initial or batch-upsert project file. Paths and UTF-8 bytes are validated against player-compute safety limits. */
+export type PlayerCodeProjectFileInput = {
+  /** UTF-8 source text, capped at 64 KiB. */
+  content: Scalars['String']['input'];
+  /** Safe relative path: Cargo.toml or a .rs file below src/, with no traversal segments. */
+  path: Scalars['String']['input'];
+  /** Project target receiving this file. */
+  target: PlayerCodeTarget;
+};
+
 /** One explicit edge from a server artifact to the client artifact it requires within the same immutable marketplace bundle. */
 export type PlayerCodeRequirement = {
   __typename?: 'PlayerCodeRequirement';
@@ -6087,6 +6424,14 @@ export type PlayerCodeRequirement = {
   /** Artifact hash of the SERVER half declaring the requirement. */
   serverArtifactHash: Scalars['String']['output'];
 };
+
+/** The independently capped source target inside a player-owned Mod Studio project. */
+export enum PlayerCodeTarget {
+  /** Browser-worker Rust that can run only after the caller separately passes current grid ownership and write_client_code deployment checks. */
+  Client = 'CLIENT',
+  /** Server-target Rust that can run only after the caller separately passes current grid ownership and write_server_code deployment checks. */
+  Server = 'SERVER'
+}
 
 /** An immutable published version of a code listing. Snapshots ARTIFACT HASHES and explicit server-to-client requirements from the author’s compiled module versions — never source (OQ-1). */
 export type PlayerCodeVersion = {
@@ -6526,6 +6871,30 @@ export type PublishEnvironmentReleaseFromGameApiTagInput = {
   gameApiTag: Scalars['String']['input'];
 };
 
+/** Publish a new immutable studio-curated common-file version. Requires the app manage_compute permission. */
+export type PublishPlayerCodeCommonFileInput = {
+  /** App tenant receiving the common entry; the token and manage_compute permission must cover this app. */
+  appId: Scalars['BigInt']['input'];
+  /** Existing common entry UUID to version; omit to create or version by slug. */
+  commonFileId?: InputMaybe<Scalars['String']['input']>;
+  /** UTF-8 source text for the new immutable version, capped at 64 KiB. */
+  content: Scalars['String']['input'];
+  /** Optional studio-authored catalog description. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Optional 24-hour retry key; strongly recommended to avoid duplicate versions after transport retries. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Safe recommended destination path. */
+  path: Scalars['String']['input'];
+  /** Stable lowercase hyphenated catalog slug. Existing entries cannot change their slug. */
+  slug: Scalars['String']['input'];
+  /** Optional unique lowercase discovery tags; at most 16. */
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Compatible project target for this common file. */
+  target: PlayerCodeTarget;
+  /** Studio-authored catalog title. */
+  title: Scalars['String']['input'];
+};
+
 export type PublishPlayerCodeInput = {
   /** App the listing belongs to. */
   appId: Scalars['BigInt']['input'];
@@ -6675,7 +7044,7 @@ export type Query = {
   computeTemplates: Array<ComputeTemplateInfo>;
   /** Operator only (is_operator). Most recent operator audit entries, newest first, optionally filtered by environment. */
   cpAudit: Array<CpAuditEntry>;
-  /** Operator only (is_operator). One change order with its tasks and steps. Null when the id is not found. */
+  /** Operator only (is_operator). One change order with ordered task and step progress. Durable change orders may return read-only projected rows when exact live execution details are unavailable; planned work remains pending until an outcome is observed or inferred. Null when the id is not found. */
   cpChangeOrder: Maybe<CpChangeOrderDetail>;
   /** Operator only (is_operator). Paginated change orders, optionally filtered by environment. Returns a *Page (rows/total/page/pageSize); page is 1-based. */
   cpChangeOrders: CpChangeOrdersPage;
@@ -6885,10 +7254,18 @@ export type Query = {
   playerAutomations: Array<PlayerAutomation>;
   /** Fetch client WASM for an entitled marketplace install or an exact marketplace/self-authored grid attachment. Attachment fetches require current in-grid presence plus matching attachment consent or capability-bound author trust; self-authored code uses module/author admission rather than a synthetic listing. Every factor, including run_client_code, Buddy lease when enabled, and kill switches, fails closed as 'not found'. */
   playerCodeClientArtifact: PlayerClientArtifact;
+  /** List the current immutable versions of published studio-curated common files for one app. Requires an app-scoped token for appId; unlike private player source, this catalog content is intentionally readable by players in that app. Results are bounded and may be filtered by target. */
+  playerCodeCommonFiles: Array<PlayerCodeCommonFile>;
+  /** List the authenticated player’s private reusable source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or studio operators. The bounded result defaults to 50. */
+  playerCodeLibraryFiles: Array<PlayerCodeLibraryFile>;
   /** List the immutable published versions of a listing, newest first, with each version’s derived capability summary and consent hash. */
   playerCodeListingVersions: Array<PlayerCodeListingVersion>;
   /** Browse an app's active marketplace code listings (free mode). Each listing carries its admission standing: in allow_list apps a PENDING listing can be acquired but not installed. Closed-source listings expose artifact hashes and the derived capability summary only — never source. */
   playerCodeListings: Array<PlayerCodeListing>;
+  /** Load one private Mod Studio project with all bounded source files. Requires an app-scoped token for appId and exact caller ownership; missing, cross-app, and cross-user ids all return the same NOT_FOUND shape. Grid owners and studio operators receive no source override. */
+  playerCodeProject: PlayerCodeProject;
+  /** List the authenticated player’s private Mod Studio projects in one app, newest first. Requires an app-scoped token for appId; every row and source-file read is filtered by both app and caller ownership. The bounded result defaults to 25 and never grants grid deployment authority. */
+  playerCodeProjects: Array<PlayerCodeProject>;
   /** Fetch a compiled CLIENT player artifact plus the metadata the browser broker needs to run it (player compute P3). Fail-closed: the caller must currently own the grid, be the version's author, hold run_client_code at app and grid scope, and the code must be admitted under the app's mode. Returns the gas-injected wasm bytes (base64), the declared client contract, and the per-dispatch fuel budget the glue worker enforces. Acquired (bought/rented) client code is served through the marketplace path in a later phase. */
   playerComputeArtifact: PlayerClientArtifact;
   /** Failed-run diagnostics for player modules on a grid the caller currently owns: the failing runs with their typed error kinds, newest first. The owner-scoped twin of computeModuleLogs. */
@@ -7751,6 +8128,22 @@ export type QueryPlayerCodeClientArtifactArgs = {
 };
 
 
+export type QueryPlayerCodeCommonFilesArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  target?: InputMaybe<PlayerCodeTarget>;
+};
+
+
+export type QueryPlayerCodeLibraryFilesArgs = {
+  appId: Scalars['BigInt']['input'];
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
 export type QueryPlayerCodeListingVersionsArgs = {
   appId: Scalars['BigInt']['input'];
   listingId: Scalars['String']['input'];
@@ -7759,6 +8152,20 @@ export type QueryPlayerCodeListingVersionsArgs = {
 
 export type QueryPlayerCodeListingsArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPlayerCodeProjectArgs = {
+  appId: Scalars['BigInt']['input'];
+  projectId: Scalars['String']['input'];
+};
+
+
+export type QueryPlayerCodeProjectsArgs = {
+  appId: Scalars['BigInt']['input'];
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -8112,6 +8519,104 @@ export type RollbackVoxelUpdatesInput = {
   to: Scalars['DateTime']['input'];
   /** Id of the user (decimal string) whose edits within the window will be reverted. */
   userId: Scalars['BigInt']['input'];
+};
+
+/** Create or optimistically update one private reusable personal-library file. */
+export type SavePlayerCodeLibraryFileInput = {
+  /** App tenant. Requires an app-scoped token; ownership is always the authenticated user. */
+  appId: Scalars['BigInt']['input'];
+  /** Private UTF-8 source text, capped at 64 KiB. */
+  content: Scalars['String']['input'];
+  /** Required current revision when libraryFileId is supplied; omit on create. */
+  expectedRevision?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional 24-hour retry key. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Existing library UUID to update; omit to create a new entry. */
+  libraryFileId?: InputMaybe<Scalars['String']['input']>;
+  /** Safe suggested destination path: Cargo.toml or a .rs file below src/. */
+  pathHint: Scalars['String']['input'];
+  /** Optional unique lowercase discovery tags; at most 16, each at most 32 characters. */
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Compatible project target for this reusable file. */
+  target: PlayerCodeTarget;
+  /** Player-facing library title. */
+  title: Scalars['String']['input'];
+};
+
+/** Atomically upsert and delete a private project’s text files under one expected project revision. */
+export type SavePlayerCodeProjectFilesInput = {
+  /** App tenant that owns the private project. */
+  appId: Scalars['BigInt']['input'];
+  /** Files to remove in the same transaction. A target/path cannot also appear in upserts. */
+  deletes?: InputMaybe<Array<PlayerCodeProjectFileDeleteInput>>;
+  /** Current project revision used for optimistic concurrency across the entire batch. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key; recommended because a successful batch increments the expected revision. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Project UUID to mutate. */
+  projectId: Scalars['String']['input'];
+  /** Files to insert or replace. The batch commits only if all paths and post-save caps are valid. */
+  upserts?: InputMaybe<Array<PlayerCodeProjectFileInput>>;
+};
+
+/** Atomically save selected project metadata plus a batch of file upserts/deletes under one expected project revision. Mod Studio uses this to persist one coherent full-stack edit. */
+export type SavePlayerCodeProjectInput = {
+  /** New supported ABI pin, or omit to preserve. */
+  abiVersion?: InputMaybe<Scalars['Int']['input']>;
+  /** App tenant that owns the private project. */
+  appId: Scalars['BigInt']['input'];
+  /** New CLIENT module name, explicit null to clear, or omit to preserve. */
+  clientModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** Files to delete in the same transaction. A target/path cannot also appear in upserts. */
+  deletes?: InputMaybe<Array<PlayerCodeProjectFileDeleteInput>>;
+  /** New private description, explicit null to clear, or omit to preserve. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Current project revision. A stale value returns CONFLICT with PLAYER_CODE_REVISION_CONFLICT and applies no metadata or file writes. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** New optional grid affinity, explicit null to clear, or omit to preserve. Affinity never grants deploy authority. */
+  gridId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional 24-hour retry key; recommended because a successful atomic save increments the expected revision. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** New non-empty project name, or omit to preserve. */
+  name?: InputMaybe<Scalars['String']['input']>;
+  /** New editor pairing preference, or omit to preserve. */
+  pairingPreference?: InputMaybe<PlayerCodePairingPreference>;
+  /** Project UUID to update. */
+  projectId: Scalars['String']['input'];
+  /** New supported SDK pin, or omit to preserve. */
+  sdkVersion?: InputMaybe<Scalars['String']['input']>;
+  /** New SERVER module name, explicit null to clear, or omit to preserve. */
+  serverModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** Changed or new files to insert/replace. Unmentioned files and their provenance remain unchanged. */
+  upserts?: InputMaybe<Array<PlayerCodeProjectFileInput>>;
+};
+
+/** Optimistically save selected project metadata. Omitted fields remain unchanged; explicit null clears nullable metadata. */
+export type SavePlayerCodeProjectMetadataInput = {
+  /** New supported ABI pin, or omit to preserve. */
+  abiVersion?: InputMaybe<Scalars['Int']['input']>;
+  /** App tenant that owns the private project. */
+  appId: Scalars['BigInt']['input'];
+  /** New CLIENT module name, explicit null to clear, or omit to preserve. */
+  clientModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** New private description, explicit null to clear, or omit to preserve. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Current project revision. A stale value returns CONFLICT with PLAYER_CODE_REVISION_CONFLICT. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** New optional grid affinity, explicit null to clear, or omit to preserve. Affinity never grants deploy authority. */
+  gridId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional 24-hour retry key; reuse with changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** New project name, or omit to preserve. */
+  name?: InputMaybe<Scalars['String']['input']>;
+  /** New editor pairing preference, or omit to preserve. */
+  pairingPreference?: InputMaybe<PlayerCodePairingPreference>;
+  /** Project UUID to update. */
+  projectId: Scalars['String']['input'];
+  /** New supported SDK pin, or omit to preserve. */
+  sdkVersion?: InputMaybe<Scalars['String']['input']>;
+  /** New SERVER module name, explicit null to clear, or omit to preserve. */
+  serverModuleName?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** A saved (vaulted) off-session payment method. */
@@ -8590,6 +9095,34 @@ export type SetPlayerAutomationEnabledInput = {
   enabled: Scalars['Boolean']['input'];
   /** Grid that confines the automation. */
   gridId: Scalars['BigInt']['input'];
+};
+
+/** Optimistically archive or restore one caller-owned personal-library file. */
+export type SetPlayerCodeLibraryFileArchivedInput = {
+  /** App tenant that owns the private library entry. */
+  appId: Scalars['BigInt']['input'];
+  /** True to archive; false to make the entry active again. */
+  archived: Scalars['Boolean']['input'];
+  /** Current library revision required for optimistic concurrency. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Personal-library file UUID. */
+  libraryFileId: Scalars['String']['input'];
+};
+
+/** Optimistically archive or unarchive one private project without deleting its files or provenance. */
+export type SetPlayerCodeProjectArchivedInput = {
+  /** App tenant that owns the private project. */
+  appId: Scalars['BigInt']['input'];
+  /** True to archive; false to restore the project. */
+  archived: Scalars['Boolean']['input'];
+  /** Current project revision required for optimistic concurrency. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Project UUID to archive or restore. */
+  projectId: Scalars['String']['input'];
 };
 
 /** Set one arbitrary JSON property on a player-owned container. The caller must currently own the specified grid and container. */
@@ -12099,6 +12632,74 @@ export type PlatformConfigQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type PlatformConfigQuery = { __typename?: 'Query', platformConfig: { __typename?: 'PlatformConfig', sharedGameApiUrl: string | null, sharedGameApiWsUrl: string | null, freeAppsPerOrg: number } };
 
+export type PlayerCodeProjectFieldsFragment = { __typename?: 'PlayerCodeProject', projectId: string, appId: string, ownerUserId: string, gridId: string | null, name: string, description: string | null, serverModuleName: string | null, clientModuleName: string | null, pairingPreference: PlayerCodePairingPreference, sdkVersion: string, abiVersion: number, revision: string, archived: boolean, archivedAt: string | null, fileCount: number, totalBytes: string, createdAt: string, updatedAt: string, files: Array<{ __typename?: 'PlayerCodeProjectFile', target: PlayerCodeTarget, path: string, content: string, revision: string, provenance: PlayerCodeFileProvenance, provenanceLibraryFileId: string | null, provenanceLibraryRevision: string | null, provenanceCommonVersionId: string | null, createdAt: string, updatedAt: string }> };
+
+export type PlayerCodeProjectsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type PlayerCodeProjectsQuery = { __typename?: 'Query', playerCodeProjects: Array<{ __typename?: 'PlayerCodeProject', projectId: string, gridId: string | null, name: string, serverModuleName: string | null, clientModuleName: string | null, pairingPreference: PlayerCodePairingPreference, revision: string, archived: boolean, updatedAt: string }> };
+
+export type PlayerCodeProjectQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  projectId: Scalars['String']['input'];
+}>;
+
+
+export type PlayerCodeProjectQuery = { __typename?: 'Query', playerCodeProject: { __typename?: 'PlayerCodeProject', projectId: string, appId: string, ownerUserId: string, gridId: string | null, name: string, description: string | null, serverModuleName: string | null, clientModuleName: string | null, pairingPreference: PlayerCodePairingPreference, sdkVersion: string, abiVersion: number, revision: string, archived: boolean, archivedAt: string | null, fileCount: number, totalBytes: string, createdAt: string, updatedAt: string, files: Array<{ __typename?: 'PlayerCodeProjectFile', target: PlayerCodeTarget, path: string, content: string, revision: string, provenance: PlayerCodeFileProvenance, provenanceLibraryFileId: string | null, provenanceLibraryRevision: string | null, provenanceCommonVersionId: string | null, createdAt: string, updatedAt: string }> } };
+
+export type PlayerCodeProjectCreateMutationVariables = Exact<{
+  input: CreatePlayerCodeProjectInput;
+}>;
+
+
+export type PlayerCodeProjectCreateMutation = { __typename?: 'Mutation', playerCodeProjectCreate: { __typename?: 'PlayerCodeProject', projectId: string, appId: string, ownerUserId: string, gridId: string | null, name: string, description: string | null, serverModuleName: string | null, clientModuleName: string | null, pairingPreference: PlayerCodePairingPreference, sdkVersion: string, abiVersion: number, revision: string, archived: boolean, archivedAt: string | null, fileCount: number, totalBytes: string, createdAt: string, updatedAt: string, files: Array<{ __typename?: 'PlayerCodeProjectFile', target: PlayerCodeTarget, path: string, content: string, revision: string, provenance: PlayerCodeFileProvenance, provenanceLibraryFileId: string | null, provenanceLibraryRevision: string | null, provenanceCommonVersionId: string | null, createdAt: string, updatedAt: string }> } };
+
+export type PlayerCodeProjectSaveMutationVariables = Exact<{
+  input: SavePlayerCodeProjectInput;
+}>;
+
+
+export type PlayerCodeProjectSaveMutation = { __typename?: 'Mutation', playerCodeProjectSave: { __typename?: 'PlayerCodeProject', projectId: string, appId: string, ownerUserId: string, gridId: string | null, name: string, description: string | null, serverModuleName: string | null, clientModuleName: string | null, pairingPreference: PlayerCodePairingPreference, sdkVersion: string, abiVersion: number, revision: string, archived: boolean, archivedAt: string | null, fileCount: number, totalBytes: string, createdAt: string, updatedAt: string, files: Array<{ __typename?: 'PlayerCodeProjectFile', target: PlayerCodeTarget, path: string, content: string, revision: string, provenance: PlayerCodeFileProvenance, provenanceLibraryFileId: string | null, provenanceLibraryRevision: string | null, provenanceCommonVersionId: string | null, createdAt: string, updatedAt: string }> } };
+
+export type PlayerCodeLibraryFilesQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type PlayerCodeLibraryFilesQuery = { __typename?: 'Query', playerCodeLibraryFiles: Array<{ __typename?: 'PlayerCodeLibraryFile', libraryFileId: string, appId: string, ownerUserId: string, title: string, pathHint: string, target: PlayerCodeTarget, tags: Array<string>, content: string, revision: string, archived: boolean, archivedAt: string | null, createdAt: string, updatedAt: string }> };
+
+export type PlayerCodeLibrarySaveMutationVariables = Exact<{
+  input: SavePlayerCodeLibraryFileInput;
+}>;
+
+
+export type PlayerCodeLibrarySaveMutation = { __typename?: 'Mutation', playerCodeLibrarySave: { __typename?: 'PlayerCodeLibraryFile', libraryFileId: string, appId: string, ownerUserId: string, title: string, pathHint: string, target: PlayerCodeTarget, tags: Array<string>, content: string, revision: string, archived: boolean, archivedAt: string | null, createdAt: string, updatedAt: string } };
+
+export type PlayerCodeCommonFilesQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  target?: InputMaybe<PlayerCodeTarget>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type PlayerCodeCommonFilesQuery = { __typename?: 'Query', playerCodeCommonFiles: Array<{ __typename?: 'PlayerCodeCommonFile', commonFileId: string, appId: string, slug: string, title: string, description: string | null, path: string, target: PlayerCodeTarget, tags: Array<string>, status: PlayerCodeCommonStatus, versionId: string, versionNo: string, content: string, contentSha256: string, publishedByUserId: string, publishedAt: string, createdAt: string, updatedAt: string }> };
+
+export type PlayerCodeProjectImportFileMutationVariables = Exact<{
+  input: ImportPlayerCodeProjectFileInput;
+}>;
+
+
+export type PlayerCodeProjectImportFileMutation = { __typename?: 'Mutation', playerCodeProjectImportFile: { __typename?: 'PlayerCodeProject', projectId: string, appId: string, ownerUserId: string, gridId: string | null, name: string, description: string | null, serverModuleName: string | null, clientModuleName: string | null, pairingPreference: PlayerCodePairingPreference, sdkVersion: string, abiVersion: number, revision: string, archived: boolean, archivedAt: string | null, fileCount: number, totalBytes: string, createdAt: string, updatedAt: string, files: Array<{ __typename?: 'PlayerCodeProjectFile', target: PlayerCodeTarget, path: string, content: string, revision: string, provenance: PlayerCodeFileProvenance, provenanceLibraryFileId: string | null, provenanceLibraryRevision: string | null, provenanceCommonVersionId: string | null, createdAt: string, updatedAt: string }> } };
+
 export type PlayerWasmModuleFieldsFragment = { __typename?: 'PlayerWasmModule', moduleId: string, appId: string, gridId: string, name: string, description: string | null, authorUserId: string | null, authorOrgId: string | null, enabled: boolean, draft: boolean, currentVersionId: string | null, currentTarget: PlayerComputeTarget | null, circuitState: string, lastError: string | null, createdAt: string, updatedAt: string };
 
 export type PlayerWasmModuleVersionFieldsFragment = { __typename?: 'PlayerWasmModuleVersion', versionId: string, moduleId: string, versionNo: number, target: PlayerComputeTarget, sourceFilesJson: string | null, openSource: boolean, compileStatus: string, compileLog: string | null, compiledSizeBytes: string | null, createdAt: string };
@@ -13051,6 +13652,7 @@ export const PlayerCodeListingVersionFieldsFragmentDoc = {"kind":"Document","def
 export const PlayerCodeAcquisitionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeAcquisitionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeAcquisition"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"acquisitionId"}},{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"unitsConsumed"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}}]}}]} as unknown as DocumentNode<PlayerCodeAcquisitionFieldsFragment, unknown>;
 export const PlayerCodeInstallFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeInstallFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeInstall"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"installId"}},{"kind":"Field","name":{"kind":"Name","value":"acquisitionId"}},{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"pinnedVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"targetGridId"}},{"kind":"Field","name":{"kind":"Name","value":"consentedCapabilityHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerCodeInstallFieldsFragment, unknown>;
 export const GridClaimRequestFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridClaimRequestFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridClaimRequest"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"requesterUserId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<GridClaimRequestFieldsFragment, unknown>;
+export const PlayerCodeProjectFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeProjectFieldsFragment, unknown>;
 export const PlayerWasmModuleFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"authorUserId"}},{"kind":"Field","name":{"kind":"Name","value":"authorOrgId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"draft"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTarget"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleFieldsFragment, unknown>;
 export const PlayerWasmModuleVersionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"sourceFilesJson"}},{"kind":"Field","name":{"kind":"Name","value":"openSource"}},{"kind":"Field","name":{"kind":"Name","value":"compileStatus"}},{"kind":"Field","name":{"kind":"Name","value":"compileLog"}},{"kind":"Field","name":{"kind":"Name","value":"compiledSizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleVersionFieldsFragment, unknown>;
 export const PlayerWasmModuleRunFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"executedAsUserId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleRunFieldsFragment, unknown>;
@@ -13340,6 +13942,14 @@ export const MyCheckoutsConnectionDocument = {"kind":"Document","definitions":[{
 export const PaymentEventsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PaymentEvents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"paymentEvents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"externalEventId"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"checkoutId"}},{"kind":"Field","name":{"kind":"Name","value":"processedAt"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"offset"}}]}}]}}]}}]} as unknown as DocumentNode<PaymentEventsQuery, PaymentEventsQueryVariables>;
 export const PaymentEventsConnectionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PaymentEventsConnection"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"paymentEventsConnection"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"externalEventId"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"checkoutId"}},{"kind":"Field","name":{"kind":"Name","value":"processedAt"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}},{"kind":"Field","name":{"kind":"Name","value":"startCursor"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"totalCount"}}]}}]}}]} as unknown as DocumentNode<PaymentEventsConnectionQuery, PaymentEventsConnectionQueryVariables>;
 export const PlatformConfigDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlatformConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"platformConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sharedGameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"sharedGameApiWsUrl"}},{"kind":"Field","name":{"kind":"Name","value":"freeAppsPerOrg"}}]}}]}}]} as unknown as DocumentNode<PlatformConfigQuery, PlatformConfigQueryVariables>;
+export const PlayerCodeProjectsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerCodeProjects"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeArchived"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeProjects"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeArchived"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeArchived"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeProjectsQuery, PlayerCodeProjectsQueryVariables>;
+export const PlayerCodeProjectDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerCodeProject"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"projectId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeProject"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"projectId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"projectId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeProjectFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeProjectQuery, PlayerCodeProjectQueryVariables>;
+export const PlayerCodeProjectCreateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerCodeProjectCreate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreatePlayerCodeProjectInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeProjectCreate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeProjectFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeProjectCreateMutation, PlayerCodeProjectCreateMutationVariables>;
+export const PlayerCodeProjectSaveDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerCodeProjectSave"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SavePlayerCodeProjectInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeProjectSave"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeProjectFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeProjectSaveMutation, PlayerCodeProjectSaveMutationVariables>;
+export const PlayerCodeLibraryFilesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerCodeLibraryFiles"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeArchived"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeLibraryFiles"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeArchived"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeArchived"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"libraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"pathHint"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeLibraryFilesQuery, PlayerCodeLibraryFilesQueryVariables>;
+export const PlayerCodeLibrarySaveDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerCodeLibrarySave"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SavePlayerCodeLibraryFileInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeLibrarySave"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"libraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"pathHint"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeLibrarySaveMutation, PlayerCodeLibrarySaveMutationVariables>;
+export const PlayerCodeCommonFilesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerCodeCommonFiles"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"target"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeTarget"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeCommonFiles"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"target"},"value":{"kind":"Variable","name":{"kind":"Name","value":"target"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"commonFileId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"contentSha256"}},{"kind":"Field","name":{"kind":"Name","value":"publishedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeCommonFilesQuery, PlayerCodeCommonFilesQueryVariables>;
+export const PlayerCodeProjectImportFileDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerCodeProjectImportFile"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ImportPlayerCodeProjectFileInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeProjectImportFile"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeProjectFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerCodeProjectImportFileMutation, PlayerCodeProjectImportFileMutationVariables>;
 export const PlayerComputeDeployDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerComputeDeploy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DeployPlayerComputeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeDeploy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWasmModuleVersionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"sourceFilesJson"}},{"kind":"Field","name":{"kind":"Name","value":"openSource"}},{"kind":"Field","name":{"kind":"Name","value":"compileStatus"}},{"kind":"Field","name":{"kind":"Name","value":"compileLog"}},{"kind":"Field","name":{"kind":"Name","value":"compiledSizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerComputeDeployMutation, PlayerComputeDeployMutationVariables>;
 export const PlayerComputeSetEnabledDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerComputeSetEnabled"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeSetEnabled"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWasmModuleFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"authorUserId"}},{"kind":"Field","name":{"kind":"Name","value":"authorOrgId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"draft"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTarget"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<PlayerComputeSetEnabledMutation, PlayerComputeSetEnabledMutationVariables>;
 export const PlayerComputeSetRequiresDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerComputeSetRequires"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"serverName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"requiredClientName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerComputeSetRequires"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}},{"kind":"Argument","name":{"kind":"Name","value":"serverName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"serverName"}}},{"kind":"Argument","name":{"kind":"Name","value":"requiredClientName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"requiredClientName"}}}]}]}}]} as unknown as DocumentNode<PlayerComputeSetRequiresMutation, PlayerComputeSetRequiresMutationVariables>;

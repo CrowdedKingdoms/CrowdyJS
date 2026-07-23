@@ -114,6 +114,46 @@ test('completion and hover merge workspace and generated platform symbols', () =
   assert.match(fieldHover?.contents.value ?? '', /pub message: Option<String>/u);
 });
 
+test('target-prefixed workspaces expose cross-file symbols and lifecycle guidance', () => {
+  const vfs = new VirtualFileSystem();
+  open(vfs, 'server/src/helpers.rs', 'pub fn server_helper() {}\n');
+  const server = open(
+    vfs,
+    'server/src/lib.rs',
+    'fn on_tick(_dt: u32) { server_helper(); }\n',
+  );
+  open(vfs, 'client/src/helpers.rs', 'pub fn client_helper() {}\n');
+  const client = open(vfs, 'client/src/lib.rs', 'fn client_main() {}\n');
+
+  const serverItems = analysis.completions(
+    server,
+    { line: 0, character: 0 },
+    vfs.documents(),
+  );
+  assert.ok(serverItems.some((item) => item.label === 'server lifecycle'));
+  assert.ok(serverItems.some((item) => item.label === 'client_helper'));
+  const clientItems = analysis.completions(
+    client,
+    { line: 0, character: 0 },
+    vfs.documents(),
+  );
+  assert.ok(clientItems.some((item) => item.label === 'client lifecycle'));
+  assert.ok(clientItems.some((item) => item.label === 'server_helper'));
+
+  const hover = analysis.hover(
+    server,
+    { line: 0, character: 5 },
+    vfs.documents(),
+  );
+  assert.match(hover?.contents.value ?? '', /SERVER lifecycle/u);
+  const definition = analysis.definition(
+    server,
+    { line: 0, character: 31 },
+    vfs.documents(),
+  );
+  assert.match(definition?.uri ?? '', /server\/src\/helpers\.rs$/u);
+});
+
 test('platform index loader is strict and bounded', () => {
   assert.equal(loadPlatformIndex(EMBEDDED_PLATFORM_INDEX).symbols.length, 725);
   assert.equal(EMBEDDED_PLATFORM_INDEX.schemaVersion, 2);

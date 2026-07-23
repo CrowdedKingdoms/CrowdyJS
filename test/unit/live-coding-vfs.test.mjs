@@ -4,6 +4,9 @@ import {
   VfsLimitError,
   VirtualFileSystem,
 } from '../../dist/live-coding/vfs.js';
+import {
+  modStudioFileUri,
+} from '../../dist/mod-studio/models.js';
 
 const uri = (path) => `file:///player-mod/${path}`;
 const item = (path, version, text) => ({
@@ -65,4 +68,40 @@ test('VFS rejects traversal and closes documents deterministically', () => {
   assert.equal(vfs.close(uri('ok.rs')), true);
   assert.equal(vfs.close(uri('ok.rs')), false);
   assert.equal(vfs.bytes, 0);
+});
+
+test('target-prefixed VFS loads duplicate Cargo and lib paths concurrently', () => {
+  const vfs = new VirtualFileSystem();
+  const serverCargo = modStudioFileUri(
+    'file:///player-mod',
+    'SERVER',
+    'Cargo.toml',
+  );
+  const clientCargo = modStudioFileUri(
+    'file:///player-mod',
+    'CLIENT',
+    'Cargo.toml',
+  );
+  const serverLib = modStudioFileUri(
+    'file:///player-mod',
+    'SERVER',
+    'src/lib.rs',
+  );
+  const clientLib = modStudioFileUri(
+    'file:///player-mod',
+    'CLIENT',
+    'src/lib.rs',
+  );
+  for (const [fileUri, text] of [
+    [serverCargo, 'server cargo'],
+    [clientCargo, 'client cargo'],
+    [serverLib, 'fn server() {}'],
+    [clientLib, 'fn client() {}'],
+  ]) {
+    vfs.open({ uri: fileUri, languageId: 'rust', version: 1, text });
+  }
+  assert.equal(vfs.require(serverCargo).path, 'server/Cargo.toml');
+  assert.equal(vfs.require(clientCargo).path, 'client/Cargo.toml');
+  assert.equal(vfs.require(serverLib).text, 'fn server() {}');
+  assert.equal(vfs.require(clientLib).text, 'fn client() {}');
 });

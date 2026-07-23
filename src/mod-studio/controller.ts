@@ -1,0 +1,1238 @@
+import {
+  PlayerCodeBroker,
+  type PlayerCodeBrokerOptions,
+  type PlayerCodeGridBounds,
+} from '../player-runtime/player-code-broker.js';
+import type { PlayerComputeAPI } from '../domains/playerCompute.js';
+import type { PlayerWalletAPI } from '../domains/playerWallet.js';
+import { parseRustcDiagnostics, type ModStudioDiagnostic } from './diagnostics.js';
+import {
+  cloneModStudioProject,
+  modStudioFileKey,
+  normalizeModStudioPath,
+  projectTargets,
+  ModStudioOfflineError,
+  ModStudioRevisionConflictError,
+  type ModStudioFileRef,
+  type ModStudioPairingPreference,
+  type ModStudioProject,
+  type ModStudioProjectFile,
+  type ModStudioProjectMetadata,
+  type ModStudioProjectProvider,
+  type ModStudioProjectSummary,
+  type ModStudioReferenceFile,
+  type ModStudioSaveState,
+  type ModStudioTarget,
+} from './models.js';
+import {
+  createModStudioStarterProject,
+  type ModStudioNewProjectOptions,
+} from './starter-projects.js';
+
+export type ModStudioPhase =
+  | 'IDLE'
+  | 'TESTING_DRAFT'
+  | 'DEPLOYING_LIVE'
+  | 'COMPILING'
+  | 'ENABLING'
+  | 'RUNNING'
+  | 'COMPILE_FAILED'
+  | 'STOPPING'
+  | 'STOPPED'
+  | 'PARTIAL_FAILURE'
+  | 'ERROR';
+
+export type ModStudioPolledSurface = 'runs' | 'logs' | 'usage';
+
+export interface ModStudioRuntimeStatus {
+  phase: ModStudioPhase;
+  target?: ModStudioTarget;
+  message?: string;
+}
+
+export interface ModStudioUsageSnapshot {
+  hourUnitsUsed: string;
+  dayUnitsUsed: string;
+  unitsPerHour: string | null;
+  unitsPerDay: string | null;
+  compilesThisHour: number;
+  maxCompilesPerHour: number;
+  gateStatus: string;
+  gateReason: string | null;
+}
+
+export interface ModStudioWalletSnapshot {
+  balanceCents: string;
+  currency: string;
+}
+
+export interface ModStudioRun {
+  runId: string;
+  moduleName: string;
+  triggerSource: string;
+  startedAt: string;
+  durationUs: number;
+  fuelUsed: string;
+  success: boolean;
+  errorMessage?: string | null;
+}
+
+export interface ModStudioInvokeResult {
+  resultBase64?: string | null;
+  resultJson?: string | null;
+  fuelUsed?: string;
+  durationUs?: number;
+}
+
+export interface ModStudioState {
+  projects: readonly ModStudioProjectSummary[];
+  project: ModStudioProject | null;
+  personalLibraryFiles: readonly ModStudioReferenceFile[];
+  commonFiles: readonly ModStudioReferenceFile[];
+  openFiles: readonly ModStudioFileRef[];
+  activeFile: ModStudioFileRef | null;
+  saveState: ModStudioSaveState;
+  saveMessage?: string;
+  runtime: ModStudioRuntimeStatus;
+  buildOutput: string;
+  authoritativeDiagnostics: readonly ModStudioDiagnostic[];
+  localDiagnostics: readonly ModStudioDiagnostic[];
+  runs: readonly ModStudioRun[];
+  logs: readonly ModStudioRun[];
+  usage: ModStudioUsageSnapshot | null;
+  wallet: ModStudioWalletSnapshot | null;
+  invokeResult: ModStudioInvokeResult | null;
+}
+
+export type ModStudioPlayerCompute = Pick<
+  PlayerComputeAPI,
+  | 'deploy'
+  | 'versions'
+  | 'setEnabled'
+  | 'setRequires'
+  | 'artifactBytes'
+  | 'usage'
+  | 'runs'
+  | 'logs'
+  | 'invoke'
+>;
+
+export type ModStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
+
+export interface ModStudioBroker {
+  start(bytes: ArrayBuffer): Promise<void>;
+  stop(): void;
+}
+
+export interface ModStudioControllerOptions {
+  projectProvider: ModStudioProjectProvider;
+  playerCompute: ModStudioPlayerCompute;
+  playerWallet?: ModStudioPlayerWallet;
+  appId: string;
+  gridId: string;
+  initialProjectId?: string;
+  /** Required only when a project has a CLIENT target. */
+  grid?: PlayerCodeGridBounds;
+  /** Platform-owned glue worker; required only for CLIENT execution. */
+  workerUrl?: string | URL;
+  /** Page-side allow-listed host-call router; required only for CLIENT execution. */
+  onHostCall?: PlayerCodeBrokerOptions['onHostCall'];
+  onPresentation?: PlayerCodeBrokerOptions['onPresentation'];
+  /** Host-visible effective permissions; server authorization remains final. */
+  targetPermissions?: Partial<
+    Record<ModStudioTarget, { canWrite: boolean; canRun: boolean }>
+  >;
+  clientTickIntervalMs?: number;
+  autosaveMs?: number;
+  retryMs?: number;
+  compilePollMs?: number;
+  compilePollLimit?: number;
+  monitorPollMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+  brokerFactory?: (options: PlayerCodeBrokerOptions) => ModStudioBroker;
+  isOnline?: () => boolean;
+  onStateChange?: (state: ModStudioState) => void;
+}
+
+export interface ModStudioStopResult {
+  serverStopped: boolean | null;
+  clientStopped: boolean | null;
+  failures: string[];
+}
+
+interface CompiledTarget {
+  target: ModStudioTarget;
+  name: string;
+  versionId: string;
+}
+
+class OperationCancelledError extends Error {}
+
+/**
+ * Headless project-first Mod Studio driver. It owns optimistic project saves,
+ * file CRUD, deployment ordering, runtime polling, and client hot swaps; the
+ * DOM mount is only a view over this state.
+ */
+export class ModStudioController {
+  private state: ModStudioState = {
+    projects: [],
+    project: null,
+    personalLibraryFiles: [],
+    commonFiles: [],
+    openFiles: [],
+    activeFile: null,
+    saveState: 'SAVED',
+    runtime: { phase: 'IDLE' },
+    buildOutput: '',
+    authoritativeDiagnostics: [],
+    localDiagnostics: [],
+    runs: [],
+    logs: [],
+    usage: null,
+    wallet: null,
+    invokeResult: null,
+  };
+  private readonly listeners = new Set<(state: ModStudioState) => void>();
+  private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private savePromise: Promise<boolean> | null = null;
+  private editGeneration = 0;
+  private persistedGeneration = 0;
+  private conflictRemote: ModStudioProject | null = null;
+  private broker: ModStudioBroker | null = null;
+  private operationGeneration = 0;
+  private readonly visibleSurfaces = new Set<ModStudioPolledSurface>();
+  private readonly surfaceTimers = new Map<
+    ModStudioPolledSurface,
+    ReturnType<typeof setTimeout>
+  >();
+  private pageVisible = true;
+  private destroyed = false;
+
+  constructor(private readonly options: ModStudioControllerOptions) {
+    if (options.onStateChange) this.listeners.add(options.onStateChange);
+  }
+
+  getState(): ModStudioState {
+    return this.state;
+  }
+
+  subscribe(listener: (state: ModStudioState) => void): () => void {
+    this.listeners.add(listener);
+    listener(this.state);
+    return () => this.listeners.delete(listener);
+  }
+
+  canTarget(
+    target: ModStudioTarget,
+    action: 'write' | 'run',
+  ): boolean {
+    const permission = this.options.targetPermissions?.[target];
+    return permission
+      ? action === 'write'
+        ? permission.canWrite
+        : permission.canRun
+      : true;
+  }
+
+  async initialize(): Promise<void> {
+    this.ensureAlive();
+    const scope = this.scope();
+    let loaded: [
+      ModStudioProjectSummary[],
+      ModStudioReferenceFile[],
+      ModStudioReferenceFile[],
+    ];
+    try {
+      loaded = await Promise.all([
+        this.options.projectProvider.listProjects(scope),
+        this.options.projectProvider.listPersonalLibraryFiles(scope),
+        this.options.projectProvider.listCommonFiles(scope),
+      ]);
+    } catch (error) {
+      if (
+        error instanceof ModStudioOfflineError ||
+        this.options.isOnline?.() === false
+      ) {
+        this.update({
+          saveState: 'OFFLINE',
+          saveMessage: errorMessage(error),
+        });
+        return;
+      }
+      throw error;
+    }
+    const [projects, personalLibraryFiles, commonFiles] = loaded;
+    this.update({
+      projects,
+      personalLibraryFiles,
+      commonFiles,
+      saveState: 'SAVED',
+      saveMessage: undefined,
+    });
+    const first =
+      projects.find(
+        (project) => project.projectId === this.options.initialProjectId,
+      ) ?? projects[0];
+    if (first) await this.loadProject(first.projectId);
+  }
+
+  async createProject(
+    options: Omit<ModStudioNewProjectOptions, 'appId' | 'gridId'>,
+  ): Promise<ModStudioProject> {
+    this.ensureAlive();
+    if (this.state.project && !(await this.saveNow())) {
+      throw new Error('Resolve or retry the current project save before creating another');
+    }
+    const input = createModStudioStarterProject({
+      ...options,
+      ...this.scope(),
+    });
+    const project = await this.options.projectProvider.createProject(input);
+    this.installProject(project);
+    this.update({
+      projects: upsertSummary(this.state.projects, summaryOf(project)),
+      saveState: 'SAVED',
+      saveMessage: undefined,
+    });
+    return project;
+  }
+
+  async switchProject(projectId: string): Promise<void> {
+    if (this.state.project?.projectId === projectId) return;
+    if (this.state.project && !(await this.saveNow())) {
+      throw new Error('Resolve or retry the current project save before switching');
+    }
+    await this.loadProject(projectId);
+  }
+
+  private async loadProject(projectId: string): Promise<void> {
+    const project = await this.options.projectProvider.getProject({
+      ...this.scope(),
+      projectId,
+    });
+    this.installProject(project);
+  }
+
+  private installProject(project: ModStudioProject): void {
+    ++this.operationGeneration;
+    this.stopSurfacePolling();
+    this.broker?.stop();
+    this.broker = null;
+    this.clearSaveTimers();
+    this.editGeneration = 0;
+    this.persistedGeneration = 0;
+    this.conflictRemote = null;
+    const clone = cloneModStudioProject(project);
+    const preferred =
+      clone.files.find((file) => file.path === 'src/lib.rs') ?? clone.files[0];
+    const activeFile = preferred ? projectFileRef(preferred) : null;
+    this.update({
+      project: clone,
+      openFiles: activeFile ? [activeFile] : [],
+      activeFile,
+      saveState: 'SAVED',
+      saveMessage: undefined,
+      runtime: { phase: 'IDLE' },
+      buildOutput: '',
+      authoritativeDiagnostics: [],
+      localDiagnostics: [],
+      runs: [],
+      logs: [],
+      invokeResult: null,
+    });
+    this.restartVisibleSurfacePolling();
+  }
+
+  openFile(ref: ModStudioFileRef): void {
+    this.requireFile(ref);
+    const exists = this.state.openFiles.some((entry) => sameFileRef(entry, ref));
+    this.update({
+      openFiles: exists ? this.state.openFiles : [...this.state.openFiles, ref],
+      activeFile: ref,
+    });
+  }
+
+  closeFile(ref: ModStudioFileRef): void {
+    const openFiles = this.state.openFiles.filter(
+      (entry) => !sameFileRef(entry, ref),
+    );
+    const activeFile =
+      this.state.activeFile && sameFileRef(this.state.activeFile, ref)
+        ? openFiles.at(-1) ?? null
+        : this.state.activeFile;
+    this.update({ openFiles, activeFile });
+  }
+
+  fileContent(ref: ModStudioFileRef): string {
+    return this.requireFile(ref).content;
+  }
+
+  addFile(target: ModStudioTarget, path: string, content = ''): void {
+    const project = this.requireProject();
+    this.assertProjectTarget(project, target);
+    const normalized = normalizeModStudioPath(path);
+    if (
+      project.files.some(
+        (file) => file.target === target && file.path === normalized,
+      )
+    ) {
+      throw new Error(`${target}:${normalized} already exists`);
+    }
+    project.files.push({ target, path: normalized, content });
+    project.files.sort(compareProjectFile);
+    const ref: ModStudioFileRef = {
+      source: 'PROJECT',
+      target,
+      path: normalized,
+    };
+    this.markEdited();
+    this.openFile(ref);
+  }
+
+  renameFile(target: ModStudioTarget, path: string, nextPath: string): void {
+    const project = this.requireProject();
+    const normalized = normalizeModStudioPath(path);
+    const renamed = normalizeModStudioPath(nextPath);
+    const file = project.files.find(
+      (entry) => entry.target === target && entry.path === normalized,
+    );
+    if (!file) throw new Error(`${target}:${normalized} does not exist`);
+    if (
+      project.files.some(
+        (entry) => entry.target === target && entry.path === renamed,
+      )
+    ) {
+      throw new Error(`${target}:${renamed} already exists`);
+    }
+    file.path = renamed;
+    project.files.sort(compareProjectFile);
+    const replaceRef = (ref: ModStudioFileRef): ModStudioFileRef =>
+      ref.source === 'PROJECT' &&
+      ref.target === target &&
+      ref.path === normalized
+        ? { ...ref, path: renamed }
+        : ref;
+    this.update({
+      openFiles: this.state.openFiles.map(replaceRef),
+      activeFile: this.state.activeFile
+        ? replaceRef(this.state.activeFile)
+        : null,
+    });
+    this.markEdited();
+  }
+
+  deleteFile(target: ModStudioTarget, path: string): void {
+    const project = this.requireProject();
+    const normalized = normalizeModStudioPath(path);
+    const index = project.files.findIndex(
+      (entry) => entry.target === target && entry.path === normalized,
+    );
+    if (index < 0) throw new Error(`${target}:${normalized} does not exist`);
+    project.files.splice(index, 1);
+    this.closeFile({ source: 'PROJECT', target, path: normalized });
+    this.markEdited();
+  }
+
+  async importReferenceFile(
+    reference: ModStudioReferenceFile,
+    destinationPath = reference.path,
+  ): Promise<void> {
+    this.requireProject();
+    if (!(await this.saveNow())) {
+      throw new Error('Resolve the current project save before importing a file');
+    }
+    const project = this.requireProject();
+    const saved = await this.options.projectProvider.importReferenceFile({
+      ...this.scope(),
+      projectId: project.projectId,
+      expectedRevisionId: project.revision.id,
+      source: reference.source,
+      referenceId: reference.id,
+      destinationPath,
+    });
+    this.installProject(saved);
+    this.update({
+      projects: upsertSummary(this.state.projects, summaryOf(saved)),
+    });
+    const imported = saved.files.find(
+      (file) =>
+        file.target === reference.target &&
+        file.path === normalizeModStudioPath(destinationPath),
+    );
+    if (imported) this.openFile(projectFileRef(imported));
+  }
+
+  async saveProjectFileToLibrary(
+    target: ModStudioTarget,
+    path: string,
+    title?: string,
+  ): Promise<ModStudioReferenceFile> {
+    const file = this.requireProject().files.find(
+      (entry) =>
+        entry.target === target &&
+        entry.path === normalizeModStudioPath(path),
+    );
+    if (!file) throw new Error(`${target}:${path} does not exist`);
+    const saved = await this.options.projectProvider.savePersonalLibraryFile({
+      ...this.scope(),
+      title: title?.trim() || file.path.split('/').at(-1) || file.path,
+      target,
+      path: file.path,
+      content: file.content,
+    });
+    this.update({
+      personalLibraryFiles: upsertReference(
+        this.state.personalLibraryFiles,
+        saved,
+      ),
+    });
+    return saved;
+  }
+
+  updateFile(target: ModStudioTarget, path: string, content: string): void {
+    const project = this.requireProject();
+    const normalized = normalizeModStudioPath(path);
+    const file = project.files.find(
+      (entry) => entry.target === target && entry.path === normalized,
+    );
+    if (!file) throw new Error(`${target}:${normalized} does not exist`);
+    if (file.content === content) return;
+    file.content = content;
+    this.markEdited();
+  }
+
+  updateSettings(
+    patch: Partial<
+      Pick<
+        ModStudioProjectMetadata,
+        | 'name'
+        | 'description'
+        | 'serverModuleName'
+        | 'clientModuleName'
+        | 'pairingPreference'
+      >
+    >,
+  ): void {
+    const project = this.requireProject();
+    project.metadata = {
+      ...project.metadata,
+      ...patch,
+      pairingPreference:
+        patch.pairingPreference ?? project.metadata.pairingPreference,
+    };
+    this.markEdited();
+  }
+
+  setPairingPreference(preference: ModStudioPairingPreference): void {
+    this.updateSettings({ pairingPreference: preference });
+  }
+
+  setLocalDiagnostics(diagnostics: readonly ModStudioDiagnostic[]): void {
+    this.update({ localDiagnostics: [...diagnostics] });
+  }
+
+  /**
+   * Flush all edits in one optimistic-concurrency save. If edits arrive while
+   * the request is in flight, a second atomic save follows with the new
+   * revision instead of overwriting local content with the earlier response.
+   */
+  async saveNow(): Promise<boolean> {
+    this.ensureAlive();
+    this.clearTimer('autosave');
+    if (!this.state.project) return true;
+    if (this.savePromise) {
+      await this.savePromise;
+      if (this.persistedGeneration === this.editGeneration) return true;
+    }
+    this.savePromise = this.performSaveLoop();
+    try {
+      return await this.savePromise;
+    } finally {
+      this.savePromise = null;
+    }
+  }
+
+  async retrySave(): Promise<boolean> {
+    this.clearTimer('retry');
+    if (!this.state.project) {
+      this.update({ saveState: 'SAVING', saveMessage: undefined });
+      await this.initialize();
+      return this.state.saveState !== 'OFFLINE';
+    }
+    if (this.state.saveState === 'CONFLICT') return false;
+    this.update({ saveState: 'SAVING', saveMessage: undefined });
+    return this.saveNow();
+  }
+
+  async acceptRemoteConflict(): Promise<void> {
+    if (this.state.saveState !== 'CONFLICT') return;
+    const remote =
+      this.conflictRemote ??
+      (await this.options.projectProvider.getProject({
+        ...this.scope(),
+        projectId: this.requireProject().projectId,
+      }));
+    this.installProject(remote);
+  }
+
+  async overwriteConflict(): Promise<boolean> {
+    if (this.state.saveState !== 'CONFLICT') return this.saveNow();
+    const project = this.requireProject();
+    const remote =
+      this.conflictRemote ??
+      (await this.options.projectProvider.getProject({
+        ...this.scope(),
+        projectId: project.projectId,
+      }));
+    project.revision = { ...remote.revision };
+    this.conflictRemote = null;
+    this.update({ saveState: 'SAVING', saveMessage: undefined });
+    return this.saveNow();
+  }
+
+  async testDraft(): Promise<void> {
+    await this.deployProject(true);
+  }
+
+  async deployLive(): Promise<void> {
+    await this.deployProject(false);
+  }
+
+  private async deployProject(draft: boolean): Promise<void> {
+    this.requireProject();
+    if (!(await this.saveNow())) {
+      this.setRuntime('ERROR', 'Project must be saved before it can be built');
+      return;
+    }
+    const project = this.requireProject();
+    const operation = ++this.operationGeneration;
+    this.stopSurfacePolling();
+    this.update({
+      runtime: { phase: draft ? 'TESTING_DRAFT' : 'DEPLOYING_LIVE' },
+      buildOutput: '',
+      authoritativeDiagnostics: [],
+    });
+    try {
+      const targets = projectTargets(project.kind);
+      if (targets.length === 1) {
+        const target = targets[0];
+        const compiled = await this.compileTarget(project, target, draft, operation);
+        if (!compiled) return;
+        if (target === 'SERVER') {
+          await this.enableServer(compiled.name, operation);
+        } else {
+          await this.runClient(compiled, operation);
+        }
+      } else {
+        // Compile the client first so a client failure never publishes a new
+        // server version or alters the currently live pairing requirement.
+        const client = await this.compileTarget(
+          project,
+          'CLIENT',
+          draft,
+          operation,
+        );
+        if (!client) return;
+        const server = await this.compileTarget(
+          project,
+          'SERVER',
+          draft,
+          operation,
+        );
+        if (!server) return;
+        this.checkOperation(operation);
+        const requiredClientName =
+          project.metadata.pairingPreference === 'REQUIRED'
+            ? client.name
+            : null;
+        await this.options.playerCompute.setRequires({
+          ...this.scope(),
+          serverName: server.name,
+          requiredClientName,
+        });
+        this.checkOperation(operation);
+        await this.enableServer(server.name, operation);
+        await this.runClient(client, operation);
+      }
+      this.update({
+        runtime: {
+          phase: 'RUNNING',
+          message: draft ? 'Draft test is running' : 'Project is live',
+        },
+      });
+      await this.refreshSurface('usage').catch(() => {});
+    } catch (error) {
+      if (error instanceof OperationCancelledError) return;
+      this.setRuntime('ERROR', errorMessage(error));
+    } finally {
+      if (operation === this.operationGeneration) {
+        this.restartVisibleSurfacePolling();
+      }
+    }
+  }
+
+  private async compileTarget(
+    project: ModStudioProject,
+    target: ModStudioTarget,
+    draft: boolean,
+    operation: number,
+  ): Promise<CompiledTarget | null> {
+    if (!this.canTarget(target, 'write')) {
+      throw new Error(`${target} authoring is unavailable on this grid`);
+    }
+    const name = moduleNameFor(project, target);
+    const files = project.files.filter((file) => file.target === target);
+    if (files.length === 0) throw new Error(`${target} has no project files`);
+    this.update({
+      runtime: {
+        phase: 'COMPILING',
+        target,
+        message: `Submitting ${name}`,
+      },
+    });
+
+    // This is the sole project→legacy wire conversion. Project state, provider
+    // contracts, editors, and templates all use typed files.
+    const sourceFilesJson = JSON.stringify(
+      Object.fromEntries(files.map((file) => [file.path, file.content])),
+    );
+    const deployed = await this.options.playerCompute.deploy({
+      ...this.scope(),
+      name,
+      target: target as never,
+      sourceFilesJson,
+      sdkVersion: project.sdkVersion,
+      abiVersion: project.abiVersion,
+      tickHz: target === 'SERVER' ? 1 : undefined,
+      draft,
+    });
+    this.checkOperation(operation);
+
+    const limit = this.options.compilePollLimit ?? 60;
+    const pollMs = this.options.compilePollMs ?? 1_500;
+    for (let attempt = 0; attempt < limit; attempt++) {
+      const versions = await this.options.playerCompute.versions({
+        ...this.scope(),
+        name,
+      });
+      this.checkOperation(operation);
+      const version = versions.find(
+        (candidate) => candidate.versionId === deployed.versionId,
+      );
+      const status = version?.compileStatus.toLowerCase();
+      if (status === 'succeeded' || status === 'success') {
+        this.recordBuild(target, version?.compileLog ?? '');
+        return { target, name, versionId: deployed.versionId };
+      }
+      if (status === 'failed' || status === 'error') {
+        const log = version?.compileLog ?? 'Compilation failed without output';
+        this.recordBuild(target, log);
+        this.update({
+          runtime: {
+            phase: 'COMPILE_FAILED',
+            target,
+            message: `${name} failed to compile`,
+          },
+        });
+        return null;
+      }
+      await this.sleep(pollMs);
+      this.checkOperation(operation);
+    }
+    const timeout = `Compilation timed out after ${limit} polls`;
+    this.recordBuild(target, timeout);
+    this.update({
+      runtime: { phase: 'COMPILE_FAILED', target, message: timeout },
+    });
+    return null;
+  }
+
+  private recordBuild(target: ModStudioTarget, log: string): void {
+    const section = `## ${target}\n${log || 'Compiled successfully.'}`;
+    const authoritativeDiagnostics = [
+      ...this.state.authoritativeDiagnostics.filter(
+        (diagnostic) => diagnostic.target !== target,
+      ),
+      ...parseRustcDiagnostics(log, target),
+    ];
+    this.update({
+      buildOutput: [this.state.buildOutput, section].filter(Boolean).join('\n\n'),
+      authoritativeDiagnostics,
+    });
+  }
+
+  private async enableServer(name: string, operation: number): Promise<void> {
+    if (!this.canTarget('SERVER', 'run')) {
+      throw new Error(
+        `${name} compiled successfully, but run_server_code is unavailable on this grid`,
+      );
+    }
+    this.update({
+      runtime: { phase: 'ENABLING', target: 'SERVER', message: `Enabling ${name}` },
+    });
+    await this.options.playerCompute.setEnabled({
+      ...this.scope(),
+      name,
+      enabled: true,
+    });
+    this.checkOperation(operation);
+  }
+
+  private async runClient(
+    compiled: CompiledTarget,
+    operation: number,
+  ): Promise<void> {
+    if (!this.canTarget('CLIENT', 'run')) {
+      throw new Error(
+        `${compiled.name} compiled successfully, but run_client_code is unavailable on this grid`,
+      );
+    }
+    const runtime = this.clientRuntimeOptions();
+    const artifact = await this.options.playerCompute.artifactBytes({
+      ...this.scope(),
+      name: compiled.name,
+      versionId: compiled.versionId,
+    });
+    this.checkOperation(operation);
+    if (
+      artifact.versionId !== compiled.versionId ||
+      !artifact.artifactHash ||
+      artifact.bytes.byteLength === 0
+    ) {
+      throw new Error('Client artifact did not match the compiled project version');
+    }
+    const brokerOptions: PlayerCodeBrokerOptions = {
+      ...runtime,
+      artifactHash: artifact.artifactHash,
+      fuelPerDispatch: artifact.fuelPerDispatch,
+      onPresentation: this.options.onPresentation,
+      tickIntervalMs: this.options.clientTickIntervalMs ?? 1_000,
+    };
+    const broker =
+      this.options.brokerFactory?.(brokerOptions) ??
+      new PlayerCodeBroker(brokerOptions);
+    await broker.start(artifact.bytes);
+    this.checkOperation(operation);
+    const previous = this.broker;
+    this.broker = broker;
+    previous?.stop();
+  }
+
+  async stopProject(): Promise<ModStudioStopResult> {
+    const project = this.requireProject();
+    ++this.operationGeneration;
+    this.stopSurfacePolling();
+    this.update({ runtime: { phase: 'STOPPING' } });
+    const failures: string[] = [];
+    let serverStopped: boolean | null = null;
+    let clientStopped: boolean | null = null;
+
+    if (projectTargets(project.kind).includes('CLIENT')) {
+      clientStopped = true;
+      try {
+        this.broker?.stop();
+      } catch (error) {
+        clientStopped = false;
+        failures.push(`Client: ${errorMessage(error)}`);
+      } finally {
+        this.broker = null;
+      }
+    }
+
+    if (projectTargets(project.kind).includes('SERVER')) {
+      serverStopped = false;
+      try {
+        await this.options.playerCompute.setEnabled({
+          ...this.scope(),
+          name: moduleNameFor(project, 'SERVER'),
+          enabled: false,
+        });
+        serverStopped = true;
+      } catch (error) {
+        failures.push(`Server: ${errorMessage(error)}`);
+      }
+    }
+
+    const result = { serverStopped, clientStopped, failures };
+    this.update({
+      runtime:
+        failures.length === 0
+          ? { phase: 'STOPPED', message: 'Project stopped' }
+          : {
+              phase: 'PARTIAL_FAILURE',
+              message: failures.join(' · '),
+            },
+    });
+    return result;
+  }
+
+  async invoke(exportName: string, paramsJson?: string): Promise<ModStudioInvokeResult> {
+    const project = this.requireProject();
+    if (!projectTargets(project.kind).includes('SERVER')) {
+      throw new Error('Invoke requires a SERVER target');
+    }
+    const result = await this.options.playerCompute.invoke({
+      ...this.scope(),
+      moduleName: moduleNameFor(project, 'SERVER'),
+      exportName: exportName.trim() || 'invoke',
+      paramsJson: paramsJson?.trim() || null,
+    });
+    this.update({ invokeResult: result });
+    return result;
+  }
+
+  setSurfaceVisible(surface: ModStudioPolledSurface, visible: boolean): void {
+    if (visible) {
+      this.visibleSurfaces.add(surface);
+      if (this.pageVisible) {
+        void this.refreshSurface(surface).catch(() => {});
+        this.scheduleSurfacePoll(surface);
+      }
+    } else {
+      this.visibleSurfaces.delete(surface);
+      this.clearSurfaceTimer(surface);
+    }
+  }
+
+  setPageVisible(visible: boolean): void {
+    if (this.pageVisible === visible) return;
+    this.pageVisible = visible;
+    if (visible) this.restartVisibleSurfacePolling();
+    else this.stopSurfacePolling();
+  }
+
+  async refreshSurface(surface: ModStudioPolledSurface): Promise<void> {
+    if (!this.state.project) return;
+    const serverName = this.state.project.metadata.serverModuleName;
+    if (surface === 'runs') {
+      this.update({
+        runs: await this.options.playerCompute.runs({
+          ...this.scope(),
+          ...(serverName ? { moduleName: serverName } : {}),
+          limit: 50,
+          offset: 0,
+        }),
+      });
+      return;
+    }
+    if (surface === 'logs') {
+      this.update({
+        logs: await this.options.playerCompute.logs({
+          ...this.scope(),
+          ...(serverName ? { moduleName: serverName } : {}),
+          limit: 50,
+        }),
+      });
+      return;
+    }
+    const [usage, wallet] = await Promise.all([
+      this.options.playerCompute.usage({ appId: this.options.appId }),
+      this.options.playerWallet?.balance() ?? Promise.resolve(null),
+    ]);
+    this.update({ usage: normalizeUsage(usage), wallet });
+  }
+
+  destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    ++this.operationGeneration;
+    this.clearSaveTimers();
+    this.stopSurfacePolling();
+    this.broker?.stop();
+    this.broker = null;
+    this.listeners.clear();
+  }
+
+  private async performSaveLoop(): Promise<boolean> {
+    while (this.persistedGeneration !== this.editGeneration) {
+      const project = this.requireProject();
+      const savingGeneration = this.editGeneration;
+      const snapshot = cloneModStudioProject(project);
+      this.update({ saveState: 'SAVING', saveMessage: undefined });
+      try {
+        const saved = await this.options.projectProvider.saveProject({
+          ...this.scope(),
+          projectId: snapshot.projectId,
+          expectedRevisionId: snapshot.revision.id,
+          metadata: snapshot.metadata,
+          files: snapshot.files,
+        });
+        this.persistedGeneration = savingGeneration;
+        if (this.state.project?.projectId !== saved.projectId) return true;
+        if (this.editGeneration === savingGeneration) {
+          this.state.project = cloneModStudioProject(saved);
+        } else {
+          // Preserve newer local edits while advancing the revision precondition.
+          this.state.project.revision = { ...saved.revision };
+          this.state.project.updatedAt = saved.updatedAt;
+        }
+        this.update({
+          projects: upsertSummary(this.state.projects, summaryOf(saved)),
+          saveState:
+            this.persistedGeneration === this.editGeneration ? 'SAVED' : 'SAVING',
+          saveMessage: undefined,
+        });
+      } catch (error) {
+        if (error instanceof ModStudioRevisionConflictError) {
+          this.conflictRemote = error.remoteProject ?? null;
+          this.update({ saveState: 'CONFLICT', saveMessage: error.message });
+          return false;
+        }
+        if (
+          error instanceof ModStudioOfflineError ||
+          this.options.isOnline?.() === false
+        ) {
+          this.update({ saveState: 'OFFLINE', saveMessage: errorMessage(error) });
+          this.scheduleRetry();
+          return false;
+        }
+        this.update({ saveState: 'OFFLINE', saveMessage: errorMessage(error) });
+        throw error;
+      }
+    }
+    this.update({ saveState: 'SAVED', saveMessage: undefined });
+    return true;
+  }
+
+  private markEdited(): void {
+    this.editGeneration++;
+    this.update({ saveState: 'SAVING', saveMessage: undefined });
+    this.clearTimer('autosave');
+    this.autosaveTimer = setTimeout(() => {
+      this.autosaveTimer = null;
+      void this.saveNow().catch(() => {});
+    }, this.options.autosaveMs ?? 700);
+  }
+
+  private scheduleRetry(): void {
+    this.clearTimer('retry');
+    if (this.destroyed) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.retrySave().catch(() => {});
+    }, this.options.retryMs ?? 3_000);
+  }
+
+  private scheduleSurfacePoll(surface: ModStudioPolledSurface): void {
+    this.clearSurfaceTimer(surface);
+    if (
+      !this.pageVisible ||
+      !this.visibleSurfaces.has(surface) ||
+      this.destroyed
+    ) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.surfaceTimers.delete(surface);
+      void this.refreshSurface(surface)
+        .catch(() => {})
+        .finally(() => this.scheduleSurfacePoll(surface));
+    }, this.options.monitorPollMs ?? 5_000);
+    this.surfaceTimers.set(surface, timer);
+  }
+
+  private restartVisibleSurfacePolling(): void {
+    if (!this.pageVisible || this.destroyed) return;
+    for (const surface of this.visibleSurfaces) {
+      void this.refreshSurface(surface).catch(() => {});
+      this.scheduleSurfacePoll(surface);
+    }
+  }
+
+  private stopSurfacePolling(): void {
+    for (const timer of this.surfaceTimers.values()) clearTimeout(timer);
+    this.surfaceTimers.clear();
+  }
+
+  private clearSurfaceTimer(surface: ModStudioPolledSurface): void {
+    const timer = this.surfaceTimers.get(surface);
+    if (timer) clearTimeout(timer);
+    this.surfaceTimers.delete(surface);
+  }
+
+  private clearSaveTimers(): void {
+    this.clearTimer('autosave');
+    this.clearTimer('retry');
+  }
+
+  private clearTimer(kind: 'autosave' | 'retry'): void {
+    const timer = kind === 'autosave' ? this.autosaveTimer : this.retryTimer;
+    if (timer) clearTimeout(timer);
+    if (kind === 'autosave') this.autosaveTimer = null;
+    else this.retryTimer = null;
+  }
+
+  private clientRuntimeOptions(): Pick<
+    PlayerCodeBrokerOptions,
+    'workerUrl' | 'grid' | 'onHostCall'
+  > {
+    if (!this.options.workerUrl || !this.options.grid || !this.options.onHostCall) {
+      throw new Error(
+        'CLIENT projects require workerUrl, grid, and an allow-listed onHostCall router',
+      );
+    }
+    return {
+      workerUrl: this.options.workerUrl,
+      grid: this.options.grid,
+      onHostCall: this.options.onHostCall,
+    };
+  }
+
+  private checkOperation(generation: number): void {
+    if (generation !== this.operationGeneration || this.destroyed) {
+      throw new OperationCancelledError();
+    }
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return (
+      this.options.sleep ??
+      ((delay) => new Promise((resolve) => setTimeout(resolve, delay)))
+    )(ms);
+  }
+
+  private requireProject(): ModStudioProject {
+    if (!this.state.project) throw new Error('No Mod Studio project is open');
+    return this.state.project;
+  }
+
+  private requireFile(
+    ref: ModStudioFileRef,
+  ): ModStudioProjectFile | ModStudioReferenceFile {
+    if (ref.source === 'PROJECT') {
+      const file = this.requireProject().files.find(
+        (entry) =>
+          entry.target === ref.target &&
+          entry.path === normalizeModStudioPath(ref.path),
+      );
+      if (file) return file;
+    } else {
+      const files =
+        ref.source === 'PERSONAL_LIBRARY'
+          ? this.state.personalLibraryFiles
+          : this.state.commonFiles;
+      const file = files.find((entry) =>
+        ref.referenceId
+          ? entry.id === ref.referenceId
+          : entry.path === ref.path && entry.target === ref.target,
+      );
+      if (file) return file;
+    }
+    throw new Error(`File is not loaded: ${ref.source}:${ref.path}`);
+  }
+
+  private assertProjectTarget(
+    project: ModStudioProject,
+    target: ModStudioTarget,
+  ): void {
+    if (!projectTargets(project.kind).includes(target)) {
+      throw new Error(`${project.kind} projects do not have a ${target} target`);
+    }
+  }
+
+  private scope(): { appId: string; gridId: string } {
+    return { appId: this.options.appId, gridId: this.options.gridId };
+  }
+
+  private setRuntime(phase: ModStudioPhase, message: string): void {
+    this.update({ runtime: { phase, message } });
+  }
+
+  private update(patch: Partial<ModStudioState>): void {
+    this.state = { ...this.state, ...patch };
+    for (const listener of this.listeners) listener(this.state);
+  }
+
+  private ensureAlive(): void {
+    if (this.destroyed) throw new Error('ModStudioController is destroyed');
+  }
+}
+
+function projectFileRef(file: ModStudioProjectFile): ModStudioFileRef {
+  return { source: 'PROJECT', target: file.target, path: file.path };
+}
+
+function sameFileRef(a: ModStudioFileRef, b: ModStudioFileRef): boolean {
+  return (
+    a.source === b.source &&
+    a.target === b.target &&
+    a.path === b.path &&
+    a.referenceId === b.referenceId
+  );
+}
+
+function compareProjectFile(a: ModStudioProjectFile, b: ModStudioProjectFile): number {
+  return modStudioFileKey(a.target, a.path).localeCompare(
+    modStudioFileKey(b.target, b.path),
+  );
+}
+
+function moduleNameFor(
+  project: ModStudioProject,
+  target: ModStudioTarget,
+): string {
+  const name =
+    target === 'SERVER'
+      ? project.metadata.serverModuleName
+      : project.metadata.clientModuleName;
+  if (!name?.trim()) {
+    throw new Error(`${target} module name is required in Project settings`);
+  }
+  return name.trim();
+}
+
+function summaryOf(project: ModStudioProject): ModStudioProjectSummary {
+  return {
+    projectId: project.projectId,
+    name: project.metadata.name,
+    kind: project.kind,
+    revisionId: project.revision.id,
+    ...(project.metadata.serverModuleName
+      ? { serverModuleName: project.metadata.serverModuleName }
+      : {}),
+    ...(project.metadata.clientModuleName
+      ? { clientModuleName: project.metadata.clientModuleName }
+      : {}),
+    updatedAt: project.updatedAt,
+  };
+}
+
+function upsertSummary(
+  projects: readonly ModStudioProjectSummary[],
+  next: ModStudioProjectSummary,
+): ModStudioProjectSummary[] {
+  const result = projects.filter((project) => project.projectId !== next.projectId);
+  result.push(next);
+  return result.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function upsertReference(
+  files: readonly ModStudioReferenceFile[],
+  next: ModStudioReferenceFile,
+): ModStudioReferenceFile[] {
+  return [
+    next,
+    ...files.filter(
+      (file) => file.source !== next.source || file.id !== next.id,
+    ),
+  ];
+}
+
+function normalizeUsage(value: ModStudioUsageSnapshot): ModStudioUsageSnapshot {
+  return {
+    hourUnitsUsed: String(value.hourUnitsUsed),
+    dayUnitsUsed: String(value.dayUnitsUsed),
+    unitsPerHour:
+      value.unitsPerHour == null ? null : String(value.unitsPerHour),
+    unitsPerDay: value.unitsPerDay == null ? null : String(value.unitsPerDay),
+    compilesThisHour: value.compilesThisHour,
+    maxCompilesPerHour: value.maxCompilesPerHour,
+    gateStatus: value.gateStatus,
+    gateReason: value.gateReason ?? null,
+  };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

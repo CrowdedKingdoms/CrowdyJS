@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '9.0.0';
+export const VERSION = '10.0.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -456,6 +456,7 @@ export {
   type WaitForCompileOptions,
 } from './domains/compute.js';
 export { PlayerComputeAPI } from './domains/playerCompute.js';
+export { PlayerCodeProjectsAPI } from './domains/playerCodeProjects.js';
 export { PlayerWalletAPI } from './domains/playerWallet.js';
 export { MarketplaceAPI } from './domains/marketplace.js';
 export { PlayerModelAPI } from './domains/playerModel.js';
@@ -491,26 +492,7 @@ export {
   glueDecoder,
   type GlueSab,
 } from './player-runtime/glue-sab.js';
-export {
-  LiveCodingController,
-  type LiveCodingControllerOptions,
-  type LiveCodingStatus,
-  type LiveCodingTarget,
-} from './live-coding/live-coding-controller.js';
-export {
-  mountLiveCoding,
-  type MountLiveCodingOptions,
-  type LiveCodingHandle,
-} from './live-coding/mount.js';
-export {
-  mountLiveCodingIDE,
-  type MountLiveCodingIDEOptions,
-} from './live-coding/ide.js';
-export {
-  PLAYER_CODE_TEMPLATES,
-  templateById,
-  type PlayerCodeTemplate,
-} from './live-coding/templates.js';
+export * from './mod-studio/index.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from

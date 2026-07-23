@@ -65,14 +65,18 @@ test('concurrent Monaco mounts receive isolated model roots', () => {
   repeated.release();
 });
 
-test('default mount awaits package service initialization before Monaco', async () => {
+test('Mod Studio awaits package service initialization before Monaco', async () => {
   const [source, packageJson] = await Promise.all([
-    readFile(new URL('../../src/live-coding/ide.ts', import.meta.url), 'utf8'),
+    readFile(
+      new URL('../../src/mod-studio/monaco-editor.ts', import.meta.url),
+      'utf8',
+    ),
     readFile(new URL('../../package.json', import.meta.url), 'utf8'),
   ]);
   const initializeAt = source.indexOf('await ensureMonacoServicesInitialized()');
   const editorImportAt = source.indexOf(
     "import('@codingame/monaco-vscode-editor-api')",
+    initializeAt,
   );
   assert.ok(initializeAt >= 0 && initializeAt < editorImportAt);
   assert.match(

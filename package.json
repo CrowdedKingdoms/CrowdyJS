@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
-  "version": "9.0.0",
+  "version": "10.0.0",
   "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
@@ -18,9 +18,9 @@
       "import": "./dist/stores/index.js",
       "types": "./dist/stores/index.d.ts"
     },
-    "./live-coding": {
-      "import": "./dist/live-coding/index.js",
-      "types": "./dist/live-coding/index.d.ts"
+    "./mod-studio": {
+      "import": "./dist/mod-studio/index.js",
+      "types": "./dist/mod-studio/index.d.ts"
     }
   },
   "sideEffects": false,
