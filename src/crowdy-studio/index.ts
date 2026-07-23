@@ -1,0 +1,89 @@
+export {
+  CrowdyStudioController,
+  type CrowdyStudioControllerOptions,
+  type CrowdyStudioBroker,
+  type CrowdyStudioInvokeResult,
+  type CrowdyStudioPhase,
+  type CrowdyStudioPolledSurface,
+  type CrowdyStudioRun,
+  type CrowdyStudioRuntimeStatus,
+  type CrowdyStudioPlayerCompute,
+  type CrowdyStudioPlayerWallet,
+  type CrowdyStudioState,
+  type CrowdyStudioStopResult,
+  type CrowdyStudioUsageSnapshot,
+  type CrowdyStudioWalletSnapshot,
+} from './controller.js';
+export {
+  mountCrowdyStudio,
+  type CrowdyStudioHandle,
+  type MountCrowdyStudioOptions,
+} from './mount.js';
+export {
+  CrowdyStudioOfflineError,
+  CrowdyStudioRevisionConflictError,
+  cloneCrowdyStudioProject,
+  crowdyStudioFileKey,
+  crowdyStudioFileUri,
+  normalizeCrowdyStudioPath,
+  projectTargets,
+  type CreateCrowdyStudioProjectInput,
+  type ImportCrowdyStudioReferenceFileInput,
+  type CrowdyStudioFileRef,
+  type CrowdyStudioPairingPreference,
+  type CrowdyStudioProject,
+  type CrowdyStudioProjectFile,
+  type CrowdyStudioProjectKind,
+  type CrowdyStudioProjectMetadata,
+  type CrowdyStudioProjectProvider,
+  type CrowdyStudioProjectRevision,
+  type CrowdyStudioProjectScope,
+  type CrowdyStudioProjectSummary,
+  type CrowdyStudioReferenceFile,
+  type CrowdyStudioSaveState,
+  type CrowdyStudioTarget,
+  type SaveCrowdyStudioLibraryFileInput,
+  type SaveCrowdyStudioProjectInput,
+} from './models.js';
+export {
+  createCrowdyStudioStarterProject,
+  type CrowdyStudioNewProjectOptions,
+} from './starter-projects.js';
+export {
+  parseRustcDiagnostics,
+  type CrowdyStudioDiagnostic,
+  type CrowdyStudioDiagnosticSeverity,
+  type CrowdyStudioDiagnosticSource,
+} from './diagnostics.js';
+export {
+  isCurrentDiagnosticVersion,
+  type MonacoCrowdyStudioEditorOptions,
+} from './monaco-editor.js';
+export {
+  EMBEDDED_PLATFORM_INDEX,
+  MAX_PLATFORM_CRATES,
+  MAX_PLATFORM_CRATE_FIELD_LENGTH,
+  MAX_PLATFORM_INDEX_BYTES,
+  computePlatformIndexContentHash,
+  loadPlatformIndex,
+  type PlatformCrate,
+  type PlatformIndex,
+  type PlatformSymbol,
+  type PlatformSymbolKind,
+} from '../live-coding/platform-index.js';
+export {
+  DEFAULT_VFS_LIMITS,
+  VfsLimitError,
+  VirtualFileSystem,
+  offsetAt,
+  type VirtualDocument,
+  type VirtualFileSystemLimits,
+} from '../live-coding/vfs.js';
+export {
+  WorkerLanguageClient,
+  WorkerMessageReader,
+  WorkerMessageWriter,
+  createDefaultRustLanguageWorker,
+  type LanguageWorkerLike,
+  type WorkerLanguageClientOptions,
+} from '../live-coding/worker-transport.js';

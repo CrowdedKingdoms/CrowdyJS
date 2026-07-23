@@ -223,7 +223,7 @@ export class PlayerComputeAPI {
   /**
    * Fetch a client artifact and decode its bytes to an ArrayBuffer plus the
    * broker inputs (content hash for side-load verification, per-dispatch fuel
-   * budget). Convenience over {@link artifact} for the Mod Studio CLIENT
+   * budget). Convenience over {@link artifact} for the Crowdy Studio CLIENT
    * deploy loop.
    */
   async artifactBytes(

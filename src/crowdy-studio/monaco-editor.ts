@@ -1,12 +1,12 @@
-import type { ModStudioState } from './controller.js';
+import type { CrowdyStudioState } from './controller.js';
 import type {
-  ModStudioEditorAdapter,
-  ModStudioEditorCallbacks,
+  CrowdyStudioEditorAdapter,
+  CrowdyStudioEditorCallbacks,
 } from './editor.js';
 import {
-  modStudioFileUri,
-  type ModStudioFileRef,
-  type ModStudioReferenceFile,
+  crowdyStudioFileUri,
+  type CrowdyStudioFileRef,
+  type CrowdyStudioReferenceFile,
 } from './models.js';
 import {
   isRecord,
@@ -31,7 +31,7 @@ import type {
   WorkerLanguageClient,
 } from '../live-coding/worker-transport.js';
 
-export interface MonacoModStudioEditorOptions {
+export interface MonacoCrowdyStudioEditorOptions {
   editorWorkerFactory?: () => Worker;
   languageWorkerFactory?: () => Worker;
   platformIndex?: PlatformIndex | unknown;
@@ -40,7 +40,7 @@ export interface MonacoModStudioEditorOptions {
 
 interface EditorModel {
   key: string;
-  ref: ModStudioFileRef;
+  ref: CrowdyStudioFileRef;
   model: {
     uri: { toString(): string };
     getValue(): string;
@@ -60,11 +60,11 @@ let rustLanguagesRegistered = false;
  * loaded project/reference file is opened in the worker; project URIs include
  * `/server/` or `/client/`, so duplicate Cargo and lib paths never collide.
  */
-export async function createMonacoModStudioEditor(
+export async function createMonacoCrowdyStudioEditor(
   host: HTMLElement,
-  options: MonacoModStudioEditorOptions,
-  callbacks: ModStudioEditorCallbacks,
-): Promise<ModStudioEditorAdapter> {
+  options: MonacoCrowdyStudioEditorOptions,
+  callbacks: CrowdyStudioEditorCallbacks,
+): Promise<CrowdyStudioEditorAdapter> {
   if (!options.languageWorkerFactory && typeof Worker === 'undefined') {
     throw new Error('Worker is unavailable');
   }
@@ -89,7 +89,7 @@ export async function createMonacoModStudioEditor(
       >
     | null = null;
   const models = new Map<string, EditorModel>();
-  const localDiagnostics = new Map<string, ModStudioState['localDiagnostics']>();
+  const localDiagnostics = new Map<string, CrowdyStudioState['localDiagnostics']>();
   const disposables: Disposable[] = [];
 
   try {
@@ -188,7 +188,7 @@ export async function createMonacoModStudioEditor(
 
     await languageClient.initialize({
       processId: null,
-      clientInfo: { name: 'CrowdyJS Mod Studio', version: '1' },
+      clientInfo: { name: 'CrowdyJS Crowdy Studio', version: '1' },
       rootUri: workspaceUri,
       capabilities: {
         general: { positionEncodings: ['utf-16'] },
@@ -292,7 +292,7 @@ export async function createMonacoModStudioEditor(
 
     let disposed = false;
     let previousActiveKey: string | null = null;
-    const adapter: ModStudioEditorAdapter = {
+    const adapter: CrowdyStudioEditorAdapter = {
       mode: 'monaco',
       sync(state) {
         if (disposed || !editor) return;
@@ -440,18 +440,18 @@ export async function createMonacoModStudioEditor(
 
 interface CollectedFile {
   key: string;
-  ref: ModStudioFileRef;
+  ref: CrowdyStudioFileRef;
   content: string;
   uri: string;
 }
 
 function collectFiles(
-  state: ModStudioState,
+  state: CrowdyStudioState,
   workspaceUri: string,
 ): CollectedFile[] {
   const projectFiles =
     state.project?.files.map((file) => {
-      const ref: ModStudioFileRef = {
+      const ref: CrowdyStudioFileRef = {
         source: 'PROJECT',
         target: file.target,
         path: file.path,
@@ -460,7 +460,7 @@ function collectFiles(
         key: keyForRef(ref),
         ref,
         content: file.content,
-        uri: modStudioFileUri(workspaceUri, file.target, file.path),
+        uri: crowdyStudioFileUri(workspaceUri, file.target, file.path),
       };
     }) ?? [];
   return [
@@ -474,9 +474,9 @@ function collectFiles(
 
 function collectReference(
   workspaceUri: string,
-  file: ModStudioReferenceFile,
+  file: CrowdyStudioReferenceFile,
 ): CollectedFile {
-  const ref: ModStudioFileRef = {
+  const ref: CrowdyStudioFileRef = {
     source: file.source,
     target: file.target,
     path: file.path,
@@ -497,7 +497,7 @@ function collectReference(
   };
 }
 
-function keyForRef(ref: ModStudioFileRef): string {
+function keyForRef(ref: CrowdyStudioFileRef): string {
   return [
     ref.source,
     ref.target ?? 'SHARED',

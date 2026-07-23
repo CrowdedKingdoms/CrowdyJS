@@ -5,31 +5,31 @@ import {
 } from '../player-runtime/player-code-broker.js';
 import type { PlayerComputeAPI } from '../domains/playerCompute.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
-import { parseRustcDiagnostics, type ModStudioDiagnostic } from './diagnostics.js';
+import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
 import {
-  cloneModStudioProject,
-  modStudioFileKey,
-  normalizeModStudioPath,
+  cloneCrowdyStudioProject,
+  crowdyStudioFileKey,
+  normalizeCrowdyStudioPath,
   projectTargets,
-  ModStudioOfflineError,
-  ModStudioRevisionConflictError,
-  type ModStudioFileRef,
-  type ModStudioPairingPreference,
-  type ModStudioProject,
-  type ModStudioProjectFile,
-  type ModStudioProjectMetadata,
-  type ModStudioProjectProvider,
-  type ModStudioProjectSummary,
-  type ModStudioReferenceFile,
-  type ModStudioSaveState,
-  type ModStudioTarget,
+  CrowdyStudioOfflineError,
+  CrowdyStudioRevisionConflictError,
+  type CrowdyStudioFileRef,
+  type CrowdyStudioPairingPreference,
+  type CrowdyStudioProject,
+  type CrowdyStudioProjectFile,
+  type CrowdyStudioProjectMetadata,
+  type CrowdyStudioProjectProvider,
+  type CrowdyStudioProjectSummary,
+  type CrowdyStudioReferenceFile,
+  type CrowdyStudioSaveState,
+  type CrowdyStudioTarget,
 } from './models.js';
 import {
-  createModStudioStarterProject,
-  type ModStudioNewProjectOptions,
+  createCrowdyStudioStarterProject,
+  type CrowdyStudioNewProjectOptions,
 } from './starter-projects.js';
 
-export type ModStudioPhase =
+export type CrowdyStudioPhase =
   | 'IDLE'
   | 'TESTING_DRAFT'
   | 'DEPLOYING_LIVE'
@@ -42,15 +42,15 @@ export type ModStudioPhase =
   | 'PARTIAL_FAILURE'
   | 'ERROR';
 
-export type ModStudioPolledSurface = 'runs' | 'logs' | 'usage';
+export type CrowdyStudioPolledSurface = 'runs' | 'logs' | 'usage';
 
-export interface ModStudioRuntimeStatus {
-  phase: ModStudioPhase;
-  target?: ModStudioTarget;
+export interface CrowdyStudioRuntimeStatus {
+  phase: CrowdyStudioPhase;
+  target?: CrowdyStudioTarget;
   message?: string;
 }
 
-export interface ModStudioUsageSnapshot {
+export interface CrowdyStudioUsageSnapshot {
   hourUnitsUsed: string;
   dayUnitsUsed: string;
   unitsPerHour: string | null;
@@ -61,12 +61,12 @@ export interface ModStudioUsageSnapshot {
   gateReason: string | null;
 }
 
-export interface ModStudioWalletSnapshot {
+export interface CrowdyStudioWalletSnapshot {
   balanceCents: string;
   currency: string;
 }
 
-export interface ModStudioRun {
+export interface CrowdyStudioRun {
   runId: string;
   moduleName: string;
   triggerSource: string;
@@ -77,34 +77,34 @@ export interface ModStudioRun {
   errorMessage?: string | null;
 }
 
-export interface ModStudioInvokeResult {
+export interface CrowdyStudioInvokeResult {
   resultBase64?: string | null;
   resultJson?: string | null;
   fuelUsed?: string;
   durationUs?: number;
 }
 
-export interface ModStudioState {
-  projects: readonly ModStudioProjectSummary[];
-  project: ModStudioProject | null;
-  personalLibraryFiles: readonly ModStudioReferenceFile[];
-  commonFiles: readonly ModStudioReferenceFile[];
-  openFiles: readonly ModStudioFileRef[];
-  activeFile: ModStudioFileRef | null;
-  saveState: ModStudioSaveState;
+export interface CrowdyStudioState {
+  projects: readonly CrowdyStudioProjectSummary[];
+  project: CrowdyStudioProject | null;
+  personalLibraryFiles: readonly CrowdyStudioReferenceFile[];
+  commonFiles: readonly CrowdyStudioReferenceFile[];
+  openFiles: readonly CrowdyStudioFileRef[];
+  activeFile: CrowdyStudioFileRef | null;
+  saveState: CrowdyStudioSaveState;
   saveMessage?: string;
-  runtime: ModStudioRuntimeStatus;
+  runtime: CrowdyStudioRuntimeStatus;
   buildOutput: string;
-  authoritativeDiagnostics: readonly ModStudioDiagnostic[];
-  localDiagnostics: readonly ModStudioDiagnostic[];
-  runs: readonly ModStudioRun[];
-  logs: readonly ModStudioRun[];
-  usage: ModStudioUsageSnapshot | null;
-  wallet: ModStudioWalletSnapshot | null;
-  invokeResult: ModStudioInvokeResult | null;
+  authoritativeDiagnostics: readonly CrowdyStudioDiagnostic[];
+  localDiagnostics: readonly CrowdyStudioDiagnostic[];
+  runs: readonly CrowdyStudioRun[];
+  logs: readonly CrowdyStudioRun[];
+  usage: CrowdyStudioUsageSnapshot | null;
+  wallet: CrowdyStudioWalletSnapshot | null;
+  invokeResult: CrowdyStudioInvokeResult | null;
 }
 
-export type ModStudioPlayerCompute = Pick<
+export type CrowdyStudioPlayerCompute = Pick<
   PlayerComputeAPI,
   | 'deploy'
   | 'versions'
@@ -117,17 +117,17 @@ export type ModStudioPlayerCompute = Pick<
   | 'invoke'
 >;
 
-export type ModStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
+export type CrowdyStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
 
-export interface ModStudioBroker {
+export interface CrowdyStudioBroker {
   start(bytes: ArrayBuffer): Promise<void>;
   stop(): void;
 }
 
-export interface ModStudioControllerOptions {
-  projectProvider: ModStudioProjectProvider;
-  playerCompute: ModStudioPlayerCompute;
-  playerWallet?: ModStudioPlayerWallet;
+export interface CrowdyStudioControllerOptions {
+  projectProvider: CrowdyStudioProjectProvider;
+  playerCompute: CrowdyStudioPlayerCompute;
+  playerWallet?: CrowdyStudioPlayerWallet;
   appId: string;
   gridId: string;
   initialProjectId?: string;
@@ -140,7 +140,7 @@ export interface ModStudioControllerOptions {
   onPresentation?: PlayerCodeBrokerOptions['onPresentation'];
   /** Host-visible effective permissions; server authorization remains final. */
   targetPermissions?: Partial<
-    Record<ModStudioTarget, { canWrite: boolean; canRun: boolean }>
+    Record<CrowdyStudioTarget, { canWrite: boolean; canRun: boolean }>
   >;
   clientTickIntervalMs?: number;
   autosaveMs?: number;
@@ -149,19 +149,19 @@ export interface ModStudioControllerOptions {
   compilePollLimit?: number;
   monitorPollMs?: number;
   sleep?: (ms: number) => Promise<void>;
-  brokerFactory?: (options: PlayerCodeBrokerOptions) => ModStudioBroker;
+  brokerFactory?: (options: PlayerCodeBrokerOptions) => CrowdyStudioBroker;
   isOnline?: () => boolean;
-  onStateChange?: (state: ModStudioState) => void;
+  onStateChange?: (state: CrowdyStudioState) => void;
 }
 
-export interface ModStudioStopResult {
+export interface CrowdyStudioStopResult {
   serverStopped: boolean | null;
   clientStopped: boolean | null;
   failures: string[];
 }
 
 interface CompiledTarget {
-  target: ModStudioTarget;
+  target: CrowdyStudioTarget;
   name: string;
   versionId: string;
 }
@@ -169,12 +169,12 @@ interface CompiledTarget {
 class OperationCancelledError extends Error {}
 
 /**
- * Headless project-first Mod Studio driver. It owns optimistic project saves,
+ * Headless project-first Crowdy Studio driver. It owns optimistic project saves,
  * file CRUD, deployment ordering, runtime polling, and client hot swaps; the
  * DOM mount is only a view over this state.
  */
-export class ModStudioController {
-  private state: ModStudioState = {
+export class CrowdyStudioController {
+  private state: CrowdyStudioState = {
     projects: [],
     project: null,
     personalLibraryFiles: [],
@@ -192,39 +192,39 @@ export class ModStudioController {
     wallet: null,
     invokeResult: null,
   };
-  private readonly listeners = new Set<(state: ModStudioState) => void>();
+  private readonly listeners = new Set<(state: CrowdyStudioState) => void>();
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private savePromise: Promise<boolean> | null = null;
   private editGeneration = 0;
   private persistedGeneration = 0;
-  private conflictRemote: ModStudioProject | null = null;
-  private broker: ModStudioBroker | null = null;
+  private conflictRemote: CrowdyStudioProject | null = null;
+  private broker: CrowdyStudioBroker | null = null;
   private operationGeneration = 0;
-  private readonly visibleSurfaces = new Set<ModStudioPolledSurface>();
+  private readonly visibleSurfaces = new Set<CrowdyStudioPolledSurface>();
   private readonly surfaceTimers = new Map<
-    ModStudioPolledSurface,
+    CrowdyStudioPolledSurface,
     ReturnType<typeof setTimeout>
   >();
   private pageVisible = true;
   private destroyed = false;
 
-  constructor(private readonly options: ModStudioControllerOptions) {
+  constructor(private readonly options: CrowdyStudioControllerOptions) {
     if (options.onStateChange) this.listeners.add(options.onStateChange);
   }
 
-  getState(): ModStudioState {
+  getState(): CrowdyStudioState {
     return this.state;
   }
 
-  subscribe(listener: (state: ModStudioState) => void): () => void {
+  subscribe(listener: (state: CrowdyStudioState) => void): () => void {
     this.listeners.add(listener);
     listener(this.state);
     return () => this.listeners.delete(listener);
   }
 
   canTarget(
-    target: ModStudioTarget,
+    target: CrowdyStudioTarget,
     action: 'write' | 'run',
   ): boolean {
     const permission = this.options.targetPermissions?.[target];
@@ -239,9 +239,9 @@ export class ModStudioController {
     this.ensureAlive();
     const scope = this.scope();
     let loaded: [
-      ModStudioProjectSummary[],
-      ModStudioReferenceFile[],
-      ModStudioReferenceFile[],
+      CrowdyStudioProjectSummary[],
+      CrowdyStudioReferenceFile[],
+      CrowdyStudioReferenceFile[],
     ];
     try {
       loaded = await Promise.all([
@@ -251,7 +251,7 @@ export class ModStudioController {
       ]);
     } catch (error) {
       if (
-        error instanceof ModStudioOfflineError ||
+        error instanceof CrowdyStudioOfflineError ||
         this.options.isOnline?.() === false
       ) {
         this.update({
@@ -278,13 +278,13 @@ export class ModStudioController {
   }
 
   async createProject(
-    options: Omit<ModStudioNewProjectOptions, 'appId' | 'gridId'>,
-  ): Promise<ModStudioProject> {
+    options: Omit<CrowdyStudioNewProjectOptions, 'appId' | 'gridId'>,
+  ): Promise<CrowdyStudioProject> {
     this.ensureAlive();
     if (this.state.project && !(await this.saveNow())) {
       throw new Error('Resolve or retry the current project save before creating another');
     }
-    const input = createModStudioStarterProject({
+    const input = createCrowdyStudioStarterProject({
       ...options,
       ...this.scope(),
     });
@@ -314,7 +314,7 @@ export class ModStudioController {
     this.installProject(project);
   }
 
-  private installProject(project: ModStudioProject): void {
+  private installProject(project: CrowdyStudioProject): void {
     ++this.operationGeneration;
     this.stopSurfacePolling();
     this.broker?.stop();
@@ -323,7 +323,7 @@ export class ModStudioController {
     this.editGeneration = 0;
     this.persistedGeneration = 0;
     this.conflictRemote = null;
-    const clone = cloneModStudioProject(project);
+    const clone = cloneCrowdyStudioProject(project);
     const preferred =
       clone.files.find((file) => file.path === 'src/lib.rs') ?? clone.files[0];
     const activeFile = preferred ? projectFileRef(preferred) : null;
@@ -344,7 +344,7 @@ export class ModStudioController {
     this.restartVisibleSurfacePolling();
   }
 
-  openFile(ref: ModStudioFileRef): void {
+  openFile(ref: CrowdyStudioFileRef): void {
     this.requireFile(ref);
     const exists = this.state.openFiles.some((entry) => sameFileRef(entry, ref));
     this.update({
@@ -353,7 +353,7 @@ export class ModStudioController {
     });
   }
 
-  closeFile(ref: ModStudioFileRef): void {
+  closeFile(ref: CrowdyStudioFileRef): void {
     const openFiles = this.state.openFiles.filter(
       (entry) => !sameFileRef(entry, ref),
     );
@@ -364,14 +364,14 @@ export class ModStudioController {
     this.update({ openFiles, activeFile });
   }
 
-  fileContent(ref: ModStudioFileRef): string {
+  fileContent(ref: CrowdyStudioFileRef): string {
     return this.requireFile(ref).content;
   }
 
-  addFile(target: ModStudioTarget, path: string, content = ''): void {
+  addFile(target: CrowdyStudioTarget, path: string, content = ''): void {
     const project = this.requireProject();
     this.assertProjectTarget(project, target);
-    const normalized = normalizeModStudioPath(path);
+    const normalized = normalizeCrowdyStudioPath(path);
     if (
       project.files.some(
         (file) => file.target === target && file.path === normalized,
@@ -381,7 +381,7 @@ export class ModStudioController {
     }
     project.files.push({ target, path: normalized, content });
     project.files.sort(compareProjectFile);
-    const ref: ModStudioFileRef = {
+    const ref: CrowdyStudioFileRef = {
       source: 'PROJECT',
       target,
       path: normalized,
@@ -390,10 +390,10 @@ export class ModStudioController {
     this.openFile(ref);
   }
 
-  renameFile(target: ModStudioTarget, path: string, nextPath: string): void {
+  renameFile(target: CrowdyStudioTarget, path: string, nextPath: string): void {
     const project = this.requireProject();
-    const normalized = normalizeModStudioPath(path);
-    const renamed = normalizeModStudioPath(nextPath);
+    const normalized = normalizeCrowdyStudioPath(path);
+    const renamed = normalizeCrowdyStudioPath(nextPath);
     const file = project.files.find(
       (entry) => entry.target === target && entry.path === normalized,
     );
@@ -407,7 +407,7 @@ export class ModStudioController {
     }
     file.path = renamed;
     project.files.sort(compareProjectFile);
-    const replaceRef = (ref: ModStudioFileRef): ModStudioFileRef =>
+    const replaceRef = (ref: CrowdyStudioFileRef): CrowdyStudioFileRef =>
       ref.source === 'PROJECT' &&
       ref.target === target &&
       ref.path === normalized
@@ -422,9 +422,9 @@ export class ModStudioController {
     this.markEdited();
   }
 
-  deleteFile(target: ModStudioTarget, path: string): void {
+  deleteFile(target: CrowdyStudioTarget, path: string): void {
     const project = this.requireProject();
-    const normalized = normalizeModStudioPath(path);
+    const normalized = normalizeCrowdyStudioPath(path);
     const index = project.files.findIndex(
       (entry) => entry.target === target && entry.path === normalized,
     );
@@ -435,7 +435,7 @@ export class ModStudioController {
   }
 
   async importReferenceFile(
-    reference: ModStudioReferenceFile,
+    reference: CrowdyStudioReferenceFile,
     destinationPath = reference.path,
   ): Promise<void> {
     this.requireProject();
@@ -458,20 +458,20 @@ export class ModStudioController {
     const imported = saved.files.find(
       (file) =>
         file.target === reference.target &&
-        file.path === normalizeModStudioPath(destinationPath),
+        file.path === normalizeCrowdyStudioPath(destinationPath),
     );
     if (imported) this.openFile(projectFileRef(imported));
   }
 
   async saveProjectFileToLibrary(
-    target: ModStudioTarget,
+    target: CrowdyStudioTarget,
     path: string,
     title?: string,
-  ): Promise<ModStudioReferenceFile> {
+  ): Promise<CrowdyStudioReferenceFile> {
     const file = this.requireProject().files.find(
       (entry) =>
         entry.target === target &&
-        entry.path === normalizeModStudioPath(path),
+        entry.path === normalizeCrowdyStudioPath(path),
     );
     if (!file) throw new Error(`${target}:${path} does not exist`);
     const saved = await this.options.projectProvider.savePersonalLibraryFile({
@@ -490,9 +490,9 @@ export class ModStudioController {
     return saved;
   }
 
-  updateFile(target: ModStudioTarget, path: string, content: string): void {
+  updateFile(target: CrowdyStudioTarget, path: string, content: string): void {
     const project = this.requireProject();
-    const normalized = normalizeModStudioPath(path);
+    const normalized = normalizeCrowdyStudioPath(path);
     const file = project.files.find(
       (entry) => entry.target === target && entry.path === normalized,
     );
@@ -505,7 +505,7 @@ export class ModStudioController {
   updateSettings(
     patch: Partial<
       Pick<
-        ModStudioProjectMetadata,
+        CrowdyStudioProjectMetadata,
         | 'name'
         | 'description'
         | 'serverModuleName'
@@ -524,11 +524,11 @@ export class ModStudioController {
     this.markEdited();
   }
 
-  setPairingPreference(preference: ModStudioPairingPreference): void {
+  setPairingPreference(preference: CrowdyStudioPairingPreference): void {
     this.updateSettings({ pairingPreference: preference });
   }
 
-  setLocalDiagnostics(diagnostics: readonly ModStudioDiagnostic[]): void {
+  setLocalDiagnostics(diagnostics: readonly CrowdyStudioDiagnostic[]): void {
     this.update({ localDiagnostics: [...diagnostics] });
   }
 
@@ -673,8 +673,8 @@ export class ModStudioController {
   }
 
   private async compileTarget(
-    project: ModStudioProject,
-    target: ModStudioTarget,
+    project: CrowdyStudioProject,
+    target: CrowdyStudioTarget,
     draft: boolean,
     operation: number,
   ): Promise<CompiledTarget | null> {
@@ -748,7 +748,7 @@ export class ModStudioController {
     return null;
   }
 
-  private recordBuild(target: ModStudioTarget, log: string): void {
+  private recordBuild(target: CrowdyStudioTarget, log: string): void {
     const section = `## ${target}\n${log || 'Compiled successfully.'}`;
     const authoritativeDiagnostics = [
       ...this.state.authoritativeDiagnostics.filter(
@@ -819,7 +819,7 @@ export class ModStudioController {
     previous?.stop();
   }
 
-  async stopProject(): Promise<ModStudioStopResult> {
+  async stopProject(): Promise<CrowdyStudioStopResult> {
     const project = this.requireProject();
     ++this.operationGeneration;
     this.stopSurfacePolling();
@@ -867,7 +867,7 @@ export class ModStudioController {
     return result;
   }
 
-  async invoke(exportName: string, paramsJson?: string): Promise<ModStudioInvokeResult> {
+  async invoke(exportName: string, paramsJson?: string): Promise<CrowdyStudioInvokeResult> {
     const project = this.requireProject();
     if (!projectTargets(project.kind).includes('SERVER')) {
       throw new Error('Invoke requires a SERVER target');
@@ -882,7 +882,7 @@ export class ModStudioController {
     return result;
   }
 
-  setSurfaceVisible(surface: ModStudioPolledSurface, visible: boolean): void {
+  setSurfaceVisible(surface: CrowdyStudioPolledSurface, visible: boolean): void {
     if (visible) {
       this.visibleSurfaces.add(surface);
       if (this.pageVisible) {
@@ -902,7 +902,7 @@ export class ModStudioController {
     else this.stopSurfacePolling();
   }
 
-  async refreshSurface(surface: ModStudioPolledSurface): Promise<void> {
+  async refreshSurface(surface: CrowdyStudioPolledSurface): Promise<void> {
     if (!this.state.project) return;
     const serverName = this.state.project.metadata.serverModuleName;
     if (surface === 'runs') {
@@ -948,7 +948,7 @@ export class ModStudioController {
     while (this.persistedGeneration !== this.editGeneration) {
       const project = this.requireProject();
       const savingGeneration = this.editGeneration;
-      const snapshot = cloneModStudioProject(project);
+      const snapshot = cloneCrowdyStudioProject(project);
       this.update({ saveState: 'SAVING', saveMessage: undefined });
       try {
         const saved = await this.options.projectProvider.saveProject({
@@ -961,7 +961,7 @@ export class ModStudioController {
         this.persistedGeneration = savingGeneration;
         if (this.state.project?.projectId !== saved.projectId) return true;
         if (this.editGeneration === savingGeneration) {
-          this.state.project = cloneModStudioProject(saved);
+          this.state.project = cloneCrowdyStudioProject(saved);
         } else {
           // Preserve newer local edits while advancing the revision precondition.
           this.state.project.revision = { ...saved.revision };
@@ -974,13 +974,13 @@ export class ModStudioController {
           saveMessage: undefined,
         });
       } catch (error) {
-        if (error instanceof ModStudioRevisionConflictError) {
+        if (error instanceof CrowdyStudioRevisionConflictError) {
           this.conflictRemote = error.remoteProject ?? null;
           this.update({ saveState: 'CONFLICT', saveMessage: error.message });
           return false;
         }
         if (
-          error instanceof ModStudioOfflineError ||
+          error instanceof CrowdyStudioOfflineError ||
           this.options.isOnline?.() === false
         ) {
           this.update({ saveState: 'OFFLINE', saveMessage: errorMessage(error) });
@@ -1014,7 +1014,7 @@ export class ModStudioController {
     }, this.options.retryMs ?? 3_000);
   }
 
-  private scheduleSurfacePoll(surface: ModStudioPolledSurface): void {
+  private scheduleSurfacePoll(surface: CrowdyStudioPolledSurface): void {
     this.clearSurfaceTimer(surface);
     if (
       !this.pageVisible ||
@@ -1045,7 +1045,7 @@ export class ModStudioController {
     this.surfaceTimers.clear();
   }
 
-  private clearSurfaceTimer(surface: ModStudioPolledSurface): void {
+  private clearSurfaceTimer(surface: CrowdyStudioPolledSurface): void {
     const timer = this.surfaceTimers.get(surface);
     if (timer) clearTimeout(timer);
     this.surfaceTimers.delete(surface);
@@ -1092,19 +1092,19 @@ export class ModStudioController {
     )(ms);
   }
 
-  private requireProject(): ModStudioProject {
-    if (!this.state.project) throw new Error('No Mod Studio project is open');
+  private requireProject(): CrowdyStudioProject {
+    if (!this.state.project) throw new Error('No Crowdy Studio project is open');
     return this.state.project;
   }
 
   private requireFile(
-    ref: ModStudioFileRef,
-  ): ModStudioProjectFile | ModStudioReferenceFile {
+    ref: CrowdyStudioFileRef,
+  ): CrowdyStudioProjectFile | CrowdyStudioReferenceFile {
     if (ref.source === 'PROJECT') {
       const file = this.requireProject().files.find(
         (entry) =>
           entry.target === ref.target &&
-          entry.path === normalizeModStudioPath(ref.path),
+          entry.path === normalizeCrowdyStudioPath(ref.path),
       );
       if (file) return file;
     } else {
@@ -1123,8 +1123,8 @@ export class ModStudioController {
   }
 
   private assertProjectTarget(
-    project: ModStudioProject,
-    target: ModStudioTarget,
+    project: CrowdyStudioProject,
+    target: CrowdyStudioTarget,
   ): void {
     if (!projectTargets(project.kind).includes(target)) {
       throw new Error(`${project.kind} projects do not have a ${target} target`);
@@ -1135,25 +1135,25 @@ export class ModStudioController {
     return { appId: this.options.appId, gridId: this.options.gridId };
   }
 
-  private setRuntime(phase: ModStudioPhase, message: string): void {
+  private setRuntime(phase: CrowdyStudioPhase, message: string): void {
     this.update({ runtime: { phase, message } });
   }
 
-  private update(patch: Partial<ModStudioState>): void {
+  private update(patch: Partial<CrowdyStudioState>): void {
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener(this.state);
   }
 
   private ensureAlive(): void {
-    if (this.destroyed) throw new Error('ModStudioController is destroyed');
+    if (this.destroyed) throw new Error('CrowdyStudioController is destroyed');
   }
 }
 
-function projectFileRef(file: ModStudioProjectFile): ModStudioFileRef {
+function projectFileRef(file: CrowdyStudioProjectFile): CrowdyStudioFileRef {
   return { source: 'PROJECT', target: file.target, path: file.path };
 }
 
-function sameFileRef(a: ModStudioFileRef, b: ModStudioFileRef): boolean {
+function sameFileRef(a: CrowdyStudioFileRef, b: CrowdyStudioFileRef): boolean {
   return (
     a.source === b.source &&
     a.target === b.target &&
@@ -1162,15 +1162,15 @@ function sameFileRef(a: ModStudioFileRef, b: ModStudioFileRef): boolean {
   );
 }
 
-function compareProjectFile(a: ModStudioProjectFile, b: ModStudioProjectFile): number {
-  return modStudioFileKey(a.target, a.path).localeCompare(
-    modStudioFileKey(b.target, b.path),
+function compareProjectFile(a: CrowdyStudioProjectFile, b: CrowdyStudioProjectFile): number {
+  return crowdyStudioFileKey(a.target, a.path).localeCompare(
+    crowdyStudioFileKey(b.target, b.path),
   );
 }
 
 function moduleNameFor(
-  project: ModStudioProject,
-  target: ModStudioTarget,
+  project: CrowdyStudioProject,
+  target: CrowdyStudioTarget,
 ): string {
   const name =
     target === 'SERVER'
@@ -1182,7 +1182,7 @@ function moduleNameFor(
   return name.trim();
 }
 
-function summaryOf(project: ModStudioProject): ModStudioProjectSummary {
+function summaryOf(project: CrowdyStudioProject): CrowdyStudioProjectSummary {
   return {
     projectId: project.projectId,
     name: project.metadata.name,
@@ -1199,18 +1199,18 @@ function summaryOf(project: ModStudioProject): ModStudioProjectSummary {
 }
 
 function upsertSummary(
-  projects: readonly ModStudioProjectSummary[],
-  next: ModStudioProjectSummary,
-): ModStudioProjectSummary[] {
+  projects: readonly CrowdyStudioProjectSummary[],
+  next: CrowdyStudioProjectSummary,
+): CrowdyStudioProjectSummary[] {
   const result = projects.filter((project) => project.projectId !== next.projectId);
   result.push(next);
   return result.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 function upsertReference(
-  files: readonly ModStudioReferenceFile[],
-  next: ModStudioReferenceFile,
-): ModStudioReferenceFile[] {
+  files: readonly CrowdyStudioReferenceFile[],
+  next: CrowdyStudioReferenceFile,
+): CrowdyStudioReferenceFile[] {
   return [
     next,
     ...files.filter(
@@ -1219,7 +1219,7 @@ function upsertReference(
   ];
 }
 
-function normalizeUsage(value: ModStudioUsageSnapshot): ModStudioUsageSnapshot {
+function normalizeUsage(value: CrowdyStudioUsageSnapshot): CrowdyStudioUsageSnapshot {
   return {
     hourUnitsUsed: String(value.hourUnitsUsed),
     dayUnitsUsed: String(value.dayUnitsUsed),

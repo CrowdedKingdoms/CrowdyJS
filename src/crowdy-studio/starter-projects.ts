@@ -1,29 +1,29 @@
 import {
   projectTargets,
-  type CreateModStudioProjectInput,
-  type ModStudioProjectFile,
-  type ModStudioProjectKind,
-  type ModStudioProjectMetadata,
-  type ModStudioTarget,
+  type CreateCrowdyStudioProjectInput,
+  type CrowdyStudioProjectFile,
+  type CrowdyStudioProjectKind,
+  type CrowdyStudioProjectMetadata,
+  type CrowdyStudioTarget,
 } from './models.js';
 
 const SDK_VERSION = '0.1.5';
 
-export interface ModStudioNewProjectOptions {
+export interface CrowdyStudioNewProjectOptions {
   appId: string;
   gridId: string;
   name: string;
-  kind: ModStudioProjectKind;
+  kind: CrowdyStudioProjectKind;
   description?: string;
 }
 
 /** Create a compile-oriented starter without introducing a raw JSON source map. */
-export function createModStudioStarterProject(
-  options: ModStudioNewProjectOptions,
-): CreateModStudioProjectInput {
+export function createCrowdyStudioStarterProject(
+  options: CrowdyStudioNewProjectOptions,
+): CreateCrowdyStudioProjectInput {
   const base = moduleName(options.name);
   const targets = projectTargets(options.kind);
-  const metadata: ModStudioProjectMetadata = {
+  const metadata: CrowdyStudioProjectMetadata = {
     name: options.name.trim() || 'Untitled mod',
     ...(options.description?.trim()
       ? { description: options.description.trim() }
@@ -50,9 +50,9 @@ export function createModStudioStarterProject(
 }
 
 function starterFiles(
-  target: ModStudioTarget,
+  target: CrowdyStudioTarget,
   name: string,
-): ModStudioProjectFile[] {
+): CrowdyStudioProjectFile[] {
   return [
     {
       target,
@@ -90,7 +90,7 @@ fn on_tick(_dt_ms: u32) {
 }
 
 fn on_invoke(payload: &[u8]) -> Vec<u8> {
-    // Called by Mod Studio's Invoke panel or an allowed game caller.
+    // Called by Crowdy Studio's Invoke panel or an allowed game caller.
     payload.to_vec()
 }
 

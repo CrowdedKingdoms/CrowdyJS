@@ -65,10 +65,10 @@ test('concurrent Monaco mounts receive isolated model roots', () => {
   repeated.release();
 });
 
-test('Mod Studio awaits package service initialization before Monaco', async () => {
+test('Crowdy Studio awaits package service initialization before Monaco', async () => {
   const [source, packageJson] = await Promise.all([
     readFile(
-      new URL('../../src/mod-studio/monaco-editor.ts', import.meta.url),
+      new URL('../../src/crowdy-studio/monaco-editor.ts', import.meta.url),
       'utf8',
     ),
     readFile(new URL('../../package.json', import.meta.url), 'utf8'),

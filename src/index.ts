@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '10.0.0';
+export const VERSION = '11.0.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -456,7 +456,7 @@ export {
   type WaitForCompileOptions,
 } from './domains/compute.js';
 export { PlayerComputeAPI } from './domains/playerCompute.js';
-export { PlayerCodeProjectsAPI } from './domains/playerCodeProjects.js';
+export { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 export { PlayerWalletAPI } from './domains/playerWallet.js';
 export { MarketplaceAPI } from './domains/marketplace.js';
 export { PlayerModelAPI } from './domains/playerModel.js';
@@ -492,7 +492,7 @@ export {
   glueDecoder,
   type GlueSab,
 } from './player-runtime/glue-sab.js';
-export * from './mod-studio/index.js';
+export * from './crowdy-studio/index.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from

@@ -7,82 +7,84 @@ import {
   CrowdyTimeoutError,
 } from '../errors.js';
 import {
-  ModStudioOfflineError,
-  ModStudioRevisionConflictError,
-  normalizeModStudioPath,
-  type CreateModStudioProjectInput,
-  type ImportModStudioReferenceFileInput,
-  type ModStudioPairingPreference,
-  type ModStudioProject,
-  type ModStudioProjectKind,
-  type ModStudioProjectProvider,
-  type ModStudioProjectScope,
-  type ModStudioProjectSummary,
-  type ModStudioReferenceFile,
-  type SaveModStudioLibraryFileInput,
-  type SaveModStudioProjectInput,
-} from '../mod-studio/models.js';
+  CrowdyStudioOfflineError,
+  CrowdyStudioRevisionConflictError,
+  normalizeCrowdyStudioPath,
+  type CreateCrowdyStudioProjectInput,
+  type ImportCrowdyStudioReferenceFileInput,
+  type CrowdyStudioPairingPreference,
+  type CrowdyStudioProject,
+  type CrowdyStudioProjectKind,
+  type CrowdyStudioProjectProvider,
+  type CrowdyStudioProjectScope,
+  type CrowdyStudioProjectSummary,
+  type CrowdyStudioReferenceFile,
+  type SaveCrowdyStudioLibraryFileInput,
+  type SaveCrowdyStudioProjectInput,
+} from '../crowdy-studio/models.js';
 import {
-  PlayerCodeCommonFilesDocument,
-  PlayerCodeImportSource,
-  PlayerCodeLibraryFilesDocument,
-  PlayerCodeLibrarySaveDocument,
-  PlayerCodePairingPreference,
-  PlayerCodeProjectCreateDocument,
-  PlayerCodeProjectDocument,
-  PlayerCodeProjectImportFileDocument,
-  PlayerCodeProjectSaveDocument,
-  PlayerCodeProjectsDocument,
-  PlayerCodeTarget,
-  type PlayerCodeCommonFilesQuery,
-  type PlayerCodeLibraryFilesQuery,
-  type PlayerCodeProjectFieldsFragment,
-  type PlayerCodeProjectsQuery,
+  CrowdyStudioCommonFilesDocument,
+  CrowdyStudioImportSource,
+  CrowdyStudioLibraryFilesDocument,
+  CrowdyStudioLibrarySaveDocument,
+  CrowdyStudioPairingPreference as CrowdyStudioPairingPreferenceEnum,
+  CrowdyStudioProjectCreateDocument,
+  CrowdyStudioProjectDocument,
+  CrowdyStudioProjectImportFileDocument,
+  CrowdyStudioProjectSaveDocument,
+  CrowdyStudioProjectsDocument,
+  CrowdyStudioTarget,
+  type CrowdyStudioCommonFilesQuery,
+  type CrowdyStudioLibraryFilesQuery,
+  type CrowdyStudioProjectFieldsFragment,
+  type CrowdyStudioProjectsQuery,
 } from '../generated/graphql.js';
 
-type ProjectDto = PlayerCodeProjectFieldsFragment;
+type ProjectDto = CrowdyStudioProjectFieldsFragment;
 type ProjectSummaryDto =
-  PlayerCodeProjectsQuery['playerCodeProjects'][number];
+  CrowdyStudioProjectsQuery['crowdyStudioProjects'][number];
 type LibraryDto =
-  PlayerCodeLibraryFilesQuery['playerCodeLibraryFiles'][number];
-type CommonDto = PlayerCodeCommonFilesQuery['playerCodeCommonFiles'][number];
+  CrowdyStudioLibraryFilesQuery['crowdyStudioLibraryFiles'][number];
+type CommonDto = CrowdyStudioCommonFilesQuery['crowdyStudioCommonFiles'][number];
 
 /**
- * Typed Game API adapter for private Mod Studio projects and reusable files.
- * Mutable projects remain separate from immutable player-compute versions;
- * only the controller's deploy path converts target files to sourceFilesJson.
+ * Schema-coupled Game API adapter for private Crowdy Studio projects and
+ * reusable files. Generated GraphQL documents and DTOs stay in this module;
+ * the controller and public project models remain transport-neutral. Mutable
+ * projects remain separate from immutable player-compute versions, and only
+ * the controller's deploy path converts target files to sourceFilesJson.
  */
-export class PlayerCodeProjectsAPI implements ModStudioProjectProvider {
-  private readonly baselines = new Map<string, ModStudioProject>();
+export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
+  private readonly baselines = new Map<string, CrowdyStudioProject>();
 
   constructor(private readonly graphql: GraphQLClient) {}
 
   async listProjects(
-    scope: ModStudioProjectScope,
-  ): Promise<ModStudioProjectSummary[]> {
-    const data = await this.request(PlayerCodeProjectsDocument, {
+    scope: CrowdyStudioProjectScope,
+  ): Promise<CrowdyStudioProjectSummary[]> {
+    const data = await this.request(CrowdyStudioProjectsDocument, {
       appId: scope.appId,
       includeArchived: false,
       limit: 50,
       offset: 0,
     });
-    return data.playerCodeProjects.map(fromSummaryDto);
+    return data.crowdyStudioProjects.map(fromSummaryDto);
   }
 
   async getProject(
-    input: ModStudioProjectScope & { projectId: string },
-  ): Promise<ModStudioProject> {
-    const data = await this.request(PlayerCodeProjectDocument, {
+    input: CrowdyStudioProjectScope & { projectId: string },
+  ): Promise<CrowdyStudioProject> {
+    const data = await this.request(CrowdyStudioProjectDocument, {
       appId: input.appId,
       projectId: input.projectId,
     });
-    return this.remember(fromProjectDto(data.playerCodeProject, input.gridId));
+    return this.remember(fromProjectDto(data.crowdyStudioProject, input.gridId));
   }
 
   async createProject(
-    input: CreateModStudioProjectInput,
-  ): Promise<ModStudioProject> {
-    const data = await this.request(PlayerCodeProjectCreateDocument, {
+    input: CreateCrowdyStudioProjectInput,
+  ): Promise<CrowdyStudioProject> {
+    const data = await this.request(CrowdyStudioProjectCreateDocument, {
       input: {
         appId: input.appId,
         gridId: input.gridId,
@@ -97,13 +99,13 @@ export class PlayerCodeProjectsAPI implements ModStudioProjectProvider {
       },
     });
     return this.remember(
-      fromProjectDto(data.playerCodeProjectCreate, input.gridId),
+      fromProjectDto(data.crowdyStudioProjectCreate, input.gridId),
     );
   }
 
   async saveProject(
-    input: SaveModStudioProjectInput,
-  ): Promise<ModStudioProject> {
+    input: SaveCrowdyStudioProjectInput,
+  ): Promise<CrowdyStudioProject> {
     try {
       const baseline =
         this.baselines.get(input.projectId) ??
@@ -113,7 +115,7 @@ export class PlayerCodeProjectsAPI implements ModStudioProjectProvider {
           projectId: input.projectId,
         }));
       const delta = projectFileDelta(baseline, input);
-      const data = await this.request(PlayerCodeProjectSaveDocument, {
+      const data = await this.request(CrowdyStudioProjectSaveDocument, {
         input: {
           appId: input.appId,
           projectId: input.projectId,
@@ -129,21 +131,21 @@ export class PlayerCodeProjectsAPI implements ModStudioProjectProvider {
           ),
           upserts: delta.upserts.map(toApiFile),
           deletes: delta.deletes.map(({ target, path }) => ({
-            target: target as PlayerCodeTarget,
+            target: target as CrowdyStudioTarget,
             path,
           })),
         },
       });
       return this.remember(
-        fromProjectDto(data.playerCodeProjectSave, input.gridId),
+        fromProjectDto(data.crowdyStudioProjectSave, input.gridId),
       );
     } catch (error) {
       if (
         error instanceof CrowdyGraphQLError &&
         error.code === 'CONFLICT' &&
-        error.message.includes('PLAYER_CODE_REVISION_CONFLICT')
+        error.message.includes('CROWDY_STUDIO_REVISION_CONFLICT')
       ) {
-        let remoteProject: ModStudioProject | undefined;
+        let remoteProject: CrowdyStudioProject | undefined;
         try {
           remoteProject = await this.getProject({
             appId: input.appId,
@@ -153,77 +155,77 @@ export class PlayerCodeProjectsAPI implements ModStudioProjectProvider {
         } catch {
           // The conflict remains actionable if the follow-up read fails.
         }
-        throw new ModStudioRevisionConflictError(error.message, remoteProject);
+        throw new CrowdyStudioRevisionConflictError(error.message, remoteProject);
       }
       throw error;
     }
   }
 
   async listPersonalLibraryFiles(
-    scope: ModStudioProjectScope,
-  ): Promise<ModStudioReferenceFile[]> {
-    const data = await this.request(PlayerCodeLibraryFilesDocument, {
+    scope: CrowdyStudioProjectScope,
+  ): Promise<CrowdyStudioReferenceFile[]> {
+    const data = await this.request(CrowdyStudioLibraryFilesDocument, {
       appId: scope.appId,
       includeArchived: false,
       limit: 100,
       offset: 0,
     });
-    return data.playerCodeLibraryFiles.map(fromLibraryDto);
+    return data.crowdyStudioLibraryFiles.map(fromLibraryDto);
   }
 
   async savePersonalLibraryFile(
-    input: SaveModStudioLibraryFileInput,
-  ): Promise<ModStudioReferenceFile> {
-    const data = await this.request(PlayerCodeLibrarySaveDocument, {
+    input: SaveCrowdyStudioLibraryFileInput,
+  ): Promise<CrowdyStudioReferenceFile> {
+    const data = await this.request(CrowdyStudioLibrarySaveDocument, {
       input: {
         appId: input.appId,
         title: input.title,
-        pathHint: normalizeModStudioPath(input.path),
-        target: input.target as PlayerCodeTarget,
+        pathHint: normalizeCrowdyStudioPath(input.path),
+        target: input.target as CrowdyStudioTarget,
         tags: input.tags ?? [],
         content: input.content,
       },
     });
-    return fromLibraryDto(data.playerCodeLibrarySave);
+    return fromLibraryDto(data.crowdyStudioLibrarySave);
   }
 
   async listCommonFiles(
-    scope: ModStudioProjectScope,
-  ): Promise<ModStudioReferenceFile[]> {
-    const data = await this.request(PlayerCodeCommonFilesDocument, {
+    scope: CrowdyStudioProjectScope,
+  ): Promise<CrowdyStudioReferenceFile[]> {
+    const data = await this.request(CrowdyStudioCommonFilesDocument, {
       appId: scope.appId,
       limit: 100,
       offset: 0,
     });
-    return data.playerCodeCommonFiles.map(fromCommonDto);
+    return data.crowdyStudioCommonFiles.map(fromCommonDto);
   }
 
   async importReferenceFile(
-    input: ImportModStudioReferenceFileInput,
-  ): Promise<ModStudioProject> {
-    const data = await this.request(PlayerCodeProjectImportFileDocument, {
+    input: ImportCrowdyStudioReferenceFileInput,
+  ): Promise<CrowdyStudioProject> {
+    const data = await this.request(CrowdyStudioProjectImportFileDocument, {
       input: {
         appId: input.appId,
         projectId: input.projectId,
         expectedProjectRevision: input.expectedRevisionId,
         source:
           input.source === 'PERSONAL_LIBRARY'
-            ? PlayerCodeImportSource.Library
-            : PlayerCodeImportSource.Common,
+            ? CrowdyStudioImportSource.Library
+            : CrowdyStudioImportSource.Common,
         ...(input.source === 'PERSONAL_LIBRARY'
           ? { libraryFileId: input.referenceId }
           : { commonVersionId: input.referenceId }),
         ...(input.destinationPath
-          ? { destinationPath: normalizeModStudioPath(input.destinationPath) }
+          ? { destinationPath: normalizeCrowdyStudioPath(input.destinationPath) }
           : {}),
       },
     });
     return this.remember(
-      fromProjectDto(data.playerCodeProjectImportFile, input.gridId),
+      fromProjectDto(data.crowdyStudioProjectImportFile, input.gridId),
     );
   }
 
-  private remember(project: ModStudioProject): ModStudioProject {
+  private remember(project: CrowdyStudioProject): CrowdyStudioProject {
     this.baselines.set(project.projectId, cloneProject(project));
     return project;
   }
@@ -240,14 +242,14 @@ export class PlayerCodeProjectsAPI implements ModStudioProjectProvider {
         error instanceof CrowdyTimeoutError ||
         (error instanceof CrowdyHttpError && error.status >= 500)
       ) {
-        throw new ModStudioOfflineError(error.message, error);
+        throw new CrowdyStudioOfflineError(error.message, error);
       }
       throw error;
     }
   }
 }
 
-function fromSummaryDto(dto: ProjectSummaryDto): ModStudioProjectSummary {
+function fromSummaryDto(dto: ProjectSummaryDto): CrowdyStudioProjectSummary {
   return {
     projectId: dto.projectId,
     name: dto.name,
@@ -266,10 +268,10 @@ function fromSummaryDto(dto: ProjectSummaryDto): ModStudioProjectSummary {
 function fromProjectDto(
   dto: ProjectDto,
   fallbackGridId: string,
-): ModStudioProject {
+): CrowdyStudioProject {
   const files = dto.files.map((file) => ({
     target: file.target as 'SERVER' | 'CLIENT',
-    path: normalizeModStudioPath(file.path),
+    path: normalizeCrowdyStudioPath(file.path),
     content: file.content,
   }));
   return {
@@ -300,26 +302,26 @@ function fromProjectDto(
   };
 }
 
-function fromLibraryDto(dto: LibraryDto): ModStudioReferenceFile {
+function fromLibraryDto(dto: LibraryDto): CrowdyStudioReferenceFile {
   return {
     id: dto.libraryFileId,
     source: 'PERSONAL_LIBRARY',
     title: dto.title,
     target: dto.target as 'SERVER' | 'CLIENT',
-    path: normalizeModStudioPath(dto.pathHint),
+    path: normalizeCrowdyStudioPath(dto.pathHint),
     content: dto.content,
     tags: [...dto.tags],
     updatedAt: dto.updatedAt,
   };
 }
 
-function fromCommonDto(dto: CommonDto): ModStudioReferenceFile {
+function fromCommonDto(dto: CommonDto): CrowdyStudioReferenceFile {
   return {
     id: dto.versionId,
     source: 'COMMON',
     title: dto.title,
     target: dto.target as 'SERVER' | 'CLIENT',
-    path: normalizeModStudioPath(dto.path),
+    path: normalizeCrowdyStudioPath(dto.path),
     content: dto.content,
     tags: [...dto.tags],
     updatedAt: dto.updatedAt,
@@ -327,30 +329,30 @@ function fromCommonDto(dto: CommonDto): ModStudioReferenceFile {
 }
 
 function kindFromApi(
-  pairing: PlayerCodePairingPreference,
-): ModStudioProjectKind {
-  if (pairing === PlayerCodePairingPreference.ServerOnly) return 'SERVER';
-  if (pairing === PlayerCodePairingPreference.ClientOnly) return 'CLIENT';
+  pairing: CrowdyStudioPairingPreferenceEnum,
+): CrowdyStudioProjectKind {
+  if (pairing === CrowdyStudioPairingPreferenceEnum.ServerOnly) return 'SERVER';
+  if (pairing === CrowdyStudioPairingPreferenceEnum.ClientOnly) return 'CLIENT';
   return 'FULL_STACK';
 }
 
 function fromApiPairing(
-  pairing: PlayerCodePairingPreference,
-): ModStudioPairingPreference {
-  if (pairing === PlayerCodePairingPreference.Paired) return 'REQUIRED';
-  if (pairing === PlayerCodePairingPreference.Independent) return 'OPTIONAL';
+  pairing: CrowdyStudioPairingPreferenceEnum,
+): CrowdyStudioPairingPreference {
+  if (pairing === CrowdyStudioPairingPreferenceEnum.Paired) return 'REQUIRED';
+  if (pairing === CrowdyStudioPairingPreferenceEnum.Independent) return 'OPTIONAL';
   return 'NONE';
 }
 
 function toApiPairing(
-  kind: ModStudioProjectKind,
-  pairing: ModStudioPairingPreference,
-): PlayerCodePairingPreference {
-  if (kind === 'SERVER') return PlayerCodePairingPreference.ServerOnly;
-  if (kind === 'CLIENT') return PlayerCodePairingPreference.ClientOnly;
+  kind: CrowdyStudioProjectKind,
+  pairing: CrowdyStudioPairingPreference,
+): CrowdyStudioPairingPreferenceEnum {
+  if (kind === 'SERVER') return CrowdyStudioPairingPreferenceEnum.ServerOnly;
+  if (kind === 'CLIENT') return CrowdyStudioPairingPreferenceEnum.ClientOnly;
   return pairing === 'REQUIRED'
-    ? PlayerCodePairingPreference.Paired
-    : PlayerCodePairingPreference.Independent;
+    ? CrowdyStudioPairingPreferenceEnum.Paired
+    : CrowdyStudioPairingPreferenceEnum.Independent;
 }
 
 function toApiFile(file: {
@@ -358,18 +360,18 @@ function toApiFile(file: {
   path: string;
   content: string;
 }): {
-  target: PlayerCodeTarget;
+  target: CrowdyStudioTarget;
   path: string;
   content: string;
 } {
   return {
-    target: file.target as PlayerCodeTarget,
-    path: normalizeModStudioPath(file.path),
+    target: file.target as CrowdyStudioTarget,
+    path: normalizeCrowdyStudioPath(file.path),
     content: file.content,
   };
 }
 
-function projectKind(input: SaveModStudioProjectInput): ModStudioProjectKind {
+function projectKind(input: SaveCrowdyStudioProjectInput): CrowdyStudioProjectKind {
   const hasServer = input.files.some((file) => file.target === 'SERVER');
   const hasClient = input.files.some((file) => file.target === 'CLIENT');
   if (hasServer && hasClient) return 'FULL_STACK';
@@ -378,40 +380,40 @@ function projectKind(input: SaveModStudioProjectInput): ModStudioProjectKind {
 }
 
 function projectFileDelta(
-  baseline: ModStudioProject,
-  input: SaveModStudioProjectInput,
+  baseline: CrowdyStudioProject,
+  input: SaveCrowdyStudioProjectInput,
 ): {
-  upserts: SaveModStudioProjectInput['files'];
+  upserts: SaveCrowdyStudioProjectInput['files'];
   deletes: Array<{ target: 'SERVER' | 'CLIENT'; path: string }>;
 } {
   const previous = new Map(
     baseline.files.map((file) => [
-      `${file.target}:${normalizeModStudioPath(file.path)}`,
+      `${file.target}:${normalizeCrowdyStudioPath(file.path)}`,
       file,
     ]),
   );
   const current = new Map(
     input.files.map((file) => [
-      `${file.target}:${normalizeModStudioPath(file.path)}`,
+      `${file.target}:${normalizeCrowdyStudioPath(file.path)}`,
       file,
     ]),
   );
   const upserts = input.files.filter((file) => {
     const before = previous.get(
-      `${file.target}:${normalizeModStudioPath(file.path)}`,
+      `${file.target}:${normalizeCrowdyStudioPath(file.path)}`,
     );
     return !before || before.content !== file.content;
   });
   const deletes = baseline.files
     .filter(
       (file) =>
-        !current.has(`${file.target}:${normalizeModStudioPath(file.path)}`),
+        !current.has(`${file.target}:${normalizeCrowdyStudioPath(file.path)}`),
     )
     .map((file) => ({ target: file.target, path: file.path }));
   return { upserts, deletes };
 }
 
-function cloneProject(project: ModStudioProject): ModStudioProject {
+function cloneProject(project: CrowdyStudioProject): CrowdyStudioProject {
   return {
     ...project,
     metadata: { ...project.metadata },

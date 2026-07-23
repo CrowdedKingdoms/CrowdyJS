@@ -50,16 +50,16 @@ const dto = {
   ],
 };
 
-test('playerCodeProjects maps the generated Game API contract', async () => {
+test('crowdyStudio maps the generated Game API contract', async () => {
   const { createCrowdyClient } = await loadSdk();
   const client = createCrowdyClient({ httpUrl: 'https://game.invalid' });
   const calls = [];
   client.graphql.request = async (operation, variables) => {
     const name = operationName(operation);
     calls.push({ name, variables });
-    if (name === 'PlayerCodeProjects') {
+    if (name === 'CrowdyStudioProjects') {
       return {
-        playerCodeProjects: [
+        crowdyStudioProjects: [
           {
             projectId: dto.projectId,
             gridId: dto.gridId,
@@ -74,24 +74,24 @@ test('playerCodeProjects maps the generated Game API contract', async () => {
         ],
       };
     }
-    if (name === 'PlayerCodeProject') {
-      return { playerCodeProject: dto };
+    if (name === 'CrowdyStudioProject') {
+      return { crowdyStudioProject: dto };
     }
-    if (name === 'PlayerCodeProjectCreate') {
-      return { playerCodeProjectCreate: dto };
+    if (name === 'CrowdyStudioProjectCreate') {
+      return { crowdyStudioProjectCreate: dto };
     }
-    if (name === 'PlayerCodeProjectSave') {
+    if (name === 'CrowdyStudioProjectSave') {
       return {
-        playerCodeProjectSave: {
+        crowdyStudioProjectSave: {
           ...dto,
           revision: '2',
           name: variables.input.name,
         },
       };
     }
-    if (name === 'PlayerCodeLibraryFiles') {
+    if (name === 'CrowdyStudioLibraryFiles') {
       return {
-        playerCodeLibraryFiles: [
+        crowdyStudioLibraryFiles: [
           {
             libraryFileId: '22222222-2222-4222-8222-222222222222',
             appId: '1',
@@ -110,9 +110,9 @@ test('playerCodeProjects maps the generated Game API contract', async () => {
         ],
       };
     }
-    if (name === 'PlayerCodeLibrarySave') {
+    if (name === 'CrowdyStudioLibrarySave') {
       return {
-        playerCodeLibrarySave: {
+        crowdyStudioLibrarySave: {
           libraryFileId: '55555555-5555-4555-8555-555555555555',
           appId: '1',
           ownerUserId: '7',
@@ -129,9 +129,9 @@ test('playerCodeProjects maps the generated Game API contract', async () => {
         },
       };
     }
-    if (name === 'PlayerCodeProjectImportFile') {
+    if (name === 'CrowdyStudioProjectImportFile') {
       return {
-        playerCodeProjectImportFile: {
+        crowdyStudioProjectImportFile: {
           ...dto,
           revision: '3',
           files: [
@@ -149,7 +149,7 @@ test('playerCodeProjects maps the generated Game API contract', async () => {
       };
     }
     return {
-      playerCodeCommonFiles: [
+      crowdyStudioCommonFiles: [
         {
           commonFileId: '33333333-3333-4333-8333-333333333333',
           appId: '1',
@@ -175,21 +175,21 @@ test('playerCodeProjects maps the generated Game API contract', async () => {
 
   const scope = { appId: '1', gridId: '2' };
   assert.equal(
-    (await client.playerCodeProjects.listProjects(scope))[0].kind,
+    (await client.crowdyStudio.listProjects(scope))[0].kind,
     'FULL_STACK',
   );
-  const project = await client.playerCodeProjects.getProject({
+  const project = await client.crowdyStudio.getProject({
     ...scope,
     projectId: dto.projectId,
   });
   assert.equal(project.revision.id, '1');
-  await client.playerCodeProjects.createProject({
+  await client.crowdyStudio.createProject({
     ...scope,
     kind: project.kind,
     metadata: project.metadata,
     files: project.files,
   });
-  await client.playerCodeProjects.saveProject({
+  await client.crowdyStudio.saveProject({
     ...scope,
     projectId: dto.projectId,
     expectedRevisionId: '1',
@@ -200,16 +200,16 @@ test('playerCodeProjects maps the generated Game API contract', async () => {
     ],
   });
   const library =
-    await client.playerCodeProjects.listPersonalLibraryFiles(scope);
-  const common = await client.playerCodeProjects.listCommonFiles(scope);
-  await client.playerCodeProjects.savePersonalLibraryFile({
+    await client.crowdyStudio.listPersonalLibraryFiles(scope);
+  const common = await client.crowdyStudio.listCommonFiles(scope);
+  await client.crowdyStudio.savePersonalLibraryFile({
     ...scope,
     title: 'Saved helper',
     target: 'SERVER',
     path: 'src/helper.rs',
     content: 'pub fn helper() {}',
   });
-  await client.playerCodeProjects.importReferenceFile({
+  await client.crowdyStudio.importReferenceFile({
     ...scope,
     projectId: dto.projectId,
     expectedRevisionId: '2',
@@ -223,17 +223,17 @@ test('playerCodeProjects maps the generated Game API contract', async () => {
   assert.deepEqual(
     calls.map(({ name }) => name),
     [
-      'PlayerCodeProjects',
-      'PlayerCodeProject',
-      'PlayerCodeProjectCreate',
-      'PlayerCodeProjectSave',
-      'PlayerCodeLibraryFiles',
-      'PlayerCodeCommonFiles',
-      'PlayerCodeLibrarySave',
-      'PlayerCodeProjectImportFile',
+      'CrowdyStudioProjects',
+      'CrowdyStudioProject',
+      'CrowdyStudioProjectCreate',
+      'CrowdyStudioProjectSave',
+      'CrowdyStudioLibraryFiles',
+      'CrowdyStudioCommonFiles',
+      'CrowdyStudioLibrarySave',
+      'CrowdyStudioProjectImportFile',
     ],
   );
-  const save = calls.find(({ name }) => name === 'PlayerCodeProjectSave');
+  const save = calls.find(({ name }) => name === 'CrowdyStudioProjectSave');
   assert.equal(save.variables.input.expectedRevision, '1');
   assert.deepEqual(save.variables.input.deletes, []);
   assert.equal(save.variables.input.upserts.length, 1);
@@ -247,7 +247,7 @@ test('playerCodeProjects maps the generated Game API contract', async () => {
 
 test('project provider uses generated operations from the merged schema', async () => {
   const source = await readFile(
-    new URL('../../src/domains/playerCodeProjects.ts', import.meta.url),
+    new URL('../../src/domains/crowdyStudio.ts', import.meta.url),
     'utf8',
   );
   assert.match(source, /generated\/graphql/u);

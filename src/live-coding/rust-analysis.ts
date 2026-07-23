@@ -103,7 +103,7 @@ const TARGET_SNIPPETS: Record<'server' | 'client', CompletionItem[]> = {
     {
       label: 'server invoke export',
       kind: 15,
-      detail: 'SERVER export callable from Mod Studio Invoke',
+      detail: 'SERVER export callable from Crowdy Studio Invoke',
       documentation:
         'The caller and owned grid are supplied by the platform runtime; author identity is never authority.',
       insertText:

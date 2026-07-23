@@ -1,57 +1,57 @@
 import {
-  ModStudioController,
-  type ModStudioControllerOptions,
+  CrowdyStudioController,
+  type CrowdyStudioControllerOptions,
 } from './controller.js';
-import { ModStudioDomShell } from './dom-shell.js';
+import { CrowdyStudioDomShell } from './dom-shell.js';
 import type {
-  ModStudioEditorAdapter,
-  ModStudioEditorCallbacks,
-  ModStudioEditorMode,
+  CrowdyStudioEditorAdapter,
+  CrowdyStudioEditorCallbacks,
+  CrowdyStudioEditorMode,
 } from './editor.js';
 import {
-  createMonacoModStudioEditor,
-  type MonacoModStudioEditorOptions,
+  createMonacoCrowdyStudioEditor,
+  type MonacoCrowdyStudioEditorOptions,
 } from './monaco-editor.js';
-import { createTextareaModStudioEditor } from './textarea-editor.js';
+import { createTextareaCrowdyStudioEditor } from './textarea-editor.js';
 
-export interface MountModStudioOptions
-  extends ModStudioControllerOptions,
-    MonacoModStudioEditorOptions {}
+export interface MountCrowdyStudioOptions
+  extends CrowdyStudioControllerOptions,
+    MonacoCrowdyStudioEditorOptions {}
 
-export interface ModStudioHandle {
-  controller: ModStudioController;
-  editorMode: ModStudioEditorMode;
+export interface CrowdyStudioHandle {
+  controller: CrowdyStudioController;
+  editorMode: CrowdyStudioEditorMode;
   destroy(): void;
 }
 
 /**
- * Mount the project-first Mod Studio. Monaco and its browser Rust worker are
+ * Mount the project-first Crowdy Studio. Monaco and its browser Rust worker are
  * loaded lazily; any editor/worker/WASM startup failure keeps the full project
  * UI and swaps in the target/file-aware textarea editor.
  */
-export async function mountModStudio(
+export async function mountCrowdyStudio(
   host: HTMLElement,
-  options: MountModStudioOptions,
-): Promise<ModStudioHandle> {
+  options: MountCrowdyStudioOptions,
+): Promise<CrowdyStudioHandle> {
   if (typeof document === 'undefined') {
-    throw new Error('mountModStudio requires a DOM document');
+    throw new Error('mountCrowdyStudio requires a DOM document');
   }
 
-  const controller = new ModStudioController(options);
-  const shell = new ModStudioDomShell(host, controller);
-  let editor: ModStudioEditorAdapter | null = null;
+  const controller = new CrowdyStudioController(options);
+  const shell = new CrowdyStudioDomShell(host, controller);
+  let editor: CrowdyStudioEditorAdapter | null = null;
   let destroyed = false;
   let recoveringEditor = false;
-  const callbacks: ModStudioEditorCallbacks = {
+  const callbacks: CrowdyStudioEditorCallbacks = {
     onProjectFileChange: (
       target: 'SERVER' | 'CLIENT',
       path: string,
       content: string,
     ) => controller.updateFile(target, path, content),
     onLocalDiagnostics: (
-      diagnostics: Parameters<ModStudioController['setLocalDiagnostics']>[0],
+      diagnostics: Parameters<CrowdyStudioController['setLocalDiagnostics']>[0],
     ) => controller.setLocalDiagnostics(diagnostics),
-    onOpenFile: (ref: Parameters<ModStudioController['openFile']>[0]) =>
+    onOpenFile: (ref: Parameters<CrowdyStudioController['openFile']>[0]) =>
       controller.openFile(ref),
     onFailure: (error: Error) => {
       queueMicrotask(() => {
@@ -64,12 +64,12 @@ export async function mountModStudio(
         }
         recoveringEditor = true;
         console.warn(
-          'Mod Studio Rust worker failed; switching to the file-aware fallback',
+          'Crowdy Studio Rust worker failed; switching to the file-aware fallback',
           error,
         );
         editor.dispose();
         controller.setLocalDiagnostics([]);
-        editor = createTextareaModStudioEditor(shell.editorHost, callbacks);
+        editor = createTextareaCrowdyStudioEditor(shell.editorHost, callbacks);
         editor.sync(controller.getState());
         recoveringEditor = false;
       });
@@ -89,23 +89,23 @@ export async function mountModStudio(
   try {
     await controller.initialize();
     try {
-      editor = await createMonacoModStudioEditor(
+      editor = await createMonacoCrowdyStudioEditor(
         shell.editorHost,
         options,
         callbacks,
       );
     } catch (error) {
       console.warn(
-        'Mod Studio Monaco editor unavailable; using the file-aware fallback',
+        'Crowdy Studio Monaco editor unavailable; using the file-aware fallback',
         error,
       );
-      editor = createTextareaModStudioEditor(shell.editorHost, callbacks);
+      editor = createTextareaCrowdyStudioEditor(shell.editorHost, callbacks);
     }
     editor.sync(controller.getState());
   } catch (error) {
     document.removeEventListener('visibilitychange', onVisibilityChange);
     unsubscribe();
-    const failedEditor = editor as ModStudioEditorAdapter | null;
+    const failedEditor = editor as CrowdyStudioEditorAdapter | null;
     failedEditor?.dispose();
     shell.dispose();
     controller.destroy();
