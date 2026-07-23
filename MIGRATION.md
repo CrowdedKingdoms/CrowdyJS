@@ -1,3 +1,47 @@
+# Unpublished next-major migration — local Rust authoring (BREAKING)
+
+This migration is implemented on the feature branch but is **not versioned or
+published yet**.
+
+`mountLiveCodingIDE` no longer connects to the WSS authoring service. Remove
+`languageServiceUrl` and `appToken` from every call:
+
+```ts
+// Before
+mountLiveCodingIDE(host, {
+  // ...normal live-coding options...
+  languageServiceUrl: import.meta.env.VITE_AUTHORING_LSP_URL,
+  appToken: () => game.session.getToken(),
+});
+
+// After
+mountLiveCodingIDE(host, {
+  // ...normal live-coding options...
+});
+```
+
+The replacement is a lazy browser module worker. It uses local
+`web-tree-sitter`/Rust-grammar WASM assets and never receives a credential or
+opens a language-service connection. Consumers must:
+
+- remove consumer-side monaco-vscode initialization workarounds;
+- use a bundler that emits module workers and dependency `.wasm` assets, or pass
+  `languageWorkerFactory` for their asset pipeline;
+- remove authoring-LSP URL environment variables and token plumbing;
+- consume the embedded game-generated platform index by default (no runtime
+  fetch or BWF option plumbing); and
+- keep the textarea behavior as the only fallback. There is no server fallback.
+
+The Monaco adapter still speaks LSP 3.17 over a standard `vscode-jsonrpc`
+Worker `MessageConnection`. `monaco-languageclient` was removed because its
+current package hard-depends on `vscode-ws-jsonrpc`; direct Monaco providers
+adapt completion/hover/symbol/definition calls to the standard message
+connection without restoring that WSS dependency.
+
+The `@crowdedkingdoms/crowdyjs/live-coding` subpath now exports the IDE,
+platform-index loader/types, VFS limits, and worker transport. The package
+version intentionally remains unchanged until the coordinated major release.
+
 # CrowdyJS v8.10 Notes
 
 ## Added
