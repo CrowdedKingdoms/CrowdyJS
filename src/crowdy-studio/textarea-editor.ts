@@ -1,31 +1,31 @@
-import type { ModStudioState } from './controller.js';
+import type { CrowdyStudioState } from './controller.js';
 import type {
-  ModStudioEditorAdapter,
-  ModStudioEditorCallbacks,
+  CrowdyStudioEditorAdapter,
+  CrowdyStudioEditorCallbacks,
 } from './editor.js';
-import type { ModStudioFileRef } from './models.js';
+import type { CrowdyStudioFileRef } from './models.js';
 
 /**
  * Target/file-aware fallback used when Monaco or the local Rust worker cannot
  * start. It edits the active source file directly; project tabs and explorer
  * continue to work and no JSON source blob is exposed.
  */
-export function createTextareaModStudioEditor(
+export function createTextareaCrowdyStudioEditor(
   host: HTMLElement,
-  callbacks: ModStudioEditorCallbacks,
-): ModStudioEditorAdapter {
+  callbacks: CrowdyStudioEditorCallbacks,
+): CrowdyStudioEditorAdapter {
   const notice = document.createElement('div');
-  notice.className = 'ck-mod-studio-editor-notice';
+  notice.className = 'ck-crowdy-studio-editor-notice';
   notice.textContent =
     'Basic editor active — Monaco or the local Rust worker was unavailable.';
   const textarea = document.createElement('textarea');
-  textarea.className = 'ck-mod-studio-textarea';
+  textarea.className = 'ck-crowdy-studio-textarea';
   textarea.rows = 24;
   textarea.spellcheck = false;
   textarea.setAttribute('aria-label', 'Project source editor');
   host.replaceChildren(notice, textarea);
 
-  let active: ModStudioFileRef | null = null;
+  let active: CrowdyStudioFileRef | null = null;
   let disposed = false;
 
   const onInput = (): void => {
@@ -71,7 +71,7 @@ export function createTextareaModStudioEditor(
   };
 }
 
-function contentFor(state: ModStudioState, ref: ModStudioFileRef): string {
+function contentFor(state: CrowdyStudioState, ref: CrowdyStudioFileRef): string {
   if (ref.source === 'PROJECT') {
     return (
       state.project?.files.find(

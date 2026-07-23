@@ -1,4 +1,4 @@
-fragment PlayerCodeProjectFields on PlayerCodeProject {
+fragment CrowdyStudioProjectFields on CrowdyStudioProject {
   projectId
   appId
   ownerUserId
@@ -31,13 +31,13 @@ fragment PlayerCodeProjectFields on PlayerCodeProject {
   }
 }
 
-query PlayerCodeProjects(
+query CrowdyStudioProjects(
   $appId: BigInt!
   $includeArchived: Boolean
   $limit: Int
   $offset: Int
 ) {
-  playerCodeProjects(
+  crowdyStudioProjects(
     appId: $appId
     includeArchived: $includeArchived
     limit: $limit
@@ -55,31 +55,31 @@ query PlayerCodeProjects(
   }
 }
 
-query PlayerCodeProject($appId: BigInt!, $projectId: String!) {
-  playerCodeProject(appId: $appId, projectId: $projectId) {
-    ...PlayerCodeProjectFields
+query CrowdyStudioProject($appId: BigInt!, $projectId: String!) {
+  crowdyStudioProject(appId: $appId, projectId: $projectId) {
+    ...CrowdyStudioProjectFields
   }
 }
 
-mutation PlayerCodeProjectCreate($input: CreatePlayerCodeProjectInput!) {
-  playerCodeProjectCreate(input: $input) {
-    ...PlayerCodeProjectFields
+mutation CrowdyStudioProjectCreate($input: CreateCrowdyStudioProjectInput!) {
+  crowdyStudioProjectCreate(input: $input) {
+    ...CrowdyStudioProjectFields
   }
 }
 
-mutation PlayerCodeProjectSave($input: SavePlayerCodeProjectInput!) {
-  playerCodeProjectSave(input: $input) {
-    ...PlayerCodeProjectFields
+mutation CrowdyStudioProjectSave($input: SaveCrowdyStudioProjectInput!) {
+  crowdyStudioProjectSave(input: $input) {
+    ...CrowdyStudioProjectFields
   }
 }
 
-query PlayerCodeLibraryFiles(
+query CrowdyStudioLibraryFiles(
   $appId: BigInt!
   $includeArchived: Boolean
   $limit: Int
   $offset: Int
 ) {
-  playerCodeLibraryFiles(
+  crowdyStudioLibraryFiles(
     appId: $appId
     includeArchived: $includeArchived
     limit: $limit
@@ -101,8 +101,8 @@ query PlayerCodeLibraryFiles(
   }
 }
 
-mutation PlayerCodeLibrarySave($input: SavePlayerCodeLibraryFileInput!) {
-  playerCodeLibrarySave(input: $input) {
+mutation CrowdyStudioLibrarySave($input: SaveCrowdyStudioLibraryFileInput!) {
+  crowdyStudioLibrarySave(input: $input) {
     libraryFileId
     appId
     ownerUserId
@@ -119,13 +119,13 @@ mutation PlayerCodeLibrarySave($input: SavePlayerCodeLibraryFileInput!) {
   }
 }
 
-query PlayerCodeCommonFiles(
+query CrowdyStudioCommonFiles(
   $appId: BigInt!
-  $target: PlayerCodeTarget
+  $target: CrowdyStudioTarget
   $limit: Int
   $offset: Int
 ) {
-  playerCodeCommonFiles(
+  crowdyStudioCommonFiles(
     appId: $appId
     target: $target
     limit: $limit
@@ -151,8 +151,8 @@ query PlayerCodeCommonFiles(
   }
 }
 
-mutation PlayerCodeProjectImportFile($input: ImportPlayerCodeProjectFileInput!) {
-  playerCodeProjectImportFile(input: $input) {
-    ...PlayerCodeProjectFields
+mutation CrowdyStudioProjectImportFile($input: ImportCrowdyStudioProjectFileInput!) {
+  crowdyStudioProjectImportFile(input: $input) {
+    ...CrowdyStudioProjectFields
   }
 }

@@ -1,21 +1,21 @@
 import {
-  type ModStudioController,
-  type ModStudioPolledSurface,
-  type ModStudioState,
+  type CrowdyStudioController,
+  type CrowdyStudioPolledSurface,
+  type CrowdyStudioState,
 } from './controller.js';
 import {
   projectTargets,
-  type ModStudioFileRef,
-  type ModStudioProjectKind,
-  type ModStudioReferenceFile,
-  type ModStudioTarget,
+  type CrowdyStudioFileRef,
+  type CrowdyStudioProjectKind,
+  type CrowdyStudioReferenceFile,
+  type CrowdyStudioTarget,
 } from './models.js';
-import { MOD_STUDIO_STYLES } from './styles.js';
+import { CROWDY_STUDIO_STYLES } from './styles.js';
 
 type PanelName = 'problems' | 'build' | 'logs' | 'runs' | 'invoke';
 
 /** Modular DOM shell; editor implementations mount into `editorHost`. */
-export class ModStudioDomShell {
+export class CrowdyStudioDomShell {
   readonly root: HTMLElement;
   readonly editorHost: HTMLElement;
   private readonly projectSelect: HTMLSelectElement;
@@ -51,19 +51,19 @@ export class ModStudioDomShell {
 
   constructor(
     host: HTMLElement,
-    private readonly controller: ModStudioController,
+    private readonly controller: CrowdyStudioController,
   ) {
     const style = document.createElement('style');
-    style.textContent = MOD_STUDIO_STYLES;
-    this.root = element('div', 'ck-mod-studio');
+    style.textContent = CROWDY_STUDIO_STYLES;
+    this.root = element('div', 'ck-crowdy-studio');
     this.root.append(style);
 
-    const toolbar = element('div', 'ck-mod-studio-toolbar');
-    const projectTools = element('div', 'ck-mod-studio-project-tools');
+    const toolbar = element('div', 'ck-crowdy-studio-toolbar');
+    const projectTools = element('div', 'ck-crowdy-studio-project-tools');
     this.projectSelect = document.createElement('select');
     this.projectSelect.setAttribute('aria-label', 'Current project');
     const newButton = button('New project');
-    this.saveBadge = element('span', 'ck-mod-studio-save');
+    this.saveBadge = element('span', 'ck-crowdy-studio-save');
     this.saveAction = button('Retry save');
     this.remoteAction = button('Use cloud version');
     this.saveAction.hidden = true;
@@ -76,12 +76,12 @@ export class ModStudioDomShell {
       this.remoteAction,
     );
 
-    const runtimeTools = element('div', 'ck-mod-studio-runtime-tools');
+    const runtimeTools = element('div', 'ck-crowdy-studio-runtime-tools');
     this.testAction = button('Test draft');
     this.deployAction = button('Deploy live');
     const stop = button('Stop project');
-    this.runtimeStatus = element('span', 'ck-mod-studio-status');
-    this.budgetStatus = element('span', 'ck-mod-studio-status');
+    this.runtimeStatus = element('span', 'ck-crowdy-studio-status');
+    this.budgetStatus = element('span', 'ck-crowdy-studio-status');
     runtimeTools.append(
       this.testAction,
       this.deployAction,
@@ -92,7 +92,7 @@ export class ModStudioDomShell {
     toolbar.append(projectTools, runtimeTools);
 
     this.newForm = document.createElement('form');
-    this.newForm.className = 'ck-mod-studio-new';
+    this.newForm.className = 'ck-crowdy-studio-new';
     this.newForm.dataset.open = 'false';
     this.newName = document.createElement('input');
     this.newName.required = true;
@@ -117,13 +117,13 @@ export class ModStudioDomShell {
     const cancel = button('Cancel');
     this.newForm.append(this.newName, this.newKind, create, cancel);
 
-    const main = element('div', 'ck-mod-studio-main');
-    this.explorer = element('aside', 'ck-mod-studio-explorer');
-    const editorColumn = element('section', 'ck-mod-studio-editor-column');
-    this.tabs = element('div', 'ck-mod-studio-tabs');
-    this.editorHost = element('div', 'ck-mod-studio-editor');
+    const main = element('div', 'ck-crowdy-studio-main');
+    this.explorer = element('aside', 'ck-crowdy-studio-explorer');
+    const editorColumn = element('section', 'ck-crowdy-studio-editor-column');
+    this.tabs = element('div', 'ck-crowdy-studio-tabs');
+    this.editorHost = element('div', 'ck-crowdy-studio-editor');
     editorColumn.append(this.tabs, this.editorHost);
-    const settings = element('aside', 'ck-mod-studio-settings');
+    const settings = element('aside', 'ck-crowdy-studio-settings');
     const settingsTitle = element('h3');
     settingsTitle.textContent = 'Project settings';
     this.settingsName = input('Project name');
@@ -145,8 +145,8 @@ export class ModStudioDomShell {
     );
     main.append(this.explorer, editorColumn, settings);
 
-    const bottom = element('section', 'ck-mod-studio-bottom');
-    const panelTabs = element('div', 'ck-mod-studio-panel-tabs');
+    const bottom = element('section', 'ck-crowdy-studio-bottom');
+    const panelTabs = element('div', 'ck-crowdy-studio-panel-tabs');
     this.problemsPanel = this.createPanel('problems', 'Problems', panelTabs);
     this.buildPanel = this.createPanel('build', 'Build', panelTabs);
     this.logsPanel = this.createPanel('logs', 'Logs', panelTabs);
@@ -163,7 +163,7 @@ export class ModStudioDomShell {
     this.invokeParams.setAttribute('aria-label', 'Invoke JSON parameters');
     const invokeButton = button('Invoke server export');
     this.invokeResult = document.createElement('pre');
-    const invokeControls = element('div', 'ck-mod-studio-invoke');
+    const invokeControls = element('div', 'ck-crowdy-studio-invoke');
     invokeControls.append(this.invokeExport, this.invokeParams, invokeButton);
     this.invokePanel.append(invokeControls, this.invokeResult);
 
@@ -183,7 +183,7 @@ export class ModStudioDomShell {
       void this.run(async () => {
         await this.controller.createProject({
           name: this.newName.value,
-          kind: this.newKind.value as ModStudioProjectKind,
+          kind: this.newKind.value as CrowdyStudioProjectKind,
         });
         this.newName.value = '';
         this.newForm.dataset.open = 'false';
@@ -247,7 +247,7 @@ export class ModStudioDomShell {
     this.activatePanel('problems');
   }
 
-  render(state: ModStudioState): void {
+  render(state: CrowdyStudioState): void {
     if (this.disposed) return;
     this.renderProjects(state);
     this.renderSaveState(state);
@@ -293,11 +293,11 @@ export class ModStudioDomShell {
     tabs: HTMLElement,
   ): HTMLElement {
     const tab = button(label);
-    tab.className = 'ck-mod-studio-panel-tab';
+    tab.className = 'ck-crowdy-studio-panel-tab';
     tab.addEventListener('click', () => this.activatePanel(name));
     this.panelButtons.set(name, tab);
     tabs.append(tab);
-    const panel = element('div', 'ck-mod-studio-panel');
+    const panel = element('div', 'ck-crowdy-studio-panel');
     panel.dataset.panel = name;
     this.panels.set(name, panel);
     return panel;
@@ -320,7 +320,7 @@ export class ModStudioDomShell {
     if (nextPoll) this.controller.setSurfaceVisible(nextPoll, true);
   }
 
-  private renderProjects(state: ModStudioState): void {
+  private renderProjects(state: CrowdyStudioState): void {
     const selected = state.project?.projectId ?? '';
     const options = state.projects.map((project) => {
       const option = document.createElement('option');
@@ -340,7 +340,7 @@ export class ModStudioDomShell {
     this.projectSelect.value = selected;
   }
 
-  private renderSaveState(state: ModStudioState): void {
+  private renderSaveState(state: CrowdyStudioState): void {
     const label = {
       SAVING: 'Saving…',
       SAVED: 'Saved',
@@ -357,7 +357,7 @@ export class ModStudioDomShell {
     this.remoteAction.hidden = state.saveState !== 'CONFLICT';
   }
 
-  private renderExplorer(state: ModStudioState): void {
+  private renderExplorer(state: CrowdyStudioState): void {
     this.explorer.replaceChildren();
     if (!state.project) {
       this.explorer.append(empty('Create a project to start authoring.'));
@@ -383,11 +383,11 @@ export class ModStudioDomShell {
   }
 
   private projectSection(
-    target: ModStudioTarget,
-    refs: ModStudioFileRef[],
+    target: CrowdyStudioTarget,
+    refs: CrowdyStudioFileRef[],
   ): HTMLElement {
-    const section = element('section', 'ck-mod-studio-section');
-    const header = element('div', 'ck-mod-studio-section-header');
+    const section = element('section', 'ck-crowdy-studio-section');
+    const header = element('div', 'ck-crowdy-studio-section-header');
     const title = document.createElement('span');
     title.textContent = `${target} files`;
     const add = button('+ File');
@@ -407,8 +407,8 @@ export class ModStudioDomShell {
     return section;
   }
 
-  private projectFileRow(ref: ModStudioFileRef): HTMLElement {
-    const row = element('div', 'ck-mod-studio-file');
+  private projectFileRow(ref: CrowdyStudioFileRef): HTMLElement {
+    const row = element('div', 'ck-crowdy-studio-file');
     const open = button(ref.path);
     open.title = `${ref.target}:${ref.path}`;
     open.addEventListener('click', () => this.controller.openFile(ref));
@@ -459,20 +459,20 @@ export class ModStudioDomShell {
 
   private referenceSection(
     titleText: string,
-    files: readonly ModStudioReferenceFile[],
+    files: readonly CrowdyStudioReferenceFile[],
   ): HTMLElement {
-    const section = element('section', 'ck-mod-studio-section');
-    const header = element('div', 'ck-mod-studio-section-header');
+    const section = element('section', 'ck-crowdy-studio-section');
+    const header = element('div', 'ck-crowdy-studio-section-header');
     header.textContent = titleText;
     section.append(header);
     for (const file of files) {
-      const ref: ModStudioFileRef = {
+      const ref: CrowdyStudioFileRef = {
         source: file.source,
         target: file.target,
         path: file.path,
         referenceId: file.id,
       };
-      const row = element('div', 'ck-mod-studio-file');
+      const row = element('div', 'ck-crowdy-studio-file');
       const open = button(
         `${file.target ? `${file.target.toLowerCase()}/` : ''}${file.path}`,
       );
@@ -496,13 +496,13 @@ export class ModStudioDomShell {
     return section;
   }
 
-  private renderTabs(state: ModStudioState): void {
+  private renderTabs(state: CrowdyStudioState): void {
     this.tabs.replaceChildren();
     for (const ref of state.openFiles) {
       const tab = button(
         `${ref.target ? `${ref.target.toLowerCase()}/` : ''}${ref.path}`,
       );
-      tab.className = 'ck-mod-studio-tab';
+      tab.className = 'ck-crowdy-studio-tab';
       tab.dataset.active = String(
         Boolean(state.activeFile && sameRef(state.activeFile, ref)),
       );
@@ -520,7 +520,7 @@ export class ModStudioDomShell {
     }
   }
 
-  private renderSettings(state: ModStudioState): void {
+  private renderSettings(state: CrowdyStudioState): void {
     const project = state.project;
     const disabled = !project;
     for (const control of [
@@ -552,7 +552,7 @@ export class ModStudioDomShell {
     this.pairing.value = project.metadata.pairingPreference;
   }
 
-  private renderProblems(state: ModStudioState): void {
+  private renderProblems(state: CrowdyStudioState): void {
     this.problemsPanel.replaceChildren();
     const diagnostics = [
       ...state.authoritativeDiagnostics,
@@ -563,7 +563,7 @@ export class ModStudioDomShell {
       return;
     }
     for (const diagnostic of diagnostics) {
-      const row = element('button', 'ck-mod-studio-problem');
+      const row = element('button', 'ck-crowdy-studio-problem');
       row.dataset.source = diagnostic.source;
       const source = document.createElement('span');
       source.textContent =
@@ -584,7 +584,7 @@ export class ModStudioDomShell {
     }
   }
 
-  private renderBuild(state: ModStudioState): void {
+  private renderBuild(state: CrowdyStudioState): void {
     this.buildPanel.replaceChildren();
     const output = document.createElement('pre');
     output.textContent = state.buildOutput || 'No build has run.';
@@ -593,7 +593,7 @@ export class ModStudioDomShell {
 
   private renderRuntimeRows(
     panel: HTMLElement,
-    rows: ModStudioState['runs'],
+    rows: CrowdyStudioState['runs'],
   ): void {
     panel.replaceChildren();
     if (rows.length === 0) {
@@ -617,12 +617,12 @@ export class ModStudioDomShell {
   }
 }
 
-function polledSurface(panel: PanelName): ModStudioPolledSurface | null {
+function polledSurface(panel: PanelName): CrowdyStudioPolledSurface | null {
   if (panel === 'logs' || panel === 'runs') return panel;
   return null;
 }
 
-function budgetText(state: ModStudioState): string {
+function budgetText(state: CrowdyStudioState): string {
   const usage = state.usage
     ? `units ${state.usage.hourUnitsUsed}/${state.usage.unitsPerHour ?? '∞'} · compiles ${state.usage.compilesThisHour}/${state.usage.maxCompilesPerHour}`
     : '';
@@ -632,7 +632,7 @@ function budgetText(state: ModStudioState): string {
   return [usage, wallet].filter(Boolean).join(' · ');
 }
 
-function formatInvokeResult(result: NonNullable<ModStudioState['invokeResult']>): string {
+function formatInvokeResult(result: NonNullable<CrowdyStudioState['invokeResult']>): string {
   return [
     result.resultJson ?? result.resultBase64 ?? '(empty result)',
     result.fuelUsed ? `${result.fuelUsed} fuel` : '',
@@ -642,7 +642,7 @@ function formatInvokeResult(result: NonNullable<ModStudioState['invokeResult']>)
     .join('\n');
 }
 
-function sameRef(a: ModStudioFileRef, b: ModStudioFileRef): boolean {
+function sameRef(a: CrowdyStudioFileRef, b: CrowdyStudioFileRef): boolean {
   return (
     a.source === b.source &&
     a.target === b.target &&
@@ -698,7 +698,7 @@ function select(
 }
 
 function empty(message: string): HTMLElement {
-  const value = element('div', 'ck-mod-studio-empty');
+  const value = element('div', 'ck-crowdy-studio-empty');
   value.textContent = message;
   return value;
 }

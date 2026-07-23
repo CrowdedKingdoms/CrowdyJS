@@ -1,22 +1,22 @@
 import {
-  normalizeModStudioPath,
-  type ModStudioTarget,
+  normalizeCrowdyStudioPath,
+  type CrowdyStudioTarget,
 } from './models.js';
 
-export type ModStudioDiagnosticSeverity = 'error' | 'warning' | 'info' | 'hint';
-export type ModStudioDiagnosticSource = 'rustc' | 'local-advisory';
+export type CrowdyStudioDiagnosticSeverity = 'error' | 'warning' | 'info' | 'hint';
+export type CrowdyStudioDiagnosticSource = 'rustc' | 'local-advisory';
 
-export interface ModStudioDiagnostic {
-  target: ModStudioTarget;
+export interface CrowdyStudioDiagnostic {
+  target: CrowdyStudioTarget;
   path: string;
   line: number;
   column: number;
   endLine?: number;
   endColumn?: number;
-  severity: ModStudioDiagnosticSeverity;
+  severity: CrowdyStudioDiagnosticSeverity;
   message: string;
   code?: string;
-  source: ModStudioDiagnosticSource;
+  source: CrowdyStudioDiagnosticSource;
 }
 
 /**
@@ -26,14 +26,14 @@ export interface ModStudioDiagnostic {
  */
 export function parseRustcDiagnostics(
   output: string | null | undefined,
-  defaultTarget: ModStudioTarget,
-): ModStudioDiagnostic[] {
+  defaultTarget: CrowdyStudioTarget,
+): CrowdyStudioDiagnostic[] {
   if (!output) return [];
-  const diagnostics: ModStudioDiagnostic[] = [];
+  const diagnostics: CrowdyStudioDiagnostic[] = [];
   const lines = output.replace(/\r\n?/gu, '\n').split('\n');
   let pending:
     | {
-        severity: ModStudioDiagnosticSeverity;
+        severity: CrowdyStudioDiagnosticSeverity;
         message: string;
         code?: string;
       }
@@ -109,8 +109,8 @@ export function parseRustcDiagnostics(
 
 function parseJsonDiagnostic(
   line: string,
-  defaultTarget: ModStudioTarget,
-): ModStudioDiagnostic[] {
+  defaultTarget: CrowdyStudioTarget,
+): CrowdyStudioDiagnostic[] {
   if (!line.trimStart().startsWith('{')) return [];
   let value: unknown;
   try {
@@ -156,23 +156,23 @@ function parseJsonDiagnostic(
 
 function normalizeLocation(
   value: string,
-  defaultTarget: ModStudioTarget,
-): { target: ModStudioTarget; path: string } {
+  defaultTarget: CrowdyStudioTarget,
+): { target: CrowdyStudioTarget; path: string } {
   let path = value.trim().replace(/\\/gu, '/');
   let target = defaultTarget;
   const targetMatch = path.match(/(?:^|\/)(server|client)\/(.+)$/iu);
   if (targetMatch) {
-    target = targetMatch[1].toUpperCase() as ModStudioTarget;
+    target = targetMatch[1].toUpperCase() as CrowdyStudioTarget;
     path = targetMatch[2];
   } else {
     const sourceIndex = path.lastIndexOf('/src/');
     if (sourceIndex >= 0) path = path.slice(sourceIndex + 1);
     else if (path.includes('/')) path = path.replace(/^.*\/(?=Cargo\.toml$)/u, '');
   }
-  return { target, path: normalizeModStudioPath(path) };
+  return { target, path: normalizeCrowdyStudioPath(path) };
 }
 
-function normalizeSeverity(value: string): ModStudioDiagnosticSeverity {
+function normalizeSeverity(value: string): CrowdyStudioDiagnosticSeverity {
   if (value === 'warning') return 'warning';
   if (value === 'info' || value === 'note' || value === 'help') return 'info';
   return 'error';

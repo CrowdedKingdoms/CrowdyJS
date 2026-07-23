@@ -33,10 +33,13 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 > **Player-code authoring DX:** `playerCompute.setRequires`,
 > `marketplace.trustGridAuthor`, self-authored `gridClientMods` fields, and
 > version-keyed client artifact fetches require the 2026-07-22 authoring-DX
-> migration. The v9 `mountModStudio` surface is project-first: cloud project
+> migration. The v11 `mountCrowdyStudio` surface is project-first: cloud project
 > revisions, target-scoped files, atomic autosave, and explicit draft/live/stop
 > orchestration. Its Rust language worker receives source plus the committed
 > platform index only—never a credential and never a server connection.
+> CrowdyJS 11 requires the matching Crowdy Studio Game API schema; the previous
+> package subpath, exports, client property, GraphQL roots, and schema types were
+> removed without aliases.
 
 > **v8.10 inventory authority:** generated craft/barter transactions work on
 > existing Model servers. Compute-refereed durable commits require Compute SDK
@@ -140,7 +143,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.gameModel` | Abstract game model: containers, properties, functions (incl. model-driven `notify_*` effects), sessions, and **automations / NPCs** (`upsertAutomation`, `runAutomation`, `automationRuns`, `automationStats`, …). |
 | `client.compute` | **Compute Modules** — server-side Rust/WASM logic: author + deploy source (`upsertModule`, `deployVersion`, `waitForCompile`), triggers + policy, synchronous `invoke`, and monitoring (`moduleRuns`, `moduleStats`, `moduleLogs`, `appDiagnostics`). Modules run server-only; see [Compute Modules docs](https://docs.crowdedkingdoms.com/game-api/compute-modules). |
 | `client.playerCompute` | Player-authored SERVER/CLIENT Rust/WASM bound to player-owned grids: deploy source, activate/deactivate, list modules/versions, and delete self-authored modules. |
-| `client.playerCodeProjects` | Cloud project, personal-library, and common-file APIs for Mod Studio: target-scoped files, metadata/module names, pairing preference, optimistic revisions, copy-by-value imports, and atomic metadata/file saves. Generated operations are pinned to the committed merged SDL. |
+| `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, pairing preference, optimistic revisions, copy-by-value imports, and atomic metadata/file saves. Generated operations are pinned to the committed merged SDL. |
 | `client.playerModel` | Player-owned flexible model containers and grid-confined automations (`containers`, `createContainer`, `setProperty`, `automations`, `createAutomation`, …). |
 | `client.marketplace` | Player-code store/install/consent flows plus player-authorized grid claims: `claimGridOwnership` preserves the existing-grid policy flow, while `claimGridChunk` atomically creates and owns one chunk under `SELF_CLAIM` and `releaseClaimedGrid` releases an eligible owner-created claim. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
@@ -151,23 +154,23 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 `PlayerCodeBroker` transfers
 compiled client artifacts to a platform-owned worker, keeps tokens on the page,
 allow-lists host calls, and locally clamps chunk-targeted effects to the owned
-grid before the normal SDK path reaches server authorization. Mod Studio
+grid before the normal SDK path reaches server authorization. Crowdy Studio
 hot-swaps only the exact version-keyed artifact returned after a successful
 CLIENT compile.
 
-## Player-code Mod Studio
+## Crowdy Studio
 
-`mountModStudio` is the project-first SERVER/CLIENT Rust authoring surface. A
+`mountCrowdyStudio` is the project-first SERVER/CLIENT Rust authoring surface. A
 project has one cloud revision, target-scoped files, project metadata, separate
 server/client module names, and a pairing preference. Full-stack edits autosave
 as one optimistic-concurrency write; the UI renders **Saving**, **Saved**,
 **Conflict**, or **Offline**, with retry and conflict-resolution actions.
 
 ```ts
-import { mountModStudio } from '@crowdedkingdoms/crowdyjs/mod-studio';
+import { mountCrowdyStudio } from '@crowdedkingdoms/crowdyjs/crowdy-studio';
 
-const studio = await mountModStudio(host, {
-  projectProvider: game.playerCodeProjects,
+const studio = await mountCrowdyStudio(host, {
+  projectProvider: game.crowdyStudio,
   playerCompute: game.playerCompute,
   playerWallet: identity.playerWallet,
   appId,
@@ -182,7 +185,7 @@ const studio = await mountModStudio(host, {
 studio.destroy();
 ```
 
-Use `new ModStudioController(options)` for a custom/headless presentation. Its
+Use `new CrowdyStudioController(options)` for a custom/headless presentation. Its
 public edits are file operations (`addFile`, `renameFile`, `deleteFile`,
 `updateFile`) and project settings—there is no session-only source blob, fixed
 module name, or template JSON API. The deploy conversion to the Game API's
@@ -211,7 +214,7 @@ Build.
 The Rust worker receives source files and the strict embedded platform index
 only. It receives no credential, opens no socket/fetch path, and never falls
 back to a server language service. If Monaco, Worker, a WASM asset, or a custom
-platform index fails, the same Mod Studio mount keeps project/target tabs and
+platform index fails, the same Crowdy Studio mount keeps project/target tabs and
 uses one file-aware textarea—never a raw JSON blob.
 
 Modern bundlers must preserve module workers and package `.wasm` assets. Custom
@@ -222,22 +225,22 @@ embedded index remains the byte-identical game export (`schemaVersion: 2`, Rust
 
 ### Game API project contract
 
-`PlayerCodeProjectsAPI` implements the transport-neutral
-`ModStudioProjectProvider`; generated GraphQL types remain inside the adapter.
+`CrowdyStudioAPI` implements the transport-neutral
+`CrowdyStudioProjectProvider`; generated GraphQL types remain inside the adapter.
 The committed merged schema and generated operations cover:
 
-- `playerCodeProjects(appId)` / `playerCodeProject(appId, projectId)`
-- `playerCodeProjectCreate(input)`
-- `playerCodeProjectSave(input)` for one atomic metadata/file delta
-- `playerCodeLibraryFiles(appId)` / `playerCodeLibrarySave(input)`
-- `playerCodeCommonFiles(appId)`
-- `playerCodeProjectImportFile(input)` for copy-by-value imports
+- `crowdyStudioProjects(appId)` / `crowdyStudioProject(appId, projectId)`
+- `crowdyStudioProjectCreate(input)`
+- `crowdyStudioProjectSave(input)` for one atomic metadata/file delta
+- `crowdyStudioLibraryFiles(appId)` / `crowdyStudioLibrarySave(input)`
+- `crowdyStudioCommonFiles(appId)`
+- `crowdyStudioProjectImportFile(input)` for copy-by-value imports
 
 The adapter maps the API's `PAIRED | INDEPENDENT | SERVER_ONLY | CLIENT_ONLY`
-presentation enum to Mod Studio's runtime-oriented project kind and
+presentation enum to Crowdy Studio's runtime-oriented project kind and
 `REQUIRED | OPTIONAL | NONE` setting. A stale expected `revision` arrives as
-`CONFLICT` with `PLAYER_CODE_REVISION_CONFLICT` in the message and becomes a
-`ModStudioRevisionConflictError` with the latest cloud project when that
+`CONFLICT` with `CROWDY_STUDIO_REVISION_CONFLICT` in the message and becomes a
+`CrowdyStudioRevisionConflictError` with the latest cloud project when that
 follow-up read succeeds.
 
 | `createWorldSession(client, appId, config)` (from `@crowdedkingdoms/crowdyjs/stores`) | World Stores: opt-in, SDK-managed game state — typed codecs (`structCodec` binary DSL), your own actor with a 5 Hz send loop (`session.self`), a remote-actor registry with lanes/history/staleness (`session.actors`), attributed send errors (`session.errors`), a chunk/voxel cache with realtime merge + worldgen write-back (`session.chunks`), channel/direct-message inboxes + a typed event router, host tracking, typed save/avatar state, and a game-model container mirror. Only configured stores exist (compile-time + runtime); unimported stores tree-shake away. |

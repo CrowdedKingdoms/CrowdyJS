@@ -66,7 +66,7 @@ import { UdpAPI } from './domains/udp.js';
 import { GameModelAPI } from './domains/gameModel.js';
 import { ComputeAPI } from './domains/compute.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
-import { PlayerCodeProjectsAPI } from './domains/playerCodeProjects.js';
+import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { MarketplaceAPI } from './domains/marketplace.js';
 import { PlayerModelAPI } from './domains/playerModel.js';
@@ -217,8 +217,8 @@ export class CrowdyClient {
   readonly compute: ComputeAPI;
   /** Player-authored Rust/WASM bound to player-owned grids. */
   readonly playerCompute: PlayerComputeAPI;
-  /** Cloud source projects consumed by the project-first Mod Studio. */
-  readonly playerCodeProjects: PlayerCodeProjectsAPI;
+  /** Crowdy Studio cloud projects, libraries, and common source files. */
+  readonly crowdyStudio: CrowdyStudioAPI;
 
   /** P4a marketplace (free mode): store, installs, consent, claim flows. */
   readonly marketplace: MarketplaceAPI;
@@ -310,7 +310,7 @@ export class CrowdyClient {
     });
     this.compute = new ComputeAPI(this.graphql);
     this.playerCompute = new PlayerComputeAPI(this.graphql);
-    this.playerCodeProjects = new PlayerCodeProjectsAPI(this.graphql);
+    this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
     this.playerWallet = new PlayerWalletAPI(this.management);
     this.marketplace = new MarketplaceAPI(this.graphql, this.management);
     this.playerModel = new PlayerModelAPI(this.graphql);

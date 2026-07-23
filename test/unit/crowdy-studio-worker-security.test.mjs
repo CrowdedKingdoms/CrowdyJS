@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { isCurrentDiagnosticVersion } from '../../dist/mod-studio/monaco-editor.js';
-import { mountModStudio } from '../../dist/mod-studio/mount.js';
+import { isCurrentDiagnosticVersion } from '../../dist/crowdy-studio/monaco-editor.js';
+import { mountCrowdyStudio } from '../../dist/crowdy-studio/mount.js';
 import {
   WorkerLanguageClient,
   WorkerMessageReader,
@@ -89,10 +89,10 @@ test('reader rejects malformed worker messages without dispatch', () => {
   subscription.dispose();
 });
 
-test('Mod Studio language path is local-only and old exports stay removed', async () => {
+test('Crowdy Studio language path is local-only and old exports stay removed', async () => {
   const [editorSource, workerSource, transportSource, packageJson, rootSource] =
     await Promise.all([
-      readFile(new URL('../../src/mod-studio/monaco-editor.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../../src/crowdy-studio/monaco-editor.ts', import.meta.url), 'utf8'),
       readFile(new URL('../../src/live-coding/rust-lsp.worker.ts', import.meta.url), 'utf8'),
       readFile(new URL('../../src/live-coding/worker-transport.ts', import.meta.url), 'utf8'),
       readFile(new URL('../../package.json', import.meta.url), 'utf8'),
@@ -109,7 +109,8 @@ test('Mod Studio language path is local-only and old exports stay removed', asyn
   assert.doesNotMatch(packageJson, /vscode-ws-jsonrpc|monaco-languageclient/u);
   const metadata = JSON.parse(packageJson);
   assert.equal(metadata.exports['./live-coding'], undefined);
-  assert.ok(metadata.exports['./mod-studio']);
+  assert.ok(metadata.exports['./crowdy-studio']);
+  assert.equal(metadata.exports[`./${['mod', 'studio'].join('-')}`], undefined);
   for (const removed of [
     'mountLiveCodingIDE',
     'mountLiveCoding',
@@ -117,6 +118,9 @@ test('Mod Studio language path is local-only and old exports stay removed', asyn
     'MountLiveCodingOptions',
     'draftByDefault',
     'PLAYER_CODE_TEMPLATES',
+    ['mount', 'Mod', 'Studio'].join(''),
+    ['Mod', 'Studio', 'Controller'].join(''),
+    ['Mount', 'Mod', 'Studio', 'Options'].join(''),
   ]) {
     assert.doesNotMatch(rootSource, new RegExp(removed, 'u'));
   }
@@ -124,8 +128,10 @@ test('Mod Studio language path is local-only and old exports stay removed', asyn
   assert.equal(sdk.mountLiveCodingIDE, undefined);
   assert.equal(sdk.mountLiveCoding, undefined);
   assert.equal(sdk.LiveCodingController, undefined);
-  assert.equal(typeof sdk.mountModStudio, 'function');
-  assert.equal(typeof sdk.ModStudioController, 'function');
+  assert.equal(sdk[['mount', 'Mod', 'Studio'].join('')], undefined);
+  assert.equal(sdk[['Mod', 'Studio', 'Controller'].join('')], undefined);
+  assert.equal(typeof sdk.mountCrowdyStudio, 'function');
+  assert.equal(typeof sdk.CrowdyStudioController, 'function');
 });
 
 test('diagnostic versions must match the current Monaco model', () => {
@@ -150,7 +156,7 @@ test('mount fallback edits one target file instead of a JSON blob', async () => 
   const cloudProject = sampleProject();
   const provider = sampleProvider(cloudProject);
   try {
-    const handle = await mountModStudio(host, {
+    const handle = await mountCrowdyStudio(host, {
       projectProvider: provider,
       playerCompute: sampleCompute(),
       appId: '1',
@@ -169,7 +175,7 @@ test('mount fallback edits one target file instead of a JSON blob', async () => 
     ]) {
       assert.ok(findByText(host, label), `${label} surface should be mounted`);
     }
-    const textarea = findByClass(host, 'ck-mod-studio-textarea');
+    const textarea = findByClass(host, 'ck-crowdy-studio-textarea');
     assert.ok(textarea);
     assert.equal(textarea.dataset.target, 'SERVER');
     assert.equal(textarea.dataset.path, 'src/lib.rs');

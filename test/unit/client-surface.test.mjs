@@ -60,10 +60,11 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.playerCompute, 'playerCompute', [
     'deploy', 'setEnabled', 'invoke', 'myModules', 'versions', 'delete',
   ]);
-  assertMethods(client.playerCodeProjects, 'playerCodeProjects', [
+  assertMethods(client.crowdyStudio, 'crowdyStudio', [
     'listProjects', 'getProject', 'createProject', 'saveProject',
     'listPersonalLibraryFiles', 'listCommonFiles',
   ]);
+  assert.equal(client[['player', 'Code', 'Projects'].join('')], undefined);
   // P4a marketplace (free mode): store + installs + consent + claim flows
   // (game API) and studio moderation (management API).
   assertMethods(client.marketplace, 'marketplace', [

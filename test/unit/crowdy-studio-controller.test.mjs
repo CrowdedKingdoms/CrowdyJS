@@ -203,9 +203,9 @@ function options(provider, compute, extra = {}) {
 }
 
 test('project file CRUD is target-scoped and debounced into one atomic save', async () => {
-  const { ModStudioController } = await loadSdk();
+  const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(provider, playerCompute()),
   );
   await controller.initialize();
@@ -231,9 +231,9 @@ test('project file CRUD is target-scoped and debounced into one atomic save', as
 });
 
 test('common files import by value and project files save into My Library', async () => {
-  const { ModStudioController } = await loadSdk();
+  const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(provider, playerCompute(), { autosaveMs: 10_000 }),
   );
   await controller.initialize();
@@ -274,8 +274,8 @@ test('common files import by value and project files save into My Library', asyn
 
 test('revision conflicts preserve local files and support explicit overwrite', async () => {
   const {
-    ModStudioController,
-    ModStudioRevisionConflictError,
+    CrowdyStudioController,
+    CrowdyStudioRevisionConflictError,
   } = await loadSdk();
   const provider = providerFor();
   const normalSave = provider.saveProject.bind(provider);
@@ -284,11 +284,11 @@ test('revision conflicts preserve local files and support explicit overwrite', a
   provider.saveProject = async (input) => {
     if (conflict) {
       conflict = false;
-      throw new ModStudioRevisionConflictError('revision changed', remote);
+      throw new CrowdyStudioRevisionConflictError('revision changed', remote);
     }
     return normalSave(input);
   };
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(provider, playerCompute(), { autosaveMs: 10_000 }),
   );
   await controller.initialize();
@@ -311,15 +311,15 @@ test('revision conflicts preserve local files and support explicit overwrite', a
 });
 
 test('offline saves retain edits and retry against the same revision', async () => {
-  const { ModStudioController, ModStudioOfflineError } = await loadSdk();
+  const { CrowdyStudioController, CrowdyStudioOfflineError } = await loadSdk();
   const provider = providerFor();
   const normalSave = provider.saveProject.bind(provider);
   let offline = true;
   provider.saveProject = async (input) => {
-    if (offline) throw new ModStudioOfflineError('network unavailable');
+    if (offline) throw new CrowdyStudioOfflineError('network unavailable');
     return normalSave(input);
   };
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(provider, playerCompute(), {
       autosaveMs: 10_000,
       retryMs: 10_000,
@@ -338,7 +338,7 @@ test('offline saves retain edits and retry against the same revision', async () 
 });
 
 test('full-stack deploy saves once and orders client, server, pairing, enable, run', async () => {
-  const { ModStudioController } = await loadSdk();
+  const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   const calls = [];
   const compute = playerCompute({
@@ -384,7 +384,7 @@ test('full-stack deploy saves once and orders client, server, pairing, enable, r
       calls.push('broker:stop');
     },
   });
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(provider, compute, { brokerFactory, autosaveMs: 10_000 }),
   );
   await controller.initialize();
@@ -407,7 +407,7 @@ test('full-stack deploy saves once and orders client, server, pairing, enable, r
 });
 
 test('full-stack partial compile never mutates pairing or enables either target', async () => {
-  const { ModStudioController } = await loadSdk();
+  const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   const calls = [];
   const compute = playerCompute({
@@ -437,7 +437,7 @@ test('full-stack partial compile never mutates pairing or enables either target'
       calls.push('artifact');
     },
   });
-  const controller = new ModStudioController(options(provider, compute));
+  const controller = new CrowdyStudioController(options(provider, compute));
   await controller.initialize();
   await controller.deployLive();
 
@@ -453,10 +453,10 @@ test('full-stack partial compile never mutates pairing or enables either target'
 });
 
 test('target permissions prevent unavailable authoring before deploy', async () => {
-  const { ModStudioController } = await loadSdk();
+  const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor(project('SERVER'));
   let deploys = 0;
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(
       provider,
       playerCompute({
@@ -484,7 +484,7 @@ test('target permissions prevent unavailable authoring before deploy', async () 
 });
 
 test('client deploy hot-swaps the exact version and stop reports partial failures', async () => {
-  const { ModStudioController } = await loadSdk();
+  const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   const events = [];
   let deployNo = 0;
@@ -530,7 +530,7 @@ test('client deploy hot-swaps the exact version and stop reports partial failure
       },
     };
   };
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(provider, compute, { brokerFactory }),
   );
   await controller.initialize();
@@ -550,7 +550,7 @@ test('client deploy hot-swaps the exact version and stop reports partial failure
 });
 
 test('runs/logs/usage polling occurs only while visible and cleans up', async () => {
-  const { ModStudioController } = await loadSdk();
+  const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor(project('SERVER'));
   let runReads = 0;
   const compute = playerCompute({
@@ -559,7 +559,7 @@ test('runs/logs/usage polling occurs only while visible and cleans up', async ()
       return [];
     },
   });
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(provider, compute, { monitorPollMs: 5 }),
   );
   await controller.initialize();
@@ -580,7 +580,7 @@ test('runs/logs/usage polling occurs only while visible and cleans up', async ()
 });
 
 test('usage, wallet, logs, runs, and invoke feed the monitoring surfaces', async () => {
-  const { ModStudioController } = await loadSdk();
+  const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor(project('SERVER'));
   const calls = [];
   const row = {
@@ -607,7 +607,7 @@ test('usage, wallet, logs, runs, and invoke feed the monitoring surfaces', async
       return { resultJson: '{"ok":true}', fuelUsed: '4', durationUs: 2 };
     },
   });
-  const controller = new ModStudioController(
+  const controller = new CrowdyStudioController(
     options(provider, compute, {
       playerWallet: {
         async balance() {

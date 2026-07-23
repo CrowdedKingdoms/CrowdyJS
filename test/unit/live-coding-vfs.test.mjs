@@ -5,8 +5,8 @@ import {
   VirtualFileSystem,
 } from '../../dist/live-coding/vfs.js';
 import {
-  modStudioFileUri,
-} from '../../dist/mod-studio/models.js';
+  crowdyStudioFileUri,
+} from '../../dist/crowdy-studio/models.js';
 
 const uri = (path) => `file:///player-mod/${path}`;
 const item = (path, version, text) => ({
@@ -72,22 +72,22 @@ test('VFS rejects traversal and closes documents deterministically', () => {
 
 test('target-prefixed VFS loads duplicate Cargo and lib paths concurrently', () => {
   const vfs = new VirtualFileSystem();
-  const serverCargo = modStudioFileUri(
+  const serverCargo = crowdyStudioFileUri(
     'file:///player-mod',
     'SERVER',
     'Cargo.toml',
   );
-  const clientCargo = modStudioFileUri(
+  const clientCargo = crowdyStudioFileUri(
     'file:///player-mod',
     'CLIENT',
     'Cargo.toml',
   );
-  const serverLib = modStudioFileUri(
+  const serverLib = crowdyStudioFileUri(
     'file:///player-mod',
     'SERVER',
     'src/lib.rs',
   );
-  const clientLib = modStudioFileUri(
+  const clientLib = crowdyStudioFileUri(
     'file:///player-mod',
     'CLIENT',
     'src/lib.rs',

@@ -1,28 +1,38 @@
-# CrowdyJS v10 — project-first Mod Studio (BREAKING)
+# CrowdyJS v11 — Crowdy Studio rename (BREAKING)
 
-This migration is implemented on the feature branch but is **not versioned or
-published yet**.
+Version 11 removes the previous Mod Studio names completely. There are no
+compatibility exports, client properties, package subpaths, GraphQL operations,
+schema types, or CSS aliases.
 
-The session-only live-coding API was removed. There are deliberately no
-compatibility aliases.
+Rename imports and API access:
 
-Removed exports:
+- `@crowdedkingdoms/crowdyjs/mod-studio` →
+  `@crowdedkingdoms/crowdyjs/crowdy-studio`
+- `mountModStudio` → `mountCrowdyStudio`
+- `ModStudioController` → `CrowdyStudioController`
+- `MountModStudioOptions` → `MountCrowdyStudioOptions`
+- `ModStudioHandle` → `CrowdyStudioHandle`
+- every other public `ModStudio*` model, error, diagnostic, and editor type →
+  its `CrowdyStudio*` equivalent
+- `modStudioFileKey`, `modStudioFileUri`, and `normalizeModStudioPath` →
+  `crowdyStudioFileKey`, `crowdyStudioFileUri`, and
+  `normalizeCrowdyStudioPath`
+- `client.playerCodeProjects` → `client.crowdyStudio`
+- `PlayerCodeProjectsAPI` → `CrowdyStudioAPI`
+- CSS classes under `ck-mod-studio*` → `ck-crowdy-studio*`
 
-- `mountLiveCodingIDE`
-- `mountLiveCoding`
-- `LiveCodingController`
-- `MountLiveCodingOptions`
-- `PLAYER_CODE_TEMPLATES` / `templateById`
-- the `moduleName` and `draftByDefault` mount options
-- the `@crowdedkingdoms/crowdyjs/live-coding` package subpath
-
-Replace the old mount with a cloud project provider and the new subpath:
+The matching Game API schema is required. Its project roots changed from
+`playerCodeProjects`, `playerCodeProject`, `playerCodeProjectCreate`,
+`playerCodeProjectSave`, `playerCodeLibraryFiles`, `playerCodeLibrarySave`,
+`playerCodeCommonFiles`, and `playerCodeProjectImportFile` to the corresponding
+`crowdyStudio*` roots. Project, library, common-file, input, and enum schema
+types likewise use `CrowdyStudio` in place of `PlayerCode`.
 
 ```ts
-import { mountModStudio } from '@crowdedkingdoms/crowdyjs/mod-studio';
+import { mountCrowdyStudio } from '@crowdedkingdoms/crowdyjs/crowdy-studio';
 
-const studio = await mountModStudio(host, {
-  projectProvider: game.playerCodeProjects,
+const studio = await mountCrowdyStudio(host, {
+  projectProvider: game.crowdyStudio,
   playerCompute: game.playerCompute,
   playerWallet: identity.playerWallet,
   appId,
@@ -33,36 +43,26 @@ const studio = await mountModStudio(host, {
 });
 ```
 
-Custom UIs instantiate `ModStudioController` directly. Move all source state
-into `ModStudioProjectProvider`: project files are typed
-`{ target: 'SERVER' | 'CLIENT', path, content }`, and full-stack files share one
-revision/save. Module names and pairing preference are project settings.
-Do not stringify source maps in callers; Mod Studio creates `sourceFilesJson`
-only at the existing `playerCompute.deploy` wire boundary.
+Provider behavior, optimistic saves, target permissions, the credential-free
+worker, full-stack deploy ordering, and stop semantics are unchanged.
 
-Action semantics are now explicit:
+# CrowdyJS v10 — project-first authoring (historical)
 
-- **Test draft** saves atomically, compiles, and runs with draft egress rules.
-- **Deploy live** saves and runs the live project.
-- **Stop project** attempts `setEnabled(false)`, client broker shutdown, and
-  polling cleanup, and returns partial failures instead of hiding them.
+Version 10 replaced the session-only live-coding API with cloud projects. It
+removed `mountLiveCodingIDE`, `mountLiveCoding`, `LiveCodingController`,
+`MountLiveCodingOptions`, `PLAYER_CODE_TEMPLATES`, `templateById`, the
+`moduleName` and `draftByDefault` mount options, and the
+`@crowdedkingdoms/crowdyjs/live-coding` package subpath.
 
-Full-stack order is CLIENT compile → SERVER compile → `setRequires` (only after
-both succeed) → SERVER enable → exact-version CLIENT artifact hot-swap.
+Projects introduced one shared optimistic revision for SERVER and CLIENT files,
+project metadata and module names, personal-library/common-file imports, atomic
+autosave, and explicit **Test draft**, **Deploy live**, and **Stop project**
+actions. Full-stack deployment was ordered CLIENT compile → SERVER compile →
+`setRequires` → SERVER enable → exact-version CLIENT artifact hot-swap.
 
-The local Rust worker remains credential-free and server-free. Monaco now uses
-target-prefixed URIs and loads project, personal-library, and common Rust files
-for cross-file completion/hover/symbols/definition. If Monaco/Worker/WASM fails,
-`mountModStudio` keeps a target/file-aware textarea inside the same project UI;
-there is no standalone fallback API.
-
-The Game API project contract is exposed through `PlayerCodeProjectsAPI`.
-Generated operations cover `playerCodeProjects`, `playerCodeProject`,
-`playerCodeProjectCreate`, `playerCodeProjectSave`,
-`playerCodeLibraryFiles`, `playerCodeLibrarySave`,
-`playerCodeCommonFiles`, and `playerCodeProjectImportFile`.
-
-This branch is versioned `10.0.0` for the coordinated major release.
+The browser Rust worker remained credential-free and server-free. Monaco used
+target-prefixed URIs for cross-file language features and retained the
+target/file-aware textarea fallback.
 
 # CrowdyJS v8.10 Notes
 

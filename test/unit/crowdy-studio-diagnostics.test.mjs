@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRustcDiagnostics } from '../../dist/mod-studio/diagnostics.js';
+import { parseRustcDiagnostics } from '../../dist/crowdy-studio/diagnostics.js';
 
 test('rustc human output becomes authoritative target/path diagnostics', () => {
   const output = [

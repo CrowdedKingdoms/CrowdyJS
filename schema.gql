@@ -4793,9 +4793,9 @@ type Query {
     appId: BigInt!
   ): [GridClaimRequest!]!
   """
-  List the authenticated player’s private Mod Studio projects in one app, newest first. Requires an app-scoped token for appId; every row and source-file read is filtered by both app and caller ownership. The bounded result defaults to 25 and never grants grid deployment authority.
+  List the authenticated player’s private Crowdy Studio projects in one app, newest first. Requires an app-scoped token for appId; every row and source-file read is filtered by both app and caller ownership. The bounded result defaults to 25 and never grants grid deployment authority.
   """
-  playerCodeProjects(
+  crowdyStudioProjects(
     """App tenant to list. The bearer token must be scoped to this exact app."""
     appId: BigInt!
     """
@@ -4806,20 +4806,20 @@ type Query {
     limit: Int
     """Number of owner-scoped projects to skip (default 0, maximum 10000)."""
     offset: Int
-  ): [PlayerCodeProject!]!
+  ): [CrowdyStudioProject!]!
   """
-  Load one private Mod Studio project with all bounded source files. Requires an app-scoped token for appId and exact caller ownership; missing, cross-app, and cross-user ids all return the same NOT_FOUND shape. Grid owners and studio operators receive no source override.
+  Load one private Crowdy Studio project with all bounded source files. Requires an app-scoped token for appId and exact caller ownership; missing, cross-app, and cross-user ids all return the same NOT_FOUND shape. Grid owners and Crowdy Studio operators receive no source override.
   """
-  playerCodeProject(
+  crowdyStudioProject(
     """App tenant containing the project; the bearer token must match it."""
     appId: BigInt!
     """Private project UUID to load."""
     projectId: String!
-  ): PlayerCodeProject!
+  ): CrowdyStudioProject!
   """
-  List the authenticated player’s private reusable source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or studio operators. The bounded result defaults to 50.
+  List the authenticated player’s private reusable Crowdy Studio source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or Crowdy Studio operators. The bounded result defaults to 50.
   """
-  playerCodeLibraryFiles(
+  crowdyStudioLibraryFiles(
     """App tenant whose caller-owned personal library should be listed."""
     appId: BigInt!
     """
@@ -4832,22 +4832,22 @@ type Query {
     Number of owner-scoped library entries to skip (default 0, maximum 10000).
     """
     offset: Int
-  ): [PlayerCodeLibraryFile!]!
+  ): [CrowdyStudioLibraryFile!]!
   """
-  List the current immutable versions of published studio-curated common files for one app. Requires an app-scoped token for appId; unlike private player source, this catalog content is intentionally readable by players in that app. Results are bounded and may be filtered by target.
+  List the current immutable versions of published Crowdy Studio-curated common files for one app. Requires an app-scoped token for appId; unlike private player source, this catalog content is intentionally readable by players in that app. Results are bounded and may be filtered by target.
   """
-  playerCodeCommonFiles(
+  crowdyStudioCommonFiles(
     """
     App tenant whose published curated catalog should be read; the bearer token must match it.
     """
     appId: BigInt!
     """Optional SERVER or CLIENT compatibility filter; omit for both targets."""
-    target: PlayerCodeTarget
+    target: CrowdyStudioTarget
     """Maximum published entries to return (default 50, allowed 1–100)."""
     limit: Int
     """Number of matching catalog entries to skip (default 0, maximum 10000)."""
     offset: Int
-  ): [PlayerCodeCommonFile!]!
+  ): [CrowdyStudioCommonFile!]!
   """
   List flexible player-model containers owned by the caller in one currently owned grid. Requires an app-scoped token and current grid ownership; never returns app-wide or foreign-owner rows.
   """
@@ -6899,95 +6899,95 @@ type Mutation {
     inviteeUserId: BigInt!
   ): Boolean!
   """
-  Create a private revisioned Mod Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
+  Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
   """
-  playerCodeProjectCreate(
+  crowdyStudioProjectCreate(
     """
     Project metadata, optional non-authoritative grid affinity, optional bounded initial files, and retry key.
     """
-    input: CreatePlayerCodeProjectInput!
-  ): PlayerCodeProject!
+    input: CreateCrowdyStudioProjectInput!
+  ): CrowdyStudioProject!
   """
   Optimistically save selected private project metadata and increment its monotonic revision. Requires an app-scoped token and exact project ownership. A stale expectedRevision returns CONFLICT; grid affinity remains an authoring hint and never bypasses player-compute deployment checks.
   """
-  playerCodeProjectSaveMetadata(
+  crowdyStudioProjectSaveMetadata(
     """
     Project id, expected revision, selected metadata changes, and optional retry key.
     """
-    input: SavePlayerCodeProjectMetadataInput!
-  ): PlayerCodeProject!
+    input: SaveCrowdyStudioProjectMetadataInput!
+  ): CrowdyStudioProject!
   """
   Atomically save selected private project metadata and a batch of file upserts/deletes under one expected project revision. Requires an app-scoped token and exact project ownership. No partial metadata or file changes survive validation, target-cap, aggregate-storage, module-binding, or revision failures.
   """
-  playerCodeProjectSave(
+  crowdyStudioProjectSave(
     """
     Project id/revision, optional metadata changes, atomic file delta, and optional retry key.
     """
-    input: SavePlayerCodeProjectInput!
-  ): PlayerCodeProject!
+    input: SaveCrowdyStudioProjectInput!
+  ): CrowdyStudioProject!
   """
   Apply a batch of project-file upserts and deletes in one transaction under one expected project revision. Requires an app-scoped token and exact project ownership. No partial writes survive path, manifest, independent 8-file/64-KiB-file/256-KiB-target caps, aggregate storage, or revision failures.
   """
-  playerCodeProjectSaveFiles(
+  crowdyStudioProjectSaveFiles(
     """
     Destination project, expected revision, atomic upsert/delete batch, and optional retry key.
     """
-    input: SavePlayerCodeProjectFilesInput!
-  ): PlayerCodeProject!
+    input: SaveCrowdyStudioProjectFilesInput!
+  ): CrowdyStudioProject!
   """
   Archive or restore a private project without deleting any source or provenance, using optimistic revision control. Requires an app-scoped token and exact owner match. Archived projects remain readable by their owner but are read-only until restored.
   """
-  playerCodeProjectSetArchived(
+  crowdyStudioProjectSetArchived(
     """
     Project id, expected revision, desired archive state, and optional retry key.
     """
-    input: SetPlayerCodeProjectArchivedInput!
-  ): PlayerCodeProject!
+    input: SetCrowdyStudioProjectArchivedInput!
+  ): CrowdyStudioProject!
   """
   Create or optimistically update one private personal-library source file. Requires an app-scoped token; ownership is always the authenticated player and cannot be delegated. Safe source paths, 64-KiB content, revision, and configurable bounded aggregate library storage are enforced atomically.
   """
-  playerCodeLibrarySave(
+  crowdyStudioLibrarySave(
     """
     Create/update shape, safe path hint, target, tags, private content, and optional retry key.
     """
-    input: SavePlayerCodeLibraryFileInput!
-  ): PlayerCodeLibraryFile!
+    input: SaveCrowdyStudioLibraryFileInput!
+  ): CrowdyStudioLibraryFile!
   """
   Archive or restore one caller-owned personal-library file under optimistic revision control. Requires an app-scoped token and exact app/user ownership; archived entries remain retained but cannot be imported until restored.
   """
-  playerCodeLibrarySetArchived(
+  crowdyStudioLibrarySetArchived(
     """
     Library entry id, expected revision, desired archive state, and optional retry key.
     """
-    input: SetPlayerCodeLibraryFileArchivedInput!
-  ): PlayerCodeLibraryFile!
+    input: SetCrowdyStudioLibraryFileArchivedInput!
+  ): CrowdyStudioLibraryFile!
   """
   Copy one active caller-owned library revision or one immutable published app-common version into a private project by value. Requires an app-scoped token and exact project ownership. The source is re-authorized, content/provenance are snapshotted, project caps and aggregate storage are checked, and the project revision advances atomically.
   """
-  playerCodeProjectImportFile(
+  crowdyStudioProjectImportFile(
     """
     Destination project/revision, exactly one authorized source id, optional safe destination path, and retry key.
     """
-    input: ImportPlayerCodeProjectFileInput!
-  ): PlayerCodeProject!
+    input: ImportCrowdyStudioProjectFileInput!
+  ): CrowdyStudioProject!
   """
-  Publish a new immutable version of an app-scoped studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries.
+  Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries.
   """
-  playerCodeCommonPublish(
+  crowdyStudioCommonPublish(
     """
     Stable catalog identity/metadata, compatible target/path, new immutable content, and optional retry key.
     """
-    input: PublishPlayerCodeCommonFileInput!
-  ): PlayerCodeCommonFile! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+    input: PublishCrowdyStudioCommonFileInput!
+  ): CrowdyStudioCommonFile! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
   """
   Lazily create a private project by copying the authenticated author’s latest source from an existing self-authored SERVER module, CLIENT module, or both. Requires an app-scoped token and authorship of every requested module; current grid ownership is deliberately not required for private source recovery after transfer, while any later deploy still rechecks ownership and target permissions. Repeated requests reuse the matching active project.
   """
-  playerCodeProjectCreateFromModules(
+  crowdyStudioProjectCreateFromModules(
     """
     App/grid, one or two caller-authored module names, optional project name, and retry key.
     """
-    input: CreatePlayerCodeProjectFromModulesInput!
-  ): PlayerCodeProject!
+    input: CreateCrowdyStudioProjectFromModulesInput!
+  ): CrowdyStudioProject!
   """
   Create a flexible player-model instance in a currently owned grid. The server forces ownerUserId to the caller; this cannot author studio types or app-wide rows.
   """
@@ -10153,17 +10153,17 @@ type GridPurchaseResult {
 """
 One private text file in a player-owned project. It is returned only when both app id and authenticated owner match the project.
 """
-type PlayerCodeProjectFile {
+type CrowdyStudioProjectFile {
   """
   Server or client target whose independent 8-file/256-KiB deploy cap includes this file.
   """
-  target: PlayerCodeTarget!
+  target: CrowdyStudioTarget!
   """
   Safe compute-source relative path: Cargo.toml or a Rust file below src/.
   """
   path: String!
   """
-  Private UTF-8 source text. Grid ownership and studio permissions never override project ownership.
+  Private UTF-8 source text. Grid ownership and Crowdy Studio permissions never override project ownership.
   """
   content: String!
   """
@@ -10173,7 +10173,7 @@ type PlayerCodeProjectFile {
   """
   Copy provenance. Imported bytes remain unchanged if the source catalog entry later changes.
   """
-  provenance: PlayerCodeFileProvenance!
+  provenance: CrowdyStudioFileProvenance!
   """
   Private library file UUID used for the copy, or null for authored/common content.
   """
@@ -10193,9 +10193,9 @@ type PlayerCodeProjectFile {
 }
 
 """
-The independently capped source target inside a player-owned Mod Studio project.
+The independently capped source target inside a player-owned Crowdy Studio project.
 """
-enum PlayerCodeTarget {
+enum CrowdyStudioTarget {
   """
   Server-target Rust that can run only after the caller separately passes current grid ownership and write_server_code deployment checks.
   """
@@ -10209,7 +10209,7 @@ enum PlayerCodeTarget {
 """
 How a project file entered the project. Imported content is copied by value; provenance is informational and does not create a live link.
 """
-enum PlayerCodeFileProvenance {
+enum CrowdyStudioFileProvenance {
   """The owner authored or directly saved this project file."""
   AUTHORED
   """
@@ -10217,15 +10217,15 @@ enum PlayerCodeFileProvenance {
   """
   LIBRARY
   """
-  The file was copied from a specific immutable version of the app’s studio-curated common catalog.
+  The file was copied from a specific immutable version of the app’s Crowdy Studio-curated common catalog.
   """
   COMMON
 }
 
 """
-A private, revisioned Mod Studio project owned by one user in one app. Optional grid affinity and module names are authoring hints only; deployment still rechecks current grid ownership and target-specific permissions.
+A private, revisioned Crowdy Studio project owned by one user in one app. Optional grid affinity and module names are authoring hints only; deployment still rechecks current grid ownership and target-specific permissions.
 """
-type PlayerCodeProject {
+type CrowdyStudioProject {
   """Stable project UUID."""
   projectId: String!
   """App tenant that isolates this project and all of its source."""
@@ -10249,7 +10249,7 @@ type PlayerCodeProject {
   """
   clientModuleName: String
   """Editor presentation preference for the two source targets."""
-  pairingPreference: PlayerCodePairingPreference!
+  pairingPreference: CrowdyStudioPairingPreference!
   """Pinned crowdy-compute-sdk version used when constructing deploy input."""
   sdkVersion: String!
   """Pinned guest ABI version used when constructing deploy input."""
@@ -10275,7 +10275,7 @@ type PlayerCodeProject {
   """
   Private project files ordered by target and path. Bounded to eight files per target.
   """
-  files: [PlayerCodeProjectFile!]!
+  files: [CrowdyStudioProjectFile!]!
   """Project creation timestamp."""
   createdAt: DateTime!
   """Timestamp of the latest successful project mutation."""
@@ -10285,9 +10285,9 @@ type PlayerCodeProject {
 """
 Editor preference describing how the project presents its server and client targets; it never grants deployment or runtime authority.
 """
-enum PlayerCodePairingPreference {
+enum CrowdyStudioPairingPreference {
   """
-  Present server and client sources as two coordinated halves of one mod.
+  Present server and client sources as two coordinated halves of one Crowdy Studio project.
   """
   PAIRED
   """
@@ -10303,7 +10303,7 @@ enum PlayerCodePairingPreference {
 """
 A reusable private text file in the authenticated player’s app-scoped personal library.
 """
-type PlayerCodeLibraryFile {
+type CrowdyStudioLibraryFile {
   """Stable personal-library file UUID."""
   libraryFileId: String!
   """App tenant that isolates this private library entry."""
@@ -10315,7 +10315,7 @@ type PlayerCodeLibraryFile {
   """Safe suggested destination path; imports may choose another safe path."""
   pathHint: String!
   """Compatible project target for this reusable file."""
-  target: PlayerCodeTarget!
+  target: CrowdyStudioTarget!
   """Normalized search tags, each lowercase and hyphen-safe."""
   tags: [String!]!
   """Private UTF-8 source text, visible only to the app-scoped owner."""
@@ -10333,29 +10333,29 @@ type PlayerCodeLibraryFile {
 }
 
 """
-A studio-curated app-scoped common file at its current immutable published version. Unlike personal source, this content is intentionally readable by app-scoped players.
+A Crowdy Studio-curated app-scoped common file at its current immutable published version. Unlike personal source, this content is intentionally readable by app-scoped players.
 """
-type PlayerCodeCommonFile {
+type CrowdyStudioCommonFile {
   """Stable common catalog entry UUID."""
   commonFileId: String!
   """App tenant whose players may read this published entry."""
   appId: BigInt!
   """Stable lowercase URL-safe catalog slug."""
   slug: String!
-  """Studio-authored catalog title."""
+  """Crowdy Studio-authored catalog title."""
   title: String!
-  """Optional studio-authored catalog description."""
+  """Optional Crowdy Studio-authored catalog description."""
   description: String
   """Safe recommended project destination path."""
   path: String!
   """Compatible project target for this catalog entry."""
-  target: PlayerCodeTarget!
-  """Normalized studio-curated discovery tags."""
+  target: CrowdyStudioTarget!
+  """Normalized Crowdy Studio-curated discovery tags."""
   tags: [String!]!
   """
   Catalog lifecycle state; ordinary player queries expose only PUBLISHED.
   """
-  status: PlayerCodeCommonStatus!
+  status: CrowdyStudioCommonStatus!
   """Current immutable content-version UUID."""
   versionId: String!
   """Monotonic immutable version number within the catalog entry."""
@@ -10364,7 +10364,7 @@ type PlayerCodeCommonFile {
   content: String!
   """Lowercase SHA-256 digest of the exact UTF-8 content bytes."""
   contentSha256: String!
-  """Studio user that published the current immutable version."""
+  """Crowdy Studio user that published the current immutable version."""
   publishedByUserId: BigInt!
   """Timestamp when the current immutable version was published."""
   publishedAt: DateTime!
@@ -10375,10 +10375,12 @@ type PlayerCodeCommonFile {
 }
 
 """
-Studio-controlled catalog visibility. Player catalog queries return only published entries.
+Crowdy Studio catalog visibility. Player catalog queries return only published entries.
 """
-enum PlayerCodeCommonStatus {
-  """Studio work in progress; hidden from player common-file queries."""
+enum CrowdyStudioCommonStatus {
+  """
+  Crowdy Studio work in progress; hidden from player common-file queries.
+  """
   DRAFT
   """Available to app-scoped players for reading and copy-by-value import."""
   PUBLISHED
@@ -12086,7 +12088,7 @@ input PublishPlayerCodeVersionInput {
 """
 Create a private player-owned project, optionally with bounded initial files for either target.
 """
-input CreatePlayerCodeProjectInput {
+input CreateCrowdyStudioProjectInput {
   """
   App tenant. Requires an app-scoped token for this exact app; the project is owned by the authenticated user.
   """
@@ -12108,7 +12110,7 @@ input CreatePlayerCodeProjectInput {
   """
   clientModuleName: String
   """Optional editor pairing preference; defaults to PAIRED."""
-  pairingPreference: PlayerCodePairingPreference = PAIRED
+  pairingPreference: CrowdyStudioPairingPreference = PAIRED
   """
   Supported crowdy-compute-sdk pin; defaults to the current 0.1.5 authoring pin.
   """
@@ -12118,7 +12120,7 @@ input CreatePlayerCodeProjectInput {
   """
   Optional initial source files. At most 16 total and at most 8/256 KiB independently per target.
   """
-  initialFiles: [PlayerCodeProjectFileInput!]
+  initialFiles: [CrowdyStudioProjectFileInput!]
   """
   Optional retry key. Same user, operation, key, and input replay the first result for 24 hours; changed input returns IDEMPOTENCY_CONFLICT.
   """
@@ -12128,9 +12130,9 @@ input CreatePlayerCodeProjectInput {
 """
 One direct-authored initial or batch-upsert project file. Paths and UTF-8 bytes are validated against player-compute safety limits.
 """
-input PlayerCodeProjectFileInput {
+input CrowdyStudioProjectFileInput {
   """Project target receiving this file."""
-  target: PlayerCodeTarget!
+  target: CrowdyStudioTarget!
   """
   Safe relative path: Cargo.toml or a .rs file below src/, with no traversal segments.
   """
@@ -12142,13 +12144,13 @@ input PlayerCodeProjectFileInput {
 """
 Optimistically save selected project metadata. Omitted fields remain unchanged; explicit null clears nullable metadata.
 """
-input SavePlayerCodeProjectMetadataInput {
+input SaveCrowdyStudioProjectMetadataInput {
   """App tenant that owns the private project."""
   appId: BigInt!
   """Project UUID to update."""
   projectId: String!
   """
-  Current project revision. A stale value returns CONFLICT with PLAYER_CODE_REVISION_CONFLICT.
+  Current project revision. A stale value returns CONFLICT with CROWDY_STUDIO_REVISION_CONFLICT.
   """
   expectedRevision: BigInt!
   """
@@ -12164,7 +12166,7 @@ input SavePlayerCodeProjectMetadataInput {
   """New CLIENT module name, explicit null to clear, or omit to preserve."""
   clientModuleName: String
   """New editor pairing preference, or omit to preserve."""
-  pairingPreference: PlayerCodePairingPreference
+  pairingPreference: CrowdyStudioPairingPreference
   """New supported SDK pin, or omit to preserve."""
   sdkVersion: String
   """New supported ABI pin, or omit to preserve."""
@@ -12176,15 +12178,15 @@ input SavePlayerCodeProjectMetadataInput {
 }
 
 """
-Atomically save selected project metadata plus a batch of file upserts/deletes under one expected project revision. Mod Studio uses this to persist one coherent full-stack edit.
+Atomically save selected project metadata plus a batch of file upserts/deletes under one expected project revision. Crowdy Studio uses this to persist one coherent full-stack edit.
 """
-input SavePlayerCodeProjectInput {
+input SaveCrowdyStudioProjectInput {
   """App tenant that owns the private project."""
   appId: BigInt!
   """Project UUID to update."""
   projectId: String!
   """
-  Current project revision. A stale value returns CONFLICT with PLAYER_CODE_REVISION_CONFLICT and applies no metadata or file writes.
+  Current project revision. A stale value returns CONFLICT with CROWDY_STUDIO_REVISION_CONFLICT and applies no metadata or file writes.
   """
   expectedRevision: BigInt!
   """
@@ -12200,7 +12202,7 @@ input SavePlayerCodeProjectInput {
   """New CLIENT module name, explicit null to clear, or omit to preserve."""
   clientModuleName: String
   """New editor pairing preference, or omit to preserve."""
-  pairingPreference: PlayerCodePairingPreference
+  pairingPreference: CrowdyStudioPairingPreference
   """New supported SDK pin, or omit to preserve."""
   sdkVersion: String
   """New supported ABI pin, or omit to preserve."""
@@ -12208,21 +12210,21 @@ input SavePlayerCodeProjectInput {
   """
   Changed or new files to insert/replace. Unmentioned files and their provenance remain unchanged.
   """
-  upserts: [PlayerCodeProjectFileInput!]
+  upserts: [CrowdyStudioProjectFileInput!]
   """
   Files to delete in the same transaction. A target/path cannot also appear in upserts.
   """
-  deletes: [PlayerCodeProjectFileDeleteInput!]
+  deletes: [CrowdyStudioProjectFileDeleteInput!]
   """
   Optional 24-hour retry key; recommended because a successful atomic save increments the expected revision.
   """
   idempotencyKey: String
 }
 
-"""A target/path key removed atomically by playerCodeProjectSaveFiles."""
-input PlayerCodeProjectFileDeleteInput {
+"""A target/path key removed atomically by crowdyStudioProjectSaveFiles."""
+input CrowdyStudioProjectFileDeleteInput {
   """Project target containing the file to remove."""
-  target: PlayerCodeTarget!
+  target: CrowdyStudioTarget!
   """Safe relative path of the file to remove."""
   path: String!
 }
@@ -12230,7 +12232,7 @@ input PlayerCodeProjectFileDeleteInput {
 """
 Atomically upsert and delete a private project’s text files under one expected project revision.
 """
-input SavePlayerCodeProjectFilesInput {
+input SaveCrowdyStudioProjectFilesInput {
   """App tenant that owns the private project."""
   appId: BigInt!
   """Project UUID to mutate."""
@@ -12242,11 +12244,11 @@ input SavePlayerCodeProjectFilesInput {
   """
   Files to insert or replace. The batch commits only if all paths and post-save caps are valid.
   """
-  upserts: [PlayerCodeProjectFileInput!]
+  upserts: [CrowdyStudioProjectFileInput!]
   """
   Files to remove in the same transaction. A target/path cannot also appear in upserts.
   """
-  deletes: [PlayerCodeProjectFileDeleteInput!]
+  deletes: [CrowdyStudioProjectFileDeleteInput!]
   """
   Optional 24-hour retry key; recommended because a successful batch increments the expected revision.
   """
@@ -12256,7 +12258,7 @@ input SavePlayerCodeProjectFilesInput {
 """
 Optimistically archive or unarchive one private project without deleting its files or provenance.
 """
-input SetPlayerCodeProjectArchivedInput {
+input SetCrowdyStudioProjectArchivedInput {
   """App tenant that owns the private project."""
   appId: BigInt!
   """Project UUID to archive or restore."""
@@ -12272,7 +12274,7 @@ input SetPlayerCodeProjectArchivedInput {
 """
 Create or optimistically update one private reusable personal-library file.
 """
-input SavePlayerCodeLibraryFileInput {
+input SaveCrowdyStudioLibraryFileInput {
   """
   App tenant. Requires an app-scoped token; ownership is always the authenticated user.
   """
@@ -12288,7 +12290,7 @@ input SavePlayerCodeLibraryFileInput {
   """Safe suggested destination path: Cargo.toml or a .rs file below src/."""
   pathHint: String!
   """Compatible project target for this reusable file."""
-  target: PlayerCodeTarget!
+  target: CrowdyStudioTarget!
   """
   Optional unique lowercase discovery tags; at most 16, each at most 32 characters.
   """
@@ -12302,7 +12304,7 @@ input SavePlayerCodeLibraryFileInput {
 """
 Optimistically archive or restore one caller-owned personal-library file.
 """
-input SetPlayerCodeLibraryFileArchivedInput {
+input SetCrowdyStudioLibraryFileArchivedInput {
   """App tenant that owns the private library entry."""
   appId: BigInt!
   """Personal-library file UUID."""
@@ -12318,7 +12320,7 @@ input SetPlayerCodeLibraryFileArchivedInput {
 """
 Copy a private library revision or immutable published common version into a project by value.
 """
-input ImportPlayerCodeProjectFileInput {
+input ImportCrowdyStudioProjectFileInput {
   """App tenant shared by the project and import source."""
   appId: BigInt!
   """Destination project UUID."""
@@ -12326,7 +12328,7 @@ input ImportPlayerCodeProjectFileInput {
   """Current project revision; the copy and revision increment are atomic."""
   expectedProjectRevision: BigInt!
   """Private LIBRARY or app-curated COMMON source."""
-  source: PlayerCodeImportSource!
+  source: CrowdyStudioImportSource!
   """Caller-owned library file UUID; required only for LIBRARY imports."""
   libraryFileId: String
   """Immutable common version UUID; required only for COMMON imports."""
@@ -12340,7 +12342,7 @@ input ImportPlayerCodeProjectFileInput {
 }
 
 """The source catalog used for a copy-by-value project file import."""
-enum PlayerCodeImportSource {
+enum CrowdyStudioImportSource {
   """
   Import from a private personal-library file owned by the authenticated caller.
   """
@@ -12352,9 +12354,9 @@ enum PlayerCodeImportSource {
 }
 
 """
-Publish a new immutable studio-curated common-file version. Requires the app manage_compute permission.
+Publish a new immutable Crowdy Studio-curated common-file version. Requires the app manage_compute permission.
 """
-input PublishPlayerCodeCommonFileInput {
+input PublishCrowdyStudioCommonFileInput {
   """
   App tenant receiving the common entry; the token and manage_compute permission must cover this app.
   """
@@ -12367,14 +12369,14 @@ input PublishPlayerCodeCommonFileInput {
   Stable lowercase hyphenated catalog slug. Existing entries cannot change their slug.
   """
   slug: String!
-  """Studio-authored catalog title."""
+  """Crowdy Studio-authored catalog title."""
   title: String!
-  """Optional studio-authored catalog description."""
+  """Optional Crowdy Studio-authored catalog description."""
   description: String
   """Safe recommended destination path."""
   path: String!
   """Compatible project target for this common file."""
-  target: PlayerCodeTarget!
+  target: CrowdyStudioTarget!
   """Optional unique lowercase discovery tags; at most 16."""
   tags: [String!]
   """UTF-8 source text for the new immutable version, capped at 64 KiB."""
@@ -12388,7 +12390,7 @@ input PublishPlayerCodeCommonFileInput {
 """
 Lazily create a private project by copying the authenticated author’s latest source versions from existing self-authored player modules.
 """
-input CreatePlayerCodeProjectFromModulesInput {
+input CreateCrowdyStudioProjectFromModulesInput {
   """App tenant containing the authored modules."""
   appId: BigInt!
   """
