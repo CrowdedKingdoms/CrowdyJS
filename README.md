@@ -166,6 +166,11 @@ server/client module names, and a pairing preference. Full-stack edits autosave
 as one optimistic-concurrency write; the UI renders **Saving**, **Saved**,
 **Conflict**, or **Offline**, with retry and conflict-resolution actions.
 
+The mount fills its host and observes host element resizes, so games can embed
+it in draggable docks or split panes without manually relaying window resize
+events. Give the host an explicit width and height; Crowdy Studio relayouts
+Monaco and collapses secondary panes from its own container width.
+
 ```ts
 import { mountCrowdyStudio } from '@crowdedkingdoms/crowdyjs/crowdy-studio';
 

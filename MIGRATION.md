@@ -1,3 +1,14 @@
+# CrowdyJS v11.1 — responsive Crowdy Studio embedding
+
+Crowdy Studio now sizes to its host instead of imposing a 680-pixel minimum
+height. The mount observes host element resizes and relayouts Monaco, while its
+explorer and settings panes respond to the host's container width rather than
+the browser viewport.
+
+Embedding hosts should provide an explicit width and height for the mount
+element. No project, autosave, deploy, pairing, worker-security, or GraphQL
+behavior changed.
+
 # CrowdyJS v11 — Crowdy Studio rename (BREAKING)
 
 Version 11 removes the previous Mod Studio names completely. There are no
