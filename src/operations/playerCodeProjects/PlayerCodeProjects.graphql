@@ -1,0 +1,158 @@
+fragment PlayerCodeProjectFields on PlayerCodeProject {
+  projectId
+  appId
+  ownerUserId
+  gridId
+  name
+  description
+  serverModuleName
+  clientModuleName
+  pairingPreference
+  sdkVersion
+  abiVersion
+  revision
+  archived
+  archivedAt
+  fileCount
+  totalBytes
+  createdAt
+  updatedAt
+  files {
+    target
+    path
+    content
+    revision
+    provenance
+    provenanceLibraryFileId
+    provenanceLibraryRevision
+    provenanceCommonVersionId
+    createdAt
+    updatedAt
+  }
+}
+
+query PlayerCodeProjects(
+  $appId: BigInt!
+  $includeArchived: Boolean
+  $limit: Int
+  $offset: Int
+) {
+  playerCodeProjects(
+    appId: $appId
+    includeArchived: $includeArchived
+    limit: $limit
+    offset: $offset
+  ) {
+    projectId
+    gridId
+    name
+    serverModuleName
+    clientModuleName
+    pairingPreference
+    revision
+    archived
+    updatedAt
+  }
+}
+
+query PlayerCodeProject($appId: BigInt!, $projectId: String!) {
+  playerCodeProject(appId: $appId, projectId: $projectId) {
+    ...PlayerCodeProjectFields
+  }
+}
+
+mutation PlayerCodeProjectCreate($input: CreatePlayerCodeProjectInput!) {
+  playerCodeProjectCreate(input: $input) {
+    ...PlayerCodeProjectFields
+  }
+}
+
+mutation PlayerCodeProjectSave($input: SavePlayerCodeProjectInput!) {
+  playerCodeProjectSave(input: $input) {
+    ...PlayerCodeProjectFields
+  }
+}
+
+query PlayerCodeLibraryFiles(
+  $appId: BigInt!
+  $includeArchived: Boolean
+  $limit: Int
+  $offset: Int
+) {
+  playerCodeLibraryFiles(
+    appId: $appId
+    includeArchived: $includeArchived
+    limit: $limit
+    offset: $offset
+  ) {
+    libraryFileId
+    appId
+    ownerUserId
+    title
+    pathHint
+    target
+    tags
+    content
+    revision
+    archived
+    archivedAt
+    createdAt
+    updatedAt
+  }
+}
+
+mutation PlayerCodeLibrarySave($input: SavePlayerCodeLibraryFileInput!) {
+  playerCodeLibrarySave(input: $input) {
+    libraryFileId
+    appId
+    ownerUserId
+    title
+    pathHint
+    target
+    tags
+    content
+    revision
+    archived
+    archivedAt
+    createdAt
+    updatedAt
+  }
+}
+
+query PlayerCodeCommonFiles(
+  $appId: BigInt!
+  $target: PlayerCodeTarget
+  $limit: Int
+  $offset: Int
+) {
+  playerCodeCommonFiles(
+    appId: $appId
+    target: $target
+    limit: $limit
+    offset: $offset
+  ) {
+    commonFileId
+    appId
+    slug
+    title
+    description
+    path
+    target
+    tags
+    status
+    versionId
+    versionNo
+    content
+    contentSha256
+    publishedByUserId
+    publishedAt
+    createdAt
+    updatedAt
+  }
+}
+
+mutation PlayerCodeProjectImportFile($input: ImportPlayerCodeProjectFileInput!) {
+  playerCodeProjectImportFile(input: $input) {
+    ...PlayerCodeProjectFields
+  }
+}

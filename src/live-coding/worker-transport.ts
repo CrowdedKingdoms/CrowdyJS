@@ -131,6 +131,7 @@ export class WorkerLanguageClient {
   private readonly writer: WorkerMessageWriter;
   private readonly connection: ProtocolConnection;
   private readonly transportErrorHandlers = new Set<(error: Error) => void>();
+  private readonly persistentErrorHandlers = new Set<(error: Error) => void>();
   private readonly readerErrorDisposable: Disposable;
   private disposed = false;
   private terminateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -143,6 +144,7 @@ export class WorkerLanguageClient {
     this.writer = new WorkerMessageWriter(worker);
     this.readerErrorDisposable = this.reader.onError((error) => {
       for (const handler of this.transportErrorHandlers) handler(error);
+      for (const handler of this.persistentErrorHandlers) handler(error);
     });
     this.connection = createProtocolConnection(this.reader, this.writer);
     this.connection.listen();
@@ -220,6 +222,15 @@ export class WorkerLanguageClient {
     return this.connection.onNotification(method, callback);
   }
 
+  /** Observe worker/transport failures for editor fallback and telemetry. */
+  onError(callback: (error: Error) => void): Disposable {
+    if (this.disposed) return { dispose() {} };
+    this.persistentErrorHandlers.add(callback);
+    return {
+      dispose: () => this.persistentErrorHandlers.delete(callback),
+    };
+  }
+
   shutdown(): void {
     if (this.disposed || this.terminateTimer) return;
     const finish = (): void => {
@@ -241,6 +252,7 @@ export class WorkerLanguageClient {
     if (this.terminateTimer) clearTimeout(this.terminateTimer);
     this.terminateTimer = null;
     this.transportErrorHandlers.clear();
+    this.persistentErrorHandlers.clear();
     this.readerErrorDisposable.dispose();
     this.connection.dispose();
     this.reader.dispose();

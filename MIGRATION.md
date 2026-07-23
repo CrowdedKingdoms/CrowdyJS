@@ -1,46 +1,68 @@
-# Unpublished next-major migration — local Rust authoring (BREAKING)
+# CrowdyJS v10 — project-first Mod Studio (BREAKING)
 
 This migration is implemented on the feature branch but is **not versioned or
 published yet**.
 
-`mountLiveCodingIDE` no longer connects to the WSS authoring service. Remove
-`languageServiceUrl` and `appToken` from every call:
+The session-only live-coding API was removed. There are deliberately no
+compatibility aliases.
+
+Removed exports:
+
+- `mountLiveCodingIDE`
+- `mountLiveCoding`
+- `LiveCodingController`
+- `MountLiveCodingOptions`
+- `PLAYER_CODE_TEMPLATES` / `templateById`
+- the `moduleName` and `draftByDefault` mount options
+- the `@crowdedkingdoms/crowdyjs/live-coding` package subpath
+
+Replace the old mount with a cloud project provider and the new subpath:
 
 ```ts
-// Before
-mountLiveCodingIDE(host, {
-  // ...normal live-coding options...
-  languageServiceUrl: import.meta.env.VITE_AUTHORING_LSP_URL,
-  appToken: () => game.session.getToken(),
-});
+import { mountModStudio } from '@crowdedkingdoms/crowdyjs/mod-studio';
 
-// After
-mountLiveCodingIDE(host, {
-  // ...normal live-coding options...
+const studio = await mountModStudio(host, {
+  projectProvider: game.playerCodeProjects,
+  playerCompute: game.playerCompute,
+  playerWallet: identity.playerWallet,
+  appId,
+  gridId,
+  grid,
+  workerUrl: playerCodeGlueWorkerUrl,
+  onHostCall,
 });
 ```
 
-The replacement is a lazy browser module worker. It uses local
-`web-tree-sitter`/Rust-grammar WASM assets and never receives a credential or
-opens a language-service connection. Consumers must:
+Custom UIs instantiate `ModStudioController` directly. Move all source state
+into `ModStudioProjectProvider`: project files are typed
+`{ target: 'SERVER' | 'CLIENT', path, content }`, and full-stack files share one
+revision/save. Module names and pairing preference are project settings.
+Do not stringify source maps in callers; Mod Studio creates `sourceFilesJson`
+only at the existing `playerCompute.deploy` wire boundary.
 
-- remove consumer-side monaco-vscode initialization workarounds;
-- use a bundler that emits module workers and dependency `.wasm` assets, or pass
-  `languageWorkerFactory` for their asset pipeline;
-- remove authoring-LSP URL environment variables and token plumbing;
-- consume the embedded game-generated platform index by default (no runtime
-  fetch or BWF option plumbing); and
-- keep the textarea behavior as the only fallback. There is no server fallback.
+Action semantics are now explicit:
 
-The Monaco adapter still speaks LSP 3.17 over a standard `vscode-jsonrpc`
-Worker `MessageConnection`. `monaco-languageclient` was removed because its
-current package hard-depends on `vscode-ws-jsonrpc`; direct Monaco providers
-adapt completion/hover/symbol/definition calls to the standard message
-connection without restoring that WSS dependency.
+- **Test draft** saves atomically, compiles, and runs with draft egress rules.
+- **Deploy live** saves and runs the live project.
+- **Stop project** attempts `setEnabled(false)`, client broker shutdown, and
+  polling cleanup, and returns partial failures instead of hiding them.
 
-The `@crowdedkingdoms/crowdyjs/live-coding` subpath now exports the IDE,
-platform-index loader/types, VFS limits, and worker transport. The package
-version intentionally remains unchanged until the coordinated major release.
+Full-stack order is CLIENT compile → SERVER compile → `setRequires` (only after
+both succeed) → SERVER enable → exact-version CLIENT artifact hot-swap.
+
+The local Rust worker remains credential-free and server-free. Monaco now uses
+target-prefixed URIs and loads project, personal-library, and common Rust files
+for cross-file completion/hover/symbols/definition. If Monaco/Worker/WASM fails,
+`mountModStudio` keeps a target/file-aware textarea inside the same project UI;
+there is no standalone fallback API.
+
+The Game API project contract is exposed through `PlayerCodeProjectsAPI`.
+Generated operations cover `playerCodeProjects`, `playerCodeProject`,
+`playerCodeProjectCreate`, `playerCodeProjectSave`,
+`playerCodeLibraryFiles`, `playerCodeLibrarySave`,
+`playerCodeCommonFiles`, and `playerCodeProjectImportFile`.
+
+This branch is versioned `10.0.0` for the coordinated major release.
 
 # CrowdyJS v8.10 Notes
 

@@ -88,6 +88,52 @@ const RUST_KEYWORDS = [
   'where',
   'while',
 ];
+const TARGET_SNIPPETS: Record<'server' | 'client', CompletionItem[]> = {
+  server: [
+    {
+      label: 'server lifecycle',
+      kind: 15,
+      detail: 'SERVER init, tick, and invoke entry points',
+      documentation:
+        'Runs in the platform sandbox as the grid owner. Host effects remain permission checked and grid-clamped.',
+      insertText:
+        'fn on_init() {\n    $1\n}\n\nfn on_tick(dt_ms: u32) {\n    $2\n}\n\nfn on_invoke(payload: &[u8]) -> Vec<u8> {\n    $3\n}\n\ncrowdy_compute_sdk::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);',
+      sortText: '0-server-lifecycle',
+    },
+    {
+      label: 'server invoke export',
+      kind: 15,
+      detail: 'SERVER export callable from Mod Studio Invoke',
+      documentation:
+        'The caller and owned grid are supplied by the platform runtime; author identity is never authority.',
+      insertText:
+        'fn on_invoke(payload: &[u8]) -> Vec<u8> {\n    ${1:payload.to_vec()}\n}',
+      sortText: '0-server-invoke',
+    },
+  ],
+  client: [
+    {
+      label: 'client lifecycle',
+      kind: 15,
+      detail: 'CLIENT init, tick, and invoke entry points',
+      documentation:
+        'Runs in the browser Rust sandbox. Page capabilities are exposed only through the broker allow-list.',
+      insertText:
+        'fn on_init() {\n    $1\n}\n\nfn on_tick(dt_ms: u32) {\n    $2\n}\n\nfn on_invoke(payload: &[u8]) -> Vec<u8> {\n    $3\n}\n\ncrowdy_compute_sdk::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);',
+      sortText: '0-client-lifecycle',
+    },
+    {
+      label: 'client presentation tick',
+      kind: 15,
+      detail: 'CLIENT tick for allow-listed HUD/presentation effects',
+      documentation:
+        'Presentation calls cross PlayerCodeBroker; the language worker and guest module never receive page credentials.',
+      insertText:
+        'fn on_tick(dt_ms: u32) {\n    // Call an allow-listed presentation host function here.\n    $1\n}',
+      sortText: '0-client-presentation',
+    },
+  ],
+};
 
 let parserInitialization: Promise<void> | null = null;
 
@@ -145,6 +191,10 @@ export class RustAnalysis {
         sortText: `0-${symbol.name}`,
       });
     }
+    const target = targetForDocument(document);
+    if (target) {
+      for (const snippet of TARGET_SNIPPETS[target]) add(snippet);
+    }
     for (const symbol of this.platformIndex.symbols) {
       add(platformCompletion(symbol, this.platformIndex));
     }
@@ -165,10 +215,13 @@ export class RustAnalysis {
       (symbol) => symbol.name === word,
     );
     if (local) {
+      const targetNote = targetLifecycleNote(document, word);
       return {
         contents: {
           kind: 'markdown',
-          value: `\`\`\`rust\n${local.detail}\n\`\`\`\n\nDefined in \`${local.uri}\`.`,
+          value:
+            `\`\`\`rust\n${local.detail}\n\`\`\`\n\nDefined in \`${local.uri}\`.` +
+            (targetNote ? `\n\n${targetNote}` : ''),
         },
         range: wordRange(document.text, position),
       };
@@ -280,6 +333,31 @@ export class RustAnalysis {
       tree.delete();
     }
   }
+}
+
+function targetForDocument(
+  document: VirtualDocument,
+): 'server' | 'client' | null {
+  const first = document.path.split('/', 1)[0]?.toLowerCase();
+  return first === 'server' || first === 'client' ? first : null;
+}
+
+function targetLifecycleNote(
+  document: VirtualDocument,
+  word: string,
+): string | null {
+  const target = targetForDocument(document);
+  if (!target || !['on_init', 'on_tick', 'on_invoke'].includes(word)) {
+    return null;
+  }
+  if (target === 'server') {
+    return word === 'on_invoke'
+      ? 'SERVER invoke exports execute as the current grid owner; host effects remain permission checked and grid-confined.'
+      : 'SERVER lifecycle code executes in the platform sandbox and is activated only after an authoritative compile succeeds.';
+  }
+  return word === 'on_tick'
+    ? 'CLIENT ticks execute inside the browser guest sandbox; all page effects cross the PlayerCodeBroker allow-list.'
+    : 'CLIENT lifecycle code is loaded from the exact hash-bound artifact produced for this project version.';
 }
 
 function visit(node: TreeSitterNode, callback: (node: TreeSitterNode) => void): void {

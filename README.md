@@ -32,11 +32,11 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 >
 > **Player-code authoring DX:** `playerCompute.setRequires`,
 > `marketplace.trustGridAuthor`, self-authored `gridClientMods` fields, and
-> attachment-keyed client artifact fetches require the 2026-07-22 authoring-DX
-> migration. `mountLiveCodingIDE` lazy-loads Monaco plus a browser-native Rust
-> language worker. Authoring sends no token and opens no server connection; if
-> Monaco, Worker, or the local WASM assets are unavailable, it preserves the
-> dependency-free textarea fallback.
+> version-keyed client artifact fetches require the 2026-07-22 authoring-DX
+> migration. The v9 `mountModStudio` surface is project-first: cloud project
+> revisions, target-scoped files, atomic autosave, and explicit draft/live/stop
+> orchestration. Its Rust language worker receives source plus the committed
+> platform index only—never a credential and never a server connection.
 
 > **v8.10 inventory authority:** generated craft/barter transactions work on
 > existing Model servers. Compute-refereed durable commits require Compute SDK
@@ -66,7 +66,7 @@ together whenever the public GraphQL surface changes; `npm run check:schema`
 detects drift in CI/release work.
 
 The browser authoring index follows the same boundary. `npm run build` validates
-only the committed `src/live-coding/assets/browser-authoring-index.json` and its
+only the committed internal `src/live-coding/assets/browser-authoring-index.json` and its
 generated TypeScript copy; it never discovers or reads a sibling game-api
 checkout. Coordinated maintainers compare an explicitly supplied exporter path:
 
@@ -140,6 +140,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.gameModel` | Abstract game model: containers, properties, functions (incl. model-driven `notify_*` effects), sessions, and **automations / NPCs** (`upsertAutomation`, `runAutomation`, `automationRuns`, `automationStats`, …). |
 | `client.compute` | **Compute Modules** — server-side Rust/WASM logic: author + deploy source (`upsertModule`, `deployVersion`, `waitForCompile`), triggers + policy, synchronous `invoke`, and monitoring (`moduleRuns`, `moduleStats`, `moduleLogs`, `appDiagnostics`). Modules run server-only; see [Compute Modules docs](https://docs.crowdedkingdoms.com/game-api/compute-modules). |
 | `client.playerCompute` | Player-authored SERVER/CLIENT Rust/WASM bound to player-owned grids: deploy source, activate/deactivate, list modules/versions, and delete self-authored modules. |
+| `client.playerCodeProjects` | Cloud project, personal-library, and common-file APIs for Mod Studio: target-scoped files, metadata/module names, pairing preference, optimistic revisions, copy-by-value imports, and atomic metadata/file saves. Generated operations are pinned to the committed merged SDL. |
 | `client.playerModel` | Player-owned flexible model containers and grid-confined automations (`containers`, `createContainer`, `setProperty`, `automations`, `createAutomation`, …). |
 | `client.marketplace` | Player-code store/install/consent flows plus player-authorized grid claims: `claimGridOwnership` preserves the existing-grid policy flow, while `claimGridChunk` atomically creates and owns one chunk under `SELF_CLAIM` and `releaseClaimedGrid` releases an eligible owner-created claim. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
@@ -147,38 +148,28 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token: disconnects the old-token UDP proxy, refreshes/stores the token, and opens the new-token proxy while existing realtime handlers resubscribe in place. |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`). |
 
-`PlayerCodeBroker` is the P1 page-side browser security skeleton: it transfers
+`PlayerCodeBroker` transfers
 compiled client artifacts to a platform-owned worker, keeps tokens on the page,
 allow-lists host calls, and locally clamps chunk-targeted effects to the owned
-grid before the normal SDK path reaches server authorization. P3 adds the
-platform worker glue/live-coding presentation UI.
+grid before the normal SDK path reaches server authorization. Mod Studio
+hot-swaps only the exact version-keyed artifact returned after a successful
+CLIENT compile.
 
-## Browser Rust live-coding IDE
+## Player-code Mod Studio
 
-`mountLiveCodingIDE` creates one Monaco editor and one module Web Worker. The
-worker runs `web-tree-sitter` with the pinned VS Code Rust grammar asset and a
-bounded in-memory workspace. It implements LSP initialize/shutdown, full/incremental
-document sync, diagnostics, completion, hover, document symbols, and definitions
-within the open workspace. It does not run rustc or rust-analyzer, and deploys
-still use the platform compiler.
-
-The mount initializes the required monaco-vscode base/editor services once
-before creating any editor. Consumers must not provide a separate Monaco
-initialization workaround; concurrent mounts share services but receive
-isolated model roots, and destroyed roots are reusable by later mounts.
-
-The worker speaks the LSP 3.17 subset above over a standard
-`vscode-jsonrpc` `MessageConnection` and Worker `MessageReader`/`MessageWriter`.
-Small direct Monaco providers adapt editor actions to that connection.
-`monaco-languageclient` is intentionally absent: its current release hard-depends
-on the forbidden `vscode-ws-jsonrpc` WSS adapter and boots a much larger VS Code
-service stack. Removing it does not replace LSP with ad-hoc messages.
+`mountModStudio` is the project-first SERVER/CLIENT Rust authoring surface. A
+project has one cloud revision, target-scoped files, project metadata, separate
+server/client module names, and a pairing preference. Full-stack edits autosave
+as one optimistic-concurrency write; the UI renders **Saving**, **Saved**,
+**Conflict**, or **Offline**, with retry and conflict-resolution actions.
 
 ```ts
-import { mountLiveCodingIDE } from '@crowdedkingdoms/crowdyjs/live-coding';
+import { mountModStudio } from '@crowdedkingdoms/crowdyjs/mod-studio';
 
-const handle = await mountLiveCodingIDE(host, {
+const studio = await mountModStudio(host, {
+  projectProvider: game.playerCodeProjects,
   playerCompute: game.playerCompute,
+  playerWallet: identity.playerWallet,
   appId,
   gridId,
   grid,
@@ -186,26 +177,68 @@ const handle = await mountLiveCodingIDE(host, {
   onHostCall,
 });
 
-// Terminates the language worker and the player-code runtime.
-handle.destroy();
+// Stops editor/runtime polling, the Rust worker, and any client broker owned
+// by this mount. It does not implicitly disable a deliberately live server.
+studio.destroy();
 ```
 
-Modern bundlers must preserve `new Worker(new URL(..., import.meta.url),
-{ type: 'module' })` and package `.wasm` assets. If a host needs custom worker
-loading (tests, a strict CSP, or a bespoke asset pipeline), pass
-`languageWorkerFactory: () => new Worker(yourUrl, { type: 'module' })`.
-`languageServiceUrl` and `appToken` are not IDE options; no server fallback
-exists.
+Use `new ModStudioController(options)` for a custom/headless presentation. Its
+public edits are file operations (`addFile`, `renameFile`, `deleteFile`,
+`updateFile`) and project settings—there is no session-only source blob, fixed
+module name, or template JSON API. The deploy conversion to the Game API's
+legacy `sourceFilesJson` input happens only inside the controller's
+`playerCompute.deploy` call.
 
-The embedded platform index is a byte-identical copy of the game export
-(`schemaVersion: 2`, Rust 1.97.1, SDK 0.1.5, ABI 0, 725 symbols, content hash
-`3f5f39d4…18ffb`). Its strict top-level fields are `schemaVersion`,
-`rustVersion`, `sdkVersion`, `abiVersion`, `contentHash`, `crates`, and
-`symbols`; every crate records its bounded `name`, `version`, and source hash,
-and each symbol has exactly `module`, `name`, `kind`, `signature`, and `docs`.
-BWF uses this embedded default and does not fetch or pass the artifact at runtime.
-`platformIndex` remains injectable for tests or coordinated future indexes;
-schema or unknown-field failures intentionally fall back to the textarea.
+The built-in UI provides a project switcher/new-project wizard
+(server/client/full-stack), target explorer, personal library/common files,
+tabs, settings, Problems/Build/Logs/Runs/Invoke panels, and explicit **Test
+draft**, **Deploy live**, and **Stop project** actions. Full-stack deployment is
+ordered: save once → compile CLIENT → compile SERVER → set/clear the pairing
+requirement only after both compiles → enable SERVER → hot-swap the exact
+version-keyed CLIENT artifact. Partial compile failures never write a new
+requirement. Stop always attempts both server disable and client/poll cleanup
+and reports each failure.
+
+Monaco uses target-prefixed model URIs (`.../server/Cargo.toml` and
+`.../client/Cargo.toml`) and opens every loaded project/library/common Rust file
+in one bounded local worker workspace. Completion, hover, symbols, and
+definition therefore work across loaded files; lifecycle snippets and hover
+notes distinguish SERVER platform execution from CLIENT broker host calls.
+Local tree-sitter markers are labeled advisory. Platform rustc output is parsed
+separately into authoritative path/line/column markers and remains visible in
+Build.
+
+The Rust worker receives source files and the strict embedded platform index
+only. It receives no credential, opens no socket/fetch path, and never falls
+back to a server language service. If Monaco, Worker, a WASM asset, or a custom
+platform index fails, the same Mod Studio mount keeps project/target tabs and
+uses one file-aware textarea—never a raw JSON blob.
+
+Modern bundlers must preserve module workers and package `.wasm` assets. Custom
+pipelines can pass `languageWorkerFactory` and `editorWorkerFactory`. The
+embedded index remains the byte-identical game export (`schemaVersion: 2`, Rust
+1.97.1, SDK 0.1.5, ABI 0, 725 symbols, content hash
+`3f5f39d4…18ffb`).
+
+### Game API project contract
+
+`PlayerCodeProjectsAPI` implements the transport-neutral
+`ModStudioProjectProvider`; generated GraphQL types remain inside the adapter.
+The committed merged schema and generated operations cover:
+
+- `playerCodeProjects(appId)` / `playerCodeProject(appId, projectId)`
+- `playerCodeProjectCreate(input)`
+- `playerCodeProjectSave(input)` for one atomic metadata/file delta
+- `playerCodeLibraryFiles(appId)` / `playerCodeLibrarySave(input)`
+- `playerCodeCommonFiles(appId)`
+- `playerCodeProjectImportFile(input)` for copy-by-value imports
+
+The adapter maps the API's `PAIRED | INDEPENDENT | SERVER_ONLY | CLIENT_ONLY`
+presentation enum to Mod Studio's runtime-oriented project kind and
+`REQUIRED | OPTIONAL | NONE` setting. A stale expected `revision` arrives as
+`CONFLICT` with `PLAYER_CODE_REVISION_CONFLICT` in the message and becomes a
+`ModStudioRevisionConflictError` with the latest cloud project when that
+follow-up read succeeds.
 
 | `createWorldSession(client, appId, config)` (from `@crowdedkingdoms/crowdyjs/stores`) | World Stores: opt-in, SDK-managed game state — typed codecs (`structCodec` binary DSL), your own actor with a 5 Hz send loop (`session.self`), a remote-actor registry with lanes/history/staleness (`session.actors`), attributed send errors (`session.errors`), a chunk/voxel cache with realtime merge + worldgen write-back (`session.chunks`), channel/direct-message inboxes + a typed event router, host tracking, typed save/avatar state, and a game-model container mirror. Only configured stores exist (compile-time + runtime); unimported stores tree-shake away. |
 | `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, `kit.plots` (buy/rent land with transactional, replication-enforced grid grants), and the genre layers `kit.economy` (wallets/shops/trades/market), `kit.progression` (xp/skills/achievements/rating), `kit.loot`, `kit.quests`, `kit.combat`, `kit.matches` (session lobbies/turns/scores with notify-to-pull channels), `kit.decks` (hidden hands), `kit.worldsim` (clock/nodes/crops/waves), `kit.social` (parties/guilds/chat over teams+channels), `kit.leaderboards`, `kit.features` (tier gates), and the engine-aware helpers `kit.mobs` (refereed attacks, defs/slots, contact-damage parsing), `kit.pets` (adopt/summon/dismiss/rename), `kit.instances` (private world slices, seeded runs), `kit.director` (encounter runs), `kit.matchmaking` (queues/proposals/rating), `kit.minigames` (invoke-loop wrapper), `kit.economy.orderBook` (escrowed bid/ask market), engine paths on `kit.matches`/`kit.decks`/`kit.leaderboards`, `kit.quests` tutorial sequencing, `kit.engines` (compute capability detection) with `kit/wire` (the engine pose codec, `engineLanes()`, and the 77/90/91/92/93 event parsers) — plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |
