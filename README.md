@@ -33,9 +33,10 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 > **Player-code authoring DX:** `playerCompute.setRequires`,
 > `marketplace.trustGridAuthor`, self-authored `gridClientMods` fields, and
 > attachment-keyed client artifact fetches require the 2026-07-22 authoring-DX
-> migration. `mountLiveCodingIDE` lazy-loads Monaco and rust-analyzer LSP support
-> when given an authenticated language-service URL and app-token getter; without
-> them it preserves the dependency-free textarea fallback.
+> migration. `mountLiveCodingIDE` lazy-loads Monaco plus a browser-native Rust
+> language worker. Authoring sends no token and opens no server connection; if
+> Monaco, Worker, or the local WASM assets are unavailable, it preserves the
+> dependency-free textarea fallback.
 
 > **v8.10 inventory authority:** generated craft/barter transactions work on
 > existing Model servers. Compute-refereed durable commits require Compute SDK
@@ -63,6 +64,21 @@ npm run codegen
 accepts explicit sources.) Commit `schema.gql` and `src/generated/graphql.ts`
 together whenever the public GraphQL surface changes; `npm run check:schema`
 detects drift in CI/release work.
+
+The browser authoring index follows the same boundary. `npm run build` validates
+only the committed `src/live-coding/assets/browser-authoring-index.json` and its
+generated TypeScript copy; it never discovers or reads a sibling game-api
+checkout. Coordinated maintainers compare an explicitly supplied exporter path:
+
+```bash
+npm run authoring-index:drift -- --source /path/to/browser-authoring-index.json
+# To accept that exact source, then regenerate the committed TypeScript:
+npm run authoring-index:drift -- --source /path/to/browser-authoring-index.json --write
+npm run authoring-index:generate
+```
+
+The drift command rejects a missing `--source`; cross-repository orchestration,
+not standalone package build or tests, owns that comparison.
 
 ## Quick start
 
@@ -136,6 +152,61 @@ compiled client artifacts to a platform-owned worker, keeps tokens on the page,
 allow-lists host calls, and locally clamps chunk-targeted effects to the owned
 grid before the normal SDK path reaches server authorization. P3 adds the
 platform worker glue/live-coding presentation UI.
+
+## Browser Rust live-coding IDE
+
+`mountLiveCodingIDE` creates one Monaco editor and one module Web Worker. The
+worker runs `web-tree-sitter` with the pinned VS Code Rust grammar asset and a
+bounded in-memory workspace. It implements LSP initialize/shutdown, full/incremental
+document sync, diagnostics, completion, hover, document symbols, and definitions
+within the open workspace. It does not run rustc or rust-analyzer, and deploys
+still use the platform compiler.
+
+The mount initializes the required monaco-vscode base/editor services once
+before creating any editor. Consumers must not provide a separate Monaco
+initialization workaround; concurrent mounts share services but receive
+isolated model roots, and destroyed roots are reusable by later mounts.
+
+The worker speaks the LSP 3.17 subset above over a standard
+`vscode-jsonrpc` `MessageConnection` and Worker `MessageReader`/`MessageWriter`.
+Small direct Monaco providers adapt editor actions to that connection.
+`monaco-languageclient` is intentionally absent: its current release hard-depends
+on the forbidden `vscode-ws-jsonrpc` WSS adapter and boots a much larger VS Code
+service stack. Removing it does not replace LSP with ad-hoc messages.
+
+```ts
+import { mountLiveCodingIDE } from '@crowdedkingdoms/crowdyjs/live-coding';
+
+const handle = await mountLiveCodingIDE(host, {
+  playerCompute: game.playerCompute,
+  appId,
+  gridId,
+  grid,
+  workerUrl: playerCodeGlueWorkerUrl,
+  onHostCall,
+});
+
+// Terminates the language worker and the player-code runtime.
+handle.destroy();
+```
+
+Modern bundlers must preserve `new Worker(new URL(..., import.meta.url),
+{ type: 'module' })` and package `.wasm` assets. If a host needs custom worker
+loading (tests, a strict CSP, or a bespoke asset pipeline), pass
+`languageWorkerFactory: () => new Worker(yourUrl, { type: 'module' })`.
+`languageServiceUrl` and `appToken` are not IDE options; no server fallback
+exists.
+
+The embedded platform index is a byte-identical copy of the game export
+(`schemaVersion: 2`, Rust 1.97.1, SDK 0.1.5, ABI 0, 725 symbols, content hash
+`3f5f39d4…18ffb`). Its strict top-level fields are `schemaVersion`,
+`rustVersion`, `sdkVersion`, `abiVersion`, `contentHash`, `crates`, and
+`symbols`; every crate records its bounded `name`, `version`, and source hash,
+and each symbol has exactly `module`, `name`, `kind`, `signature`, and `docs`.
+BWF uses this embedded default and does not fetch or pass the artifact at runtime.
+`platformIndex` remains injectable for tests or coordinated future indexes;
+schema or unknown-field failures intentionally fall back to the textarea.
+
 | `createWorldSession(client, appId, config)` (from `@crowdedkingdoms/crowdyjs/stores`) | World Stores: opt-in, SDK-managed game state — typed codecs (`structCodec` binary DSL), your own actor with a 5 Hz send loop (`session.self`), a remote-actor registry with lanes/history/staleness (`session.actors`), attributed send errors (`session.errors`), a chunk/voxel cache with realtime merge + worldgen write-back (`session.chunks`), channel/direct-message inboxes + a typed event router, host tracking, typed save/avatar state, and a game-model container mirror. Only configured stores exist (compile-time + runtime); unimported stores tree-shake away. |
 | `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, `kit.plots` (buy/rent land with transactional, replication-enforced grid grants), and the genre layers `kit.economy` (wallets/shops/trades/market), `kit.progression` (xp/skills/achievements/rating), `kit.loot`, `kit.quests`, `kit.combat`, `kit.matches` (session lobbies/turns/scores with notify-to-pull channels), `kit.decks` (hidden hands), `kit.worldsim` (clock/nodes/crops/waves), `kit.social` (parties/guilds/chat over teams+channels), `kit.leaderboards`, `kit.features` (tier gates), and the engine-aware helpers `kit.mobs` (refereed attacks, defs/slots, contact-damage parsing), `kit.pets` (adopt/summon/dismiss/rename), `kit.instances` (private world slices, seeded runs), `kit.director` (encounter runs), `kit.matchmaking` (queues/proposals/rating), `kit.minigames` (invoke-loop wrapper), `kit.economy.orderBook` (escrowed bid/ask market), engine paths on `kit.matches`/`kit.decks`/`kit.leaderboards`, `kit.quests` tutorial sequencing, `kit.engines` (compute capability detection) with `kit/wire` (the engine pose codec, `engineLanes()`, and the 77/90/91/92/93 event parsers) — plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |
 

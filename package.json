@@ -1,7 +1,7 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
   "version": "8.22.0",
-  "description": "Client SDK for Crowded Kingdoms GraphQL API with UDP proxy support",
+  "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,6 +17,10 @@
     "./stores": {
       "import": "./dist/stores/index.js",
       "types": "./dist/stores/index.d.ts"
+    },
+    "./live-coding": {
+      "import": "./dist/live-coding/index.js",
+      "types": "./dist/live-coding/index.d.ts"
     }
   },
   "sideEffects": false,
@@ -33,7 +37,10 @@
     "codegen": "graphql-codegen --config codegen.ts",
     "check:schema": "npm run codegen && git diff --exit-code schema.gql src/generated/graphql.ts",
     "codegen:watch": "graphql-codegen --config codegen.ts --watch",
-    "build": "tsc",
+    "authoring-index:generate": "node scripts/generate-browser-authoring-index.mjs --write",
+    "authoring-index:drift": "node scripts/sync-browser-authoring-index.mjs",
+    "check:authoring-index": "node scripts/validate-browser-authoring-index.mjs && node scripts/generate-browser-authoring-index.mjs",
+    "build": "npm run check:authoring-index && tsc && node scripts/copy-live-coding-assets.mjs",
     "test": "npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/e2e/*.test.mjs",
     "test:unit": "npm run build && node --test test/unit/*.test.mjs",
     "test:e2e": "npm run build && node --test --test-concurrency=1 test/e2e/*.test.mjs",
@@ -50,7 +57,9 @@
     "graphql",
     "game-api",
     "multiplayer",
-    "sdk"
+    "sdk",
+    "rust",
+    "webassembly"
   ],
   "author": "",
   "license": "MIT",
@@ -73,13 +82,16 @@
     "ws": "^8.21.1"
   },
   "dependencies": {
+    "@codingame/monaco-vscode-api": "25.1.2",
     "@codingame/monaco-vscode-editor-api": "25.1.2",
     "@graphql-typed-document-node/core": "^3.2.0",
+    "@vscode/tree-sitter-wasm": "0.3.1",
     "dompurify": "3.4.12",
     "graphql": "^16.13.2",
     "graphql-ws": "^6.0.8",
-    "monaco-languageclient": "10.7.0",
-    "vscode-ws-jsonrpc": "3.5.0"
+    "vscode-jsonrpc": "8.2.0",
+    "vscode-languageserver-protocol": "3.17.5",
+    "web-tree-sitter": "0.26.11"
   },
   "overrides": {
     "dompurify": "$dompurify"
