@@ -25,6 +25,35 @@ export interface CrowdyStudioHandle {
 }
 
 /**
+ * Keep an embedded editor fitted to its host. Hosts can resize without a
+ * window resize (for example when a game drags a dock splitter), so Monaco
+ * must follow the element itself rather than the browser viewport.
+ */
+export function observeCrowdyStudioEditorLayout(
+  host: HTMLElement,
+  currentEditor: () => CrowdyStudioEditorAdapter | null,
+): () => void {
+  const Observer = globalThis.ResizeObserver;
+  if (!Observer) return () => {};
+  let stopped = false;
+  let queued = false;
+  const observer = new Observer(() => {
+    if (stopped || queued) return;
+    queued = true;
+    queueMicrotask(() => {
+      queued = false;
+      if (!stopped) currentEditor()?.layout();
+    });
+  });
+  observer.observe(host);
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    observer.disconnect();
+  };
+}
+
+/**
  * Mount the project-first Crowdy Studio. Monaco and its browser Rust worker are
  * loaded lazily; any editor/worker/WASM startup failure keeps the full project
  * UI and swaps in the target/file-aware textarea editor.
@@ -42,6 +71,10 @@ export async function mountCrowdyStudio(
   let editor: CrowdyStudioEditorAdapter | null = null;
   let destroyed = false;
   let recoveringEditor = false;
+  const disconnectLayoutObserver = observeCrowdyStudioEditorLayout(
+    host,
+    () => editor,
+  );
   const callbacks: CrowdyStudioEditorCallbacks = {
     onProjectFileChange: (
       target: 'SERVER' | 'CLIENT',
@@ -71,6 +104,7 @@ export async function mountCrowdyStudio(
         controller.setLocalDiagnostics([]);
         editor = createTextareaCrowdyStudioEditor(shell.editorHost, callbacks);
         editor.sync(controller.getState());
+        editor.layout();
         recoveringEditor = false;
       });
     },
@@ -102,7 +136,9 @@ export async function mountCrowdyStudio(
       editor = createTextareaCrowdyStudioEditor(shell.editorHost, callbacks);
     }
     editor.sync(controller.getState());
+    editor.layout();
   } catch (error) {
+    disconnectLayoutObserver();
     document.removeEventListener('visibilitychange', onVisibilityChange);
     unsubscribe();
     const failedEditor = editor as CrowdyStudioEditorAdapter | null;
@@ -120,6 +156,7 @@ export async function mountCrowdyStudio(
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      disconnectLayoutObserver();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       unsubscribe();
       editor?.dispose();
