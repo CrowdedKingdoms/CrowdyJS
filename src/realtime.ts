@@ -436,17 +436,45 @@ export class RealtimeClient {
       throw error;
     }
 
-    this.opening = this.openSubscription(token).finally(() => {
-      this.opening = null;
-    });
+    this.opening = this.openSubscription(token)
+      .catch((error) => {
+        const realtimeError =
+          error instanceof CrowdyRealtimeError
+            ? error
+            : new CrowdyRealtimeError('Failed to open realtime subscription', {
+                code: 'SUBSCRIPTION_FAILED',
+                retryable: true,
+                cause: error,
+              });
+        this.logger.error?.('Realtime subscription open failed', realtimeError);
+        this.dispatchError(realtimeError);
+        if (this.desired) {
+          this.setStatus('reconnecting');
+        } else {
+          this.setStatus('failed');
+        }
+      })
+      .finally(() => {
+        this.opening = null;
+      });
   }
 
   private async openSubscription(token: string): Promise<void> {
     if (this.lbCookieStore) {
-      await this.lbCookieStore.primeFromGraphql({
-        endpoint: this.wsUrl,
-        token,
-      });
+      try {
+        await this.lbCookieStore.primeFromGraphql({
+          endpoint: this.wsUrl,
+          token,
+        });
+      } catch (error) {
+        // Sticky cookie is best-effort. Under game-api overload the prime
+        // fetch often times out; throwing here used to surface as an uncaught
+        // AbortError and kill Node load-test workers (all bots on that process).
+        this.logger.warn?.(
+          'LB cookie prime failed; continuing without sticky cookie',
+          error,
+        );
+      }
     }
 
     this.setStatus('connecting');

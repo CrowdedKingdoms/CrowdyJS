@@ -1,3 +1,5 @@
+import { CrowdyNetworkError, CrowdyTimeoutError } from './errors.js';
+
 /**
  * In-memory store for the Caddy load-balancer sticky cookie (`cks_ga`).
  *
@@ -38,6 +40,10 @@ export class LbCookieStore {
   /**
    * Obtain `cks_ga` from the game-api before opening a WebSocket so the
    * upgrade lands on the same upstream as subsequent HTTP mutations.
+   *
+   * Failures (timeout / abort / network) throw {@link CrowdyTimeoutError} or
+   * {@link CrowdyNetworkError} — never a raw `AbortError`/`DOMException`.
+   * Callers that treat sticky cookies as best-effort should catch and continue.
    */
   async primeFromGraphql(args: {
     endpoint: string;
@@ -64,10 +70,21 @@ export class LbCookieStore {
       });
       this.ingestSetCookie(response.headers);
       await response.arrayBuffer().catch(() => undefined);
+    } catch (error) {
+      if (isAbortError(error) || signal.aborted) {
+        throw new CrowdyTimeoutError(timeoutMs);
+      }
+      throw new CrowdyNetworkError(error);
     } finally {
       clearTimeout(timeoutId);
     }
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const name = (error as { name?: unknown }).name;
+  return name === 'AbortError' || name === 'TimeoutError';
 }
 
 function parseSetCookieFallback(header: string | null): string[] {
