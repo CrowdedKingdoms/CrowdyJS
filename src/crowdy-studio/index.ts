@@ -107,5 +107,24 @@ export {
   CrowdyStudioAgentDomShell,
   type CrowdyStudioAgentDomShellOptions,
 } from './agent-dom-shell.js';
+export {
+  STUDIO_LAYOUT_STORAGE_KEY,
+  STUDIO_PANE_IDS,
+  StudioLayoutController,
+  clampStudioPaneSize,
+  studioPaneSizeRange,
+  type StudioLayoutControllerOptions,
+  type StudioLayoutListener,
+  type StudioLayoutState,
+  type StudioLayoutStorage,
+  type StudioPaneId,
+  type StudioPaneSizeRange,
+} from './layout.js';
+export {
+  createPaneSplitter,
+  type PaneSplitterHandle,
+  type PaneSplitterOptions,
+  type PaneSplitterRange,
+} from './splitter.js';
 export * from '../crowdy-agent/index.js';
 export * from '../player-host/index.js';

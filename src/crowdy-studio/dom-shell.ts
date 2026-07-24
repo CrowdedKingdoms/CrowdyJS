@@ -1,6 +1,5 @@
 import {
   type CrowdyStudioController,
-  type CrowdyStudioPolledSurface,
   type CrowdyStudioState,
 } from './controller.js';
 import type { CrowdyStudioAgentController } from '../crowdy-agent/controller.js';
@@ -8,6 +7,13 @@ import {
   CrowdyStudioAgentDomShell,
   type CrowdyStudioAgentDomShellOptions,
 } from './agent-dom-shell.js';
+import {
+  StudioLayoutController,
+  studioPaneSizeRange,
+  type StudioLayoutState,
+  type StudioPaneId,
+} from './layout.js';
+import { createPaneSplitter, type PaneSplitterHandle } from './splitter.js';
 import {
   projectTargets,
   type CrowdyStudioFileRef,
@@ -19,22 +25,66 @@ import { CROWDY_STUDIO_STYLES } from './styles.js';
 
 type PanelName = 'problems' | 'build' | 'logs' | 'runs' | 'invoke';
 
-/** Modular DOM shell; editor implementations mount into `editorHost`. */
+type ExplorerFormState =
+  | { kind: 'add'; target: CrowdyStudioTarget; value: string }
+  | { kind: 'rename'; target: CrowdyStudioTarget; path: string; value: string }
+  | { kind: 'delete'; target: CrowdyStudioTarget; path: string }
+  | {
+      kind: 'library';
+      target: CrowdyStudioTarget;
+      path: string;
+      value: string;
+    }
+  | { kind: 'import'; referenceId: string; value: string };
+
+interface MenuHandle {
+  readonly button: HTMLButtonElement;
+  readonly menu: HTMLElement;
+  readonly wrap: HTMLElement;
+  close(): void;
+  dispose(): void;
+}
+
+const FAILURE_PHASES = new Set([
+  'COMPILE_FAILED',
+  'ERROR',
+  'PARTIAL_FAILURE',
+]);
+
+/**
+ * Modular DOM shell; editor implementations mount into `editorHost`.
+ *
+ * Layout is user directed: the editor is always visible while the explorer,
+ * project settings, bottom panel, and agent dock are toggled from the
+ * activity rail, resized with accessible splitters, and persisted through
+ * {@link StudioLayoutController}.
+ */
 export class CrowdyStudioDomShell {
   readonly root: HTMLElement;
   readonly editorHost: HTMLElement;
-  private readonly projectSelect: HTMLSelectElement;
-  private readonly saveBadge: HTMLElement;
+  readonly layout: StudioLayoutController;
+  private readonly workspace: HTMLElement;
+  private readonly editorColumn: HTMLElement;
+  private readonly projectMenu: MenuHandle;
+  private readonly projectMenuList: HTMLElement;
+  private readonly saveMenu: MenuHandle;
+  private readonly saveActions: HTMLElement;
+  private readonly saveMessageText: HTMLElement;
   private readonly saveAction: HTMLButtonElement;
   private readonly remoteAction: HTMLButtonElement;
   private readonly testAction: HTMLButtonElement;
+  private readonly runMenu: MenuHandle;
   private readonly deployAction: HTMLButtonElement;
-  private readonly runtimeStatus: HTMLElement;
+  private readonly stopAction: HTMLButtonElement;
+  private readonly runtimeStatus: HTMLButtonElement;
   private readonly budgetStatus: HTMLElement;
+  private readonly saveStatus: HTMLElement;
   private readonly newForm: HTMLFormElement;
   private readonly newName: HTMLInputElement;
   private readonly newKind: HTMLSelectElement;
   private readonly explorer: HTMLElement;
+  private readonly settings: HTMLElement;
+  private readonly bottom: HTMLElement;
   private readonly tabs: HTMLElement;
   private readonly settingsName: HTMLInputElement;
   private readonly settingsDescription: HTMLInputElement;
@@ -51,8 +101,14 @@ export class CrowdyStudioDomShell {
   private readonly invokeResult: HTMLElement;
   private readonly panelButtons = new Map<PanelName, HTMLButtonElement>();
   private readonly panels = new Map<PanelName, HTMLElement>();
+  private readonly railButtons = new Map<StudioPaneId, HTMLButtonElement>();
+  private readonly splitters = new Map<StudioPaneId, PaneSplitterHandle>();
   private readonly agentShell: CrowdyStudioAgentDomShell | null;
+  private readonly unsubscribeLayout: () => void;
   private activePanel: PanelName = 'problems';
+  private explorerForm: ExplorerFormState | null = null;
+  private lastState: CrowdyStudioState | null = null;
+  private lastPhase = 'IDLE';
   private disposed = false;
 
   constructor(
@@ -65,40 +121,44 @@ export class CrowdyStudioDomShell {
     style.textContent = CROWDY_STUDIO_STYLES;
     this.root = element('div', 'ck-crowdy-studio');
     this.root.append(style);
+    this.layout = new StudioLayoutController();
 
+    // ----- Top bar -----------------------------------------------------
     const toolbar = element('div', 'ck-crowdy-studio-toolbar');
     const projectTools = element('div', 'ck-crowdy-studio-project-tools');
-    this.projectSelect = document.createElement('select');
-    this.projectSelect.setAttribute('aria-label', 'Current project');
-    const newButton = button('New project');
-    this.saveBadge = element('span', 'ck-crowdy-studio-save');
+
+    this.projectMenu = this.createMenu('No projects yet', {
+      buttonClass: 'ck-crowdy-studio-project-button',
+      ariaLabel: 'Current project',
+    });
+    this.projectMenuList = this.projectMenu.menu;
+
+    this.saveMenu = this.createMenu('Saved', {
+      buttonClass: 'ck-crowdy-studio-save',
+      ariaLabel: 'Save status',
+    });
+    this.saveMessageText = element('p', 'ck-crowdy-studio-save-message');
     this.saveAction = button('Retry save');
     this.remoteAction = button('Use cloud version');
-    this.saveAction.hidden = true;
-    this.remoteAction.hidden = true;
-    projectTools.append(
-      this.projectSelect,
-      newButton,
-      this.saveBadge,
-      this.saveAction,
-      this.remoteAction,
-    );
+    this.saveActions = element('div', 'ck-crowdy-studio-save-actions');
+    this.saveActions.append(this.saveAction, this.remoteAction);
+    this.saveMenu.menu.append(this.saveMessageText, this.saveActions);
+
+    projectTools.append(this.projectMenu.wrap, this.saveMenu.wrap);
 
     const runtimeTools = element('div', 'ck-crowdy-studio-runtime-tools');
     this.testAction = button('Test draft');
-    this.deployAction = button('Deploy live');
-    const stop = button('Stop project');
-    this.runtimeStatus = element('span', 'ck-crowdy-studio-status');
-    this.budgetStatus = element('span', 'ck-crowdy-studio-status');
-    runtimeTools.append(
-      this.testAction,
-      this.deployAction,
-      stop,
-      this.runtimeStatus,
-      this.budgetStatus,
-    );
+    this.testAction.className = 'ck-crowdy-studio-primary';
+    this.runMenu = this.createMenu('Run ▾', {
+      ariaLabel: 'More run actions',
+    });
+    this.deployAction = menuItem('Deploy live');
+    this.stopAction = menuItem('Stop project');
+    this.runMenu.menu.append(this.deployAction, this.stopAction);
+    runtimeTools.append(this.testAction, this.runMenu.wrap);
     toolbar.append(projectTools, runtimeTools);
 
+    // ----- New-project popover -----------------------------------------
     this.newForm = document.createElement('form');
     this.newForm.className = 'ck-crowdy-studio-new';
     this.newForm.dataset.open = 'false';
@@ -125,13 +185,48 @@ export class CrowdyStudioDomShell {
     const cancel = button('Cancel');
     this.newForm.append(this.newName, this.newKind, create, cancel);
 
-    const main = element('div', 'ck-crowdy-studio-main');
+    // ----- Workspace: rail + panes + editor -----------------------------
+    this.workspace = element('div', 'ck-crowdy-studio-workspace');
+    const rail = element('nav', 'ck-crowdy-studio-rail');
+    rail.setAttribute('aria-label', 'Studio panes');
+    rail.append(
+      this.railButton('explorer', 'Files', 'Show or hide project files'),
+      this.railButton('settings', 'Settings', 'Show or hide project settings'),
+      this.railButton('bottom', 'Console', 'Show or hide the console panel'),
+    );
+
     this.explorer = element('aside', 'ck-crowdy-studio-explorer');
-    const editorColumn = element('section', 'ck-crowdy-studio-editor-column');
+    this.explorer.setAttribute('aria-label', 'Project files');
+    this.editorColumn = element('section', 'ck-crowdy-studio-editor-column');
     this.tabs = element('div', 'ck-crowdy-studio-tabs');
     this.editorHost = element('div', 'ck-crowdy-studio-editor');
-    editorColumn.append(this.tabs, this.editorHost);
-    const settings = element('aside', 'ck-crowdy-studio-settings');
+
+    this.bottom = element('section', 'ck-crowdy-studio-bottom');
+    const panelTabs = element('div', 'ck-crowdy-studio-panel-tabs');
+    this.problemsPanel = this.createPanel('problems', 'Problems', panelTabs);
+    this.buildPanel = this.createPanel('build', 'Build', panelTabs);
+    this.logsPanel = this.createPanel('logs', 'Logs', panelTabs);
+    this.runsPanel = this.createPanel('runs', 'Runs', panelTabs);
+    this.invokePanel = this.createPanel('invoke', 'Invoke', panelTabs);
+    const hidePanel = button('×');
+    hidePanel.className = 'ck-crowdy-studio-panel-hide';
+    hidePanel.setAttribute('aria-label', 'Hide the console panel');
+    hidePanel.addEventListener('click', () =>
+      this.layout.setVisible('bottom', false),
+    );
+    panelTabs.append(hidePanel);
+    const panelBody = element('div', 'ck-crowdy-studio-panel-body');
+    for (const panel of this.panels.values()) panelBody.append(panel);
+    this.bottom.append(panelTabs, panelBody);
+
+    this.editorColumn.append(
+      this.tabs,
+      this.editorHost,
+      this.paneSplitter('bottom', 'horizontal', 'after', 'Resize the console panel'),
+      this.bottom,
+    );
+
+    this.settings = element('aside', 'ck-crowdy-studio-settings');
     const settingsTitle = element('h3');
     settingsTitle.textContent = 'Project settings';
     this.settingsName = input('Project name');
@@ -143,7 +238,7 @@ export class CrowdyStudioDomShell {
       ['OPTIONAL', 'Optional companion'],
       ['REQUIRED', 'Require client companion'],
     ]);
-    settings.append(
+    this.settings.append(
       settingsTitle,
       labeled('Name', this.settingsName),
       labeled('Description', this.settingsDescription),
@@ -151,48 +246,59 @@ export class CrowdyStudioDomShell {
       labeled('Client module', this.clientModuleName),
       labeled('Pairing', this.pairing),
     );
-    main.append(this.explorer, editorColumn, settings);
 
-    const bottom = element('section', 'ck-crowdy-studio-bottom');
-    const panelTabs = element('div', 'ck-crowdy-studio-panel-tabs');
-    this.problemsPanel = this.createPanel('problems', 'Problems', panelTabs);
-    this.buildPanel = this.createPanel('build', 'Build', panelTabs);
-    this.logsPanel = this.createPanel('logs', 'Logs', panelTabs);
-    this.runsPanel = this.createPanel('runs', 'Runs', panelTabs);
-    this.invokePanel = this.createPanel('invoke', 'Invoke', panelTabs);
-    const panelBody = element('div');
-    for (const panel of this.panels.values()) panelBody.append(panel);
-    bottom.append(panelTabs, panelBody);
+    this.workspace.append(
+      rail,
+      this.explorer,
+      this.paneSplitter('explorer', 'vertical', 'before', 'Resize the file explorer'),
+      this.editorColumn,
+      this.paneSplitter('settings', 'vertical', 'after', 'Resize project settings'),
+      this.settings,
+    );
 
-    this.invokeExport = input('Export name');
-    this.invokeExport.value = 'invoke';
-    this.invokeParams = document.createElement('textarea');
-    this.invokeParams.placeholder = '{"example": true}';
-    this.invokeParams.setAttribute('aria-label', 'Invoke JSON parameters');
-    const invokeButton = button('Invoke server export');
-    this.invokeResult = document.createElement('pre');
-    const invokeControls = element('div', 'ck-crowdy-studio-invoke');
-    invokeControls.append(this.invokeExport, this.invokeParams, invokeButton);
-    this.invokePanel.append(invokeControls, this.invokeResult);
+    // ----- Status bar ----------------------------------------------------
+    const statusbar = element('footer', 'ck-crowdy-studio-statusbar');
+    this.saveStatus = element('span', 'ck-crowdy-studio-status');
+    this.runtimeStatus = document.createElement('button');
+    this.runtimeStatus.type = 'button';
+    this.runtimeStatus.className =
+      'ck-crowdy-studio-status ck-crowdy-studio-statusbar-runtime';
+    this.runtimeStatus.setAttribute(
+      'aria-label',
+      'Runtime status; opens the console panel',
+    );
+    this.runtimeStatus.addEventListener('click', () => {
+      this.layout.setVisible('bottom', true);
+      this.activatePanel(this.activePanel);
+    });
+    this.budgetStatus = element('span', 'ck-crowdy-studio-status');
+    statusbar.append(this.saveStatus, this.runtimeStatus, this.budgetStatus);
 
-    this.root.append(toolbar, this.newForm, main, bottom);
+    // The popover is absolutely positioned against the toolbar so it opens
+    // right under the project menu button.
+    toolbar.append(this.newForm);
+    this.root.append(toolbar, this.workspace, statusbar);
     host.appendChild(this.root);
-    this.agentShell = agentController
-      ? new CrowdyStudioAgentDomShell(
-          this.root,
-          agentController,
-          agentOptions,
-        )
-      : null;
 
-    newButton.addEventListener('click', () => {
-      this.newForm.dataset.open =
-        this.newForm.dataset.open === 'true' ? 'false' : 'true';
-      if (this.newForm.dataset.open === 'true') this.newName.focus();
-    });
-    cancel.addEventListener('click', () => {
-      this.newForm.dataset.open = 'false';
-    });
+    // ----- Agent dock ----------------------------------------------------
+    if (agentController) {
+      rail.append(
+        this.railButton('agent', 'Agent', 'Show or hide the Crowdy Agent dock'),
+      );
+      this.workspace.append(
+        this.paneSplitter('agent', 'vertical', 'after', 'Resize the agent dock'),
+      );
+      this.agentShell = new CrowdyStudioAgentDomShell(
+        this.workspace,
+        agentController,
+        { ...agentOptions, layout: agentOptions.layout ?? this.layout },
+      );
+      this.root.dataset.agent = 'true';
+    } else {
+      this.agentShell = null;
+    }
+
+    // ----- Wiring ---------------------------------------------------------
     this.newForm.addEventListener('submit', (event) => {
       event.preventDefault();
       void this.run(async () => {
@@ -204,28 +310,34 @@ export class CrowdyStudioDomShell {
         this.newForm.dataset.open = 'false';
       });
     });
-    this.projectSelect.addEventListener('change', () => {
-      void this.run(() => this.controller.switchProject(this.projectSelect.value));
+    cancel.addEventListener('click', () => {
+      this.newForm.dataset.open = 'false';
     });
-    this.testAction.addEventListener('click', () =>
-      void this.run(() => this.controller.testDraft()),
-    );
-    this.deployAction.addEventListener('click', () =>
-      void this.run(() => this.controller.deployLive()),
-    );
-    stop.addEventListener('click', () =>
-      void this.run(() => this.controller.stopProject()),
-    );
+    this.testAction.addEventListener('click', () => {
+      this.revealPanel('build');
+      void this.run(() => this.controller.testDraft());
+    });
+    this.deployAction.addEventListener('click', () => {
+      this.runMenu.close();
+      this.revealPanel('build');
+      void this.run(() => this.controller.deployLive());
+    });
+    this.stopAction.addEventListener('click', () => {
+      this.runMenu.close();
+      void this.run(() => this.controller.stopProject());
+    });
     this.saveAction.addEventListener('click', () => {
+      this.saveMenu.close();
       void this.run(() =>
         this.controller.getState().saveState === 'CONFLICT'
           ? this.controller.overwriteConflict()
           : this.controller.retrySave(),
       );
     });
-    this.remoteAction.addEventListener('click', () =>
-      void this.run(() => this.controller.acceptRemoteConflict()),
-    );
+    this.remoteAction.addEventListener('click', () => {
+      this.saveMenu.close();
+      void this.run(() => this.controller.acceptRemoteConflict());
+    });
     this.settingsName.addEventListener('change', () =>
       this.controller.updateSettings({ name: this.settingsName.value }),
     );
@@ -249,6 +361,17 @@ export class CrowdyStudioDomShell {
         this.pairing.value as 'NONE' | 'OPTIONAL' | 'REQUIRED',
       ),
     );
+
+    this.invokeExport = input('Export name');
+    this.invokeExport.value = 'invoke';
+    this.invokeParams = document.createElement('textarea');
+    this.invokeParams.placeholder = '{"example": true}';
+    this.invokeParams.setAttribute('aria-label', 'Invoke JSON parameters');
+    const invokeButton = button('Invoke server export');
+    this.invokeResult = document.createElement('pre');
+    const invokeControls = element('div', 'ck-crowdy-studio-invoke');
+    invokeControls.append(this.invokeExport, this.invokeParams, invokeButton);
+    this.invokePanel.append(invokeControls, this.invokeResult);
     invokeButton.addEventListener('click', () => {
       void this.run(() =>
         this.controller.invoke(
@@ -259,11 +382,16 @@ export class CrowdyStudioDomShell {
     });
 
     this.controller.setSurfaceVisible('usage', true);
+    this.unsubscribeLayout = this.layout.subscribe((state) =>
+      this.applyLayout(state),
+    );
+    this.applyLayout(this.layout.getState());
     this.activatePanel('problems');
   }
 
   render(state: CrowdyStudioState): void {
     if (this.disposed) return;
+    this.lastState = state;
     this.renderProjects(state);
     this.renderSaveState(state);
     this.renderExplorer(state);
@@ -283,14 +411,13 @@ export class CrowdyStudioDomShell {
     this.invokeResult.textContent = state.invokeResult
       ? formatInvokeResult(state.invokeResult)
       : '';
-    this.runtimeStatus.textContent = [
-      state.runtime.phase,
-      state.runtime.target,
-      state.runtime.message,
-    ]
-      .filter(Boolean)
-      .join(' · ');
+    this.runtimeStatus.textContent =
+      [state.runtime.phase, state.runtime.target, state.runtime.message]
+        .filter(Boolean)
+        .join(' · ') || 'IDLE';
+    this.runtimeStatus.dataset.phase = state.runtime.phase;
     this.budgetStatus.textContent = budgetText(state);
+    this.autoRevealFailures(state);
   }
 
   dispose(): void {
@@ -299,9 +426,183 @@ export class CrowdyStudioDomShell {
     this.controller.setSurfaceVisible('usage', false);
     this.controller.setSurfaceVisible('logs', false);
     this.controller.setSurfaceVisible('runs', false);
+    this.unsubscribeLayout();
+    for (const splitter of this.splitters.values()) splitter.dispose();
+    this.projectMenu.dispose();
+    this.saveMenu.dispose();
+    this.runMenu.dispose();
     this.agentShell?.dispose();
     this.root.remove();
   }
+
+  // ----- Layout ----------------------------------------------------------
+
+  private railButton(
+    pane: StudioPaneId,
+    label: string,
+    description: string,
+  ): HTMLButtonElement {
+    const control = button(label);
+    control.className = 'ck-crowdy-studio-rail-button';
+    control.dataset.pane = pane;
+    control.title = description;
+    control.setAttribute('aria-pressed', 'false');
+    control.addEventListener('click', () => {
+      const wasVisible = this.layout.isVisible(pane);
+      this.layout.toggle(pane);
+      if (!wasVisible) this.collapseOverlappingPanes(pane);
+    });
+    this.railButtons.set(pane, control);
+    return control;
+  }
+
+  /**
+   * Narrow widths turn side panes into overlays (styles.ts container
+   * queries), where several open panes would stack invisibly on top of each
+   * other. Enforce the "single pane" rule there: opening one side pane
+   * closes the others that overlay at the current width.
+   */
+  private collapseOverlappingPanes(opened: StudioPaneId): void {
+    if (opened === 'bottom') return;
+    const width = this.root.clientWidth;
+    if (!width) return;
+    const overlaying: StudioPaneId[] = [];
+    if (width <= 900) overlaying.push('settings');
+    if (width <= 760) overlaying.push('agent');
+    if (width <= 620) overlaying.push('explorer');
+    if (!overlaying.includes(opened)) return;
+    for (const pane of overlaying) {
+      if (pane !== opened && this.layout.isVisible(pane)) {
+        this.layout.setVisible(pane, false);
+      }
+    }
+  }
+
+  private paneSplitter(
+    pane: StudioPaneId,
+    orientation: 'vertical' | 'horizontal',
+    position: 'before' | 'after',
+    label: string,
+  ): HTMLElement {
+    const splitter = createPaneSplitter({
+      orientation,
+      pane: position,
+      label,
+      range: () => studioPaneSizeRange(pane),
+      getSize: () => this.layout.paneSize(pane),
+      setSize: (size, commit) => this.layout.setSize(pane, size, commit),
+    });
+    this.splitters.set(pane, splitter);
+    return splitter.element;
+  }
+
+  private applyLayout(state: StudioLayoutState): void {
+    const paneElements: Record<StudioPaneId, HTMLElement | null> = {
+      explorer: this.explorer,
+      settings: this.settings,
+      bottom: this.bottom,
+      agent: this.agentShell?.root ?? null,
+    };
+    for (const pane of ['explorer', 'settings', 'bottom', 'agent'] as const) {
+      const paneElement = paneElements[pane];
+      const visible = state.visible[pane] && paneElement !== null;
+      if (paneElement) {
+        paneElement.hidden = !visible;
+        if (pane === 'bottom') {
+          paneElement.style.height = `${state.sizes[pane]}px`;
+        } else {
+          paneElement.style.width = `${state.sizes[pane]}px`;
+        }
+      }
+      const splitter = this.splitters.get(pane);
+      if (splitter) {
+        splitter.element.hidden = !visible;
+        splitter.refresh();
+      }
+      const railControl = this.railButtons.get(pane);
+      if (railControl) {
+        railControl.setAttribute('aria-pressed', String(visible));
+        railControl.dataset.active = String(visible);
+      }
+    }
+    this.syncPanelPolling();
+  }
+
+  private revealPanel(name: PanelName): void {
+    this.layout.setVisible('bottom', true);
+    this.activatePanel(name);
+  }
+
+  private autoRevealFailures(state: CrowdyStudioState): void {
+    const phase = state.runtime.phase;
+    if (phase !== this.lastPhase && FAILURE_PHASES.has(phase)) {
+      const diagnostics =
+        state.authoritativeDiagnostics.length + state.localDiagnostics.length;
+      this.revealPanel(diagnostics > 0 ? 'problems' : 'build');
+    }
+    this.lastPhase = phase;
+  }
+
+  // ----- Menus -----------------------------------------------------------
+
+  private createMenu(
+    label: string,
+    options: { buttonClass?: string; ariaLabel?: string } = {},
+  ): MenuHandle {
+    const wrap = element('div', 'ck-crowdy-studio-menu-wrap');
+    const control = button(label);
+    control.className = options.buttonClass
+      ? `ck-crowdy-studio-menu-button ${options.buttonClass}`
+      : 'ck-crowdy-studio-menu-button';
+    if (options.ariaLabel) control.setAttribute('aria-label', options.ariaLabel);
+    control.setAttribute('aria-haspopup', 'true');
+    control.setAttribute('aria-expanded', 'false');
+    const menu = element('div', 'ck-crowdy-studio-menu');
+    menu.hidden = true;
+    menu.setAttribute('role', 'menu');
+    wrap.append(control, menu);
+
+    const outsideClick = (event: Event): void => {
+      if (!wrap.contains(event.target as Node | null)) close();
+    };
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      close();
+      control.focus();
+    };
+    const close = (): void => {
+      if (menu.hidden) return;
+      menu.hidden = true;
+      control.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('pointerdown', outsideClick, true);
+      wrap.removeEventListener('keydown', escape);
+    };
+    const open = (): void => {
+      if (!menu.hidden) return;
+      menu.hidden = false;
+      control.setAttribute('aria-expanded', 'true');
+      document.addEventListener('pointerdown', outsideClick, true);
+      wrap.addEventListener('keydown', escape);
+    };
+    control.addEventListener('click', () => {
+      if (menu.hidden) open();
+      else close();
+    });
+
+    return {
+      button: control,
+      menu,
+      wrap,
+      close,
+      dispose(): void {
+        close();
+        wrap.remove();
+      },
+    };
+  }
+
+  // ----- Panels ------------------------------------------------------------
 
   private createPanel(
     name: PanelName,
@@ -320,7 +621,6 @@ export class CrowdyStudioDomShell {
   }
 
   private activatePanel(name: PanelName): void {
-    const previous = this.activePanel;
     this.activePanel = name;
     for (const [key, buttonElement] of this.panelButtons) {
       buttonElement.dataset.active = String(key === name);
@@ -328,32 +628,51 @@ export class CrowdyStudioDomShell {
     for (const [key, panel] of this.panels) {
       panel.dataset.active = String(key === name);
     }
-    const previousPoll = polledSurface(previous);
-    const nextPoll = polledSurface(name);
-    if (previousPoll && previousPoll !== nextPoll) {
-      this.controller.setSurfaceVisible(previousPoll, false);
-    }
-    if (nextPoll) this.controller.setSurfaceVisible(nextPoll, true);
+    this.syncPanelPolling();
   }
 
-  private renderProjects(state: CrowdyStudioState): void {
-    const selected = state.project?.projectId ?? '';
-    const options = state.projects.map((project) => {
-      const option = document.createElement('option');
-      option.value = project.projectId;
-      option.textContent = `${project.name} · ${project.kind
-        .toLowerCase()
-        .replace('_', ' ')}`;
-      return option;
-    });
-    if (options.length === 0) {
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = 'No projects yet';
-      options.push(empty);
+  /** Poll logs/runs only while their panel is both selected and shown. */
+  private syncPanelPolling(): void {
+    const bottomVisible = this.layout.isVisible('bottom');
+    for (const surface of ['logs', 'runs'] as const) {
+      this.controller.setSurfaceVisible(
+        surface,
+        bottomVisible && this.activePanel === surface,
+      );
     }
-    this.projectSelect.replaceChildren(...options);
-    this.projectSelect.value = selected;
+  }
+
+  // ----- Rendering -----------------------------------------------------------
+
+  private renderProjects(state: CrowdyStudioState): void {
+    const selected = state.project;
+    this.projectMenu.button.textContent = selected
+      ? `${selected.metadata.name} ▾`
+      : state.projects.length === 0
+        ? 'No projects yet ▾'
+        : 'Select project ▾';
+    const items: HTMLElement[] = state.projects.map((project) => {
+      const item = menuItem(
+        `${project.name} · ${project.kind.toLowerCase().replace('_', ' ')}`,
+      );
+      item.dataset.active = String(project.projectId === selected?.projectId);
+      item.addEventListener('click', () => {
+        this.projectMenu.close();
+        void this.run(() => this.controller.switchProject(project.projectId));
+      });
+      return item;
+    });
+    if (items.length === 0) {
+      items.push(empty('No projects yet.'));
+    }
+    const divider = element('div', 'ck-crowdy-studio-menu-divider');
+    const newProject = menuItem('New project…');
+    newProject.addEventListener('click', () => {
+      this.projectMenu.close();
+      this.newForm.dataset.open = 'true';
+      this.newName.focus();
+    });
+    this.projectMenuList.replaceChildren(...items, divider, newProject);
   }
 
   private renderSaveState(state: CrowdyStudioState): void {
@@ -363,17 +682,26 @@ export class CrowdyStudioDomShell {
       CONFLICT: 'Conflict',
       OFFLINE: 'Offline',
     }[state.saveState];
-    this.saveBadge.dataset.state = state.saveState;
-    this.saveBadge.textContent = state.saveMessage
+    this.saveMenu.button.dataset.state = state.saveState;
+    this.saveMenu.button.textContent = label;
+    this.saveStatus.textContent = state.saveMessage
       ? `${label}: ${state.saveMessage}`
       : label;
-    this.saveAction.hidden = !['CONFLICT', 'OFFLINE'].includes(state.saveState);
+    this.saveMessageText.textContent = state.saveMessage
+      ? state.saveMessage
+      : state.saveState === 'SAVED'
+        ? 'Edits autosave to your private project.'
+        : label;
+    const attention = ['CONFLICT', 'OFFLINE'].includes(state.saveState);
+    this.saveAction.hidden = !attention;
     this.saveAction.textContent =
       state.saveState === 'CONFLICT' ? 'Keep my version' : 'Retry save';
     this.remoteAction.hidden = state.saveState !== 'CONFLICT';
+    this.saveMenu.button.dataset.attention = String(attention);
   }
 
   private renderExplorer(state: CrowdyStudioState): void {
+    const focused = focusedExplorerField(this.explorer);
     this.explorer.replaceChildren();
     if (!state.project) {
       this.explorer.append(empty('Create a project to start authoring.'));
@@ -396,6 +724,7 @@ export class CrowdyStudioDomShell {
       this.referenceSection('Personal library', state.personalLibraryFiles),
       this.referenceSection('Common files', state.commonFiles),
     );
+    restoreExplorerFocus(this.explorer, focused);
   }
 
   private projectSection(
@@ -410,12 +739,32 @@ export class CrowdyStudioDomShell {
     add.setAttribute('aria-label', `Add ${target} file`);
     add.disabled = !this.controller.canTarget(target, 'write');
     add.addEventListener('click', () => {
-      const path = window.prompt(`New ${target} file path`, 'src/new.rs');
-      if (!path) return;
-      void this.run(() => Promise.resolve(this.controller.addFile(target, path)));
+      this.explorerForm =
+        this.explorerForm?.kind === 'add' && this.explorerForm.target === target
+          ? null
+          : { kind: 'add', target, value: 'src/new.rs' };
+      this.rerenderExplorer();
     });
     header.append(title, add);
     section.append(header);
+    if (this.explorerForm?.kind === 'add' && this.explorerForm.target === target) {
+      section.append(
+        this.inlineForm({
+          value: this.explorerForm.value,
+          placeholder: `New ${target} file path`,
+          submitLabel: 'Add file',
+          onInput: (value) => {
+            if (this.explorerForm?.kind === 'add') this.explorerForm.value = value;
+          },
+          onSubmit: (value) => {
+            this.explorerForm = null;
+            void this.run(() =>
+              Promise.resolve(this.controller.addFile(target, value)),
+            );
+          },
+        }),
+      );
+    }
     for (const ref of refs) {
       section.append(this.projectFileRow(ref));
     }
@@ -424,52 +773,114 @@ export class CrowdyStudioDomShell {
   }
 
   private projectFileRow(ref: CrowdyStudioFileRef): HTMLElement {
+    const form = this.explorerForm;
+    if (
+      form &&
+      form.kind !== 'add' &&
+      form.kind !== 'import' &&
+      form.target === ref.target &&
+      form.path === ref.path
+    ) {
+      return this.projectFileFormRow(ref, form);
+    }
     const row = element('div', 'ck-crowdy-studio-file');
     const open = button(ref.path);
     open.title = `${ref.target}:${ref.path}`;
     open.addEventListener('click', () => this.controller.openFile(ref));
-    const rename = button('✎');
-    rename.setAttribute('aria-label', `Rename ${ref.path}`);
-    rename.addEventListener('click', () => {
-      const next = window.prompt('Rename file', ref.path);
-      if (!next || !ref.target) return;
-      void this.run(() =>
-        Promise.resolve(
-          this.controller.renameFile(ref.target!, ref.path, next),
-        ),
-      );
+    const actions = this.createMenu('…', {
+      ariaLabel: `Actions for ${ref.path}`,
+      buttonClass: 'ck-crowdy-studio-file-action',
     });
-    const remove = button('×');
-    remove.setAttribute('aria-label', `Delete ${ref.path}`);
-    remove.addEventListener('click', () => {
-      if (
-        !ref.target ||
-        !window.confirm(`Delete ${ref.target}:${ref.path}?`)
-      ) {
-        return;
-      }
-      void this.run(() =>
-        Promise.resolve(this.controller.deleteFile(ref.target!, ref.path)),
-      );
-    });
-    const library = button('Library');
-    library.setAttribute('aria-label', `Save ${ref.path} to My Library`);
+    const library = menuItem('Save to library');
     library.addEventListener('click', () => {
+      actions.close();
       if (!ref.target) return;
-      const title = window.prompt(
-        'Library file title',
-        ref.path.split('/').at(-1) ?? ref.path,
-      );
-      if (title == null) return;
-      void this.run(() =>
-        this.controller.saveProjectFileToLibrary(
-          ref.target!,
-          ref.path,
-          title,
-        ),
-      );
+      this.explorerForm = {
+        kind: 'library',
+        target: ref.target,
+        path: ref.path,
+        value: ref.path.split('/').at(-1) ?? ref.path,
+      };
+      this.rerenderExplorer();
     });
-    row.append(open, library, rename, remove);
+    const rename = menuItem('Rename');
+    rename.addEventListener('click', () => {
+      actions.close();
+      if (!ref.target) return;
+      this.explorerForm = {
+        kind: 'rename',
+        target: ref.target,
+        path: ref.path,
+        value: ref.path,
+      };
+      this.rerenderExplorer();
+    });
+    const remove = menuItem('Delete');
+    remove.addEventListener('click', () => {
+      actions.close();
+      if (!ref.target) return;
+      this.explorerForm = { kind: 'delete', target: ref.target, path: ref.path };
+      this.rerenderExplorer();
+    });
+    actions.menu.append(library, rename, remove);
+    row.append(open, actions.wrap);
+    return row;
+  }
+
+  private projectFileFormRow(
+    ref: CrowdyStudioFileRef,
+    form: Exclude<ExplorerFormState, { kind: 'add' } | { kind: 'import' }>,
+  ): HTMLElement {
+    const row = element('div', 'ck-crowdy-studio-file-form-row');
+    if (form.kind === 'delete') {
+      const text = document.createElement('span');
+      text.textContent = `Delete ${ref.target}:${ref.path}?`;
+      const confirm = button('Delete');
+      confirm.addEventListener('click', () => {
+        this.explorerForm = null;
+        void this.run(() =>
+          Promise.resolve(this.controller.deleteFile(form.target, form.path)),
+        );
+      });
+      const cancel = button('Cancel');
+      cancel.addEventListener('click', () => {
+        this.explorerForm = null;
+        this.rerenderExplorer();
+      });
+      row.append(text, confirm, cancel);
+      return row;
+    }
+    row.append(
+      this.inlineForm({
+        value: form.value,
+        placeholder:
+          form.kind === 'rename' ? 'New file path' : 'Library file title',
+        submitLabel: form.kind === 'rename' ? 'Rename' : 'Save to library',
+        onInput: (value) => {
+          if (this.explorerForm && this.explorerForm.kind === form.kind) {
+            this.explorerForm.value = value;
+          }
+        },
+        onSubmit: (value) => {
+          this.explorerForm = null;
+          if (form.kind === 'rename') {
+            void this.run(() =>
+              Promise.resolve(
+                this.controller.renameFile(form.target, form.path, value),
+              ),
+            );
+          } else {
+            void this.run(() =>
+              this.controller.saveProjectFileToLibrary(
+                form.target,
+                form.path,
+                value,
+              ),
+            );
+          }
+        },
+      }),
+    );
     return row;
   }
 
@@ -496,20 +907,89 @@ export class CrowdyStudioDomShell {
       const add = button('Add');
       add.setAttribute('aria-label', `Add ${file.title} to project`);
       add.addEventListener('click', () => {
-        const destination = window.prompt(
-          'Destination project path',
-          file.path,
-        );
-        if (!destination) return;
-        void this.run(() =>
-          this.controller.importReferenceFile(file, destination),
-        );
+        this.explorerForm =
+          this.explorerForm?.kind === 'import' &&
+          this.explorerForm.referenceId === file.id
+            ? null
+            : { kind: 'import', referenceId: file.id, value: file.path };
+        this.rerenderExplorer();
       });
       row.append(open, add);
       section.append(row);
+      if (
+        this.explorerForm?.kind === 'import' &&
+        this.explorerForm.referenceId === file.id
+      ) {
+        section.append(
+          this.inlineForm({
+            value: this.explorerForm.value,
+            placeholder: 'Destination project path',
+            submitLabel: 'Add to project',
+            onInput: (value) => {
+              if (this.explorerForm?.kind === 'import') {
+                this.explorerForm.value = value;
+              }
+            },
+            onSubmit: (value) => {
+              this.explorerForm = null;
+              void this.run(() =>
+                this.controller.importReferenceFile(file, value),
+              );
+            },
+          }),
+        );
+      }
     }
     if (files.length === 0) section.append(empty('No files'));
     return section;
+  }
+
+  private inlineForm(options: {
+    value: string;
+    placeholder: string;
+    submitLabel: string;
+    onInput(value: string): void;
+    onSubmit(value: string): void;
+  }): HTMLElement {
+    const form = document.createElement('form');
+    form.className = 'ck-crowdy-studio-inline-form';
+    const field = document.createElement('input');
+    field.value = options.value;
+    field.placeholder = options.placeholder;
+    field.setAttribute('aria-label', options.placeholder);
+    field.dataset.explorerField = 'true';
+    field.addEventListener('input', () => options.onInput(field.value));
+    const submit = button(options.submitLabel, 'submit');
+    const cancel = button('Cancel');
+    cancel.addEventListener('click', () => {
+      this.explorerForm = null;
+      this.rerenderExplorer();
+    });
+    form.append(field, submit, cancel);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const value = field.value.trim();
+      if (!value) return;
+      options.onSubmit(value);
+    });
+    queueMicrotask(() => {
+      try {
+        if (
+          field.isConnected &&
+          !this.explorer.contains(document.activeElement)
+        ) {
+          field.focus();
+          field.select();
+        }
+      } catch {
+        // Focus management is an enhancement only.
+      }
+    });
+    return form;
+  }
+
+  private rerenderExplorer(): void {
+    if (this.lastState) this.renderExplorer(this.lastState);
   }
 
   private renderTabs(state: CrowdyStudioState): void {
@@ -574,6 +1054,11 @@ export class CrowdyStudioDomShell {
       ...state.authoritativeDiagnostics,
       ...state.localDiagnostics,
     ];
+    const problemsTab = this.panelButtons.get('problems');
+    if (problemsTab) {
+      problemsTab.textContent =
+        diagnostics.length > 0 ? `Problems (${diagnostics.length})` : 'Problems';
+    }
     if (diagnostics.length === 0) {
       this.problemsPanel.append(empty('No problems.'));
       return;
@@ -633,11 +1118,6 @@ export class CrowdyStudioDomShell {
   }
 }
 
-function polledSurface(panel: PanelName): CrowdyStudioPolledSurface | null {
-  if (panel === 'logs' || panel === 'runs') return panel;
-  return null;
-}
-
 function budgetText(state: CrowdyStudioState): string {
   const usage = state.usage
     ? `units ${state.usage.hourUnitsUsed}/${state.usage.unitsPerHour ?? '∞'} · compiles ${state.usage.compilesThisHour}/${state.usage.maxCompilesPerHour}`
@@ -667,6 +1147,34 @@ function sameRef(a: CrowdyStudioFileRef, b: CrowdyStudioFileRef): boolean {
   );
 }
 
+function focusedExplorerField(explorer: HTMLElement): string | null {
+  if (typeof HTMLInputElement === 'undefined') return null;
+  const active = document.activeElement;
+  if (
+    active instanceof HTMLInputElement &&
+    explorer.contains(active) &&
+    active.dataset.explorerField === 'true'
+  ) {
+    return active.value;
+  }
+  return null;
+}
+
+function restoreExplorerFocus(explorer: HTMLElement, value: string | null): void {
+  if (value === null) return;
+  const field = explorer.querySelector<HTMLInputElement>(
+    'input[data-explorer-field="true"]',
+  );
+  if (!field) return;
+  field.focus();
+  const end = field.value.length;
+  try {
+    field.setSelectionRange(end, end);
+  } catch {
+    // Selection APIs are an enhancement only.
+  }
+}
+
 function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -683,6 +1191,13 @@ function button(
   const value = document.createElement('button');
   value.type = type;
   value.textContent = label;
+  return value;
+}
+
+function menuItem(label: string): HTMLButtonElement {
+  const value = button(label);
+  value.className = 'ck-crowdy-studio-menu-item';
+  value.setAttribute('role', 'menuitem');
   return value;
 }
 

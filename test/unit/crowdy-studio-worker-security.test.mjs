@@ -515,6 +515,7 @@ class FakeElement {
   readOnly = false;
   required = false;
   rows = 0;
+  style = {};
 
   constructor(tagName, ownerDocument) {
     this.tagName = tagName;
