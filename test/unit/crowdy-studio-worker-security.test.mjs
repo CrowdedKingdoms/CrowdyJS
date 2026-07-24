@@ -207,6 +207,188 @@ test('mount fallback edits one target file instead of a JSON blob', async () => 
   }
 });
 
+test('mount derives the selected project for BUILD and fences project switches', async () => {
+  const previous = {
+    document: globalThis.document,
+    window: globalThis.window,
+    Worker: globalThis.Worker,
+  };
+  const fakeDocument = new FakeDocument();
+  globalThis.document = fakeDocument;
+  globalThis.window = { prompt: () => null, confirm: () => true };
+  delete globalThis.Worker;
+  const host = fakeDocument.createElement('host');
+  const first = sampleProject();
+  const second = {
+    ...structuredClone(first),
+    projectId: 'p2',
+    metadata: { ...first.metadata, name: 'Second project' },
+  };
+  const base = sampleProvider(first);
+  const provider = {
+    ...base,
+    async listProjects() {
+      return [first, second].map((project) => ({
+        projectId: project.projectId,
+        name: project.metadata.name,
+        kind: project.kind,
+        revisionId: project.revision.id,
+        serverModuleName: project.metadata.serverModuleName,
+        clientModuleName: project.metadata.clientModuleName,
+        updatedAt: project.updatedAt,
+      }));
+    },
+    async getProject({ projectId }) {
+      return structuredClone(projectId === 'p2' ? second : first);
+    },
+  };
+  const {
+    CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
+  } = await import('../../dist/crowdy-agent/index.js');
+  let createInput;
+  let currentSession;
+  const transport = {
+    async getSession() {
+      return structuredClone(currentSession);
+    },
+    async listSessions() {
+      return {
+        edges: [],
+        pageInfo: { hasNextPage: false },
+        nodes: [],
+        hasNextPage: false,
+      };
+    },
+    async history() {
+      return {
+        edges: [],
+        pageInfo: { hasNextPage: false },
+        events: [],
+        hasMore: false,
+      };
+    },
+    async toolDescriptors() {
+      return {
+        registryDigest: registry.registryDigest,
+        tools: registry.list(),
+      };
+    },
+    async budget() {
+      return { dimensions: [], platformFunded: true, payer: 'PLATFORM' };
+    },
+    async createSession(input) {
+      createInput = structuredClone(input);
+      currentSession = {
+        contractVersion: 'crowdy.studio-agent/1',
+        sessionId: 'session-project',
+        appId: input.appId,
+        projectId: input.projectId,
+        gridId: input.gridId,
+        mode: input.mode,
+        status: 'ACTIVE',
+        requestedModel: 'fake/model',
+        providerDataConsent: false,
+        registryDigest: registry.registryDigest,
+        providerPolicyVersion: 'provider-1',
+        appPolicyVersion: 'app-1',
+        contextVersion: 'context-1',
+        currentClientEpoch: '0',
+        lastEventSeq: '0',
+        activeLeases: [],
+        createdAt: '2026-07-24T00:00:00Z',
+        updatedAt: '2026-07-24T00:00:00Z',
+      };
+      return structuredClone(currentSession);
+    },
+    async attachClient() {
+      currentSession = {
+        ...currentSession,
+        currentClientEpoch: '1',
+        clientEpoch: '1',
+      };
+      return {
+        session: structuredClone(currentSession),
+        clientEpoch: '1',
+        replayAfterSeq: '0',
+      };
+    },
+    async acknowledgeEvents({ throughSeq }) {
+      return { throughSeq };
+    },
+    async heartbeat() {
+      return { serverTime: new Date().toISOString() };
+    },
+    async sendMessage() {
+      throw new Error('not used');
+    },
+    async setMode() {
+      return structuredClone(currentSession);
+    },
+    async approveTool() {
+      throw new Error('not used');
+    },
+    async rejectTool() {
+      throw new Error('not used');
+    },
+    async toolResult() {
+      throw new Error('not used');
+    },
+    async grantLease() {
+      throw new Error('not used');
+    },
+    async revokeLease() {
+      throw new Error('not used');
+    },
+    async pause() {
+      return structuredClone(currentSession);
+    },
+    async resume() {
+      return structuredClone(currentSession);
+    },
+    async cancelRun() {
+      throw new Error('not used');
+    },
+    async closeSession() {
+      return structuredClone(currentSession);
+    },
+    subscribeEvents() {
+      return { close() {} };
+    },
+  };
+  try {
+    const handle = await mountCrowdyStudio(host, {
+      projectProvider: provider,
+      playerCompute: sampleCompute(),
+      appId: '1',
+      gridId: '2',
+      agent: {
+        transport,
+        createSession: {
+          appId: '1',
+          projectId: 'caller-guess-is-ignored',
+          mode: 'BUILD',
+          idempotencyKey: 'create-bound-session',
+        },
+      },
+    });
+    assert.equal(createInput.projectId, 'p1');
+    assert.equal(createInput.gridId, '2');
+    assert.equal(handle.agent.getState().session.projectId, 'p1');
+
+    await handle.controller.switchProject('p2');
+    assert.equal(handle.agent.getState().connection, 'ERROR');
+    assert.equal(
+      handle.agent.getState().lastError.code,
+      'AGENT_CONTEXT_CHANGED',
+    );
+    handle.destroy();
+  } finally {
+    restoreGlobal('document', previous.document);
+    restoreGlobal('window', previous.window);
+    restoreGlobal('Worker', previous.Worker);
+  }
+});
+
 function sampleProject() {
   return {
     projectId: 'p1',

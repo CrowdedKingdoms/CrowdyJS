@@ -12,6 +12,21 @@ npm install @crowdedkingdoms/crowdyjs
 
 CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must provide browser-compatible globals when opening realtime connections.
 
+> **CrowdyJS v12 (breaking): Agentic Crowdy Studio.** v12 adds the accepted
+> `crowdy.studio-agent/1`, `crowdy.agent-tools/1`, and
+> `crowdy.player-host/1` browser contracts. Import the provider-neutral durable
+> client and immutable tool registry from
+> `@crowdedkingdoms/crowdyjs/agent`, and generic game observations/control from
+> `@crowdedkingdoms/crowdyjs/player-host`. Crowdy Studio can mount the
+> integrated Ask/Build/Play dock when given an injectable agent transport.
+> There is deliberately no OpenRouter key/client, raw GraphQL executor, DOM
+> driver, `fetch`, shell, unrestricted SDK bridge, or client-mod `host_call` in
+> these surfaces. The reconciled Game API SDL, generated operations, and
+> production `CrowdyAgentGraphQLTransport` are included and exposed as
+> `client.crowdyStudioAgent`; tests may still inject
+> `CrowdyStudioAgentTransportV1`. Existing manual Studio mounting remains
+> unchanged when `agent` is omitted.
+>
 > **Server compatibility (v8.13):** v8.13 adds the **flow-correlation surface**: `gameModel.flow({ appId, flowId })` stitches one flow correlation id into a single cross-engine timeline (model events + automation runs + compute module runs, each time-ascending), and the default event/run fragments now select the nullable `flowId` field on `GmEvent` / `GmAutomationRun` / `WasmModuleRun`. Both require the 2026-07-19 `cks-game-api` dev line (the `2026-07-19-compute-fleet-hardening` migration for the columns and the `gameModelFlow` query for the timeline); older servers reject the operations with a GraphQL validation error, and everything else keeps working. `gameModel.flow` requires the app-admin `manage_apps` permission (it is a diagnostics surface). v8.13 also extends the kit invoke helpers' gameplay-verdict mapping: the typed invoke-contract violation `computeInvoke` raises (`BAD_REQUEST` with an "Invoke params violate ..." message, game-api 2026-07-19+) now maps onto `{ success: false, errorMessage }` (`kitInvoke`) / `{ success: false, reason }` (engine invokes) instead of throwing — see the exported `isKitVerdictError` predicate.
 >
 > **Server compatibility:** v8.12's **container query predicates** (`where`/`limit`/`offset` on `gameModel.containers`), **automation compute actions** (`actionKind: 'compute_invoke'` with `computeModuleName`/`computeExport` on `gameModel.upsertAutomation`; `property_changed` events additionally carry `oldValue`/`newValue` to compute modules), **container-change push** (`gameModel.containerChanged` — metadata-only pull-on-push over graphql-transport-ws; on Node ≤ 21 pass `webSocketImpl`), and **invoke-trigger contracts** (`contractJson` on `compute.upsertTrigger`/`moduleTriggers`, validated server-side pre-sandbox) require the 2026-07 `cks-game-api` dev line with the `2026-07-19-automation-compute-action` migration; older servers reject the new arguments/fields (omit them and everything else keeps working). (npm 8.11.0 is a partial cut of this surface — prefer 8.12.0.) v8.12 also adds the `runOptimisticAction` kit helper (client-only: the packaged optimistic apply → referee invoke → confirm/rollback loop with actionId receipts). v5.2+ targets environments on release **v0.1.19 or later** (`cks-game-api >= v0.10.3`, `cks-management-api >= v0.1.70`). The destructive mutations send an `idempotencyKey` argument that older servers don't define. v6.1's `client.gameApps.deleteGrid` additionally requires release **v0.1.33+** (`cks-game-api >= v0.12.3`). The game-model **permission effects** fields (`permissionEffects` on `gameModel.upsertFunction`/`seed`, `permissionEffectsAppliedJson` on events) require a `cks-game-api` build with the `2026-07-17-model-permission-effects` migration (v0.13.11+); older servers reject queries/mutations that include them (omit the fields and everything else keeps working). The **permission-read** surface (the `has_grid_permission`/`grid_at`/`has_chunk_permission` expression builtins the kit's `chunkPermission` locks compile to, and selector `*PermissionWhere` predicates) additionally requires `cks-game-api` **v0.13.12+**. Older `cks-game-api` builds report game-model **invoke policy denials** as `FORBIDDEN` GraphQL errors instead of resolving with `success: false`; as of this version the kit's invoke helpers map that error onto the documented `{ success: false, errorMessage }` result, so kit callers behave identically against both server generations. v8.6's **`client.compute`** (Compute Modules — server-side Rust/WASM logic) requires a `cks-game-api` build with the compute surface (the `compute*` root fields, v0.13.13+ dev line); older servers reject these operations with a GraphQL validation error, and everything else keeps working. v8.9's **realtime + live-ops surfaces** (`kit.abilities`/`movement`/`territory`/`racing`/`liveops`/`moderation`/`telemetry`, the loot engine path, `client.compute.deployTemplate` + `kit.deploy({engines})`, and the type-94..98 event parsers) complete the 30-abstraction catalog; v8.8's **session-genre engine surfaces** (`kit.instances`/`director`/`matchmaking`/`minigames`, the engine paths on matches/decks/leaderboards, `economy.orderBook`, and the type-91/92/93 event parsers) talk to the Wave 2 engine templates; capability detection keeps model-only deployments on today's behavior. v8.7's **engine kit surfaces** (`kit.mobs`, `kit.pets`, `kit.combat.attackRouted`, `kit.worldsim.forecast`, and the `kit/wire` pose/lane registry) talk to compute-module game engines built on the Wave 0/1 `cks-game-api` dev line (`crowdy-game-kit` crates); capability detection makes them degrade gracefully — model-only deployments keep today's behavior.
@@ -144,6 +159,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.compute` | **Compute Modules** — server-side Rust/WASM logic: author + deploy source (`upsertModule`, `deployVersion`, `waitForCompile`), triggers + policy, synchronous `invoke`, and monitoring (`moduleRuns`, `moduleStats`, `moduleLogs`, `appDiagnostics`). Modules run server-only; see [Compute Modules docs](https://docs.crowdedkingdoms.com/game-api/compute-modules). |
 | `client.playerCompute` | Player-authored SERVER/CLIENT Rust/WASM bound to player-owned grids: deploy source, activate/deactivate, list modules/versions, and delete self-authored modules. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, pairing preference, optimistic revisions, copy-by-value imports, and atomic metadata/file saves. Generated operations are pinned to the committed merged SDL. |
+| `client.crowdyStudioAgent` | Generated, app-token Game API transport for durable agent sessions, Relay history/session pages, descriptors/budgets, exact approvals, browser tool results, heartbeat, control mutations, and ordered event subscriptions. |
 | `client.playerModel` | Player-owned flexible model containers and grid-confined automations (`containers`, `createContainer`, `setProperty`, `automations`, `createAutomation`, …). |
 | `client.marketplace` | Player-code store/install/consent flows plus player-authorized grid claims: `claimGridOwnership` preserves the existing-grid policy flow, while `claimGridChunk` atomically creates and owns one chunk under `SELF_CLAIM` and `releaseClaimedGrid` releases an eligible owner-created claim. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`). |
@@ -247,6 +263,193 @@ presentation enum to Crowdy Studio's runtime-oriented project kind and
 `CONFLICT` with `CROWDY_STUDIO_REVISION_CONFLICT` in the message and becomes a
 `CrowdyStudioRevisionConflictError` with the latest cloud project when that
 follow-up read succeeds.
+
+### Agent SDK, transport, and integrated dock (v12)
+
+The v12 agent API remains provider-neutral, while CrowdyJS now ships generated
+operations plus the production `CrowdyAgentGraphQLTransport` exposed as
+`client.crowdyStudioAgent`:
+
+```ts
+import {
+  CROWDY_AGENT_TOOL_REGISTRY_V1,
+  CrowdyStudioAgentController,
+} from '@crowdedkingdoms/crowdyjs/agent';
+
+const agent = new CrowdyStudioAgentController({
+  transport: game.crowdyStudioAgent,
+  createSession: {
+    appId,
+    projectId,
+    gridId,
+    mode: 'BUILD',
+    providerDataConsent: true,
+    idempotencyKey: crypto.randomUUID(),
+  },
+  beforeAgentWork: () => studio.controller.prepareForAgentWork(),
+});
+await agent.initialize(); // attach epoch → durable replay/gap fill → live tail
+```
+
+`CROWDY_AGENT_TOOL_REGISTRY_V1` is an immutable, digest-pinned registry of the
+minimum Studio/project/workspace/library/template/diagnostics/runtime and
+generic game tools. Every descriptor has exact logical and provider wire names,
+semantic version, bounded input/output JSON schemas,
+`additionalProperties:false`, executor, mode, risk/effect/reversibility,
+scope, approval, idempotency, timeout, and redaction metadata. Input schemas
+reject caller-supplied identity, epoch, lease, approval, endpoint, token, and
+other authority fields. `CrowdyAgentToolRegistry.fromWireName` is exact and
+case-sensitive; browser dispatch is execute-once by `toolCallId`, and ambiguous
+effects become `OUTCOME_UNKNOWN` instead of being repeated.
+
+`CrowdyStudioAgentTransportV1` owns no credentials and exposes only typed
+durable orchestration operations: session/history/descriptor/budget queries;
+create/attach/mode/event-ack/message/approval/tool-result/lease/pause/resume/
+cancel/close mutations; and the ordered event subscription. A generated adapter
+maps these methods to the operation names in
+`CROWDY_AGENT_GRAPHQL_OPERATIONS_V1`:
+
+- `crowdyStudioAgentSession`, `crowdyStudioAgentSessions`,
+  `crowdyStudioAgentHistory`, `crowdyStudioAgentToolDescriptors`, and
+  `crowdyStudioAgentBudget`;
+- `crowdyStudioAgentCreateSession`, `AttachClient`, `SetMode`,
+  `AcknowledgeEvents`, `Heartbeat`, `SendMessage`, `ApproveTool`, `RejectTool`,
+  `ToolResult`, `GrantLease`, `RevokeLease`, `Pause`, `Resume`, `CancelRun`,
+  and `CloseSession` (all with the `crowdyStudioAgent` prefix);
+- `crowdyStudioAgentEvents(sessionId, afterSeq, clientEpoch)`.
+
+The controller applies only contiguous decimal-string sequences, deduplicates
+event IDs, fills gaps from durable history, acknowledges the highest
+contiguous cursor, fences old attach epochs, and explicitly reconnects without
+resuming a run or Play lease. Approval methods use the exact displayed argument
+hash. Human edit/game input calls local preemption before best-effort transport
+cleanup. Attach uses a stable `clientInstanceId` and the server
+`replayAfterSeq`; public message input maps to Game API `content`, cancellation
+always sends an explicit run id, and PLAY sends a two-second heartbeat only
+while attached, active, and visible. Heartbeat, kill, and stale-epoch failures
+immediately clear local authority.
+
+Mode changes adopt the complete server-repinned session (registry digest,
+provider/app policy revisions, and context version) before loading its new
+effective descriptors. The Studio mount resolves the selected saved project
+after `CrowdyStudioController.initialize()`, overrides caller guesses when
+creating a BUILD session, and rejects an existing session bound to another
+project. Because v1 has no set-project mutation, switching projects fences the
+agent and requires a new session/remount.
+
+An active BUILD workspace lease is renewed every ten seconds through the same
+authenticated heartbeat; the server returns its renewed 30-second expiry.
+Human edits, project/context changes, lease revocation, disconnect, and destroy
+stop renewal and abort browser handlers. Run events retain their stable
+`code`, `reason`, and typed safe `error`.
+
+The committed descriptor digest fixture is checked on every build against the
+canonical registry. Coordinated refreshes first run
+`npm run agent-descriptors:drift -- --source <game-api-fixture>`; builds then
+recompute the full and canonical 28-tool Game API subset digest (14 mandatory
+game plus 14 Studio/diagnostic/runtime tools) so the fixture cannot silently
+diverge.
+
+Mount the responsive agent dock by adding `agent`; omit it to retain the v11
+manual UI unchanged:
+
+```ts
+const studio = await mountCrowdyStudio(host, {
+  projectProvider: game.crowdyStudio,
+  playerCompute: game.playerCompute,
+  appId,
+  gridId,
+  agent: {
+    transport: game.crowdyStudioAgent,
+    sessionId,
+    playerHost: bwfPlayerHostAdapter,
+  },
+});
+
+studio.agent?.sendMessage('Explain the current diagnostics');
+studio.controlLeaseManager?.preempt('HUMAN_INPUT');
+```
+
+The dock provides human-owned Ask/Build/Play selection, chat streaming,
+plan/tool status, exact approval hashes, diff/checkpoint cards, budget, visible
+lease scope/expiry, Pause/Resume/Stop, and checkpoint-restore requests. It uses
+text nodes for all untrusted content, ARIA status/log/group labels, visible
+focus, keyboard submission, and a container-query layout that moves the agent
+dock below narrow embeds.
+
+The headless `CrowdyStudioController` now also exposes:
+
+- `prepareForAgentWork()` to flush autosave and fail closed on conflict/offline;
+- `applyAtomicPatch()` and `synchronizeProject()` for all-or-none multi-file
+  updates, human-edit preemption, and Monaco synchronization;
+- `refreshCheckpoints()` / `restoreCheckpoint()` through the optional
+  transport-neutral `CrowdyStudioSynchronizationProvider` (the provider is
+  required for agent writes/restores and must make checkpoint + revision
+  changes durable and atomic);
+- typed draft/live results plus `runtimeSync` (`RUNNING_SAVED`,
+  `RUNNING_STALE`, `STOPPED`, or `NEVER_RUN`).
+
+### PlayerHostAdapter and Blocks with Friends integration
+
+`@crowdedkingdoms/crowdyjs/player-host` exports
+`PlayerHostAdapterV1`, capability/observation/command/result types and schemas,
+`AgentControlLeaseManager`, and `createPlayerHostAgentTools`. A game adapter
+implements only:
+
+```ts
+interface PlayerHostAdapterV1 {
+  readonly contractVersion: 'crowdy.player-host/1';
+  capabilities(): Promise<PlayerHostCapabilitiesV1>;
+  observe(request: ObserveRequestV1): Promise<GameObservationV1>;
+  dispatch(command: GameCommandV1, gate: ValidatedGateV1):
+    Promise<GameCommandResultV1>;
+  clearAgentIntent(reason: CrowdyAgentPreemptionReason): void;
+}
+```
+
+For Blocks with Friends, implement this interface over the same typed intent
+methods used by `PlayerController`, `ActionService`, `InventoryService`,
+`FishingService`, `RideService`, and existing referee/model calls. Construct
+`createPlayerHostAgentTools(adapter)` and pass `adapter` as the mount's
+`playerHost`. The returned lease manager enforces TTL, scopes, client epoch,
+host/controlled-entity revision, observation freshness, modal/death state,
+per-command rate limits, approvals, and tool-call dedup. Call
+`leaseManager.preempt('HUMAN_INPUT')` synchronously on key/mouse/touch input,
+`ESCAPE` on Escape, and the corresponding reason on death, target/context
+change, disconnect, or Stop. `clearAgentIntent` must immediately zero movement,
+look, and pending action intent. BWF does not integrate through raw CrowdyJS,
+DOM input, UDP packets, `PlayerCodeBroker`, or client-mod host calls.
+
+BWF should pass only `game.crowdyStudioAgent` and its
+`BwfPlayerHostAdapter` to the Studio mount; the mount derives the selected
+project id. Its adapter must implement the exact 14 mandatory game surfaces,
+classify combat as conditional approval, return typed failed/denied/unknown
+outcomes, and make `clearAgentIntent` synchronously cancel shared movement and
+action intents when the dispatcher aborts.
+
+The reconciled Game API development pilot advertises the exact 28-tool
+follow-up subset, including all 14 mandatory game descriptors. CrowdyJS routes
+all game tools through
+`PlayerHostAdapterV1`, the scoped lease gate, conditional combat approval,
+safety stop, heartbeat fencing, and typed result continuation. BWF Play now
+remains blocked only on the concrete BWF adapter/shared-intent wiring and its
+host/app policy configuration.
+
+The same browser dispatcher routes backend-advertised `runtime.test_draft`,
+`runtime.deploy_live`, `runtime.invoke`, and `runtime.stop` through the
+headless Studio controller. Draft testing is routine BUILD work; live deploy
+and LIVE invoke require the exact approval grant; stop remains an idempotent
+safety action. Inner game `FAILED`, `DENIED`, or `OUTCOME_UNKNOWN` results are
+promoted to matching outer terminal tool results and are never reported as
+successful.
+
+Runtime execution is plan-bound: requested targets must exactly equal the
+selected project’s authoritative target set, so a full-stack project cannot run
+CLIENT after SERVER-only authorization. Live deploy additionally rechecks the
+saved revision, canonical project content hash (including module names/files),
+and pairing preference after autosave. Invoke checks the exact running
+DRAFT/LIVE environment and export; stop always stops the complete selected
+project as a safety action rather than interpreting a partial target.
 
 | `createWorldSession(client, appId, config)` (from `@crowdedkingdoms/crowdyjs/stores`) | World Stores: opt-in, SDK-managed game state — typed codecs (`structCodec` binary DSL), your own actor with a 5 Hz send loop (`session.self`), a remote-actor registry with lanes/history/staleness (`session.actors`), attributed send errors (`session.errors`), a chunk/voxel cache with realtime merge + worldgen write-back (`session.chunks`), channel/direct-message inboxes + a typed event router, host tracking, typed save/avatar state, and a game-model container mirror. Only configured stores exist (compile-time + runtime); unimported stores tree-shake away. |
 | `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, `kit.plots` (buy/rent land with transactional, replication-enforced grid grants), and the genre layers `kit.economy` (wallets/shops/trades/market), `kit.progression` (xp/skills/achievements/rating), `kit.loot`, `kit.quests`, `kit.combat`, `kit.matches` (session lobbies/turns/scores with notify-to-pull channels), `kit.decks` (hidden hands), `kit.worldsim` (clock/nodes/crops/waves), `kit.social` (parties/guilds/chat over teams+channels), `kit.leaderboards`, `kit.features` (tier gates), and the engine-aware helpers `kit.mobs` (refereed attacks, defs/slots, contact-damage parsing), `kit.pets` (adopt/summon/dismiss/rename), `kit.instances` (private world slices, seeded runs), `kit.director` (encounter runs), `kit.matchmaking` (queues/proposals/rating), `kit.minigames` (invoke-loop wrapper), `kit.economy.orderBook` (escrowed bid/ask market), engine paths on `kit.matches`/`kit.decks`/`kit.leaderboards`, `kit.quests` tutorial sequencing, `kit.engines` (compute capability detection) with `kit/wire` (the engine pose codec, `engineLanes()`, and the 77/90/91/92/93 event parsers) — plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |

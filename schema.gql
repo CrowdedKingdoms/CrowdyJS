@@ -99,6 +99,388 @@ type UserIdentity {
 }
 
 """
+Per-turn provider/tool/compile limits. Token and cost values are exact decimal BigInt strings; cost is in micro-US-dollars.
+"""
+type CrowdyStudioAgentTurnLimits {
+  """Maximum provider requests in one accepted turn."""
+  providerRequests: Int!
+  """Maximum input tokens in one turn."""
+  inputTokens: BigInt!
+  """Maximum output tokens in one turn."""
+  outputTokens: BigInt!
+  """Maximum reasoning tokens in one turn."""
+  reasoningTokens: BigInt!
+  """Maximum total provider tokens in one turn."""
+  totalTokens: BigInt!
+  """Maximum reserved/reconciled provider cost per turn, in micro-USD."""
+  providerCostMicrousd: BigInt!
+  """Maximum tool calls in one turn."""
+  toolCalls: Int!
+  """Maximum serialized provider/tool rounds in one turn."""
+  toolRounds: Int!
+  """Maximum draft compile submissions in one turn."""
+  compiles: Int!
+  """Maximum turn wall-clock duration in milliseconds."""
+  wallClockMs: Int!
+  """
+  Maximum concurrent provider requests in one turn. The v1 orchestrator still serializes calls.
+  """
+  concurrentProviderRequests: Int!
+}
+
+"""
+Per-session cumulative provider/tool/compile limits and the serialized-run concurrency ceiling.
+"""
+type CrowdyStudioAgentSessionLimits {
+  """Maximum provider requests in one session."""
+  providerRequests: Int!
+  """Maximum input tokens in one session."""
+  inputTokens: BigInt!
+  """Maximum output tokens in one session."""
+  outputTokens: BigInt!
+  """Maximum reasoning tokens in one session."""
+  reasoningTokens: BigInt!
+  """Maximum total provider tokens in one session."""
+  totalTokens: BigInt!
+  """Maximum provider cost in one session, in micro-USD."""
+  providerCostMicrousd: BigInt!
+  """Maximum tool calls in one session."""
+  toolCalls: Int!
+  """Maximum draft compile submissions in one session."""
+  compiles: Int!
+  """
+  Maximum concurrent non-terminal runs in a session. The v1 contract requires one.
+  """
+  concurrentRuns: Int!
+}
+
+"""
+Per-player UTC-day cumulative limits plus player/app concurrency ceilings.
+"""
+type CrowdyStudioAgentPlayerDayLimits {
+  """Maximum provider requests per player per UTC day."""
+  providerRequests: Int!
+  """Maximum input tokens per player per UTC day."""
+  inputTokens: BigInt!
+  """Maximum output tokens per player per UTC day."""
+  outputTokens: BigInt!
+  """Maximum reasoning tokens per player per UTC day."""
+  reasoningTokens: BigInt!
+  """Maximum total provider tokens per player per UTC day."""
+  totalTokens: BigInt!
+  """Maximum provider cost per player per UTC day, in micro-USD."""
+  providerCostMicrousd: BigInt!
+  """Maximum tool calls per player per UTC day."""
+  toolCalls: Int!
+  """Maximum draft compile submissions per player per UTC day."""
+  compiles: Int!
+  """Maximum concurrent sessions for one player."""
+  concurrentSessions: Int!
+  """Maximum concurrent agent runs across the app."""
+  concurrentRunsPerApp: Int!
+}
+
+"""
+Retention ceilings for redacted Agentic Studio data. Provider wire bodies, headers, private reasoning, and individual token deltas always have zero retention and are absent.
+"""
+type CrowdyStudioAgentRetentionPolicy {
+  """Coalesced assistant chunk retention in hours (0-24)."""
+  assistantChunkHours: Int!
+  """
+  Detailed game observation/browser tool-result retention in hours (0-24).
+  """
+  detailedContextHours: Int!
+  """
+  Final messages, redacted events, and checkpoint retention after close in days (0-30).
+  """
+  sessionDataDays: Int!
+  """
+  Provider generation/token/cost and kill metadata retention in days (1-90).
+  """
+  usageDays: Int!
+}
+
+"""
+Provider privacy posture. ZDR and collection denial are locked true; provider request/response bodies are never persisted.
+"""
+type CrowdyStudioAgentPrivacyPolicy {
+  """Whether Zero Data Retention is required. Always true in v1."""
+  requireZdr: Boolean!
+  """
+  Whether routed-provider data collection must be denied. Always true in v1.
+  """
+  denyDataCollection: Boolean!
+  """
+  Whether selected private project source may be sent after the separate human disclosure/consent gate.
+  """
+  allowPrivateSource: Boolean!
+  """
+  Whether first-use human disclosure/consent is required for private source. Always true in v1.
+  """
+  requirePrivateSourceConsent: Boolean!
+  """
+  Whether provider HTTP request/response bodies can be persisted. Always false in v1.
+  """
+  persistProviderBodies: Boolean!
+}
+
+"""
+Funding seam for Agentic Studio. The development pilot is platform-funded and never debits a player wallet; payer/rate-card fields are reserved for a later contract.
+"""
+type CrowdyStudioAgentFundingPolicy {
+  """Funding mode. The pilot always returns 'PLATFORM_FUNDED'."""
+  billingMode: String!
+  """Future payer kind. The pilot always returns 'PLATFORM'."""
+  payerKind: String!
+  """Future rate-card UUID; null throughout the platform-funded pilot."""
+  rateCardId: String
+  """
+  Whether this policy can debit a player wallet. Always false in the pilot.
+  """
+  walletDebitEnabled: Boolean!
+}
+
+"""
+Management's Agentic Crowdy Studio policy publication. EFFECTIVE values are the fail-closed platform/app intersection; an app can never widen platform models, tools, modes, risks, budgets, retention, or privacy. Game API runtime enforcement still requires a fresh validated replica.
+"""
+type CrowdyStudioAgentPolicy {
+  """PLATFORM, APP, or EFFECTIVE projection."""
+  kind: CrowdyStudioAgentPolicyKind!
+  """App id for APP/EFFECTIVE policy; null for platform policy."""
+  appId: BigInt
+  """
+  Whether this Management policy layer/publication is enabled. EFFECTIVE is true only when all required layers are enabled and no kill applies; it does not attest that Game API has synchronized.
+  """
+  enabled: Boolean!
+  """
+  Layer kill state. EFFECTIVE is true when platform, operator-app, or app kill is active.
+  """
+  killSwitch: Boolean!
+  """
+  Operator-only per-app kill state. App policy mutations cannot clear or alter it.
+  """
+  operatorKillSwitch: Boolean!
+  """
+  Stable disable/kill reason code (for example AGENT_OPERATOR_KILLED); null when enabled.
+  """
+  disableReasonCode: String
+  """
+  Safe operator/app reason text; never includes provider bodies or secrets.
+  """
+  disableReason: String
+  """
+  Exact model ids allowed by this layer/intersection. Empty denies all models.
+  """
+  allowedModelIds: [String!]!
+  """
+  Exact crowdy.agent-tools/1 logical tool names allowed by this layer/intersection. Empty denies all tools.
+  """
+  allowedToolNames: [String!]!
+  """Human-selectable modes allowed by this layer/intersection."""
+  allowedModes: [CrowdyStudioAgentMode!]!
+  """
+  Allowed tool risk classes. Required approval classes remain approval-gated even when listed.
+  """
+  allowedRiskClasses: [CrowdyStudioAgentRiskClass!]!
+  """Per-turn hard limits."""
+  turnLimits: CrowdyStudioAgentTurnLimits!
+  """Per-session hard limits."""
+  sessionLimits: CrowdyStudioAgentSessionLimits!
+  """Per-player UTC-day and concurrency hard limits."""
+  playerDayLimits: CrowdyStudioAgentPlayerDayLimits!
+  """Redacted-data retention limits."""
+  retention: CrowdyStudioAgentRetentionPolicy!
+  """Locked provider privacy and private-source controls."""
+  privacy: CrowdyStudioAgentPrivacyPolicy!
+  """Platform-funded pilot/future billing seam."""
+  funding: CrowdyStudioAgentFundingPolicy!
+  """Revision of this stored layer; zero means no app row exists yet."""
+  revision: BigInt!
+  """Platform revision used by an EFFECTIVE projection."""
+  platformRevision: BigInt!
+  """
+  App revision used by an EFFECTIVE projection; zero means missing app policy.
+  """
+  appRevision: BigInt!
+  """
+  Composite Management revision, formatted p<platform revision>:a<app revision>. Game API pins it only after a successful fresh replica pull.
+  """
+  effectiveRevision: String!
+  """Policy row creation time or projection time."""
+  createdAt: DateTime!
+  """Last policy change time or projection time."""
+  updatedAt: DateTime!
+}
+
+"""Whether a policy object is the platform row, app row, or intersection."""
+enum CrowdyStudioAgentPolicyKind {
+  """Operator-owned platform policy and hard ceilings."""
+  PLATFORM
+  """App-owned policy after write-time platform clamping."""
+  APP
+  """Fail-closed intersection of platform, operator-kill, and app policy."""
+  EFFECTIVE
+}
+
+"""
+Human-selected authority mode. The model cannot change modes or elevate itself.
+"""
+enum CrowdyStudioAgentMode {
+  """Read-only assistance and proposals."""
+  ASK
+  """
+  Routine project edits and draft tests under ordinary write/run permissions.
+  """
+  BUILD
+  """
+  Game control only while a human-granted, scoped, time-boxed control lease is active.
+  """
+  PLAY
+}
+
+"""
+Tool risk classes from crowdy.agent-tools/1. App policy may only remove platform-allowed classes; locked approval requirements still apply.
+"""
+enum CrowdyStudioAgentRiskClass {
+  """Owner/app-scoped reads with redaction."""
+  READ_ONLY
+  """Reversible Build writes with revision checks and checkpoints."""
+  ROUTINE_WRITE
+  """Routine Play actions requiring a visible human-granted lease."""
+  WORLD_CONTROL
+  """Destructive action; exact human approval required."""
+  DESTRUCTIVE
+  """Trust, consent, or capability change; exact human approval required."""
+  TRUST_CONSENT
+  """Money or commerce action; exact human approval required."""
+  ECONOMIC
+  """Irreversible action; exact human approval required."""
+  IRREVERSIBLE
+}
+
+"""
+One sanitized, platform-funded provider usage record. It contains exact OpenRouter token/cost dimensions but no key, prompt, headers, request/response body, private reasoning, or wallet debit.
+"""
+type CrowdyStudioAgentUsageRecord {
+  """Game API-issued immutable usage UUID."""
+  usageId: String!
+  """App whose agent run consumed usage."""
+  appId: BigInt!
+  """Player whose isolated budget consumed usage."""
+  userId: BigInt!
+  """Game-local Agentic Studio session UUID."""
+  sessionId: String!
+  """Game-local Agentic Studio run UUID."""
+  runId: String!
+  """Provider name; 'openrouter' for the v1 pilot."""
+  provider: String!
+  """
+  Opaque OpenRouter generation id; null when terminal provider accounting was unavailable.
+  """
+  providerGenerationId: String
+  """Resolved allowlisted model id."""
+  resolvedModelId: String!
+  """
+  RECONCILED or RESERVATION_CONSUMED when terminal usage was unavailable.
+  """
+  accountingStatus: String!
+  """Provider request count."""
+  requestCount: BigInt!
+  """OpenRouter prompt token count."""
+  promptTokens: BigInt!
+  """OpenRouter completion token count."""
+  completionTokens: BigInt!
+  """OpenRouter reasoning token count."""
+  reasoningTokens: BigInt!
+  """OpenRouter cached token count."""
+  cachedTokens: BigInt!
+  """Provider-native prompt token count."""
+  nativePromptTokens: BigInt!
+  """Provider-native completion token count."""
+  nativeCompletionTokens: BigInt!
+  """Provider-native reasoning token count."""
+  nativeReasoningTokens: BigInt!
+  """Provider-native cached token count."""
+  nativeCachedTokens: BigInt!
+  """Validated tool calls in the run."""
+  toolCalls: BigInt!
+  """Serialized provider/tool rounds in the run."""
+  toolRounds: BigInt!
+  """Draft compile submissions in the run."""
+  compileCount: BigInt!
+  """
+  Accepted run wall-clock duration in milliseconds, from durable run start to finish.
+  """
+  wallClockMs: BigInt!
+  """Worst-case cost reserved before provider contact, in micro-USD."""
+  reservedCostMicrousd: BigInt!
+  """
+  Exact provider-reported OpenRouter cost in decimal USD (up to 18 fractional digits).
+  """
+  providerCostUsd: String!
+  """Exact upstream inference cost in decimal USD when reported."""
+  upstreamInferenceCostUsd: String
+  """True: OpenRouter ZDR was enforced."""
+  zdrEnforced: Boolean!
+  """True: provider data collection was denied."""
+  dataCollectionDenied: Boolean!
+  """Pinned platform policy revision."""
+  platformPolicyRevision: BigInt!
+  """Pinned app policy revision."""
+  appPolicyRevision: BigInt!
+  """Funding mode; 'PLATFORM_FUNDED' in the pilot."""
+  billingMode: String!
+  """Payer kind; 'PLATFORM' in the pilot."""
+  payerKind: String!
+  """When the provider usage occurred."""
+  occurredAt: DateTime!
+  """When Management API accepted the usage record."""
+  ingestedAt: DateTime!
+}
+
+"""
+Exact aggregate over the returned app/window usage records. Decimal USD remains a string to preserve precision.
+"""
+type CrowdyStudioAgentUsageSummary {
+  """Provider requests."""
+  requestCount: BigInt!
+  """Prompt tokens."""
+  promptTokens: BigInt!
+  """Completion tokens."""
+  completionTokens: BigInt!
+  """Reasoning tokens."""
+  reasoningTokens: BigInt!
+  """Cached tokens."""
+  cachedTokens: BigInt!
+  """Tool calls."""
+  toolCalls: BigInt!
+  """Tool rounds."""
+  toolRounds: BigInt!
+  """Draft compiles."""
+  compileCount: BigInt!
+  """Summed accepted-run wall-clock milliseconds."""
+  wallClockMs: BigInt!
+  """Exact summed provider cost in decimal USD."""
+  providerCostUsd: String!
+}
+
+"""
+Sanitized app usage read model: newest exact records plus an aggregate for the requested window.
+"""
+type CrowdyStudioAgentUsagePage {
+  """Newest usage records, bounded by the requested limit."""
+  records: [CrowdyStudioAgentUsageRecord!]!
+  """
+  Aggregate over the full requested time window, not only returned records.
+  """
+  summary: CrowdyStudioAgentUsageSummary!
+  """Inclusive start of the usage window."""
+  since: DateTime!
+  """Exclusive end of the usage window."""
+  until: DateTime!
+}
+
+"""
 Aggregated lifetime donation totals for a user. LEGACY: donations are no longer purchasable. Returned by the deprecated myDonationData query.
 """
 type UserDonationData {
@@ -3905,6 +4287,37 @@ type Query {
     appId: BigInt!
   ): [GridListing!]!
   """
+  Read the app-owned Agentic Crowdy Studio policy row, or a disabled/killed deny-all projection when no row exists. Requires 'view_compute_diagnostics' on the app. This is configuration only: use crowdyStudioAgentEffectivePolicy to see platform clamp and kill precedence. No provider key, prompt, source, header, request/response body, payer reference, or other secret is exposed.
+  """
+  crowdyStudioAgentPolicy(
+    """App whose stored Agentic Studio policy to read."""
+    appId: BigInt!
+  ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, exact model/tool/mode/risk intersections, minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent.
+  """
+  crowdyStudioAgentEffectivePolicy(
+    """App whose effective policy intersection to read."""
+    appId: BigInt!
+  ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Read the app's sanitized platform-funded Agentic Studio usage over a bounded time window. Requires 'view_compute_diagnostics'. Returns exact OpenRouter prompt/completion/reasoning/cache/native token and decimal-USD cost dimensions, request/tool/compile/wall counts, and pinned policy revisions. It never returns prompts, source, private reasoning, headers, provider bodies, credentials, payer references, or wallet data; pilot usage never debits a player wallet.
+  """
+  crowdyStudioAgentUsage(
+    """App whose Agentic Studio usage to read."""
+    appId: BigInt!
+    """Inclusive ISO-8601 start time or relative lookback (default 24h)."""
+    since: DateTime
+    """Exclusive ISO-8601 end time (default now)."""
+    until: DateTime
+    """Maximum newest records to return (default 100, max 200)."""
+    limit: Int
+  ): CrowdyStudioAgentUsagePage! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Operator only (is_operator or is_super_admin). Read the platform Agentic Studio enablement, global emergency kill, model/tool/mode/risk allowlists, budget ceilings, retention/privacy policy, pilot funding seam, timestamps, and revision. No provider credential or request body is stored or returned.
+  """
+  cpCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
   List every registered GraphQL API server (both management-api and game-api kinds), regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers).
   """
   graphqlServers: [GraphQLServer!]!
@@ -4849,6 +5262,49 @@ type Query {
     offset: Int
   ): [CrowdyStudioCommonFile!]!
   """
+  Return one durable Agentic Crowdy Studio session plus its active run, leases, and pending approval. Requires an unexpired app-scoped token, use_studio_agent, and exact session owner/app visibility; missing and foreign ids return AGENT_SESSION_NOT_FOUND.
+  """
+  crowdyStudioAgentSession(
+    """Owner/app session UUID to load."""
+    sessionId: String!
+  ): AgentSession! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  List the authenticated owner’s Agentic Crowdy Studio sessions in one app using an opaque cursor, newest first. Requires an app-scoped token for appId and use_studio_agent. The bounded page defaults to 20 and allows 1–50.
+  """
+  crowdyStudioAgentSessions(
+    """App tenant to list; it must equal the bearer app-token scope."""
+    appId: BigInt!
+    """Opaque cursor from a previous edge; omit for the first page."""
+    after: String
+    """Maximum sessions to return (default 20, allowed 1–50)."""
+    first: Int
+  ): AgentSessionConnection! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "appId")
+  """
+  Replay ordered durable typed events with seq greater than afterSeq. Requires the app-scoped owner and use_studio_agent. Use this query to fill subscription gaps; results are ascending, at-least-once safe, default 100, maximum 200.
+  """
+  crowdyStudioAgentHistory(
+    """Owner/app session UUID."""
+    sessionId: String!
+    """Exclusive durable sequence cursor as a decimal BigInt; defaults to 0."""
+    afterSeq: BigInt
+    """Maximum events to return (default 100, allowed 1–200)."""
+    first: Int
+  ): AgentEventConnection! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Return only implemented tools allowed by the current mode plus the exact non-stale Management model/tool/risk policy. Each entry includes the complete canonical crowdy.agent-tool/1 descriptor and digest. Requires the app-scoped owner and use_studio_agent.
+  """
+  crowdyStudioAgentToolDescriptors(
+    """Owner/app session UUID whose mode/policy filters apply."""
+    sessionId: String!
+  ): AgentToolDescriptorSet! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Return every effective TURN, SESSION, and PLAYER_DAY request/token/reasoning/cost/tool-round/wall-clock/tool-call/compile dimension with reserved, consumed, and non-negative remaining values. The pilot is platform-funded and this owner/app query never debits a wallet.
+  """
+  crowdyStudioAgentBudget(
+    """Owner/app session UUID whose budget should be read."""
+    sessionId: String!
+  ): AgentBudget! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
   List flexible player-model containers owned by the caller in one currently owned grid. Requires an app-scoped token and current grid ownership; never returns app-wide or foreign-owner rows.
   """
   playerModelContainers(
@@ -5225,7 +5681,7 @@ type Mutation {
     idempotencyKey: String
   ): Boolean!
   """
-  Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting full runtime permissions, and notifies the game API. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=DRAFT unless overridden in the input.
+  Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=DRAFT unless overridden in the input.
   """
   createApp(
     """Details for the app to create."""
@@ -5742,6 +6198,31 @@ type Mutation {
     """Grid listing config."""
     input: CreateGridListingInput!
   ): GridListing! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. Model/tool/mode/risk lists are intersected with platform allowlists and every numeric/retention value is clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision, appends a sanitized audit event, and transactionally notifies Game API to pull crowdy.studio-agent-policy/1. Runtime enforcement changes only after Game API obtains and validates the fresh replica. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
+  """
+  setCrowdyStudioAgentPolicy(
+    """App policy patch, expected revision, and required idempotency key."""
+    input: SetCrowdyStudioAgentAppPolicyInput!
+  ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
+  Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, revision increments, a sanitized append-only audit event is written, and transactional replica notifications fan out to every app with Agentic Studio policy. Runtime enforcement changes only when Game API pulls and validates the fresh crowdy.studio-agent-policy/1 envelope; Game API must fail closed if it is missing, malformed, or stale. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
+  """
+  cpSetCrowdyStudioAgentPlatformPolicy(
+    """
+    Platform policy/kill patch, expected revision, and required idempotency key.
+    """
+    input: SetCrowdyStudioAgentPlatformPolicyInput!
+  ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment, sanitized audit event, and transactional Game API policy notify. Runtime preemption depends on Game API pulling and enforcing the fresh envelope; releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
+  """
+  cpSetCrowdyStudioAgentAppKill(
+    """
+    Target app, kill state, safe reason, expected revision, and idempotency key.
+    """
+    input: SetCrowdyStudioAgentOperatorAppKillInput!
+  ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only (is_operator). Patches the platform compute ceilings: omitted fields stay unchanged, an explicit null clears that override (game-api falls back to env/default), a value (> 0) sets it. SIDE EFFECTS: fans a replica notify out to every game-api so the new ceilings clamp computeSetPolicy within ~30 seconds without a restart, and writes an audit entry. Lowering a ceiling does not shrink already-stored per-app policies; it rejects future computeSetPolicy values above the new ceiling. Returns the updated ceilings row.
   """
@@ -6989,6 +7470,125 @@ type Mutation {
     input: CreateCrowdyStudioProjectFromModulesInput!
   ): CrowdyStudioProject!
   """
+  Create a durable owner/app Agentic Crowdy Studio session and pin mode, private project/grid context, allowlisted model, exact Management platform/app revisions, and the mode/tool/risk-filtered registry digest. Requires an app-scoped token, use_studio_agent, a fresh non-killed policy, and an idempotency key; optional consent applies only to private source.
+  """
+  crowdyStudioAgentCreateSession(
+    """
+    App/project/grid, human mode, optional allowlisted model, optional private-source consent, and retry key.
+    """
+    input: CreateAgentSessionInput!
+  ): AgentSession! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "input.appId")
+  """
+  Attach one interactive browser, allocate a new monotonic epoch, return that client instance’s replay cursor, and fence every older epoch plus its leases, approvals, and pending browser tools. Requires the app-scoped owner, use_studio_agent, and idempotency key; reconnect never replays an effect.
+  """
+  crowdyStudioAgentAttachClient(
+    """
+    Session, stable client-instance UUID, optional selected project/grid, and retry key.
+    """
+    input: AttachAgentClientInput!
+  ): AgentClientAttachment! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Atomically human-select ASK, BUILD, or PLAY plus optional project/grid and repin effective policy revisions, descriptors, registry digest, and context. The change preempts runs and revokes old leases/approvals. Requires current epoch, app owner, use_studio_agent, mode policy, and idempotency key.
+  """
+  crowdyStudioAgentSetMode(
+    """
+    Session, current epoch, new human mode, optional project/grid, and retry key.
+    """
+    input: SetAgentModeInput!
+  ): AgentSession! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Monotonically persist one attached epoch’s highest contiguous applied event sequence. Requires the app-scoped owner, exact current epoch, and idempotency key; stale epochs and gaps fail with stable errors.
+  """
+  crowdyStudioAgentAcknowledgeEvents(
+    """Session, epoch, contiguous throughSeq, and retry key."""
+    input: AcknowledgeAgentEventsInput!
+  ): AgentEventAcknowledgement!
+  """
+  Recheck current agent permission, policy, owner context, and record the attached heartbeat. CrowdyJS sends this every two seconds; PLAY is stale after five seconds and an unchanged workspace lease renews to 30 seconds. Requires the current app-scoped owner/epoch and an idempotency key.
+  """
+  crowdyStudioAgentHeartbeat(
+    """Session, current epoch, and heartbeat retry key."""
+    input: AgentHeartbeatInput!
+  ): AgentHeartbeat! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Append one bounded, redacted human message and queue exactly one serialized provider/tool run. Requires an active app-scoped owner, use_studio_agent, current epoch, fresh Management policy, complete budget reservation, and idempotency key; private source remains separately policy/consent gated.
+  """
+  crowdyStudioAgentSendMessage(
+    """Session, epoch, bounded human intent, and retry key."""
+    input: SendAgentMessageInput!
+  ): AgentRun! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Human-grant one unexpired pending tool call by exact argument hash. The server revalidates epoch, context, policy, lease, descriptor, permissions, and project revision before single-use consumption. Requires the app-scoped owner, use_studio_agent, and idempotency key; approval never creates missing authority.
+  """
+  crowdyStudioAgentApproveTool(
+    """
+    Session, current epoch, pending call UUID, displayed argument hash, and retry key.
+    """
+    input: DecideAgentToolInput!
+  ): AgentApproval! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Human-deny one unexpired pending exact tool call, terminally denying the call and failing its run without any effect. Requires the app-scoped owner, current epoch, matching hash, and idempotency key.
+  """
+  crowdyStudioAgentRejectTool(
+    """
+    Session, current epoch, pending call UUID, displayed argument hash, and retry key.
+    """
+    input: DecideAgentToolInput!
+  ): AgentApproval!
+  """
+  Submit one idempotent terminal result for a matching BROWSER dispatch. The server fences old epochs/context, validates output against the pinned descriptor, redacts before persistence/provider continuation, and never retries OUTCOME_UNKNOWN. Requires an app-scoped owner and idempotency key.
+  """
+  crowdyStudioAgentToolResult(
+    """
+    Dispatch identity, epoch/context, typed terminal status, optional schema output/safe error, and retry key.
+    """
+    input: AgentToolResultInput!
+  ): AgentToolCall! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Human-grant a visible PLAY lease with explicit scopes, controlled entity, host capability revision, epoch, context, and 1–600 second duration. Requires PLAY mode, selected grid, app-scoped owner, use_studio_agent, effective policy, and idempotency key; the model cannot grant or renew it.
+  """
+  crowdyStudioAgentGrantLease(
+    """
+    Session/epoch, explicit scopes/duration, entity/host revision, and retry key.
+    """
+    input: GrantAgentLeaseInput!
+  ): AgentLease! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Immediately and idempotently revoke one owner/session lease. This safety action remains available without waiting for provider/model progress and does not require approval; requires an app-scoped owner, current epoch, and idempotency key.
+  """
+  crowdyStudioAgentRevokeLease(
+    """Session, epoch, lease UUID, and retry key."""
+    input: RevokeAgentLeaseInput!
+  ): AgentLease!
+  """
+  Immediately pause the session and active run, revoke leases/approvals/pending dispatches, and persist SESSION_PAUSED. This human safety action does not wait for provider progress; requires the app-scoped owner, current epoch, and idempotency key.
+  """
+  crowdyStudioAgentPause(
+    """Session, current epoch, and retry key."""
+    input: AgentSessionControlInput!
+  ): AgentSession!
+  """
+  Explicitly resume a paused session after fresh policy/context validation and requeue its paused run. PLAY never restores an old lease. Requires the app-scoped owner, current epoch, use_studio_agent, and idempotency key.
+  """
+  crowdyStudioAgentResume(
+    """Paused session, current epoch, and retry key."""
+    input: AgentSessionControlInput!
+  ): AgentSession! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
+  """
+  Immediately make one owner/session run durably CANCELLED, revoke pending capabilities/tools, and abort its local provider stream when present. Requires the app-scoped owner, current epoch, exact run id, and idempotency key; cancellation never silently resumes.
+  """
+  crowdyStudioAgentCancelRun(
+    """Session, current epoch, active run UUID, and retry key."""
+    input: CancelAgentRunInput!
+  ): AgentRun!
+  """
+  Permanently close one owner/app session, preempt its active run, revoke leases/approvals/dispatches, detach clients, and start the 30-day agent-data cleanup clock without deleting canonical projects/runtime state. Requires the current epoch and idempotency key.
+  """
+  crowdyStudioAgentCloseSession(
+    """Open session, current epoch, and retry key."""
+    input: AgentSessionControlInput!
+  ): AgentSession!
+  """
   Create a flexible player-model instance in a currently owned grid. The server forces ownerUserId to the caller; this cannot author studio types or app-wide rows.
   """
   playerModelCreateContainer(
@@ -7744,6 +8344,226 @@ input CreateGridListingInput {
   resalePolicy: String
   """Studio cut (bps) taken on resales, when resale_with_studio_cut."""
   studioCutBps: Int
+}
+
+"""
+Patch an app's Agentic Studio policy. Requires manage_compute. Omitted fields stay unchanged; all supplied authority and limits are clamped to platform policy.
+"""
+input SetCrowdyStudioAgentAppPolicyInput {
+  """Enable or disable this policy layer."""
+  enabled: Boolean
+  """Set or clear this layer kill switch. Kill always wins over enablement."""
+  killSwitch: Boolean
+  """
+  Replacement exact model allowlist (max 64). App values are intersected with the platform allowlist.
+  """
+  allowedModelIds: [String!]
+  """
+  Replacement exact logical tool-name allowlist (max 256). App values are intersected with platform tools.
+  """
+  allowedToolNames: [String!]
+  """
+  Replacement mode allowlist; app values are intersected with platform modes.
+  """
+  allowedModes: [CrowdyStudioAgentMode!]
+  """
+  Replacement risk-class allowlist; app values are intersected with platform classes.
+  """
+  allowedRiskClasses: [CrowdyStudioAgentRiskClass!]
+  """Optional per-turn limit patch."""
+  turnLimits: CrowdyStudioAgentTurnLimitsInput
+  """Optional per-session limit patch."""
+  sessionLimits: CrowdyStudioAgentSessionLimitsInput
+  """Optional per-player/day and concurrency limit patch."""
+  playerDayLimits: CrowdyStudioAgentPlayerDayLimitsInput
+  """Optional retention patch."""
+  retention: CrowdyStudioAgentRetentionPolicyInput
+  """
+  Optional private-source sharing patch; first-use consent remains locked on.
+  """
+  privacy: CrowdyStudioAgentPrivacyPolicyInput
+  """App whose policy is changed."""
+  appId: BigInt!
+  """
+  Optional optimistic revision. Use 0 when creating; a mismatch fails AGENT_POLICY_REVISION_CONFLICT.
+  """
+  expectedRevision: BigInt
+  """
+  Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+}
+
+"""
+Patch for per-turn limits. Omitted values stay unchanged; supplied values must be positive and are clamped down to platform ceilings.
+"""
+input CrowdyStudioAgentTurnLimitsInput {
+  """Maximum provider requests in one turn; positive integer."""
+  providerRequests: Int
+  """Maximum input tokens in one turn; positive decimal string."""
+  inputTokens: BigInt
+  """Maximum output tokens in one turn; positive decimal string."""
+  outputTokens: BigInt
+  """Maximum reasoning tokens in one turn; positive decimal string."""
+  reasoningTokens: BigInt
+  """Maximum total provider tokens in one turn; positive decimal string."""
+  totalTokens: BigInt
+  """Maximum provider cost in one turn, in positive micro-USD."""
+  providerCostMicrousd: BigInt
+  """Maximum tool calls in one turn; positive integer."""
+  toolCalls: Int
+  """Maximum serialized provider/tool rounds in one turn."""
+  toolRounds: Int
+  """Maximum draft compile submissions in one turn."""
+  compiles: Int
+  """Maximum wall-clock duration of one turn in milliseconds."""
+  wallClockMs: Int
+  """Maximum concurrent provider requests in one turn."""
+  concurrentProviderRequests: Int
+}
+
+"""
+Patch for per-session limits. Omitted values stay unchanged; supplied values are clamped down to platform ceilings.
+"""
+input CrowdyStudioAgentSessionLimitsInput {
+  """Maximum provider requests in one session."""
+  providerRequests: Int
+  """Maximum input tokens in one session; positive decimal string."""
+  inputTokens: BigInt
+  """Maximum output tokens in one session; positive decimal string."""
+  outputTokens: BigInt
+  """Maximum reasoning tokens in one session; positive decimal string."""
+  reasoningTokens: BigInt
+  """Maximum total provider tokens in one session."""
+  totalTokens: BigInt
+  """Maximum provider cost in one session, in positive micro-USD."""
+  providerCostMicrousd: BigInt
+  """Maximum tool calls in one session."""
+  toolCalls: Int
+  """Maximum draft compile submissions in one session."""
+  compiles: Int
+  """Maximum concurrent non-terminal runs in one session."""
+  concurrentRuns: Int
+}
+
+"""
+Patch for per-player/day and app concurrency limits. Omitted values stay unchanged; supplied values are clamped down to platform ceilings.
+"""
+input CrowdyStudioAgentPlayerDayLimitsInput {
+  """Maximum provider requests per player per UTC day."""
+  providerRequests: Int
+  """Maximum input tokens per player per UTC day."""
+  inputTokens: BigInt
+  """Maximum output tokens per player per UTC day."""
+  outputTokens: BigInt
+  """Maximum reasoning tokens per player per UTC day."""
+  reasoningTokens: BigInt
+  """Maximum total provider tokens per player per UTC day."""
+  totalTokens: BigInt
+  """Maximum provider cost per player per UTC day, in micro-USD."""
+  providerCostMicrousd: BigInt
+  """Maximum tool calls per player per UTC day."""
+  toolCalls: Int
+  """Maximum draft compile submissions per player per UTC day."""
+  compiles: Int
+  """Maximum concurrent Agentic Studio sessions for one player."""
+  concurrentSessions: Int
+  """Maximum concurrent Agentic Studio runs across the app."""
+  concurrentRunsPerApp: Int
+}
+
+"""
+Retention patch. Values may only shorten the platform policy and the hard pilot maxima.
+"""
+input CrowdyStudioAgentRetentionPolicyInput {
+  """Coalesced assistant chunk retention in hours (0-24)."""
+  assistantChunkHours: Int
+  """Detailed observation/browser result retention in hours (0-24)."""
+  detailedContextHours: Int
+  """Final message/redacted event retention after close in days (0-30)."""
+  sessionDataDays: Int
+  """Generation/token/cost/kill metadata retention in days (1-90)."""
+  usageDays: Int
+}
+
+"""
+App/platform privacy patch. It can disable private-source sharing; ZDR, collection denial, first-use consent, and provider-body non-persistence are locked.
+"""
+input CrowdyStudioAgentPrivacyPolicyInput {
+  """
+  Allow selected private source only after the separate human disclosure/consent gate.
+  """
+  allowPrivateSource: Boolean
+}
+
+"""
+Operator-only platform policy patch. Omitted values stay unchanged; hard v1 privacy and retention maxima still apply.
+"""
+input SetCrowdyStudioAgentPlatformPolicyInput {
+  """Enable or disable this policy layer."""
+  enabled: Boolean
+  """Set or clear this layer kill switch. Kill always wins over enablement."""
+  killSwitch: Boolean
+  """
+  Replacement exact model allowlist (max 64). App values are intersected with the platform allowlist.
+  """
+  allowedModelIds: [String!]
+  """
+  Replacement exact logical tool-name allowlist (max 256). App values are intersected with platform tools.
+  """
+  allowedToolNames: [String!]
+  """
+  Replacement mode allowlist; app values are intersected with platform modes.
+  """
+  allowedModes: [CrowdyStudioAgentMode!]
+  """
+  Replacement risk-class allowlist; app values are intersected with platform classes.
+  """
+  allowedRiskClasses: [CrowdyStudioAgentRiskClass!]
+  """Optional per-turn limit patch."""
+  turnLimits: CrowdyStudioAgentTurnLimitsInput
+  """Optional per-session limit patch."""
+  sessionLimits: CrowdyStudioAgentSessionLimitsInput
+  """Optional per-player/day and concurrency limit patch."""
+  playerDayLimits: CrowdyStudioAgentPlayerDayLimitsInput
+  """Optional retention patch."""
+  retention: CrowdyStudioAgentRetentionPolicyInput
+  """
+  Optional private-source sharing patch; first-use consent remains locked on.
+  """
+  privacy: CrowdyStudioAgentPrivacyPolicyInput
+  """Optional optimistic platform revision."""
+  expectedRevision: BigInt
+  """Stable kill reason code (max 64); used only while killSwitch is true."""
+  killReasonCode: String
+  """
+  Safe operator-facing kill reason (max 256); no secrets or provider bodies.
+  """
+  killReason: String
+  """
+  Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+}
+
+"""
+Operator-only per-app emergency kill. App managers cannot clear or override this state.
+"""
+input SetCrowdyStudioAgentOperatorAppKillInput {
+  """App to kill or release."""
+  appId: BigInt!
+  """True to kill immediately; false to release the operator kill."""
+  killed: Boolean!
+  """Stable reason code (max 64); defaults to AGENT_OPERATOR_KILLED."""
+  reasonCode: String
+  """Safe reason text (max 256); no secrets or provider bodies."""
+  reason: String
+  """Optional optimistic app-policy revision."""
+  expectedRevision: BigInt
+  """
+  Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
 }
 
 """
@@ -10391,6 +11211,979 @@ enum CrowdyStudioCommonStatus {
 }
 
 """
+Stable safe error envelope carried inside tool/run events. Branch on code, never message.
+"""
+type AgentError {
+  """Stable additive error code."""
+  code: String!
+  """Safe bounded human-readable detail."""
+  message: String!
+  """Whether policy permits a deliberate retry."""
+  retryable: Boolean!
+  """Optional safe human remediation, never a command to execute."""
+  remediation: String
+  """Optional invalid input field path."""
+  field: String
+  """Optional missing agent scope."""
+  requiredScope: String
+}
+
+"""Summary of one durable session run."""
+type AgentRun {
+  """Stable run UUID."""
+  runId: String!
+  """Current serialized state."""
+  status: CrowdyStudioAgentRunStatus!
+  """Provider rounds already attempted in this run."""
+  providerRounds: Int!
+  """Descriptor-pinned tool calls already recorded."""
+  toolCalls: Int!
+  """Stable terminal error code, or null while non-terminal/successful."""
+  errorCode: String
+  """Stable preemption/cancellation reason, or null."""
+  terminalReason: String
+  """SDK-compatible terminal/preemption reason, or null."""
+  reason: String
+  """Worker start timestamp, or null while queued."""
+  startedAt: DateTime
+  """Terminal timestamp, or null while active."""
+  finishedAt: DateTime
+  """Run acceptance timestamp."""
+  createdAt: DateTime!
+  """True when the durable run status is CANCELLED."""
+  cancelled: Boolean!
+}
+
+"""
+Serialized durable state of one accepted human message and its provider/tool loop.
+"""
+enum CrowdyStudioAgentRunStatus {
+  """Durably accepted and awaiting a worker claim."""
+  QUEUED
+  """Owned by one leased orchestrator worker."""
+  RUNNING
+  """Waiting for one matching browser tool result."""
+  WAITING_FOR_TOOL
+  """Waiting for a short-lived exact human decision."""
+  WAITING_FOR_APPROVAL
+  """Recoverable human pause; resume revalidates context."""
+  PAUSED
+  """Finished with a canonical assistant message."""
+  SUCCEEDED
+  """Terminal typed failure; inspect errorCode."""
+  FAILED
+  """Terminal human cancellation."""
+  CANCELLED
+  """Terminal safety preemption caused by context/control loss."""
+  PREEMPTED
+}
+
+"""
+Short-lived context-bound capability. The model cannot create, widen, or renew it.
+"""
+type AgentLease {
+  """Stable lease UUID."""
+  leaseId: String!
+  """WORKSPACE or PLAY."""
+  kind: CrowdyStudioAgentLeaseType!
+  """Required lease lifecycle status."""
+  status: CrowdyStudioAgentLeaseStatus!
+  """Bound attached browser epoch."""
+  clientEpoch: BigInt!
+  """Explicit maximum scopes carried by this lease."""
+  scopes: [String!]!
+  """Human-visible lease holder alias."""
+  holder: String!
+  """Authoritative context version bound to the lease."""
+  contextVersion: String!
+  """Controlled entity for PLAY, or null."""
+  controlledEntityId: String
+  """Host capability revision for PLAY, or null."""
+  hostCapabilityRevision: String
+  """Expected project revision for WORKSPACE, or null."""
+  expectedProjectRevision: BigInt
+  """Lease grant timestamp."""
+  grantedAt: DateTime!
+  """Hard expiry; the model cannot renew it."""
+  expiresAt: DateTime!
+  """Stable revoke/expiry reason, or null while active."""
+  revokedReason: String
+}
+
+"""Capability family represented by a lease."""
+enum CrowdyStudioAgentLeaseType {
+  """
+  Thirty-second server-acquired lease bound to project revision and target write scopes.
+  """
+  WORKSPACE
+  """Visible human-granted browser control lease, capped at ten minutes."""
+  PLAY
+}
+
+"""Lifecycle of a short-lived workspace or Play capability."""
+enum CrowdyStudioAgentLeaseStatus {
+  """Usable until its exact expiry/context changes."""
+  ACTIVE
+  """Explicitly or automatically revoked."""
+  REVOKED
+  """Expired and cannot be renewed by the model."""
+  EXPIRED
+}
+
+"""
+Short-lived single-use human decision bound to one tool call and canonical argument hash.
+"""
+type AgentApproval {
+  """Stable approval UUID."""
+  approvalId: String!
+  """Tool call UUID this decision binds."""
+  toolCallId: String!
+  """Canonical sha256 argument/context binding shown to the human."""
+  argumentHash: String!
+  """Current single-use lifecycle."""
+  status: CrowdyStudioAgentApprovalStatus!
+  """Safe bounded domain summary shown before approval."""
+  safeSummary: String!
+  """Attached client epoch authorized to decide."""
+  clientEpoch: BigInt!
+  """Hard decision/consumption expiry."""
+  expiresAt: DateTime!
+  """True when this response granted/consumed the approval."""
+  approved: Boolean!
+  """True when this response denied the approval."""
+  rejected: Boolean!
+}
+
+"""Single-use human decision lifecycle for one canonical argument hash."""
+enum CrowdyStudioAgentApprovalStatus {
+  """Awaiting the matching attached human."""
+  PENDING
+  """Granted but not yet atomically consumed."""
+  GRANTED
+  """Human denied the exact call."""
+  DENIED
+  """Used exactly once for dispatch/execution."""
+  CONSUMED
+  """Invalidated by context or policy change."""
+  REVOKED
+  """TTL elapsed before use."""
+  EXPIRED
+}
+
+"""
+Owner/app-scoped durable agent conversation with pinned mode, model, policy, registry, and client epoch.
+"""
+type AgentSession {
+  """Session contract version; always 'crowdy.studio-agent/1'."""
+  contractVersion: String!
+  """Stable session UUID."""
+  sessionId: String!
+  """App tenant from the app-scoped bearer token."""
+  appId: BigInt!
+  """
+  Selected private project UUID, or null. Returned only to its exact owner/app.
+  """
+  projectId: String
+  """Selected grid id, or null; it does not grant authority."""
+  gridId: BigInt
+  """Human-selected current mode."""
+  mode: CrowdyStudioAgentMode!
+  """Requested model in the effective platform/app allowlist."""
+  requestedModel: String!
+  """Selected allowlisted model, matching the SDK session model."""
+  model: String
+  """Resolved routed model after a provider response, or null."""
+  resolvedModel: String
+  """Current durable session lifecycle."""
+  status: CrowdyStudioAgentSessionStatus!
+  """
+  Whether the human accepted first-use disclosure of selected private project source. Messages and metadata do not imply this consent.
+  """
+  providerDataConsent: Boolean!
+  """Digest of the mode/policy-filtered immutable tool registry."""
+  registryDigest: String!
+  """Opaque platform provider-policy version pinned at creation."""
+  providerPolicyVersion: String!
+  """Opaque management app-policy version pinned at creation."""
+  appPolicyVersion: String!
+  """Current authoritative context version."""
+  contextVersion: String!
+  """Monotonic attached client epoch. A newer attach fences all older tabs."""
+  currentClientEpoch: BigInt!
+  """SDK-compatible attached client epoch, or null before attach."""
+  clientEpoch: BigInt
+  """Highest committed durable event sequence."""
+  lastEventSeq: BigInt!
+  """Current non-terminal run, or null."""
+  activeRun: AgentRun
+  """SDK-compatible current non-terminal run, or null."""
+  currentRun: AgentRun
+  """Current unexpired leases; bounded to WORKSPACE and PLAY."""
+  activeLeases: [AgentLease!]!
+  """Newest unexpired pending approval, or null."""
+  pendingApproval: AgentApproval
+  """Session creation timestamp."""
+  createdAt: DateTime!
+  """Latest durable session update."""
+  updatedAt: DateTime!
+  """Close timestamp, or null while open."""
+  closedAt: DateTime
+}
+
+"""Durable lifecycle state of an owner/app agent session."""
+enum CrowdyStudioAgentSessionStatus {
+  """Accepts human control mutations and one run."""
+  ACTIVE
+  """
+  Stopped by the human or reconnect flow; explicit context-revalidating resume is required.
+  """
+  PAUSED
+  """
+  Permanently closed, all capabilities revoked, and retention cleanup scheduled.
+  """
+  CLOSED
+  """
+  Disabled by authoritative policy or platform control and cannot resume.
+  """
+  REVOKED
+}
+
+"""Standard opaque-cursor pagination metadata."""
+type AgentPageInfo {
+  """Whether another page exists after endCursor."""
+  hasNextPage: Boolean!
+  """Opaque cursor for the final returned edge, or null."""
+  endCursor: String
+}
+
+"""One session connection edge."""
+type AgentSessionEdge {
+  """Opaque cursor for this session edge."""
+  cursor: String!
+  """Owner/app-scoped session node."""
+  node: AgentSession!
+}
+
+"""Bounded owner/app session connection."""
+type AgentSessionConnection {
+  """Sessions ordered newest first."""
+  edges: [AgentSessionEdge!]!
+  """Connection page metadata."""
+  pageInfo: AgentPageInfo!
+  """SDK-compatible session nodes in newest-first order."""
+  nodes: [AgentSession!]!
+  """SDK-compatible final opaque cursor."""
+  endCursor: String
+  """SDK-compatible next-page indicator."""
+  hasNextPage: Boolean!
+}
+
+"""
+Complete crowdy.tool-call/1 browser invocation envelope. Arguments are canonical descriptor-validated JSON.
+"""
+type AgentToolInvocation {
+  """Invocation version; always 'crowdy.tool-call/1'."""
+  protocolVersion: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Owning run UUID."""
+  runId: String!
+  """Execute-once tool call UUID."""
+  toolCallId: String!
+  """Logical tool name."""
+  name: String!
+  """Pinned semantic tool version."""
+  version: String!
+  """Pinned canonical descriptor digest."""
+  descriptorDigest: String!
+  """Canonical JSON object matching the descriptor input schema."""
+  argumentsJson: String!
+  """Canonical argument/context hash."""
+  argumentHash: String!
+  """Authoritative context version."""
+  contextVersion: String!
+  """Required matching browser epoch."""
+  clientEpoch: BigInt
+  """Required lease UUID when the tool scopes demand one."""
+  leaseId: String
+  """Opaque consumed approval capability when required."""
+  approvalGrant: String
+  """Server-issued executor idempotency key when required."""
+  idempotencyKey: String
+  """Hard browser execution deadline."""
+  deadline: DateTime!
+}
+
+"""
+Complete crowdy.tool-result/1 terminal browser result with exact timing and safe typed error.
+"""
+type AgentToolResultEnvelope {
+  """Result version; always 'crowdy.tool-result/1'."""
+  protocolVersion: String!
+  """Matching tool call UUID."""
+  toolCallId: String!
+  """Terminal result status."""
+  status: CrowdyStudioAgentToolResultStatus!
+  """Canonical descriptor-validated output JSON, or null."""
+  outputJson: String
+  """Safe typed error for non-success, or null."""
+  error: AgentError
+  """Context version observed by the browser executor."""
+  observedContextVersion: String!
+  """Browser execution start timestamp."""
+  startedAt: DateTime!
+  """Browser execution finish timestamp."""
+  finishedAt: DateTime!
+}
+
+"""Terminal result reported once by a browser executor."""
+enum CrowdyStudioAgentToolResultStatus {
+  """Effect and typed output are known successful."""
+  SUCCEEDED
+  """Effect is known failed with a typed safe error."""
+  FAILED
+  """Known cancelled before successful effect."""
+  CANCELLED
+  """Browser deadline elapsed."""
+  TIMED_OUT
+  """Effect may have happened; server fails the run without retrying."""
+  OUTCOME_UNKNOWN
+}
+
+"""One source-free file summary in an immutable checkpoint."""
+type AgentCheckpointFile {
+  """SERVER or CLIENT target."""
+  target: String!
+  """Bounded project-relative path."""
+  path: String!
+  """Exact file content digest."""
+  contentHash: String!
+  """Exact UTF-8 byte length."""
+  byteLength: Int!
+}
+
+"""One ordered event connection edge."""
+type AgentEventEdge {
+  """Opaque cursor equal to the event decimal sequence."""
+  cursor: String!
+  """Typed durable event node."""
+  node: CrowdyStudioAgentEvent!
+}
+
+"""
+Typed union of ordered, replayable version 1 session facts. Delivery is at-least-once; seq and eventId support deduplication.
+"""
+union CrowdyStudioAgentEvent = AgentLifecycleEvent | AgentMessageEvent | AgentRunEvent | AgentToolEvent | AgentApprovalEvent | AgentLeaseEvent | AgentCheckpointEvent | AgentBudgetEvent
+
+"""Typed session/client/mode/context lifecycle event."""
+type AgentLifecycleEvent implements AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+  """Selected mode when this event carries one."""
+  mode: CrowdyStudioAgentMode
+  """Attached client epoch when this event carries one."""
+  clientEpoch: BigInt
+  """Replay cursor returned by attach, or null."""
+  replayAfterSeq: BigInt
+  """Stable lifecycle/preemption reason, or null."""
+  reason: String
+  """New context version when carried by this event."""
+  contextVersion: String
+}
+
+"""
+Common identity/order fields on every typed durable agent event variant.
+"""
+interface AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+}
+
+"""Version 1 durable ordered event vocabulary."""
+enum CrowdyStudioAgentEventType {
+  """Session and pinned policy/registry context were created."""
+  SESSION_CREATED
+  """Human paused the session and revoked capabilities."""
+  SESSION_PAUSED
+  """Human explicitly resumed after context revalidation."""
+  SESSION_RESUMED
+  """Session closed and retention cleanup began."""
+  SESSION_CLOSED
+  """A new monotonic client epoch attached and fenced older tabs."""
+  CLIENT_ATTACHED
+  """The interactive browser detached."""
+  CLIENT_DETACHED
+  """Human selected ASK, BUILD, or PLAY."""
+  MODE_SELECTED
+  """Redacted bounded human message accepted for one run."""
+  USER_MESSAGE
+  """A leased worker started the serialized run."""
+  RUN_STARTED
+  """Bounded coalesced assistant text; final message is canonical."""
+  ASSISTANT_CHUNK
+  """Canonical final assistant response."""
+  ASSISTANT_MESSAGE
+  """Provider proposal passed exact name and input validation."""
+  TOOL_PROPOSED
+  """Typed browser call was durably dispatched once."""
+  TOOL_DISPATCHED
+  """Typed executor output passed validation."""
+  TOOL_SUCCEEDED
+  """Typed executor reported a safe terminal failure."""
+  TOOL_FAILED
+  """Human denied the exact proposal."""
+  TOOL_DENIED
+  """Recorded tool deadline elapsed."""
+  TOOL_TIMED_OUT
+  """Effect may have occurred; no blind retry is allowed."""
+  TOOL_OUTCOME_UNKNOWN
+  """Exact argument-hash human approval was requested."""
+  APPROVAL_REQUESTED
+  """Human granted the pending exact approval."""
+  APPROVAL_GRANTED
+  """Human denied the pending exact approval."""
+  APPROVAL_DENIED
+  """Approval was atomically consumed once."""
+  APPROVAL_CONSUMED
+  """Approval TTL elapsed."""
+  APPROVAL_EXPIRED
+  """Immutable private pre-image checkpoint was created."""
+  CHECKPOINT_CREATED
+  """Checkpoint restored as a new project revision."""
+  CHECKPOINT_RESTORED
+  """Workspace or Play lease was granted."""
+  LEASE_GRANTED
+  """Lease was immediately revoked."""
+  LEASE_REVOKED
+  """Lease reached its expiry."""
+  LEASE_EXPIRED
+  """Authoritative context changed and old authority was fenced."""
+  CONTEXT_CHANGED
+  """Provider reservation/accounting state changed."""
+  BUDGET_UPDATED
+  """Active run entered a recoverable pause."""
+  RUN_PAUSED
+  """Run completed successfully."""
+  RUN_SUCCEEDED
+  """Run reached a typed terminal failure."""
+  RUN_FAILED
+  """Human cancellation became durable."""
+  RUN_CANCELLED
+  """Safety preemption became durable."""
+  RUN_PREEMPTED
+}
+
+"""Typed bounded user or assistant text event."""
+type AgentMessageEvent implements AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+  """Stable message UUID used for replay deduplication."""
+  messageId: String!
+  """USER or ASSISTANT message role."""
+  role: String!
+  """
+  Redacted bounded text. ASSISTANT_MESSAGE is canonical; chunks are transient presentation hints.
+  """
+  content: String!
+}
+
+"""Typed run lifecycle event."""
+type AgentRunEvent implements AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+  """Required durable run status carried by this event."""
+  status: CrowdyStudioAgentRunStatus!
+  """Stable terminal error code, or null."""
+  code: String
+  """Stable terminal/preemption reason, or null."""
+  reason: String
+  """Safe typed error envelope when present."""
+  error: AgentError
+}
+
+"""
+Typed tool event. JSON fields are descriptor-versioned and validated against the descriptor returned by crowdyStudioAgentToolDescriptors; they are never arbitrary executor input.
+"""
+type AgentToolEvent implements AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+  """Stable tool call UUID."""
+  toolCallId: String!
+  """Logical versioned tool name."""
+  toolName: String!
+  """Pinned semantic tool version."""
+  toolVersion: String!
+  """Required durable tool status for this event."""
+  status: CrowdyStudioAgentToolCallStatus!
+  """Safe bounded human summary, or null."""
+  safeSummary: String
+  """Pinned descriptor digest, or null before dispatch."""
+  descriptorDigest: String
+  """Canonical argument hash, or null."""
+  argumentHash: String
+  """SERVER or BROWSER executor, or null."""
+  executor: CrowdyStudioAgentToolExecutor
+  """Authoritative dispatch context version, or null."""
+  contextVersion: String
+  """Fenced browser epoch for a dispatch, or null."""
+  clientEpoch: BigInt
+  """
+  Descriptor-schema-validated, redaction-safe canonical JSON arguments for browser dispatch; null otherwise.
+  """
+  argumentsJson: String
+  """Bound lease UUID, or null."""
+  leaseId: String
+  """Opaque approval capability, or null."""
+  approvalGrant: String
+  """Executor idempotency key, or null."""
+  idempotencyKey: String
+  """
+  Descriptor-schema-validated, redaction-safe canonical JSON result summary; source and prompt bodies are omitted.
+  """
+  resultJson: String
+  """Complete browser invocation on TOOL_DISPATCHED; null for other events."""
+  invocation: AgentToolInvocation
+  """Complete typed terminal result when available."""
+  result: AgentToolResultEnvelope
+  """Safe typed terminal tool error, or null."""
+  error: AgentError
+  """Dispatch deadline, or null for non-dispatch events."""
+  deadline: DateTime
+}
+
+"""Durable state of one descriptor-pinned serialized tool proposal."""
+enum CrowdyStudioAgentToolCallStatus {
+  """Validated and recorded, not yet dispatched."""
+  PROPOSED
+  """Blocked on the exact argument-hash approval."""
+  WAITING_FOR_APPROVAL
+  """Durably sent to the matching attached browser epoch."""
+  DISPATCHED
+  """Executor began the typed operation."""
+  RUNNING
+  """Typed output validated successfully."""
+  SUCCEEDED
+  """Typed executor failure."""
+  FAILED
+  """Human denied the exact proposal."""
+  DENIED
+  """The recorded tool deadline elapsed."""
+  TIMED_OUT
+  """Cancelled before a known successful effect."""
+  CANCELLED
+  """Fenced by an epoch or context change."""
+  STALE
+  """
+  An effect may have occurred; it is never retried blindly and requires human inspection.
+  """
+  OUTCOME_UNKNOWN
+}
+
+"""Trusted boundary that executes a typed tool."""
+enum CrowdyStudioAgentToolExecutor {
+  """
+  Game API invokes an owner-scoped domain service; never shell or arbitrary GraphQL.
+  """
+  SERVER
+  """
+  The attached CrowdyJS host executes once after epoch/context/lease validation.
+  """
+  BROWSER
+}
+
+"""Typed exact-argument human approval event."""
+type AgentApprovalEvent implements AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+  """Stable approval UUID."""
+  approvalId: String!
+  """Bound tool call UUID."""
+  toolCallId: String!
+  """Canonical displayed argument hash."""
+  argumentHash: String!
+  """Required approval lifecycle status."""
+  status: CrowdyStudioAgentApprovalStatus!
+  """Safe domain summary retained without raw arguments."""
+  safeSummary: String!
+  """Bounded server-authored reasons for requiring approval."""
+  reasons: [String!]!
+  """Hard approval expiry."""
+  expiresAt: DateTime!
+}
+
+"""Typed workspace/Play lease lifecycle event."""
+type AgentLeaseEvent implements AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+  """Stable lease UUID."""
+  leaseId: String!
+  """WORKSPACE or PLAY."""
+  kind: CrowdyStudioAgentLeaseType!
+  """Required lease lifecycle status."""
+  status: CrowdyStudioAgentLeaseStatus!
+  """Bound attached client epoch."""
+  clientEpoch: BigInt!
+  """Explicit scopes carried when granted; empty otherwise."""
+  scopes: [String!]!
+  """Human-visible lease holder alias."""
+  holder: String!
+  """Authoritative context version bound to this lease."""
+  contextVersion: String!
+  """Controlled entity identifier for PLAY, or null."""
+  controlledEntityId: String
+  """Host capability revision for PLAY, or null."""
+  hostCapabilityRevision: String
+  """Expected project revision for WORKSPACE, or null."""
+  expectedProjectRevision: BigInt
+  """Lease grant timestamp."""
+  grantedAt: DateTime!
+  """Hard lease expiry."""
+  expiresAt: DateTime!
+  """Stable revoke/expiry reason, or null."""
+  reason: String
+}
+
+"""Typed immutable private project checkpoint event."""
+type AgentCheckpointEvent implements AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+  """Private checkpoint UUID."""
+  checkpointId: String!
+  """Project revision captured as the immutable pre-image."""
+  projectRevision: BigInt!
+  """sha256 digest of the canonical private snapshot."""
+  contentHash: String!
+  """AGENT_WRITE, RESTORE_PREIMAGE, or MANUAL."""
+  reason: String!
+  """Bounded target/path/hash/byte summaries; never source."""
+  files: [AgentCheckpointFile!]!
+  """Restore timestamp for CHECKPOINT_RESTORED, or null."""
+  restoredAt: DateTime
+}
+
+"""
+Typed provider budget reservation or reconciliation event; no wallet debit occurs in the platform-funded pilot.
+"""
+type AgentBudgetEvent implements AgentEventBase {
+  """Event envelope version; always 'crowdy.agent-event/1'."""
+  protocolVersion: String!
+  """Stable event UUID for deduplication."""
+  eventId: String!
+  """Owning session UUID."""
+  sessionId: String!
+  """Strictly increasing session sequence as a decimal BigInt."""
+  seq: BigInt!
+  """Stable version 1 event discriminator."""
+  type: CrowdyStudioAgentEventType!
+  """Related run UUID, or null for session-only facts."""
+  runId: String
+  """Versioned event payload contract."""
+  version: String!
+  """Commit timestamp."""
+  createdAt: DateTime!
+  """Complete effective budget snapshot after this change."""
+  budget: AgentBudget!
+}
+
+"""
+Bounded ordered history connection, exclusive of the supplied afterSeq.
+"""
+type AgentEventConnection {
+  """Events in ascending contiguous sequence order."""
+  edges: [AgentEventEdge!]!
+  """History page metadata."""
+  pageInfo: AgentPageInfo!
+  """SDK-compatible ordered typed events."""
+  events: [CrowdyStudioAgentEvent!]!
+  """SDK-compatible history continuation indicator."""
+  hasMore: Boolean!
+}
+
+"""
+One effective immutable tool descriptor. Schemas are JSON Schema 2020-12 objects serialized as canonical JSON.
+"""
+type AgentToolDescriptor {
+  """Descriptor schema version; always 'crowdy.agent-tool/1'."""
+  schemaVersion: String!
+  """Logical dotted tool name."""
+  name: String!
+  """Provider-safe exact wire name including major version."""
+  wireName: String!
+  """Semantic descriptor version."""
+  version: String!
+  """Safe model/user-facing summary."""
+  summary: String!
+  """SERVER or BROWSER."""
+  executor: CrowdyStudioAgentToolExecutor!
+  """Human modes in which this descriptor may be proposed."""
+  modes: [CrowdyStudioAgentMode!]!
+  """Server-classified risk."""
+  risk: CrowdyStudioAgentToolRisk!
+  """Canonical server-classified effect labels."""
+  riskEffects: [String!]!
+  """Whether the classified effect is reversible."""
+  riskReversible: Boolean!
+  """Required agent scopes; ordinary platform checks still apply."""
+  scopes: [String!]!
+  """
+  Canonical JSON array of complete scope requirement objects, including argument-path conditions.
+  """
+  scopeRequirementsJson: String!
+  """Whether exact human approval is always required."""
+  approvalRequired: Boolean!
+  """NONE, REQUIRED, or CONDITIONAL approval policy."""
+  approvalPolicy: String!
+  """Server-authored approval reasons."""
+  approvalReasons: [String!]!
+  """Maximum approval lifetime in seconds."""
+  approvalMaxTtlSeconds: Int!
+  """PURE, KEYED, TOOL_CALL_ONCE, or NON_RETRYABLE."""
+  idempotencyClass: String!
+  """NONE, TOOL_CALL, or USER_TOOL_ARGUMENTS key scope."""
+  idempotencyKeyScope: String!
+  """Hard tool execution timeout in milliseconds."""
+  timeoutMs: Int!
+  """Canonical bounded input JSON Schema."""
+  inputSchemaJson: String!
+  """Canonical bounded output JSON Schema."""
+  outputSchemaJson: String!
+  """Canonical JSON array of input redaction rules."""
+  inputRedactionJson: String!
+  """Canonical JSON array of output redaction rules."""
+  outputRedactionJson: String!
+  """Maximum persisted redacted tool bytes."""
+  maxPersistedBytes: Int!
+  """Complete RFC8785-canonical crowdy.agent-tool/1 descriptor JSON."""
+  descriptorJson: String!
+  """sha256 digest of the immutable descriptor contract."""
+  descriptorDigest: String!
+}
+
+"""Server-classified effect risk; app policy may only tighten it."""
+enum CrowdyStudioAgentToolRisk {
+  """No canonical state mutation."""
+  READ_ONLY
+  """Reversible expected-revision write with checkpointing."""
+  ROUTINE_WRITE
+  """Routine game control requiring an explicit Play scope."""
+  WORLD_CONTROL
+  """Possible data/path loss; exact human approval required."""
+  DESTRUCTIVE
+  """Changes trust or consent; exact human approval required."""
+  TRUST_CONSENT
+  """Moves or commits value; exact human approval required."""
+  ECONOMIC
+  """Cannot be safely undone; exact human approval required."""
+  IRREVERSIBLE
+}
+
+"""Effective mode/policy-filtered descriptor registry."""
+type AgentToolDescriptorSet {
+  """Digest pinned by the current session."""
+  registryDigest: String!
+  """
+  Only tools implemented and currently allowed for this session; omitted contract tools are not executable.
+  """
+  tools: [AgentToolDescriptor!]!
+}
+
+"""One effective budget dimension at TURN, SESSION, or PLAYER_DAY scope."""
+type AgentBudgetDimension {
+  """
+  REQUESTS, INPUT_TOKENS, OUTPUT_TOKENS, REASONING_TOKENS, PROVIDER_COST, TOOL_ROUNDS, WALL_CLOCK_MS, TOOL_CALLS, or COMPILES.
+  """
+  name: String!
+  """TURN, SESSION, or PLAYER_DAY limit scope."""
+  scope: String!
+  """Effective hard limit."""
+  limit: BigInt!
+  """Worst-case active reservation."""
+  reserved: BigInt!
+  """Durably consumed amount."""
+  consumed: BigInt!
+  """Non-negative remaining amount."""
+  remaining: BigInt!
+  """Dimension unit, for example tokens, requests, microusd, or ms."""
+  unit: String!
+}
+
+"""
+Complete platform-funded budget across turn, session, and player-day dimensions.
+"""
+type AgentBudget {
+  """All normative provider/tool/compile/wall-clock dimensions."""
+  dimensions: [AgentBudgetDimension!]!
+  """UTC player-day reset, or null when no reset applies."""
+  resetAt: DateTime
+  """True throughout the development pilot."""
+  platformFunded: Boolean!
+  """Payer seam; 'PLATFORM' throughout the development pilot."""
+  payer: String!
+}
+
+"""Result of attaching a fresh interactive client epoch."""
+type AgentClientAttachment {
+  """Session after fencing older epochs."""
+  session: AgentSession!
+  """New server-issued monotonic client epoch."""
+  clientEpoch: BigInt!
+  """
+  Persisted contiguous cursor for this client instance; subscribe after this sequence.
+  """
+  replayAfterSeq: BigInt!
+}
+
+"""Monotonic event acknowledgement result."""
+type AgentEventAcknowledgement {
+  """Highest persisted contiguous acknowledged sequence."""
+  throughSeq: BigInt!
+}
+
+"""
+Server acknowledgement of the 2-second client heartbeat and 5-second Play freshness window.
+"""
+type AgentHeartbeat {
+  """Authoritative server receipt time."""
+  serverTime: DateTime!
+  """
+  Play lease remains server-fresh through this instant, bounded by its hard expiry; null without an active Play lease.
+  """
+  playLeaseFreshUntil: DateTime
+  """
+  Renewed 30-second workspace lease expiry; null when no unchanged connected workspace lease can be renewed.
+  """
+  workspaceLeaseExpiresAt: DateTime
+}
+
+"""Typed browser tool-call terminal record returned after submit."""
+type AgentToolCall {
+  """Stable tool call UUID."""
+  toolCallId: String!
+  """Logical descriptor name."""
+  toolName: String!
+  """Durable terminal/current status."""
+  status: CrowdyStudioAgentToolCallStatus!
+  """Canonical argument hash."""
+  argumentHash: String!
+  """Safe terminal error, or null."""
+  error: AgentError
+  """True when the idempotent terminal result was accepted."""
+  accepted: Boolean!
+}
+
+"""
 A flexible player-owned model container confined to exactly one app, grid, and current owner.
 """
 type PlayerModelContainer {
@@ -12416,6 +14209,284 @@ input CreateCrowdyStudioProjectFromModulesInput {
 }
 
 """
+Create an owner/app-scoped session with pinned human mode, project/grid context, model, policy, registry, and provider disclosure choice.
+"""
+input CreateAgentSessionInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """
+  App tenant; the bearer credential must be an unexpired app token for this exact app and the caller must hold use_studio_agent.
+  """
+  appId: BigInt!
+  """
+  Optional private owner project UUID. Required for BUILD; cross-owner/app ids return the same not-found shape.
+  """
+  projectId: String
+  """Optional selected grid context; selection grants no authority."""
+  gridId: BigInt
+  """Human-selected initial ASK, BUILD, or PLAY mode."""
+  mode: CrowdyStudioAgentMode!
+  """Optional requested allowlisted model. Omit for the platform default."""
+  requestedModel: String
+  """
+  Optional explicit first-use consent for selected private project source. Omit/false for message-only or metadata-only sessions.
+  """
+  providerDataConsent: Boolean = false
+}
+
+"""
+Attach one interactive browser and optional selected project/grid, atomically repinning policy/registry/context while fencing old tabs, leases, approvals, and browser dispatches.
+"""
+input AttachAgentClientInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """
+  Optional stable browser instance UUID. Omit to use the single-interactive-client session cursor.
+  """
+  clientInstanceId: String
+  """
+  Optional owner project UUID selected by the attaching Studio. Omit to retain the current selection; null explicitly clears it outside BUILD.
+  """
+  projectId: String
+  """
+  Optional authoritative grid context selected by the attaching Studio. Omit to retain the current grid.
+  """
+  gridId: BigInt
+}
+
+"""
+Atomically select human mode plus optional project/grid and repin effective policy revisions, descriptors, registry digest, and context while preempting old authority.
+"""
+input SetAgentModeInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+  """New human-selected mode; the model cannot call this mutation."""
+  mode: CrowdyStudioAgentMode!
+  """
+  Optional owner project UUID to atomically repin with the mode. Omit to retain it; BUILD requires the resulting selection.
+  """
+  projectId: String
+  """
+  Optional grid context to atomically repin with the mode. Omit to retain it; PLAY requires the resulting grid.
+  """
+  gridId: BigInt
+}
+
+"""Monotonically acknowledge the highest contiguous applied event."""
+input AcknowledgeAgentEventsInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+  """
+  Highest contiguous applied sequence. It cannot move backward or exceed committed history.
+  """
+  throughSeq: BigInt!
+}
+
+"""
+Two-second attached-client heartbeat that rechecks policy/permission/context, refreshes five-second Play freshness, and renews an unchanged workspace lease to 30 seconds.
+"""
+input AgentHeartbeatInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """Exact current attached client epoch."""
+  clientEpoch: BigInt!
+}
+
+"""Accept one bounded human message and queue exactly one serialized run."""
+input SendAgentMessageInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app active session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+  """
+  Human intent text, normalized, secret-scanned, and capped at 16 KiB. It never grants authority.
+  """
+  content: String!
+}
+
+"""
+Approve or reject one exact pending tool call by its displayed argument hash.
+"""
+input DecideAgentToolInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+  """Pending tool call UUID."""
+  toolCallId: String!
+  """
+  Exact sha256 hash displayed by APPROVAL_REQUESTED; substitutions and stale contexts fail.
+  """
+  argumentHash: String!
+  """Optional bounded human rejection reason."""
+  reason: String
+}
+
+"""
+Submit one idempotent terminal browser result for the matching owner/session epoch.
+"""
+input AgentToolResultInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+  """Complete descriptor-validated crowdy.tool-result/1 result envelope."""
+  result: AgentToolResultEnvelopeInput!
+}
+
+"""Complete crowdy.tool-result/1 browser result envelope."""
+input AgentToolResultEnvelopeInput {
+  """Result protocol version; must be 'crowdy.tool-result/1'."""
+  protocolVersion: String!
+  """Dispatched tool call UUID."""
+  toolCallId: String!
+  """Known terminal executor outcome."""
+  status: CrowdyStudioAgentToolResultStatus!
+  """
+  Output JSON object required for SUCCEEDED and validated against the pinned descriptor; omit for failures. Maximum 128 KiB.
+  """
+  outputJson: String
+  """Stable AGENT_* error code for non-success; omit for SUCCEEDED."""
+  errorCode: String
+  """
+  Safe bounded error message for non-success; no stack, source, prompt, headers, or tokens.
+  """
+  errorMessage: String
+  """Whether policy permits deliberate retry; defaults false."""
+  errorRetryable: Boolean
+  """Exact authoritative context version observed by the host."""
+  observedContextVersion: String!
+  """Browser execution start timestamp."""
+  startedAt: DateTime!
+  """Browser execution finish timestamp."""
+  finishedAt: DateTime!
+}
+
+"""
+Human-grant a visible, scoped Play lease for the current grid/entity/host revision.
+"""
+input GrantAgentLeaseInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app PLAY session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+  """
+  Explicit unique Play scopes: observe, locomotion, interact, craft, combat, communicate, or travel.
+  """
+  scopes: [String!]!
+  """Human-selected duration in seconds (1–600); no silent renewal."""
+  durationSeconds: Int!
+  """Current player-controlled entity identifier, capped at 128 characters."""
+  controlledEntityId: String!
+  """Exact current host capability revision."""
+  hostCapabilityRevision: String!
+}
+
+"""Immediately revoke one visible lease."""
+input RevokeAgentLeaseInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+  """Lease UUID to revoke."""
+  leaseId: String!
+  """
+  Optional strict CrowdyJS/BWF preemption reason; defaults to HUMAN_STOP.
+  """
+  reason: CrowdyStudioAgentPreemptionReason
+}
+
+"""
+Closed CrowdyJS/BWF reason vocabulary for synchronous lease and control preemption.
+"""
+enum CrowdyStudioAgentPreemptionReason {
+  HUMAN_INPUT
+  HUMAN_EDIT
+  HUMAN_STOP
+  ESCAPE
+  DEATH
+  CONTEXT_CHANGED
+  PERMISSION_CHANGED
+  ADMISSION_CHANGED
+  CONTROL_TARGET_CHANGED
+  DISCONNECTED
+  CLIENT_REATTACHED
+  QUOTA_FAILURE
+  BUDGET_FAILURE
+  OPERATOR_KILL
+  LEASE_EXPIRED
+  SESSION_CLOSED
+}
+
+"""Common human session-control shape for pause, resume, and close."""
+input AgentSessionControlInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+}
+
+"""Immediately request cancellation of one active session run."""
+input CancelAgentRunInput {
+  """
+  Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
+  """
+  idempotencyKey: String!
+  """Owner/app session UUID."""
+  sessionId: String!
+  """Current attached client epoch."""
+  clientEpoch: BigInt!
+  """Active run UUID to cancel; omit to cancel the session currentRun."""
+  runId: String
+}
+
+"""
 Create a flexible player-owned model container inside one grid. The caller must currently own the grid; owner identity cannot be supplied.
 """
 input CreatePlayerModelContainerInput {
@@ -12519,6 +14590,19 @@ type Subscription {
   Realtime downlink from the game server: spatial notifications and responses, GenericErrorResponse (errors from your sends, correlated by sequenceNumber), and RealtimeConnectionEvent (lifecycle/setup failures). Requires a bearer game token AND an appId-scoped connection — the appId is read from the graphql-transport-ws connection (game tokens are app-agnostic and one UDP socket is shared across apps, so an app-agnostic subscription is rejected with a RealtimeConnectionEvent code APP_ID_REQUIRED, and a missing/invalid token with AUTH_REQUIRED). On subscribe, opens a UDP proxy session if none exists (binds to the least-loaded game server); open/transport failures are delivered as RealtimeConnectionEvent (code UDP_PROXY_CONNECTION_FAILED) and then the stream ends. Only this app’s spatial fan-out is delivered; appId-less control frames always pass. Subscribe before/while sending so async results are not missed. Unsubscribing stops delivery only — it does NOT close the UDP session; call disconnectUdpProxy (or rely on the server inactivity timeout) to release it.
   """
   udpNotifications: UdpNotification
+  """
+  Replay durable events with seq greater than afterSeq, then tail newly committed facts using database replay plus in-memory wakeups. Requires an app-scoped owner, use_studio_agent, and exact current clientEpoch. Delivery is ordered and at-least-once: deduplicate eventId/seq, fill gaps with crowdyStudioAgentHistory, and acknowledge only contiguous sequences.
+  """
+  crowdyStudioAgentEvents(
+    """Owner/app session UUID to replay and tail."""
+    sessionId: String!
+    """Exclusive last applied sequence as a non-negative decimal BigInt."""
+    afterSeq: BigInt!
+    """
+    Exact current attached epoch; a newer attach terminates this stream with AGENT_CLIENT_EPOCH_STALE.
+    """
+    clientEpoch: BigInt!
+  ): CrowdyStudioAgentEvent! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
 }
 
 """

@@ -64,6 +64,13 @@ test('client exposes the full management + game sub-client surface', async () =>
     'listProjects', 'getProject', 'createProject', 'saveProject',
     'listPersonalLibraryFiles', 'listCommonFiles',
   ]);
+  assertMethods(client.crowdyStudioAgent, 'crowdyStudioAgent', [
+    'getSession', 'listSessions', 'history', 'toolDescriptors', 'budget',
+    'createSession', 'attachClient', 'setMode', 'acknowledgeEvents',
+    'heartbeat', 'sendMessage', 'approveTool', 'rejectTool', 'toolResult',
+    'grantLease', 'revokeLease', 'pause', 'resume', 'cancelRun',
+    'closeSession', 'subscribeEvents', 'close',
+  ]);
   assert.equal(client[['player', 'Code', 'Projects'].join('')], undefined);
   // P4a marketplace (free mode): store + installs + consent + claim flows
   // (game API) and studio moderation (management API).

@@ -1,0 +1,442 @@
+fragment CrowdyAgentErrorFields on AgentError {
+  code
+  message
+  retryable
+  remediation
+  field
+  requiredScope
+}
+
+fragment CrowdyAgentRunFields on AgentRun {
+  runId
+  status
+  providerRounds
+  toolCalls
+  errorCode
+  terminalReason
+  reason
+  startedAt
+  finishedAt
+  createdAt
+  cancelled
+}
+
+fragment CrowdyAgentLeaseFields on AgentLease {
+  leaseId
+  kind
+  status
+  clientEpoch
+  scopes
+  holder
+  contextVersion
+  controlledEntityId
+  hostCapabilityRevision
+  expectedProjectRevision
+  grantedAt
+  expiresAt
+  revokedReason
+}
+
+fragment CrowdyAgentApprovalFields on AgentApproval {
+  approvalId
+  toolCallId
+  argumentHash
+  status
+  safeSummary
+  clientEpoch
+  expiresAt
+  approved
+  rejected
+}
+
+fragment CrowdyAgentSessionFields on AgentSession {
+  contractVersion
+  sessionId
+  appId
+  projectId
+  gridId
+  mode
+  requestedModel
+  model
+  resolvedModel
+  status
+  providerDataConsent
+  registryDigest
+  providerPolicyVersion
+  appPolicyVersion
+  contextVersion
+  currentClientEpoch
+  clientEpoch
+  lastEventSeq
+  currentRun {
+    ...CrowdyAgentRunFields
+  }
+  activeLeases {
+    ...CrowdyAgentLeaseFields
+  }
+  pendingApproval {
+    ...CrowdyAgentApprovalFields
+  }
+  createdAt
+  updatedAt
+  closedAt
+}
+
+fragment CrowdyAgentBudgetFields on AgentBudget {
+  dimensions {
+    name
+    scope
+    limit
+    reserved
+    consumed
+    remaining
+    unit
+  }
+  resetAt
+  platformFunded
+  payer
+}
+
+fragment CrowdyAgentToolDescriptorFields on AgentToolDescriptor {
+  schemaVersion
+  name
+  wireName
+  version
+  summary
+  executor
+  modes
+  risk
+  riskEffects
+  riskReversible
+  scopes
+  scopeRequirementsJson
+  approvalRequired
+  approvalPolicy
+  approvalReasons
+  approvalMaxTtlSeconds
+  idempotencyClass
+  idempotencyKeyScope
+  timeoutMs
+  inputSchemaJson
+  outputSchemaJson
+  inputRedactionJson
+  outputRedactionJson
+  maxPersistedBytes
+  descriptorJson
+  descriptorDigest
+}
+
+fragment CrowdyAgentEventBaseFields on AgentEventBase {
+  protocolVersion
+  eventId
+  sessionId
+  seq
+  type
+  runId
+  version
+  createdAt
+}
+
+fragment CrowdyAgentEventFields on CrowdyStudioAgentEvent {
+  __typename
+  ...CrowdyAgentEventBaseFields
+  ... on AgentLifecycleEvent {
+    lifecycleMode: mode
+    lifecycleClientEpoch: clientEpoch
+    lifecycleReplayAfterSeq: replayAfterSeq
+    lifecycleReason: reason
+    lifecycleContextVersion: contextVersion
+  }
+  ... on AgentMessageEvent {
+    messageEventId: messageId
+    messageRole: role
+    messageContent: content
+  }
+  ... on AgentRunEvent {
+    runStatus: status
+    runCode: code
+    runReason: reason
+    runError: error {
+      ...CrowdyAgentErrorFields
+    }
+  }
+  ... on AgentToolEvent {
+    toolEventCallId: toolCallId
+    toolEventName: toolName
+    toolEventVersion: toolVersion
+    toolStatus: status
+    toolSafeSummary: safeSummary
+    toolDescriptorDigest: descriptorDigest
+    toolArgumentHash: argumentHash
+    toolExecutor: executor
+    toolContextVersion: contextVersion
+    toolClientEpoch: clientEpoch
+    toolArgumentsJson: argumentsJson
+    toolLeaseId: leaseId
+    toolApprovalGrant: approvalGrant
+    toolIdempotencyKey: idempotencyKey
+    toolResultJson: resultJson
+    toolInvocation: invocation {
+      protocolVersion
+      sessionId
+      runId
+      toolCallId
+      name
+      version
+      descriptorDigest
+      argumentsJson
+      argumentHash
+      contextVersion
+      clientEpoch
+      leaseId
+      approvalGrant
+      idempotencyKey
+      deadline
+    }
+    toolResult: result {
+      protocolVersion
+      toolCallId
+      status
+      outputJson
+      error {
+        ...CrowdyAgentErrorFields
+      }
+      observedContextVersion
+      startedAt
+      finishedAt
+    }
+    toolError: error {
+      ...CrowdyAgentErrorFields
+    }
+    toolDeadline: deadline
+  }
+  ... on AgentApprovalEvent {
+    approvalEventId: approvalId
+    approvalToolCallId: toolCallId
+    approvalArgumentHash: argumentHash
+    approvalStatus: status
+    approvalSafeSummary: safeSummary
+    approvalReasons: reasons
+    approvalExpiresAt: expiresAt
+  }
+  ... on AgentLeaseEvent {
+    leaseEventId: leaseId
+    leaseKind: kind
+    leaseStatus: status
+    leaseClientEpoch: clientEpoch
+    leaseScopes: scopes
+    leaseHolder: holder
+    leaseContextVersion: contextVersion
+    leaseControlledEntityId: controlledEntityId
+    leaseHostCapabilityRevision: hostCapabilityRevision
+    leaseExpectedProjectRevision: expectedProjectRevision
+    leaseGrantedAt: grantedAt
+    leaseExpiresAt: expiresAt
+    leaseReason: reason
+  }
+  ... on AgentCheckpointEvent {
+    checkpointEventId: checkpointId
+    checkpointProjectRevision: projectRevision
+    checkpointContentHash: contentHash
+    checkpointReason: reason
+    checkpointFiles: files {
+      target
+      path
+      contentHash
+      byteLength
+    }
+    checkpointRestoredAt: restoredAt
+  }
+  ... on AgentBudgetEvent {
+    budgetSnapshot: budget {
+      ...CrowdyAgentBudgetFields
+    }
+  }
+}
+
+query CrowdyStudioAgentSession($sessionId: String!) {
+  crowdyStudioAgentSession(sessionId: $sessionId) {
+    ...CrowdyAgentSessionFields
+  }
+}
+
+query CrowdyStudioAgentSessions($appId: BigInt!, $after: String, $first: Int) {
+  crowdyStudioAgentSessions(appId: $appId, after: $after, first: $first) {
+    edges {
+      cursor
+      node {
+        ...CrowdyAgentSessionFields
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      ...CrowdyAgentSessionFields
+    }
+    endCursor
+    hasNextPage
+  }
+}
+
+query CrowdyStudioAgentHistory(
+  $sessionId: String!
+  $afterSeq: BigInt
+  $first: Int
+) {
+  crowdyStudioAgentHistory(
+    sessionId: $sessionId
+    afterSeq: $afterSeq
+    first: $first
+  ) {
+    edges {
+      cursor
+      node {
+        ...CrowdyAgentEventFields
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    events {
+      ...CrowdyAgentEventFields
+    }
+    hasMore
+  }
+}
+
+query CrowdyStudioAgentToolDescriptors($sessionId: String!) {
+  crowdyStudioAgentToolDescriptors(sessionId: $sessionId) {
+    registryDigest
+    tools {
+      ...CrowdyAgentToolDescriptorFields
+    }
+  }
+}
+
+query CrowdyStudioAgentBudget($sessionId: String!) {
+  crowdyStudioAgentBudget(sessionId: $sessionId) {
+    ...CrowdyAgentBudgetFields
+  }
+}
+
+mutation CrowdyStudioAgentCreateSession($input: CreateAgentSessionInput!) {
+  crowdyStudioAgentCreateSession(input: $input) {
+    ...CrowdyAgentSessionFields
+  }
+}
+
+mutation CrowdyStudioAgentAttachClient($input: AttachAgentClientInput!) {
+  crowdyStudioAgentAttachClient(input: $input) {
+    session {
+      ...CrowdyAgentSessionFields
+    }
+    clientEpoch
+    replayAfterSeq
+  }
+}
+
+mutation CrowdyStudioAgentSetMode($input: SetAgentModeInput!) {
+  crowdyStudioAgentSetMode(input: $input) {
+    ...CrowdyAgentSessionFields
+  }
+}
+
+mutation CrowdyStudioAgentAcknowledgeEvents(
+  $input: AcknowledgeAgentEventsInput!
+) {
+  crowdyStudioAgentAcknowledgeEvents(input: $input) {
+    throughSeq
+  }
+}
+
+mutation CrowdyStudioAgentHeartbeat($input: AgentHeartbeatInput!) {
+  crowdyStudioAgentHeartbeat(input: $input) {
+    serverTime
+    playLeaseFreshUntil
+    workspaceLeaseExpiresAt
+  }
+}
+
+mutation CrowdyStudioAgentSendMessage($input: SendAgentMessageInput!) {
+  crowdyStudioAgentSendMessage(input: $input) {
+    ...CrowdyAgentRunFields
+  }
+}
+
+mutation CrowdyStudioAgentApproveTool($input: DecideAgentToolInput!) {
+  crowdyStudioAgentApproveTool(input: $input) {
+    ...CrowdyAgentApprovalFields
+  }
+}
+
+mutation CrowdyStudioAgentRejectTool($input: DecideAgentToolInput!) {
+  crowdyStudioAgentRejectTool(input: $input) {
+    ...CrowdyAgentApprovalFields
+  }
+}
+
+mutation CrowdyStudioAgentToolResult($input: AgentToolResultInput!) {
+  crowdyStudioAgentToolResult(input: $input) {
+    toolCallId
+    toolName
+    status
+    argumentHash
+    error {
+      ...CrowdyAgentErrorFields
+    }
+    accepted
+  }
+}
+
+mutation CrowdyStudioAgentGrantLease($input: GrantAgentLeaseInput!) {
+  crowdyStudioAgentGrantLease(input: $input) {
+    ...CrowdyAgentLeaseFields
+  }
+}
+
+mutation CrowdyStudioAgentRevokeLease($input: RevokeAgentLeaseInput!) {
+  crowdyStudioAgentRevokeLease(input: $input) {
+    ...CrowdyAgentLeaseFields
+  }
+}
+
+mutation CrowdyStudioAgentPause($input: AgentSessionControlInput!) {
+  crowdyStudioAgentPause(input: $input) {
+    ...CrowdyAgentSessionFields
+  }
+}
+
+mutation CrowdyStudioAgentResume($input: AgentSessionControlInput!) {
+  crowdyStudioAgentResume(input: $input) {
+    ...CrowdyAgentSessionFields
+  }
+}
+
+mutation CrowdyStudioAgentCancelRun($input: CancelAgentRunInput!) {
+  crowdyStudioAgentCancelRun(input: $input) {
+    ...CrowdyAgentRunFields
+  }
+}
+
+mutation CrowdyStudioAgentCloseSession($input: AgentSessionControlInput!) {
+  crowdyStudioAgentCloseSession(input: $input) {
+    ...CrowdyAgentSessionFields
+  }
+}
+
+subscription CrowdyStudioAgentEvents(
+  $sessionId: String!
+  $afterSeq: BigInt!
+  $clientEpoch: BigInt!
+) {
+  crowdyStudioAgentEvents(
+    sessionId: $sessionId
+    afterSeq: $afterSeq
+    clientEpoch: $clientEpoch
+  ) {
+    ...CrowdyAgentEventFields
+  }
+}

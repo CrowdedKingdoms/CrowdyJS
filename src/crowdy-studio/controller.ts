@@ -5,6 +5,10 @@ import {
 } from '../player-runtime/player-code-broker.js';
 import type { PlayerComputeAPI } from '../domains/playerCompute.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
+import {
+  digestCanonicalJson,
+  sha256Digest,
+} from '../crowdy-agent/schema.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
 import {
   cloneCrowdyStudioProject,
@@ -13,6 +17,9 @@ import {
   projectTargets,
   CrowdyStudioOfflineError,
   CrowdyStudioRevisionConflictError,
+  type CrowdyStudioAtomicPatchInput,
+  type CrowdyStudioAtomicPatchResult,
+  type CrowdyStudioCheckpointMetadata,
   type CrowdyStudioFileRef,
   type CrowdyStudioPairingPreference,
   type CrowdyStudioProject,
@@ -22,7 +29,9 @@ import {
   type CrowdyStudioProjectSummary,
   type CrowdyStudioReferenceFile,
   type CrowdyStudioSaveState,
+  type CrowdyStudioSynchronizationProvider,
   type CrowdyStudioTarget,
+  type CrowdyStudioProjectSynchronization,
 } from './models.js';
 import {
   createCrowdyStudioStarterProject,
@@ -48,6 +57,42 @@ export interface CrowdyStudioRuntimeStatus {
   phase: CrowdyStudioPhase;
   target?: CrowdyStudioTarget;
   message?: string;
+}
+
+export type CrowdyStudioRuntimeSyncState =
+  | 'NEVER_RUN'
+  | 'RUNNING_SAVED'
+  | 'RUNNING_STALE'
+  | 'STOPPED';
+
+export interface CrowdyStudioRuntimeSync {
+  state: CrowdyStudioRuntimeSyncState;
+  savedRevisionId?: string;
+  runningRevisionId?: string;
+  deployment?: 'DRAFT' | 'LIVE';
+  startedAt?: string;
+}
+
+export interface CrowdyStudioDeployResult {
+  deployment: 'DRAFT' | 'LIVE';
+  status: 'RUNNING' | 'COMPILE_FAILED' | 'FAILED';
+  projectRevisionId: string;
+  targets: readonly CrowdyStudioTarget[];
+  message: string;
+}
+
+export interface CrowdyStudioDeploymentPlan {
+  expectedRevisionId: string;
+  targets: readonly CrowdyStudioTarget[];
+  pairingPreference?: CrowdyStudioPairingPreference;
+  projectContentHash?: string;
+}
+
+export interface CrowdyStudioAgentWorkContext {
+  projectId?: string;
+  projectRevisionId?: string;
+  saveState: 'SAVED';
+  runtimeSync: CrowdyStudioRuntimeSync;
 }
 
 export interface CrowdyStudioUsageSnapshot {
@@ -94,6 +139,9 @@ export interface CrowdyStudioState {
   saveState: CrowdyStudioSaveState;
   saveMessage?: string;
   runtime: CrowdyStudioRuntimeStatus;
+  runtimeSync: CrowdyStudioRuntimeSync;
+  agentActivity: 'IDLE' | 'PREPARING' | 'WORKING' | 'PAUSED';
+  checkpoints: readonly CrowdyStudioCheckpointMetadata[];
   buildOutput: string;
   authoritativeDiagnostics: readonly CrowdyStudioDiagnostic[];
   localDiagnostics: readonly CrowdyStudioDiagnostic[];
@@ -148,6 +196,12 @@ export interface CrowdyStudioControllerOptions {
   compilePollMs?: number;
   compilePollLimit?: number;
   monitorPollMs?: number;
+  /** Durable atomic-patch and checkpoint adapter, independent of GraphQL types. */
+  synchronizationProvider?: CrowdyStudioSynchronizationProvider;
+  onProjectSynchronized?: (
+    project: CrowdyStudioProject,
+    synchronization: CrowdyStudioProjectSynchronization,
+  ) => void;
   sleep?: (ms: number) => Promise<void>;
   brokerFactory?: (options: PlayerCodeBrokerOptions) => CrowdyStudioBroker;
   isOnline?: () => boolean;
@@ -183,6 +237,9 @@ export class CrowdyStudioController {
     activeFile: null,
     saveState: 'SAVED',
     runtime: { phase: 'IDLE' },
+    runtimeSync: { state: 'NEVER_RUN' },
+    agentActivity: 'IDLE',
+    checkpoints: [],
     buildOutput: '',
     authoritativeDiagnostics: [],
     localDiagnostics: [],
@@ -193,6 +250,7 @@ export class CrowdyStudioController {
     invokeResult: null,
   };
   private readonly listeners = new Set<(state: CrowdyStudioState) => void>();
+  private readonly humanEditListeners = new Set<() => void>();
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private savePromise: Promise<boolean> | null = null;
@@ -201,6 +259,7 @@ export class CrowdyStudioController {
   private conflictRemote: CrowdyStudioProject | null = null;
   private broker: CrowdyStudioBroker | null = null;
   private operationGeneration = 0;
+  private agentOperationGeneration = 0;
   private readonly visibleSurfaces = new Set<CrowdyStudioPolledSurface>();
   private readonly surfaceTimers = new Map<
     CrowdyStudioPolledSurface,
@@ -223,6 +282,56 @@ export class CrowdyStudioController {
     return () => this.listeners.delete(listener);
   }
 
+  /** Subscribe to synchronous human-edit preemption signals. */
+  onHumanEdit(listener: () => void): () => void {
+    this.humanEditListeners.add(listener);
+    return () => this.humanEditListeners.delete(listener);
+  }
+
+  /**
+   * Flush autosave before a durable agent turn. Conflict/offline state fails
+   * closed so Build never starts from an uncommitted browser snapshot.
+   */
+  async prepareForAgentWork(): Promise<CrowdyStudioAgentWorkContext> {
+    this.ensureAlive();
+    this.update({ agentActivity: 'PREPARING' });
+    const saved = await this.saveNow();
+    if (!saved || this.state.saveState !== 'SAVED') {
+      this.update({ agentActivity: 'PAUSED' });
+      throw new Error('Resolve the project save before starting agent work');
+    }
+    const project = this.state.project;
+    this.update({ agentActivity: 'WORKING' });
+    return {
+      ...(project
+        ? {
+            projectId: project.projectId,
+            projectRevisionId: project.revision.id,
+          }
+        : {}),
+      saveState: 'SAVED',
+      runtimeSync: { ...this.state.runtimeSync },
+    };
+  }
+
+  finishAgentWork(paused = false): void {
+    this.update({ agentActivity: paused ? 'PAUSED' : 'IDLE' });
+  }
+
+  beginAgentOperation(): number {
+    return ++this.agentOperationGeneration;
+  }
+
+  /** Synchronously fence an in-flight agent compile/deploy/invoke operation. */
+  cancelAgentOperation(message = 'Agent operation cancelled'): void {
+    ++this.agentOperationGeneration;
+    ++this.operationGeneration;
+    this.update({
+      agentActivity: 'PAUSED',
+      runtime: { phase: 'IDLE', message },
+    });
+  }
+
   canTarget(
     target: CrowdyStudioTarget,
     action: 'write' | 'run',
@@ -233,6 +342,39 @@ export class CrowdyStudioController {
         ? permission.canWrite
         : permission.canRun
       : true;
+  }
+
+  /** Credential-free context projection used by exact browser agent tools. */
+  getAgentContext(): {
+    appRef: string;
+    projectRef?: string;
+    gridRef: string;
+    contextVersion: string;
+    projectContentHash?: string;
+  } {
+    const project = this.state.project;
+    return {
+      appRef: this.options.appId,
+      ...(project ? { projectRef: project.projectId } : {}),
+      gridRef: this.options.gridId,
+      contextVersion: digestCanonicalJson({
+        contract: 'crowdy.studio-context/1',
+        appRef: this.options.appId,
+        gridRef: this.options.gridId,
+        ...(project
+          ? {
+              projectRef: project.projectId,
+              projectRevisionId: project.revision.id,
+              projectContentHash: projectContentHash(project),
+            }
+          : {}),
+        saveState: this.state.saveState,
+        runtimeSync: this.state.runtimeSync,
+      }),
+      ...(project
+        ? { projectContentHash: projectContentHash(project) }
+        : {}),
+    };
   }
 
   async initialize(): Promise<void> {
@@ -312,6 +454,9 @@ export class CrowdyStudioController {
       projectId,
     });
     this.installProject(project);
+    if (this.options.synchronizationProvider) {
+      await this.refreshCheckpoints();
+    }
   }
 
   private installProject(project: CrowdyStudioProject): void {
@@ -334,6 +479,12 @@ export class CrowdyStudioController {
       saveState: 'SAVED',
       saveMessage: undefined,
       runtime: { phase: 'IDLE' },
+      runtimeSync: {
+        state: 'NEVER_RUN',
+        savedRevisionId: clone.revision.id,
+      },
+      agentActivity: 'IDLE',
+      checkpoints: [],
       buildOutput: '',
       authoritativeDiagnostics: [],
       localDiagnostics: [],
@@ -591,21 +742,241 @@ export class CrowdyStudioController {
     return this.saveNow();
   }
 
-  async testDraft(): Promise<void> {
-    await this.deployProject(true);
+  async refreshCheckpoints(): Promise<readonly CrowdyStudioCheckpointMetadata[]> {
+    const project = this.requireProject();
+    const checkpoints = this.options.synchronizationProvider
+      ? await this.options.synchronizationProvider.listCheckpoints({
+          ...this.scope(),
+          projectId: project.projectId,
+        })
+      : this.state.checkpoints;
+    this.update({ checkpoints: [...checkpoints] });
+    return checkpoints;
   }
 
-  async deployLive(): Promise<void> {
-    await this.deployProject(false);
+  /**
+   * Validate every change against one immutable baseline, then persist and
+   * synchronize all files or none. Routine agent patches cannot delete/rename.
+   */
+  async applyAtomicPatch(
+    input: CrowdyStudioAtomicPatchInput,
+  ): Promise<CrowdyStudioAtomicPatchResult> {
+    if (!(await this.saveNow())) {
+      throw new Error('Resolve the current project save before applying an agent patch');
+    }
+    const baseline = cloneCrowdyStudioProject(this.requireProject());
+    if (baseline.revision.id !== input.expectedRevisionId) {
+      throw new CrowdyStudioRevisionConflictError(
+        `Expected revision ${input.expectedRevisionId}, found ${baseline.revision.id}`,
+        baseline,
+      );
+    }
+    applyValidatedPatch(baseline, input);
+    if (!this.options.synchronizationProvider) {
+      throw new Error(
+        'Atomic agent patches require a durable synchronization provider',
+      );
+    }
+    const result = await this.options.synchronizationProvider.applyAtomicPatch({
+      ...this.scope(),
+      projectId: baseline.projectId,
+      expectedRevisionId: input.expectedRevisionId,
+      changes: input.changes,
+    });
+    if (result.project.projectId !== baseline.projectId) {
+      throw new Error('Atomic patch returned a different project');
+    }
+    if (
+      result.project.revision.id === baseline.revision.id ||
+      result.checkpoint.projectRevisionId !== baseline.revision.id
+    ) {
+      throw new Error('Atomic patch returned invalid revision/checkpoint metadata');
+    }
+    for (const change of input.changes) {
+      const persisted = result.project.files.find(
+        (file) =>
+          file.target === change.target &&
+          file.path === normalizeCrowdyStudioPath(change.path),
+      );
+      if (!persisted || persisted.content !== change.content) {
+        throw new Error(`Atomic patch did not synchronize ${change.target}:${change.path}`);
+      }
+    }
+    this.synchronizeProject(result.project, {
+      source: 'AGENT',
+      expectedPreviousRevisionId: baseline.revision.id,
+      checkpoint: result.checkpoint,
+    });
+    return result;
   }
 
-  private async deployProject(draft: boolean): Promise<void> {
+  /**
+   * Apply a server-published project revision to Monaco/kernel state. Pending
+   * human edits win and turn the update into an explicit conflict.
+   */
+  synchronizeProject(
+    project: CrowdyStudioProject,
+    synchronization: CrowdyStudioProjectSynchronization,
+  ): void {
+    const current = this.requireProject();
+    if (project.projectId !== current.projectId) {
+      throw new Error('Project synchronization target does not match the open project');
+    }
+    if (
+      synchronization.expectedPreviousRevisionId &&
+      synchronization.expectedPreviousRevisionId !== current.revision.id
+    ) {
+      throw new CrowdyStudioRevisionConflictError(
+        'Project synchronization started from a stale revision',
+        project,
+      );
+    }
+    if (this.persistedGeneration !== this.editGeneration) {
+      this.conflictRemote = cloneCrowdyStudioProject(project);
+      this.update({
+        saveState: 'CONFLICT',
+        saveMessage: 'Human edits preempted an incoming agent project revision',
+        agentActivity: 'PAUSED',
+      });
+      throw new CrowdyStudioRevisionConflictError(
+        'Human edits preempted the agent project synchronization',
+        project,
+      );
+    }
+    this.clearSaveTimers();
+    const clone = cloneCrowdyStudioProject(project);
+    this.editGeneration = 0;
+    this.persistedGeneration = 0;
+    this.conflictRemote = null;
+    const openFiles = this.state.openFiles.filter((ref) =>
+      fileRefExists(clone, this.state, ref),
+    );
+    const activeFile =
+      this.state.activeFile &&
+      openFiles.some((ref) => sameFileRef(ref, this.state.activeFile!))
+        ? this.state.activeFile
+        : openFiles.at(-1) ?? null;
+    const checkpoint = synchronization.checkpoint;
+    this.update({
+      project: clone,
+      projects: upsertSummary(this.state.projects, summaryOf(clone)),
+      openFiles,
+      activeFile,
+      saveState: 'SAVED',
+      saveMessage: undefined,
+      checkpoints: checkpoint
+        ? upsertCheckpoint(this.state.checkpoints, checkpoint)
+        : this.state.checkpoints,
+      runtimeSync: {
+        ...this.state.runtimeSync,
+        savedRevisionId: clone.revision.id,
+        state:
+          this.state.runtimeSync.state === 'RUNNING_SAVED' ||
+          this.state.runtimeSync.state === 'RUNNING_STALE'
+            ? this.state.runtimeSync.runningRevisionId === clone.revision.id
+              ? 'RUNNING_SAVED'
+              : 'RUNNING_STALE'
+            : this.state.runtimeSync.state,
+      },
+    });
+    this.options.onProjectSynchronized?.(
+      cloneCrowdyStudioProject(clone),
+      synchronization,
+    );
+  }
+
+  async restoreCheckpoint(
+    checkpointId: string,
+    approvalGrant: string,
+    expectedRevisionId = this.requireProject().revision.id,
+  ): Promise<CrowdyStudioCheckpointMetadata> {
+    if (approvalGrant.trim().length < 8) {
+      throw new Error('Checkpoint restore requires an opaque exact approval grant');
+    }
+    if (!(await this.saveNow())) {
+      throw new Error('Resolve the current project save before restoring a checkpoint');
+    }
+    const current = cloneCrowdyStudioProject(this.requireProject());
+    if (current.revision.id !== expectedRevisionId) {
+      throw new CrowdyStudioRevisionConflictError(
+        `Expected revision ${expectedRevisionId}, found ${current.revision.id}`,
+        current,
+      );
+    }
+    let restoredProject: CrowdyStudioProject;
+    let preRestoreCheckpoint: CrowdyStudioCheckpointMetadata;
+    if (!this.options.synchronizationProvider) {
+      throw new Error(
+        'Checkpoint restore requires a durable synchronization provider',
+      );
+    }
+    const restored = await this.options.synchronizationProvider.restoreCheckpoint({
+      ...this.scope(),
+      projectId: current.projectId,
+      checkpointId,
+      expectedRevisionId,
+      approvalGrant,
+    });
+    restoredProject = restored.project;
+    preRestoreCheckpoint = restored.preRestoreCheckpoint;
+    if (
+      restoredProject.projectId !== current.projectId ||
+      restoredProject.revision.id === current.revision.id ||
+      preRestoreCheckpoint.projectRevisionId !== current.revision.id
+    ) {
+      throw new Error('Checkpoint restore returned invalid synchronization metadata');
+    }
+    this.synchronizeProject(restoredProject, {
+      source: 'AGENT',
+      expectedPreviousRevisionId: expectedRevisionId,
+      checkpoint: preRestoreCheckpoint,
+    });
+    return preRestoreCheckpoint;
+  }
+
+  async testDraft(agentOperation?: number): Promise<CrowdyStudioDeployResult> {
+    return this.deployProject(true, agentOperation);
+  }
+
+  async testDraftPlan(
+    plan: CrowdyStudioDeploymentPlan,
+    agentOperation?: number,
+  ): Promise<CrowdyStudioDeployResult> {
+    return this.deployProject(true, agentOperation, plan);
+  }
+
+  async deployLive(agentOperation?: number): Promise<CrowdyStudioDeployResult> {
+    return this.deployProject(false, agentOperation);
+  }
+
+  async deployLivePlan(
+    plan: CrowdyStudioDeploymentPlan,
+    agentOperation?: number,
+  ): Promise<CrowdyStudioDeployResult> {
+    return this.deployProject(false, agentOperation, plan);
+  }
+
+  private async deployProject(
+    draft: boolean,
+    agentOperation?: number,
+    plan?: CrowdyStudioDeploymentPlan,
+  ): Promise<CrowdyStudioDeployResult> {
+    this.checkAgentOperation(agentOperation);
     this.requireProject();
     if (!(await this.saveNow())) {
       this.setRuntime('ERROR', 'Project must be saved before it can be built');
-      return;
+      return {
+        deployment: draft ? 'DRAFT' : 'LIVE',
+        status: 'FAILED',
+        projectRevisionId: this.requireProject().revision.id,
+        targets: projectTargets(this.requireProject().kind),
+        message: 'Project must be saved before it can be built',
+      };
     }
+    this.checkAgentOperation(agentOperation);
     const project = this.requireProject();
+    if (plan) this.assertDeploymentPlan(project, plan, draft);
+    const targets = plan ? [...plan.targets] : projectTargets(project.kind);
     const operation = ++this.operationGeneration;
     this.stopSurfacePolling();
     this.update({
@@ -614,11 +985,18 @@ export class CrowdyStudioController {
       authoritativeDiagnostics: [],
     });
     try {
-      const targets = projectTargets(project.kind);
       if (targets.length === 1) {
         const target = targets[0];
         const compiled = await this.compileTarget(project, target, draft, operation);
-        if (!compiled) return;
+        if (!compiled) {
+          return {
+            deployment: draft ? 'DRAFT' : 'LIVE',
+            status: 'COMPILE_FAILED',
+            projectRevisionId: project.revision.id,
+            targets,
+            message: this.state.runtime.message ?? 'Compilation failed',
+          };
+        }
         if (target === 'SERVER') {
           await this.enableServer(compiled.name, operation);
         } else {
@@ -633,14 +1011,30 @@ export class CrowdyStudioController {
           draft,
           operation,
         );
-        if (!client) return;
+        if (!client) {
+          return {
+            deployment: draft ? 'DRAFT' : 'LIVE',
+            status: 'COMPILE_FAILED',
+            projectRevisionId: project.revision.id,
+            targets,
+            message: this.state.runtime.message ?? 'Client compilation failed',
+          };
+        }
         const server = await this.compileTarget(
           project,
           'SERVER',
           draft,
           operation,
         );
-        if (!server) return;
+        if (!server) {
+          return {
+            deployment: draft ? 'DRAFT' : 'LIVE',
+            status: 'COMPILE_FAILED',
+            projectRevisionId: project.revision.id,
+            targets,
+            message: this.state.runtime.message ?? 'Server compilation failed',
+          };
+        }
         this.checkOperation(operation);
         const requiredClientName =
           project.metadata.pairingPreference === 'REQUIRED'
@@ -660,11 +1054,40 @@ export class CrowdyStudioController {
           phase: 'RUNNING',
           message: draft ? 'Draft test is running' : 'Project is live',
         },
+        runtimeSync: {
+          state: 'RUNNING_SAVED',
+          savedRevisionId: project.revision.id,
+          runningRevisionId: project.revision.id,
+          deployment: draft ? 'DRAFT' : 'LIVE',
+          startedAt: new Date().toISOString(),
+        },
       });
       await this.refreshSurface('usage').catch(() => {});
+      return {
+        deployment: draft ? 'DRAFT' : 'LIVE',
+        status: 'RUNNING',
+        projectRevisionId: project.revision.id,
+        targets,
+        message: draft ? 'Draft test is running' : 'Project is live',
+      };
     } catch (error) {
-      if (error instanceof OperationCancelledError) return;
+      if (error instanceof OperationCancelledError) {
+        return {
+          deployment: draft ? 'DRAFT' : 'LIVE',
+          status: 'FAILED',
+          projectRevisionId: project.revision.id,
+          targets,
+          message: 'Deployment was cancelled',
+        };
+      }
       this.setRuntime('ERROR', errorMessage(error));
+      return {
+        deployment: draft ? 'DRAFT' : 'LIVE',
+        status: 'FAILED',
+        projectRevisionId: project.revision.id,
+        targets,
+        message: errorMessage(error),
+      };
     } finally {
       if (operation === this.operationGeneration) {
         this.restartVisibleSurfacePolling();
@@ -863,11 +1286,20 @@ export class CrowdyStudioController {
               phase: 'PARTIAL_FAILURE',
               message: failures.join(' · '),
             },
+      runtimeSync: {
+        ...this.state.runtimeSync,
+        state: 'STOPPED',
+      },
     });
     return result;
   }
 
-  async invoke(exportName: string, paramsJson?: string): Promise<CrowdyStudioInvokeResult> {
+  async invoke(
+    exportName: string,
+    paramsJson?: string,
+    agentOperation?: number,
+  ): Promise<CrowdyStudioInvokeResult> {
+    this.checkAgentOperation(agentOperation);
     const project = this.requireProject();
     if (!projectTargets(project.kind).includes('SERVER')) {
       throw new Error('Invoke requires a SERVER target');
@@ -878,6 +1310,7 @@ export class CrowdyStudioController {
       exportName: exportName.trim() || 'invoke',
       paramsJson: paramsJson?.trim() || null,
     });
+    this.checkAgentOperation(agentOperation);
     this.update({ invokeResult: result });
     return result;
   }
@@ -942,6 +1375,7 @@ export class CrowdyStudioController {
     this.broker?.stop();
     this.broker = null;
     this.listeners.clear();
+    this.humanEditListeners.clear();
   }
 
   private async performSaveLoop(): Promise<boolean> {
@@ -972,6 +1406,17 @@ export class CrowdyStudioController {
           saveState:
             this.persistedGeneration === this.editGeneration ? 'SAVED' : 'SAVING',
           saveMessage: undefined,
+          runtimeSync: {
+            ...this.state.runtimeSync,
+            savedRevisionId: saved.revision.id,
+            state:
+              this.state.runtimeSync.state === 'RUNNING_SAVED' ||
+              this.state.runtimeSync.state === 'RUNNING_STALE'
+                ? this.state.runtimeSync.runningRevisionId === saved.revision.id
+                  ? 'RUNNING_SAVED'
+                  : 'RUNNING_STALE'
+                : this.state.runtimeSync.state,
+          },
         });
       } catch (error) {
         if (error instanceof CrowdyStudioRevisionConflictError) {
@@ -996,8 +1441,20 @@ export class CrowdyStudioController {
   }
 
   private markEdited(): void {
+    for (const listener of this.humanEditListeners) listener();
     this.editGeneration++;
-    this.update({ saveState: 'SAVING', saveMessage: undefined });
+    this.update({
+      saveState: 'SAVING',
+      saveMessage: undefined,
+      agentActivity:
+        this.state.agentActivity === 'WORKING'
+          ? 'PAUSED'
+          : this.state.agentActivity,
+      runtimeSync:
+        this.state.runtimeSync.state === 'RUNNING_SAVED'
+          ? { ...this.state.runtimeSync, state: 'RUNNING_STALE' }
+          : this.state.runtimeSync,
+    });
     this.clearTimer('autosave');
     this.autosaveTimer = setTimeout(() => {
       this.autosaveTimer = null;
@@ -1079,8 +1536,63 @@ export class CrowdyStudioController {
     };
   }
 
+  private assertDeploymentPlan(
+    project: CrowdyStudioProject,
+    plan: CrowdyStudioDeploymentPlan,
+    draft: boolean,
+  ): void {
+    if (project.revision.id !== plan.expectedRevisionId) {
+      throw new CrowdyStudioRevisionConflictError(
+        `Expected revision ${plan.expectedRevisionId}, found ${project.revision.id}`,
+        project,
+      );
+    }
+    const authoritativeTargets = [...projectTargets(project.kind)].sort();
+    const requestedTargets = [...new Set(plan.targets)].sort();
+    if (
+      requestedTargets.length !== authoritativeTargets.length ||
+      requestedTargets.some(
+        (target, index) => target !== authoritativeTargets[index],
+      )
+    ) {
+      throw new Error(
+        `Deployment targets must exactly match ${authoritativeTargets.join(', ')}`,
+      );
+    }
+    if (
+      plan.pairingPreference !== undefined &&
+      plan.pairingPreference !== project.metadata.pairingPreference
+    ) {
+      throw new Error('Deployment pairing preference changed after approval');
+    }
+    if (
+      plan.projectContentHash !== undefined &&
+      plan.projectContentHash !== projectContentHash(project)
+    ) {
+      throw new Error('Deployment project content changed after approval');
+    }
+    if (
+      !draft &&
+      (plan.pairingPreference === undefined ||
+        plan.projectContentHash === undefined)
+    ) {
+      throw new Error(
+        'Live deployment requires exact pairing and project content bindings',
+      );
+    }
+  }
+
   private checkOperation(generation: number): void {
     if (generation !== this.operationGeneration || this.destroyed) {
+      throw new OperationCancelledError();
+    }
+  }
+
+  private checkAgentOperation(generation?: number): void {
+    if (
+      generation !== undefined &&
+      (generation !== this.agentOperationGeneration || this.destroyed)
+    ) {
       throw new OperationCancelledError();
     }
   }
@@ -1231,6 +1743,118 @@ function normalizeUsage(value: CrowdyStudioUsageSnapshot): CrowdyStudioUsageSnap
     gateStatus: value.gateStatus,
     gateReason: value.gateReason ?? null,
   };
+}
+
+function applyValidatedPatch(
+  baseline: CrowdyStudioProject,
+  input: CrowdyStudioAtomicPatchInput,
+): CrowdyStudioProject {
+  if (input.changes.length < 1 || input.changes.length > 16) {
+    throw new Error('Atomic patch must contain 1 to 16 file changes');
+  }
+  const next = cloneCrowdyStudioProject(baseline);
+  const seen = new Set<string>();
+  for (const change of input.changes) {
+    const path = normalizeCrowdyStudioPath(change.path);
+    const key = crowdyStudioFileKey(change.target, path);
+    if (seen.has(key)) throw new Error(`Atomic patch repeats ${key}`);
+    seen.add(key);
+    if (!projectTargets(next.kind).includes(change.target)) {
+      throw new Error(`${next.kind} projects do not have a ${change.target} target`);
+    }
+    const bytes = new TextEncoder().encode(change.content).byteLength;
+    if (bytes > 65_536) throw new Error(`${key} exceeds the 65536-byte file limit`);
+    const index = next.files.findIndex(
+      (file) => file.target === change.target && file.path === path,
+    );
+    if (change.operation === 'CREATE') {
+      if (change.expectedContentHash !== 'ABSENT' || index >= 0) {
+        throw new CrowdyStudioRevisionConflictError(
+          `${key} was expected to be absent`,
+          baseline,
+        );
+      }
+      next.files.push({ target: change.target, path, content: change.content });
+      continue;
+    }
+    if (index < 0) {
+      throw new CrowdyStudioRevisionConflictError(
+        `${key} no longer exists`,
+        baseline,
+      );
+    }
+    const currentHash = sha256Digest(next.files[index].content);
+    if (change.expectedContentHash !== currentHash) {
+      throw new CrowdyStudioRevisionConflictError(
+        `${key} content hash changed`,
+        baseline,
+      );
+    }
+    next.files[index] = {
+      target: change.target,
+      path,
+      content: change.content,
+    };
+  }
+  if (next.files.length > 128) {
+    throw new Error('Project exceeds the 128-file limit');
+  }
+  next.files.sort(compareProjectFile);
+  return next;
+}
+
+function projectContentHash(project: CrowdyStudioProject): string {
+  return digestCanonicalJson({
+    contract: 'crowdy.studio-project-content/1',
+    projectId: project.projectId,
+    metadata: project.metadata,
+    files: project.files
+      .map((file) => ({
+        target: file.target,
+        path: file.path,
+        contentHash: sha256Digest(file.content),
+      }))
+      .sort((left, right) =>
+        crowdyStudioFileKey(left.target, left.path).localeCompare(
+          crowdyStudioFileKey(right.target, right.path),
+        ),
+      ),
+  });
+}
+
+function upsertCheckpoint(
+  checkpoints: readonly CrowdyStudioCheckpointMetadata[],
+  checkpoint: CrowdyStudioCheckpointMetadata,
+): CrowdyStudioCheckpointMetadata[] {
+  return [
+    checkpoint,
+    ...checkpoints.filter(
+      (entry) => entry.checkpointId !== checkpoint.checkpointId,
+    ),
+  ];
+}
+
+function fileRefExists(
+  project: CrowdyStudioProject,
+  state: CrowdyStudioState,
+  ref: CrowdyStudioFileRef,
+): boolean {
+  if (ref.source === 'PROJECT') {
+    return project.files.some(
+      (file) =>
+        file.target === ref.target &&
+        file.path === normalizeCrowdyStudioPath(ref.path),
+    );
+  }
+  const references =
+    ref.source === 'PERSONAL_LIBRARY'
+      ? state.personalLibraryFiles
+      : state.commonFiles;
+  return references.some((file) =>
+    ref.referenceId
+      ? file.id === ref.referenceId
+      : file.target === ref.target && file.path === ref.path,
+  );
 }
 
 function errorMessage(error: unknown): string {
