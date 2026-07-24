@@ -1,3 +1,89 @@
+# CrowdyJS v12 — Agentic Crowdy Studio contract (BREAKING)
+
+Version 12 establishes the greenfield public contracts
+`crowdy.studio-agent/1`, `crowdy.agent-tools/1`, and
+`crowdy.player-host/1`. The major bump reserves their authority, event,
+descriptor, and browser-control semantics before rollout; changing those
+semantics later requires another major contract version.
+
+New package subpaths:
+
+- `@crowdedkingdoms/crowdyjs/agent` — immutable descriptor registry, bounded
+  JSON-schema validator, stable errors, injectable durable transport,
+  ordered/reconnecting session controller, exact approvals, and execute-once
+  browser dispatch.
+- `@crowdedkingdoms/crowdyjs/player-host` — generic host capability,
+  observation, command, and result contracts plus the revocable Play lease
+  manager/gate.
+- `@crowdedkingdoms/crowdyjs/crowdy-studio` re-exports both surfaces and adds
+  the integrated Ask/Build/Play dock.
+
+The reconciled Game API SDL and generated agent operations are now committed.
+`client.crowdyStudioAgent` is a production `CrowdyAgentGraphQLTransport`
+implementing every `CrowdyStudioAgentTransportV1` query, Relay connection,
+mutation, heartbeat, and typed event subscription. Tests and non-GraphQL hosts
+may still inject the interface; do not add a generic raw-GraphQL callback.
+
+Creation now carries optional `providerDataConsent`; attach carries a stable
+`clientInstanceId` and consumes `replayAfterSeq`; the public transport
+`message` maps to Game API `content`; cancellation requires the exact run id;
+and nested browser results map to `AgentToolResultEnvelopeInput`. PLAY sends a
+two-second heartbeat only while attached, active, and visible, stopping and
+clearing local authority on pause, disconnect, stale epoch, kill, or destroy.
+Descriptor builds verify the full registry and canonical 22-tool Game API
+subset (8 Studio + 14 mandatory game tools) against the copied digest fixture.
+
+Existing manual mounts continue to work:
+
+```ts
+await mountCrowdyStudio(host, existingOptions);
+```
+
+To enable the agent dock, inject the transport and either an existing session
+or create-session input:
+
+```ts
+await mountCrowdyStudio(host, {
+  ...existingOptions,
+  agent: {
+    transport: game.crowdyStudioAgent,
+    sessionId,
+    playerHost, // optional; required for generic Play tools
+  },
+});
+```
+
+`CrowdyStudioHandle` now exposes `agent` and `controlLeaseManager` (both `null`
+when agent mode is not configured). `CrowdyStudioController.testDraft()` and
+`deployLive()` now resolve typed `CrowdyStudioDeployResult` values; code that
+ignored their previous `void` result remains valid.
+
+Headless integrations should adopt:
+
+- `prepareForAgentWork()` before sending a turn;
+- `applyAtomicPatch()` / `synchronizeProject()` for complete revision-fenced
+  project updates;
+- `CrowdyStudioSynchronizationProvider` for durable checkpoint list, atomic
+  patch, and approved restore hooks;
+- `state.runtimeSync` instead of inferring saved-versus-running status from the
+  display phase.
+
+Game integrations implement `PlayerHostAdapterV1`, route commands through the
+same intent services as human input, and call
+`AgentControlLeaseManager.preempt(reason)` synchronously on human input,
+Escape, Stop, death, disconnect, or context/target changes. Do not adapt the
+agent through DOM events, raw UDP/GraphQL/CrowdyJS methods,
+`PlayerCodeBroker`, or client-mod `host_call`.
+
+The current Game API pilot advertises its canonical 8 Studio and 14 mandatory
+game tools. CrowdyJS dispatches the game tools through `PlayerHostAdapterV1`;
+BWF Play still requires the concrete BWF adapter/shared-intent integration and
+matching host/app policy.
+
+The browser package contains no provider client or key. Provider routing,
+policy, budgets, durable approvals, and server tools remain Game API
+responsibilities.
+
 # CrowdyJS v11.1 — responsive Crowdy Studio embedding
 
 Crowdy Studio now sizes to its host instead of imposing a 680-pixel minimum

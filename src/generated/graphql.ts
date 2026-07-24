@@ -19,6 +19,18 @@ export type Scalars = {
   DateTime: { input: string; output: string; }
 };
 
+/** Monotonically acknowledge the highest contiguous applied event. */
+export type AcknowledgeAgentEventsInput = {
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
+  /** Highest contiguous applied sequence. It cannot move backward or exceed committed history. */
+  throughSeq: Scalars['BigInt']['input'];
+};
+
 export type Actor = {
   __typename?: 'Actor';
   /** App (game) this actor belongs to. BigInt serialized as a decimal string. */
@@ -163,6 +175,785 @@ export type AdmitAppCodeInput = {
   subjectRef: Scalars['String']['input'];
   /** Optional P1 version range: exact "3", inclusive "2-5", ">=4", or "<=9". Omit to admit all versions. */
   versionRange?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Short-lived single-use human decision bound to one tool call and canonical argument hash. */
+export type AgentApproval = {
+  __typename?: 'AgentApproval';
+  /** Stable approval UUID. */
+  approvalId: Scalars['String']['output'];
+  /** True when this response granted/consumed the approval. */
+  approved: Scalars['Boolean']['output'];
+  /** Canonical sha256 argument/context binding shown to the human. */
+  argumentHash: Scalars['String']['output'];
+  /** Attached client epoch authorized to decide. */
+  clientEpoch: Scalars['BigInt']['output'];
+  /** Hard decision/consumption expiry. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** True when this response denied the approval. */
+  rejected: Scalars['Boolean']['output'];
+  /** Safe bounded domain summary shown before approval. */
+  safeSummary: Scalars['String']['output'];
+  /** Current single-use lifecycle. */
+  status: CrowdyStudioAgentApprovalStatus;
+  /** Tool call UUID this decision binds. */
+  toolCallId: Scalars['String']['output'];
+};
+
+/** Typed exact-argument human approval event. */
+export type AgentApprovalEvent = AgentEventBase & {
+  __typename?: 'AgentApprovalEvent';
+  /** Stable approval UUID. */
+  approvalId: Scalars['String']['output'];
+  /** Canonical displayed argument hash. */
+  argumentHash: Scalars['String']['output'];
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Hard approval expiry. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Bounded server-authored reasons for requiring approval. */
+  reasons: Array<Scalars['String']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Safe domain summary retained without raw arguments. */
+  safeSummary: Scalars['String']['output'];
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Required approval lifecycle status. */
+  status: CrowdyStudioAgentApprovalStatus;
+  /** Bound tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Complete platform-funded budget across turn, session, and player-day dimensions. */
+export type AgentBudget = {
+  __typename?: 'AgentBudget';
+  /** All normative provider/tool/compile/wall-clock dimensions. */
+  dimensions: Array<AgentBudgetDimension>;
+  /** Payer seam; 'PLATFORM' throughout the development pilot. */
+  payer: Scalars['String']['output'];
+  /** True throughout the development pilot. */
+  platformFunded: Scalars['Boolean']['output'];
+  /** UTC player-day reset, or null when no reset applies. */
+  resetAt: Maybe<Scalars['DateTime']['output']>;
+};
+
+/** One effective budget dimension at TURN, SESSION, or PLAYER_DAY scope. */
+export type AgentBudgetDimension = {
+  __typename?: 'AgentBudgetDimension';
+  /** Durably consumed amount. */
+  consumed: Scalars['BigInt']['output'];
+  /** Effective hard limit. */
+  limit: Scalars['BigInt']['output'];
+  /** REQUESTS, INPUT_TOKENS, OUTPUT_TOKENS, REASONING_TOKENS, PROVIDER_COST, TOOL_ROUNDS, WALL_CLOCK_MS, TOOL_CALLS, or COMPILES. */
+  name: Scalars['String']['output'];
+  /** Non-negative remaining amount. */
+  remaining: Scalars['BigInt']['output'];
+  /** Worst-case active reservation. */
+  reserved: Scalars['BigInt']['output'];
+  /** TURN, SESSION, or PLAYER_DAY limit scope. */
+  scope: Scalars['String']['output'];
+  /** Dimension unit, for example tokens, requests, microusd, or ms. */
+  unit: Scalars['String']['output'];
+};
+
+/** Typed provider budget reservation or reconciliation event; no wallet debit occurs in the platform-funded pilot. */
+export type AgentBudgetEvent = AgentEventBase & {
+  __typename?: 'AgentBudgetEvent';
+  /** Complete effective budget snapshot after this change. */
+  budget: AgentBudget;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Typed immutable private project checkpoint event. */
+export type AgentCheckpointEvent = AgentEventBase & {
+  __typename?: 'AgentCheckpointEvent';
+  /** Private checkpoint UUID. */
+  checkpointId: Scalars['String']['output'];
+  /** sha256 digest of the canonical private snapshot. */
+  contentHash: Scalars['String']['output'];
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Bounded target/path/hash/byte summaries; never source. */
+  files: Array<AgentCheckpointFile>;
+  /** Project revision captured as the immutable pre-image. */
+  projectRevision: Scalars['BigInt']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** AGENT_WRITE, RESTORE_PREIMAGE, or MANUAL. */
+  reason: Scalars['String']['output'];
+  /** Restore timestamp for CHECKPOINT_RESTORED, or null. */
+  restoredAt: Maybe<Scalars['DateTime']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** One source-free file summary in an immutable checkpoint. */
+export type AgentCheckpointFile = {
+  __typename?: 'AgentCheckpointFile';
+  /** Exact UTF-8 byte length. */
+  byteLength: Scalars['Int']['output'];
+  /** Exact file content digest. */
+  contentHash: Scalars['String']['output'];
+  /** Bounded project-relative path. */
+  path: Scalars['String']['output'];
+  /** SERVER or CLIENT target. */
+  target: Scalars['String']['output'];
+};
+
+/** Result of attaching a fresh interactive client epoch. */
+export type AgentClientAttachment = {
+  __typename?: 'AgentClientAttachment';
+  /** New server-issued monotonic client epoch. */
+  clientEpoch: Scalars['BigInt']['output'];
+  /** Persisted contiguous cursor for this client instance; subscribe after this sequence. */
+  replayAfterSeq: Scalars['BigInt']['output'];
+  /** Session after fencing older epochs. */
+  session: AgentSession;
+};
+
+/** Stable safe error envelope carried inside tool/run events. Branch on code, never message. */
+export type AgentError = {
+  __typename?: 'AgentError';
+  /** Stable additive error code. */
+  code: Scalars['String']['output'];
+  /** Optional invalid input field path. */
+  field: Maybe<Scalars['String']['output']>;
+  /** Safe bounded human-readable detail. */
+  message: Scalars['String']['output'];
+  /** Optional safe human remediation, never a command to execute. */
+  remediation: Maybe<Scalars['String']['output']>;
+  /** Optional missing agent scope. */
+  requiredScope: Maybe<Scalars['String']['output']>;
+  /** Whether policy permits a deliberate retry. */
+  retryable: Scalars['Boolean']['output'];
+};
+
+/** Monotonic event acknowledgement result. */
+export type AgentEventAcknowledgement = {
+  __typename?: 'AgentEventAcknowledgement';
+  /** Highest persisted contiguous acknowledged sequence. */
+  throughSeq: Scalars['BigInt']['output'];
+};
+
+/** Common identity/order fields on every typed durable agent event variant. */
+export type AgentEventBase = {
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Bounded ordered history connection, exclusive of the supplied afterSeq. */
+export type AgentEventConnection = {
+  __typename?: 'AgentEventConnection';
+  /** Events in ascending contiguous sequence order. */
+  edges: Array<AgentEventEdge>;
+  /** SDK-compatible ordered typed events. */
+  events: Array<CrowdyStudioAgentEvent>;
+  /** SDK-compatible history continuation indicator. */
+  hasMore: Scalars['Boolean']['output'];
+  /** History page metadata. */
+  pageInfo: AgentPageInfo;
+};
+
+/** One ordered event connection edge. */
+export type AgentEventEdge = {
+  __typename?: 'AgentEventEdge';
+  /** Opaque cursor equal to the event decimal sequence. */
+  cursor: Scalars['String']['output'];
+  /** Typed durable event node. */
+  node: CrowdyStudioAgentEvent;
+};
+
+/** Server acknowledgement of the 2-second client heartbeat and 5-second Play freshness window. */
+export type AgentHeartbeat = {
+  __typename?: 'AgentHeartbeat';
+  /** Play lease remains server-fresh through this instant, bounded by its hard expiry; null without an active Play lease. */
+  playLeaseFreshUntil: Maybe<Scalars['DateTime']['output']>;
+  /** Authoritative server receipt time. */
+  serverTime: Scalars['DateTime']['output'];
+};
+
+/** Two-second attached-client heartbeat that refreshes the five-second server-side Play freshness window. */
+export type AgentHeartbeatInput = {
+  /** Exact current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
+};
+
+/** Short-lived context-bound capability. The model cannot create, widen, or renew it. */
+export type AgentLease = {
+  __typename?: 'AgentLease';
+  /** Bound attached browser epoch. */
+  clientEpoch: Scalars['BigInt']['output'];
+  /** Authoritative context version bound to the lease. */
+  contextVersion: Scalars['String']['output'];
+  /** Controlled entity for PLAY, or null. */
+  controlledEntityId: Maybe<Scalars['String']['output']>;
+  /** Expected project revision for WORKSPACE, or null. */
+  expectedProjectRevision: Maybe<Scalars['BigInt']['output']>;
+  /** Hard expiry; the model cannot renew it. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** Lease grant timestamp. */
+  grantedAt: Scalars['DateTime']['output'];
+  /** Human-visible lease holder alias. */
+  holder: Scalars['String']['output'];
+  /** Host capability revision for PLAY, or null. */
+  hostCapabilityRevision: Maybe<Scalars['String']['output']>;
+  /** WORKSPACE or PLAY. */
+  kind: CrowdyStudioAgentLeaseType;
+  /** Stable lease UUID. */
+  leaseId: Scalars['String']['output'];
+  /** Stable revoke/expiry reason, or null while active. */
+  revokedReason: Maybe<Scalars['String']['output']>;
+  /** Explicit maximum scopes carried by this lease. */
+  scopes: Array<Scalars['String']['output']>;
+  /** Required lease lifecycle status. */
+  status: CrowdyStudioAgentLeaseStatus;
+};
+
+/** Typed workspace/Play lease lifecycle event. */
+export type AgentLeaseEvent = AgentEventBase & {
+  __typename?: 'AgentLeaseEvent';
+  /** Bound attached client epoch. */
+  clientEpoch: Scalars['BigInt']['output'];
+  /** Authoritative context version bound to this lease. */
+  contextVersion: Scalars['String']['output'];
+  /** Controlled entity identifier for PLAY, or null. */
+  controlledEntityId: Maybe<Scalars['String']['output']>;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Expected project revision for WORKSPACE, or null. */
+  expectedProjectRevision: Maybe<Scalars['BigInt']['output']>;
+  /** Hard lease expiry. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** Lease grant timestamp. */
+  grantedAt: Scalars['DateTime']['output'];
+  /** Human-visible lease holder alias. */
+  holder: Scalars['String']['output'];
+  /** Host capability revision for PLAY, or null. */
+  hostCapabilityRevision: Maybe<Scalars['String']['output']>;
+  /** WORKSPACE or PLAY. */
+  kind: CrowdyStudioAgentLeaseType;
+  /** Stable lease UUID. */
+  leaseId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Stable revoke/expiry reason, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Explicit scopes carried when granted; empty otherwise. */
+  scopes: Array<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Required lease lifecycle status. */
+  status: CrowdyStudioAgentLeaseStatus;
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Typed session/client/mode/context lifecycle event. */
+export type AgentLifecycleEvent = AgentEventBase & {
+  __typename?: 'AgentLifecycleEvent';
+  /** Attached client epoch when this event carries one. */
+  clientEpoch: Maybe<Scalars['BigInt']['output']>;
+  /** New context version when carried by this event. */
+  contextVersion: Maybe<Scalars['String']['output']>;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Selected mode when this event carries one. */
+  mode: Maybe<CrowdyStudioAgentMode>;
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Stable lifecycle/preemption reason, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Replay cursor returned by attach, or null. */
+  replayAfterSeq: Maybe<Scalars['BigInt']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Typed bounded user or assistant text event. */
+export type AgentMessageEvent = AgentEventBase & {
+  __typename?: 'AgentMessageEvent';
+  /** Redacted bounded text. ASSISTANT_MESSAGE is canonical; chunks are transient presentation hints. */
+  content: Scalars['String']['output'];
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Stable message UUID used for replay deduplication. */
+  messageId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** USER or ASSISTANT message role. */
+  role: Scalars['String']['output'];
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Standard opaque-cursor pagination metadata. */
+export type AgentPageInfo = {
+  __typename?: 'AgentPageInfo';
+  /** Opaque cursor for the final returned edge, or null. */
+  endCursor: Maybe<Scalars['String']['output']>;
+  /** Whether another page exists after endCursor. */
+  hasNextPage: Scalars['Boolean']['output'];
+};
+
+/** Summary of one durable session run. */
+export type AgentRun = {
+  __typename?: 'AgentRun';
+  /** True when the durable run status is CANCELLED. */
+  cancelled: Scalars['Boolean']['output'];
+  /** Run acceptance timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable terminal error code, or null while non-terminal/successful. */
+  errorCode: Maybe<Scalars['String']['output']>;
+  /** Terminal timestamp, or null while active. */
+  finishedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Provider rounds already attempted in this run. */
+  providerRounds: Scalars['Int']['output'];
+  /** SDK-compatible terminal/preemption reason, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Stable run UUID. */
+  runId: Scalars['String']['output'];
+  /** Worker start timestamp, or null while queued. */
+  startedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Current serialized state. */
+  status: CrowdyStudioAgentRunStatus;
+  /** Stable preemption/cancellation reason, or null. */
+  terminalReason: Maybe<Scalars['String']['output']>;
+  /** Descriptor-pinned tool calls already recorded. */
+  toolCalls: Scalars['Int']['output'];
+};
+
+/** Typed run lifecycle event. */
+export type AgentRunEvent = AgentEventBase & {
+  __typename?: 'AgentRunEvent';
+  /** Stable terminal error code, or null. */
+  code: Maybe<Scalars['String']['output']>;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Safe typed error envelope when present. */
+  error: Maybe<AgentError>;
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Stable terminal/preemption reason, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Required durable run status carried by this event. */
+  status: CrowdyStudioAgentRunStatus;
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Owner/app-scoped durable agent conversation with pinned mode, model, policy, registry, and client epoch. */
+export type AgentSession = {
+  __typename?: 'AgentSession';
+  /** Current unexpired leases; bounded to WORKSPACE and PLAY. */
+  activeLeases: Array<AgentLease>;
+  /** Current non-terminal run, or null. */
+  activeRun: Maybe<AgentRun>;
+  /** App tenant from the app-scoped bearer token. */
+  appId: Scalars['BigInt']['output'];
+  /** Opaque management app-policy version pinned at creation. */
+  appPolicyVersion: Scalars['String']['output'];
+  /** SDK-compatible attached client epoch, or null before attach. */
+  clientEpoch: Maybe<Scalars['BigInt']['output']>;
+  /** Close timestamp, or null while open. */
+  closedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Current authoritative context version. */
+  contextVersion: Scalars['String']['output'];
+  /** Session contract version; always 'crowdy.studio-agent/1'. */
+  contractVersion: Scalars['String']['output'];
+  /** Session creation timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Monotonic attached client epoch. A newer attach fences all older tabs. */
+  currentClientEpoch: Scalars['BigInt']['output'];
+  /** SDK-compatible current non-terminal run, or null. */
+  currentRun: Maybe<AgentRun>;
+  /** Selected grid id, or null; it does not grant authority. */
+  gridId: Maybe<Scalars['BigInt']['output']>;
+  /** Highest committed durable event sequence. */
+  lastEventSeq: Scalars['BigInt']['output'];
+  /** Human-selected current mode. */
+  mode: CrowdyStudioAgentMode;
+  /** Selected allowlisted model, matching the SDK session model. */
+  model: Maybe<Scalars['String']['output']>;
+  /** Newest unexpired pending approval, or null. */
+  pendingApproval: Maybe<AgentApproval>;
+  /** Selected private project UUID, or null. Returned only to its exact owner/app. */
+  projectId: Maybe<Scalars['String']['output']>;
+  /** Whether the human accepted first-use disclosure of selected private project source. Messages and metadata do not imply this consent. */
+  providerDataConsent: Scalars['Boolean']['output'];
+  /** Opaque platform provider-policy version pinned at creation. */
+  providerPolicyVersion: Scalars['String']['output'];
+  /** Digest of the mode/policy-filtered immutable tool registry. */
+  registryDigest: Scalars['String']['output'];
+  /** Requested model in the effective platform/app allowlist. */
+  requestedModel: Scalars['String']['output'];
+  /** Resolved routed model after a provider response, or null. */
+  resolvedModel: Maybe<Scalars['String']['output']>;
+  /** Stable session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Current durable session lifecycle. */
+  status: CrowdyStudioAgentSessionStatus;
+  /** Latest durable session update. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Bounded owner/app session connection. */
+export type AgentSessionConnection = {
+  __typename?: 'AgentSessionConnection';
+  /** Sessions ordered newest first. */
+  edges: Array<AgentSessionEdge>;
+  /** SDK-compatible final opaque cursor. */
+  endCursor: Maybe<Scalars['String']['output']>;
+  /** SDK-compatible next-page indicator. */
+  hasNextPage: Scalars['Boolean']['output'];
+  /** SDK-compatible session nodes in newest-first order. */
+  nodes: Array<AgentSession>;
+  /** Connection page metadata. */
+  pageInfo: AgentPageInfo;
+};
+
+/** Common human session-control shape for pause, resume, and close. */
+export type AgentSessionControlInput = {
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
+};
+
+/** One session connection edge. */
+export type AgentSessionEdge = {
+  __typename?: 'AgentSessionEdge';
+  /** Opaque cursor for this session edge. */
+  cursor: Scalars['String']['output'];
+  /** Owner/app-scoped session node. */
+  node: AgentSession;
+};
+
+/** Typed browser tool-call terminal record returned after submit. */
+export type AgentToolCall = {
+  __typename?: 'AgentToolCall';
+  /** True when the idempotent terminal result was accepted. */
+  accepted: Scalars['Boolean']['output'];
+  /** Canonical argument hash. */
+  argumentHash: Scalars['String']['output'];
+  /** Safe terminal error, or null. */
+  error: Maybe<AgentError>;
+  /** Durable terminal/current status. */
+  status: CrowdyStudioAgentToolCallStatus;
+  /** Stable tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+  /** Logical descriptor name. */
+  toolName: Scalars['String']['output'];
+};
+
+/** One effective immutable tool descriptor. Schemas are JSON Schema 2020-12 objects serialized as canonical JSON. */
+export type AgentToolDescriptor = {
+  __typename?: 'AgentToolDescriptor';
+  /** Maximum approval lifetime in seconds. */
+  approvalMaxTtlSeconds: Scalars['Int']['output'];
+  /** NONE, REQUIRED, or CONDITIONAL approval policy. */
+  approvalPolicy: Scalars['String']['output'];
+  /** Server-authored approval reasons. */
+  approvalReasons: Array<Scalars['String']['output']>;
+  /** Whether exact human approval is always required. */
+  approvalRequired: Scalars['Boolean']['output'];
+  /** sha256 digest of the immutable descriptor contract. */
+  descriptorDigest: Scalars['String']['output'];
+  /** Complete RFC8785-canonical crowdy.agent-tool/1 descriptor JSON. */
+  descriptorJson: Scalars['String']['output'];
+  /** SERVER or BROWSER. */
+  executor: CrowdyStudioAgentToolExecutor;
+  /** PURE, KEYED, TOOL_CALL_ONCE, or NON_RETRYABLE. */
+  idempotencyClass: Scalars['String']['output'];
+  /** NONE, TOOL_CALL, or USER_TOOL_ARGUMENTS key scope. */
+  idempotencyKeyScope: Scalars['String']['output'];
+  /** Canonical JSON array of input redaction rules. */
+  inputRedactionJson: Scalars['String']['output'];
+  /** Canonical bounded input JSON Schema. */
+  inputSchemaJson: Scalars['String']['output'];
+  /** Maximum persisted redacted tool bytes. */
+  maxPersistedBytes: Scalars['Int']['output'];
+  /** Human modes in which this descriptor may be proposed. */
+  modes: Array<CrowdyStudioAgentMode>;
+  /** Logical dotted tool name. */
+  name: Scalars['String']['output'];
+  /** Canonical JSON array of output redaction rules. */
+  outputRedactionJson: Scalars['String']['output'];
+  /** Canonical bounded output JSON Schema. */
+  outputSchemaJson: Scalars['String']['output'];
+  /** Server-classified risk. */
+  risk: CrowdyStudioAgentToolRisk;
+  /** Canonical server-classified effect labels. */
+  riskEffects: Array<Scalars['String']['output']>;
+  /** Whether the classified effect is reversible. */
+  riskReversible: Scalars['Boolean']['output'];
+  /** Descriptor schema version; always 'crowdy.agent-tool/1'. */
+  schemaVersion: Scalars['String']['output'];
+  /** Canonical JSON array of complete scope requirement objects, including argument-path conditions. */
+  scopeRequirementsJson: Scalars['String']['output'];
+  /** Required agent scopes; ordinary platform checks still apply. */
+  scopes: Array<Scalars['String']['output']>;
+  /** Safe model/user-facing summary. */
+  summary: Scalars['String']['output'];
+  /** Hard tool execution timeout in milliseconds. */
+  timeoutMs: Scalars['Int']['output'];
+  /** Semantic descriptor version. */
+  version: Scalars['String']['output'];
+  /** Provider-safe exact wire name including major version. */
+  wireName: Scalars['String']['output'];
+};
+
+/** Effective mode/policy-filtered descriptor registry. */
+export type AgentToolDescriptorSet = {
+  __typename?: 'AgentToolDescriptorSet';
+  /** Digest pinned by the current session. */
+  registryDigest: Scalars['String']['output'];
+  /** Only tools implemented and currently allowed for this session; omitted contract tools are not executable. */
+  tools: Array<AgentToolDescriptor>;
+};
+
+/** Typed tool event. JSON fields are descriptor-versioned and validated against the descriptor returned by crowdyStudioAgentToolDescriptors; they are never arbitrary executor input. */
+export type AgentToolEvent = AgentEventBase & {
+  __typename?: 'AgentToolEvent';
+  /** Opaque approval capability, or null. */
+  approvalGrant: Maybe<Scalars['String']['output']>;
+  /** Canonical argument hash, or null. */
+  argumentHash: Maybe<Scalars['String']['output']>;
+  /** Descriptor-schema-validated, redaction-safe canonical JSON arguments for browser dispatch; null otherwise. */
+  argumentsJson: Maybe<Scalars['String']['output']>;
+  /** Fenced browser epoch for a dispatch, or null. */
+  clientEpoch: Maybe<Scalars['BigInt']['output']>;
+  /** Authoritative dispatch context version, or null. */
+  contextVersion: Maybe<Scalars['String']['output']>;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Dispatch deadline, or null for non-dispatch events. */
+  deadline: Maybe<Scalars['DateTime']['output']>;
+  /** Pinned descriptor digest, or null before dispatch. */
+  descriptorDigest: Maybe<Scalars['String']['output']>;
+  /** Safe typed terminal tool error, or null. */
+  error: Maybe<AgentError>;
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** SERVER or BROWSER executor, or null. */
+  executor: Maybe<CrowdyStudioAgentToolExecutor>;
+  /** Executor idempotency key, or null. */
+  idempotencyKey: Maybe<Scalars['String']['output']>;
+  /** Complete browser invocation on TOOL_DISPATCHED; null for other events. */
+  invocation: Maybe<AgentToolInvocation>;
+  /** Bound lease UUID, or null. */
+  leaseId: Maybe<Scalars['String']['output']>;
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Complete typed terminal result when available. */
+  result: Maybe<AgentToolResultEnvelope>;
+  /** Descriptor-schema-validated, redaction-safe canonical JSON result summary; source and prompt bodies are omitted. */
+  resultJson: Maybe<Scalars['String']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Safe bounded human summary, or null. */
+  safeSummary: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Required durable tool status for this event. */
+  status: CrowdyStudioAgentToolCallStatus;
+  /** Stable tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+  /** Logical versioned tool name. */
+  toolName: Scalars['String']['output'];
+  /** Pinned semantic tool version. */
+  toolVersion: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Complete crowdy.tool-call/1 browser invocation envelope. Arguments are canonical descriptor-validated JSON. */
+export type AgentToolInvocation = {
+  __typename?: 'AgentToolInvocation';
+  /** Opaque consumed approval capability when required. */
+  approvalGrant: Maybe<Scalars['String']['output']>;
+  /** Canonical argument/context hash. */
+  argumentHash: Scalars['String']['output'];
+  /** Canonical JSON object matching the descriptor input schema. */
+  argumentsJson: Scalars['String']['output'];
+  /** Required matching browser epoch. */
+  clientEpoch: Maybe<Scalars['BigInt']['output']>;
+  /** Authoritative context version. */
+  contextVersion: Scalars['String']['output'];
+  /** Hard browser execution deadline. */
+  deadline: Scalars['DateTime']['output'];
+  /** Pinned canonical descriptor digest. */
+  descriptorDigest: Scalars['String']['output'];
+  /** Server-issued executor idempotency key when required. */
+  idempotencyKey: Maybe<Scalars['String']['output']>;
+  /** Required lease UUID when the tool scopes demand one. */
+  leaseId: Maybe<Scalars['String']['output']>;
+  /** Logical tool name. */
+  name: Scalars['String']['output'];
+  /** Invocation version; always 'crowdy.tool-call/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Owning run UUID. */
+  runId: Scalars['String']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Execute-once tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+  /** Pinned semantic tool version. */
+  version: Scalars['String']['output'];
+};
+
+/** Complete crowdy.tool-result/1 terminal browser result with exact timing and safe typed error. */
+export type AgentToolResultEnvelope = {
+  __typename?: 'AgentToolResultEnvelope';
+  /** Safe typed error for non-success, or null. */
+  error: Maybe<AgentError>;
+  /** Browser execution finish timestamp. */
+  finishedAt: Scalars['DateTime']['output'];
+  /** Context version observed by the browser executor. */
+  observedContextVersion: Scalars['String']['output'];
+  /** Canonical descriptor-validated output JSON, or null. */
+  outputJson: Maybe<Scalars['String']['output']>;
+  /** Result version; always 'crowdy.tool-result/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Browser execution start timestamp. */
+  startedAt: Scalars['DateTime']['output'];
+  /** Terminal result status. */
+  status: CrowdyStudioAgentToolResultStatus;
+  /** Matching tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+};
+
+/** Complete crowdy.tool-result/1 browser result envelope. */
+export type AgentToolResultEnvelopeInput = {
+  /** Stable AGENT_* error code for non-success; omit for SUCCEEDED. */
+  errorCode?: InputMaybe<Scalars['String']['input']>;
+  /** Safe bounded error message for non-success; no stack, source, prompt, headers, or tokens. */
+  errorMessage?: InputMaybe<Scalars['String']['input']>;
+  /** Whether policy permits deliberate retry; defaults false. */
+  errorRetryable?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Browser execution finish timestamp. */
+  finishedAt: Scalars['DateTime']['input'];
+  /** Exact authoritative context version observed by the host. */
+  observedContextVersion: Scalars['String']['input'];
+  /** Output JSON object required for SUCCEEDED and validated against the pinned descriptor; omit for failures. Maximum 128 KiB. */
+  outputJson?: InputMaybe<Scalars['String']['input']>;
+  /** Result protocol version; must be 'crowdy.tool-result/1'. */
+  protocolVersion: Scalars['String']['input'];
+  /** Browser execution start timestamp. */
+  startedAt: Scalars['DateTime']['input'];
+  /** Known terminal executor outcome. */
+  status: CrowdyStudioAgentToolResultStatus;
+  /** Dispatched tool call UUID. */
+  toolCallId: Scalars['String']['input'];
+};
+
+/** Submit one idempotent terminal browser result for the matching owner/session epoch. */
+export type AgentToolResultInput = {
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Complete descriptor-validated crowdy.tool-result/1 result envelope. */
+  result: AgentToolResultEnvelopeInput;
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
 };
 
 /** A publishable application (game/experience) owned by an organization. Its discoverability is controlled by visibility and its lifecycle by status. */
@@ -647,6 +1438,16 @@ export type AssignGroupToGridInput = {
   permissionKeys: Array<Scalars['String']['input']>;
 };
 
+/** Attach one interactive browser, incrementing the monotonic epoch and fencing old tabs, leases, approvals, and browser dispatches. */
+export type AttachAgentClientInput = {
+  /** Optional stable browser instance UUID. Omit to use the single-interactive-client session cursor. */
+  clientInstanceId?: InputMaybe<Scalars['String']['input']>;
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
+};
+
 /** Whether the account has a password set. Does not reveal whether the email is registered. */
 export type AuthMethodResult = {
   __typename?: 'AuthMethodResult';
@@ -745,6 +1546,18 @@ export type BuddyLiveRates = {
   serverId: Scalars['String']['output'];
   /** Timestamp of the heartbeat these rates came from. */
   updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Immediately request cancellation of one active session run. */
+export type CancelAgentRunInput = {
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Active run UUID to cancel; omit to cancel the session currentRun. */
+  runId?: InputMaybe<Scalars['String']['input']>;
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
 };
 
 /** Input for publishing a message to a channel. Delivered to every active member of the channel (regardless of location), not chunk-routed. The sender must have the channel send_messages permission. */
@@ -1920,6 +2733,24 @@ export type CreateActorInput = {
   uuid: Scalars['String']['input'];
 };
 
+/** Create an owner/app-scoped session with pinned human mode, project/grid context, model, policy, registry, and provider disclosure choice. */
+export type CreateAgentSessionInput = {
+  /** App tenant; the bearer credential must be an unexpired app token for this exact app and the caller must hold use_studio_agent. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional selected grid context; selection grants no authority. */
+  gridId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Human-selected initial ASK, BUILD, or PLAY mode. */
+  mode: CrowdyStudioAgentMode;
+  /** Optional private owner project UUID. Required for BUILD; cross-owner/app ids return the same not-found shape. */
+  projectId?: InputMaybe<Scalars['String']['input']>;
+  /** Optional explicit first-use consent for selected private project source. Omit/false for message-only or metadata-only sessions. */
+  providerDataConsent?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional requested allowlisted model. Omit for the platform default. */
+  requestedModel?: InputMaybe<Scalars['String']['input']>;
+};
+
 /** Input payload for creating a new app. */
 export type CreateAppInput = {
   /** Optional short plain-text description for listings. */
@@ -2252,6 +3083,621 @@ export type CreateUserAppStateInput = {
   state?: InputMaybe<Scalars['String']['input']>;
 };
 
+/** Single-use human decision lifecycle for one canonical argument hash. */
+export enum CrowdyStudioAgentApprovalStatus {
+  /** Used exactly once for dispatch/execution. */
+  Consumed = 'CONSUMED',
+  /** Human denied the exact call. */
+  Denied = 'DENIED',
+  /** TTL elapsed before use. */
+  Expired = 'EXPIRED',
+  /** Granted but not yet atomically consumed. */
+  Granted = 'GRANTED',
+  /** Awaiting the matching attached human. */
+  Pending = 'PENDING',
+  /** Invalidated by context or policy change. */
+  Revoked = 'REVOKED'
+}
+
+/** Typed union of ordered, replayable version 1 session facts. Delivery is at-least-once; seq and eventId support deduplication. */
+export type CrowdyStudioAgentEvent = AgentApprovalEvent | AgentBudgetEvent | AgentCheckpointEvent | AgentLeaseEvent | AgentLifecycleEvent | AgentMessageEvent | AgentRunEvent | AgentToolEvent;
+
+/** Version 1 durable ordered event vocabulary. */
+export enum CrowdyStudioAgentEventType {
+  /** Approval was atomically consumed once. */
+  ApprovalConsumed = 'APPROVAL_CONSUMED',
+  /** Human denied the pending exact approval. */
+  ApprovalDenied = 'APPROVAL_DENIED',
+  /** Approval TTL elapsed. */
+  ApprovalExpired = 'APPROVAL_EXPIRED',
+  /** Human granted the pending exact approval. */
+  ApprovalGranted = 'APPROVAL_GRANTED',
+  /** Exact argument-hash human approval was requested. */
+  ApprovalRequested = 'APPROVAL_REQUESTED',
+  /** Bounded coalesced assistant text; final message is canonical. */
+  AssistantChunk = 'ASSISTANT_CHUNK',
+  /** Canonical final assistant response. */
+  AssistantMessage = 'ASSISTANT_MESSAGE',
+  /** Provider reservation/accounting state changed. */
+  BudgetUpdated = 'BUDGET_UPDATED',
+  /** Immutable private pre-image checkpoint was created. */
+  CheckpointCreated = 'CHECKPOINT_CREATED',
+  /** Checkpoint restored as a new project revision. */
+  CheckpointRestored = 'CHECKPOINT_RESTORED',
+  /** A new monotonic client epoch attached and fenced older tabs. */
+  ClientAttached = 'CLIENT_ATTACHED',
+  /** The interactive browser detached. */
+  ClientDetached = 'CLIENT_DETACHED',
+  /** Authoritative context changed and old authority was fenced. */
+  ContextChanged = 'CONTEXT_CHANGED',
+  /** Lease reached its expiry. */
+  LeaseExpired = 'LEASE_EXPIRED',
+  /** Workspace or Play lease was granted. */
+  LeaseGranted = 'LEASE_GRANTED',
+  /** Lease was immediately revoked. */
+  LeaseRevoked = 'LEASE_REVOKED',
+  /** Human selected ASK, BUILD, or PLAY. */
+  ModeSelected = 'MODE_SELECTED',
+  /** Human cancellation became durable. */
+  RunCancelled = 'RUN_CANCELLED',
+  /** Run reached a typed terminal failure. */
+  RunFailed = 'RUN_FAILED',
+  /** Active run entered a recoverable pause. */
+  RunPaused = 'RUN_PAUSED',
+  /** Safety preemption became durable. */
+  RunPreempted = 'RUN_PREEMPTED',
+  /** A leased worker started the serialized run. */
+  RunStarted = 'RUN_STARTED',
+  /** Run completed successfully. */
+  RunSucceeded = 'RUN_SUCCEEDED',
+  /** Session closed and retention cleanup began. */
+  SessionClosed = 'SESSION_CLOSED',
+  /** Session and pinned policy/registry context were created. */
+  SessionCreated = 'SESSION_CREATED',
+  /** Human paused the session and revoked capabilities. */
+  SessionPaused = 'SESSION_PAUSED',
+  /** Human explicitly resumed after context revalidation. */
+  SessionResumed = 'SESSION_RESUMED',
+  /** Human denied the exact proposal. */
+  ToolDenied = 'TOOL_DENIED',
+  /** Typed browser call was durably dispatched once. */
+  ToolDispatched = 'TOOL_DISPATCHED',
+  /** Typed executor reported a safe terminal failure. */
+  ToolFailed = 'TOOL_FAILED',
+  /** Effect may have occurred; no blind retry is allowed. */
+  ToolOutcomeUnknown = 'TOOL_OUTCOME_UNKNOWN',
+  /** Provider proposal passed exact name and input validation. */
+  ToolProposed = 'TOOL_PROPOSED',
+  /** Typed executor output passed validation. */
+  ToolSucceeded = 'TOOL_SUCCEEDED',
+  /** Recorded tool deadline elapsed. */
+  ToolTimedOut = 'TOOL_TIMED_OUT',
+  /** Redacted bounded human message accepted for one run. */
+  UserMessage = 'USER_MESSAGE'
+}
+
+/** Funding seam for Agentic Studio. The development pilot is platform-funded and never debits a player wallet; payer/rate-card fields are reserved for a later contract. */
+export type CrowdyStudioAgentFundingPolicy = {
+  __typename?: 'CrowdyStudioAgentFundingPolicy';
+  /** Funding mode. The pilot always returns 'PLATFORM_FUNDED'. */
+  billingMode: Scalars['String']['output'];
+  /** Future payer kind. The pilot always returns 'PLATFORM'. */
+  payerKind: Scalars['String']['output'];
+  /** Future rate-card UUID; null throughout the platform-funded pilot. */
+  rateCardId: Maybe<Scalars['String']['output']>;
+  /** Whether this policy can debit a player wallet. Always false in the pilot. */
+  walletDebitEnabled: Scalars['Boolean']['output'];
+};
+
+/** Lifecycle of a short-lived workspace or Play capability. */
+export enum CrowdyStudioAgentLeaseStatus {
+  /** Usable until its exact expiry/context changes. */
+  Active = 'ACTIVE',
+  /** Expired and cannot be renewed by the model. */
+  Expired = 'EXPIRED',
+  /** Explicitly or automatically revoked. */
+  Revoked = 'REVOKED'
+}
+
+/** Capability family represented by a lease. */
+export enum CrowdyStudioAgentLeaseType {
+  /** Visible human-granted browser control lease, capped at ten minutes. */
+  Play = 'PLAY',
+  /** Thirty-second server-acquired lease bound to project revision and target write scopes. */
+  Workspace = 'WORKSPACE'
+}
+
+/** Human-selected authority mode. The model cannot change modes or elevate itself. */
+export enum CrowdyStudioAgentMode {
+  /** Read-only assistance and proposals. */
+  Ask = 'ASK',
+  /** Routine project edits and draft tests under ordinary write/run permissions. */
+  Build = 'BUILD',
+  /** Game control only while a human-granted, scoped, time-boxed control lease is active. */
+  Play = 'PLAY'
+}
+
+/** Per-player UTC-day cumulative limits plus player/app concurrency ceilings. */
+export type CrowdyStudioAgentPlayerDayLimits = {
+  __typename?: 'CrowdyStudioAgentPlayerDayLimits';
+  /** Maximum draft compile submissions per player per UTC day. */
+  compiles: Scalars['Int']['output'];
+  /** Maximum concurrent agent runs across the app. */
+  concurrentRunsPerApp: Scalars['Int']['output'];
+  /** Maximum concurrent sessions for one player. */
+  concurrentSessions: Scalars['Int']['output'];
+  /** Maximum input tokens per player per UTC day. */
+  inputTokens: Scalars['BigInt']['output'];
+  /** Maximum output tokens per player per UTC day. */
+  outputTokens: Scalars['BigInt']['output'];
+  /** Maximum provider cost per player per UTC day, in micro-USD. */
+  providerCostMicrousd: Scalars['BigInt']['output'];
+  /** Maximum provider requests per player per UTC day. */
+  providerRequests: Scalars['Int']['output'];
+  /** Maximum reasoning tokens per player per UTC day. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Maximum tool calls per player per UTC day. */
+  toolCalls: Scalars['Int']['output'];
+  /** Maximum total provider tokens per player per UTC day. */
+  totalTokens: Scalars['BigInt']['output'];
+};
+
+/** Patch for per-player/day and app concurrency limits. Omitted values stay unchanged; supplied values are clamped down to platform ceilings. */
+export type CrowdyStudioAgentPlayerDayLimitsInput = {
+  /** Maximum draft compile submissions per player per UTC day. */
+  compiles?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum concurrent Agentic Studio runs across the app. */
+  concurrentRunsPerApp?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum concurrent Agentic Studio sessions for one player. */
+  concurrentSessions?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum input tokens per player per UTC day. */
+  inputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum output tokens per player per UTC day. */
+  outputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider cost per player per UTC day, in micro-USD. */
+  providerCostMicrousd?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider requests per player per UTC day. */
+  providerRequests?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum reasoning tokens per player per UTC day. */
+  reasoningTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum tool calls per player per UTC day. */
+  toolCalls?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum total provider tokens per player per UTC day. */
+  totalTokens?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** Management's Agentic Crowdy Studio policy publication. EFFECTIVE values are the fail-closed platform/app intersection; an app can never widen platform models, tools, modes, risks, budgets, retention, or privacy. Game API runtime enforcement still requires a fresh validated replica. */
+export type CrowdyStudioAgentPolicy = {
+  __typename?: 'CrowdyStudioAgentPolicy';
+  /** Exact model ids allowed by this layer/intersection. Empty denies all models. */
+  allowedModelIds: Array<Scalars['String']['output']>;
+  /** Human-selectable modes allowed by this layer/intersection. */
+  allowedModes: Array<CrowdyStudioAgentMode>;
+  /** Allowed tool risk classes. Required approval classes remain approval-gated even when listed. */
+  allowedRiskClasses: Array<CrowdyStudioAgentRiskClass>;
+  /** Exact crowdy.agent-tools/1 logical tool names allowed by this layer/intersection. Empty denies all tools. */
+  allowedToolNames: Array<Scalars['String']['output']>;
+  /** App id for APP/EFFECTIVE policy; null for platform policy. */
+  appId: Maybe<Scalars['BigInt']['output']>;
+  /** App revision used by an EFFECTIVE projection; zero means missing app policy. */
+  appRevision: Scalars['BigInt']['output'];
+  /** Policy row creation time or projection time. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Safe operator/app reason text; never includes provider bodies or secrets. */
+  disableReason: Maybe<Scalars['String']['output']>;
+  /** Stable disable/kill reason code (for example AGENT_OPERATOR_KILLED); null when enabled. */
+  disableReasonCode: Maybe<Scalars['String']['output']>;
+  /** Composite Management revision, formatted p<platform revision>:a<app revision>. Game API pins it only after a successful fresh replica pull. */
+  effectiveRevision: Scalars['String']['output'];
+  /** Whether this Management policy layer/publication is enabled. EFFECTIVE is true only when all required layers are enabled and no kill applies; it does not attest that Game API has synchronized. */
+  enabled: Scalars['Boolean']['output'];
+  /** Platform-funded pilot/future billing seam. */
+  funding: CrowdyStudioAgentFundingPolicy;
+  /** Layer kill state. EFFECTIVE is true when platform, operator-app, or app kill is active. */
+  killSwitch: Scalars['Boolean']['output'];
+  /** PLATFORM, APP, or EFFECTIVE projection. */
+  kind: CrowdyStudioAgentPolicyKind;
+  /** Operator-only per-app kill state. App policy mutations cannot clear or alter it. */
+  operatorKillSwitch: Scalars['Boolean']['output'];
+  /** Platform revision used by an EFFECTIVE projection. */
+  platformRevision: Scalars['BigInt']['output'];
+  /** Per-player UTC-day and concurrency hard limits. */
+  playerDayLimits: CrowdyStudioAgentPlayerDayLimits;
+  /** Locked provider privacy and private-source controls. */
+  privacy: CrowdyStudioAgentPrivacyPolicy;
+  /** Redacted-data retention limits. */
+  retention: CrowdyStudioAgentRetentionPolicy;
+  /** Revision of this stored layer; zero means no app row exists yet. */
+  revision: Scalars['BigInt']['output'];
+  /** Per-session hard limits. */
+  sessionLimits: CrowdyStudioAgentSessionLimits;
+  /** Per-turn hard limits. */
+  turnLimits: CrowdyStudioAgentTurnLimits;
+  /** Last policy change time or projection time. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Whether a policy object is the platform row, app row, or intersection. */
+export enum CrowdyStudioAgentPolicyKind {
+  /** App-owned policy after write-time platform clamping. */
+  App = 'APP',
+  /** Fail-closed intersection of platform, operator-kill, and app policy. */
+  Effective = 'EFFECTIVE',
+  /** Operator-owned platform policy and hard ceilings. */
+  Platform = 'PLATFORM'
+}
+
+/** Provider privacy posture. ZDR and collection denial are locked true; provider request/response bodies are never persisted. */
+export type CrowdyStudioAgentPrivacyPolicy = {
+  __typename?: 'CrowdyStudioAgentPrivacyPolicy';
+  /** Whether selected private project source may be sent after the separate human disclosure/consent gate. */
+  allowPrivateSource: Scalars['Boolean']['output'];
+  /** Whether routed-provider data collection must be denied. Always true in v1. */
+  denyDataCollection: Scalars['Boolean']['output'];
+  /** Whether provider HTTP request/response bodies can be persisted. Always false in v1. */
+  persistProviderBodies: Scalars['Boolean']['output'];
+  /** Whether first-use human disclosure/consent is required for private source. Always true in v1. */
+  requirePrivateSourceConsent: Scalars['Boolean']['output'];
+  /** Whether Zero Data Retention is required. Always true in v1. */
+  requireZdr: Scalars['Boolean']['output'];
+};
+
+/** App/platform privacy patch. It can disable private-source sharing; ZDR, collection denial, first-use consent, and provider-body non-persistence are locked. */
+export type CrowdyStudioAgentPrivacyPolicyInput = {
+  /** Allow selected private source only after the separate human disclosure/consent gate. */
+  allowPrivateSource?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** Retention ceilings for redacted Agentic Studio data. Provider wire bodies, headers, private reasoning, and individual token deltas always have zero retention and are absent. */
+export type CrowdyStudioAgentRetentionPolicy = {
+  __typename?: 'CrowdyStudioAgentRetentionPolicy';
+  /** Coalesced assistant chunk retention in hours (0-24). */
+  assistantChunkHours: Scalars['Int']['output'];
+  /** Detailed game observation/browser tool-result retention in hours (0-24). */
+  detailedContextHours: Scalars['Int']['output'];
+  /** Final messages, redacted events, and checkpoint retention after close in days (0-30). */
+  sessionDataDays: Scalars['Int']['output'];
+  /** Provider generation/token/cost and kill metadata retention in days (1-90). */
+  usageDays: Scalars['Int']['output'];
+};
+
+/** Retention patch. Values may only shorten the platform policy and the hard pilot maxima. */
+export type CrowdyStudioAgentRetentionPolicyInput = {
+  /** Coalesced assistant chunk retention in hours (0-24). */
+  assistantChunkHours?: InputMaybe<Scalars['Int']['input']>;
+  /** Detailed observation/browser result retention in hours (0-24). */
+  detailedContextHours?: InputMaybe<Scalars['Int']['input']>;
+  /** Final message/redacted event retention after close in days (0-30). */
+  sessionDataDays?: InputMaybe<Scalars['Int']['input']>;
+  /** Generation/token/cost/kill metadata retention in days (1-90). */
+  usageDays?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Tool risk classes from crowdy.agent-tools/1. App policy may only remove platform-allowed classes; locked approval requirements still apply. */
+export enum CrowdyStudioAgentRiskClass {
+  /** Destructive action; exact human approval required. */
+  Destructive = 'DESTRUCTIVE',
+  /** Money or commerce action; exact human approval required. */
+  Economic = 'ECONOMIC',
+  /** Irreversible action; exact human approval required. */
+  Irreversible = 'IRREVERSIBLE',
+  /** Owner/app-scoped reads with redaction. */
+  ReadOnly = 'READ_ONLY',
+  /** Reversible Build writes with revision checks and checkpoints. */
+  RoutineWrite = 'ROUTINE_WRITE',
+  /** Trust, consent, or capability change; exact human approval required. */
+  TrustConsent = 'TRUST_CONSENT',
+  /** Routine Play actions requiring a visible human-granted lease. */
+  WorldControl = 'WORLD_CONTROL'
+}
+
+/** Serialized durable state of one accepted human message and its provider/tool loop. */
+export enum CrowdyStudioAgentRunStatus {
+  /** Terminal human cancellation. */
+  Cancelled = 'CANCELLED',
+  /** Terminal typed failure; inspect errorCode. */
+  Failed = 'FAILED',
+  /** Recoverable human pause; resume revalidates context. */
+  Paused = 'PAUSED',
+  /** Terminal safety preemption caused by context/control loss. */
+  Preempted = 'PREEMPTED',
+  /** Durably accepted and awaiting a worker claim. */
+  Queued = 'QUEUED',
+  /** Owned by one leased orchestrator worker. */
+  Running = 'RUNNING',
+  /** Finished with a canonical assistant message. */
+  Succeeded = 'SUCCEEDED',
+  /** Waiting for a short-lived exact human decision. */
+  WaitingForApproval = 'WAITING_FOR_APPROVAL',
+  /** Waiting for one matching browser tool result. */
+  WaitingForTool = 'WAITING_FOR_TOOL'
+}
+
+/** Per-session cumulative provider/tool/compile limits and the serialized-run concurrency ceiling. */
+export type CrowdyStudioAgentSessionLimits = {
+  __typename?: 'CrowdyStudioAgentSessionLimits';
+  /** Maximum draft compile submissions in one session. */
+  compiles: Scalars['Int']['output'];
+  /** Maximum concurrent non-terminal runs in a session. The v1 contract requires one. */
+  concurrentRuns: Scalars['Int']['output'];
+  /** Maximum input tokens in one session. */
+  inputTokens: Scalars['BigInt']['output'];
+  /** Maximum output tokens in one session. */
+  outputTokens: Scalars['BigInt']['output'];
+  /** Maximum provider cost in one session, in micro-USD. */
+  providerCostMicrousd: Scalars['BigInt']['output'];
+  /** Maximum provider requests in one session. */
+  providerRequests: Scalars['Int']['output'];
+  /** Maximum reasoning tokens in one session. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Maximum tool calls in one session. */
+  toolCalls: Scalars['Int']['output'];
+  /** Maximum total provider tokens in one session. */
+  totalTokens: Scalars['BigInt']['output'];
+};
+
+/** Patch for per-session limits. Omitted values stay unchanged; supplied values are clamped down to platform ceilings. */
+export type CrowdyStudioAgentSessionLimitsInput = {
+  /** Maximum draft compile submissions in one session. */
+  compiles?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum concurrent non-terminal runs in one session. */
+  concurrentRuns?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum input tokens in one session; positive decimal string. */
+  inputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum output tokens in one session; positive decimal string. */
+  outputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider cost in one session, in positive micro-USD. */
+  providerCostMicrousd?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider requests in one session. */
+  providerRequests?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum reasoning tokens in one session; positive decimal string. */
+  reasoningTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum tool calls in one session. */
+  toolCalls?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum total provider tokens in one session. */
+  totalTokens?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** Durable lifecycle state of an owner/app agent session. */
+export enum CrowdyStudioAgentSessionStatus {
+  /** Accepts human control mutations and one run. */
+  Active = 'ACTIVE',
+  /** Permanently closed, all capabilities revoked, and retention cleanup scheduled. */
+  Closed = 'CLOSED',
+  /** Stopped by the human or reconnect flow; explicit context-revalidating resume is required. */
+  Paused = 'PAUSED',
+  /** Disabled by authoritative policy or platform control and cannot resume. */
+  Revoked = 'REVOKED'
+}
+
+/** Durable state of one descriptor-pinned serialized tool proposal. */
+export enum CrowdyStudioAgentToolCallStatus {
+  /** Cancelled before a known successful effect. */
+  Cancelled = 'CANCELLED',
+  /** Human denied the exact proposal. */
+  Denied = 'DENIED',
+  /** Durably sent to the matching attached browser epoch. */
+  Dispatched = 'DISPATCHED',
+  /** Typed executor failure. */
+  Failed = 'FAILED',
+  /** An effect may have occurred; it is never retried blindly and requires human inspection. */
+  OutcomeUnknown = 'OUTCOME_UNKNOWN',
+  /** Validated and recorded, not yet dispatched. */
+  Proposed = 'PROPOSED',
+  /** Executor began the typed operation. */
+  Running = 'RUNNING',
+  /** Fenced by an epoch or context change. */
+  Stale = 'STALE',
+  /** Typed output validated successfully. */
+  Succeeded = 'SUCCEEDED',
+  /** The recorded tool deadline elapsed. */
+  TimedOut = 'TIMED_OUT',
+  /** Blocked on the exact argument-hash approval. */
+  WaitingForApproval = 'WAITING_FOR_APPROVAL'
+}
+
+/** Trusted boundary that executes a typed tool. */
+export enum CrowdyStudioAgentToolExecutor {
+  /** The attached CrowdyJS host executes once after epoch/context/lease validation. */
+  Browser = 'BROWSER',
+  /** Game API invokes an owner-scoped domain service; never shell or arbitrary GraphQL. */
+  Server = 'SERVER'
+}
+
+/** Terminal result reported once by a browser executor. */
+export enum CrowdyStudioAgentToolResultStatus {
+  /** Known cancelled before successful effect. */
+  Cancelled = 'CANCELLED',
+  /** Effect is known failed with a typed safe error. */
+  Failed = 'FAILED',
+  /** Effect may have happened; server fails the run without retrying. */
+  OutcomeUnknown = 'OUTCOME_UNKNOWN',
+  /** Effect and typed output are known successful. */
+  Succeeded = 'SUCCEEDED',
+  /** Browser deadline elapsed. */
+  TimedOut = 'TIMED_OUT'
+}
+
+/** Server-classified effect risk; app policy may only tighten it. */
+export enum CrowdyStudioAgentToolRisk {
+  /** Possible data/path loss; exact human approval required. */
+  Destructive = 'DESTRUCTIVE',
+  /** Moves or commits value; exact human approval required. */
+  Economic = 'ECONOMIC',
+  /** Cannot be safely undone; exact human approval required. */
+  Irreversible = 'IRREVERSIBLE',
+  /** No canonical state mutation. */
+  ReadOnly = 'READ_ONLY',
+  /** Reversible expected-revision write with checkpointing. */
+  RoutineWrite = 'ROUTINE_WRITE',
+  /** Changes trust or consent; exact human approval required. */
+  TrustConsent = 'TRUST_CONSENT',
+  /** Routine game control requiring an explicit Play scope. */
+  WorldControl = 'WORLD_CONTROL'
+}
+
+/** Per-turn provider/tool/compile limits. Token and cost values are exact decimal BigInt strings; cost is in micro-US-dollars. */
+export type CrowdyStudioAgentTurnLimits = {
+  __typename?: 'CrowdyStudioAgentTurnLimits';
+  /** Maximum draft compile submissions in one turn. */
+  compiles: Scalars['Int']['output'];
+  /** Maximum concurrent provider requests in one turn. The v1 orchestrator still serializes calls. */
+  concurrentProviderRequests: Scalars['Int']['output'];
+  /** Maximum input tokens in one turn. */
+  inputTokens: Scalars['BigInt']['output'];
+  /** Maximum output tokens in one turn. */
+  outputTokens: Scalars['BigInt']['output'];
+  /** Maximum reserved/reconciled provider cost per turn, in micro-USD. */
+  providerCostMicrousd: Scalars['BigInt']['output'];
+  /** Maximum provider requests in one accepted turn. */
+  providerRequests: Scalars['Int']['output'];
+  /** Maximum reasoning tokens in one turn. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Maximum tool calls in one turn. */
+  toolCalls: Scalars['Int']['output'];
+  /** Maximum serialized provider/tool rounds in one turn. */
+  toolRounds: Scalars['Int']['output'];
+  /** Maximum total provider tokens in one turn. */
+  totalTokens: Scalars['BigInt']['output'];
+  /** Maximum turn wall-clock duration in milliseconds. */
+  wallClockMs: Scalars['Int']['output'];
+};
+
+/** Patch for per-turn limits. Omitted values stay unchanged; supplied values must be positive and are clamped down to platform ceilings. */
+export type CrowdyStudioAgentTurnLimitsInput = {
+  /** Maximum draft compile submissions in one turn. */
+  compiles?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum concurrent provider requests in one turn. */
+  concurrentProviderRequests?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum input tokens in one turn; positive decimal string. */
+  inputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum output tokens in one turn; positive decimal string. */
+  outputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider cost in one turn, in positive micro-USD. */
+  providerCostMicrousd?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider requests in one turn; positive integer. */
+  providerRequests?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum reasoning tokens in one turn; positive decimal string. */
+  reasoningTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum tool calls in one turn; positive integer. */
+  toolCalls?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum serialized provider/tool rounds in one turn. */
+  toolRounds?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum total provider tokens in one turn; positive decimal string. */
+  totalTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum wall-clock duration of one turn in milliseconds. */
+  wallClockMs?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Sanitized app usage read model: newest exact records plus an aggregate for the requested window. */
+export type CrowdyStudioAgentUsagePage = {
+  __typename?: 'CrowdyStudioAgentUsagePage';
+  /** Newest usage records, bounded by the requested limit. */
+  records: Array<CrowdyStudioAgentUsageRecord>;
+  /** Inclusive start of the usage window. */
+  since: Scalars['DateTime']['output'];
+  /** Aggregate over the full requested time window, not only returned records. */
+  summary: CrowdyStudioAgentUsageSummary;
+  /** Exclusive end of the usage window. */
+  until: Scalars['DateTime']['output'];
+};
+
+/** One sanitized, platform-funded provider usage record. It contains exact OpenRouter token/cost dimensions but no key, prompt, headers, request/response body, private reasoning, or wallet debit. */
+export type CrowdyStudioAgentUsageRecord = {
+  __typename?: 'CrowdyStudioAgentUsageRecord';
+  /** RECONCILED or RESERVATION_CONSUMED when terminal usage was unavailable. */
+  accountingStatus: Scalars['String']['output'];
+  /** App whose agent run consumed usage. */
+  appId: Scalars['BigInt']['output'];
+  /** Pinned app policy revision. */
+  appPolicyRevision: Scalars['BigInt']['output'];
+  /** Funding mode; 'PLATFORM_FUNDED' in the pilot. */
+  billingMode: Scalars['String']['output'];
+  /** OpenRouter cached token count. */
+  cachedTokens: Scalars['BigInt']['output'];
+  /** Draft compile submissions in the run. */
+  compileCount: Scalars['BigInt']['output'];
+  /** OpenRouter completion token count. */
+  completionTokens: Scalars['BigInt']['output'];
+  /** True: provider data collection was denied. */
+  dataCollectionDenied: Scalars['Boolean']['output'];
+  /** When Management API accepted the usage record. */
+  ingestedAt: Scalars['DateTime']['output'];
+  /** Provider-native cached token count. */
+  nativeCachedTokens: Scalars['BigInt']['output'];
+  /** Provider-native completion token count. */
+  nativeCompletionTokens: Scalars['BigInt']['output'];
+  /** Provider-native prompt token count. */
+  nativePromptTokens: Scalars['BigInt']['output'];
+  /** Provider-native reasoning token count. */
+  nativeReasoningTokens: Scalars['BigInt']['output'];
+  /** When the provider usage occurred. */
+  occurredAt: Scalars['DateTime']['output'];
+  /** Payer kind; 'PLATFORM' in the pilot. */
+  payerKind: Scalars['String']['output'];
+  /** Pinned platform policy revision. */
+  platformPolicyRevision: Scalars['BigInt']['output'];
+  /** OpenRouter prompt token count. */
+  promptTokens: Scalars['BigInt']['output'];
+  /** Provider name; 'openrouter' for the v1 pilot. */
+  provider: Scalars['String']['output'];
+  /** Exact provider-reported OpenRouter cost in decimal USD (up to 18 fractional digits). */
+  providerCostUsd: Scalars['String']['output'];
+  /** Opaque OpenRouter generation id; null when terminal provider accounting was unavailable. */
+  providerGenerationId: Maybe<Scalars['String']['output']>;
+  /** OpenRouter reasoning token count. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Provider request count. */
+  requestCount: Scalars['BigInt']['output'];
+  /** Worst-case cost reserved before provider contact, in micro-USD. */
+  reservedCostMicrousd: Scalars['BigInt']['output'];
+  /** Resolved allowlisted model id. */
+  resolvedModelId: Scalars['String']['output'];
+  /** Game-local Agentic Studio run UUID. */
+  runId: Scalars['String']['output'];
+  /** Game-local Agentic Studio session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Validated tool calls in the run. */
+  toolCalls: Scalars['BigInt']['output'];
+  /** Serialized provider/tool rounds in the run. */
+  toolRounds: Scalars['BigInt']['output'];
+  /** Exact upstream inference cost in decimal USD when reported. */
+  upstreamInferenceCostUsd: Maybe<Scalars['String']['output']>;
+  /** Game API-issued immutable usage UUID. */
+  usageId: Scalars['String']['output'];
+  /** Player whose isolated budget consumed usage. */
+  userId: Scalars['BigInt']['output'];
+  /** Accepted run wall-clock duration in milliseconds, from durable run start to finish. */
+  wallClockMs: Scalars['BigInt']['output'];
+  /** True: OpenRouter ZDR was enforced. */
+  zdrEnforced: Scalars['Boolean']['output'];
+};
+
+/** Exact aggregate over the returned app/window usage records. Decimal USD remains a string to preserve precision. */
+export type CrowdyStudioAgentUsageSummary = {
+  __typename?: 'CrowdyStudioAgentUsageSummary';
+  /** Cached tokens. */
+  cachedTokens: Scalars['BigInt']['output'];
+  /** Draft compiles. */
+  compileCount: Scalars['BigInt']['output'];
+  /** Completion tokens. */
+  completionTokens: Scalars['BigInt']['output'];
+  /** Prompt tokens. */
+  promptTokens: Scalars['BigInt']['output'];
+  /** Exact summed provider cost in decimal USD. */
+  providerCostUsd: Scalars['String']['output'];
+  /** Reasoning tokens. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Provider requests. */
+  requestCount: Scalars['BigInt']['output'];
+  /** Tool calls. */
+  toolCalls: Scalars['BigInt']['output'];
+  /** Tool rounds. */
+  toolRounds: Scalars['BigInt']['output'];
+  /** Summed accepted-run wall-clock milliseconds. */
+  wallClockMs: Scalars['BigInt']['output'];
+};
+
 /** A Crowdy Studio-curated app-scoped common file at its current immutable published version. Unlike personal source, this content is intentionally readable by app-scoped players. */
 export type CrowdyStudioCommonFile = {
   __typename?: 'CrowdyStudioCommonFile';
@@ -2455,6 +3901,22 @@ export enum CrowdyStudioTarget {
   /** Server-target Rust that can run only after the caller separately passes current grid ownership and write_server_code deployment checks. */
   Server = 'SERVER'
 }
+
+/** Approve or reject one exact pending tool call by its displayed argument hash. */
+export type DecideAgentToolInput = {
+  /** Exact sha256 hash displayed by APPROVAL_REQUESTED; substitutions and stale contexts fail. */
+  argumentHash: Scalars['String']['input'];
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Optional bounded human rejection reason. */
+  reason?: InputMaybe<Scalars['String']['input']>;
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
+  /** Pending tool call UUID. */
+  toolCallId: Scalars['String']['input'];
+};
 
 /** Define an app feature key. */
 export type DefineAppFeatureInput = {
@@ -3511,6 +4973,24 @@ export type GmTypeSchema = {
   typeName: Scalars['String']['output'];
 };
 
+/** Human-grant a visible, scoped Play lease for the current grid/entity/host revision. */
+export type GrantAgentLeaseInput = {
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Current player-controlled entity identifier, capped at 128 characters. */
+  controlledEntityId: Scalars['String']['input'];
+  /** Human-selected duration in seconds (1–600); no silent renewal. */
+  durationSeconds: Scalars['Int']['input'];
+  /** Exact current host capability revision. */
+  hostCapabilityRevision: Scalars['String']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Explicit unique Play scopes: observe, locomotion, interact, craft, combat, communicate, or travel. */
+  scopes: Array<Scalars['String']['input']>;
+  /** Owner/app PLAY session UUID. */
+  sessionId: Scalars['String']['input'];
+};
+
 /** Input for granting a user access to an app, optionally on a specific tier. */
 export type GrantAppAccessInput = {
   /** Numeric id of the app to grant access to. The caller must hold manage_access_tiers on this app. */
@@ -4092,11 +5572,15 @@ export type Mutation = {
   consentGridClientMod: Scalars['Boolean']['output'];
   /** Operator only (is_operator). Patches the platform compute ceilings: omitted fields stay unchanged, an explicit null clears that override (game-api falls back to env/default), a value (> 0) sets it. SIDE EFFECTS: fans a replica notify out to every game-api so the new ceilings clamp computeSetPolicy within ~30 seconds without a restart, and writes an audit entry. Lowering a ceiling does not shrink already-stored per-app policies; it rejects future computeSetPolicy values above the new ceiling. Returns the updated ceilings row. */
   cpSetComputePlatformCeilings: CpComputePlatformCeilings;
+  /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment, sanitized audit event, and transactional Game API policy notify. Runtime preemption depends on Game API pulling and enforcing the fresh envelope; releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  cpSetCrowdyStudioAgentAppKill: CrowdyStudioAgentPolicy;
+  /** Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, revision increments, a sanitized append-only audit event is written, and transactional replica notifications fan out to every app with Agentic Studio policy. Runtime enforcement changes only when Game API pulls and validates the fresh crowdy.studio-agent-policy/1 envelope; Game API must fail closed if it is missing, malformed, or stale. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  cpSetCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
   /** Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user. */
   createAccessTier: AppAccessTier;
   /** Creates an actor (a player’s presence/instance in an app world) owned by the authenticated user and returns the persisted row (including the server-set `createdAt`). Requires a valid game token. If `input.avatarId` is set it must reference an avatar the caller owns (throws Unauthorized otherwise). `input.uuid` must be the 32-character ASCII actor id used on the UDP wire (NOT a hyphenated RFC-4122 UUID). */
   createActor: Actor;
-  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting full runtime permissions, and notifies the game API. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=DRAFT unless overridden in the input. */
+  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=DRAFT unless overridden in the input. */
   createApp: App;
   /** Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar". */
   createAvatar: Avatar;
@@ -4128,6 +5612,36 @@ export type Mutation = {
   createTeam: Group;
   /** Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs). */
   createTeamRole: GroupRole;
+  /** Monotonically persist one attached epoch’s highest contiguous applied event sequence. Requires the app-scoped owner, exact current epoch, and idempotency key; stale epochs and gaps fail with stable errors. */
+  crowdyStudioAgentAcknowledgeEvents: AgentEventAcknowledgement;
+  /** Human-grant one unexpired pending tool call by exact argument hash. The server revalidates epoch, context, policy, lease, descriptor, permissions, and project revision before single-use consumption. Requires the app-scoped owner and idempotency key; approval never creates missing authority. */
+  crowdyStudioAgentApproveTool: AgentApproval;
+  /** Attach one interactive browser, allocate a new monotonic epoch, return that client instance’s replay cursor, and fence every older epoch plus its leases, approvals, and pending browser tools. Requires the app-scoped owner, use_studio_agent, and idempotency key; reconnect never replays an effect. */
+  crowdyStudioAgentAttachClient: AgentClientAttachment;
+  /** Immediately make one owner/session run durably CANCELLED, revoke pending capabilities/tools, and abort its local provider stream when present. Requires the app-scoped owner, current epoch, exact run id, and idempotency key; cancellation never silently resumes. */
+  crowdyStudioAgentCancelRun: AgentRun;
+  /** Permanently close one owner/app session, preempt its active run, revoke leases/approvals/dispatches, detach clients, and start the 30-day agent-data cleanup clock without deleting canonical projects/runtime state. Requires the current epoch and idempotency key. */
+  crowdyStudioAgentCloseSession: AgentSession;
+  /** Create a durable owner/app Agentic Crowdy Studio session and pin mode, private project/grid context, allowlisted model, exact Management platform/app revisions, and the mode/tool/risk-filtered registry digest. Requires an app-scoped token, use_studio_agent, a fresh non-killed policy, and an idempotency key; optional consent applies only to private source. */
+  crowdyStudioAgentCreateSession: AgentSession;
+  /** Human-grant a visible PLAY lease with explicit scopes, controlled entity, host capability revision, epoch, context, and 1–600 second duration. Requires PLAY mode, selected grid, app-scoped owner, use_studio_agent, effective policy, and idempotency key; the model cannot grant or renew it. */
+  crowdyStudioAgentGrantLease: AgentLease;
+  /** Record the attached client heartbeat. CrowdyJS sends this every two seconds; PLAY is server-stale after five seconds or at the hard lease expiry. Requires the current app-scoped owner/epoch and an idempotency key. */
+  crowdyStudioAgentHeartbeat: AgentHeartbeat;
+  /** Immediately pause the session and active run, revoke leases/approvals/pending dispatches, and persist SESSION_PAUSED. This human safety action does not wait for provider progress; requires the app-scoped owner, current epoch, and idempotency key. */
+  crowdyStudioAgentPause: AgentSession;
+  /** Human-deny one unexpired pending exact tool call, terminally denying the call and failing its run without any effect. Requires the app-scoped owner, current epoch, matching hash, and idempotency key. */
+  crowdyStudioAgentRejectTool: AgentApproval;
+  /** Explicitly resume a paused session after fresh policy/context validation and requeue its paused run. PLAY never restores an old lease. Requires the app-scoped owner, current epoch, use_studio_agent, and idempotency key. */
+  crowdyStudioAgentResume: AgentSession;
+  /** Immediately and idempotently revoke one owner/session lease. This safety action remains available without waiting for provider/model progress and does not require approval; requires an app-scoped owner, current epoch, and idempotency key. */
+  crowdyStudioAgentRevokeLease: AgentLease;
+  /** Append one bounded, redacted human message and queue exactly one serialized provider/tool run. Requires an active app-scoped owner, use_studio_agent, current epoch, fresh Management policy, complete budget reservation, and idempotency key; private source remains separately policy/consent gated. */
+  crowdyStudioAgentSendMessage: AgentRun;
+  /** Human-select ASK, BUILD, or PLAY. Changing mode preempts any active run, revokes leases/approvals, advances context, and never preserves Play control. Requires the current client epoch, app-scoped owner, use_studio_agent, effective mode policy, and idempotency key. */
+  crowdyStudioAgentSetMode: AgentSession;
+  /** Submit one idempotent terminal result for a matching BROWSER dispatch. The server fences old epochs/context, validates output against the pinned descriptor, redacts before persistence/provider continuation, and never retries OUTCOME_UNKNOWN. Requires an app-scoped owner and idempotency key. */
+  crowdyStudioAgentToolResult: AgentToolCall;
   /** Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
   crowdyStudioCommonPublish: CrowdyStudioCommonFile;
   /** Create or optimistically update one private personal-library source file. Requires an app-scoped token; ownership is always the authenticated player and cannot be delegated. Safe source paths, 64-KiB content, revision, and configurable bounded aggregate library storage are enforced atomically. */
@@ -4404,6 +5918,8 @@ export type Mutation = {
   setChannelMemberRoles: GroupMember;
   /** Set who may create channels in an app and the default membership policy for new channels. Requires app-admin ('manage_apps'). Affects future channel creation only, not existing channels. */
   setChannelPolicy: AppGroupPolicy;
+  /** Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. Model/tool/mode/risk lists are intersected with platform allowlists and every numeric/retention value is clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision, appends a sanitized audit event, and transactionally notifies Game API to pull crowdy.studio-agent-policy/1. Runtime enforcement changes only after Game API obtains and validates the fresh replica. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  setCrowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
   /** Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api. */
   setEarlyAccessOverride: User;
   /** Operator only (is_operator). Toggles deletion protection on an environment (when enabled, purgeEnvironment is blocked) and writes an audit entry. Returns true on success. */
@@ -4686,6 +6202,16 @@ export type MutationCpSetComputePlatformCeilingsArgs = {
 };
 
 
+export type MutationCpSetCrowdyStudioAgentAppKillArgs = {
+  input: SetCrowdyStudioAgentOperatorAppKillInput;
+};
+
+
+export type MutationCpSetCrowdyStudioAgentPlatformPolicyArgs = {
+  input: SetCrowdyStudioAgentPlatformPolicyInput;
+};
+
+
 export type MutationCreateAccessTierArgs = {
   input: CreateAccessTierInput;
 };
@@ -4774,6 +6300,81 @@ export type MutationCreateTeamArgs = {
 
 export type MutationCreateTeamRoleArgs = {
   input: CreateGroupRoleInput;
+};
+
+
+export type MutationCrowdyStudioAgentAcknowledgeEventsArgs = {
+  input: AcknowledgeAgentEventsInput;
+};
+
+
+export type MutationCrowdyStudioAgentApproveToolArgs = {
+  input: DecideAgentToolInput;
+};
+
+
+export type MutationCrowdyStudioAgentAttachClientArgs = {
+  input: AttachAgentClientInput;
+};
+
+
+export type MutationCrowdyStudioAgentCancelRunArgs = {
+  input: CancelAgentRunInput;
+};
+
+
+export type MutationCrowdyStudioAgentCloseSessionArgs = {
+  input: AgentSessionControlInput;
+};
+
+
+export type MutationCrowdyStudioAgentCreateSessionArgs = {
+  input: CreateAgentSessionInput;
+};
+
+
+export type MutationCrowdyStudioAgentGrantLeaseArgs = {
+  input: GrantAgentLeaseInput;
+};
+
+
+export type MutationCrowdyStudioAgentHeartbeatArgs = {
+  input: AgentHeartbeatInput;
+};
+
+
+export type MutationCrowdyStudioAgentPauseArgs = {
+  input: AgentSessionControlInput;
+};
+
+
+export type MutationCrowdyStudioAgentRejectToolArgs = {
+  input: DecideAgentToolInput;
+};
+
+
+export type MutationCrowdyStudioAgentResumeArgs = {
+  input: AgentSessionControlInput;
+};
+
+
+export type MutationCrowdyStudioAgentRevokeLeaseArgs = {
+  input: RevokeAgentLeaseInput;
+};
+
+
+export type MutationCrowdyStudioAgentSendMessageArgs = {
+  input: SendAgentMessageInput;
+};
+
+
+export type MutationCrowdyStudioAgentSetModeArgs = {
+  input: SetAgentModeInput;
+};
+
+
+export type MutationCrowdyStudioAgentToolResultArgs = {
+  input: AgentToolResultInput;
 };
 
 
@@ -5525,6 +7126,11 @@ export type MutationSetChannelMemberRolesArgs = {
 
 export type MutationSetChannelPolicyArgs = {
   input: SetChannelPolicyInput;
+};
+
+
+export type MutationSetCrowdyStudioAgentPolicyArgs = {
+  input: SetCrowdyStudioAgentAppPolicyInput;
 };
 
 
@@ -7050,6 +8656,8 @@ export type Query = {
   cpChangeOrders: CpChangeOrdersPage;
   /** Operator only (is_operator). The stored platform ceilings for the per-app WASM compute policy (the nine knobs computeSetPolicy clamps against). Null fields mean no operator override: game-api uses its COMPUTE_PLATFORM_MAX_* env var, then the code default. Read-only. */
   cpComputePlatformCeilings: CpComputePlatformCeilings;
+  /** Operator only (is_operator or is_super_admin). Read the platform Agentic Studio enablement, global emergency kill, model/tool/mode/risk allowlists, budget ceilings, retention/privacy policy, pilot funding seam, timestamps, and revision. No provider credential or request body is stored or returned. */
+  cpCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
   /** Operator only (is_operator). Lists environment-delivered secret metadata (names/kinds only, never plaintext) injected into the tenant runtime, optionally filtered by environment. */
   cpEnvSecrets: Array<CpEnvSecretRow>;
   /** Operator only (is_operator). Operator view of one environment by slug, across any org. Null when not found. */
@@ -7066,6 +8674,22 @@ export type Query = {
   cpUnreleasedGameApiTags: CpUnreleasedGameApiTagsPage;
   /** Operator only (is_operator). Per-minute usage summary for any environment by slug (operator equivalent of environmentUsageSummary, not org-scoped). Read-only. */
   cpUsageSummary: CpUsageSummary;
+  /** Return every effective TURN, SESSION, and PLAYER_DAY request/token/reasoning/cost/tool-round/wall-clock/tool-call/compile dimension with reserved, consumed, and non-negative remaining values. The pilot is platform-funded and this owner/app query never debits a wallet. */
+  crowdyStudioAgentBudget: AgentBudget;
+  /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, exact model/tool/mode/risk intersections, minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
+  crowdyStudioAgentEffectivePolicy: CrowdyStudioAgentPolicy;
+  /** Replay ordered durable typed events with seq greater than afterSeq. Requires the app-scoped owner and use_studio_agent. Use this query to fill subscription gaps; results are ascending, at-least-once safe, default 100, maximum 200. */
+  crowdyStudioAgentHistory: AgentEventConnection;
+  /** Read the app-owned Agentic Crowdy Studio policy row, or a disabled/killed deny-all projection when no row exists. Requires 'view_compute_diagnostics' on the app. This is configuration only: use crowdyStudioAgentEffectivePolicy to see platform clamp and kill precedence. No provider key, prompt, source, header, request/response body, payer reference, or other secret is exposed. */
+  crowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
+  /** Return one durable Agentic Crowdy Studio session plus its active run, leases, and pending approval. Requires an unexpired app-scoped token, use_studio_agent, and exact session owner/app visibility; missing and foreign ids return AGENT_SESSION_NOT_FOUND. */
+  crowdyStudioAgentSession: AgentSession;
+  /** List the authenticated owner’s Agentic Crowdy Studio sessions in one app using an opaque cursor, newest first. Requires an app-scoped token for appId and use_studio_agent. The bounded page defaults to 20 and allows 1–50. */
+  crowdyStudioAgentSessions: AgentSessionConnection;
+  /** Return only implemented tools allowed by the current mode plus the exact non-stale Management model/tool/risk policy. Each entry includes the complete canonical crowdy.agent-tool/1 descriptor and digest. Requires the app-scoped owner and use_studio_agent. */
+  crowdyStudioAgentToolDescriptors: AgentToolDescriptorSet;
+  /** Read the app's sanitized platform-funded Agentic Studio usage over a bounded time window. Requires 'view_compute_diagnostics'. Returns exact OpenRouter prompt/completion/reasoning/cache/native token and decimal-USD cost dimensions, request/tool/compile/wall counts, and pinned policy revisions. It never returns prompts, source, private reasoning, headers, provider bodies, credentials, payer references, or wallet data; pilot usage never debits a player wallet. */
+  crowdyStudioAgentUsage: CrowdyStudioAgentUsagePage;
   /** List the current immutable versions of published Crowdy Studio-curated common files for one app. Requires an app-scoped token for appId; unlike private player source, this catalog content is intentionally readable by players in that app. Results are bounded and may be filtered by target. */
   crowdyStudioCommonFiles: Array<CrowdyStudioCommonFile>;
   /** List the authenticated player’s private reusable Crowdy Studio source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or Crowdy Studio operators. The bounded result defaults to 50. */
@@ -7697,6 +9321,53 @@ export type QueryCpSecretsArgs = {
 export type QueryCpUsageSummaryArgs = {
   environmentSlug: Scalars['String']['input'];
   since: Scalars['DateTime']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentBudgetArgs = {
+  sessionId: Scalars['String']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentEffectivePolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentHistoryArgs = {
+  afterSeq?: InputMaybe<Scalars['BigInt']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  sessionId: Scalars['String']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentSessionArgs = {
+  sessionId: Scalars['String']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentSessionsArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  appId: Scalars['BigInt']['input'];
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCrowdyStudioAgentToolDescriptorsArgs = {
+  sessionId: Scalars['String']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentUsageArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  since?: InputMaybe<Scalars['DateTime']['input']>;
+  until?: InputMaybe<Scalars['DateTime']['input']>;
 };
 
 
@@ -8456,6 +10127,20 @@ export type ResumeEnvironmentInput = {
   slug: Scalars['String']['input'];
 };
 
+/** Immediately revoke one visible lease. */
+export type RevokeAgentLeaseInput = {
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Lease UUID to revoke. */
+  leaseId: Scalars['String']['input'];
+  /** Optional stable revoke reason; defaults to HUMAN_STOP. */
+  reason?: InputMaybe<Scalars['String']['input']>;
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
+};
+
 /** Revoke a user's direct grants on a grid (deletes from the grid_user_direct_grants input table). */
 export type RevokeGridPermissionsInput = {
   /** The app (tenant) that owns the grid. */
@@ -8811,6 +10496,18 @@ export type SellerPayoutBalance = {
   reservedCents: Scalars['Int']['output'];
 };
 
+/** Accept one bounded human message and queue exactly one serialized run. */
+export type SendAgentMessageInput = {
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Human intent text, normalized, secret-scanned, and capped at 16 KiB. It never grants authority. */
+  content: Scalars['String']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Owner/app active session UUID. */
+  sessionId: Scalars['String']['input'];
+};
+
 /** Notification received when the server sends a custom event. Received via the udpNotifications subscription. */
 export type ServerEventNotification = {
   __typename?: 'ServerEventNotification';
@@ -8930,6 +10627,18 @@ export type ServiceQuota = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** Select a new human mode and preempt old authority. */
+export type SetAgentModeInput = {
+  /** Current attached client epoch. */
+  clientEpoch: Scalars['BigInt']['input'];
+  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** New human-selected mode; the model cannot call this mutation. */
+  mode: CrowdyStudioAgentMode;
+  /** Owner/app session UUID. */
+  sessionId: Scalars['String']['input'];
+};
+
 /** Register/update an app's OAuth client settings for the portal handoff (requires manage_apps on the app). */
 export type SetAppClientSettingsInput = {
   appId: Scalars['BigInt']['input'];
@@ -9034,6 +10743,88 @@ export type SetContainerPropertyInput = {
   valueJson: Scalars['String']['input'];
   /** The value type being written (must match the property definition). */
   valueType: Scalars['String']['input'];
+};
+
+/** Patch an app's Agentic Studio policy. Requires manage_compute. Omitted fields stay unchanged; all supplied authority and limits are clamped to platform policy. */
+export type SetCrowdyStudioAgentAppPolicyInput = {
+  /** Replacement exact model allowlist (max 64). App values are intersected with the platform allowlist. */
+  allowedModelIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Replacement mode allowlist; app values are intersected with platform modes. */
+  allowedModes?: InputMaybe<Array<CrowdyStudioAgentMode>>;
+  /** Replacement risk-class allowlist; app values are intersected with platform classes. */
+  allowedRiskClasses?: InputMaybe<Array<CrowdyStudioAgentRiskClass>>;
+  /** Replacement exact logical tool-name allowlist (max 256). App values are intersected with platform tools. */
+  allowedToolNames?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** App whose policy is changed. */
+  appId: Scalars['BigInt']['input'];
+  /** Enable or disable this policy layer. */
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional optimistic revision. Use 0 when creating; a mismatch fails AGENT_POLICY_REVISION_CONFLICT. */
+  expectedRevision?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Set or clear this layer kill switch. Kill always wins over enablement. */
+  killSwitch?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional per-player/day and concurrency limit patch. */
+  playerDayLimits?: InputMaybe<CrowdyStudioAgentPlayerDayLimitsInput>;
+  /** Optional private-source sharing patch; first-use consent remains locked on. */
+  privacy?: InputMaybe<CrowdyStudioAgentPrivacyPolicyInput>;
+  /** Optional retention patch. */
+  retention?: InputMaybe<CrowdyStudioAgentRetentionPolicyInput>;
+  /** Optional per-session limit patch. */
+  sessionLimits?: InputMaybe<CrowdyStudioAgentSessionLimitsInput>;
+  /** Optional per-turn limit patch. */
+  turnLimits?: InputMaybe<CrowdyStudioAgentTurnLimitsInput>;
+};
+
+/** Operator-only per-app emergency kill. App managers cannot clear or override this state. */
+export type SetCrowdyStudioAgentOperatorAppKillInput = {
+  /** App to kill or release. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional optimistic app-policy revision. */
+  expectedRevision?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** True to kill immediately; false to release the operator kill. */
+  killed: Scalars['Boolean']['input'];
+  /** Safe reason text (max 256); no secrets or provider bodies. */
+  reason?: InputMaybe<Scalars['String']['input']>;
+  /** Stable reason code (max 64); defaults to AGENT_OPERATOR_KILLED. */
+  reasonCode?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Operator-only platform policy patch. Omitted values stay unchanged; hard v1 privacy and retention maxima still apply. */
+export type SetCrowdyStudioAgentPlatformPolicyInput = {
+  /** Replacement exact model allowlist (max 64). App values are intersected with the platform allowlist. */
+  allowedModelIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Replacement mode allowlist; app values are intersected with platform modes. */
+  allowedModes?: InputMaybe<Array<CrowdyStudioAgentMode>>;
+  /** Replacement risk-class allowlist; app values are intersected with platform classes. */
+  allowedRiskClasses?: InputMaybe<Array<CrowdyStudioAgentRiskClass>>;
+  /** Replacement exact logical tool-name allowlist (max 256). App values are intersected with platform tools. */
+  allowedToolNames?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Enable or disable this policy layer. */
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional optimistic platform revision. */
+  expectedRevision?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Safe operator-facing kill reason (max 256); no secrets or provider bodies. */
+  killReason?: InputMaybe<Scalars['String']['input']>;
+  /** Stable kill reason code (max 64); used only while killSwitch is true. */
+  killReasonCode?: InputMaybe<Scalars['String']['input']>;
+  /** Set or clear this layer kill switch. Kill always wins over enablement. */
+  killSwitch?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional per-player/day and concurrency limit patch. */
+  playerDayLimits?: InputMaybe<CrowdyStudioAgentPlayerDayLimitsInput>;
+  /** Optional private-source sharing patch; first-use consent remains locked on. */
+  privacy?: InputMaybe<CrowdyStudioAgentPrivacyPolicyInput>;
+  /** Optional retention patch. */
+  retention?: InputMaybe<CrowdyStudioAgentRetentionPolicyInput>;
+  /** Optional per-session limit patch. */
+  sessionLimits?: InputMaybe<CrowdyStudioAgentSessionLimitsInput>;
+  /** Optional per-turn limit patch. */
+  turnLimits?: InputMaybe<CrowdyStudioAgentTurnLimitsInput>;
 };
 
 /** Optimistically archive or restore one caller-owned personal-library file. */
@@ -9291,10 +11082,19 @@ export type SocialLoginStartInput = {
 
 export type Subscription = {
   __typename?: 'Subscription';
+  /** Replay durable events with seq greater than afterSeq, then tail newly committed facts using database replay plus in-memory wakeups. Requires an app-scoped owner, use_studio_agent, and exact current clientEpoch. Delivery is ordered and at-least-once: deduplicate eventId/seq, fill gaps with crowdyStudioAgentHistory, and acknowledge only contiguous sequences. */
+  crowdyStudioAgentEvents: CrowdyStudioAgentEvent;
   /** Push notification whenever a container in the app changes: an invoke mutated it, a direct gameModelSetProperty wrote it, or it was created/deleted. Metadata only (containerId, typeName, changedKeys — no property values); pull the visibility-filtered state with gameModelContainerState on receipt. Post-commit and best-effort (a dropped event costs one missed pull, never correctness) — durable reads remain the source of truth. Optional typeName/sessionId filters narrow delivery. Fans out across all API replicas. Requires a valid token. Replaces interval polling with pull-on-push. */
   gameModelContainerChanged: GmContainerChange;
   /** Realtime downlink from the game server: spatial notifications and responses, GenericErrorResponse (errors from your sends, correlated by sequenceNumber), and RealtimeConnectionEvent (lifecycle/setup failures). Requires a bearer game token AND an appId-scoped connection — the appId is read from the graphql-transport-ws connection (game tokens are app-agnostic and one UDP socket is shared across apps, so an app-agnostic subscription is rejected with a RealtimeConnectionEvent code APP_ID_REQUIRED, and a missing/invalid token with AUTH_REQUIRED). On subscribe, opens a UDP proxy session if none exists (binds to the least-loaded game server); open/transport failures are delivered as RealtimeConnectionEvent (code UDP_PROXY_CONNECTION_FAILED) and then the stream ends. Only this app’s spatial fan-out is delivered; appId-less control frames always pass. Subscribe before/while sending so async results are not missed. Unsubscribing stops delivery only — it does NOT close the UDP session; call disconnectUdpProxy (or rely on the server inactivity timeout) to release it. */
   udpNotifications: Maybe<UdpNotification>;
+};
+
+
+export type SubscriptionCrowdyStudioAgentEventsArgs = {
+  afterSeq: Scalars['BigInt']['input'];
+  clientEpoch: Scalars['BigInt']['input'];
+  sessionId: Scalars['String']['input'];
 };
 
 
@@ -11471,6 +13271,254 @@ export type CrowdyStudioProjectImportFileMutationVariables = Exact<{
 
 export type CrowdyStudioProjectImportFileMutation = { __typename?: 'Mutation', crowdyStudioProjectImportFile: { __typename?: 'CrowdyStudioProject', projectId: string, appId: string, ownerUserId: string, gridId: string | null, name: string, description: string | null, serverModuleName: string | null, clientModuleName: string | null, pairingPreference: CrowdyStudioPairingPreference, sdkVersion: string, abiVersion: number, revision: string, archived: boolean, archivedAt: string | null, fileCount: number, totalBytes: string, createdAt: string, updatedAt: string, files: Array<{ __typename?: 'CrowdyStudioProjectFile', target: CrowdyStudioTarget, path: string, content: string, revision: string, provenance: CrowdyStudioFileProvenance, provenanceLibraryFileId: string | null, provenanceLibraryRevision: string | null, provenanceCommonVersionId: string | null, createdAt: string, updatedAt: string }> } };
 
+export type CrowdyAgentErrorFieldsFragment = { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null };
+
+export type CrowdyAgentRunFieldsFragment = { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean };
+
+export type CrowdyAgentLeaseFieldsFragment = { __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null };
+
+export type CrowdyAgentApprovalFieldsFragment = { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean };
+
+export type CrowdyAgentSessionFieldsFragment = { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null };
+
+export type CrowdyAgentBudgetFieldsFragment = { __typename?: 'AgentBudget', resetAt: string | null, platformFunded: boolean, payer: string, dimensions: Array<{ __typename?: 'AgentBudgetDimension', name: string, scope: string, limit: string, reserved: string, consumed: string, remaining: string, unit: string }> };
+
+export type CrowdyAgentToolDescriptorFieldsFragment = { __typename?: 'AgentToolDescriptor', schemaVersion: string, name: string, wireName: string, version: string, summary: string, executor: CrowdyStudioAgentToolExecutor, modes: Array<CrowdyStudioAgentMode>, risk: CrowdyStudioAgentToolRisk, riskEffects: Array<string>, riskReversible: boolean, scopes: Array<string>, scopeRequirementsJson: string, approvalRequired: boolean, approvalPolicy: string, approvalReasons: Array<string>, approvalMaxTtlSeconds: number, idempotencyClass: string, idempotencyKeyScope: string, timeoutMs: number, inputSchemaJson: string, outputSchemaJson: string, inputRedactionJson: string, outputRedactionJson: string, maxPersistedBytes: number, descriptorJson: string, descriptorDigest: string };
+
+type CrowdyAgentEventBaseFields_AgentApprovalEvent_Fragment = { __typename?: 'AgentApprovalEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string };
+
+type CrowdyAgentEventBaseFields_AgentBudgetEvent_Fragment = { __typename?: 'AgentBudgetEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string };
+
+type CrowdyAgentEventBaseFields_AgentCheckpointEvent_Fragment = { __typename?: 'AgentCheckpointEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string };
+
+type CrowdyAgentEventBaseFields_AgentLeaseEvent_Fragment = { __typename?: 'AgentLeaseEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string };
+
+type CrowdyAgentEventBaseFields_AgentLifecycleEvent_Fragment = { __typename?: 'AgentLifecycleEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string };
+
+type CrowdyAgentEventBaseFields_AgentMessageEvent_Fragment = { __typename?: 'AgentMessageEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string };
+
+type CrowdyAgentEventBaseFields_AgentRunEvent_Fragment = { __typename?: 'AgentRunEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string };
+
+type CrowdyAgentEventBaseFields_AgentToolEvent_Fragment = { __typename?: 'AgentToolEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string };
+
+export type CrowdyAgentEventBaseFieldsFragment =
+  | CrowdyAgentEventBaseFields_AgentApprovalEvent_Fragment
+  | CrowdyAgentEventBaseFields_AgentBudgetEvent_Fragment
+  | CrowdyAgentEventBaseFields_AgentCheckpointEvent_Fragment
+  | CrowdyAgentEventBaseFields_AgentLeaseEvent_Fragment
+  | CrowdyAgentEventBaseFields_AgentLifecycleEvent_Fragment
+  | CrowdyAgentEventBaseFields_AgentMessageEvent_Fragment
+  | CrowdyAgentEventBaseFields_AgentRunEvent_Fragment
+  | CrowdyAgentEventBaseFields_AgentToolEvent_Fragment
+;
+
+type CrowdyAgentEventFields_AgentApprovalEvent_Fragment = { __typename: 'AgentApprovalEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, approvalEventId: string, approvalToolCallId: string, approvalArgumentHash: string, approvalStatus: CrowdyStudioAgentApprovalStatus, approvalSafeSummary: string, approvalReasons: Array<string>, approvalExpiresAt: string };
+
+type CrowdyAgentEventFields_AgentBudgetEvent_Fragment = { __typename: 'AgentBudgetEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, budgetSnapshot: { __typename?: 'AgentBudget', resetAt: string | null, platformFunded: boolean, payer: string, dimensions: Array<{ __typename?: 'AgentBudgetDimension', name: string, scope: string, limit: string, reserved: string, consumed: string, remaining: string, unit: string }> } };
+
+type CrowdyAgentEventFields_AgentCheckpointEvent_Fragment = { __typename: 'AgentCheckpointEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, checkpointEventId: string, checkpointProjectRevision: string, checkpointContentHash: string, checkpointReason: string, checkpointRestoredAt: string | null, checkpointFiles: Array<{ __typename?: 'AgentCheckpointFile', target: string, path: string, contentHash: string, byteLength: number }> };
+
+type CrowdyAgentEventFields_AgentLeaseEvent_Fragment = { __typename: 'AgentLeaseEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, leaseEventId: string, leaseKind: CrowdyStudioAgentLeaseType, leaseStatus: CrowdyStudioAgentLeaseStatus, leaseClientEpoch: string, leaseScopes: Array<string>, leaseHolder: string, leaseContextVersion: string, leaseControlledEntityId: string | null, leaseHostCapabilityRevision: string | null, leaseExpectedProjectRevision: string | null, leaseGrantedAt: string, leaseExpiresAt: string, leaseReason: string | null };
+
+type CrowdyAgentEventFields_AgentLifecycleEvent_Fragment = { __typename: 'AgentLifecycleEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, lifecycleMode: CrowdyStudioAgentMode | null, lifecycleClientEpoch: string | null, lifecycleReplayAfterSeq: string | null, lifecycleReason: string | null, lifecycleContextVersion: string | null };
+
+type CrowdyAgentEventFields_AgentMessageEvent_Fragment = { __typename: 'AgentMessageEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, messageEventId: string, messageRole: string, messageContent: string };
+
+type CrowdyAgentEventFields_AgentRunEvent_Fragment = { __typename: 'AgentRunEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, runStatus: CrowdyStudioAgentRunStatus, runCode: string | null, runReason: string | null, runError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null };
+
+type CrowdyAgentEventFields_AgentToolEvent_Fragment = { __typename: 'AgentToolEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, toolEventCallId: string, toolEventName: string, toolEventVersion: string, toolStatus: CrowdyStudioAgentToolCallStatus, toolSafeSummary: string | null, toolDescriptorDigest: string | null, toolArgumentHash: string | null, toolExecutor: CrowdyStudioAgentToolExecutor | null, toolContextVersion: string | null, toolClientEpoch: string | null, toolArgumentsJson: string | null, toolLeaseId: string | null, toolApprovalGrant: string | null, toolIdempotencyKey: string | null, toolResultJson: string | null, toolDeadline: string | null, toolInvocation: { __typename?: 'AgentToolInvocation', protocolVersion: string, sessionId: string, runId: string, toolCallId: string, name: string, version: string, descriptorDigest: string, argumentsJson: string, argumentHash: string, contextVersion: string, clientEpoch: string | null, leaseId: string | null, approvalGrant: string | null, idempotencyKey: string | null, deadline: string } | null, toolResult: { __typename?: 'AgentToolResultEnvelope', protocolVersion: string, toolCallId: string, status: CrowdyStudioAgentToolResultStatus, outputJson: string | null, observedContextVersion: string, startedAt: string, finishedAt: string, error: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null } | null, toolError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null };
+
+export type CrowdyAgentEventFieldsFragment =
+  | CrowdyAgentEventFields_AgentApprovalEvent_Fragment
+  | CrowdyAgentEventFields_AgentBudgetEvent_Fragment
+  | CrowdyAgentEventFields_AgentCheckpointEvent_Fragment
+  | CrowdyAgentEventFields_AgentLeaseEvent_Fragment
+  | CrowdyAgentEventFields_AgentLifecycleEvent_Fragment
+  | CrowdyAgentEventFields_AgentMessageEvent_Fragment
+  | CrowdyAgentEventFields_AgentRunEvent_Fragment
+  | CrowdyAgentEventFields_AgentToolEvent_Fragment
+;
+
+export type CrowdyStudioAgentSessionQueryVariables = Exact<{
+  sessionId: Scalars['String']['input'];
+}>;
+
+
+export type CrowdyStudioAgentSessionQuery = { __typename?: 'Query', crowdyStudioAgentSession: { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null } };
+
+export type CrowdyStudioAgentSessionsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  after?: InputMaybe<Scalars['String']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type CrowdyStudioAgentSessionsQuery = { __typename?: 'Query', crowdyStudioAgentSessions: { __typename?: 'AgentSessionConnection', endCursor: string | null, hasNextPage: boolean, edges: Array<{ __typename?: 'AgentSessionEdge', cursor: string, node: { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null } }>, pageInfo: { __typename?: 'AgentPageInfo', hasNextPage: boolean, endCursor: string | null }, nodes: Array<{ __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null }> } };
+
+export type CrowdyStudioAgentHistoryQueryVariables = Exact<{
+  sessionId: Scalars['String']['input'];
+  afterSeq?: InputMaybe<Scalars['BigInt']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type CrowdyStudioAgentHistoryQuery = { __typename?: 'Query', crowdyStudioAgentHistory: { __typename?: 'AgentEventConnection', hasMore: boolean, edges: Array<{ __typename?: 'AgentEventEdge', cursor: string, node:
+        | { __typename: 'AgentApprovalEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, approvalEventId: string, approvalToolCallId: string, approvalArgumentHash: string, approvalStatus: CrowdyStudioAgentApprovalStatus, approvalSafeSummary: string, approvalReasons: Array<string>, approvalExpiresAt: string }
+        | { __typename: 'AgentBudgetEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, budgetSnapshot: { __typename?: 'AgentBudget', resetAt: string | null, platformFunded: boolean, payer: string, dimensions: Array<{ __typename?: 'AgentBudgetDimension', name: string, scope: string, limit: string, reserved: string, consumed: string, remaining: string, unit: string }> } }
+        | { __typename: 'AgentCheckpointEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, checkpointEventId: string, checkpointProjectRevision: string, checkpointContentHash: string, checkpointReason: string, checkpointRestoredAt: string | null, checkpointFiles: Array<{ __typename?: 'AgentCheckpointFile', target: string, path: string, contentHash: string, byteLength: number }> }
+        | { __typename: 'AgentLeaseEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, leaseEventId: string, leaseKind: CrowdyStudioAgentLeaseType, leaseStatus: CrowdyStudioAgentLeaseStatus, leaseClientEpoch: string, leaseScopes: Array<string>, leaseHolder: string, leaseContextVersion: string, leaseControlledEntityId: string | null, leaseHostCapabilityRevision: string | null, leaseExpectedProjectRevision: string | null, leaseGrantedAt: string, leaseExpiresAt: string, leaseReason: string | null }
+        | { __typename: 'AgentLifecycleEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, lifecycleMode: CrowdyStudioAgentMode | null, lifecycleClientEpoch: string | null, lifecycleReplayAfterSeq: string | null, lifecycleReason: string | null, lifecycleContextVersion: string | null }
+        | { __typename: 'AgentMessageEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, messageEventId: string, messageRole: string, messageContent: string }
+        | { __typename: 'AgentRunEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, runStatus: CrowdyStudioAgentRunStatus, runCode: string | null, runReason: string | null, runError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null }
+        | { __typename: 'AgentToolEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, toolEventCallId: string, toolEventName: string, toolEventVersion: string, toolStatus: CrowdyStudioAgentToolCallStatus, toolSafeSummary: string | null, toolDescriptorDigest: string | null, toolArgumentHash: string | null, toolExecutor: CrowdyStudioAgentToolExecutor | null, toolContextVersion: string | null, toolClientEpoch: string | null, toolArgumentsJson: string | null, toolLeaseId: string | null, toolApprovalGrant: string | null, toolIdempotencyKey: string | null, toolResultJson: string | null, toolDeadline: string | null, toolInvocation: { __typename?: 'AgentToolInvocation', protocolVersion: string, sessionId: string, runId: string, toolCallId: string, name: string, version: string, descriptorDigest: string, argumentsJson: string, argumentHash: string, contextVersion: string, clientEpoch: string | null, leaseId: string | null, approvalGrant: string | null, idempotencyKey: string | null, deadline: string } | null, toolResult: { __typename?: 'AgentToolResultEnvelope', protocolVersion: string, toolCallId: string, status: CrowdyStudioAgentToolResultStatus, outputJson: string | null, observedContextVersion: string, startedAt: string, finishedAt: string, error: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null } | null, toolError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null }
+       }>, pageInfo: { __typename?: 'AgentPageInfo', hasNextPage: boolean, endCursor: string | null }, events: Array<
+      | { __typename: 'AgentApprovalEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, approvalEventId: string, approvalToolCallId: string, approvalArgumentHash: string, approvalStatus: CrowdyStudioAgentApprovalStatus, approvalSafeSummary: string, approvalReasons: Array<string>, approvalExpiresAt: string }
+      | { __typename: 'AgentBudgetEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, budgetSnapshot: { __typename?: 'AgentBudget', resetAt: string | null, platformFunded: boolean, payer: string, dimensions: Array<{ __typename?: 'AgentBudgetDimension', name: string, scope: string, limit: string, reserved: string, consumed: string, remaining: string, unit: string }> } }
+      | { __typename: 'AgentCheckpointEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, checkpointEventId: string, checkpointProjectRevision: string, checkpointContentHash: string, checkpointReason: string, checkpointRestoredAt: string | null, checkpointFiles: Array<{ __typename?: 'AgentCheckpointFile', target: string, path: string, contentHash: string, byteLength: number }> }
+      | { __typename: 'AgentLeaseEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, leaseEventId: string, leaseKind: CrowdyStudioAgentLeaseType, leaseStatus: CrowdyStudioAgentLeaseStatus, leaseClientEpoch: string, leaseScopes: Array<string>, leaseHolder: string, leaseContextVersion: string, leaseControlledEntityId: string | null, leaseHostCapabilityRevision: string | null, leaseExpectedProjectRevision: string | null, leaseGrantedAt: string, leaseExpiresAt: string, leaseReason: string | null }
+      | { __typename: 'AgentLifecycleEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, lifecycleMode: CrowdyStudioAgentMode | null, lifecycleClientEpoch: string | null, lifecycleReplayAfterSeq: string | null, lifecycleReason: string | null, lifecycleContextVersion: string | null }
+      | { __typename: 'AgentMessageEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, messageEventId: string, messageRole: string, messageContent: string }
+      | { __typename: 'AgentRunEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, runStatus: CrowdyStudioAgentRunStatus, runCode: string | null, runReason: string | null, runError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null }
+      | { __typename: 'AgentToolEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, toolEventCallId: string, toolEventName: string, toolEventVersion: string, toolStatus: CrowdyStudioAgentToolCallStatus, toolSafeSummary: string | null, toolDescriptorDigest: string | null, toolArgumentHash: string | null, toolExecutor: CrowdyStudioAgentToolExecutor | null, toolContextVersion: string | null, toolClientEpoch: string | null, toolArgumentsJson: string | null, toolLeaseId: string | null, toolApprovalGrant: string | null, toolIdempotencyKey: string | null, toolResultJson: string | null, toolDeadline: string | null, toolInvocation: { __typename?: 'AgentToolInvocation', protocolVersion: string, sessionId: string, runId: string, toolCallId: string, name: string, version: string, descriptorDigest: string, argumentsJson: string, argumentHash: string, contextVersion: string, clientEpoch: string | null, leaseId: string | null, approvalGrant: string | null, idempotencyKey: string | null, deadline: string } | null, toolResult: { __typename?: 'AgentToolResultEnvelope', protocolVersion: string, toolCallId: string, status: CrowdyStudioAgentToolResultStatus, outputJson: string | null, observedContextVersion: string, startedAt: string, finishedAt: string, error: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null } | null, toolError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null }
+    > } };
+
+export type CrowdyStudioAgentToolDescriptorsQueryVariables = Exact<{
+  sessionId: Scalars['String']['input'];
+}>;
+
+
+export type CrowdyStudioAgentToolDescriptorsQuery = { __typename?: 'Query', crowdyStudioAgentToolDescriptors: { __typename?: 'AgentToolDescriptorSet', registryDigest: string, tools: Array<{ __typename?: 'AgentToolDescriptor', schemaVersion: string, name: string, wireName: string, version: string, summary: string, executor: CrowdyStudioAgentToolExecutor, modes: Array<CrowdyStudioAgentMode>, risk: CrowdyStudioAgentToolRisk, riskEffects: Array<string>, riskReversible: boolean, scopes: Array<string>, scopeRequirementsJson: string, approvalRequired: boolean, approvalPolicy: string, approvalReasons: Array<string>, approvalMaxTtlSeconds: number, idempotencyClass: string, idempotencyKeyScope: string, timeoutMs: number, inputSchemaJson: string, outputSchemaJson: string, inputRedactionJson: string, outputRedactionJson: string, maxPersistedBytes: number, descriptorJson: string, descriptorDigest: string }> } };
+
+export type CrowdyStudioAgentBudgetQueryVariables = Exact<{
+  sessionId: Scalars['String']['input'];
+}>;
+
+
+export type CrowdyStudioAgentBudgetQuery = { __typename?: 'Query', crowdyStudioAgentBudget: { __typename?: 'AgentBudget', resetAt: string | null, platformFunded: boolean, payer: string, dimensions: Array<{ __typename?: 'AgentBudgetDimension', name: string, scope: string, limit: string, reserved: string, consumed: string, remaining: string, unit: string }> } };
+
+export type CrowdyStudioAgentCreateSessionMutationVariables = Exact<{
+  input: CreateAgentSessionInput;
+}>;
+
+
+export type CrowdyStudioAgentCreateSessionMutation = { __typename?: 'Mutation', crowdyStudioAgentCreateSession: { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null } };
+
+export type CrowdyStudioAgentAttachClientMutationVariables = Exact<{
+  input: AttachAgentClientInput;
+}>;
+
+
+export type CrowdyStudioAgentAttachClientMutation = { __typename?: 'Mutation', crowdyStudioAgentAttachClient: { __typename?: 'AgentClientAttachment', clientEpoch: string, replayAfterSeq: string, session: { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null } } };
+
+export type CrowdyStudioAgentSetModeMutationVariables = Exact<{
+  input: SetAgentModeInput;
+}>;
+
+
+export type CrowdyStudioAgentSetModeMutation = { __typename?: 'Mutation', crowdyStudioAgentSetMode: { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null } };
+
+export type CrowdyStudioAgentAcknowledgeEventsMutationVariables = Exact<{
+  input: AcknowledgeAgentEventsInput;
+}>;
+
+
+export type CrowdyStudioAgentAcknowledgeEventsMutation = { __typename?: 'Mutation', crowdyStudioAgentAcknowledgeEvents: { __typename?: 'AgentEventAcknowledgement', throughSeq: string } };
+
+export type CrowdyStudioAgentHeartbeatMutationVariables = Exact<{
+  input: AgentHeartbeatInput;
+}>;
+
+
+export type CrowdyStudioAgentHeartbeatMutation = { __typename?: 'Mutation', crowdyStudioAgentHeartbeat: { __typename?: 'AgentHeartbeat', serverTime: string, playLeaseFreshUntil: string | null } };
+
+export type CrowdyStudioAgentSendMessageMutationVariables = Exact<{
+  input: SendAgentMessageInput;
+}>;
+
+
+export type CrowdyStudioAgentSendMessageMutation = { __typename?: 'Mutation', crowdyStudioAgentSendMessage: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } };
+
+export type CrowdyStudioAgentApproveToolMutationVariables = Exact<{
+  input: DecideAgentToolInput;
+}>;
+
+
+export type CrowdyStudioAgentApproveToolMutation = { __typename?: 'Mutation', crowdyStudioAgentApproveTool: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } };
+
+export type CrowdyStudioAgentRejectToolMutationVariables = Exact<{
+  input: DecideAgentToolInput;
+}>;
+
+
+export type CrowdyStudioAgentRejectToolMutation = { __typename?: 'Mutation', crowdyStudioAgentRejectTool: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } };
+
+export type CrowdyStudioAgentToolResultMutationVariables = Exact<{
+  input: AgentToolResultInput;
+}>;
+
+
+export type CrowdyStudioAgentToolResultMutation = { __typename?: 'Mutation', crowdyStudioAgentToolResult: { __typename?: 'AgentToolCall', toolCallId: string, toolName: string, status: CrowdyStudioAgentToolCallStatus, argumentHash: string, accepted: boolean, error: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null } };
+
+export type CrowdyStudioAgentGrantLeaseMutationVariables = Exact<{
+  input: GrantAgentLeaseInput;
+}>;
+
+
+export type CrowdyStudioAgentGrantLeaseMutation = { __typename?: 'Mutation', crowdyStudioAgentGrantLease: { __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null } };
+
+export type CrowdyStudioAgentRevokeLeaseMutationVariables = Exact<{
+  input: RevokeAgentLeaseInput;
+}>;
+
+
+export type CrowdyStudioAgentRevokeLeaseMutation = { __typename?: 'Mutation', crowdyStudioAgentRevokeLease: { __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null } };
+
+export type CrowdyStudioAgentPauseMutationVariables = Exact<{
+  input: AgentSessionControlInput;
+}>;
+
+
+export type CrowdyStudioAgentPauseMutation = { __typename?: 'Mutation', crowdyStudioAgentPause: { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null } };
+
+export type CrowdyStudioAgentResumeMutationVariables = Exact<{
+  input: AgentSessionControlInput;
+}>;
+
+
+export type CrowdyStudioAgentResumeMutation = { __typename?: 'Mutation', crowdyStudioAgentResume: { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null } };
+
+export type CrowdyStudioAgentCancelRunMutationVariables = Exact<{
+  input: CancelAgentRunInput;
+}>;
+
+
+export type CrowdyStudioAgentCancelRunMutation = { __typename?: 'Mutation', crowdyStudioAgentCancelRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } };
+
+export type CrowdyStudioAgentCloseSessionMutationVariables = Exact<{
+  input: AgentSessionControlInput;
+}>;
+
+
+export type CrowdyStudioAgentCloseSessionMutation = { __typename?: 'Mutation', crowdyStudioAgentCloseSession: { __typename?: 'AgentSession', contractVersion: string, sessionId: string, appId: string, projectId: string | null, gridId: string | null, mode: CrowdyStudioAgentMode, requestedModel: string, model: string | null, resolvedModel: string | null, status: CrowdyStudioAgentSessionStatus, providerDataConsent: boolean, registryDigest: string, providerPolicyVersion: string, appPolicyVersion: string, contextVersion: string, currentClientEpoch: string, clientEpoch: string | null, lastEventSeq: string, createdAt: string, updatedAt: string, closedAt: string | null, currentRun: { __typename?: 'AgentRun', runId: string, status: CrowdyStudioAgentRunStatus, providerRounds: number, toolCalls: number, errorCode: string | null, terminalReason: string | null, reason: string | null, startedAt: string | null, finishedAt: string | null, createdAt: string, cancelled: boolean } | null, activeLeases: Array<{ __typename?: 'AgentLease', leaseId: string, kind: CrowdyStudioAgentLeaseType, status: CrowdyStudioAgentLeaseStatus, clientEpoch: string, scopes: Array<string>, holder: string, contextVersion: string, controlledEntityId: string | null, hostCapabilityRevision: string | null, expectedProjectRevision: string | null, grantedAt: string, expiresAt: string, revokedReason: string | null }>, pendingApproval: { __typename?: 'AgentApproval', approvalId: string, toolCallId: string, argumentHash: string, status: CrowdyStudioAgentApprovalStatus, safeSummary: string, clientEpoch: string, expiresAt: string, approved: boolean, rejected: boolean } | null } };
+
+export type CrowdyStudioAgentEventsSubscriptionVariables = Exact<{
+  sessionId: Scalars['String']['input'];
+  afterSeq: Scalars['BigInt']['input'];
+  clientEpoch: Scalars['BigInt']['input'];
+}>;
+
+
+export type CrowdyStudioAgentEventsSubscription = { __typename?: 'Subscription', crowdyStudioAgentEvents:
+    | { __typename: 'AgentApprovalEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, approvalEventId: string, approvalToolCallId: string, approvalArgumentHash: string, approvalStatus: CrowdyStudioAgentApprovalStatus, approvalSafeSummary: string, approvalReasons: Array<string>, approvalExpiresAt: string }
+    | { __typename: 'AgentBudgetEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, budgetSnapshot: { __typename?: 'AgentBudget', resetAt: string | null, platformFunded: boolean, payer: string, dimensions: Array<{ __typename?: 'AgentBudgetDimension', name: string, scope: string, limit: string, reserved: string, consumed: string, remaining: string, unit: string }> } }
+    | { __typename: 'AgentCheckpointEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, checkpointEventId: string, checkpointProjectRevision: string, checkpointContentHash: string, checkpointReason: string, checkpointRestoredAt: string | null, checkpointFiles: Array<{ __typename?: 'AgentCheckpointFile', target: string, path: string, contentHash: string, byteLength: number }> }
+    | { __typename: 'AgentLeaseEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, leaseEventId: string, leaseKind: CrowdyStudioAgentLeaseType, leaseStatus: CrowdyStudioAgentLeaseStatus, leaseClientEpoch: string, leaseScopes: Array<string>, leaseHolder: string, leaseContextVersion: string, leaseControlledEntityId: string | null, leaseHostCapabilityRevision: string | null, leaseExpectedProjectRevision: string | null, leaseGrantedAt: string, leaseExpiresAt: string, leaseReason: string | null }
+    | { __typename: 'AgentLifecycleEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, lifecycleMode: CrowdyStudioAgentMode | null, lifecycleClientEpoch: string | null, lifecycleReplayAfterSeq: string | null, lifecycleReason: string | null, lifecycleContextVersion: string | null }
+    | { __typename: 'AgentMessageEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, messageEventId: string, messageRole: string, messageContent: string }
+    | { __typename: 'AgentRunEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, runStatus: CrowdyStudioAgentRunStatus, runCode: string | null, runReason: string | null, runError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null }
+    | { __typename: 'AgentToolEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, toolEventCallId: string, toolEventName: string, toolEventVersion: string, toolStatus: CrowdyStudioAgentToolCallStatus, toolSafeSummary: string | null, toolDescriptorDigest: string | null, toolArgumentHash: string | null, toolExecutor: CrowdyStudioAgentToolExecutor | null, toolContextVersion: string | null, toolClientEpoch: string | null, toolArgumentsJson: string | null, toolLeaseId: string | null, toolApprovalGrant: string | null, toolIdempotencyKey: string | null, toolResultJson: string | null, toolDeadline: string | null, toolInvocation: { __typename?: 'AgentToolInvocation', protocolVersion: string, sessionId: string, runId: string, toolCallId: string, name: string, version: string, descriptorDigest: string, argumentsJson: string, argumentHash: string, contextVersion: string, clientEpoch: string | null, leaseId: string | null, approvalGrant: string | null, idempotencyKey: string | null, deadline: string } | null, toolResult: { __typename?: 'AgentToolResultEnvelope', protocolVersion: string, toolCallId: string, status: CrowdyStudioAgentToolResultStatus, outputJson: string | null, observedContextVersion: string, startedAt: string, finishedAt: string, error: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null } | null, toolError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null }
+   };
+
 export type CreateEnvironmentMutationVariables = Exact<{
   input: CreateEnvironmentInput;
 }>;
@@ -13638,6 +15686,15 @@ export const ComputeTriggerFieldsFragmentDoc = {"kind":"Document","definitions":
 export const ComputePolicyFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputePolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModulePolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}}]}}]} as unknown as DocumentNode<ComputePolicyFieldsFragment, unknown>;
 export const ComputeRunFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"entry"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"dbReads"}},{"kind":"Field","name":{"kind":"Name","value":"dbWrites"}},{"kind":"Field","name":{"kind":"Name","value":"egressMsgs"}},{"kind":"Field","name":{"kind":"Name","value":"egressBytes"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"circuitAction"}}]}}]} as unknown as DocumentNode<ComputeRunFieldsFragment, unknown>;
 export const CrowdyStudioProjectFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyStudioProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioProjectFieldsFragment, unknown>;
+export const CrowdyAgentRunFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}}]} as unknown as DocumentNode<CrowdyAgentRunFieldsFragment, unknown>;
+export const CrowdyAgentLeaseFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}}]} as unknown as DocumentNode<CrowdyAgentLeaseFieldsFragment, unknown>;
+export const CrowdyAgentApprovalFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}}]} as unknown as DocumentNode<CrowdyAgentApprovalFieldsFragment, unknown>;
+export const CrowdyAgentSessionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}}]} as unknown as DocumentNode<CrowdyAgentSessionFieldsFragment, unknown>;
+export const CrowdyAgentToolDescriptorFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentToolDescriptorFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentToolDescriptor"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"schemaVersion"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"wireName"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"executor"}},{"kind":"Field","name":{"kind":"Name","value":"modes"}},{"kind":"Field","name":{"kind":"Name","value":"risk"}},{"kind":"Field","name":{"kind":"Name","value":"riskEffects"}},{"kind":"Field","name":{"kind":"Name","value":"riskReversible"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRequirementsJson"}},{"kind":"Field","name":{"kind":"Name","value":"approvalRequired"}},{"kind":"Field","name":{"kind":"Name","value":"approvalPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"approvalReasons"}},{"kind":"Field","name":{"kind":"Name","value":"approvalMaxTtlSeconds"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyClass"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyKeyScope"}},{"kind":"Field","name":{"kind":"Name","value":"timeoutMs"}},{"kind":"Field","name":{"kind":"Name","value":"inputSchemaJson"}},{"kind":"Field","name":{"kind":"Name","value":"outputSchemaJson"}},{"kind":"Field","name":{"kind":"Name","value":"inputRedactionJson"}},{"kind":"Field","name":{"kind":"Name","value":"outputRedactionJson"}},{"kind":"Field","name":{"kind":"Name","value":"maxPersistedBytes"}},{"kind":"Field","name":{"kind":"Name","value":"descriptorJson"}},{"kind":"Field","name":{"kind":"Name","value":"descriptorDigest"}}]}}]} as unknown as DocumentNode<CrowdyAgentToolDescriptorFieldsFragment, unknown>;
+export const CrowdyAgentEventBaseFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentEventBase"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"seq"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<CrowdyAgentEventBaseFieldsFragment, unknown>;
+export const CrowdyAgentErrorFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentErrorFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentError"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}},{"kind":"Field","name":{"kind":"Name","value":"remediation"}},{"kind":"Field","name":{"kind":"Name","value":"field"}},{"kind":"Field","name":{"kind":"Name","value":"requiredScope"}}]}}]} as unknown as DocumentNode<CrowdyAgentErrorFieldsFragment, unknown>;
+export const CrowdyAgentBudgetFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudget"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"dimensions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"reserved"}},{"kind":"Field","name":{"kind":"Name","value":"consumed"}},{"kind":"Field","name":{"kind":"Name","value":"remaining"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}}]}},{"kind":"Field","name":{"kind":"Name","value":"resetAt"}},{"kind":"Field","name":{"kind":"Name","value":"platformFunded"}},{"kind":"Field","name":{"kind":"Name","value":"payer"}}]}}]} as unknown as DocumentNode<CrowdyAgentBudgetFieldsFragment, unknown>;
+export const CrowdyAgentEventFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioAgentEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLifecycleEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"lifecycleMode"},"name":{"kind":"Name","value":"mode"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleReplayAfterSeq"},"name":{"kind":"Name","value":"replayAfterSeq"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleContextVersion"},"name":{"kind":"Name","value":"contextVersion"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentMessageEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"messageEventId"},"name":{"kind":"Name","value":"messageId"}},{"kind":"Field","alias":{"kind":"Name","value":"messageRole"},"name":{"kind":"Name","value":"role"}},{"kind":"Field","alias":{"kind":"Name","value":"messageContent"},"name":{"kind":"Name","value":"content"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRunEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"runStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"runCode"},"name":{"kind":"Name","value":"code"}},{"kind":"Field","alias":{"kind":"Name","value":"runReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"runError"},"name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentToolEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"toolEventCallId"},"name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","alias":{"kind":"Name","value":"toolEventName"},"name":{"kind":"Name","value":"toolName"}},{"kind":"Field","alias":{"kind":"Name","value":"toolEventVersion"},"name":{"kind":"Name","value":"toolVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"toolStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"toolSafeSummary"},"name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","alias":{"kind":"Name","value":"toolDescriptorDigest"},"name":{"kind":"Name","value":"descriptorDigest"}},{"kind":"Field","alias":{"kind":"Name","value":"toolArgumentHash"},"name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"toolExecutor"},"name":{"kind":"Name","value":"executor"}},{"kind":"Field","alias":{"kind":"Name","value":"toolContextVersion"},"name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"toolClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"toolArgumentsJson"},"name":{"kind":"Name","value":"argumentsJson"}},{"kind":"Field","alias":{"kind":"Name","value":"toolLeaseId"},"name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","alias":{"kind":"Name","value":"toolApprovalGrant"},"name":{"kind":"Name","value":"approvalGrant"}},{"kind":"Field","alias":{"kind":"Name","value":"toolIdempotencyKey"},"name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","alias":{"kind":"Name","value":"toolResultJson"},"name":{"kind":"Name","value":"resultJson"}},{"kind":"Field","alias":{"kind":"Name","value":"toolInvocation"},"name":{"kind":"Name","value":"invocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"descriptorDigest"}},{"kind":"Field","name":{"kind":"Name","value":"argumentsJson"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"approvalGrant"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","name":{"kind":"Name","value":"deadline"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolResult"},"name":{"kind":"Name","value":"result"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"outputJson"}},{"kind":"Field","name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"observedContextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolError"},"name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolDeadline"},"name":{"kind":"Name","value":"deadline"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApprovalEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"approvalEventId"},"name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalToolCallId"},"name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalArgumentHash"},"name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalSafeSummary"},"name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalReasons"},"name":{"kind":"Name","value":"reasons"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalExpiresAt"},"name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLeaseEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"leaseEventId"},"name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseKind"},"name":{"kind":"Name","value":"kind"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseScopes"},"name":{"kind":"Name","value":"scopes"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseHolder"},"name":{"kind":"Name","value":"holder"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseContextVersion"},"name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseControlledEntityId"},"name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseHostCapabilityRevision"},"name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseExpectedProjectRevision"},"name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseGrantedAt"},"name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseExpiresAt"},"name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseReason"},"name":{"kind":"Name","value":"reason"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentCheckpointEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"checkpointEventId"},"name":{"kind":"Name","value":"checkpointId"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointProjectRevision"},"name":{"kind":"Name","value":"projectRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointContentHash"},"name":{"kind":"Name","value":"contentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointFiles"},"name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"contentHash"}},{"kind":"Field","name":{"kind":"Name","value":"byteLength"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointRestoredAt"},"name":{"kind":"Name","value":"restoredAt"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudgetEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"budgetSnapshot"},"name":{"kind":"Name","value":"budget"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentErrorFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentError"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}},{"kind":"Field","name":{"kind":"Name","value":"remediation"}},{"kind":"Field","name":{"kind":"Name","value":"field"}},{"kind":"Field","name":{"kind":"Name","value":"requiredScope"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudget"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"dimensions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"reserved"}},{"kind":"Field","name":{"kind":"Name","value":"consumed"}},{"kind":"Field","name":{"kind":"Name","value":"remaining"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}}]}},{"kind":"Field","name":{"kind":"Name","value":"resetAt"}},{"kind":"Field","name":{"kind":"Name","value":"platformFunded"}},{"kind":"Field","name":{"kind":"Name","value":"payer"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentEventBase"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"seq"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<CrowdyAgentEventFieldsFragment, unknown>;
 export const GridOwnershipFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridOwnershipFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridOwnership"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]} as unknown as DocumentNode<GridOwnershipFieldsFragment, unknown>;
 export const GmAutomationFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomation"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"actionKind"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"computeModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"computeExport"}},{"kind":"Field","name":{"kind":"Name","value":"targetMode"}},{"kind":"Field","name":{"kind":"Name","value":"selfContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"targetTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"paramsJson"}},{"kind":"Field","name":{"kind":"Name","value":"selectorJson"}},{"kind":"Field","name":{"kind":"Name","value":"runAsUserId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerType"}},{"kind":"Field","name":{"kind":"Name","value":"scheduleKind"}},{"kind":"Field","name":{"kind":"Name","value":"intervalMs"}},{"kind":"Field","name":{"kind":"Name","value":"cronExpr"}},{"kind":"Field","name":{"kind":"Name","value":"maxTargets"}},{"kind":"Field","name":{"kind":"Name","value":"maxFnDepth"}},{"kind":"Field","name":{"kind":"Name","value":"gasLimit"}},{"kind":"Field","name":{"kind":"Name","value":"runTimeoutMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"pausedUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}}]}}]} as unknown as DocumentNode<GmAutomationFieldsFragment, unknown>;
 export const GmAutomationTriggerFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationTriggerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomationTrigger"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"triggerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"onEvent"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyKey"}},{"kind":"Field","name":{"kind":"Name","value":"debounceMs"}}]}}]} as unknown as DocumentNode<GmAutomationTriggerFieldsFragment, unknown>;
@@ -13793,6 +15850,27 @@ export const CrowdyStudioLibraryFilesDocument = {"kind":"Document","definitions"
 export const CrowdyStudioLibrarySaveDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioLibrarySave"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SaveCrowdyStudioLibraryFileInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioLibrarySave"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"libraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"pathHint"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioLibrarySaveMutation, CrowdyStudioLibrarySaveMutationVariables>;
 export const CrowdyStudioCommonFilesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CrowdyStudioCommonFiles"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"target"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioTarget"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioCommonFiles"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"target"},"value":{"kind":"Variable","name":{"kind":"Name","value":"target"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"commonFileId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"contentSha256"}},{"kind":"Field","name":{"kind":"Name","value":"publishedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioCommonFilesQuery, CrowdyStudioCommonFilesQueryVariables>;
 export const CrowdyStudioProjectImportFileDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioProjectImportFile"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ImportCrowdyStudioProjectFileInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioProjectImportFile"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyStudioProjectFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyStudioProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioProjectImportFileMutation, CrowdyStudioProjectImportFileMutationVariables>;
+export const CrowdyStudioAgentSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CrowdyStudioAgentSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentSessionQuery, CrowdyStudioAgentSessionQueryVariables>;
+export const CrowdyStudioAgentSessionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CrowdyStudioAgentSessions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentSessions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}},{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}},{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentSessionsQuery, CrowdyStudioAgentSessionsQueryVariables>;
+export const CrowdyStudioAgentHistoryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CrowdyStudioAgentHistory"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"afterSeq"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentHistory"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}},{"kind":"Argument","name":{"kind":"Name","value":"afterSeq"},"value":{"kind":"Variable","name":{"kind":"Name","value":"afterSeq"}}},{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentEventFields"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentEventFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"hasMore"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentErrorFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentError"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}},{"kind":"Field","name":{"kind":"Name","value":"remediation"}},{"kind":"Field","name":{"kind":"Name","value":"field"}},{"kind":"Field","name":{"kind":"Name","value":"requiredScope"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudget"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"dimensions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"reserved"}},{"kind":"Field","name":{"kind":"Name","value":"consumed"}},{"kind":"Field","name":{"kind":"Name","value":"remaining"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}}]}},{"kind":"Field","name":{"kind":"Name","value":"resetAt"}},{"kind":"Field","name":{"kind":"Name","value":"platformFunded"}},{"kind":"Field","name":{"kind":"Name","value":"payer"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentEventBase"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"seq"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioAgentEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLifecycleEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"lifecycleMode"},"name":{"kind":"Name","value":"mode"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleReplayAfterSeq"},"name":{"kind":"Name","value":"replayAfterSeq"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleContextVersion"},"name":{"kind":"Name","value":"contextVersion"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentMessageEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"messageEventId"},"name":{"kind":"Name","value":"messageId"}},{"kind":"Field","alias":{"kind":"Name","value":"messageRole"},"name":{"kind":"Name","value":"role"}},{"kind":"Field","alias":{"kind":"Name","value":"messageContent"},"name":{"kind":"Name","value":"content"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRunEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"runStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"runCode"},"name":{"kind":"Name","value":"code"}},{"kind":"Field","alias":{"kind":"Name","value":"runReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"runError"},"name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentToolEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"toolEventCallId"},"name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","alias":{"kind":"Name","value":"toolEventName"},"name":{"kind":"Name","value":"toolName"}},{"kind":"Field","alias":{"kind":"Name","value":"toolEventVersion"},"name":{"kind":"Name","value":"toolVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"toolStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"toolSafeSummary"},"name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","alias":{"kind":"Name","value":"toolDescriptorDigest"},"name":{"kind":"Name","value":"descriptorDigest"}},{"kind":"Field","alias":{"kind":"Name","value":"toolArgumentHash"},"name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"toolExecutor"},"name":{"kind":"Name","value":"executor"}},{"kind":"Field","alias":{"kind":"Name","value":"toolContextVersion"},"name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"toolClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"toolArgumentsJson"},"name":{"kind":"Name","value":"argumentsJson"}},{"kind":"Field","alias":{"kind":"Name","value":"toolLeaseId"},"name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","alias":{"kind":"Name","value":"toolApprovalGrant"},"name":{"kind":"Name","value":"approvalGrant"}},{"kind":"Field","alias":{"kind":"Name","value":"toolIdempotencyKey"},"name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","alias":{"kind":"Name","value":"toolResultJson"},"name":{"kind":"Name","value":"resultJson"}},{"kind":"Field","alias":{"kind":"Name","value":"toolInvocation"},"name":{"kind":"Name","value":"invocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"descriptorDigest"}},{"kind":"Field","name":{"kind":"Name","value":"argumentsJson"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"approvalGrant"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","name":{"kind":"Name","value":"deadline"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolResult"},"name":{"kind":"Name","value":"result"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"outputJson"}},{"kind":"Field","name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"observedContextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolError"},"name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolDeadline"},"name":{"kind":"Name","value":"deadline"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApprovalEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"approvalEventId"},"name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalToolCallId"},"name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalArgumentHash"},"name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalSafeSummary"},"name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalReasons"},"name":{"kind":"Name","value":"reasons"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalExpiresAt"},"name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLeaseEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"leaseEventId"},"name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseKind"},"name":{"kind":"Name","value":"kind"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseScopes"},"name":{"kind":"Name","value":"scopes"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseHolder"},"name":{"kind":"Name","value":"holder"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseContextVersion"},"name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseControlledEntityId"},"name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseHostCapabilityRevision"},"name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseExpectedProjectRevision"},"name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseGrantedAt"},"name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseExpiresAt"},"name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseReason"},"name":{"kind":"Name","value":"reason"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentCheckpointEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"checkpointEventId"},"name":{"kind":"Name","value":"checkpointId"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointProjectRevision"},"name":{"kind":"Name","value":"projectRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointContentHash"},"name":{"kind":"Name","value":"contentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointFiles"},"name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"contentHash"}},{"kind":"Field","name":{"kind":"Name","value":"byteLength"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointRestoredAt"},"name":{"kind":"Name","value":"restoredAt"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudgetEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"budgetSnapshot"},"name":{"kind":"Name","value":"budget"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"}}]}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentHistoryQuery, CrowdyStudioAgentHistoryQueryVariables>;
+export const CrowdyStudioAgentToolDescriptorsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CrowdyStudioAgentToolDescriptors"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentToolDescriptors"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"tools"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentToolDescriptorFields"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentToolDescriptorFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentToolDescriptor"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"schemaVersion"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"wireName"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"executor"}},{"kind":"Field","name":{"kind":"Name","value":"modes"}},{"kind":"Field","name":{"kind":"Name","value":"risk"}},{"kind":"Field","name":{"kind":"Name","value":"riskEffects"}},{"kind":"Field","name":{"kind":"Name","value":"riskReversible"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRequirementsJson"}},{"kind":"Field","name":{"kind":"Name","value":"approvalRequired"}},{"kind":"Field","name":{"kind":"Name","value":"approvalPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"approvalReasons"}},{"kind":"Field","name":{"kind":"Name","value":"approvalMaxTtlSeconds"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyClass"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyKeyScope"}},{"kind":"Field","name":{"kind":"Name","value":"timeoutMs"}},{"kind":"Field","name":{"kind":"Name","value":"inputSchemaJson"}},{"kind":"Field","name":{"kind":"Name","value":"outputSchemaJson"}},{"kind":"Field","name":{"kind":"Name","value":"inputRedactionJson"}},{"kind":"Field","name":{"kind":"Name","value":"outputRedactionJson"}},{"kind":"Field","name":{"kind":"Name","value":"maxPersistedBytes"}},{"kind":"Field","name":{"kind":"Name","value":"descriptorJson"}},{"kind":"Field","name":{"kind":"Name","value":"descriptorDigest"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentToolDescriptorsQuery, CrowdyStudioAgentToolDescriptorsQueryVariables>;
+export const CrowdyStudioAgentBudgetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CrowdyStudioAgentBudget"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentBudget"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudget"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"dimensions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"reserved"}},{"kind":"Field","name":{"kind":"Name","value":"consumed"}},{"kind":"Field","name":{"kind":"Name","value":"remaining"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}}]}},{"kind":"Field","name":{"kind":"Name","value":"resetAt"}},{"kind":"Field","name":{"kind":"Name","value":"platformFunded"}},{"kind":"Field","name":{"kind":"Name","value":"payer"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentBudgetQuery, CrowdyStudioAgentBudgetQueryVariables>;
+export const CrowdyStudioAgentCreateSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentCreateSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentSessionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentCreateSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentCreateSessionMutation, CrowdyStudioAgentCreateSessionMutationVariables>;
+export const CrowdyStudioAgentAttachClientDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentAttachClient"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AttachAgentClientInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentAttachClient"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"session"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"replayAfterSeq"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentAttachClientMutation, CrowdyStudioAgentAttachClientMutationVariables>;
+export const CrowdyStudioAgentSetModeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentSetMode"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetAgentModeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentSetMode"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentSetModeMutation, CrowdyStudioAgentSetModeMutationVariables>;
+export const CrowdyStudioAgentAcknowledgeEventsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentAcknowledgeEvents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AcknowledgeAgentEventsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentAcknowledgeEvents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"throughSeq"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentAcknowledgeEventsMutation, CrowdyStudioAgentAcknowledgeEventsMutationVariables>;
+export const CrowdyStudioAgentHeartbeatDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentHeartbeat"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentHeartbeatInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentHeartbeat"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverTime"}},{"kind":"Field","name":{"kind":"Name","value":"playLeaseFreshUntil"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentHeartbeatMutation, CrowdyStudioAgentHeartbeatMutationVariables>;
+export const CrowdyStudioAgentSendMessageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentSendMessage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SendAgentMessageInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentSendMessage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentSendMessageMutation, CrowdyStudioAgentSendMessageMutationVariables>;
+export const CrowdyStudioAgentApproveToolDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentApproveTool"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DecideAgentToolInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentApproveTool"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentApproveToolMutation, CrowdyStudioAgentApproveToolMutationVariables>;
+export const CrowdyStudioAgentRejectToolDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentRejectTool"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DecideAgentToolInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentRejectTool"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentRejectToolMutation, CrowdyStudioAgentRejectToolMutationVariables>;
+export const CrowdyStudioAgentToolResultDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentToolResult"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentToolResultInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentToolResult"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"toolName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"accepted"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentErrorFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentError"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}},{"kind":"Field","name":{"kind":"Name","value":"remediation"}},{"kind":"Field","name":{"kind":"Name","value":"field"}},{"kind":"Field","name":{"kind":"Name","value":"requiredScope"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentToolResultMutation, CrowdyStudioAgentToolResultMutationVariables>;
+export const CrowdyStudioAgentGrantLeaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentGrantLease"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"GrantAgentLeaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentGrantLease"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentGrantLeaseMutation, CrowdyStudioAgentGrantLeaseMutationVariables>;
+export const CrowdyStudioAgentRevokeLeaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentRevokeLease"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RevokeAgentLeaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentRevokeLease"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentRevokeLeaseMutation, CrowdyStudioAgentRevokeLeaseMutationVariables>;
+export const CrowdyStudioAgentPauseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentPause"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSessionControlInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentPause"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentPauseMutation, CrowdyStudioAgentPauseMutationVariables>;
+export const CrowdyStudioAgentResumeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentResume"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSessionControlInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentResume"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentResumeMutation, CrowdyStudioAgentResumeMutationVariables>;
+export const CrowdyStudioAgentCancelRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentCancelRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CancelAgentRunInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentCancelRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentCancelRunMutation, CrowdyStudioAgentCancelRunMutationVariables>;
+export const CrowdyStudioAgentCloseSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentCloseSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSessionControlInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentCloseSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentCloseSessionMutation, CrowdyStudioAgentCloseSessionMutationVariables>;
+export const CrowdyStudioAgentEventsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"CrowdyStudioAgentEvents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"afterSeq"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"clientEpoch"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentEvents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}},{"kind":"Argument","name":{"kind":"Name","value":"afterSeq"},"value":{"kind":"Variable","name":{"kind":"Name","value":"afterSeq"}}},{"kind":"Argument","name":{"kind":"Name","value":"clientEpoch"},"value":{"kind":"Variable","name":{"kind":"Name","value":"clientEpoch"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentEventFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentErrorFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentError"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}},{"kind":"Field","name":{"kind":"Name","value":"remediation"}},{"kind":"Field","name":{"kind":"Name","value":"field"}},{"kind":"Field","name":{"kind":"Name","value":"requiredScope"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudget"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"dimensions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"reserved"}},{"kind":"Field","name":{"kind":"Name","value":"consumed"}},{"kind":"Field","name":{"kind":"Name","value":"remaining"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}}]}},{"kind":"Field","name":{"kind":"Name","value":"resetAt"}},{"kind":"Field","name":{"kind":"Name","value":"platformFunded"}},{"kind":"Field","name":{"kind":"Name","value":"payer"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentEventBase"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"seq"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioAgentEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLifecycleEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"lifecycleMode"},"name":{"kind":"Name","value":"mode"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleReplayAfterSeq"},"name":{"kind":"Name","value":"replayAfterSeq"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleContextVersion"},"name":{"kind":"Name","value":"contextVersion"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentMessageEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"messageEventId"},"name":{"kind":"Name","value":"messageId"}},{"kind":"Field","alias":{"kind":"Name","value":"messageRole"},"name":{"kind":"Name","value":"role"}},{"kind":"Field","alias":{"kind":"Name","value":"messageContent"},"name":{"kind":"Name","value":"content"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRunEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"runStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"runCode"},"name":{"kind":"Name","value":"code"}},{"kind":"Field","alias":{"kind":"Name","value":"runReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"runError"},"name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentToolEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"toolEventCallId"},"name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","alias":{"kind":"Name","value":"toolEventName"},"name":{"kind":"Name","value":"toolName"}},{"kind":"Field","alias":{"kind":"Name","value":"toolEventVersion"},"name":{"kind":"Name","value":"toolVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"toolStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"toolSafeSummary"},"name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","alias":{"kind":"Name","value":"toolDescriptorDigest"},"name":{"kind":"Name","value":"descriptorDigest"}},{"kind":"Field","alias":{"kind":"Name","value":"toolArgumentHash"},"name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"toolExecutor"},"name":{"kind":"Name","value":"executor"}},{"kind":"Field","alias":{"kind":"Name","value":"toolContextVersion"},"name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"toolClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"toolArgumentsJson"},"name":{"kind":"Name","value":"argumentsJson"}},{"kind":"Field","alias":{"kind":"Name","value":"toolLeaseId"},"name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","alias":{"kind":"Name","value":"toolApprovalGrant"},"name":{"kind":"Name","value":"approvalGrant"}},{"kind":"Field","alias":{"kind":"Name","value":"toolIdempotencyKey"},"name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","alias":{"kind":"Name","value":"toolResultJson"},"name":{"kind":"Name","value":"resultJson"}},{"kind":"Field","alias":{"kind":"Name","value":"toolInvocation"},"name":{"kind":"Name","value":"invocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"descriptorDigest"}},{"kind":"Field","name":{"kind":"Name","value":"argumentsJson"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"approvalGrant"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","name":{"kind":"Name","value":"deadline"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolResult"},"name":{"kind":"Name","value":"result"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"outputJson"}},{"kind":"Field","name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"observedContextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolError"},"name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolDeadline"},"name":{"kind":"Name","value":"deadline"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApprovalEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"approvalEventId"},"name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalToolCallId"},"name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalArgumentHash"},"name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalSafeSummary"},"name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalReasons"},"name":{"kind":"Name","value":"reasons"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalExpiresAt"},"name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLeaseEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"leaseEventId"},"name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseKind"},"name":{"kind":"Name","value":"kind"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseScopes"},"name":{"kind":"Name","value":"scopes"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseHolder"},"name":{"kind":"Name","value":"holder"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseContextVersion"},"name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseControlledEntityId"},"name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseHostCapabilityRevision"},"name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseExpectedProjectRevision"},"name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseGrantedAt"},"name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseExpiresAt"},"name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseReason"},"name":{"kind":"Name","value":"reason"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentCheckpointEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"checkpointEventId"},"name":{"kind":"Name","value":"checkpointId"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointProjectRevision"},"name":{"kind":"Name","value":"projectRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointContentHash"},"name":{"kind":"Name","value":"contentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointFiles"},"name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"contentHash"}},{"kind":"Field","name":{"kind":"Name","value":"byteLength"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointRestoredAt"},"name":{"kind":"Name","value":"restoredAt"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudgetEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"budgetSnapshot"},"name":{"kind":"Name","value":"budget"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"}}]}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentEventsSubscription, CrowdyStudioAgentEventsSubscriptionVariables>;
 export const CreateEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"billingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"desiredEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"changeOrders"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateEnvironmentMutation, CreateEnvironmentMutationVariables>;
 export const DestroyEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DestroyEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DestroyEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"destroyEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"requestedBy"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<DestroyEnvironmentMutation, DestroyEnvironmentMutationVariables>;
 export const EnvironmentDatacentersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentDatacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentDatacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"city"}},{"kind":"Field","name":{"kind":"Name","value":"continent"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"isAvailable"}},{"kind":"Field","name":{"kind":"Name","value":"selectableInstanceCount"}},{"kind":"Field","name":{"kind":"Name","value":"syncedAt"}}]}}]}}]} as unknown as DocumentNode<EnvironmentDatacentersQuery, EnvironmentDatacentersQueryVariables>;

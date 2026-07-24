@@ -146,6 +146,87 @@ export interface CrowdyStudioProjectProvider {
   ): Promise<CrowdyStudioReferenceFile>;
 }
 
+export type CrowdyStudioPatchOperation = 'CREATE' | 'REPLACE';
+
+/** One routine, non-destructive file replacement in an atomic agent patch. */
+export interface CrowdyStudioAtomicFileChange {
+  target: CrowdyStudioTarget;
+  path: string;
+  operation: CrowdyStudioPatchOperation;
+  content: string;
+  /** `ABSENT` for CREATE, otherwise the exact current sha256 digest. */
+  expectedContentHash: string | 'ABSENT';
+}
+
+export interface CrowdyStudioAtomicPatchInput {
+  expectedRevisionId: string;
+  changes: readonly CrowdyStudioAtomicFileChange[];
+}
+
+export interface CrowdyStudioCheckpointFile {
+  target: CrowdyStudioTarget;
+  path: string;
+  contentHash: string;
+  byteLength: number;
+}
+
+/** Source-free checkpoint metadata safe for Studio state and agent events. */
+export interface CrowdyStudioCheckpointMetadata {
+  checkpointId: string;
+  projectRevisionId: string;
+  contentHash: string;
+  reason: 'AGENT_WRITE' | 'RESTORE_PREIMAGE' | 'MANUAL';
+  files: readonly CrowdyStudioCheckpointFile[];
+  createdAt: string;
+  restoredAt?: string;
+}
+
+export interface CrowdyStudioAtomicPatchResult {
+  project: CrowdyStudioProject;
+  checkpoint: CrowdyStudioCheckpointMetadata;
+  changedFiles: readonly CrowdyStudioCheckpointFile[];
+}
+
+export interface CrowdyStudioCheckpointRestoreInput {
+  projectId: string;
+  checkpointId: string;
+  expectedRevisionId: string;
+  /** Opaque single-use grant from the durable orchestrator. */
+  approvalGrant: string;
+}
+
+export interface CrowdyStudioCheckpointRestoreResult {
+  project: CrowdyStudioProject;
+  preRestoreCheckpoint: CrowdyStudioCheckpointMetadata;
+}
+
+/**
+ * Optional durable synchronization hooks. A generated Game API adapter can
+ * implement these after schema reconciliation; the headless kernel stays
+ * transport-neutral and tests can inject deterministic fakes.
+ */
+export interface CrowdyStudioSynchronizationProvider {
+  applyAtomicPatch(
+    input: CrowdyStudioProjectScope & {
+      projectId: string;
+      expectedRevisionId: string;
+      changes: readonly CrowdyStudioAtomicFileChange[];
+    },
+  ): Promise<CrowdyStudioAtomicPatchResult>;
+  listCheckpoints(
+    input: CrowdyStudioProjectScope & { projectId: string },
+  ): Promise<readonly CrowdyStudioCheckpointMetadata[]>;
+  restoreCheckpoint(
+    input: CrowdyStudioProjectScope & CrowdyStudioCheckpointRestoreInput,
+  ): Promise<CrowdyStudioCheckpointRestoreResult>;
+}
+
+export interface CrowdyStudioProjectSynchronization {
+  source: 'AGENT' | 'REMOTE';
+  expectedPreviousRevisionId?: string;
+  checkpoint?: CrowdyStudioCheckpointMetadata;
+}
+
 /** Provider error indicating that the expected revision lost a save race. */
 export class CrowdyStudioRevisionConflictError extends Error {
   readonly code = 'PROJECT_REVISION_CONFLICT';

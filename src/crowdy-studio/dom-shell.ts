@@ -3,6 +3,11 @@ import {
   type CrowdyStudioPolledSurface,
   type CrowdyStudioState,
 } from './controller.js';
+import type { CrowdyStudioAgentController } from '../crowdy-agent/controller.js';
+import {
+  CrowdyStudioAgentDomShell,
+  type CrowdyStudioAgentDomShellOptions,
+} from './agent-dom-shell.js';
 import {
   projectTargets,
   type CrowdyStudioFileRef,
@@ -46,12 +51,15 @@ export class CrowdyStudioDomShell {
   private readonly invokeResult: HTMLElement;
   private readonly panelButtons = new Map<PanelName, HTMLButtonElement>();
   private readonly panels = new Map<PanelName, HTMLElement>();
+  private readonly agentShell: CrowdyStudioAgentDomShell | null;
   private activePanel: PanelName = 'problems';
   private disposed = false;
 
   constructor(
     host: HTMLElement,
     private readonly controller: CrowdyStudioController,
+    agentController?: CrowdyStudioAgentController,
+    agentOptions: CrowdyStudioAgentDomShellOptions = {},
   ) {
     const style = document.createElement('style');
     style.textContent = CROWDY_STUDIO_STYLES;
@@ -169,6 +177,13 @@ export class CrowdyStudioDomShell {
 
     this.root.append(toolbar, this.newForm, main, bottom);
     host.appendChild(this.root);
+    this.agentShell = agentController
+      ? new CrowdyStudioAgentDomShell(
+          this.root,
+          agentController,
+          agentOptions,
+        )
+      : null;
 
     newButton.addEventListener('click', () => {
       this.newForm.dataset.open =
@@ -284,6 +299,7 @@ export class CrowdyStudioDomShell {
     this.controller.setSurfaceVisible('usage', false);
     this.controller.setSurfaceVisible('logs', false);
     this.controller.setSurfaceVisible('runs', false);
+    this.agentShell?.dispose();
     this.root.remove();
   }
 

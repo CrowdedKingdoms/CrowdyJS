@@ -2,11 +2,15 @@ export {
   CrowdyStudioController,
   type CrowdyStudioControllerOptions,
   type CrowdyStudioBroker,
+  type CrowdyStudioAgentWorkContext,
+  type CrowdyStudioDeployResult,
   type CrowdyStudioInvokeResult,
   type CrowdyStudioPhase,
   type CrowdyStudioPolledSurface,
   type CrowdyStudioRun,
   type CrowdyStudioRuntimeStatus,
+  type CrowdyStudioRuntimeSync,
+  type CrowdyStudioRuntimeSyncState,
   type CrowdyStudioPlayerCompute,
   type CrowdyStudioPlayerWallet,
   type CrowdyStudioState,
@@ -17,6 +21,7 @@ export {
 export {
   mountCrowdyStudio,
   type CrowdyStudioHandle,
+  type MountCrowdyStudioAgentOptions,
   type MountCrowdyStudioOptions,
 } from './mount.js';
 export {
@@ -29,6 +34,13 @@ export {
   projectTargets,
   type CreateCrowdyStudioProjectInput,
   type ImportCrowdyStudioReferenceFileInput,
+  type CrowdyStudioAtomicFileChange,
+  type CrowdyStudioAtomicPatchInput,
+  type CrowdyStudioAtomicPatchResult,
+  type CrowdyStudioCheckpointFile,
+  type CrowdyStudioCheckpointMetadata,
+  type CrowdyStudioCheckpointRestoreInput,
+  type CrowdyStudioCheckpointRestoreResult,
   type CrowdyStudioFileRef,
   type CrowdyStudioPairingPreference,
   type CrowdyStudioProject,
@@ -41,6 +53,9 @@ export {
   type CrowdyStudioProjectSummary,
   type CrowdyStudioReferenceFile,
   type CrowdyStudioSaveState,
+  type CrowdyStudioSynchronizationProvider,
+  type CrowdyStudioProjectSynchronization,
+  type CrowdyStudioPatchOperation,
   type CrowdyStudioTarget,
   type SaveCrowdyStudioLibraryFileInput,
   type SaveCrowdyStudioProjectInput,
@@ -87,3 +102,9 @@ export {
   type LanguageWorkerLike,
   type WorkerLanguageClientOptions,
 } from '../live-coding/worker-transport.js';
+export {
+  CrowdyStudioAgentDomShell,
+  type CrowdyStudioAgentDomShellOptions,
+} from './agent-dom-shell.js';
+export * from '../crowdy-agent/index.js';
+export * from '../player-host/index.js';
