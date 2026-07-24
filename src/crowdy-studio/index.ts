@@ -126,5 +126,6 @@ export {
   type PaneSplitterOptions,
   type PaneSplitterRange,
 } from './splitter.js';
+export * from './embed/index.js';
 export * from '../crowdy-agent/index.js';
 export * from '../player-host/index.js';

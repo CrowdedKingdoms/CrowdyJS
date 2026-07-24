@@ -244,6 +244,65 @@ embedded index remains the byte-identical game export (`schemaVersion: 2`, Rust
 1.97.1, SDK 0.1.5, ABI 0, 725 symbols, content hash
 `3f5f39d4…18ffb`).
 
+### Embed Crowdy Studio in your game (v12.1)
+
+Most games should not hand-roll the window chrome around `mountCrowdyStudio`.
+The embed kit ships the proven Blocks with Friends shell as reusable, game
+-agnostic components (exported from `@crowdedkingdoms/crowdyjs/crowdy-studio`):
+
+- **`createCrowdyStudioEmbed(options)` / `CrowdyStudioEmbed`** — a responsive
+  panel that renders a resizable right dock on desktop and a focus-trapped
+  fullscreen modal below 1000 px. It owns Escape/close-key semantics, the
+  compact header (title, grid pill, on-demand Context drawer, Close), loading
+  and retry chrome, and assembles the `mountCrowdyStudio` call — including the
+  agent block when the client exposes `crowdyStudioAgent` and the game passes a
+  `playerHost`.
+- **`CrowdyStudioEmbedDock`** — the accessible game/studio splitter with
+  persisted width (`ck:crowdy-studio:embed:dock-width:v1`), arrow-key/Home/End
+  resize, and ARIA value text.
+- **`CrowdyStudioTextHud`** — the text-only presentation sink for CLIENT-mod
+  `hud_set` payloads plus the drawer HUD preview. Untrusted payloads render as
+  text, never HTML.
+- **`ensureCrowdyStudioEmbedStyles()`** — injected `ck-crowdy-studio-embed-*`
+  styles; games restyle by overriding classes. While docked, the panel sets
+  `--ck-game-right-inset` on `document.body` so game HUDs can keep clear of
+  the dock.
+
+```ts
+import { createCrowdyStudioEmbed } from '@crowdedkingdoms/crowdyjs/crowdy-studio';
+// Self-starting glue worker for CLIENT mods (Vite shown; any bundler that
+// packages module workers works):
+import workerUrl from '@crowdedkingdoms/crowdyjs/player-glue-worker?worker&url';
+
+const studio = createCrowdyStudioEmbed({
+  client: game, // CrowdyClient: crowdyStudio, playerCompute, playerWallet, crowdyStudioAgent
+  appId,
+  gameName: 'My Game',
+  suppressGameplayInput: () => pauseInput(),
+  onLayoutChange: () => resizeCanvas(),
+});
+
+// Per open (for example after the player claims a grid):
+studio.toggle({
+  gridId,
+  targetPermissions: {
+    SERVER: { canWrite: true, canRun: true },
+    CLIENT: { canWrite: false, canRun: false }, // SERVER-only embeds omit workerUrl
+  },
+});
+```
+
+CLIENT-mod embeds additionally pass `grid`, `workerUrl`, `onHostCall`, an
+optional `hud` sink, and a `playerHost` adapter. Note that CLIENT mods outside
+Blocks with Friends remain gated by program decision D13; new games should
+start SERVER-only exactly as above.
+
+The visible agent safety chrome is exported from
+`@crowdedkingdoms/crowdyjs/player-host`: **`PlayerControlGate`** (capture-phase
+human preemption seam with offline Stop) and **`AgentControlBanner`** (the
+always-visible-on-control Pause/Stop region, self-injected
+`ck-agent-control-*` styles).
+
 ### Game API project contract
 
 `CrowdyStudioAPI` implements the transport-neutral
