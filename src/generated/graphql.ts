@@ -3333,6 +3333,26 @@ export enum CrowdyStudioAgentPolicyKind {
   Platform = 'PLATFORM'
 }
 
+/** Closed CrowdyJS/BWF reason vocabulary for synchronous lease and control preemption. */
+export enum CrowdyStudioAgentPreemptionReason {
+  AdmissionChanged = 'ADMISSION_CHANGED',
+  BudgetFailure = 'BUDGET_FAILURE',
+  ClientReattached = 'CLIENT_REATTACHED',
+  ContextChanged = 'CONTEXT_CHANGED',
+  ControlTargetChanged = 'CONTROL_TARGET_CHANGED',
+  Death = 'DEATH',
+  Disconnected = 'DISCONNECTED',
+  Escape = 'ESCAPE',
+  HumanEdit = 'HUMAN_EDIT',
+  HumanInput = 'HUMAN_INPUT',
+  HumanStop = 'HUMAN_STOP',
+  LeaseExpired = 'LEASE_EXPIRED',
+  OperatorKill = 'OPERATOR_KILL',
+  PermissionChanged = 'PERMISSION_CHANGED',
+  QuotaFailure = 'QUOTA_FAILURE',
+  SessionClosed = 'SESSION_CLOSED'
+}
+
 /** Provider privacy posture. ZDR and collection denial are locked true; provider request/response bodies are never persisted. */
 export type CrowdyStudioAgentPrivacyPolicy = {
   __typename?: 'CrowdyStudioAgentPrivacyPolicy';
@@ -5620,7 +5640,7 @@ export type Mutation = {
   createTeamRole: GroupRole;
   /** Monotonically persist one attached epoch’s highest contiguous applied event sequence. Requires the app-scoped owner, exact current epoch, and idempotency key; stale epochs and gaps fail with stable errors. */
   crowdyStudioAgentAcknowledgeEvents: AgentEventAcknowledgement;
-  /** Human-grant one unexpired pending tool call by exact argument hash. The server revalidates epoch, context, policy, lease, descriptor, permissions, and project revision before single-use consumption. Requires the app-scoped owner and idempotency key; approval never creates missing authority. */
+  /** Human-grant one unexpired pending tool call by exact argument hash. The server revalidates epoch, context, policy, lease, descriptor, permissions, and project revision before single-use consumption. Requires the app-scoped owner, use_studio_agent, and idempotency key; approval never creates missing authority. */
   crowdyStudioAgentApproveTool: AgentApproval;
   /** Attach one interactive browser, allocate a new monotonic epoch, return that client instance’s replay cursor, and fence every older epoch plus its leases, approvals, and pending browser tools. Requires the app-scoped owner, use_studio_agent, and idempotency key; reconnect never replays an effect. */
   crowdyStudioAgentAttachClient: AgentClientAttachment;
@@ -10141,8 +10161,8 @@ export type RevokeAgentLeaseInput = {
   idempotencyKey: Scalars['String']['input'];
   /** Lease UUID to revoke. */
   leaseId: Scalars['String']['input'];
-  /** Optional stable revoke reason; defaults to HUMAN_STOP. */
-  reason?: InputMaybe<Scalars['String']['input']>;
+  /** Optional strict CrowdyJS/BWF preemption reason; defaults to HUMAN_STOP. */
+  reason?: InputMaybe<CrowdyStudioAgentPreemptionReason>;
   /** Owner/app session UUID. */
   sessionId: Scalars['String']['input'];
 };

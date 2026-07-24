@@ -4,6 +4,7 @@ import type {
   CrowdyAgentHeartbeatV1,
   CrowdyAgentLeaseV1,
   CrowdyAgentMode,
+  CrowdyAgentPreemptionReason,
   CrowdyAgentRegisteredToolV1,
   CrowdyAgentRunV1,
   CrowdyAgentSessionV1,
@@ -139,7 +140,7 @@ export interface CrowdyStudioAgentTransportV1 {
   revokeLease(
     input: SessionMutationInput & {
       readonly leaseId: string;
-      readonly reason: string;
+      readonly reason: CrowdyAgentPreemptionReason;
     },
   ): Promise<CrowdyAgentLeaseV1>;
   pause(input: SessionMutationInput): Promise<CrowdyAgentSessionV1>;

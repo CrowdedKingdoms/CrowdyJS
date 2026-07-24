@@ -37,6 +37,7 @@ import {
   type CrowdyAgentRunFieldsFragment,
   type CrowdyAgentSessionFieldsFragment,
   type CrowdyAgentToolDescriptorFieldsFragment,
+  type CrowdyStudioAgentPreemptionReason,
 } from '../generated/graphql.js';
 import {
   CrowdyAgentError,
@@ -57,6 +58,7 @@ import type {
   CrowdyAgentLeaseV1,
   CrowdyAgentMessageV1,
   CrowdyAgentMode,
+  CrowdyAgentPreemptionReason,
   CrowdyAgentRegisteredToolV1,
   CrowdyAgentRunV1,
   CrowdyAgentSessionV1,
@@ -421,10 +423,13 @@ export class CrowdyAgentGraphQLTransport
     readonly clientEpoch: string;
     readonly idempotencyKey: string;
     readonly leaseId: string;
-    readonly reason: string;
+    readonly reason: CrowdyAgentPreemptionReason;
   }): Promise<CrowdyAgentLeaseV1> {
     const data = await this.request(CrowdyStudioAgentRevokeLeaseDocument, {
-      input,
+      input: {
+        ...input,
+        reason: input.reason as CrowdyStudioAgentPreemptionReason,
+      },
     });
     return mapLease(data.crowdyStudioAgentRevokeLease);
   }

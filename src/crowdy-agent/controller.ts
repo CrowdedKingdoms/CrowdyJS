@@ -438,11 +438,14 @@ export class CrowdyStudioAgentController {
     return lease;
   }
 
-  async revokeLease(leaseId: string, reason = 'Human revoked control'): Promise<void> {
+  async revokeLease(
+    leaseId: string,
+    reason: CrowdyAgentPreemptionReason = 'HUMAN_STOP',
+  ): Promise<void> {
     const lease = await this.options.transport.revokeLease({
       ...this.mutationContext('revoke-lease'),
       leaseId,
-      reason: reason.slice(0, 256),
+      reason,
     });
     this.upsertLease(lease);
     this.options.onLeaseChanged?.(lease);

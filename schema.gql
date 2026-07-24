@@ -7495,7 +7495,7 @@ type Mutation {
     Session, current epoch, new human mode, optional project/grid, and retry key.
     """
     input: SetAgentModeInput!
-  ): AgentSession!
+  ): AgentSession! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
   """
   Monotonically persist one attached epoch’s highest contiguous applied event sequence. Requires the app-scoped owner, exact current epoch, and idempotency key; stale epochs and gaps fail with stable errors.
   """
@@ -7518,14 +7518,14 @@ type Mutation {
     input: SendAgentMessageInput!
   ): AgentRun! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
   """
-  Human-grant one unexpired pending tool call by exact argument hash. The server revalidates epoch, context, policy, lease, descriptor, permissions, and project revision before single-use consumption. Requires the app-scoped owner and idempotency key; approval never creates missing authority.
+  Human-grant one unexpired pending tool call by exact argument hash. The server revalidates epoch, context, policy, lease, descriptor, permissions, and project revision before single-use consumption. Requires the app-scoped owner, use_studio_agent, and idempotency key; approval never creates missing authority.
   """
   crowdyStudioAgentApproveTool(
     """
     Session, current epoch, pending call UUID, displayed argument hash, and retry key.
     """
     input: DecideAgentToolInput!
-  ): AgentApproval!
+  ): AgentApproval! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
   """
   Human-deny one unexpired pending exact tool call, terminally denying the call and failing its run without any effect. Requires the app-scoped owner, current epoch, matching hash, and idempotency key.
   """
@@ -7573,7 +7573,7 @@ type Mutation {
   crowdyStudioAgentResume(
     """Paused session, current epoch, and retry key."""
     input: AgentSessionControlInput!
-  ): AgentSession!
+  ): AgentSession! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
   """
   Immediately make one owner/session run durably CANCELLED, revoke pending capabilities/tools, and abort its local provider stream when present. Requires the app-scoped owner, current epoch, exact run id, and idempotency key; cancellation never silently resumes.
   """
@@ -14432,8 +14432,32 @@ input RevokeAgentLeaseInput {
   clientEpoch: BigInt!
   """Lease UUID to revoke."""
   leaseId: String!
-  """Optional stable revoke reason; defaults to HUMAN_STOP."""
-  reason: String
+  """
+  Optional strict CrowdyJS/BWF preemption reason; defaults to HUMAN_STOP.
+  """
+  reason: CrowdyStudioAgentPreemptionReason
+}
+
+"""
+Closed CrowdyJS/BWF reason vocabulary for synchronous lease and control preemption.
+"""
+enum CrowdyStudioAgentPreemptionReason {
+  HUMAN_INPUT
+  HUMAN_EDIT
+  HUMAN_STOP
+  ESCAPE
+  DEATH
+  CONTEXT_CHANGED
+  PERMISSION_CHANGED
+  ADMISSION_CHANGED
+  CONTROL_TARGET_CHANGED
+  DISCONNECTED
+  CLIENT_REATTACHED
+  QUOTA_FAILURE
+  BUDGET_FAILURE
+  OPERATOR_KILL
+  LEASE_EXPIRED
+  SESSION_CLOSED
 }
 
 """Common human session-control shape for pause, resume, and close."""
