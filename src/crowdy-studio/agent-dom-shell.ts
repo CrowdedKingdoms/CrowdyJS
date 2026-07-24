@@ -3,6 +3,7 @@ import {
   type CrowdyStudioAgentStateV1,
 } from '../crowdy-agent/controller.js';
 import type { CrowdyAgentMode } from '../crowdy-agent/types.js';
+import type { StudioLayoutController } from './layout.js';
 
 const PLAY_SCOPES = [
   'observe',
@@ -19,9 +20,22 @@ export interface CrowdyStudioAgentDomShellOptions {
     controlledEntityId: string;
     hostCapabilityRevision: string;
   } | null;
+  /**
+   * Optional studio layout controller. When present the dock participates in
+   * the shared pane layout and auto-reveals itself for safety-critical
+   * moments (pending exact approvals, an activating Play lease).
+   */
+  layout?: StudioLayoutController;
 }
 
-/** Accessible, text-only rendering for the integrated durable agent dock. */
+/**
+ * Accessible, text-only rendering for the integrated durable agent dock.
+ *
+ * The conversation is the primary surface. Play-control, activity, and
+ * change-tracking sections are collapsible disclosures so the dock stays
+ * minimal, with one deliberate exception: pending exact approvals and the
+ * active Play lease countdown always render prominently.
+ */
 export class CrowdyStudioAgentDomShell {
   readonly root: HTMLElement;
   private readonly status: HTMLElement;
@@ -34,11 +48,19 @@ export class CrowdyStudioAgentDomShell {
   private readonly checkpoints: HTMLElement;
   private readonly composer: HTMLTextAreaElement;
   private readonly send: HTMLButtonElement;
+  private readonly playDisclosure: HTMLDetailsElement;
+  private readonly playSummary: HTMLElement;
+  private readonly activityDisclosure: HTMLDetailsElement;
+  private readonly activitySummary: HTMLElement;
+  private readonly changesDisclosure: HTMLDetailsElement;
+  private readonly changesSummary: HTMLElement;
   private readonly modeButtons = new Map<CrowdyAgentMode, HTMLButtonElement>();
   private readonly scopeInputs = new Map<string, HTMLInputElement>();
   private readonly unsubscribe: () => void;
   private readonly countdownTimer: ReturnType<typeof setInterval>;
   private lastState: CrowdyStudioAgentStateV1;
+  private lastPendingApprovals = 0;
+  private lastPlayLeaseActive = false;
   private disposed = false;
 
   constructor(
@@ -60,6 +82,8 @@ export class CrowdyStudioAgentDomShell {
     this.status.setAttribute('aria-live', 'polite');
     header.append(title, this.status);
 
+    const controlsRow = document.createElement('div');
+    controlsRow.className = 'ck-crowdy-studio-agent-controls-row';
     const modeGroup = document.createElement('div');
     modeGroup.className = 'ck-crowdy-studio-agent-modes';
     modeGroup.setAttribute('role', 'group');
@@ -90,15 +114,55 @@ export class CrowdyStudioAgentDomShell {
       void this.run(() => this.controller.stop()),
     );
     controls.append(pause, resume, stop);
+    controlsRow.append(modeGroup, controls);
 
-    this.budget = document.createElement('div');
-    this.budget.className = 'ck-crowdy-studio-agent-budget';
-    this.budget.setAttribute('aria-label', 'Agent budget');
+    // Safety surfaces: approvals and the active Play lease stay prominent and
+    // are never hidden behind a disclosure.
+    this.approvals = document.createElement('section');
+    this.approvals.className = 'ck-crowdy-studio-agent-approvals';
+    this.approvals.setAttribute('aria-label', 'Pending exact approvals');
     this.lease = document.createElement('div');
     this.lease.className = 'ck-crowdy-studio-agent-lease';
     this.lease.setAttribute('role', 'status');
     this.lease.setAttribute('aria-label', 'Agent control lease');
 
+    this.messages = document.createElement('div');
+    this.messages.className = 'ck-crowdy-studio-agent-messages';
+    this.messages.setAttribute('role', 'log');
+    this.messages.setAttribute('aria-live', 'polite');
+    this.messages.setAttribute('aria-relevant', 'additions text');
+    this.stream = document.createElement('div');
+    this.stream.className = 'ck-crowdy-studio-agent-stream';
+    this.stream.setAttribute('aria-label', 'Streaming assistant response');
+    this.messages.append(this.stream);
+
+    const form = document.createElement('form');
+    form.className = 'ck-crowdy-studio-agent-composer';
+    this.composer = document.createElement('textarea');
+    this.composer.maxLength = 32_768;
+    this.composer.rows = 3;
+    this.composer.placeholder = 'Ask, build, or play…';
+    this.composer.setAttribute('aria-label', 'Message Crowdy Agent');
+    this.send = button('Send', 'submit');
+    form.append(this.composer, this.send);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const content = this.composer.value;
+      if (!content.trim()) return;
+      void this.run(async () => {
+        await this.controller.sendMessage(content);
+        this.composer.value = '';
+      });
+    });
+    this.composer.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    // Collapsible secondary sections.
+    const playBody = document.createElement('div');
     const leaseControls = document.createElement('fieldset');
     leaseControls.className = 'ck-crowdy-studio-agent-lease-controls';
     const leaseLegend = document.createElement('legend');
@@ -136,74 +200,49 @@ export class CrowdyStudioAgentDomShell {
       );
     });
     leaseControls.append(grant);
+    playBody.append(leaseControls);
+    [this.playDisclosure, this.playSummary] = disclosure(
+      'Play control',
+      playBody,
+    );
 
-    const conversationTitle = heading('Conversation');
-    this.messages = document.createElement('div');
-    this.messages.className = 'ck-crowdy-studio-agent-messages';
-    this.messages.setAttribute('role', 'log');
-    this.messages.setAttribute('aria-live', 'polite');
-    this.messages.setAttribute('aria-relevant', 'additions text');
-    this.stream = document.createElement('div');
-    this.stream.className = 'ck-crowdy-studio-agent-stream';
-    this.stream.setAttribute('aria-label', 'Streaming assistant response');
-    this.messages.append(this.stream);
-
-    const activityTitle = heading('Plan and tools');
     this.timeline = document.createElement('ol');
     this.timeline.className = 'ck-crowdy-studio-agent-timeline';
     this.timeline.setAttribute('aria-label', 'Agent plan and tool timeline');
+    [this.activityDisclosure, this.activitySummary] = disclosure(
+      'Activity',
+      this.timeline,
+    );
 
-    this.approvals = document.createElement('section');
-    this.approvals.className = 'ck-crowdy-studio-agent-approvals';
-    this.approvals.setAttribute('aria-label', 'Pending exact approvals');
     this.checkpoints = document.createElement('section');
     this.checkpoints.className = 'ck-crowdy-studio-agent-checkpoints';
     this.checkpoints.setAttribute('aria-label', 'Agent diffs and checkpoints');
+    [this.changesDisclosure, this.changesSummary] = disclosure(
+      'Changes',
+      this.checkpoints,
+    );
 
-    const form = document.createElement('form');
-    form.className = 'ck-crowdy-studio-agent-composer';
-    this.composer = document.createElement('textarea');
-    this.composer.maxLength = 32_768;
-    this.composer.rows = 3;
-    this.composer.placeholder = 'Ask, build, or play…';
-    this.composer.setAttribute('aria-label', 'Message Crowdy Agent');
-    this.send = button('Send', 'submit');
-    form.append(this.composer, this.send);
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const content = this.composer.value;
-      if (!content.trim()) return;
-      void this.run(async () => {
-        await this.controller.sendMessage(content);
-        this.composer.value = '';
-      });
-    });
-    this.composer.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        form.requestSubmit();
-      }
-    });
+    this.budget = document.createElement('div');
+    this.budget.className = 'ck-crowdy-studio-agent-budget';
+    this.budget.setAttribute('aria-label', 'Agent budget');
 
     this.root.append(
       header,
-      modeGroup,
-      controls,
-      this.budget,
-      this.lease,
-      leaseControls,
-      conversationTitle,
-      this.messages,
-      activityTitle,
-      this.timeline,
+      controlsRow,
       this.approvals,
-      this.checkpoints,
+      this.lease,
+      this.messages,
       form,
+      this.playDisclosure,
+      this.activityDisclosure,
+      this.changesDisclosure,
+      this.budget,
     );
     host.dataset.agent = 'true';
     host.append(this.root);
     this.unsubscribe = controller.subscribe((state) => this.render(state));
     this.countdownTimer = setInterval(() => this.renderLease(this.lastState), 1_000);
+    this.render(this.lastState);
   }
 
   render(state: CrowdyStudioAgentStateV1): void {
@@ -229,6 +268,7 @@ export class CrowdyStudioAgentDomShell {
     this.renderTimeline(state);
     this.renderApprovals(state);
     this.renderCheckpoints(state);
+    this.autoReveal(state);
   }
 
   dispose(): void {
@@ -237,6 +277,32 @@ export class CrowdyStudioAgentDomShell {
     clearInterval(this.countdownTimer);
     this.unsubscribe();
     this.root.remove();
+  }
+
+  /**
+   * Safety-critical auto-reveal: a newly pending exact approval or a Play
+   * lease activation opens the dock and the Play disclosure so the human is
+   * always shown what needs their decision or is acting on their behalf.
+   */
+  private autoReveal(state: CrowdyStudioAgentStateV1): void {
+    const pending = state.approvals.filter(
+      (approval) => approval.status === 'PENDING',
+    ).length;
+    const playLeaseActive = state.leases.some(
+      (lease) => lease.kind === 'PLAY' && lease.status === 'ACTIVE',
+    );
+    if (pending > this.lastPendingApprovals) {
+      this.options.layout?.setVisible('agent', true);
+    }
+    if (playLeaseActive && !this.lastPlayLeaseActive) {
+      this.options.layout?.setVisible('agent', true);
+      this.playDisclosure.open = true;
+    }
+    if (state.session?.mode === 'PLAY' && !playLeaseActive) {
+      this.playDisclosure.open = true;
+    }
+    this.lastPendingApprovals = pending;
+    this.lastPlayLeaseActive = playLeaseActive;
   }
 
   private renderBudget(state: CrowdyStudioAgentStateV1): void {
@@ -260,18 +326,22 @@ export class CrowdyStudioAgentDomShell {
     );
     if (!lease) {
       this.lease.textContent = 'No active Play lease';
+      this.lease.dataset.active = 'false';
+      this.playSummary.textContent = 'Play control';
       return;
     }
     const remaining = Math.max(
       0,
       Math.ceil((Date.parse(lease.expiresAt) - Date.now()) / 1_000),
     );
+    this.lease.dataset.active = 'true';
     this.lease.textContent = [
       `Play lease: ${remaining}s`,
       `holder ${lease.holder}`,
       `entity ${lease.controlledEntityId ?? 'none'}`,
       `scopes ${lease.scopes.join(', ')}`,
     ].join(' · ');
+    this.playSummary.textContent = `Play control · lease ${remaining}s`;
   }
 
   private renderMessages(state: CrowdyStudioAgentStateV1): void {
@@ -344,6 +414,8 @@ export class CrowdyStudioAgentDomShell {
     });
     const items = [...runItems, ...toolItems];
     this.timeline.replaceChildren(...items);
+    this.activitySummary.textContent =
+      items.length > 0 ? `Activity (${items.length})` : 'Activity';
     if (items.length === 0) {
       const empty = document.createElement('li');
       empty.textContent = 'No tool activity.';
@@ -396,6 +468,7 @@ export class CrowdyStudioAgentDomShell {
       return card;
     });
     this.approvals.replaceChildren(...cards);
+    this.approvals.hidden = cards.length === 0;
   }
 
   private renderCheckpoints(state: CrowdyStudioAgentStateV1): void {
@@ -430,6 +503,14 @@ export class CrowdyStudioAgentDomShell {
       cards.push(card);
     }
     this.checkpoints.replaceChildren(...cards);
+    this.changesSummary.textContent =
+      cards.length > 0 ? `Changes (${cards.length})` : 'Changes';
+    if (cards.length === 0) {
+      const none = document.createElement('p');
+      none.className = 'ck-crowdy-studio-empty';
+      none.textContent = 'No agent edits or checkpoints yet.';
+      this.checkpoints.append(none);
+    }
   }
 
   private async run(operation: () => void | Promise<unknown>): Promise<void> {
@@ -440,6 +521,18 @@ export class CrowdyStudioAgentDomShell {
         error instanceof Error ? error.message : 'Agent action failed';
     }
   }
+}
+
+function disclosure(
+  label: string,
+  body: HTMLElement,
+): [HTMLDetailsElement, HTMLElement] {
+  const details = document.createElement('details');
+  details.className = 'ck-crowdy-studio-agent-disclosure';
+  const summary = document.createElement('summary');
+  summary.textContent = label;
+  details.append(summary, body);
+  return [details, summary];
 }
 
 function button(

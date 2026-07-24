@@ -223,8 +223,10 @@ export async function mountCrowdyStudio(
   let editor: CrowdyStudioEditorAdapter | null = null;
   let destroyed = false;
   let recoveringEditor = false;
+  // Observe the editor box itself so pane toggles and splitter drags inside
+  // the studio relayout Monaco, not only host/window resizes.
   const disconnectLayoutObserver = observeCrowdyStudioEditorLayout(
-    host,
+    shell.editorHost,
     () => editor,
   );
   const callbacks: CrowdyStudioEditorCallbacks = {
