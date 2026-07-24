@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
-  "version": "12.0.0",
+  "version": "12.1.0",
   "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
@@ -29,6 +29,10 @@
     "./player-host": {
       "import": "./dist/player-host/index.js",
       "types": "./dist/player-host/index.d.ts"
+    },
+    "./player-glue-worker": {
+      "import": "./dist/player-runtime/player-glue-worker.js",
+      "types": "./dist/player-runtime/player-glue-worker.d.ts"
     }
   },
   "sideEffects": false,
@@ -88,6 +92,7 @@
     "@graphql-codegen/typescript-operations": "^5.1.0",
     "@graphql-tools/merge": "^9.1.10",
     "@types/node": "^22.10.7",
+    "happy-dom": "^20.11.1",
     "typescript": "^5.7.3",
     "ws": "^8.21.1"
   },

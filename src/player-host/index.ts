@@ -17,6 +17,18 @@ export {
   createPlayerHostAgentTools,
   type PlayerHostAgentToolsV1,
 } from './tools.js';
+export {
+  PlayerControlGate,
+  type PlayerControlGateAgentControl,
+  type PlayerControlGateOptions,
+  type PlayerControlGateSnapshot,
+} from './control-gate.js';
+export {
+  AGENT_CONTROL_BANNER_STYLES,
+  AgentControlBanner,
+  ensureAgentControlBannerStyles,
+  type AgentControlBannerController,
+} from './control-banner.js';
 export type {
   GameChatSendCommandV1,
   GameCombatAttackCommandV1,

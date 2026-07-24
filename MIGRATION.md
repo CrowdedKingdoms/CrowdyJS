@@ -1,3 +1,48 @@
+# CrowdyJS v12.1 — Crowdy Studio embed kit (additive)
+
+Version 12.1 ships the reusable game-embed chrome that previously lived only
+in Blocks with Friends. Nothing breaks; games that already hand-roll a shell
+can adopt incrementally.
+
+New from `@crowdedkingdoms/crowdyjs/crowdy-studio`:
+
+- `createCrowdyStudioEmbed(options)` / `CrowdyStudioEmbed` — responsive
+  dock/fullscreen panel with focus trap, Escape/close-key semantics, compact
+  header, on-demand Context drawer (grid bounds, permission cards, optional
+  HUD preview), loading/error/retry chrome, and assembly of the full
+  `mountCrowdyStudio` call (agent block included when the client exposes
+  `crowdyStudioAgent` and the game passes `playerHost`).
+- `CrowdyStudioEmbedDock` — accessible game/studio splitter with persisted
+  width under `ck:crowdy-studio:embed:dock-width:v1`.
+- `CrowdyStudioTextHud` — text-only presentation sink for CLIENT-mod
+  `hud_set` payloads plus the drawer preview mount.
+- `CROWDY_STUDIO_EMBED_STYLES` / `ensureCrowdyStudioEmbedStyles()` — injected
+  `ck-crowdy-studio-embed-*` styling; the docked panel sets
+  `--ck-game-right-inset` on `document.body` for game HUD insets.
+
+New from `@crowdedkingdoms/crowdyjs/player-host`:
+
+- `PlayerControlGate` — the synchronous human-takeover seam (capture-phase
+  keyboard/pointer preemption, offline Stop, page-hide/visibility handling),
+  parameterized on a `clearAgentIntent` hook.
+- `AgentControlBanner` — the always-visible-on-control Pause/Stop safety
+  region with self-injected `ck-agent-control-*` styles.
+
+New package subpath:
+
+- `@crowdedkingdoms/crowdyjs/player-glue-worker` — the self-starting tokenless
+  CLIENT-mod glue worker entry. Bundle it as a same-origin module worker (for
+  example Vite's `?worker&url`) instead of copying a worker wrapper into the
+  game.
+
+Migrating from the Blocks with Friends copies: `CrowdyStudioPanel` →
+`CrowdyStudioEmbed`, `CrowdyStudioDock` → `CrowdyStudioEmbedDock`,
+`ModHudLayer` → `CrowdyStudioTextHud`, `bwf-crowdy-studio-*` CSS →
+`ck-crowdy-studio-embed-*`, `bwf-agent-control-*` → `ck-agent-control-*`,
+`--bwf-game-right-inset` → `--ck-game-right-inset`. The persisted dock width
+key changes from `bwf:crowdy-studio:dock-width:v1` to the `ck:` key above
+(previous widths reset once).
+
 # CrowdyJS v12 — Agentic Crowdy Studio contract (BREAKING)
 
 Version 12 establishes the greenfield public contracts
