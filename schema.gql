@@ -4857,7 +4857,7 @@ type Query {
     containerId: String!
   ): GmContainer!
   """
-  List containers in an app, optionally filtered by container type and/or session, by property predicates (`where`, requires typeName; the same predicate shape automation selectors use — missing properties fall back to the type default), and paged with offset/limit over the stable created-at ordering. Requires a valid token.
+  List containers in an app, optionally filtered by container type and/or session, by bindingKey (get-by-key read of an ensured container), by property predicates (`where`, requires typeName; the same predicate shape automation selectors use — missing properties fall back to the type default), and paged with offset/limit over the stable created-at ordering. Requires a valid token.
   """
   gameModelContainers(
     """The app (tenant) whose containers to list."""
@@ -4868,6 +4868,10 @@ type Query {
     Optional: only containers in this session. Omit for all (including app-global).
     """
     sessionId: String
+    """
+    Optional: only containers ensured under this binding key (see gameModelEnsureContainer). Combine with typeName and sessionId for a get-by-key read of the single shared row.
+    """
+    bindingKey: String
     """
     Optional property predicates (max 8, AND-combined). Requires typeName. Ops: '==', '!=', '<', '>', '<=', '>='. Values are JSON-encoded.
     """
@@ -4955,6 +4959,15 @@ type Query {
     """Optional: filter by outcome (true = succeeded, false = failed)."""
     success: Boolean
   ): GameModelEventsConnection!
+  """
+  Read the best-known app-scoped number of active gameplay sessions across fresh non-Offline Buddy servers. This counts sessions, not actors or distinct users. FRESH is a complete fleet total; PARTIAL is only the supported-Buddy subset; UNAVAILABLE has no fresh observation. Partial/unavailable samples never create count-change revisions. Requires an app-scoped token for this exact app.
+  """
+  gameModelActivePlayerCount(
+    """
+    App whose active gameplay-session count to read. Must match the app-scoped bearer token.
+    """
+    appId: BigInt!
+  ): GameModelActivePlayerCountSnapshot!
   """
   The platform's engine-template registry: ready-made compute engines (mob/world/match/deck/instance/director/matchmaking/market/board/minigame/abilities/movement-warden/territory/racing/...) deployable by name with computeDeployTemplate. Requires the org 'manage_compute' permission.
   """
@@ -6851,11 +6864,11 @@ type Mutation {
     enabled: Boolean!
   ): GmAutomation! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
-  Create an event trigger that fires an automation in reaction to model activity (a function invocation, a direct property write, or a container creation). Matched in the API server post-commit. Requires app-admin ('manage_apps').
+  Create an event trigger that fires an automation in reaction to model activity or a complete app-scoped active-player-count transition. player_count_changed rejects model filters, starts silent-baseline tracking, injects reserved previous/current/delta/revision params, and uses trailing-edge debounce; other event behavior is unchanged. Matched in the API server post-commit. Requires app-admin ('manage_apps').
   """
   gameModelUpsertAutomationTrigger(
     """
-    The app, the target automation (by name), the model event, and optional filters.
+    The app, target automation (by name), event, optional model filters, and debounce window.
     """
     input: UpsertAutomationTriggerInput!
   ): GmAutomationTrigger! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
@@ -6918,6 +6931,15 @@ type Mutation {
     """
     input: CreateContainerInput!
   ): GmContainer!
+  """
+  Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules), so a caller who may not instantiate the type errors only in the not-exists case. NOTE: bindingKey is client-supplied and not yet policy-governed; shared world objects should use admin-instantiable types so only app admins can create the keyed row. Requires a valid token.
+  """
+  gameModelEnsureContainer(
+    """
+    The app, optional session, container type, the binding key, and the display name / owner / metadata / initial properties applied only if this call creates the row.
+    """
+    input: EnsureContainerInput!
+  ): GmEnsureContainerResult!
   """
   Delete a container instance. Cascades its instance properties and any edges connected to it. Allowed for an app admin or the container owner. Requires a valid token. DESTRUCTIVE. Returns true if a container was deleted.
   """
@@ -9929,7 +9951,7 @@ type GmAutomation {
 }
 
 """
-An event subscription that fires an automation in reaction to model activity (matched in the API server, not the DB).
+An event subscription that fires an automation in reaction to model activity or a complete app-scoped active-player-count transition (matched in the API server, not a DB trigger).
 """
 type GmAutomationTrigger {
   """Unique trigger id (UUID)."""
@@ -9939,16 +9961,20 @@ type GmAutomationTrigger {
   """The automation this trigger fires."""
   automationId: String!
   """
-  The model event: function_invoked | property_changed | container_created.
+  Observed event: function_invoked | property_changed | container_created | player_count_changed.
   """
   onEvent: String!
-  """Filter: only this function name."""
+  """Filter: only this function name. Always null for player_count_changed."""
   functionName: String
-  """Filter: only this container type."""
+  """
+  Filter: only this container type. Always null for player_count_changed.
+  """
   containerTypeName: String
-  """Filter: only this property key."""
+  """Filter: only this property key. Always null for player_count_changed."""
   propertyKey: String
-  """Debounce/coalesce window in ms."""
+  """
+  Debounce window in ms. player_count_changed coalesces on the trailing edge; other model events use their existing leading-edge behavior.
+  """
   debounceMs: Int!
 }
 
@@ -10280,6 +10306,22 @@ type GmContainer {
   ownerUserId: BigInt
   """JSON object of developer metadata."""
   metadataJson: String!
+  """
+  Opaque client-derived key the container was ensured under (unique per appId + typeName + sessionId), or null when it was created without one.
+  """
+  bindingKey: String
+}
+
+"""
+Result of gameModelEnsureContainer: the resolved container plus whether this call inserted it.
+"""
+type GmEnsureContainerResult {
+  """The container all ensures of this key converge on."""
+  container: GmContainer!
+  """
+  True when THIS call created the row; false when it resolved an existing one (creation-only input fields were ignored).
+  """
+  created: Boolean!
 }
 
 """
@@ -10560,6 +10602,68 @@ type GameModelEventsConnection {
   Total matching records across all pages, when known (null for sources that do not compute a total).
   """
   totalCount: Int
+}
+
+"""
+A point-in-time app-scoped count of active gameplay sessions. This counts sessions, not actors or distinct users; one user with multiple active sessions contributes multiple players. Status states whether the fleet-wide count is complete.
+"""
+type GameModelActivePlayerCountSnapshot {
+  """The app whose active gameplay sessions were counted."""
+  appId: BigInt!
+  """
+  Active gameplay sessions currently reported for the app. For PARTIAL this is the best-known sum from supported fresh Buddies; for UNAVAILABLE it is zero because no live report can be observed. Check status before treating it as a complete fleet total.
+  """
+  activePlayerCount: Int!
+  """
+  Whether activePlayerCount is complete (FRESH), a supported-Buddy subset (PARTIAL), or unavailable because no Buddy heartbeat is fresh (UNAVAILABLE).
+  """
+  status: GameModelPlayerCountStatus!
+  """
+  Latest heartbeat time represented by this observation, or null when no fresh Buddy is available.
+  """
+  observedAt: DateTime
+  """
+  Durable monotonic revision of complete count changes. Zero means the app is untracked or has not changed after its silent baseline. Partial and unavailable observations never advance it.
+  """
+  revision: BigInt!
+}
+
+"""
+Completeness of an app-scoped active gameplay-session count across the fresh Buddy fleet.
+"""
+enum GameModelPlayerCountStatus {
+  """
+  At least one non-Offline Buddy heartbeat is fresh and every fresh Buddy supports version 1 app-scoped counts. The count is complete.
+  """
+  FRESH
+  """
+  At least one non-Offline Buddy heartbeat is fresh, but one or more fresh Buddies do not support app-scoped counts. The count is only the best-known supported-Buddy sum and does not advance change revisions.
+  """
+  PARTIAL
+  """
+  No non-Offline Buddy heartbeat is fresh enough to observe. The count is unavailable and does not advance change revisions.
+  """
+  UNAVAILABLE
+}
+
+"""
+One durable transition between complete app-scoped active gameplay-session counts. Delivery is cross-replica but best-effort; deduplicate by revision and requery gameModelActivePlayerCount after reconnect or a revision gap.
+"""
+type GameModelActivePlayerCountChange {
+  """The app whose complete active-session count changed."""
+  appId: BigInt!
+  """Last complete active gameplay-session count before this transition."""
+  previousCount: Int!
+  """New complete active gameplay-session count after this transition."""
+  currentCount: Int!
+  """Signed change: currentCount minus previousCount."""
+  delta: Int!
+  """
+  Durable monotonic app revision for this transition. Use it to deduplicate and detect gaps.
+  """
+  revision: BigInt!
+  """Latest fresh Buddy heartbeat represented by the new count."""
+  observedAt: DateTime!
 }
 
 """
@@ -13104,7 +13208,7 @@ input NotificationArgInput {
 }
 
 """
-A declarative grid-permission effect the function applies TRANSACTIONALLY with its property mutations: grant or revoke runtime grid permissions (the same ACL Buddy enforces on movement/voxel writes) driven by game logic. Expressions are compiled server-side and evaluated in the invocation context (params plus the injected $caller_user_id / $self_owner_id / $session_id / $current_turn_user_id). If an effect fails, the whole invocation rolls back. Applied effects are recorded on the invocation event.
+A declarative grid-permission effect the function applies TRANSACTIONALLY with its property mutations: grant or revoke runtime grid permissions (the same ACL Buddy enforces on movement/voxel writes) driven by game logic. Expressions are compiled server-side and evaluated in the invocation context (params plus the injected $caller_user_id / $self_owner_id / $session_id / $current_turn_user_id / $self_container_id). If an effect fails, the whole invocation rolls back. Applied effects are recorded on the invocation event.
 """
 input FunctionPermissionEffectInput {
   """
@@ -13359,23 +13463,27 @@ input UpsertAutomationInput {
   cooldownMs: Int
 }
 
-"""Create an event trigger that fires an automation on model activity."""
+"""
+Create an event trigger that fires an automation on model activity or a complete app-scoped active-player-count transition.
+"""
 input UpsertAutomationTriggerInput {
   """The app (tenant)."""
   appId: BigInt!
   """The automation (by name) this trigger fires."""
   automationName: String!
   """
-  The model event: function_invoked | property_changed | container_created.
+  Event to observe: function_invoked | property_changed | container_created | player_count_changed. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params.
   """
   onEvent: String!
-  """Filter: only this function name."""
+  """Filter: only this function name. Rejected for player_count_changed."""
   functionName: String
-  """Filter: only this container type."""
+  """Filter: only this container type. Rejected for player_count_changed."""
   containerTypeName: String
-  """Filter: only this property key."""
+  """Filter: only this property key. Rejected for player_count_changed."""
   propertyKey: String
-  """Debounce/coalesce window in ms."""
+  """
+  Debounce window in ms. player_count_changed uses trailing-edge coalescing (first previous count plus latest current count/revision); existing model events retain leading-edge suppression.
+  """
   debounceMs: Int
 }
 
@@ -13446,6 +13554,36 @@ input CreateContainerInput {
   """JSON object of metadata."""
   metadataJson: String
   """Initial property values for the container."""
+  properties: [SeedPropertyInput!]
+}
+
+"""
+Atomically get-or-create a container by an opaque binding key. The key is unique per (appId, typeName, sessionId); concurrent ensures converge on one row. Creation-only fields are ignored when the row already exists.
+"""
+input EnsureContainerInput {
+  """The app (tenant) the container belongs to."""
+  appId: BigInt!
+  """
+  Optional session scoping the key and the container (omit for app-global). Two sessions may hold the same bindingKey independently.
+  """
+  sessionId: String
+  """The container type to resolve or instantiate."""
+  typeName: String!
+  """
+  Opaque client-derived key (max 128 chars) identifying the shared container within (appId, typeName, sessionId). All concurrent ensures with the same key return the same containerId.
+  """
+  bindingKey: String!
+  """Human-friendly display name. Used ONLY when this call creates the row."""
+  displayName: String!
+  """Optional description. Used ONLY when this call creates the row."""
+  description: String
+  """
+  Owner user id, same rules as CreateContainerInput (defaults to the caller for member/owner types, shared null for admin types). Used ONLY when this call creates the row.
+  """
+  ownerUserId: BigInt
+  """JSON object of metadata. Used ONLY when this call creates the row."""
+  metadataJson: String
+  """Initial property values. Used ONLY when this call creates the row."""
   properties: [SeedPropertyInput!]
 }
 
@@ -14575,6 +14713,15 @@ input PlayerAutomationRefInput {
 }
 
 type Subscription {
+  """
+  Stream complete active gameplay-session count transitions for one app. There is no bootstrap event: query gameModelActivePlayerCount for the current snapshot. The first complete sample is a silent baseline; PARTIAL/UNAVAILABLE samples do not emit or become zero. Delivery uses a Postgres-backed cross-replica best-effort feed with a bounded oldest-drop buffer. Deduplicate by revision; after reconnect or a revision gap, requery gameModelActivePlayerCount. Requires an app-scoped token for this exact app.
+  """
+  gameModelActivePlayerCountChanged(
+    """
+    App whose complete count transitions to stream. Must match the app-scoped bearer token.
+    """
+    appId: BigInt!
+  ): GameModelActivePlayerCountChange!
   """
   Push notification whenever a container in the app changes: an invoke mutated it, a direct gameModelSetProperty wrote it, or it was created/deleted. Metadata only (containerId, typeName, changedKeys — no property values); pull the visibility-filtered state with gameModelContainerState on receipt. Post-commit and best-effort (a dropped event costs one missed pull, never correctness) — durable reads remain the source of truth. Optional typeName/sessionId filters narrow delivery. Fans out across all API replicas. Requires a valid token. Replaces interval polling with pull-on-push.
   """

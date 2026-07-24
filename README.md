@@ -39,6 +39,16 @@ CrowdyJS v4 targets browsers by default and uses native `fetch`, `WebSocket`, `c
 > `marketplace.claimGridChunk` / `marketplace.releaseClaimedGrid` require the
 > corresponding 2026-07-22 Game API claim schema. Older servers reject only
 > those operations during GraphQL validation.
+>
+> **App-scoped player-count compatibility:** `gameModel.activePlayerCount(appId)`
+> and `gameModel.activePlayerCountChanged({ appId }, handlers)` require the
+> matching 2026-07-24 Game API schema and an app token scoped to that exact app;
+> the subscription also requires `wsUrl`. They count active gameplay sessions,
+> not distinct users or actors, and an abandoned session can remain counted for
+> approximately 120 seconds. Only `FRESH` snapshots are complete:
+> `PARTIAL`/`UNAVAILABLE` are not authoritative zeroes. The subscription is
+> best-effort and has no initial event; establish it, query the snapshot,
+> deduplicate by `revision`, and requery after reconnects or revision gaps.
 
 > **v8.21.1 Node realtime routing hotfix:** app-routing responses provide a
 > WebSocket base URL. CrowdyJS now normalizes that base to `/graphql` before
@@ -155,7 +165,7 @@ If `managementUrl` is omitted, the SDK falls back to `httpUrl` for backwards-com
 | `client.host` | Game-host election (`get`, `amIHost`) + actor liveness `heartbeat`. `amIHost` is UI convenience only — authoritative host gating uses `gameModelInvoke`'s `is_host` policy. |
 | `client.teleport` | Teleport requests. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
-| `client.gameModel` | Abstract game model: containers, properties, functions (incl. model-driven `notify_*` effects), sessions, and **automations / NPCs** (`upsertAutomation`, `runAutomation`, `automationRuns`, `automationStats`, …). |
+| `client.gameModel` | Abstract game model: containers, properties, functions (incl. model-driven `notify_*` effects), sessions, **app-scoped active-session counts** (`activePlayerCount`, `activePlayerCountChanged`), and **automations / NPCs** (`upsertAutomation`, `runAutomation`, `automationRuns`, `automationStats`, …). |
 | `client.compute` | **Compute Modules** — server-side Rust/WASM logic: author + deploy source (`upsertModule`, `deployVersion`, `waitForCompile`), triggers + policy, synchronous `invoke`, and monitoring (`moduleRuns`, `moduleStats`, `moduleLogs`, `appDiagnostics`). Modules run server-only; see [Compute Modules docs](https://docs.crowdedkingdoms.com/game-api/compute-modules). |
 | `client.playerCompute` | Player-authored SERVER/CLIENT Rust/WASM bound to player-owned grids: deploy source, activate/deactivate, list modules/versions, and delete self-authored modules. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, pairing preference, optimistic revisions, copy-by-value imports, and atomic metadata/file saves. Generated operations are pinned to the committed merged SDL. |

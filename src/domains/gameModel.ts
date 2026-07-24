@@ -37,6 +37,12 @@ import {
   GameModelContainerChangedDocument,
   GameModelContainerChangedSubscription,
   GameModelContainerChangedSubscriptionVariables,
+  GameModelActivePlayerCountDocument,
+  type GameModelActivePlayerCountQuery,
+  type GameModelActivePlayerCountQueryVariables,
+  GameModelActivePlayerCountChangedDocument,
+  type GameModelActivePlayerCountChangedSubscription,
+  type GameModelActivePlayerCountChangedSubscriptionVariables,
   GameModelContainersDocument,
   type GameModelContainersQuery,
   type GameModelContainersQueryVariables,
@@ -259,11 +265,134 @@ export interface ContainerChangedHandlers {
   webSocketImpl?: unknown;
 }
 
+/** A snapshot returned by {@link GameModelAPI.activePlayerCount}. */
+export type GmActivePlayerCountSnapshot =
+  GameModelActivePlayerCountQuery['gameModelActivePlayerCount'];
+
+/** One count transition from {@link GameModelAPI.activePlayerCountChanged}. */
+export type GmActivePlayerCountChangeEvent =
+  GameModelActivePlayerCountChangedSubscription['gameModelActivePlayerCountChanged'];
+
+/** Handlers for {@link GameModelAPI.activePlayerCountChanged}. */
+export interface ActivePlayerCountChangedHandlers {
+  /** A complete app-scoped active-session count transition. */
+  next: (change: GmActivePlayerCountChangeEvent) => void;
+  /** Transport/GraphQL errors (the subscription retries on socket drops). */
+  error?: (error: unknown) => void;
+  /** The server ended the stream. */
+  complete?: () => void;
+  /**
+   * WebSocket constructor for runtimes without a global `WebSocket` (Node
+   * ≤ 21): pass `(await import('ws')).default`.
+   */
+  webSocketImpl?: unknown;
+}
+
 export class GameModelAPI {
   constructor(
     private gql: GraphQLClient,
     private readonly ws?: { wsUrl?: string; getToken: () => string | null },
   ) {}
+
+  /**
+   * **Player count** — read the best-known number of active gameplay sessions
+   * for one app. Requires a bearer token scoped to exactly `appId`.
+   *
+   * This is a **session count**, not a distinct-user or actor count: one user
+   * with multiple active sessions contributes more than once. A session that
+   * disappears without a clean disconnect can remain counted for approximately
+   * 120 seconds while its inactivity is recognized.
+   *
+   * Treat the result as authoritative only when `status === 'FRESH'`.
+   * `PARTIAL` is an incomplete best-known count and `UNAVAILABLE` means no fresh
+   * observation exists; neither status is an authoritative zero. `appId` and
+   * the monotonic `revision` are generated `BigInt` scalars represented as
+   * decimal strings.
+   *
+   * @param appId - App to count, as a decimal-string `BigInt`; it must match
+   *   the app scope of the bearer token.
+   * @returns The generated snapshot payload: `appId`, `activePlayerCount`,
+   *   `status`, nullable `observedAt`, and `revision`.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING` when the
+   *   token is missing or is not scoped to `appId`.
+   */
+  async activePlayerCount(
+    appId: GameModelActivePlayerCountQueryVariables['appId'],
+  ): Promise<GmActivePlayerCountSnapshot> {
+    const data = await this.gql.request(GameModelActivePlayerCountDocument, {
+      appId,
+    });
+    return data.gameModelActivePlayerCount;
+  }
+
+  /**
+   * **Player-count subscription** — stream complete active-session count
+   * transitions for one app. Requires a bearer token scoped to exactly
+   * `variables.appId` and a game-api `wsUrl` in the client config.
+   *
+   * This stream counts gameplay **sessions**, not distinct users or actors;
+   * abandoned sessions can remain counted for approximately 120 seconds while
+   * inactivity is recognized. It emits no initial/bootstrap event, so establish
+   * the stream and then call {@link activePlayerCount} for the current snapshot.
+   * `PARTIAL` and `UNAVAILABLE` observations neither emit transitions nor
+   * represent an authoritative zero.
+   *
+   * Delivery is best-effort and may miss or repeat events across reconnects.
+   * Deduplicate by the decimal-string `revision`. Requery
+   * {@link activePlayerCount} after every reconnect or whenever revisions have
+   * a gap; the query is the source of truth.
+   *
+   * @param variables - Exact call shape `{ appId }`, where `appId` is the
+   *   decimal-string `BigInt` matching the app-scoped bearer token.
+   * @param handlers - `next` per transition; optional `error`, `complete`, and
+   *   `webSocketImpl` for runtimes without a global `WebSocket`.
+   * @returns An unsubscribe function that disposes this subscription and its
+   *   graphql-transport-ws client.
+   * @throws {Error} Synchronously when the client config has no `wsUrl`.
+   */
+  activePlayerCountChanged(
+    variables: GameModelActivePlayerCountChangedSubscriptionVariables,
+    handlers: ActivePlayerCountChangedHandlers,
+  ): () => void {
+    if (!this.ws?.wsUrl) {
+      throw new Error(
+        'activePlayerCountChanged requires a wsUrl in the client config (graphql-transport-ws endpoint)',
+      );
+    }
+    const client = createWsClient({
+      url: this.ws.wsUrl,
+      lazy: false,
+      retryAttempts: 8,
+      ...(handlers.webSocketImpl
+        ? { webSocketImpl: handlers.webSocketImpl as never }
+        : {}),
+      connectionParams: () => {
+        const token = this.ws?.getToken();
+        return token ? { Authorization: `Bearer ${token}` } : {};
+      },
+    });
+    const dispose = client.subscribe(
+      { query: print(GameModelActivePlayerCountChangedDocument), variables },
+      {
+        next: (msg: { data?: unknown; errors?: unknown }) => {
+          const data = msg.data as
+            | GameModelActivePlayerCountChangedSubscription
+            | undefined;
+          if (data?.gameModelActivePlayerCountChanged) {
+            handlers.next(data.gameModelActivePlayerCountChanged);
+          } else if (msg.errors) {
+            handlers.error?.(msg.errors);
+          }
+        },
+        error: (err) => handlers.error?.(err),
+        complete: () => handlers.complete?.(),
+      },
+    );
+    return () => {
+      dispose();
+      void client.dispose();
+    };
+  }
 
   /**
    * **Subscriptions** — stream container-change notifications for an app

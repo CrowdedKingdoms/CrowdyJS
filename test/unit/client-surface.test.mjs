@@ -106,6 +106,9 @@ test('client exposes the full management + game sub-client surface', async () =>
   // New game-side sub-clients.
   assertMethods(client.avatars, 'avatars', ['listForUser', 'get', 'mine', 'appState', 'create', 'update', 'delete', 'updateState', 'updateAppState']);
   assertMethods(client.host, 'host', ['get', 'heartbeat']);
+  assertMethods(client.gameModel, 'gameModel', [
+    'activePlayerCount', 'activePlayerCountChanged',
+  ]);
   assertMethods(client.gameApps, 'gameApps', [
     'ownership', 'assignOwnership', 'transferOwnership', 'userPermissions',
     'nearbyPermissions', 'permissionLimits', 'createGrid', 'grantPermissions',
