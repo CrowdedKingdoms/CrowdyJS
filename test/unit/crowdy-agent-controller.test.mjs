@@ -43,6 +43,8 @@ function fakeTransport(registry) {
   const approvals = [];
   const toolResults = [];
   const heartbeats = [];
+  const workspaceRenewals = [];
+  const revocations = [];
   let epoch = 0;
   let currentSession = session(registry.registryDigest);
   return {
@@ -52,6 +54,8 @@ function fakeTransport(registry) {
     approvals,
     toolResults,
     heartbeats,
+    workspaceRenewals,
+    revocations,
     async getSession() {
       return structuredClone(currentSession);
     },
@@ -128,9 +132,13 @@ function fakeTransport(registry) {
     },
     async heartbeat(input) {
       heartbeats.push(structuredClone(input));
+      if (input.idempotencyKey.includes('renew-workspace-')) {
+        workspaceRenewals.push(structuredClone(input));
+      }
       return {
         serverTime: new Date().toISOString(),
         playLeaseFreshUntil: new Date(Date.now() + 5_000).toISOString(),
+        workspaceLeaseExpiresAt: new Date(Date.now() + 30_000).toISOString(),
       };
     },
     async sendMessage() {
@@ -150,8 +158,21 @@ function fakeTransport(registry) {
     async grantLease() {
       throw new Error('not used');
     },
-    async revokeLease() {
-      throw new Error('not used');
+    async revokeLease(input) {
+      revocations.push(structuredClone(input));
+      return {
+        leaseId: input.leaseId,
+        kind: 'WORKSPACE',
+        status: 'REVOKED',
+        clientEpoch: input.clientEpoch,
+        scopes: ['studio.project.write.server'],
+        holder: 'Current player',
+        expectedProjectRevision: '1',
+        contextVersion: currentSession.contextVersion,
+        grantedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30_000).toISOString(),
+        revokedReason: input.reason,
+      };
     },
     async pause() {
       currentSession = { ...currentSession, status: 'PAUSED' };
@@ -382,6 +403,117 @@ test('unknown event enum values fail closed without advancing the cursor', async
   controller.destroy();
 });
 
+test('ASK to BUILD to PLAY accepts each server-repinned registry and policy context', async () => {
+  const {
+    CROWDY_AGENT_TOOL_REGISTRY_V1: full,
+    CrowdyAgentToolRegistry,
+    CrowdyStudioAgentController,
+  } = await import('../../dist/crowdy-agent/index.js');
+  const registries = {
+    ASK: new CrowdyAgentToolRegistry([
+      full.require('studio.context.get', '1.0.0').descriptor,
+    ]),
+    BUILD: new CrowdyAgentToolRegistry([
+      full.require('workspace.file.patch', '1.0.0').descriptor,
+    ]),
+    PLAY: new CrowdyAgentToolRegistry([
+      full.require('game.control.stop', '1.0.0').descriptor,
+    ]),
+  };
+  let mode = 'ASK';
+  const transport = fakeTransport(registries.ASK);
+  transport.toolDescriptors = async () => ({
+    registryDigest: registries[mode].registryDigest,
+    tools: registries[mode].list(),
+  });
+  transport.setMode = async ({ mode: next }) => {
+    mode = next;
+    return {
+      ...session(registries[next].registryDigest),
+      mode: next,
+      currentClientEpoch: '1',
+      clientEpoch: '1',
+      providerPolicyVersion: `provider-${next}`,
+      appPolicyVersion: `app-${next}`,
+      contextVersion: `context-${next}`,
+    };
+  };
+  const controller = new CrowdyStudioAgentController({
+    transport,
+    sessionId: 'session-1',
+  });
+  await controller.initialize();
+  await controller.setMode('BUILD');
+  assert.equal(
+    controller.getState().session.registryDigest,
+    registries.BUILD.registryDigest,
+  );
+  assert.equal(controller.getState().session.contextVersion, 'context-BUILD');
+  assert.equal(
+    controller.getState().toolDescriptors[0].descriptor.name,
+    'workspace.file.patch',
+  );
+  await controller.setMode('PLAY');
+  assert.equal(
+    controller.getState().session.registryDigest,
+    registries.PLAY.registryDigest,
+  );
+  assert.equal(
+    controller.getState().session.providerPolicyVersion,
+    'provider-PLAY',
+  );
+  assert.equal(
+    controller.getState().toolDescriptors[0].descriptor.name,
+    'game.control.stop',
+  );
+  controller.destroy();
+});
+
+test('session creation derives the saved selected project and project switches fail closed', async () => {
+  const {
+    CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
+    CrowdyStudioAgentController,
+  } = await import('../../dist/crowdy-agent/index.js');
+  const transport = fakeTransport(registry);
+  let createInput;
+  transport.createSession = async (input) => {
+    createInput = structuredClone(input);
+    return {
+      ...session(registry.registryDigest),
+      projectId: input.projectId,
+      gridId: input.gridId,
+      mode: input.mode,
+    };
+  };
+  const controller = new CrowdyStudioAgentController({
+    transport,
+    createSession: {
+      appId: 'app-1',
+      projectId: 'guessed-project',
+      gridId: 'guessed-grid',
+      mode: 'BUILD',
+      idempotencyKey: 'create-project-bound',
+    },
+    resolveProjectBinding: async () => ({
+      projectId: 'project-1',
+      gridId: 'grid-1',
+    }),
+  });
+  await controller.initialize();
+  assert.equal(createInput.projectId, 'project-1');
+  assert.equal(createInput.gridId, 'grid-1');
+  assert.equal(controller.getState().session.projectId, 'project-1');
+
+  controller.projectSelectionChanged('project-2');
+  assert.equal(controller.getState().connection, 'ERROR');
+  assert.equal(controller.getState().clientEpoch, null);
+  assert.equal(
+    controller.getState().lastError.code,
+    'AGENT_CONTEXT_CHANGED',
+  );
+  controller.destroy();
+});
+
 test('Play heartbeat runs only while attached, active, and visible', async () => {
   const {
     CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
@@ -436,4 +568,158 @@ test('heartbeat freshness timeout fails closed locally', async () => {
   assert.equal(controller.getState().clientEpoch, null);
   assert.ok(preemptions.includes('DISCONNECTED'));
   controller.destroy();
+});
+
+test('workspace lease renews every interval and stops on human edit', async () => {
+  const {
+    CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
+    CrowdyStudioAgentController,
+  } = await import('../../dist/crowdy-agent/index.js');
+  const transport = fakeTransport(registry);
+  const controller = new CrowdyStudioAgentController({
+    transport,
+    sessionId: 'session-1',
+    workspaceRenewIntervalMs: 5,
+  });
+  await controller.initialize();
+  await controller.setMode('BUILD');
+  const lease = {
+    leaseId: 'workspace-1',
+    kind: 'WORKSPACE',
+    status: 'ACTIVE',
+    clientEpoch: '1',
+    scopes: ['studio.project.write.server'],
+    holder: 'Current player',
+    expectedProjectRevision: '1',
+    contextVersion: 'context-1',
+    grantedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 30_000).toISOString(),
+  };
+  const granted = event(1, 'LEASE_GRANTED', { lease });
+  transport.durable.push(granted);
+  transport.subscriptions[0].handlers.next(structuredClone(granted));
+  await new Promise((resolve) => setTimeout(resolve, 18));
+  assert.ok(transport.workspaceRenewals.length >= 2);
+  assert.equal(
+    transport.workspaceRenewals[0].sessionId,
+    'session-1',
+  );
+  assert.match(
+    transport.workspaceRenewals[0].idempotencyKey,
+    /renew-workspace-workspace-1/u,
+  );
+
+  controller.preemptForHumanEdit();
+  const stoppedAt = transport.workspaceRenewals.length;
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  assert.equal(transport.workspaceRenewals.length, stoppedAt);
+  assert.equal(transport.revocations.at(-1).reason, 'HUMAN_EDIT');
+  controller.destroy();
+});
+
+test('lease revocation aborts browser handlers and rejects late results', async () => {
+  const {
+    CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
+    CrowdyAgentBrowserToolDispatcher,
+    CrowdyStudioAgentController,
+  } = await import('../../dist/crowdy-agent/index.js');
+  const transport = fakeTransport(registry);
+  let controller;
+  let started = false;
+  let aborted = false;
+  const dispatcher = new CrowdyAgentBrowserToolDispatcher({
+    registry,
+    handlers: {
+      'workspace.tab.open': (_arguments, context) =>
+        new Promise((_resolve, reject) => {
+          started = true;
+          context.signal.addEventListener(
+            'abort',
+            () => {
+              aborted = true;
+              reject(new Error('late browser handler aborted'));
+            },
+            { once: true },
+          );
+        }),
+    },
+    getSessionId: () => 'session-1',
+    getClientEpoch: () => controller?.getState().clientEpoch ?? null,
+    getContextVersion: () =>
+      controller?.getState().session?.contextVersion ?? 'context-1',
+    getMode: () => 'BUILD',
+  });
+  controller = new CrowdyStudioAgentController({
+    transport,
+    sessionId: 'session-1',
+    browserDispatcher: dispatcher,
+    workspaceRenewIntervalMs: 60_000,
+  });
+  await controller.initialize();
+  await controller.setMode('BUILD');
+  const workspaceLease = {
+    leaseId: 'workspace-late',
+    kind: 'WORKSPACE',
+    status: 'ACTIVE',
+    clientEpoch: '1',
+    scopes: ['studio.project.write.server'],
+    holder: 'Current player',
+    expectedProjectRevision: '1',
+    contextVersion: 'context-1',
+    grantedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 30_000).toISOString(),
+  };
+  const granted = event(1, 'LEASE_GRANTED', { lease: workspaceLease });
+  transport.durable.push(granted);
+  transport.subscriptions[0].handlers.next(structuredClone(granted));
+  await settle();
+
+  const entry = registry.require('workspace.tab.open', '1.0.0');
+  const dispatched = event(2, 'TOOL_DISPATCHED', {
+    toolCallId: 'late-tool',
+    name: entry.descriptor.name,
+    version: entry.descriptor.version,
+    status: 'DISPATCHED',
+    invocation: {
+      protocolVersion: 'crowdy.tool-call/1',
+      sessionId: 'session-1',
+      runId: 'run-1',
+      toolCallId: 'late-tool',
+      name: entry.descriptor.name,
+      version: entry.descriptor.version,
+      descriptorDigest: entry.descriptorDigest,
+      arguments: {
+        source: 'PROJECT',
+        target: 'SERVER',
+        path: 'src/lib.rs',
+      },
+      argumentHash: `sha256:${'d'.repeat(64)}`,
+      contextVersion: 'context-1',
+      clientEpoch: '1',
+      leaseId: 'workspace-late',
+      deadline: new Date(Date.now() + 10_000).toISOString(),
+    },
+  });
+  transport.durable.push(dispatched);
+  transport.subscriptions[0].handlers.next(structuredClone(dispatched));
+  for (let attempt = 0; attempt < 20 && !started; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  const revoked = event(3, 'LEASE_REVOKED', {
+    lease: {
+      ...workspaceLease,
+      status: 'REVOKED',
+      revokedReason: 'HUMAN_EDIT',
+    },
+  });
+  transport.durable.push(revoked);
+  transport.subscriptions[0].handlers.next(structuredClone(revoked));
+  await settle();
+  const wasAborted = aborted;
+  const didStart = started;
+  const resultCount = transport.toolResults.length;
+  controller.destroy();
+  assert.equal(didStart, true);
+  assert.equal(wasAborted, true);
+  assert.equal(resultCount, 0);
 });

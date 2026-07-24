@@ -3,6 +3,7 @@ export {
   type CrowdyStudioControllerOptions,
   type CrowdyStudioBroker,
   type CrowdyStudioAgentWorkContext,
+  type CrowdyStudioDeploymentPlan,
   type CrowdyStudioDeployResult,
   type CrowdyStudioInvokeResult,
   type CrowdyStudioPhase,

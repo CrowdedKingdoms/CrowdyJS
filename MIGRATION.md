@@ -30,8 +30,28 @@ Creation now carries optional `providerDataConsent`; attach carries a stable
 and nested browser results map to `AgentToolResultEnvelopeInput`. PLAY sends a
 two-second heartbeat only while attached, active, and visible, stopping and
 clearing local authority on pause, disconnect, stale epoch, kill, or destroy.
-Descriptor builds verify the full registry and canonical 22-tool Game API
-subset (8 Studio + 14 mandatory game tools) against the copied digest fixture.
+Descriptor builds verify the full registry and canonical 28-tool Game API
+follow-up subset (14 mandatory game plus 14 Studio/diagnostic/runtime tools)
+against the copied digest fixture.
+
+Mode changes now consume the server-repinned registry/policy/context fields.
+BUILD mounts derive `projectId` from the selected saved Studio project after
+initialization; callers should no longer guess it. An existing session for a
+different project fails closed, and project switches require a new session
+until Game API adds an explicit set-project mutation.
+
+BUILD workspace leases renew every ten seconds through agent heartbeat and
+stop on human edit, project/context change, revocation, disconnect, or destroy.
+Backend-advertised draft/live/stop/invoke tools execute through the headless
+Studio controller, with exact approval for live work. Run events now preserve
+typed code/error details, aborted handlers clear local intent, and inner
+`OUTCOME_UNKNOWN` can no longer be wrapped as outer success.
+
+Runtime draft/live calls now require an exact full-project target plan. Live
+execution also binds the post-autosave revision, content/module hash, and
+pairing preference; mismatches fail before any compile/deploy. Invoke verifies
+the running DRAFT/LIVE environment and export, while stop remains an
+all-project safety action.
 
 Existing manual mounts continue to work:
 
@@ -75,8 +95,9 @@ Escape, Stop, death, disconnect, or context/target changes. Do not adapt the
 agent through DOM events, raw UDP/GraphQL/CrowdyJS methods,
 `PlayerCodeBroker`, or client-mod `host_call`.
 
-The current Game API pilot advertises its canonical 8 Studio and 14 mandatory
-game tools. CrowdyJS dispatches the game tools through `PlayerHostAdapterV1`;
+The current Game API pilot advertises its canonical 28-tool follow-up subset,
+including all 14 mandatory game tools. CrowdyJS dispatches the game tools
+through `PlayerHostAdapterV1`;
 BWF Play still requires the concrete BWF adapter/shared-intent integration and
 matching host/app policy.
 

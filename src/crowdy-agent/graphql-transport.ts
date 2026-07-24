@@ -298,6 +298,9 @@ export class CrowdyAgentGraphQLTransport
       ...(heartbeat.playLeaseFreshUntil
         ? { playLeaseFreshUntil: heartbeat.playLeaseFreshUntil }
         : {}),
+      ...(heartbeat.workspaceLeaseExpiresAt
+        ? { workspaceLeaseExpiresAt: heartbeat.workspaceLeaseExpiresAt }
+        : {}),
     };
   }
 
@@ -831,7 +834,9 @@ function mapEvent(value: CrowdyAgentEventFieldsFragment): CrowdyAgentEventV1 {
         payload: {
           runId: value.runId,
           status: value.runStatus as CrowdyAgentRunV1['status'],
+          ...(value.runCode ? { code: value.runCode } : {}),
           ...(value.runReason ? { reason: value.runReason } : {}),
+          ...(value.runError ? { error: mapError(value.runError) } : {}),
         },
       } as CrowdyAgentEventV1;
     case 'AgentToolEvent':

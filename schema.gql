@@ -7482,14 +7482,18 @@ type Mutation {
   Attach one interactive browser, allocate a new monotonic epoch, return that client instance’s replay cursor, and fence every older epoch plus its leases, approvals, and pending browser tools. Requires the app-scoped owner, use_studio_agent, and idempotency key; reconnect never replays an effect.
   """
   crowdyStudioAgentAttachClient(
-    """Session, stable client-instance UUID, and retry key."""
+    """
+    Session, stable client-instance UUID, optional selected project/grid, and retry key.
+    """
     input: AttachAgentClientInput!
   ): AgentClientAttachment! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
   """
-  Human-select ASK, BUILD, or PLAY. Changing mode preempts any active run, revokes leases/approvals, advances context, and never preserves Play control. Requires the current client epoch, app-scoped owner, use_studio_agent, effective mode policy, and idempotency key.
+  Atomically human-select ASK, BUILD, or PLAY plus optional project/grid and repin effective policy revisions, descriptors, registry digest, and context. The change preempts runs and revokes old leases/approvals. Requires current epoch, app owner, use_studio_agent, mode policy, and idempotency key.
   """
   crowdyStudioAgentSetMode(
-    """Session, current epoch, new human mode, and retry key."""
+    """
+    Session, current epoch, new human mode, optional project/grid, and retry key.
+    """
     input: SetAgentModeInput!
   ): AgentSession!
   """
@@ -7500,12 +7504,12 @@ type Mutation {
     input: AcknowledgeAgentEventsInput!
   ): AgentEventAcknowledgement!
   """
-  Record the attached client heartbeat. CrowdyJS sends this every two seconds; PLAY is server-stale after five seconds or at the hard lease expiry. Requires the current app-scoped owner/epoch and an idempotency key.
+  Recheck current agent permission, policy, owner context, and record the attached heartbeat. CrowdyJS sends this every two seconds; PLAY is stale after five seconds and an unchanged workspace lease renews to 30 seconds. Requires the current app-scoped owner/epoch and an idempotency key.
   """
   crowdyStudioAgentHeartbeat(
     """Session, current epoch, and heartbeat retry key."""
     input: AgentHeartbeatInput!
-  ): AgentHeartbeat!
+  ): AgentHeartbeat! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
   """
   Append one bounded, redacted human message and queue exactly one serialized provider/tool run. Requires an active app-scoped owner, use_studio_agent, current epoch, fresh Management policy, complete budget reservation, and idempotency key; private source remains separately policy/consent gated.
   """
@@ -7539,7 +7543,7 @@ type Mutation {
     Dispatch identity, epoch/context, typed terminal status, optional schema output/safe error, and retry key.
     """
     input: AgentToolResultInput!
-  ): AgentToolCall!
+  ): AgentToolCall! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
   """
   Human-grant a visible PLAY lease with explicit scopes, controlled entity, host capability revision, epoch, context, and 1–600 second duration. Requires PLAY mode, selected grid, app-scoped owner, use_studio_agent, effective policy, and idempotency key; the model cannot grant or renew it.
   """
@@ -12157,6 +12161,10 @@ type AgentHeartbeat {
   Play lease remains server-fresh through this instant, bounded by its hard expiry; null without an active Play lease.
   """
   playLeaseFreshUntil: DateTime
+  """
+  Renewed 30-second workspace lease expiry; null when no unchanged connected workspace lease can be renewed.
+  """
+  workspaceLeaseExpiresAt: DateTime
 }
 
 """Typed browser tool-call terminal record returned after submit."""
@@ -14229,7 +14237,7 @@ input CreateAgentSessionInput {
 }
 
 """
-Attach one interactive browser, incrementing the monotonic epoch and fencing old tabs, leases, approvals, and browser dispatches.
+Attach one interactive browser and optional selected project/grid, atomically repinning policy/registry/context while fencing old tabs, leases, approvals, and browser dispatches.
 """
 input AttachAgentClientInput {
   """
@@ -14242,9 +14250,19 @@ input AttachAgentClientInput {
   Optional stable browser instance UUID. Omit to use the single-interactive-client session cursor.
   """
   clientInstanceId: String
+  """
+  Optional owner project UUID selected by the attaching Studio. Omit to retain the current selection; null explicitly clears it outside BUILD.
+  """
+  projectId: String
+  """
+  Optional authoritative grid context selected by the attaching Studio. Omit to retain the current grid.
+  """
+  gridId: BigInt
 }
 
-"""Select a new human mode and preempt old authority."""
+"""
+Atomically select human mode plus optional project/grid and repin effective policy revisions, descriptors, registry digest, and context while preempting old authority.
+"""
 input SetAgentModeInput {
   """
   Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT.
@@ -14256,6 +14274,14 @@ input SetAgentModeInput {
   clientEpoch: BigInt!
   """New human-selected mode; the model cannot call this mutation."""
   mode: CrowdyStudioAgentMode!
+  """
+  Optional owner project UUID to atomically repin with the mode. Omit to retain it; BUILD requires the resulting selection.
+  """
+  projectId: String
+  """
+  Optional grid context to atomically repin with the mode. Omit to retain it; PLAY requires the resulting grid.
+  """
+  gridId: BigInt
 }
 
 """Monotonically acknowledge the highest contiguous applied event."""
@@ -14275,7 +14301,7 @@ input AcknowledgeAgentEventsInput {
 }
 
 """
-Two-second attached-client heartbeat that refreshes the five-second server-side Play freshness window.
+Two-second attached-client heartbeat that rechecks policy/permission/context, refreshes five-second Play freshness, and renews an unchanged workspace lease to 30 seconds.
 """
 input AgentHeartbeatInput {
   """

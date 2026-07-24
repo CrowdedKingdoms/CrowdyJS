@@ -356,6 +356,7 @@ mutation CrowdyStudioAgentHeartbeat($input: AgentHeartbeatInput!) {
   crowdyStudioAgentHeartbeat(input: $input) {
     serverTime
     playLeaseFreshUntil
+    workspaceLeaseExpiresAt
   }
 }
 

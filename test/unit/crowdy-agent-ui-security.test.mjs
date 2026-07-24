@@ -17,6 +17,7 @@ test('agent UI renders hostile content as text and includes accessible controls'
   assert.match(source, /Message Crowdy Agent/);
   assert.match(source, /Approve exact call/);
   assert.match(source, /approval\.argumentHash/);
+  assert.match(source, /Server-verified execution plan/);
   assert.match(source, /Pause/);
   assert.match(source, /Stop/);
   assert.match(source, /Restore checkpoint/);

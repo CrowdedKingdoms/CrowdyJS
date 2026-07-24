@@ -302,6 +302,24 @@ export class CrowdyStudioAgentDomShell {
         const timestamp = document.createElement('span');
         timestamp.textContent = event.createdAt;
         item.append(title, timestamp);
+        const payload = event.payload as {
+          code?: string;
+          reason?: string;
+          error?: { code: string; message: string };
+        };
+        if (payload.code || payload.reason || payload.error) {
+          const detail = document.createElement('p');
+          detail.textContent = [
+            payload.code,
+            payload.reason,
+            payload.error
+              ? `${payload.error.code}: ${payload.error.message}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          item.append(detail);
+        }
         return item;
       });
     const toolItems = state.tools.map((tool) => {
@@ -350,7 +368,7 @@ export class CrowdyStudioAgentDomShell {
         3,
       );
       const summary = document.createElement('p');
-      summary.textContent = approval.safeSummary;
+      summary.textContent = `Server-verified execution plan: ${approval.safeSummary}`;
       const call = document.createElement('p');
       call.textContent = `Tool call ${approval.toolCallId}`;
       const reasons = document.createElement('p');

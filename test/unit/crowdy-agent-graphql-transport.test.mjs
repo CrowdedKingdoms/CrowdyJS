@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const SUBSET_NAMES = [
+  'diagnostics.local.get',
   'game.capabilities.get',
   'game.chat.send',
   'game.combat.attack',
@@ -20,6 +21,11 @@ const SUBSET_NAMES = [
   'project.checkpoint.restore',
   'project.get',
   'project.list',
+  'runtime.deploy_live',
+  'runtime.invoke',
+  'runtime.status.get',
+  'runtime.stop',
+  'runtime.test_draft',
   'studio.context.get',
   'workspace.file.list',
   'workspace.file.patch',
@@ -355,6 +361,9 @@ async function harness({ heartbeatError } = {}) {
             __typename: 'AgentHeartbeat',
             serverTime: new Date().toISOString(),
             playLeaseFreshUntil: new Date(Date.now() + 5_000).toISOString(),
+            workspaceLeaseExpiresAt: new Date(
+              Date.now() + 30_000,
+            ).toISOString(),
           },
         };
       }
@@ -592,6 +601,35 @@ test('generated transport runs create, attach, dispatch, result, heartbeat, repl
     ['message-3', 'message-4'],
   );
 
+  value.wsSink.next({
+    data: {
+      crowdyStudioAgentEvents: {
+        ...baseEvent(5, 'RUN_FAILED', 'AgentRunEvent'),
+        runStatus: 'FAILED',
+        runCode: 'AGENT_TOOL_FAILED',
+        runReason: 'CONTEXT_CHANGED',
+        runError: {
+          __typename: 'AgentError',
+          code: 'AGENT_TOOL_FAILED',
+          message: 'Runtime tool failed safely',
+          retryable: false,
+          remediation: null,
+          field: null,
+          requiredScope: null,
+        },
+      },
+    },
+  });
+  await settle();
+  assert.equal(
+    value.controller.getState().session.currentRun.errorCode,
+    'AGENT_TOOL_FAILED',
+  );
+  assert.equal(
+    value.controller.getState().session.currentRun.error.message,
+    'Runtime tool failed safely',
+  );
+
   await value.controller.cancelRun('run-1');
   const cancel = value.calls.find(
     (call) =>
@@ -622,7 +660,7 @@ test('generated transport maps every remaining Relay and control result shape', 
   assert.equal(sessions.nodes[0].sessionId, 'session-1');
 
   const descriptors = await value.transport.toolDescriptors('session-1');
-  assert.equal(descriptors.tools.length, 8);
+  assert.equal(descriptors.tools.length, 14);
   const limits = await value.transport.budget('session-1');
   assert.equal(limits.dimensions[0].scope, 'SESSION');
 
@@ -631,6 +669,8 @@ test('generated transport maps every remaining Relay and control result shape', 
     clientEpoch: '1',
     idempotencyKey: 'control-key',
   };
+  const heartbeat = await value.transport.heartbeat(context);
+  assert.ok(heartbeat.workspaceLeaseExpiresAt);
   const approved = await value.transport.approveTool({
     ...context,
     toolCallId: 'tool-1',

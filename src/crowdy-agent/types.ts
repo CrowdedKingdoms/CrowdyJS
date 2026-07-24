@@ -204,6 +204,7 @@ export interface CrowdyAgentRunV1 {
   readonly startedAt?: string;
   readonly finishedAt?: string;
   readonly reason?: string;
+  readonly error?: AgentErrorV1;
 }
 
 export interface CrowdyAgentApprovalV1 {
@@ -281,6 +282,7 @@ export interface CrowdyAgentBudgetV1 {
 export interface CrowdyAgentHeartbeatV1 {
   readonly serverTime: string;
   readonly playLeaseFreshUntil?: string;
+  readonly workspaceLeaseExpiresAt?: string;
 }
 
 export interface CrowdyAgentToolCallAckV1 {
@@ -328,7 +330,9 @@ interface ClientEventPayload {
 interface RunEventPayload {
   readonly runId: string;
   readonly status: CrowdyAgentRunStatus;
+  readonly code?: string;
   readonly reason?: CrowdyAgentPreemptionReason | string;
+  readonly error?: AgentErrorV1;
 }
 
 interface ToolEventPayload {

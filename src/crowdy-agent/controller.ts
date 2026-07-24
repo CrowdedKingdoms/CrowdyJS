@@ -57,7 +57,15 @@ export interface CrowdyStudioAgentStateV1 {
 export interface CrowdyStudioAgentControllerOptionsV1 {
   readonly transport: CrowdyStudioAgentTransportV1;
   readonly sessionId?: string;
-  readonly createSession?: CrowdyAgentCreateSessionInputV1;
+  readonly createSession?:
+    | CrowdyAgentCreateSessionInputV1
+    | (() =>
+        | CrowdyAgentCreateSessionInputV1
+        | Promise<CrowdyAgentCreateSessionInputV1>);
+  /** Resolve the currently selected, fully saved Studio project at attach time. */
+  readonly resolveProjectBinding?: () =>
+    | { readonly projectId?: string; readonly gridId?: string }
+    | Promise<{ readonly projectId?: string; readonly gridId?: string }>;
   readonly browserDispatcher?: CrowdyAgentBrowserToolDispatcher;
   /** Stable browser UUID reused across fresh attach epochs. */
   readonly clientInstanceId?: string;
@@ -75,6 +83,7 @@ export interface CrowdyStudioAgentControllerOptionsV1 {
   readonly maxReconnectAttempts?: number;
   readonly heartbeatIntervalMs?: number;
   readonly heartbeatStaleMs?: number;
+  readonly workspaceRenewIntervalMs?: number;
   readonly onStateChange?: (state: CrowdyStudioAgentStateV1) => void;
 }
 
@@ -114,6 +123,7 @@ export class CrowdyStudioAgentController {
   private acknowledgePromise: Promise<void> = Promise.resolve();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+  private workspaceRenewTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private keySequence = 0;
   private readonly clientInstanceId: string;
@@ -160,16 +170,106 @@ export class CrowdyStudioAgentController {
 
   async initialize(): Promise<void> {
     this.ensureAlive();
+    const binding = await this.options.resolveProjectBinding?.();
     let session: CrowdyAgentSessionV1;
     if (this.options.sessionId) {
       session = await this.options.transport.getSession(this.options.sessionId);
+      this.assertProjectBinding(
+        session,
+        binding?.projectId,
+        Boolean(this.options.resolveProjectBinding),
+      );
     } else {
+      const configured =
+        typeof this.options.createSession === 'function'
+          ? await this.options.createSession()
+          : this.options.createSession!;
+      const createInput: CrowdyAgentCreateSessionInputV1 = {
+        ...configured,
+        ...(this.options.resolveProjectBinding
+          ? binding?.projectId
+            ? { projectId: binding.projectId }
+            : { projectId: undefined }
+          : {}),
+        ...(binding?.gridId ? { gridId: binding.gridId } : {}),
+      };
+      if (createInput.mode === 'BUILD' && !createInput.projectId) {
+        throw new CrowdyAgentError(
+          'AGENT_CONTEXT_CHANGED',
+          'BUILD requires the currently selected saved Crowdy Studio project',
+        );
+      }
       session = await this.options.transport.createSession(
-        this.options.createSession!,
+        createInput,
+      );
+      this.assertProjectBinding(
+        session,
+        binding?.projectId,
+        Boolean(this.options.resolveProjectBinding),
       );
     }
     this.update({ session, lastError: null });
     await this.attach('ATTACHING');
+  }
+
+  /**
+   * Fail closed when the human selects another project. The v1 Game API has no
+   * set-project mutation, so callers must create/remount a session for it.
+   */
+  projectSelectionChanged(projectId: string | undefined): void {
+    const session = this.state.session;
+    if (!session || session.projectId === projectId) return;
+    const clientEpoch = this.state.clientEpoch;
+    if (clientEpoch) {
+      for (const lease of this.state.leases.filter(
+        (entry) => entry.status === 'ACTIVE',
+      )) {
+        void this.options.transport
+          .revokeLease({
+            sessionId: session.sessionId,
+            clientEpoch,
+            leaseId: lease.leaseId,
+            reason: 'CONTEXT_CHANGED',
+            idempotencyKey: this.nextKey(
+              `project-switch-revoke-${lease.leaseId}`,
+            ),
+          })
+          .catch(() => {});
+      }
+      if (session.currentRun?.runId) {
+        void this.options.transport
+          .cancelRun({
+            sessionId: session.sessionId,
+            clientEpoch,
+            runId: session.currentRun.runId,
+            idempotencyKey: this.nextKey('project-switch-cancel'),
+          })
+          .catch(() => {});
+      }
+      void this.options.transport
+        .pause({
+          sessionId: session.sessionId,
+          clientEpoch,
+          idempotencyKey: this.nextKey('project-switch-pause'),
+        })
+        .catch(() => {});
+    }
+    this.preemptLocal('CONTEXT_CHANGED');
+    this.stopHeartbeat();
+    this.generation++;
+    this.disconnectSubscription();
+    const error = new CrowdyAgentError(
+      'AGENT_CONTEXT_CHANGED',
+      'Selected project changed; create a new agent session for this project',
+    );
+    this.update({
+      connection: 'ERROR',
+      clientEpoch: null,
+      leases: [],
+      approvals: [],
+      reconnectRequired: true,
+      lastError: error.toJSON(),
+    });
   }
 
   async reconnect(): Promise<void> {
@@ -207,6 +307,12 @@ export class CrowdyStudioAgentController {
         `Unknown agent mode ${String(mode)}`,
       );
     }
+    if (mode === 'BUILD' && !this.requireSession().projectId) {
+      throw new CrowdyAgentError(
+        'AGENT_CONTEXT_CHANGED',
+        'Create a project-bound agent session before selecting BUILD',
+      );
+    }
     this.preemptLocal('CONTEXT_CHANGED');
     const session = await this.options.transport.setMode({
       ...this.mutationContext('set-mode'),
@@ -221,6 +327,7 @@ export class CrowdyStudioAgentController {
       reconnectRequired: false,
     });
     this.refreshHeartbeat(true);
+    this.refreshWorkspaceRenewal();
   }
 
   async approveTool(
@@ -344,6 +451,7 @@ export class CrowdyStudioAgentController {
   async pause(): Promise<void> {
     this.preemptLocal('HUMAN_STOP');
     this.stopHeartbeat();
+    this.stopWorkspaceRenewal();
     const session = await this.options.transport.pause(
       this.mutationContext('pause'),
     );
@@ -366,6 +474,7 @@ export class CrowdyStudioAgentController {
           : this.state.leases,
     });
     this.refreshHeartbeat(true);
+    this.refreshWorkspaceRenewal();
   }
 
   async cancelRun(runId = this.state.session?.currentRun?.runId): Promise<void> {
@@ -437,6 +546,7 @@ export class CrowdyStudioAgentController {
   async close(): Promise<void> {
     this.preemptLocal('SESSION_CLOSED');
     this.stopHeartbeat();
+    this.stopWorkspaceRenewal();
     const session = await this.options.transport.closeSession(
       this.mutationContext('close-session'),
     );
@@ -460,6 +570,7 @@ export class CrowdyStudioAgentController {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.stopHeartbeat();
+    this.stopWorkspaceRenewal();
     this.preemptLocal('DISCONNECTED');
     this.listeners.clear();
   }
@@ -576,6 +687,7 @@ export class CrowdyStudioAgentController {
         reconnectRequired: connection === 'RECONNECTING',
       });
       this.refreshHeartbeat(true);
+      this.refreshWorkspaceRenewal();
     } catch (error) {
       if (generation !== this.generation || this.destroyed) return;
       this.stopHeartbeat();
@@ -612,13 +724,23 @@ export class CrowdyStudioAgentController {
       this.fail(error);
       return;
     }
-    if (!this.drainPromise) {
-      this.drainPromise = this.drainBuffered(generation, true)
-        .catch((error) => this.fail(error))
-        .finally(() => {
-          this.drainPromise = null;
-        });
-    }
+    this.startDrain(generation);
+  }
+
+  private startDrain(generation: number): void {
+    if (this.drainPromise) return;
+    this.drainPromise = this.drainBuffered(generation, true)
+      .catch((error) => this.fail(error))
+      .finally(() => {
+        this.drainPromise = null;
+        if (
+          this.buffered.size > 0 &&
+          generation === this.generation &&
+          !this.destroyed
+        ) {
+          this.startDrain(generation);
+        }
+      });
   }
 
   private bufferEvent(event: CrowdyAgentEventV1): void {
@@ -776,8 +898,14 @@ export class CrowdyStudioAgentController {
             currentRun: {
               runId: event.payload.runId,
               status: event.payload.status,
+              ...(event.payload.code
+                ? { errorCode: event.payload.code }
+                : {}),
               ...(event.payload.reason
                 ? { reason: event.payload.reason }
+                : {}),
+              ...(event.payload.error
+                ? { error: event.payload.error }
                 : {}),
             },
           }),
@@ -832,6 +960,14 @@ export class CrowdyStudioAgentController {
           ),
         };
         this.options.onLeaseChanged?.(event.payload.lease);
+        if (event.type !== 'LEASE_GRANTED') {
+          this.preemptLocal(
+            event.payload.lease.revokedReason ??
+              (event.type === 'LEASE_EXPIRED'
+                ? 'LEASE_EXPIRED'
+                : 'CONTEXT_CHANGED'),
+          );
+        }
         break;
       case 'BUDGET_UPDATED':
         patch = { ...patch, budget: event.payload.budget };
@@ -852,6 +988,7 @@ export class CrowdyStudioAgentController {
     this.appliedEventIds.set(event.seq, event.eventId);
     this.update(patch);
     this.refreshHeartbeat();
+    this.refreshWorkspaceRenewal();
     if (
       event.type === 'TOOL_DISPATCHED' &&
       event.payload.invocation &&
@@ -879,10 +1016,21 @@ export class CrowdyStudioAgentController {
       return;
     }
     const result = await this.options.browserDispatcher!.dispatch(invocation);
+    const currentContextVersion = this.state.session?.contextVersion;
+    const leaseStillActive =
+      !invocation.leaseId ||
+      this.state.leases.some(
+        (lease) =>
+          lease.leaseId === invocation.leaseId &&
+          lease.status === 'ACTIVE',
+      );
     if (
       generation !== this.generation ||
       invocation.clientEpoch !== this.state.clientEpoch ||
-      result.error?.code === 'AGENT_CLIENT_EPOCH_STALE'
+      result.error?.code === 'AGENT_CLIENT_EPOCH_STALE' ||
+      invocation.contextVersion !== currentContextVersion ||
+      result.observedContextVersion !== currentContextVersion ||
+      !leaseStillActive
     ) {
       return;
     }
@@ -931,6 +1079,7 @@ export class CrowdyStudioAgentController {
     if (generation !== this.generation || this.destroyed) return;
     this.generation++;
     this.stopHeartbeat();
+    this.stopWorkspaceRenewal();
     this.disconnectSubscription();
     const reason =
       error instanceof CrowdyAgentError &&
@@ -1016,6 +1165,105 @@ export class CrowdyStudioAgentController {
     this.heartbeatTimer = null;
   }
 
+  private refreshWorkspaceRenewal(): void {
+    const lease = this.state.leases.find(
+      (entry) => entry.kind === 'WORKSPACE' && entry.status === 'ACTIVE',
+    );
+    const shouldRun =
+      !this.destroyed &&
+      this.state.connection === 'CONNECTED' &&
+      this.state.session?.status === 'ACTIVE' &&
+      this.state.session.mode === 'BUILD' &&
+      this.state.clientEpoch !== null &&
+      lease !== undefined;
+    if (!shouldRun) {
+      this.stopWorkspaceRenewal();
+      return;
+    }
+    if (this.workspaceRenewTimer) return;
+    const generation = this.generation;
+    this.workspaceRenewTimer = setTimeout(() => {
+      this.workspaceRenewTimer = null;
+      void this.renewWorkspaceLease(lease, generation);
+    }, this.options.workspaceRenewIntervalMs ?? 10_000);
+  }
+
+  private async renewWorkspaceLease(
+    lease: CrowdyAgentLeaseV1,
+    generation: number,
+  ): Promise<void> {
+    if (generation !== this.generation || this.destroyed) return;
+    try {
+      const heartbeat = await withHeartbeatDeadline(
+        this.options.transport.heartbeat({
+          ...this.mutationContext(`renew-workspace-${lease.leaseId}`),
+        }),
+        this.options.heartbeatStaleMs ?? 5_000,
+      );
+      if (!heartbeat.workspaceLeaseExpiresAt) {
+        throw new CrowdyAgentError(
+          'AGENT_LEASE_REVOKED',
+          'Server did not renew the active workspace lease',
+        );
+      }
+      const renewed: CrowdyAgentLeaseV1 = {
+        ...lease,
+        status: 'ACTIVE',
+        expiresAt: heartbeat.workspaceLeaseExpiresAt,
+      };
+      if (
+        generation !== this.generation ||
+        this.destroyed ||
+        this.state.session?.mode !== 'BUILD' ||
+        !this.state.leases.some(
+          (entry) =>
+            entry.leaseId === lease.leaseId && entry.status === 'ACTIVE',
+        )
+      ) {
+        return;
+      }
+      if (
+        renewed.kind !== 'WORKSPACE' ||
+        renewed.status !== 'ACTIVE' ||
+        renewed.contextVersion !== this.state.session.contextVersion
+      ) {
+        throw new CrowdyAgentError(
+          'AGENT_LEASE_REVOKED',
+          'Workspace renewal returned stale lease context',
+        );
+      }
+      this.upsertLease(renewed);
+      this.options.onLeaseChanged?.(renewed);
+      this.refreshWorkspaceRenewal();
+    } catch (error) {
+      if (generation !== this.generation || this.destroyed) return;
+      if (
+        error instanceof CrowdyAgentError &&
+        error.code === 'AGENT_CLIENT_EPOCH_STALE'
+      ) {
+        this.handleDisconnect(error, generation);
+        return;
+      }
+      this.preemptLocal('CONTEXT_CHANGED');
+      const revoked: CrowdyAgentLeaseV1 = {
+        ...lease,
+        status: 'REVOKED',
+        revokedReason: 'CONTEXT_CHANGED',
+      };
+      this.upsertLease(revoked);
+      this.options.onLeaseChanged?.(revoked);
+      this.update({
+        lastError: toAgentError(error, 'AGENT_LEASE_REVOKED'),
+        reconnectRequired: true,
+      });
+    }
+  }
+
+  private stopWorkspaceRenewal(): void {
+    if (this.workspaceRenewTimer) clearTimeout(this.workspaceRenewTimer);
+    this.workspaceRenewTimer = null;
+  }
+
   private scheduleReconnect(): void {
     if (this.reconnectTimer || this.destroyed) return;
     const max = this.options.maxReconnectAttempts ?? 5;
@@ -1049,6 +1297,28 @@ export class CrowdyStudioAgentController {
       toolDescriptors: descriptorSet.tools,
       budget,
     };
+  }
+
+  private assertProjectBinding(
+    session: CrowdyAgentSessionV1,
+    expectedProjectId: string | undefined,
+    enforceSelection: boolean,
+  ): void {
+    if (session.mode === 'BUILD' && !session.projectId) {
+      throw new CrowdyAgentError(
+        'AGENT_CONTEXT_CHANGED',
+        'BUILD session is not bound to a Crowdy Studio project',
+      );
+    }
+    if (
+      enforceSelection &&
+      session.projectId !== expectedProjectId
+    ) {
+      throw new CrowdyAgentError(
+        'AGENT_CONTEXT_CHANGED',
+        'Agent session project does not match the selected Crowdy Studio project',
+      );
+    }
   }
 
   private mutationContext(operation: string): {
@@ -1113,6 +1383,7 @@ export class CrowdyStudioAgentController {
   }
 
   private preemptLocal(reason: CrowdyAgentPreemptionReason): void {
+    this.stopWorkspaceRenewal();
     this.options.browserDispatcher?.cancelActive();
     this.options.onPreempt?.(reason);
   }
@@ -1239,6 +1510,17 @@ function validateEventPayload(event: CrowdyAgentEventV1): void {
       'run status',
     );
     assertBoundedEventString(payload.runId, 'runId', 128);
+    if (payload.code !== undefined && payload.code !== null) {
+      assertBoundedEventString(payload.code, 'run code', 128);
+    }
+    if (payload.error !== undefined && payload.error !== null) {
+      const error = asEventRecord(payload.error, 'run error');
+      assertBoundedEventString(error.code, 'run error code', 128);
+      assertBoundedEventString(error.message, 'run error message', 512);
+      if (typeof error.retryable !== 'boolean') {
+        throw invalidEvent('run error retryable must be boolean');
+      }
+    }
     return;
   }
   if (

@@ -268,3 +268,158 @@ test('lease expiry clears intent and ambiguous host results remain outcome unkno
     (error) => error.code === 'AGENT_LEASE_REQUIRED',
   );
 });
+
+test('inner outcome unknown becomes an outer terminal outcome unknown', async () => {
+  const {
+    AgentControlLeaseManager,
+    createPlayerHostAgentTools,
+  } = await import('../../dist/player-host/index.js');
+  const {
+    CrowdyAgentBrowserToolDispatcher,
+    CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
+  } = await import('../../dist/crowdy-agent/index.js');
+  const adapter = {
+    contractVersion: 'crowdy.player-host/1',
+    async capabilities() {
+      return capabilities();
+    },
+    async observe() {
+      return observation();
+    },
+    async dispatch(command) {
+      return {
+        contractVersion: 'crowdy.game-command-result/1',
+        status: 'OUTCOME_UNKNOWN',
+        commandKind: command.kind,
+        observationId: command.observationId,
+        error: {
+          code: 'AGENT_TOOL_OUTCOME_UNKNOWN',
+          message: 'Movement may have started',
+          retryable: false,
+        },
+      };
+    },
+    clearAgentIntent() {},
+  };
+  const tools = createPlayerHostAgentTools(adapter, {
+    now: () => BASE_TIME,
+    contextVersion: () => 'context-1',
+  });
+  assert.ok(tools.leaseManager instanceof AgentControlLeaseManager);
+  tools.leaseManager.attach('1');
+  await tools.leaseManager.refreshCapabilities();
+  tools.leaseManager.grantLease(lease(BASE_TIME + 60_000));
+  await tools.leaseManager.observe({
+    detail: 'MINIMAL',
+    maxNearbyActors: 0,
+    maxNearbyVoxels: 0,
+  });
+  const entry = registry.require('game.control.move', '1.0.0');
+  const dispatcher = new CrowdyAgentBrowserToolDispatcher({
+    registry,
+    handlers: tools.handlers,
+    getSessionId: () => 'session-1',
+    getClientEpoch: () => '1',
+    getContextVersion: () => 'context-1',
+    getMode: () => 'PLAY',
+  });
+  const result = await dispatcher.dispatch({
+    protocolVersion: 'crowdy.tool-call/1',
+    sessionId: 'session-1',
+    runId: 'run-1',
+    toolCallId: 'outer-unknown',
+    name: entry.descriptor.name,
+    version: entry.descriptor.version,
+    descriptorDigest: entry.descriptorDigest,
+    arguments: {
+      observationId: `observation-${BASE_TIME}`,
+      capabilityRevision: 'capability-7',
+      controlledEntityId: 'player-7',
+      direction: 'FORWARD',
+      intensity: 1,
+      durationMs: 100,
+    },
+    argumentHash: `sha256:${'a'.repeat(64)}`,
+    contextVersion: 'context-1',
+    clientEpoch: '1',
+    leaseId: 'lease-1',
+    deadline: new Date(Date.now() + 10_000).toISOString(),
+  });
+  assert.equal(result.status, 'OUTCOME_UNKNOWN');
+  assert.equal(result.error.code, 'AGENT_TOOL_OUTCOME_UNKNOWN');
+  tools.leaseManager.preempt('HUMAN_STOP');
+});
+
+test('dispatcher abort clears player intent and returns cancelled', async () => {
+  const {
+    createPlayerHostAgentTools,
+  } = await import('../../dist/player-host/index.js');
+  const {
+    CrowdyAgentBrowserToolDispatcher,
+    CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
+  } = await import('../../dist/crowdy-agent/index.js');
+  const cleared = [];
+  const adapter = {
+    contractVersion: 'crowdy.player-host/1',
+    async capabilities() {
+      return capabilities();
+    },
+    async observe() {
+      return observation();
+    },
+    async dispatch() {
+      return new Promise(() => {});
+    },
+    clearAgentIntent(reason) {
+      cleared.push(reason);
+    },
+  };
+  const tools = createPlayerHostAgentTools(adapter, {
+    now: () => BASE_TIME,
+    contextVersion: () => 'context-1',
+  });
+  tools.leaseManager.attach('1');
+  await tools.leaseManager.refreshCapabilities();
+  tools.leaseManager.grantLease(lease(BASE_TIME + 60_000));
+  await tools.leaseManager.observe({
+    detail: 'MINIMAL',
+    maxNearbyActors: 0,
+    maxNearbyVoxels: 0,
+  });
+  const entry = registry.require('game.control.move', '1.0.0');
+  const dispatcher = new CrowdyAgentBrowserToolDispatcher({
+    registry,
+    handlers: tools.handlers,
+    getSessionId: () => 'session-1',
+    getClientEpoch: () => '1',
+    getContextVersion: () => 'context-1',
+    getMode: () => 'PLAY',
+  });
+  const pending = dispatcher.dispatch({
+    protocolVersion: 'crowdy.tool-call/1',
+    sessionId: 'session-1',
+    runId: 'run-1',
+    toolCallId: 'aborted-host-call',
+    name: entry.descriptor.name,
+    version: entry.descriptor.version,
+    descriptorDigest: entry.descriptorDigest,
+    arguments: {
+      observationId: `observation-${BASE_TIME}`,
+      capabilityRevision: 'capability-7',
+      controlledEntityId: 'player-7',
+      direction: 'FORWARD',
+      intensity: 1,
+      durationMs: 100,
+    },
+    argumentHash: `sha256:${'b'.repeat(64)}`,
+    contextVersion: 'context-1',
+    clientEpoch: '1',
+    leaseId: 'lease-1',
+    deadline: new Date(Date.now() + 10_000).toISOString(),
+  });
+  await Promise.resolve();
+  dispatcher.cancelActive();
+  const result = await pending;
+  assert.equal(result.status, 'CANCELLED');
+  assert.equal(cleared.at(-1), 'HUMAN_STOP');
+});

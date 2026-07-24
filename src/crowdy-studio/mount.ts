@@ -44,6 +44,7 @@ export interface MountCrowdyStudioAgentOptions
     | 'onEpochAttached'
     | 'onLeaseChanged'
     | 'onPreempt'
+    | 'resolveProjectBinding'
   > {
   registry?: CrowdyAgentToolRegistry;
   /** Exact additional handlers, normally `game.extension.<game>.*`. */
@@ -136,6 +137,15 @@ export async function mountCrowdyStudio(
             .map((lease) => lease.kind) ?? [],
         getHostCapabilityRevision: () =>
           controlLeaseManager?.snapshot().capabilities?.revision,
+        isLeaseActive: (leaseId, kind) =>
+          agent
+            ?.getState()
+            .leases.some(
+              (lease) =>
+                lease.leaseId === leaseId &&
+                lease.kind === kind &&
+                lease.status === 'ACTIVE',
+            ) ?? false,
       }),
       hostTools?.handlers,
       options.agent.browserHandlers,
@@ -154,6 +164,18 @@ export async function mountCrowdyStudio(
     agent = new CrowdyStudioAgentController({
       ...agentOptions,
       browserDispatcher: dispatcher,
+      resolveProjectBinding: async () => {
+        const project = controller.getState().project;
+        if (project && !(await controller.saveNow())) {
+          throw new Error(
+            'Resolve the selected project save before starting the agent',
+          );
+        }
+        return {
+          ...(project ? { projectId: project.projectId } : {}),
+          gridId: project?.gridId ?? options.gridId,
+        };
+      },
       beforeAgentWork: async () => {
         await controller.prepareForAgentWork();
       },
@@ -240,9 +262,15 @@ export async function mountCrowdyStudio(
     },
   };
 
+  let selectedProjectId = controller.getState().project?.projectId;
   const unsubscribe = controller.subscribe((state) => {
     shell.render(state);
     editor?.sync(state);
+    const nextProjectId = state.project?.projectId;
+    if (nextProjectId !== selectedProjectId) {
+      selectedProjectId = nextProjectId;
+      agent?.projectSelectionChanged(nextProjectId);
+    }
   });
   const onVisibilityChange = (): void => {
     const visible = document.visibilityState !== 'hidden';

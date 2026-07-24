@@ -329,11 +329,26 @@ always sends an explicit run id, and PLAY sends a two-second heartbeat only
 while attached, active, and visible. Heartbeat, kill, and stale-epoch failures
 immediately clear local authority.
 
+Mode changes adopt the complete server-repinned session (registry digest,
+provider/app policy revisions, and context version) before loading its new
+effective descriptors. The Studio mount resolves the selected saved project
+after `CrowdyStudioController.initialize()`, overrides caller guesses when
+creating a BUILD session, and rejects an existing session bound to another
+project. Because v1 has no set-project mutation, switching projects fences the
+agent and requires a new session/remount.
+
+An active BUILD workspace lease is renewed every ten seconds through the same
+authenticated heartbeat; the server returns its renewed 30-second expiry.
+Human edits, project/context changes, lease revocation, disconnect, and destroy
+stop renewal and abort browser handlers. Run events retain their stable
+`code`, `reason`, and typed safe `error`.
+
 The committed descriptor digest fixture is checked on every build against the
 canonical registry. Coordinated refreshes first run
 `npm run agent-descriptors:drift -- --source <game-api-fixture>`; builds then
-recompute the full and canonical 22-tool Game API subset digests (8 Studio +
-14 mandatory game tools) so the fixture cannot silently diverge.
+recompute the full and canonical 28-tool Game API subset digest (14 mandatory
+game plus 14 Studio/diagnostic/runtime tools) so the fixture cannot silently
+diverge.
 
 Mount the responsive agent dock by adding `agent`; omit it to retain the v11
 manual UI unchanged:
@@ -405,12 +420,36 @@ change, disconnect, or Stop. `clearAgentIntent` must immediately zero movement,
 look, and pending action intent. BWF does not integrate through raw CrowdyJS,
 DOM input, UDP packets, `PlayerCodeBroker`, or client-mod host calls.
 
-The reconciled Game API development pilot advertises the exact 8 Studio and 14
-mandatory game descriptors. CrowdyJS routes all 14 through
+BWF should pass only `game.crowdyStudioAgent` and its
+`BwfPlayerHostAdapter` to the Studio mount; the mount derives the selected
+project id. Its adapter must implement the exact 14 mandatory game surfaces,
+classify combat as conditional approval, return typed failed/denied/unknown
+outcomes, and make `clearAgentIntent` synchronously cancel shared movement and
+action intents when the dispatcher aborts.
+
+The reconciled Game API development pilot advertises the exact 28-tool
+follow-up subset, including all 14 mandatory game descriptors. CrowdyJS routes
+all game tools through
 `PlayerHostAdapterV1`, the scoped lease gate, conditional combat approval,
 safety stop, heartbeat fencing, and typed result continuation. BWF Play now
 remains blocked only on the concrete BWF adapter/shared-intent wiring and its
 host/app policy configuration.
+
+The same browser dispatcher routes backend-advertised `runtime.test_draft`,
+`runtime.deploy_live`, `runtime.invoke`, and `runtime.stop` through the
+headless Studio controller. Draft testing is routine BUILD work; live deploy
+and LIVE invoke require the exact approval grant; stop remains an idempotent
+safety action. Inner game `FAILED`, `DENIED`, or `OUTCOME_UNKNOWN` results are
+promoted to matching outer terminal tool results and are never reported as
+successful.
+
+Runtime execution is plan-bound: requested targets must exactly equal the
+selected project’s authoritative target set, so a full-stack project cannot run
+CLIENT after SERVER-only authorization. Live deploy additionally rechecks the
+saved revision, canonical project content hash (including module names/files),
+and pairing preference after autosave. Invoke checks the exact running
+DRAFT/LIVE environment and export; stop always stops the complete selected
+project as a safety action rather than interpreting a partial target.
 
 | `createWorldSession(client, appId, config)` (from `@crowdedkingdoms/crowdyjs/stores`) | World Stores: opt-in, SDK-managed game state — typed codecs (`structCodec` binary DSL), your own actor with a 5 Hz send loop (`session.self`), a remote-actor registry with lanes/history/staleness (`session.actors`), attributed send errors (`session.errors`), a chunk/voxel cache with realtime merge + worldgen write-back (`session.chunks`), channel/direct-message inboxes + a typed event router, host tracking, typed save/avatar state, and a game-model container mirror. Only configured stores exist (compile-time + runtime); unimported stores tree-shake away. |
 | `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — `kit.inventory`, `kit.objects` (lockable doors/chests with custom permissions), `kit.npcs`, `kit.plots` (buy/rent land with transactional, replication-enforced grid grants), and the genre layers `kit.economy` (wallets/shops/trades/market), `kit.progression` (xp/skills/achievements/rating), `kit.loot`, `kit.quests`, `kit.combat`, `kit.matches` (session lobbies/turns/scores with notify-to-pull channels), `kit.decks` (hidden hands), `kit.worldsim` (clock/nodes/crops/waves), `kit.social` (parties/guilds/chat over teams+channels), `kit.leaderboards`, `kit.features` (tier gates), and the engine-aware helpers `kit.mobs` (refereed attacks, defs/slots, contact-damage parsing), `kit.pets` (adopt/summon/dismiss/rename), `kit.instances` (private world slices, seeded runs), `kit.director` (encounter runs), `kit.matchmaking` (queues/proposals/rating), `kit.minigames` (invoke-loop wrapper), `kit.economy.orderBook` (escrowed bid/ask market), engine paths on `kit.matches`/`kit.decks`/`kit.leaderboards`, `kit.quests` tutorial sequencing, `kit.engines` (compute capability detection) with `kit/wire` (the engine pose codec, `engineLanes()`, and the 77/90/91/92/93 event parsers) — plus blueprint builders + `kit.deploy(...)` for the admin "load the rules" step. |

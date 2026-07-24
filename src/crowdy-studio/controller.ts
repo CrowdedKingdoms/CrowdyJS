@@ -81,6 +81,13 @@ export interface CrowdyStudioDeployResult {
   message: string;
 }
 
+export interface CrowdyStudioDeploymentPlan {
+  expectedRevisionId: string;
+  targets: readonly CrowdyStudioTarget[];
+  pairingPreference?: CrowdyStudioPairingPreference;
+  projectContentHash?: string;
+}
+
 export interface CrowdyStudioAgentWorkContext {
   projectId?: string;
   projectRevisionId?: string;
@@ -252,6 +259,7 @@ export class CrowdyStudioController {
   private conflictRemote: CrowdyStudioProject | null = null;
   private broker: CrowdyStudioBroker | null = null;
   private operationGeneration = 0;
+  private agentOperationGeneration = 0;
   private readonly visibleSurfaces = new Set<CrowdyStudioPolledSurface>();
   private readonly surfaceTimers = new Map<
     CrowdyStudioPolledSurface,
@@ -308,6 +316,20 @@ export class CrowdyStudioController {
 
   finishAgentWork(paused = false): void {
     this.update({ agentActivity: paused ? 'PAUSED' : 'IDLE' });
+  }
+
+  beginAgentOperation(): number {
+    return ++this.agentOperationGeneration;
+  }
+
+  /** Synchronously fence an in-flight agent compile/deploy/invoke operation. */
+  cancelAgentOperation(message = 'Agent operation cancelled'): void {
+    ++this.agentOperationGeneration;
+    ++this.operationGeneration;
+    this.update({
+      agentActivity: 'PAUSED',
+      runtime: { phase: 'IDLE', message },
+    });
   }
 
   canTarget(
@@ -912,17 +934,34 @@ export class CrowdyStudioController {
     return preRestoreCheckpoint;
   }
 
-  async testDraft(): Promise<CrowdyStudioDeployResult> {
-    return this.deployProject(true);
+  async testDraft(agentOperation?: number): Promise<CrowdyStudioDeployResult> {
+    return this.deployProject(true, agentOperation);
   }
 
-  async deployLive(): Promise<CrowdyStudioDeployResult> {
-    return this.deployProject(false);
+  async testDraftPlan(
+    plan: CrowdyStudioDeploymentPlan,
+    agentOperation?: number,
+  ): Promise<CrowdyStudioDeployResult> {
+    return this.deployProject(true, agentOperation, plan);
+  }
+
+  async deployLive(agentOperation?: number): Promise<CrowdyStudioDeployResult> {
+    return this.deployProject(false, agentOperation);
+  }
+
+  async deployLivePlan(
+    plan: CrowdyStudioDeploymentPlan,
+    agentOperation?: number,
+  ): Promise<CrowdyStudioDeployResult> {
+    return this.deployProject(false, agentOperation, plan);
   }
 
   private async deployProject(
     draft: boolean,
+    agentOperation?: number,
+    plan?: CrowdyStudioDeploymentPlan,
   ): Promise<CrowdyStudioDeployResult> {
+    this.checkAgentOperation(agentOperation);
     this.requireProject();
     if (!(await this.saveNow())) {
       this.setRuntime('ERROR', 'Project must be saved before it can be built');
@@ -934,8 +973,10 @@ export class CrowdyStudioController {
         message: 'Project must be saved before it can be built',
       };
     }
+    this.checkAgentOperation(agentOperation);
     const project = this.requireProject();
-    const targets = projectTargets(project.kind);
+    if (plan) this.assertDeploymentPlan(project, plan, draft);
+    const targets = plan ? [...plan.targets] : projectTargets(project.kind);
     const operation = ++this.operationGeneration;
     this.stopSurfacePolling();
     this.update({
@@ -1253,7 +1294,12 @@ export class CrowdyStudioController {
     return result;
   }
 
-  async invoke(exportName: string, paramsJson?: string): Promise<CrowdyStudioInvokeResult> {
+  async invoke(
+    exportName: string,
+    paramsJson?: string,
+    agentOperation?: number,
+  ): Promise<CrowdyStudioInvokeResult> {
+    this.checkAgentOperation(agentOperation);
     const project = this.requireProject();
     if (!projectTargets(project.kind).includes('SERVER')) {
       throw new Error('Invoke requires a SERVER target');
@@ -1264,6 +1310,7 @@ export class CrowdyStudioController {
       exportName: exportName.trim() || 'invoke',
       paramsJson: paramsJson?.trim() || null,
     });
+    this.checkAgentOperation(agentOperation);
     this.update({ invokeResult: result });
     return result;
   }
@@ -1489,8 +1536,63 @@ export class CrowdyStudioController {
     };
   }
 
+  private assertDeploymentPlan(
+    project: CrowdyStudioProject,
+    plan: CrowdyStudioDeploymentPlan,
+    draft: boolean,
+  ): void {
+    if (project.revision.id !== plan.expectedRevisionId) {
+      throw new CrowdyStudioRevisionConflictError(
+        `Expected revision ${plan.expectedRevisionId}, found ${project.revision.id}`,
+        project,
+      );
+    }
+    const authoritativeTargets = [...projectTargets(project.kind)].sort();
+    const requestedTargets = [...new Set(plan.targets)].sort();
+    if (
+      requestedTargets.length !== authoritativeTargets.length ||
+      requestedTargets.some(
+        (target, index) => target !== authoritativeTargets[index],
+      )
+    ) {
+      throw new Error(
+        `Deployment targets must exactly match ${authoritativeTargets.join(', ')}`,
+      );
+    }
+    if (
+      plan.pairingPreference !== undefined &&
+      plan.pairingPreference !== project.metadata.pairingPreference
+    ) {
+      throw new Error('Deployment pairing preference changed after approval');
+    }
+    if (
+      plan.projectContentHash !== undefined &&
+      plan.projectContentHash !== projectContentHash(project)
+    ) {
+      throw new Error('Deployment project content changed after approval');
+    }
+    if (
+      !draft &&
+      (plan.pairingPreference === undefined ||
+        plan.projectContentHash === undefined)
+    ) {
+      throw new Error(
+        'Live deployment requires exact pairing and project content bindings',
+      );
+    }
+  }
+
   private checkOperation(generation: number): void {
     if (generation !== this.operationGeneration || this.destroyed) {
+      throw new OperationCancelledError();
+    }
+  }
+
+  private checkAgentOperation(generation?: number): void {
+    if (
+      generation !== undefined &&
+      (generation !== this.agentOperationGeneration || this.destroyed)
+    ) {
       throw new OperationCancelledError();
     }
   }

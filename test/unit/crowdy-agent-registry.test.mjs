@@ -155,7 +155,7 @@ test('canonical digest implementation matches the SHA-256 known vector', async (
   assert.equal(canonicalJson({ z: 1, a: [true, 'x'] }), '{"a":[true,"x"],"z":1}');
 });
 
-test('canonical Game API fixture matches all 8 Studio and 14 game descriptors', async () => {
+test('canonical Game API fixture matches its 28-tool follow-up subset', async () => {
   const {
     CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
     CrowdyAgentToolRegistry,
@@ -180,11 +180,22 @@ test('canonical Game API fixture matches all 8 Studio and 14 game descriptors', 
       return entry;
     },
   );
-  assert.equal(entries.length, 22);
+  assert.equal(entries.length, 28);
   assert.equal(
     entries.filter((entry) => entry.descriptor.name.startsWith('game.')).length,
     14,
   );
+  for (const name of [
+    'runtime.test_draft',
+    'runtime.deploy_live',
+    'runtime.invoke',
+    'runtime.stop',
+  ]) {
+    assert.ok(
+      entries.some((entry) => entry.descriptor.name === name),
+      `${name} must be in the Game API follow-up subset`,
+    );
+  }
   assert.equal(
     new CrowdyAgentToolRegistry(
       entries.map((entry) => entry.descriptor),

@@ -1,8 +1,9 @@
 {
   "contractVersion": "crowdy.agent-tools/1",
   "crowdyJsFullRegistryDigest": "sha256:44d2afb45eda085b0adb2a4d7d365579b8894ee60c45258e8d2001f9d0351293",
-  "gameApiSubsetRegistryDigest": "sha256:e74c1da1e1c954e6b413bcce4175a2965648f1b7b1cfc5d230e6eefee0501ee7",
+  "gameApiSubsetRegistryDigest": "sha256:20ecf25d55beccc1cb7033095cab3774dc301cb5f3edab818e45921416b48c71",
   "descriptorDigests": {
+    "diagnostics.local.get@1.0.0": "sha256:42c8abffeb9c1425afc7aa4f26fe4a0d76fb19c5da32f4c8cf37c3fa8888b215",
     "game.capabilities.get@1.0.0": "sha256:8e992a9dd090e6be5a23362a50debd41b29ea093b872e9c2fc89b90ea2dfbfcd",
     "game.chat.send@1.0.0": "sha256:adcd38097ea3069b7fbc758dfa8b583156188b44716c252446e68205d5092c11",
     "game.combat.attack@1.0.0": "sha256:99715c6e8d23beb3072f87906180c99686dc514756edf354894815bc4565f7a1",
@@ -21,6 +22,11 @@
     "project.checkpoint.restore@1.0.0": "sha256:69e298bd2ce501254f70d5c83259a7cab219c28b93de790232a3c2b3d0e10744",
     "project.get@1.0.0": "sha256:ef8160252a868efab44981f07ce136521428cb205433e20fa8c03ff696ab51af",
     "project.list@1.0.0": "sha256:ef2b9db3a2793909bb80945fdf028b3ae5017a5ed25523a46e350063778a21ba",
+    "runtime.deploy_live@1.0.0": "sha256:83c3f6a8bec8667d5b25c5b5b7c679bda56fda3ccddeae09d77cd43facc1643a",
+    "runtime.invoke@1.0.0": "sha256:9a28aea0feff18ceb60813edd94d7aad58a57494fe8b6ca074896f7bba2428b6",
+    "runtime.status.get@1.0.0": "sha256:fb43970c015294a38530cfee63271451819525f687d8d382e35ae2e4f4d81603",
+    "runtime.stop@1.0.0": "sha256:ddf23da04e1beddc43c2f8e3cc3b4908edda8664f99d78095f4abed75425e8f9",
+    "runtime.test_draft@1.0.0": "sha256:d75e929b08768d938dadbaa382a138416ecde5f5e8c8b0c58f2bda3d2b608810",
     "studio.context.get@1.0.0": "sha256:0fd5eca473e52101b53be36aaa9694e16840a6982b3f672d172b16809e881b69",
     "workspace.file.list@1.0.0": "sha256:79176f29eaca308b4f78861f3b8ce121eed5577c133210f2d3f7d7edf1d7d7b6",
     "workspace.file.patch@1.0.0": "sha256:76fc6c30aef7d5011171dc2e637244d988c591e35a42c0bd2c97cd797483abde",

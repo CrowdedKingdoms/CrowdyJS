@@ -13,6 +13,10 @@ export interface CrowdyStudioAgentToolsOptionsV1 {
   readonly getContextVersion?: () => string | undefined;
   readonly getLeaseKinds?: () => readonly ('WORKSPACE' | 'PLAY')[];
   readonly getHostCapabilityRevision?: () => string | undefined;
+  readonly isLeaseActive?: (
+    leaseId: string,
+    kind: 'WORKSPACE' | 'PLAY',
+  ) => boolean;
 }
 
 /** Exact browser tools backed by the same headless kernel as the human UI. */
@@ -91,9 +95,25 @@ export function createCrowdyStudioAgentTools(
       })),
     }),
     'runtime.status.get': () => runtimeProjection(controller),
-    'runtime.test_draft': async (argumentsValue) => {
-      assertExpectedRevision(controller, argumentsValue);
-      const result = await controller.testDraft();
+    'runtime.test_draft': async (argumentsValue, context) => {
+      assertInvocationLease(context.invocation.leaseId, 'WORKSPACE', options);
+      const expectedRevision = stringArgument(
+        argumentsValue,
+        'expectedRevision',
+      );
+      const targets = targetArguments(argumentsValue);
+      const result = await runStudioOperation(
+        controller,
+        context.signal,
+        (operation) =>
+          controller.testDraftPlan(
+            {
+              expectedRevisionId: expectedRevision,
+              targets,
+            },
+            operation,
+          ),
+      );
       if (result.status !== 'RUNNING') {
         throw new CrowdyAgentError('AGENT_TOOL_FAILED', result.message);
       }
@@ -102,19 +122,41 @@ export function createCrowdyStudioAgentTools(
         compiledTargets: [...result.targets],
       };
     },
-    'runtime.deploy_live': async (argumentsValue) => {
-      assertExpectedRevision(controller, argumentsValue);
+    'runtime.deploy_live': async (argumentsValue, context) => {
+      assertInvocationLease(context.invocation.leaseId, 'WORKSPACE', options);
+      if (!context.invocation.approvalGrant) {
+        throw new CrowdyAgentError(
+          'AGENT_APPROVAL_REQUIRED',
+          'Live deployment requires exact human approval',
+        );
+      }
       const expectedHash = stringArgument(
         argumentsValue,
         'projectContentHash',
       );
-      if (controller.getAgentContext().projectContentHash !== expectedHash) {
-        throw new CrowdyAgentError(
-          'AGENT_CONTEXT_STALE',
-          'Live deployment content hash changed before execution',
-        );
-      }
-      const result = await controller.deployLive();
+      const expectedRevision = stringArgument(
+        argumentsValue,
+        'expectedRevision',
+      );
+      const targets = targetArguments(argumentsValue);
+      const pairingPreference = stringArgument(
+        argumentsValue,
+        'pairingPreference',
+      ) as 'NONE' | 'OPTIONAL' | 'REQUIRED';
+      const result = await runStudioOperation(
+        controller,
+        context.signal,
+        (operation) =>
+          controller.deployLivePlan(
+            {
+              expectedRevisionId: expectedRevision,
+              targets,
+              pairingPreference,
+              projectContentHash: expectedHash,
+            },
+            operation,
+          ),
+      );
       if (result.status !== 'RUNNING') {
         throw new CrowdyAgentError('AGENT_TOOL_FAILED', result.message);
       }
@@ -123,7 +165,20 @@ export function createCrowdyStudioAgentTools(
         deployedTargets: [...result.targets],
       };
     },
-    'runtime.invoke': async (argumentsValue) => {
+    'runtime.invoke': async (argumentsValue, context) => {
+      const environment = stringArgument(argumentsValue, 'environment');
+      assertRuntimeEnvironment(controller, environment);
+      assertInvocationLease(
+        context.invocation.leaseId,
+        environment === 'LIVE' ? 'PLAY' : 'WORKSPACE',
+        options,
+      );
+      if (environment === 'LIVE' && !context.invocation.approvalGrant) {
+        throw new CrowdyAgentError(
+          'AGENT_APPROVAL_REQUIRED',
+          'Live runtime invocation requires exact human approval',
+        );
+      }
       const params = arrayArgument(argumentsValue, 'params').map((entry) => {
         if (!isRecord(entry)) {
           throw new CrowdyAgentError(
@@ -145,9 +200,15 @@ export function createCrowdyStudioAgentTools(
           type === 'BOOLEAN' ? value === 'true' : value,
         ] as const;
       });
-      const result = await controller.invoke(
-        stringArgument(argumentsValue, 'exportName'),
-        JSON.stringify(Object.fromEntries(params)),
+      const result = await runStudioOperation(
+        controller,
+        context.signal,
+        (operation) =>
+          controller.invoke(
+            stringArgument(argumentsValue, 'exportName'),
+            JSON.stringify(Object.fromEntries(params)),
+            operation,
+          ),
       );
       const value = result.resultJson ?? result.resultBase64 ?? '';
       return {
@@ -256,20 +317,6 @@ function fileRef(
   };
 }
 
-function assertExpectedRevision(
-  controller: CrowdyStudioController,
-  value: Readonly<Record<string, unknown>>,
-): void {
-  const expected = stringArgument(value, 'expectedRevision');
-  const actual = requireProject(controller).revision.id;
-  if (expected !== actual) {
-    throw new CrowdyAgentError(
-      'CROWDY_STUDIO_REVISION_CONFLICT',
-      `Expected project revision ${expected}, found ${actual}`,
-    );
-  }
-}
-
 function requireProject(controller: CrowdyStudioController): CrowdyStudioProject {
   const project = controller.getState().project;
   if (!project) {
@@ -311,8 +358,91 @@ function arrayArgument(
   return entry;
 }
 
+function targetArguments(
+  value: Readonly<Record<string, unknown>>,
+): readonly ('SERVER' | 'CLIENT')[] {
+  return arrayArgument(value, 'targets').map((target) => {
+    if (target !== 'SERVER' && target !== 'CLIENT') {
+      throw new CrowdyAgentError(
+        'AGENT_TOOL_INPUT_INVALID',
+        'Runtime target must be SERVER or CLIENT',
+        { field: 'targets' },
+      );
+    }
+    return target;
+  });
+}
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function assertInvocationLease(
+  leaseId: string | undefined,
+  kind: 'WORKSPACE' | 'PLAY',
+  options: CrowdyStudioAgentToolsOptionsV1,
+): void {
+  if (!leaseId) {
+    throw new CrowdyAgentError(
+      'AGENT_LEASE_REQUIRED',
+      `${kind} lease is required for this runtime operation`,
+    );
+  }
+  if (options.isLeaseActive && !options.isLeaseActive(leaseId, kind)) {
+    throw new CrowdyAgentError(
+      'AGENT_LEASE_REVOKED',
+      `${kind} lease is no longer active`,
+    );
+  }
+}
+
+function assertRuntimeEnvironment(
+  controller: CrowdyStudioController,
+  environment: string,
+): void {
+  const runtime = controller.getState().runtimeSync;
+  if (
+    (environment !== 'DRAFT' && environment !== 'LIVE') ||
+    runtime.state !== 'RUNNING_SAVED' ||
+    runtime.deployment !== environment
+  ) {
+    throw new CrowdyAgentError(
+      'AGENT_CONTEXT_STALE',
+      `No exact saved ${environment} runtime is currently running`,
+    );
+  }
+}
+
+async function runStudioOperation<T>(
+  controller: CrowdyStudioController,
+  signal: AbortSignal,
+  operation: (agentOperation: number) => Promise<T>,
+): Promise<T> {
+  const agentOperation = controller.beginAgentOperation();
+  const abort = (): void =>
+    controller.cancelAgentOperation(
+      'Agent operation preempted before completion',
+    );
+  if (signal.aborted) {
+    abort();
+    throw new CrowdyAgentError(
+      'AGENT_CANCELLED',
+      'Agent browser operation was cancelled',
+    );
+  }
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    const result = await operation(agentOperation);
+    if (signal.aborted) {
+      throw new CrowdyAgentError(
+        'AGENT_CANCELLED',
+        'Agent browser operation was cancelled',
+      );
+    }
+    return result;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
 }
 
 /** Keep the canonical target helper reachable for BWF host integrations. */

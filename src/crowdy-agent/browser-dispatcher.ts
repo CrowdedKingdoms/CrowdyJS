@@ -206,6 +206,18 @@ export class CrowdyAgentBrowserToolDispatcher {
         remaining,
         abort,
       );
+      if (abort.signal.aborted) {
+        throw new CrowdyAgentError(
+          'AGENT_CANCELLED',
+          'Browser tool was cancelled before its result was accepted',
+        );
+      }
+      if (invocation.contextVersion !== this.options.getContextVersion()) {
+        throw new CrowdyAgentError(
+          'AGENT_CONTEXT_STALE',
+          'Browser tool context changed before its result was accepted',
+        );
+      }
       this.options.registry.validateOutput(
         invocation.name,
         invocation.version,
