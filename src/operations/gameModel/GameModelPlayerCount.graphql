@@ -1,0 +1,20 @@
+query GameModelActivePlayerCount($appId: BigInt!) {
+  gameModelActivePlayerCount(appId: $appId) {
+    appId
+    activePlayerCount
+    status
+    observedAt
+    revision
+  }
+}
+
+subscription GameModelActivePlayerCountChanged($appId: BigInt!) {
+  gameModelActivePlayerCountChanged(appId: $appId) {
+    appId
+    previousCount
+    currentCount
+    delta
+    revision
+    observedAt
+  }
+}

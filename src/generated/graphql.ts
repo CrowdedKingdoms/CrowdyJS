@@ -4023,6 +4023,28 @@ export type DevLoginInput = {
   email: Scalars['String']['input'];
 };
 
+/** Atomically get-or-create a container by an opaque binding key. The key is unique per (appId, typeName, sessionId); concurrent ensures converge on one row. Creation-only fields are ignored when the row already exists. */
+export type EnsureContainerInput = {
+  /** The app (tenant) the container belongs to. */
+  appId: Scalars['BigInt']['input'];
+  /** Opaque client-derived key (max 128 chars) identifying the shared container within (appId, typeName, sessionId). All concurrent ensures with the same key return the same containerId. */
+  bindingKey: Scalars['String']['input'];
+  /** Optional description. Used ONLY when this call creates the row. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Human-friendly display name. Used ONLY when this call creates the row. */
+  displayName: Scalars['String']['input'];
+  /** JSON object of metadata. Used ONLY when this call creates the row. */
+  metadataJson?: InputMaybe<Scalars['String']['input']>;
+  /** Owner user id, same rules as CreateContainerInput (defaults to the caller for member/owner types, shared null for admin types). Used ONLY when this call creates the row. */
+  ownerUserId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Initial property values. Used ONLY when this call creates the row. */
+  properties?: InputMaybe<Array<SeedPropertyInput>>;
+  /** Optional session scoping the key and the container (omit for app-global). Two sessions may hold the same bindingKey independently. */
+  sessionId?: InputMaybe<Scalars['String']['input']>;
+  /** The container type to resolve or instantiate. */
+  typeName: Scalars['String']['input'];
+};
+
 /** One manifest component's change in a redeploy plan: what the environment currently runs vs what the target release pins. */
 export type EnvironmentComponentChange = {
   __typename?: 'EnvironmentComponentChange';
@@ -4230,7 +4252,7 @@ export type FunctionParamInput = {
   valueType: Scalars['String']['input'];
 };
 
-/** A declarative grid-permission effect the function applies TRANSACTIONALLY with its property mutations: grant or revoke runtime grid permissions (the same ACL Buddy enforces on movement/voxel writes) driven by game logic. Expressions are compiled server-side and evaluated in the invocation context (params plus the injected $caller_user_id / $self_owner_id / $session_id / $current_turn_user_id). If an effect fails, the whole invocation rolls back. Applied effects are recorded on the invocation event. */
+/** A declarative grid-permission effect the function applies TRANSACTIONALLY with its property mutations: grant or revoke runtime grid permissions (the same ACL Buddy enforces on movement/voxel writes) driven by game logic. Expressions are compiled server-side and evaluated in the invocation context (params plus the injected $caller_user_id / $self_owner_id / $session_id / $current_turn_user_id / $self_container_id). If an effect fails, the whole invocation rolls back. Applied effects are recorded on the invocation event. */
 export type FunctionPermissionEffectInput = {
   /** 'grant' (upsert direct grants, optionally expiring) or 'revoke' (delete direct grants for the listed keys). */
   action: Scalars['String']['input'];
@@ -4278,6 +4300,38 @@ export type GameHost = {
   hostUserId: Scalars['BigInt']['output'];
 };
 
+/** One durable transition between complete app-scoped active gameplay-session counts. Delivery is cross-replica but best-effort; deduplicate by revision and requery gameModelActivePlayerCount after reconnect or a revision gap. */
+export type GameModelActivePlayerCountChange = {
+  __typename?: 'GameModelActivePlayerCountChange';
+  /** The app whose complete active-session count changed. */
+  appId: Scalars['BigInt']['output'];
+  /** New complete active gameplay-session count after this transition. */
+  currentCount: Scalars['Int']['output'];
+  /** Signed change: currentCount minus previousCount. */
+  delta: Scalars['Int']['output'];
+  /** Latest fresh Buddy heartbeat represented by the new count. */
+  observedAt: Scalars['DateTime']['output'];
+  /** Last complete active gameplay-session count before this transition. */
+  previousCount: Scalars['Int']['output'];
+  /** Durable monotonic app revision for this transition. Use it to deduplicate and detect gaps. */
+  revision: Scalars['BigInt']['output'];
+};
+
+/** A point-in-time app-scoped count of active gameplay sessions. This counts sessions, not actors or distinct users; one user with multiple active sessions contributes multiple players. Status states whether the fleet-wide count is complete. */
+export type GameModelActivePlayerCountSnapshot = {
+  __typename?: 'GameModelActivePlayerCountSnapshot';
+  /** Active gameplay sessions currently reported for the app. For PARTIAL this is the best-known sum from supported fresh Buddies; for UNAVAILABLE it is zero because no live report can be observed. Check status before treating it as a complete fleet total. */
+  activePlayerCount: Scalars['Int']['output'];
+  /** The app whose active gameplay sessions were counted. */
+  appId: Scalars['BigInt']['output'];
+  /** Latest heartbeat time represented by this observation, or null when no fresh Buddy is available. */
+  observedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Durable monotonic revision of complete count changes. Zero means the app is untracked or has not changed after its silent baseline. Partial and unavailable observations never advance it. */
+  revision: Scalars['BigInt']['output'];
+  /** Whether activePlayerCount is complete (FRESH), a supported-Buddy subset (PARTIAL), or unavailable because no Buddy heartbeat is fresh (UNAVAILABLE). */
+  status: GameModelPlayerCountStatus;
+};
+
 /** Relay-style cursor-paginated connection over the function-invocation event log (GmEvent). Page with `first`/`after`; cursors are opaque. */
 export type GameModelEventsConnection = {
   __typename?: 'GameModelEventsConnection';
@@ -4288,6 +4342,16 @@ export type GameModelEventsConnection = {
   /** Total matching records across all pages, when known (null for sources that do not compute a total). */
   totalCount: Maybe<Scalars['Int']['output']>;
 };
+
+/** Completeness of an app-scoped active gameplay-session count across the fresh Buddy fleet. */
+export enum GameModelPlayerCountStatus {
+  /** At least one non-Offline Buddy heartbeat is fresh and every fresh Buddy supports version 1 app-scoped counts. The count is complete. */
+  Fresh = 'FRESH',
+  /** At least one non-Offline Buddy heartbeat is fresh, but one or more fresh Buddies do not support app-scoped counts. The count is only the best-known supported-Buddy sum and does not advance change revisions. */
+  Partial = 'PARTIAL',
+  /** No non-Offline Buddy heartbeat is fresh enough to observe. The count is unavailable and does not advance change revisions. */
+  Unavailable = 'UNAVAILABLE'
+}
 
 /** Asynchronous error from the UDP game server for a previously sent datagram (e.g. a send* mutation). Delivered as a member of the udpNotifications union, NOT as a GraphQL error on the mutation (which only reports whether the datagram was accepted for sending). Match it to the originating send via sequenceNumber and read errorCode for the reason. Note: not every failure produces one — some auth failures are dropped silently (see UdpErrorCode). */
 export type GenericErrorResponse = {
@@ -4572,22 +4636,22 @@ export type GmAutomationStats = {
   windowMinutes: Scalars['Int']['output'];
 };
 
-/** An event subscription that fires an automation in reaction to model activity (matched in the API server, not the DB). */
+/** An event subscription that fires an automation in reaction to model activity or a complete app-scoped active-player-count transition (matched in the API server, not a DB trigger). */
 export type GmAutomationTrigger = {
   __typename?: 'GmAutomationTrigger';
   /** The app (tenant). */
   appId: Scalars['BigInt']['output'];
   /** The automation this trigger fires. */
   automationId: Scalars['String']['output'];
-  /** Filter: only this container type. */
+  /** Filter: only this container type. Always null for player_count_changed. */
   containerTypeName: Maybe<Scalars['String']['output']>;
-  /** Debounce/coalesce window in ms. */
+  /** Debounce window in ms. player_count_changed coalesces on the trailing edge; other model events use their existing leading-edge behavior. */
   debounceMs: Scalars['Int']['output'];
-  /** Filter: only this function name. */
+  /** Filter: only this function name. Always null for player_count_changed. */
   functionName: Maybe<Scalars['String']['output']>;
-  /** The model event: function_invoked | property_changed | container_created. */
+  /** Observed event: function_invoked | property_changed | container_created | player_count_changed. */
   onEvent: Scalars['String']['output'];
-  /** Filter: only this property key. */
+  /** Filter: only this property key. Always null for player_count_changed. */
   propertyKey: Maybe<Scalars['String']['output']>;
   /** Unique trigger id (UUID). */
   triggerId: Scalars['String']['output'];
@@ -4598,6 +4662,8 @@ export type GmContainer = {
   __typename?: 'GmContainer';
   /** The app (tenant) that owns the container. */
   appId: Scalars['BigInt']['output'];
+  /** Opaque client-derived key the container was ensured under (unique per appId + typeName + sessionId), or null when it was created without one. */
+  bindingKey: Maybe<Scalars['String']['output']>;
   /** Unique container id (UUID). */
   containerId: Scalars['String']['output'];
   /** Optional description. */
@@ -4686,6 +4752,15 @@ export type GmEdge = {
   toContainerId: Scalars['String']['output'];
   /** Optional edge weight. */
   weight: Maybe<Scalars['Float']['output']>;
+};
+
+/** Result of gameModelEnsureContainer: the resolved container plus whether this call inserted it. */
+export type GmEnsureContainerResult = {
+  __typename?: 'GmEnsureContainerResult';
+  /** The container all ensures of this key converge on. */
+  container: GmContainer;
+  /** True when THIS call created the row; false when it resolved an existing one (creation-only input fields were ignored). */
+  created: Scalars['Boolean']['output'];
 };
 
 /** An audit-log entry recording one function invocation and its outcome. */
@@ -5750,6 +5825,8 @@ export type Mutation = {
   gameModelDeleteFunction: Scalars['Boolean']['output'];
   /** Delete a property definition from a container type. Does not remove instance property values already stored on containers. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a definition was deleted. */
   gameModelDeletePropertyDef: Scalars['Boolean']['output'];
+  /** Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules), so a caller who may not instantiate the type errors only in the not-exists case. NOTE: bindingKey is client-supplied and not yet policy-governed; shared world objects should use admin-instantiable types so only app admins can create the keyed row. Requires a valid token. */
+  gameModelEnsureContainer: GmEnsureContainerResult;
   /** Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps'). */
   gameModelGrantTierFeature: GmTierFeature;
   /** Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). Invoke-policy denials are gameplay verdicts, NOT exceptions: they return success=false with errorMessage and log a failure event (observable via gameModelEvents). Scope violations (calling a server-scope function as a non-admin, or an internal function directly) are misconfigurations and throw FORBIDDEN. This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here. */
@@ -5774,7 +5851,7 @@ export type Mutation = {
   gameModelSetSessionTurn: GmSession;
   /** Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps'). */
   gameModelUpsertAutomation: GmAutomation;
-  /** Create an event trigger that fires an automation in reaction to model activity (a function invocation, a direct property write, or a container creation). Matched in the API server post-commit. Requires app-admin ('manage_apps'). */
+  /** Create an event trigger that fires an automation in reaction to model activity or a complete app-scoped active-player-count transition. player_count_changed rejects model filters, starts silent-baseline tracking, injects reserved previous/current/delta/revision params, and uses trailing-edge debounce; other event behavior is unchanged. Matched in the API server post-commit. Requires app-admin ('manage_apps'). */
   gameModelUpsertAutomationTrigger: GmAutomationTrigger;
   /** Create or update a container type: the studio-defined schema for a kind of runtime entity (like a class). Idempotent on (app, typeName). Requires app-admin ('manage_apps'). */
   gameModelUpsertContainerType: GmContainerType;
@@ -6616,6 +6693,11 @@ export type MutationGameModelDeletePropertyDefArgs = {
   appId: Scalars['BigInt']['input'];
   containerTypeName: Scalars['String']['input'];
   key: Scalars['String']['input'];
+};
+
+
+export type MutationGameModelEnsureContainerArgs = {
+  input: EnsureContainerInput;
 };
 
 
@@ -8748,6 +8830,8 @@ export type Query = {
   gameClientBootstrap: GameClientBootstrap;
   /** Returns the single elected host user for an app (game). Deterministic across all cks-game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
   gameHost: Maybe<GameHost>;
+  /** Read the best-known app-scoped number of active gameplay sessions across fresh non-Offline Buddy servers. This counts sessions, not actors or distinct users. FRESH is a complete fleet total; PARTIAL is only the supported-Buddy subset; UNAVAILABLE has no fresh observation. Partial/unavailable samples never create count-change revisions. Requires an app-scoped token for this exact app. */
+  gameModelActivePlayerCount: GameModelActivePlayerCountSnapshot;
   /** A snapshot of an app's game-model footprint and recent activity: container/property/edge/session/function/automation row counts, total + 24h event volume, failed + automation-driven invocations, and the most-invoked functions. Helps developers understand what is in their game and their database. Requires app-admin ('manage_apps'). */
   gameModelAppDiagnostics: GmAppDiagnostics;
   /** Fetch one automation by name, including its circuit-breaker state. Requires app-admin ('manage_apps'). */
@@ -8768,7 +8852,7 @@ export type Query = {
   gameModelContainerState: GmContainerState;
   /** List all container types defined for an app. Requires app-admin ('manage_apps'). */
   gameModelContainerTypes: Array<GmContainerType>;
-  /** List containers in an app, optionally filtered by container type and/or session, by property predicates (`where`, requires typeName; the same predicate shape automation selectors use — missing properties fall back to the type default), and paged with offset/limit over the stable created-at ordering. Requires a valid token. */
+  /** List containers in an app, optionally filtered by container type and/or session, by bindingKey (get-by-key read of an ensured container), by property predicates (`where`, requires typeName; the same predicate shape automation selectors use — missing properties fall back to the type default), and paged with offset/limit over the stable created-at ordering. Requires a valid token. */
   gameModelContainers: Array<GmContainer>;
   /** Query the function-invocation event log (audit trail) with optional filters and pagination. Useful for debugging functions or showing recent activity. Requires a valid token. */
   gameModelEvents: Array<GmEvent>;
@@ -9480,6 +9564,11 @@ export type QueryGameHostArgs = {
 };
 
 
+export type QueryGameModelActivePlayerCountArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryGameModelAppDiagnosticsArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -9541,6 +9630,7 @@ export type QueryGameModelContainerTypesArgs = {
 
 export type QueryGameModelContainersArgs = {
   appId: Scalars['BigInt']['input'];
+  bindingKey?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
   sessionId?: InputMaybe<Scalars['String']['input']>;
@@ -11114,6 +11204,8 @@ export type Subscription = {
   __typename?: 'Subscription';
   /** Replay durable events with seq greater than afterSeq, then tail newly committed facts using database replay plus in-memory wakeups. Requires an app-scoped owner, use_studio_agent, and exact current clientEpoch. Delivery is ordered and at-least-once: deduplicate eventId/seq, fill gaps with crowdyStudioAgentHistory, and acknowledge only contiguous sequences. */
   crowdyStudioAgentEvents: CrowdyStudioAgentEvent;
+  /** Stream complete active gameplay-session count transitions for one app. There is no bootstrap event: query gameModelActivePlayerCount for the current snapshot. The first complete sample is a silent baseline; PARTIAL/UNAVAILABLE samples do not emit or become zero. Delivery uses a Postgres-backed cross-replica best-effort feed with a bounded oldest-drop buffer. Deduplicate by revision; after reconnect or a revision gap, requery gameModelActivePlayerCount. Requires an app-scoped token for this exact app. */
+  gameModelActivePlayerCountChanged: GameModelActivePlayerCountChange;
   /** Push notification whenever a container in the app changes: an invoke mutated it, a direct gameModelSetProperty wrote it, or it was created/deleted. Metadata only (containerId, typeName, changedKeys — no property values); pull the visibility-filtered state with gameModelContainerState on receipt. Post-commit and best-effort (a dropped event costs one missed pull, never correctness) — durable reads remain the source of truth. Optional typeName/sessionId filters narrow delivery. Fans out across all API replicas. Requires a valid token. Replaces interval polling with pull-on-push. */
   gameModelContainerChanged: GmContainerChange;
   /** Realtime downlink from the game server: spatial notifications and responses, GenericErrorResponse (errors from your sends, correlated by sequenceNumber), and RealtimeConnectionEvent (lifecycle/setup failures). Requires a bearer game token AND an appId-scoped connection — the appId is read from the graphql-transport-ws connection (game tokens are app-agnostic and one UDP socket is shared across apps, so an app-agnostic subscription is rejected with a RealtimeConnectionEvent code APP_ID_REQUIRED, and a missing/invalid token with AUTH_REQUIRED). On subscribe, opens a UDP proxy session if none exists (binds to the least-loaded game server); open/transport failures are delivered as RealtimeConnectionEvent (code UDP_PROXY_CONNECTION_FAILED) and then the stream ends. Only this app’s spatial fan-out is delivered; appId-less control frames always pass. Subscribe before/while sending so async results are not missed. Unsubscribing stops delivery only — it does NOT close the UDP session; call disconnectUdpProxy (or rely on the server inactivity timeout) to release it. */
@@ -11125,6 +11217,11 @@ export type SubscriptionCrowdyStudioAgentEventsArgs = {
   afterSeq: Scalars['BigInt']['input'];
   clientEpoch: Scalars['BigInt']['input'];
   sessionId: Scalars['String']['input'];
+};
+
+
+export type SubscriptionGameModelActivePlayerCountChangedArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -11529,21 +11626,21 @@ export type UpsertAutomationInput = {
   triggerType?: InputMaybe<Scalars['String']['input']>;
 };
 
-/** Create an event trigger that fires an automation on model activity. */
+/** Create an event trigger that fires an automation on model activity or a complete app-scoped active-player-count transition. */
 export type UpsertAutomationTriggerInput = {
   /** The app (tenant). */
   appId: Scalars['BigInt']['input'];
   /** The automation (by name) this trigger fires. */
   automationName: Scalars['String']['input'];
-  /** Filter: only this container type. */
+  /** Filter: only this container type. Rejected for player_count_changed. */
   containerTypeName?: InputMaybe<Scalars['String']['input']>;
-  /** Debounce/coalesce window in ms. */
+  /** Debounce window in ms. player_count_changed uses trailing-edge coalescing (first previous count plus latest current count/revision); existing model events retain leading-edge suppression. */
   debounceMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Filter: only this function name. */
+  /** Filter: only this function name. Rejected for player_count_changed. */
   functionName?: InputMaybe<Scalars['String']['input']>;
-  /** The model event: function_invoked | property_changed | container_created. */
+  /** Event to observe: function_invoked | property_changed | container_created | player_count_changed. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params. */
   onEvent: Scalars['String']['input'];
-  /** Filter: only this property key. */
+  /** Filter: only this property key. Rejected for player_count_changed. */
   propertyKey?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -13890,6 +13987,20 @@ export type GameModelAppDiagnosticsQueryVariables = Exact<{
 
 export type GameModelAppDiagnosticsQuery = { __typename?: 'Query', gameModelAppDiagnostics: { __typename?: 'GmAppDiagnostics', appId: string, containerCount: number, propertyCount: number, edgeCount: number, sessionCount: number, functionCount: number, automationCount: number, eventCount: number, events24h: number, failedEvents24h: number, automationEvents24h: number, topFunctions: Array<{ __typename?: 'GmTopFunction', functionName: string, invocations: number, failures: number }> } };
 
+export type GameModelActivePlayerCountQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type GameModelActivePlayerCountQuery = { __typename?: 'Query', gameModelActivePlayerCount: { __typename?: 'GameModelActivePlayerCountSnapshot', appId: string, activePlayerCount: number, status: GameModelPlayerCountStatus, observedAt: string | null, revision: string } };
+
+export type GameModelActivePlayerCountChangedSubscriptionVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type GameModelActivePlayerCountChangedSubscription = { __typename?: 'Subscription', gameModelActivePlayerCountChanged: { __typename?: 'GameModelActivePlayerCountChange', appId: string, previousCount: number, currentCount: number, delta: number, revision: string, observedAt: string } };
+
 export type GmSessionFieldsFragment = { __typename?: 'GmSession', sessionId: string, appId: string, name: string | null, status: string, createdByUserId: string | null, currentTurnUserId: string | null, metadataJson: string };
 
 export type GmContainerFieldsFragment = { __typename?: 'GmContainer', containerId: string, appId: string, sessionId: string | null, typeName: string, displayName: string, description: string | null, ownerUserId: string | null, metadataJson: string };
@@ -15946,6 +16057,8 @@ export const GameModelAutomationPolicyDocument = {"kind":"Document","definitions
 export const GameModelAutomationRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelAutomationRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"automationName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"success"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAutomationRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"automationName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"automationName"}}},{"kind":"Argument","name":{"kind":"Name","value":"success"},"value":{"kind":"Variable","name":{"kind":"Name","value":"success"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmAutomationRunFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomationRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"automationName"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"parentRunId"}},{"kind":"Field","name":{"kind":"Name","value":"cascadeDepth"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"targets"}},{"kind":"Field","name":{"kind":"Name","value":"invocations"}},{"kind":"Field","name":{"kind":"Name","value":"mutations"}},{"kind":"Field","name":{"kind":"Name","value":"fnCalls"}},{"kind":"Field","name":{"kind":"Name","value":"gasUsed"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"circuitAction"}},{"kind":"Field","name":{"kind":"Name","value":"computeUnits"}}]}}]} as unknown as DocumentNode<GameModelAutomationRunsQuery, GameModelAutomationRunsQueryVariables>;
 export const GameModelAutomationStatsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelAutomationStats"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"windowMinutes"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAutomationStats"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"windowMinutes"},"value":{"kind":"Variable","name":{"kind":"Name","value":"windowMinutes"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"windowMinutes"}},{"kind":"Field","name":{"kind":"Name","value":"totalRuns"}},{"kind":"Field","name":{"kind":"Name","value":"failedRuns"}},{"kind":"Field","name":{"kind":"Name","value":"failureRatePct"}},{"kind":"Field","name":{"kind":"Name","value":"runsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"totalInvocations"}},{"kind":"Field","name":{"kind":"Name","value":"totalMutations"}},{"kind":"Field","name":{"kind":"Name","value":"totalComputeUnits"}},{"kind":"Field","name":{"kind":"Name","value":"avgDurationUs"}},{"kind":"Field","name":{"kind":"Name","value":"byAutomation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationName"}},{"kind":"Field","name":{"kind":"Name","value":"runs"}},{"kind":"Field","name":{"kind":"Name","value":"failures"}},{"kind":"Field","name":{"kind":"Name","value":"invocations"}},{"kind":"Field","name":{"kind":"Name","value":"computeUnits"}},{"kind":"Field","name":{"kind":"Name","value":"avgDurationUs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}}]}}]}}]}}]} as unknown as DocumentNode<GameModelAutomationStatsQuery, GameModelAutomationStatsQueryVariables>;
 export const GameModelAppDiagnosticsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelAppDiagnostics"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAppDiagnostics"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"containerCount"}},{"kind":"Field","name":{"kind":"Name","value":"propertyCount"}},{"kind":"Field","name":{"kind":"Name","value":"edgeCount"}},{"kind":"Field","name":{"kind":"Name","value":"sessionCount"}},{"kind":"Field","name":{"kind":"Name","value":"functionCount"}},{"kind":"Field","name":{"kind":"Name","value":"automationCount"}},{"kind":"Field","name":{"kind":"Name","value":"eventCount"}},{"kind":"Field","name":{"kind":"Name","value":"events24h"}},{"kind":"Field","name":{"kind":"Name","value":"failedEvents24h"}},{"kind":"Field","name":{"kind":"Name","value":"automationEvents24h"}},{"kind":"Field","name":{"kind":"Name","value":"topFunctions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"invocations"}},{"kind":"Field","name":{"kind":"Name","value":"failures"}}]}}]}}]}}]} as unknown as DocumentNode<GameModelAppDiagnosticsQuery, GameModelAppDiagnosticsQueryVariables>;
+export const GameModelActivePlayerCountDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelActivePlayerCount"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelActivePlayerCount"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"activePlayerCount"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"observedAt"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}}]}}]}}]} as unknown as DocumentNode<GameModelActivePlayerCountQuery, GameModelActivePlayerCountQueryVariables>;
+export const GameModelActivePlayerCountChangedDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"GameModelActivePlayerCountChanged"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelActivePlayerCountChanged"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"previousCount"}},{"kind":"Field","name":{"kind":"Name","value":"currentCount"}},{"kind":"Field","name":{"kind":"Name","value":"delta"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"observedAt"}}]}}]}}]} as unknown as DocumentNode<GameModelActivePlayerCountChangedSubscription, GameModelActivePlayerCountChangedSubscriptionVariables>;
 export const GameModelCreateSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelCreateSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateSessionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelCreateSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTurnUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelCreateSessionMutation, GameModelCreateSessionMutationVariables>;
 export const GameModelJoinSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelJoinSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"JoinSessionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelJoinSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}}]}}]}}]} as unknown as DocumentNode<GameModelJoinSessionMutation, GameModelJoinSessionMutationVariables>;
 export const GameModelSetSessionTurnDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelSetSessionTurn"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetSessionTurnInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelSetSessionTurn"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTurnUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelSetSessionTurnMutation, GameModelSetSessionTurnMutationVariables>;

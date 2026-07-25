@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '12.1.0';
+export const VERSION = '12.2.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -447,7 +447,14 @@ export { ServerStatusAPI } from './domains/serverStatus.js';
 export { ChannelsAPI } from './domains/channels.js';
 export { TeamsAPI } from './domains/teams.js';
 export { UdpAPI } from './domains/udp.js';
-export { GameModelAPI } from './domains/gameModel.js';
+export {
+  GameModelAPI,
+  type GmContainerChangeEvent,
+  type ContainerChangedHandlers,
+  type GmActivePlayerCountSnapshot,
+  type GmActivePlayerCountChangeEvent,
+  type ActivePlayerCountChangedHandlers,
+} from './domains/gameModel.js';
 export {
   ComputeAPI,
   COMPUTE_SDK_VERSION,
@@ -584,6 +591,8 @@ export type {
   GmTierFeature,
   GmAppPolicy,
   GmSeedResult,
+  GameModelActivePlayerCountSnapshot,
+  GameModelActivePlayerCountChange,
   UpsertContainerTypeInput,
   UpsertPropertyDefInput,
   UpsertFunctionInput,
@@ -639,6 +648,7 @@ export {
   PlayerComputeTarget,
   GridOwnerKind,
   GridTenure,
+  GameModelPlayerCountStatus,
   CodeAdmissionMode,
   CodeAdmissionSubjectKind,
 } from './generated/graphql.js';

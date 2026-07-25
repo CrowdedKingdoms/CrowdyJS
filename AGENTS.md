@@ -86,6 +86,7 @@ self-contained here or in the public docs.)
 | Persistent terrain / world | `chunks.get` / `chunks.byDistance` / `chunks.update` (durable) + `udp.sendVoxelUpdate` (realtime edits) |
 | Per-block metadata | app-defined blob conventions inside chunk `voxelStates` (e.g. compact JSON→base64 with orientation/growth/power/container-link fields); type it with a `StateCodec` on the ChunkStore's `voxelStateCodec` |
 | Server-side rules & data (inventory, stats, crafting, NPCs) | `gameModel` containers / properties / functions with invoke policies — schema admin-seeded before play |
+| App-wide active gameplay-session count | `gameModel.activePlayerCount(appId)` snapshot + `gameModel.activePlayerCountChanged({ appId }, handlers)` best-effort transitions |
 | World life with no client online | `gameModel` automations (schedules/triggers invoking `autonomousInvocable` functions) — admin-seeded before play |
 | Ready-made inventory / lockable objects / NPC mappings | `kit(appId)` — blueprints deployed with `kit.deploy` (admin), runtime via `kit.inventory` / `kit.objects` / `kit.npcs` |
 | Economy / progression / loot / quests / combat / matches / decks / world sim / leaderboards | `kit(appId)` genre layers — one blueprint builder + runtime helper each (`kit.economy`, `kit.progression`, `kit.loot`, `kit.quests`, `kit.combat`, `kit.matches`, `kit.decks`, `kit.worldsim`, `kit.leaderboards`) |
@@ -155,6 +156,15 @@ remainder), seeds definition containers, and versions migrations via a
 Sessions (`createSession` / `joinSession` / `setSessionTurn`) support
 match/turn structures; model-driven `notify_*` effects push updates to
 subscribed clients.
+
+App-scoped player counts use a player's app token:
+`gameModel.activePlayerCount(appId)` counts active gameplay sessions (not
+distinct users or actors), and an abandoned session may remain for about 120
+seconds. Only `FRESH` is complete; never interpret `PARTIAL` or `UNAVAILABLE`
+as authoritative zero. `activePlayerCountChanged({ appId }, handlers)` requires
+`wsUrl`, sends no initial event, and is best-effort: establish the stream, query
+the snapshot, deduplicate by decimal-string `revision`, and requery after
+reconnects or revision gaps.
 
 ### Automations API (NPCs & world ticks)
 
