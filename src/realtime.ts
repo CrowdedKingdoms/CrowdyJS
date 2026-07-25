@@ -491,6 +491,13 @@ export class RealtimeClient {
           Authorization: `Bearer ${currentToken}`,
         };
         if (this.subscribedAppId != null) params.appId = this.subscribedAppId;
+        // Browser clients: hint game-api to put this session on the foreground
+        // AOI emit budget (HUD). Node loadtest bots omit this and stay on the
+        // background rate. Belts-and-suspenders with User-Agent detection.
+        if (typeof globalThis !== 'undefined' && (globalThis as { window?: unknown }).window) {
+          params.preferForeground = '1';
+          params.clientKind = 'browser';
+        }
         return params;
       },
       retryWait: async (retries) => {
