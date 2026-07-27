@@ -201,6 +201,14 @@ export interface RealtimeConfig {
    * subscription land on the same game-api upstream.
    */
   lbCookieStore?: LbCookieStore;
+  /**
+   * When true, GraphQL-WS `connectionParams` include `preferForeground=1` and
+   * `clientKind=browser` so game-api puts this session on the foreground AOI
+   * emit budget. Defaults to true in browsers (`globalThis.window`); Node
+   * loadtest bots leave this unset and stay on the background rate. Headless
+   * probes that should behave like a browser set `preferForeground: true`.
+   */
+  preferForeground?: boolean;
 }
 
 interface PendingWait {
@@ -235,6 +243,7 @@ export class RealtimeClient {
   private readonly retryMaxDelayMs: number;
   private readonly waitTimeoutMs: number;
   private readonly lbCookieStore?: LbCookieStore;
+  private readonly preferForeground: boolean;
   private client: Client | null = null;
   private release: (() => void) | null = null;
   private desired = false;
@@ -272,6 +281,10 @@ export class RealtimeClient {
     this.retryMaxDelayMs = config.retryMaxDelayMs ?? 5000;
     this.waitTimeoutMs = config.waitTimeoutMs ?? 5000;
     this.lbCookieStore = config.lbCookieStore;
+    const browserWindow =
+      typeof globalThis !== 'undefined' &&
+      (globalThis as { window?: unknown }).window != null;
+    this.preferForeground = config.preferForeground ?? browserWindow;
 
     this.session.onChange((token) => {
       if (!this.desired) return;
@@ -491,10 +504,10 @@ export class RealtimeClient {
           Authorization: `Bearer ${currentToken}`,
         };
         if (this.subscribedAppId != null) params.appId = this.subscribedAppId;
-        // Browser clients: hint game-api to put this session on the foreground
-        // AOI emit budget (HUD). Node loadtest bots omit this and stay on the
-        // background rate. Belts-and-suspenders with User-Agent detection.
-        if (typeof globalThis !== 'undefined' && (globalThis as { window?: unknown }).window) {
+        // Foreground AOI emit budget (HUD). Browsers default on; Node bots stay
+        // on the background rate unless RealtimeConfig.preferForeground is set.
+        // Belts-and-suspenders with User-Agent detection on game-api.
+        if (this.preferForeground) {
           params.preferForeground = '1';
           params.clientKind = 'browser';
         }

@@ -123,6 +123,12 @@ export interface CrowdyClientConfig {
     retryMaxDelayMs?: number;
     /** Default timeout for `...AndWait` round-trips that await a matching echo. */
     waitTimeoutMs?: number;
+    /**
+     * Hint game-api to put this session on the foreground AOI emit budget.
+     * Defaults to true in browsers; set true explicitly for Node probes that
+     * should measure browser-like HUD latency. Loadtest bots leave this unset.
+     */
+    preferForeground?: boolean;
   };
   /**
    * Optional sticky-LB cookie jar shared with the game-api HTTP client. Node
