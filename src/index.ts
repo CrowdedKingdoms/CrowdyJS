@@ -74,6 +74,15 @@ export {
   type UdpNotificationHandlers,
 } from './realtime.js';
 export {
+  SnapshotStreamClient,
+  decodeSnapshotFrame,
+  type SnapshotStreamConfig,
+  type SnapshotPoseEntry,
+  type SnapshotPoseHandler,
+  type SnapshotInterestTier,
+  type DecodedSnapshotFrame,
+} from './snapshot-stream.js';
+export {
   RealtimeMetrics,
   payloadBytesOf,
   type RealtimeMetricsCounters,

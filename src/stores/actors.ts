@@ -431,6 +431,11 @@ export interface RemoteActor<T> {
   /** Local receive time of the latest update (ms). */
   receivedAt: number;
   /**
+   * Interest tier from the experiment snapshot stream (`0` near / `1` mid /
+   * `2` far). Undefined for GraphQL-WS Path B updates.
+   */
+  interestTier?: 0 | 1 | 2;
+  /**
    * Recent samples, newest first (length ≤ `historySize`) — the data an
    * interpolating renderer needs without keeping its own buffers.
    */
@@ -452,6 +457,12 @@ export interface RemoteActorsConfig<T> {
    * 12 000 ms. `false` disables staleness entirely.
    */
   staleAfterMs?: number | false;
+  /**
+   * Experiment: per interest-tier stale timeouts (near/mid/far). Far-tier
+   * snapshot poses refresh ~0.2 Hz and must not be reaped at the 12 s default.
+   * Missing tiers fall back to {@link staleAfterMs}.
+   */
+  staleAfterByTierMs?: Partial<Record<0 | 1 | 2, number | false>>;
   /**
    * Reap-timer cadence (physically deletes stale records and fires
    * `onLeave`). Defaults to 1000 ms; `false` relies on read-time filtering +
@@ -485,6 +496,7 @@ export class RemoteActorLane<T> {
     private readonly historySize: number,
     private readonly staleAfterMs: number | false,
     private readonly now: () => number,
+    private readonly staleAfterByTierMs?: Partial<Record<0 | 1 | 2, number | false>>,
   ) {}
 
   /** Bumped on every change — poll it cheaply from a render loop. */
@@ -537,6 +549,7 @@ export class RemoteActorLane<T> {
     chunk: ChunkCoordinatesInput,
     distance: number,
     epochMillis: number,
+    interestTier?: 0 | 1 | 2,
   ): void {
     const receivedAt = this.now();
     let actor = this.actors.get(uuid);
@@ -558,6 +571,9 @@ export class RemoteActorLane<T> {
     actor.distance = distance;
     actor.epochMillis = epochMillis;
     actor.receivedAt = receivedAt;
+    if (interestTier !== undefined) {
+      actor.interestTier = interestTier;
+    }
     actor.samples.unshift({ state, chunk, epochMillis, receivedAt });
     if (actor.samples.length > this.historySize) {
       actor.samples.length = this.historySize;
@@ -590,9 +606,15 @@ export class RemoteActorLane<T> {
   }
 
   private isStale(actor: RemoteActor<T>): boolean {
-    return (
-      this.staleAfterMs !== false && this.now() - actor.receivedAt > this.staleAfterMs
-    );
+    let limit = this.staleAfterMs;
+    if (
+      actor.interestTier !== undefined &&
+      this.staleAfterByTierMs &&
+      Object.prototype.hasOwnProperty.call(this.staleAfterByTierMs, actor.interestTier)
+    ) {
+      limit = this.staleAfterByTierMs[actor.interestTier] as number | false;
+    }
+    return limit !== false && this.now() - actor.receivedAt > limit;
   }
 }
 
@@ -619,10 +641,14 @@ export class RemoteActorStore<T> {
     const now = config.now ?? Date.now;
     const historySize = Math.max(1, config.historySize ?? 2);
     const staleAfterMs = config.staleAfterMs ?? 12_000;
+    const staleAfterByTierMs = config.staleAfterByTierMs;
 
     const laneNames = config.lanes ? Object.keys(config.lanes) : ['default'];
     for (const name of laneNames) {
-      this.lanes.set(name, new RemoteActorLane<T>(historySize, staleAfterMs, now));
+      this.lanes.set(
+        name,
+        new RemoteActorLane<T>(historySize, staleAfterMs, now, staleAfterByTierMs),
+      );
     }
     this.laneFilters = config.lanes
       ? Object.entries(config.lanes)
@@ -719,6 +745,67 @@ export class RemoteActorStore<T> {
   /** Notifications whose state failed to decode (foreign layouts). */
   get decodeFailures(): number {
     return this.decodeFailureCount;
+  }
+
+  /**
+   * Experiment: apply a decoded pose from the regional `/poses` snapshot
+   * stream (bypasses GraphQL-WS). `stateBase64` is the same base64 shape as
+   * `ActorUpdateNotification.state`.
+   */
+  ingestSnapshotPose(input: {
+    uuid: string;
+    stateBase64: string;
+    chunkX: string | number;
+    chunkY: string | number;
+    chunkZ: string | number;
+    interestTier?: 0 | 1 | 2;
+    epochMillis?: number;
+    distance?: number;
+  }): void {
+    const selfUuid =
+      typeof this.config.selfUuid === 'function'
+        ? this.config.selfUuid()
+        : this.config.selfUuid;
+    if (selfUuid && input.uuid === selfUuid) return;
+
+    let state: T;
+    try {
+      state = this.config.codec.decode(input.stateBase64);
+    } catch {
+      this.decodeFailureCount += 1;
+      return;
+    }
+    const notification = {
+      uuid: input.uuid,
+      state: input.stateBase64,
+      chunkX: String(input.chunkX),
+      chunkY: String(input.chunkY),
+      chunkZ: String(input.chunkZ),
+      distance: input.distance ?? 0,
+      epochMillis: String(input.epochMillis ?? Date.now()),
+    } as ActorUpdateEcho;
+    for (const [name, filter] of this.laneFilters) {
+      let matches: boolean;
+      try {
+        matches = filter(state, notification);
+      } catch {
+        continue;
+      }
+      if (!matches) continue;
+      this.lanes.get(name)!.apply(
+        input.uuid,
+        state,
+        {
+          x: String(input.chunkX),
+          y: String(input.chunkY),
+          z: String(input.chunkZ),
+        },
+        input.distance ?? 0,
+        Number(input.epochMillis ?? Date.now()),
+        input.interestTier,
+      );
+      break;
+    }
   }
 
   /** A new actor appeared (default/single-lane sugar; use `lane()` with lanes). */
