@@ -6,7 +6,7 @@
  *
  * Management-only (no game-api/realtime needed). Auto-skips unless the
  * management e2e env is configured. Drives the new `client.organizations`,
- * `client.appAccess`, `client.billing`, `client.quotas`, `client.environments`,
+ * `client.appAccess`, `client.billing`, `client.quotas`,
  * and `client.usage` sub-clients (and `client.admin.*`).
  */
 import test from 'node:test';
@@ -88,7 +88,7 @@ test('studio admin: org -> roles -> app -> access tier -> grant happy path', { s
   }
 });
 
-test('studio admin: billing + quotas + environment discovery', { skip, timeout: 60_000 }, async () => {
+test('studio admin: billing + quotas + usage', { skip, timeout: 60_000 }, async () => {
   const { client } = await ownerClient();
   try {
     const slug = `e2e-org-${rid()}`;
@@ -107,18 +107,11 @@ test('studio admin: billing + quotas + environment discovery', { skip, timeout: 
     const orgQuotas = await client.quotas.forOrg(org.orgId);
     assert.ok(Array.isArray(orgQuotas), 'quotasForOrg lists quotas');
 
-    // Environment discovery (public-ish + view_environments).
-    const datacenters = await client.environments.datacenters();
-    assert.ok(Array.isArray(datacenters), 'environmentDatacenters returns a list');
-    const versions = await client.environments.versions();
-    assert.ok(Array.isArray(versions), 'environmentVersions returns a list');
-    const envs = await client.environments.list(org.orgId);
-    assert.ok(Array.isArray(envs), 'orgEnvironments returns a list');
-
-    // Usage reporting (view_usage); window = last hour.
+    // Usage reporting (view_usage); window = last hour. (v13: the
+    // per-environment rollups retired with dedicated environments.)
     const since = new Date(Date.now() - 3600_000).toISOString();
-    const usage = await client.usage.orgByEnvironment(org.orgId, since);
-    assert.ok(Array.isArray(usage), 'orgUsageByEnvironment returns a list');
+    const usage = await client.usage.appSummary(org.orgId, appId, since);
+    assert.ok(usage != null, 'appUsageSummary returns a summary');
   } finally {
     client.close();
   }
