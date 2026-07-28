@@ -7896,7 +7896,10 @@ export type Query = {
   myCheckouts: CheckoutsPage;
   /** Lists the authenticated caller's own checkouts (newest first), across every org and app. Use this for a self-service payment history; use `checkoutsConnection` for the cross-tenant super-admin view. Requires an authenticated user. Relay cursor connection; prefer this over the offset-based myCheckouts. */
   myCheckoutsConnection: CheckoutsConnection;
-  /** Lifetime donation totals for the authenticated user, summed across every app. Requires a valid game token. */
+  /**
+   * Lifetime donation totals for the authenticated user, summed across every app. Requires a valid game token.
+   * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
+   */
   myDonationData: UserDonationData;
   /** The signed-in user's linked sign-in identities. */
   myIdentities: Array<UserIdentity>;
@@ -7906,7 +7909,10 @@ export type Query = {
   myPlayerCodeAcquisitions: Array<PlayerCodeAcquisition>;
   /** The caller's active installs in this app: pinned versions, consent hashes, and target grids. */
   myPlayerCodeInstalls: Array<PlayerCodeInstall>;
-  /** The authenticated user’s property-token balances (available, in use, total). Requires a valid game token. */
+  /**
+   * The authenticated user’s property-token balances (available, in use, total). Requires a valid game token.
+   * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
+   */
   myPropertyTokens: UserPropertyTokenData;
   /** The calling player's seller payout balance (pending/payable/reserved). */
   mySellerPayoutBalance: SellerPayoutBalance;

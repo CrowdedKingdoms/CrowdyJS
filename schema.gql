@@ -6348,11 +6348,11 @@ type Query {
   """
   Lifetime donation totals for the authenticated user, summed across every app. Requires a valid game token.
   """
-  myDonationData: UserDonationData!
+  myDonationData: UserDonationData! @deprecated(reason: "Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.")
   """
   The authenticated user’s property-token balances (available, in use, total). Requires a valid game token.
   """
-  myPropertyTokens: UserPropertyTokenData!
+  myPropertyTokens: UserPropertyTokenData! @deprecated(reason: "Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.")
   """
   Reports whether a free-play window is active now, a human-readable schedule description, and the ISO-8601 start of the next window. PUBLIC: no authentication required. Takes no arguments; computed from server config and the current clock.
   """
