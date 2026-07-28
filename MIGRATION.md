@@ -1,3 +1,32 @@
+# CrowdyJS v13 — unified galaxy API (breaking)
+
+The platform merged the Management API and Game API into ONE server on the
+shared galaxy database. v13 resyncs the committed schema from the unified SDL
+and removes the surfaces the platform retired:
+
+- **`client.environments` (and `client.admin.environments`) removed.**
+  Dedicated customer environments no longer exist; every app runs on the
+  shared platform. `mintAppToken` still returns `gameApiUrl`/`gameApiWsUrl`
+  (they resolve to the shared host), so portal routing code keeps working.
+- **`client.operator` reduced to platform compute ceilings**
+  (`computePlatformCeilings` / `setComputePlatformCeilings`). Infrastructure
+  operations (environments, change orders, secrets, releases, audit) moved to
+  the separate infra-control-plane service, which has its own auth, GraphQL
+  API, and operator console — not this SDK.
+- **`client.usage`**: the per-environment rollups (`environmentSummary`,
+  `orgByEnvironment`, `environmentByApp`) are gone; org/app-scoped reporting
+  (`appSummary`, `appGraphqlOperations`, `playerPulse`) stays.
+- **`client.billing`**: the per-environment capacity tier catalogs
+  (`buddyTiers`, `graphqlTiers`, `postgresTiers`) are gone; wallets, budgets
+  and transactions stay.
+- **Endpoints**: `managementUrl` and `httpUrl` may now be the SAME origin
+  (e.g. `https://ck.test.cks-env.com`); configuring both remains supported
+  and the two-token model (session vs app-scoped) is unchanged.
+
+Everything game-client (auth, users, world/UDP, stores, kit, game model,
+compute, player compute/model, marketplace, Crowdy Studio + agent) is
+unchanged — the merged schema is a superset for those surfaces.
+
 # CrowdyJS v12.1 — Crowdy Studio embed kit (additive)
 
 Version 12.1 ships the reusable game-embed chrome that previously lived only

@@ -46,7 +46,6 @@ import { AppAccessAPI } from './domains/appAccess.js';
 import { BillingAPI } from './domains/billing.js';
 import { PaymentsAPI } from './domains/payments.js';
 import { QuotasAPI } from './domains/quotas.js';
-import { EnvironmentsAPI } from './domains/environments.js';
 import { UsageAPI } from './domains/usage.js';
 import { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
 import { ControlPlaneAPI } from './domains/controlPlane.js';
@@ -178,8 +177,6 @@ export class CrowdyClient {
   readonly payments: PaymentsAPI;
   /** Usage quotas at the org/app scope (studio admin). */
   readonly quotas: QuotasAPI;
-  /** Dedicated customer environments: provision, scale, deploy (studio admin). */
-  readonly environments: EnvironmentsAPI;
   /** Replication + GraphQL usage reporting (studio admin). */
   readonly usage: UsageAPI;
   /** Shared-environment publishing, runtime gating, auto-billing (studio admin). */
@@ -189,7 +186,7 @@ export class CrowdyClient {
   /**
    * Studio-admin facade grouping the privileged management sub-clients
    * (`organizations`, `appAccess`, `billing`, `payments`, `quotas`,
-   * `environments`, `usage`, `sharedEnvironment`, `grids`) under one namespace.
+   * `usage`, `sharedEnvironment`, `grids`) under one namespace.
    */
   readonly admin: AdminAPI;
 
@@ -293,7 +290,6 @@ export class CrowdyClient {
     this.billing = new BillingAPI(this.management);
     this.payments = new PaymentsAPI(this.management);
     this.quotas = new QuotasAPI(this.management);
-    this.environments = new EnvironmentsAPI(this.management);
     this.usage = new UsageAPI(this.management);
     this.sharedEnvironment = new SharedEnvironmentAPI(this.management);
     this.operator = new ControlPlaneAPI(this.management);
@@ -332,7 +328,6 @@ export class CrowdyClient {
       billing: this.billing,
       payments: this.payments,
       quotas: this.quotas,
-      environments: this.environments,
       usage: this.usage,
       sharedEnvironment: this.sharedEnvironment,
       grids: this.gameApps,

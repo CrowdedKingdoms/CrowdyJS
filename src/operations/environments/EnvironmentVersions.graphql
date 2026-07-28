@@ -1,9 +1,0 @@
-query EnvironmentVersions {
-  environmentVersions {
-    version
-    releasedAt
-    status
-    notes
-    gameApiGitTag
-  }
-}

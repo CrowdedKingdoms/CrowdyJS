@@ -37,7 +37,7 @@
  * `chunks`/`voxels`/`actors`/`avatars`/`state`/`teleport`/`channels`/`teams`/
  * `gameModel`/`host`), the privileged studio-admin surface grouped under
  * `client.admin` (`organizations`, `appAccess`, `billing`, `payments`,
- * `quotas`, `environments`, `usage`, `sharedEnvironment`, `gameApps`; also
+ * `quotas`, `usage`, `sharedEnvironment`, `gameApps`; also
  * available top-level), and the operator control-plane surface under
  * `client.operator` (requires `is_operator`). Admin/operator calls still
  * require the appropriate token + permission — the server enforces them; the
@@ -430,7 +430,6 @@ export { AppAccessAPI } from './domains/appAccess.js';
 export { BillingAPI } from './domains/billing.js';
 export { PaymentsAPI } from './domains/payments.js';
 export { QuotasAPI } from './domains/quotas.js';
-export { EnvironmentsAPI } from './domains/environments.js';
 export { UsageAPI } from './domains/usage.js';
 export { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
 export { ControlPlaneAPI } from './domains/controlPlane.js';

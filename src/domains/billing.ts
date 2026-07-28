@@ -6,9 +6,6 @@ import {
   AppBudgetDocument,
   AppBudgetsDocument,
   SetAppBudgetDocument,
-  BuddyBillingTiersDocument,
-  GraphqlBillingTiersDocument,
-  PostgresBillingTiersDocument,
   type WalletBalanceQuery,
   type WalletTransactionsQuery,
   type WalletTransactionsConnectionQuery,
@@ -16,9 +13,6 @@ import {
   type AppBudgetQuery,
   type AppBudgetsQuery,
   type SetAppBudgetMutation,
-  type BuddyBillingTiersQuery,
-  type GraphqlBillingTiersQuery,
-  type PostgresBillingTiersQuery,
 } from '../generated/graphql.js';
 
 /**
@@ -145,39 +139,7 @@ export class BillingAPI {
     return data.walletTransactionsConnection;
   }
 
-  /**
-   * Buddy (UDP replication) capacity billing-tier catalog. **Public.** Each
-   * tier lists its messages/sec + bandwidth allotment and capacity charge; use
-   * with {@link EnvironmentsAPI.updateBillingTiers} to set an environment's tier.
-   *
-   * @returns The Buddy billing tiers.
-   */
-  async buddyTiers(): Promise<BuddyBillingTiersQuery['buddyBillingTiers']> {
-    const data = await this.management.request(BuddyBillingTiersDocument);
-    return data.buddyBillingTiers;
-  }
-
-  /**
-   * GraphQL (Game API) capacity billing-tier catalog. **Public.**
-   *
-   * @returns The GraphQL billing tiers.
-   */
-  async graphqlTiers(): Promise<
-    GraphqlBillingTiersQuery['graphqlBillingTiers']
-  > {
-    const data = await this.management.request(GraphqlBillingTiersDocument);
-    return data.graphqlBillingTiers;
-  }
-
-  /**
-   * Postgres capacity billing-tier catalog. **Public.**
-   *
-   * @returns The Postgres billing tiers.
-   */
-  async postgresTiers(): Promise<
-    PostgresBillingTiersQuery['postgresBillingTiers']
-  > {
-    const data = await this.management.request(PostgresBillingTiersDocument);
-    return data.postgresBillingTiers;
-  }
+  // NOTE (unified galaxy API): the per-environment capacity billing-tier
+  // catalogs (buddyTiers/graphqlTiers/postgresTiers) were retired with
+  // dedicated customer environments.
 }

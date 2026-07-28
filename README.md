@@ -2,6 +2,16 @@
 
 The official browser-first TypeScript SDK for **Crowded Kingdoms**. CrowdyJS gives you typed clients for auth, the world/replication GraphQL API, and the UDP proxy subscription stream. As of **v7** it follows the Overworld two-token model: an identity **session token** for the Management API, and short-lived **app-scoped tokens** for gameplay via `client.portal` (see [Overworld portals & app-scoped tokens (v7)](#overworld-portals--app-scoped-tokens-v7)).
 
+> **CrowdyJS v13 (breaking): unified galaxy API.** The platform merged the
+> Management API and Game API into ONE server on the shared galaxy database
+> (`managementUrl` and `httpUrl` may be the same origin now; the two-token
+> model is unchanged). The schema is resynced from the unified SDL, and the
+> retired surfaces are removed: `client.environments` (dedicated customer
+> environments no longer exist), the per-environment usage rollups and
+> capacity tier catalogs, and everything on `client.operator` except the
+> platform compute ceilings (infra operations moved to the separate
+> infra-control-plane service). See [MIGRATION.md](MIGRATION.md).
+
 ## Install
 
 ```bash
@@ -533,7 +543,6 @@ project as a safety action rather than interpreting a partial target.
 | `client.billing` | Org wallet + per-app spend budgets. |
 | `client.payments` | Payment checkouts (wallet top-ups, plan purchases). |
 | `client.quotas` | Usage quotas at the org/app scope. |
-| `client.environments` | Dedicated environments: quote, provision, scale, deploy, link apps. |
 | `client.usage` | Replication + GraphQL usage reporting. |
 | `client.sharedEnvironment` | Publish to shared, runtime gating, spend caps, auto-billing. |
 | `client.gameApps` | App grids (`createGrid` / `deleteGrid`), first-class grid ownership (`ownership` / `assignOwnership` / `transferOwnership`), and grid runtime-permission administration. |
@@ -543,7 +552,7 @@ project as a safety action rather than interpreting a partial target.
 
 | Sub-client | What it does |
 |---|---|
-| `client.operator` | Control plane: cross-org environments, change orders, secrets, release management, audit. |
+| `client.operator` | Platform compute ceilings (v13: infra operations moved to the separate infra-control-plane service). |
 
 Auth, user reads, and the studio-admin / operator surfaces target `managementUrl` and use the **identity session token**; the game-client world/UDP surfaces target `httpUrl` / `wsUrl` and require an **app-scoped token** for that app. Use one identity client plus a per-game client (see [Overworld portals & app-scoped tokens (v7)](#overworld-portals--app-scoped-tokens-v7)); each client's `AuthState` carries its token to its own endpoints, so HTTP and WebSocket auth never drift within a client.
 
@@ -930,8 +939,10 @@ alongside the legacy offset lists. The surfaces are namespaced by audience:
   `client.billing`) — privileged organization/app administration. Drive these from a
   **studio backend** with an org-scoped or admin token, **not** from an untrusted
   browser; the server still enforces the relevant org/app permission on every call.
-- **Operator** (`client.operator`) — platform control-plane operations that require
-  `users.is_operator`. For internal operator tooling only.
+- **Operator** (`client.operator`) — platform-policy operations (compute
+  ceilings) that require `users.is_operator`. For internal operator tooling
+  only. Infrastructure operations live in the separate infra-control-plane
+  service as of v13, not this SDK.
 
 The SDK never relaxes server-side authorization — exposing an operation here just
 gives you a typed wrapper; the caller still needs the right token and permission. For

@@ -73,6 +73,19 @@ export type ActorFilterInput = {
   uuid?: InputMaybe<Scalars['String']['input']>;
 };
 
+/** The signed-in identity behind a bearer token. */
+export type ActorType = {
+  __typename?: 'ActorType';
+  /** Contributor uuid — the votes/content actor. */
+  contributorUuid: Scalars['String']['output'];
+  email: Maybe<Scalars['String']['output']>;
+  /** Legacy bigint public user id (Buddy / CK wire), as a string. */
+  userId: Scalars['String']['output'];
+  /** User identity (galaxy row uuid). */
+  userUuid: Scalars['String']['output'];
+  username: Maybe<Scalars['String']['output']>;
+};
+
 /** Notification received when an actor (player or NPC) state is updated by another client or the server. Received via the udpNotifications subscription. */
 export type ActorUpdateNotification = {
   __typename?: 'ActorUpdateNotification';
@@ -1290,25 +1303,6 @@ export type AppUsageProjection = {
   sufficientData: Scalars['Boolean']['output'];
 };
 
-/** Aggregate byte totals for one app over the requested window. All *Bytes fields are string counters (may exceed Int range). */
-export type AppUsageRollupRow = {
-  __typename?: 'AppUsageRollupRow';
-  /** App id (as a string). */
-  appId: Scalars['String']['output'];
-  /** App display name. */
-  appName: Scalars['String']['output'];
-  /** App slug. */
-  appSlug: Scalars['String']['output'];
-  /** Total GraphQL bytes received (string counter). */
-  graphqlRecvBytes: Scalars['String']['output'];
-  /** Total GraphQL bytes sent (string counter). */
-  graphqlSendBytes: Scalars['String']['output'];
-  /** Total replication bytes received (string counter). */
-  replicationRecvBytes: Scalars['String']['output'];
-  /** Total replication bytes sent (string counter). */
-  replicationSendBytes: Scalars['String']['output'];
-};
-
 /** Aggregate byte totals plus the top GraphQL operations for one app over the window. */
 export type AppUsageSummary = {
   __typename?: 'AppUsageSummary';
@@ -1515,24 +1509,6 @@ export type AvatarDto = {
 export type BatchActorLookupInput = {
   /** Actor ids to look up. Each is exactly 32 ASCII characters (the UDP-wire actor id), NOT a hyphenated RFC-4122 UUID. Must be non-empty; unknown ids are silently omitted from the result. */
   uuids: Array<Scalars['String']['input']>;
-};
-
-/** Buddy (UDP replication) billing tier: message rate + bandwidth allotments and capacity charge. */
-export type BuddyBillingTier = {
-  __typename?: 'BuddyBillingTier';
-  /** Maximum bandwidth allotment in megabits per second. */
-  bandwidthMbitPerSecond: Scalars['Float']['output'];
-  /** Capacity charge for this tier, in cents (placeholder until load tests). */
-  chargeCents: Scalars['BigInt']['output'];
-  /** ISO-4217 currency for chargeCents, e.g. 'usd'. */
-  currency: Scalars['String']['output'];
-  description: Maybe<Scalars['String']['output']>;
-  /** Customer-facing tier label. */
-  label: Scalars['String']['output'];
-  /** Maximum messages per second allotment. */
-  messagesPerSecond: Scalars['Int']['output'];
-  /** Tier level (1 = lowest offered tier). */
-  tierLevel: Scalars['Int']['output'];
 };
 
 /** Live (most recent heartbeat) Buddy UDP throughput rates. */
@@ -1841,327 +1817,6 @@ export type ChunksByDistanceResponse = {
   skip: Maybe<Scalars['Int']['output']>;
 };
 
-export type CksBuddyHealth = {
-  __typename?: 'CksBuddyHealth';
-  /** UDP port clients connect to on the Buddy server. */
-  clientPort: Maybe<Scalars['Int']['output']>;
-  /** Currently connected client count reported by Buddy. */
-  clients: Maybe<Scalars['Int']['output']>;
-  /** Seconds since server_status.updated_at (game DB heartbeat). */
-  heartbeatAgeSec: Maybe<Scalars['Float']['output']>;
-  /** Public IPv4 of the Buddy UDP runtime VM, if registered. */
-  ip4: Maybe<Scalars['String']['output']>;
-  /** True when heartbeat is missing or older than the staleness threshold (~30s). Game-api rejects assignment when age > ~11s. */
-  isStale: Scalars['Boolean']['output'];
-  /** False when no server_status row exists for this environment. */
-  registered: Scalars['Boolean']['output'];
-  /** Buddy-reported server state from server_status (e.g. 'ReadyForClients'). */
-  status: Maybe<Scalars['String']['output']>;
-  /** Operator-facing hint when multiplayer assignment may fail. */
-  troubleshootingHint: Scalars['String']['output'];
-  /** Timestamp of the last server_status heartbeat (game DB). */
-  updatedAt: Maybe<Scalars['DateTime']['output']>;
-};
-
-/** Progress for the active or most recent deploy/destroy change order, with per-task counts and a retry hint. Durable change orders may expose read-only projected tasks and steps; planned work remains pending until an outcome is observed or inferred. */
-export type CksDeployProgress = {
-  __typename?: 'CksDeployProgress';
-  /** Redeploy is allowed (failed deploy or stuck order cleared) */
-  canRetry: Scalars['Boolean']['output'];
-  changeOrderId: Scalars['String']['output'];
-  /** Change order kind (deploy or destroy pipeline identifier) */
-  changeOrderKind: Scalars['String']['output'];
-  changeOrderStatus: Scalars['String']['output'];
-  currentStepKind: Maybe<Scalars['String']['output']>;
-  currentTaskKind: Maybe<Scalars['String']['output']>;
-  error: Maybe<Scalars['String']['output']>;
-  /** True when the deploy failed but the change order was left in_progress */
-  isStuck: Scalars['Boolean']['output'];
-  targetVersion: Maybe<Scalars['String']['output']>;
-  tasks: Array<CksDeployProgressTask>;
-  tasksFailed: Scalars['Int']['output'];
-  tasksInProgress: Scalars['Int']['output'];
-  tasksPending: Scalars['Int']['output'];
-  tasksSucceeded: Scalars['Int']['output'];
-  tasksTotal: Scalars['Int']['output'];
-};
-
-/** A single step within a deploy/destroy task. Progress may be recorded directly or exposed as a read-only projection for a durable change order. Planned steps remain pending until an outcome is observed or inferred. */
-export type CksDeployProgressStep = {
-  __typename?: 'CksDeployProgressStep';
-  /** Attempt count. For projected progress, 0 means no attempt or outcome has been observed or inferred; 1 means an attempt or outcome has been observed or inferred. */
-  attempt: Scalars['Int']['output'];
-  error: Maybe<Scalars['String']['output']>;
-  id: Scalars['String']['output'];
-  kind: Scalars['String']['output'];
-  /** Human-readable step label for the org UI */
-  label: Scalars['String']['output'];
-  /** Execution status. For projected progress, pending means the step is planned and no terminal outcome is available yet. */
-  status: Scalars['String']['output'];
-};
-
-/** A task in a deploy/destroy pipeline, containing ordered steps. Durable change orders may expose task progress as a read-only projection. */
-export type CksDeployProgressTask = {
-  __typename?: 'CksDeployProgressTask';
-  error: Maybe<Scalars['String']['output']>;
-  id: Scalars['String']['output'];
-  kind: Scalars['String']['output'];
-  label: Scalars['String']['output'];
-  /** Execution status derived from available step outcomes. Active projected tasks may contain pending steps when exact live state is unavailable. */
-  status: Scalars['String']['output'];
-  steps: Array<CksDeployProgressStep>;
-};
-
-/** A provisioned (or provisioning/destroyed) tenant environment. status tracks provisioning lifecycle; billingStatus tracks payment lifecycle — they are independent. */
-export type CksEnvironment = {
-  __typename?: 'CksEnvironment';
-  /** When billingStatus = grace, the deadline to add funds before suspension (~24h after the failed charge). Null otherwise. */
-  billingGraceDeadline: Maybe<Scalars['DateTime']['output']>;
-  /** Payment lifecycle (NOT provisioning): active; grace (a charge failed — funds must be added before billingGraceDeadline); suspension_queued -> suspended (runtime stopped for non-payment); resume_queued -> active after payment (resume_failed on error). Recover with resumeEnvironment. */
-  billingStatus: Scalars['String']['output'];
-  /** Selected Buddy billing tier level, if any. */
-  buddyBillingTier: Maybe<Scalars['Int']['output']>;
-  caddyFlavor: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['DateTime']['output'];
-  databaseFlavor: Maybe<Scalars['String']['output']>;
-  /** Environment release version the platform is driving toward (target/desired state). */
-  desiredEnvironmentVersion: Maybe<Scalars['String']['output']>;
-  displayName: Scalars['String']['output'];
-  /** 'dedicated' (multi-VM) or 'dev_single' (one dev-only VM). */
-  environmentClass: Scalars['String']['output'];
-  gameApiFlavor: Maybe<Scalars['String']['output']>;
-  gameApiMaxServers: Scalars['Int']['output'];
-  gameApiMinServers: Scalars['Int']['output'];
-  /** Selected GraphQL billing tier level, if any. */
-  graphqlBillingTier: Maybe<Scalars['Int']['output']>;
-  /** Opaque environment UUID (cks_environments.id). */
-  id: Scalars['String']['output'];
-  /** True for the single platform-owned shared environment (slug 'shared') that hosts the shared game-api serving apps with deploymentTarget='shared'. Customer environments are always false. */
-  isShared: Scalars['Boolean']['output'];
-  loadBalancerCount: Scalars['Int']['output'];
-  /** Release version actually observed running. Lags desiredEnvironmentVersion while a deploy is in progress. */
-  observedEnvironmentVersion: Maybe<Scalars['String']['output']>;
-  /** Owning organization id (BigInt). */
-  orgId: Scalars['BigInt']['output'];
-  /** Selected Postgres billing tier level, if any. */
-  postgresBillingTier: Maybe<Scalars['Int']['output']>;
-  /** Cloud provider, e.g. 'ovh'. */
-  primaryCloud: Scalars['String']['output'];
-  /** Primary datacenter/region code, e.g. 'GRA11'. */
-  primaryRegion: Scalars['String']['output'];
-  /** Single VM flavor when environmentClass = 'dev_single'. */
-  singleBoxFlavor: Maybe<Scalars['String']['output']>;
-  /** URL-safe environment identifier, stable for the environment's lifetime. Auto-generated as 'e-<12 chars>' unless a custom slug was supplied at creation. */
-  slug: Scalars['String']['output'];
-  /** Provisioning lifecycle (NOT billing): deploy_requested -> provisioning -> active; deploy_failed on error; destroy_requested -> destroyed (destroy_failed on error). See billingStatus for payment state. */
-  status: Scalars['String']['output'];
-  /** Subdomain handle used to build the environment public URLs. Null until assigned. */
-  subdomainHandle: Maybe<Scalars['String']['output']>;
-  /** When the environment was suspended for non-payment. Null unless suspended. */
-  suspendedAt: Maybe<Scalars['DateTime']['output']>;
-  udpBuddyFlavor: Maybe<Scalars['String']['output']>;
-  udpBuddyMaxServers: Scalars['Int']['output'];
-  udpBuddyMinServers: Scalars['Int']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** Audit-log entry recording an environment lifecycle action. */
-export type CksEnvironmentAudit = {
-  __typename?: 'CksEnvironmentAudit';
-  action: Scalars['String']['output'];
-  createdAt: Scalars['DateTime']['output'];
-  environmentId: Scalars['String']['output'];
-  id: Scalars['String']['output'];
-  payloadJson: Maybe<Scalars['String']['output']>;
-};
-
-/** A billable cloud resource attributed to the environment, with its customer hourly price. */
-export type CksEnvironmentBillingResource = {
-  __typename?: 'CksEnvironmentBillingResource';
-  componentKind: Scalars['String']['output'];
-  currency: Scalars['String']['output'];
-  /** Customer hourly price billed for this resource, in cents. */
-  customerHourlyPriceCents: Maybe<Scalars['BigInt']['output']>;
-  environmentId: Scalars['String']['output'];
-  flavorName: Maybe<Scalars['String']['output']>;
-  id: Scalars['String']['output'];
-  observedAt: Scalars['DateTime']['output'];
-  provider: Scalars['String']['output'];
-  region: Scalars['String']['output'];
-  resourceId: Scalars['String']['output'];
-  resourceName: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-};
-
-/** An asynchronous change order tracking a deploy / destroy / scaling pipeline for an environment. Returned by mutations so callers can poll completion. */
-export type CksEnvironmentChangeOrder = {
-  __typename?: 'CksEnvironmentChangeOrder';
-  claimedAt: Maybe<Scalars['DateTime']['output']>;
-  claimedBy: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['DateTime']['output'];
-  environmentId: Scalars['String']['output'];
-  error: Maybe<Scalars['String']['output']>;
-  finishedAt: Maybe<Scalars['DateTime']['output']>;
-  /** Change order UUID. */
-  id: Scalars['String']['output'];
-  /** Pipeline kind, e.g. 'deploy_environment_version', 'game_api_environment_destroy', or 'postgres_citus_destroy'. */
-  kind: Scalars['String']['output'];
-  /** JSON-encoded change order payload. */
-  payloadJson: Scalars['String']['output'];
-  /** User id (BigInt) that requested the change order. */
-  requestedBy: Maybe<Scalars['BigInt']['output']>;
-  /** Execution status: pending, claimed/in_progress, succeeded, failed, or cancelled. */
-  status: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** One provisioned component of an environment (DNS, database VM, game-api, Buddy, load balancer, etc.) with its desired vs. observed version and spec. */
-export type CksEnvironmentComponent = {
-  __typename?: 'CksEnvironmentComponent';
-  desiredSpecJson: Maybe<Scalars['String']['output']>;
-  desiredVersion: Maybe<Scalars['String']['output']>;
-  environmentId: Scalars['String']['output'];
-  id: Scalars['String']['output'];
-  kind: Scalars['String']['output'];
-  lastObservedAt: Maybe<Scalars['DateTime']['output']>;
-  observedSpecJson: Maybe<Scalars['String']['output']>;
-  observedVersion: Maybe<Scalars['String']['output']>;
-  status: Maybe<Scalars['String']['output']>;
-};
-
-/** Full environment detail returned by orgEnvironment: the environment plus its components, change orders, audit, secrets, outputs, billing resources, live deploy/destroy progress, and Buddy health. */
-export type CksEnvironmentDetail = {
-  __typename?: 'CksEnvironmentDetail';
-  audit: Array<CksEnvironmentAudit>;
-  billingResources: Array<CksEnvironmentBillingResource>;
-  /** Buddy UDP server heartbeat from mirrored server_status. Null when env is destroyed or management DB has no row. */
-  buddyHealth: Maybe<CksBuddyHealth>;
-  changeOrders: Array<CksEnvironmentChangeOrder>;
-  components: Array<CksEnvironmentComponent>;
-  /** Deploy task/step progress for the active or most recent deploy. Durable change orders may expose read-only projected progress, with planned work pending until an outcome is observed or inferred. */
-  deployProgress: Maybe<CksDeployProgress>;
-  /** Destroy tear-down progress for game-api and platform change orders. Durable change orders may expose read-only projected progress and show planned work as pending. */
-  destroyProgress: Array<CksDeployProgress>;
-  environment: CksEnvironment;
-  outputs: Array<CksEnvironmentOutput>;
-  secrets: Array<CksEnvironmentSecretValue>;
-};
-
-/** A published output value from a provisioned component (e.g. URLs, handles, connection details). */
-export type CksEnvironmentOutput = {
-  __typename?: 'CksEnvironmentOutput';
-  componentKind: Scalars['String']['output'];
-  environmentId: Scalars['String']['output'];
-  id: Scalars['String']['output'];
-  label: Scalars['String']['output'];
-  name: Scalars['String']['output'];
-  value: Scalars['String']['output'];
-  valueKind: Scalars['String']['output'];
-};
-
-/** Pricing quote for a proposed environment selection plus the org wallet balance, used to gate createEnvironment. All *Cents fields are in minor currency units (cents). */
-export type CksEnvironmentQuote = {
-  __typename?: 'CksEnvironmentQuote';
-  /** Wallet balance still available after existing reservations, in cents. Compared against firstDayReserveCents. */
-  availableBalanceCents: Scalars['BigInt']['output'];
-  caddyFlavor: Scalars['String']['output'];
-  /** True when availableBalanceCents ≥ firstDayReserveCents, or when AUTO_BILLING_PAID_PROVISIONING_ENABLED is true and auto-billing is enabled with a saved payment method and enough period headroom to cover the shortfall. createEnvironment may auto-recharge before provisioning when the wallet is short but billing-ready. */
-  canCreate: Scalars['Boolean']['output'];
-  /** ISO-4217 currency of the *Cents fields, e.g. 'USD'. */
-  currency: Scalars['String']['output'];
-  databaseFlavor: Scalars['String']['output'];
-  datacenter: Scalars['String']['output'];
-  /** 'dedicated' (multi-VM) or 'dev_single' (one dev-only VM). */
-  environmentClass: Scalars['String']['output'];
-  /** Up-front wallet reserve required to create (≈ first day of runtime), in cents. */
-  firstDayReserveCents: Scalars['BigInt']['output'];
-  gameApiFlavor: Scalars['String']['output'];
-  gameApiMaxServers: Scalars['Int']['output'];
-  gameApiMinServers: Scalars['Int']['output'];
-  /** Total hourly price of the full selection, in cents. */
-  hourlyCostCents: Scalars['BigInt']['output'];
-  loadBalancerCount: Scalars['Int']['output'];
-  /** Single VM flavor when environmentClass = 'dev_single'. */
-  singleBoxFlavor: Maybe<Scalars['String']['output']>;
-  udpBuddyFlavor: Scalars['String']['output'];
-  udpBuddyMaxServers: Scalars['Int']['output'];
-  udpBuddyMinServers: Scalars['Int']['output'];
-  /** Org wallet balance, in cents. */
-  walletBalanceCents: Scalars['BigInt']['output'];
-};
-
-/** A sealed environment secret. Exposes ciphertext only (sealedCiphertextBase64) — never the plaintext. */
-export type CksEnvironmentSecretValue = {
-  __typename?: 'CksEnvironmentSecretValue';
-  createdAt: Scalars['DateTime']['output'];
-  environmentId: Scalars['String']['output'];
-  id: Scalars['String']['output'];
-  kind: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  sealedCiphertextBase64: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** An environment release version in the deployable catalog. */
-export type CksEnvironmentVersion = {
-  __typename?: 'CksEnvironmentVersion';
-  /** Pinned cks-game-api git tag from the ingested manifest. */
-  gameApiGitTag: Maybe<Scalars['String']['output']>;
-  notes: Maybe<Scalars['String']['output']>;
-  releasedAt: Scalars['DateTime']['output'];
-  /** Release status, e.g. 'available' (deployable) or 'yanked' (withdrawn). */
-  status: Scalars['String']['output'];
-  /** Semantic version, e.g. 'v0.1.4'. */
-  version: Scalars['String']['output'];
-};
-
-/** An OVH datacenter offered for environment placement. Only datacenters with at least one customer-selectable flavor are returned by environmentDatacenters. */
-export type CksOvhDatacenter = {
-  __typename?: 'CksOvhDatacenter';
-  city: Maybe<Scalars['String']['output']>;
-  continent: Maybe<Scalars['String']['output']>;
-  /** True when the datacenter is currently accepting new instances. */
-  isAvailable: Scalars['Boolean']['output'];
-  name: Maybe<Scalars['String']['output']>;
-  /** Region/datacenter code used as the datacenter arg, e.g. 'GRA11'. */
-  region: Scalars['String']['output'];
-  /** Number of customer-selectable instances in this datacenter after availability, pricing, and admin visibility filters. */
-  selectableInstanceCount: Scalars['Int']['output'];
-  /** Provider availability status string, e.g. 'UP'. */
-  status: Scalars['String']['output'];
-  syncedAt: Scalars['DateTime']['output'];
-};
-
-/** Customer-selectable catalog instance flavor. Hidden, unavailable, or unpriced rows are omitted from environmentFlavors. */
-export type CksOvhFlavor = {
-  __typename?: 'CksOvhFlavor';
-  /** Catalog availability for this flavor, e.g. 'available'. */
-  availabilityStatus: Scalars['String']['output'];
-  /** ISO-4217 currency for the price fields, e.g. 'USD'. */
-  currency: Scalars['String']['output'];
-  /** Customer hourly price in cents. Non-null for every flavor returned from environmentFlavors. */
-  customerHourlyPriceCents: Scalars['BigInt']['output'];
-  /** Customer monthly reference price in cents. Display-only until monthly billing is implemented. */
-  customerMonthlyPriceCents: Maybe<Scalars['BigInt']['output']>;
-  /** Local disk in gigabytes. */
-  diskGb: Maybe<Scalars['Int']['output']>;
-  flavorName: Scalars['String']['output'];
-  flavorType: Maybe<Scalars['String']['output']>;
-  /** How the customer price was derived (e.g. fixed vs. markup mode). */
-  pricingMode: Scalars['String']['output'];
-  /** Where the customer price came from (pricing pipeline source). */
-  pricingSource: Maybe<Scalars['String']['output']>;
-  /** Remaining instances of this flavor the project may launch in the datacenter (OVH quota headroom). */
-  quotaAvailable: Maybe<Scalars['Int']['output']>;
-  /** RAM in megabytes. */
-  ramMb: Maybe<Scalars['Int']['output']>;
-  /** Raw OVH provider hourly cost in cents (pre-markup). Internal reference; bill against customerHourlyPriceCents. */
-  rawHourlyCostCents: Maybe<Scalars['BigInt']['output']>;
-  syncedAt: Scalars['DateTime']['output'];
-  /** Virtual CPU count. */
-  vcpus: Maybe<Scalars['Int']['output']>;
-};
-
 /** Notification received when another client sends an audio packet (voice chat). Received via the udpNotifications subscription. */
 export type ClientAudioNotification = {
   __typename?: 'ClientAudioNotification';
@@ -2374,102 +2029,6 @@ export type ConnectionPageInfo = {
   startCursor: Maybe<Scalars['String']['output']>;
 };
 
-/** Operator-facing view of cks_environments. */
-export type CpAdminEnvironment = {
-  __typename?: 'CpAdminEnvironment';
-  createdAt: Scalars['DateTime']['output'];
-  /** When true, purgeEnvironment is blocked. Toggle via setEnvironmentDeletionProtection. */
-  deletionProtectionEnabled: Scalars['Boolean']['output'];
-  deletionProtectionSetAt: Maybe<Scalars['DateTime']['output']>;
-  deletionProtectionSetByEmail: Maybe<Scalars['String']['output']>;
-  displayName: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  orgId: Maybe<Scalars['String']['output']>;
-  primaryCloud: Scalars['String']['output'];
-  primaryRegion: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  /** Provisioning lifecycle: deploy_requested -> provisioning -> active; deploy_failed; destroy_requested -> destroyed (destroy_failed on error). */
-  status: Scalars['String']['output'];
-  subdomainHandle: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** One page of operator environment rows. Paging is 1-based: page 1 is the first page. */
-export type CpAdminEnvironmentsPage = {
-  __typename?: 'CpAdminEnvironmentsPage';
-  /** Current 1-based page number. */
-  page: Scalars['Int']['output'];
-  /** Requested page size (max rows per page). */
-  pageSize: Scalars['Int']['output'];
-  /** Environment rows on this page. */
-  rows: Array<CpAdminEnvironment>;
-  /** Total rows across all pages (not just this page). */
-  total: Scalars['Int']['output'];
-};
-
-export type CpAuditEntry = {
-  __typename?: 'CpAuditEntry';
-  action: Scalars['String']['output'];
-  actorKind: Scalars['String']['output'];
-  actorUserId: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['DateTime']['output'];
-  entityId: Maybe<Scalars['String']['output']>;
-  entityKind: Maybe<Scalars['String']['output']>;
-  environmentId: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  payloadJson: Maybe<Scalars['String']['output']>;
-};
-
-export type CpBuddyLiveRates = {
-  __typename?: 'CpBuddyLiveRates';
-  clientRecvMbitPerSec: Scalars['Float']['output'];
-  clientRecvMsgsPerSec: Scalars['Float']['output'];
-  clientSendMbitPerSec: Scalars['Float']['output'];
-  clientSendMsgsPerSec: Scalars['Float']['output'];
-  clients: Scalars['Float']['output'];
-  serverId: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-export type CpChangeOrder = {
-  __typename?: 'CpChangeOrder';
-  claimedAt: Maybe<Scalars['DateTime']['output']>;
-  claimedBy: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['DateTime']['output'];
-  environmentId: Scalars['String']['output'];
-  error: Maybe<Scalars['String']['output']>;
-  finishedAt: Maybe<Scalars['DateTime']['output']>;
-  id: Scalars['ID']['output'];
-  /** Pipeline kind (e.g. deploy_environment_version, *_destroy). */
-  kind: Scalars['String']['output'];
-  /** JSON-encoded payload */
-  payloadJson: Maybe<Scalars['String']['output']>;
-  /** Execution status: pending, claimed/in_progress, succeeded, failed, or cancelled. */
-  status: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** Change-order detail with ordered task and step progress. Durable change orders may return read-only projected rows when exact live execution details are unavailable. */
-export type CpChangeOrderDetail = {
-  __typename?: 'CpChangeOrderDetail';
-  order: CpChangeOrder;
-  steps: Array<CpStepRow>;
-  tasks: Array<CpTaskRow>;
-};
-
-/** One page of operator change-order rows. Paging is 1-based: page 1 is the first page. */
-export type CpChangeOrdersPage = {
-  __typename?: 'CpChangeOrdersPage';
-  /** Current 1-based page number. */
-  page: Scalars['Int']['output'];
-  /** Requested page size (max rows per page). */
-  pageSize: Scalars['Int']['output'];
-  /** Change-order rows on this page. */
-  rows: Array<CpChangeOrder>;
-  /** Total rows across all pages (not just this page). */
-  total: Scalars['Int']['output'];
-};
-
 /** Operator-set platform ceilings for the per-app WASM compute policy. Each field caps the matching wasm_module_policy knob platform-wide: game-api rejects computeSetPolicy values above the ceiling. A null field means no operator override is stored — game-api falls back to its COMPUTE_PLATFORM_MAX_* env var (bootstrap default), then to the built-in code default. Edits propagate to game-api replicas via replica sync and apply within ~30 seconds, without a game-api restart. */
 export type CpComputePlatformCeilings = {
   __typename?: 'CpComputePlatformCeilings';
@@ -2497,98 +2056,6 @@ export type CpComputePlatformCeilings = {
   updatedByUserId: Maybe<Scalars['String']['output']>;
 };
 
-export type CpEnvSecretRow = {
-  __typename?: 'CpEnvSecretRow';
-  createdAt: Scalars['DateTime']['output'];
-  environmentId: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  kind: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  rotatedAt: Maybe<Scalars['DateTime']['output']>;
-};
-
-/** Operator-facing view of one ingested (or git-only pending) environment release manifest. */
-export type CpEnvironmentVersionRow = {
-  __typename?: 'CpEnvironmentVersionRow';
-  buddyVersion: Maybe<Scalars['String']['output']>;
-  gameApiGitTag: Maybe<Scalars['String']['output']>;
-  /** True when a row exists in cks_environment_versions. */
-  inDb: Scalars['Boolean']['output'];
-  /** True when releases/<version>.yaml exists on the configured git ref. */
-  inGit: Scalars['Boolean']['output'];
-  ingestedAt: Scalars['DateTime']['output'];
-  /** True when this ingested available release is what org redeploy targets (newest available, or ENVIRONMENT_DEFAULT_VERSION). */
-  isLatestAvailable: Scalars['Boolean']['output'];
-  notes: Maybe<Scalars['String']['output']>;
-  releasedAt: Scalars['DateTime']['output'];
-  sourceCommit: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-  version: Scalars['String']['output'];
-};
-
-/** Operator release manifest list merged from git and cks_environment_versions. */
-export type CpEnvironmentVersionsPage = {
-  __typename?: 'CpEnvironmentVersionsPage';
-  /** False when GitHub manifest listing failed (e.g. invalid GITHUB_PAT). Rows may still come from the database. */
-  gitSourceAvailable: Scalars['Boolean']['output'];
-  /** Version org redeploy resolves to when no explicit version is passed. */
-  latestAvailableVersion: Maybe<Scalars['String']['output']>;
-  rows: Array<CpEnvironmentVersionRow>;
-};
-
-/** A user with operator and/or super-admin privileges. */
-export type CpOperatorUser = {
-  __typename?: 'CpOperatorUser';
-  createdAt: Scalars['DateTime']['output'];
-  email: Maybe<Scalars['String']['output']>;
-  gamertag: Maybe<Scalars['String']['output']>;
-  /** True when users.is_operator is set (operator surface access). */
-  isOperator: Scalars['Boolean']['output'];
-  /** True when users.is_super_admin is set (implies operator access). */
-  isSuperAdmin: Scalars['Boolean']['output'];
-  userId: Scalars['ID']['output'];
-};
-
-export type CpOvhCatalogRow = {
-  __typename?: 'CpOvhCatalogRow';
-  /** Customer-facing hourly price in cents, as a string. */
-  customerHourlyPriceCents: Maybe<Scalars['String']['output']>;
-  /** How the customer price was derived (e.g. fixed vs. markup). */
-  customerPricingMode: Scalars['String']['output'];
-  diskGb: Maybe<Scalars['Int']['output']>;
-  flavorName: Scalars['String']['output'];
-  inboundBandwidth: Maybe<Scalars['Int']['output']>;
-  outboundBandwidth: Maybe<Scalars['Int']['output']>;
-  /** Raw OVH provider hourly cost in cents, as a string. Internal reference. */
-  ovhHourlyPriceCents: Maybe<Scalars['String']['output']>;
-  quotaAvailable: Maybe<Scalars['Int']['output']>;
-  ramMb: Maybe<Scalars['Int']['output']>;
-  region: Scalars['String']['output'];
-  vcpus: Maybe<Scalars['Int']['output']>;
-};
-
-/** Result of publishing an environment release from a game-api tag. */
-export type CpPublishEnvironmentReleaseResult = {
-  __typename?: 'CpPublishEnvironmentReleaseResult';
-  /** True when releases/vX.Y.Z.yaml was committed to the manifest git ref. */
-  committedToGit: Scalars['Boolean']['output'];
-  /** Set when ingest succeeded but the GitHub manifest commit failed. */
-  gitCommitError: Maybe<Scalars['String']['output']>;
-  schemaChanged: Scalars['Boolean']['output'];
-  version: CpEnvironmentVersionRow;
-};
-
-export type CpSecretRow = {
-  __typename?: 'CpSecretRow';
-  createdAt: Scalars['DateTime']['output'];
-  environmentId: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  kind: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  rotatedAt: Maybe<Scalars['DateTime']['output']>;
-};
-
 /** Patch for cpSetComputePlatformCeilings. Omitted fields stay unchanged; a field set to an explicit null clears that override (game-api falls back to its COMPUTE_PLATFORM_MAX_* env var, then the code default); a value sets the ceiling. All values must be > 0. At least one field is required. */
 export type CpSetComputePlatformCeilingsInput = {
   /** Max fuel per invoke (decimal string). > 0; explicit null clears the override; omit to leave unchanged. */
@@ -2609,101 +2076,6 @@ export type CpSetComputePlatformCeilingsInput = {
   maxRunMs?: InputMaybe<Scalars['Int']['input']>;
   /** Max tick rate in Hz per module. > 0; explicit null clears the override; omit to leave unchanged. */
   maxTickHz?: InputMaybe<Scalars['Int']['input']>;
-};
-
-/** Operator step progress. Rows may contain recorded execution progress or a read-only projection. Fields unavailable for projected progress remain null. */
-export type CpStepRow = {
-  __typename?: 'CpStepRow';
-  /** Attempt indicator. For projected progress, 0 means no attempt or outcome has been observed or inferred; 1 means an attempt or outcome has been observed or inferred. */
-  attempt: Scalars['Int']['output'];
-  claimedBy: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['DateTime']['output'];
-  error: Maybe<Scalars['String']['output']>;
-  finishedAt: Maybe<Scalars['DateTime']['output']>;
-  handleJson: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  idempotencyKey: Maybe<Scalars['String']['output']>;
-  intentJson: Maybe<Scalars['String']['output']>;
-  kind: Scalars['String']['output'];
-  ordinal: Scalars['Int']['output'];
-  outputJson: Maybe<Scalars['String']['output']>;
-  payloadJson: Maybe<Scalars['String']['output']>;
-  recheckAt: Maybe<Scalars['DateTime']['output']>;
-  startedAt: Maybe<Scalars['DateTime']['output']>;
-  /** Execution status. For projected progress, pending means the step is planned and no terminal outcome is available yet. */
-  status: Scalars['String']['output'];
-  taskId: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** Operator task progress. Rows may contain recorded execution progress or a read-only projection for a durable change order. */
-export type CpTaskRow = {
-  __typename?: 'CpTaskRow';
-  changeOrderId: Scalars['String']['output'];
-  /** JSON-encoded context */
-  contextJson: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['DateTime']['output'];
-  dependsOn: Array<Scalars['String']['output']>;
-  environmentId: Maybe<Scalars['String']['output']>;
-  error: Maybe<Scalars['String']['output']>;
-  finishedAt: Maybe<Scalars['DateTime']['output']>;
-  id: Scalars['ID']['output'];
-  kind: Scalars['String']['output'];
-  ordinal: Scalars['Int']['output'];
-  startedAt: Maybe<Scalars['DateTime']['output']>;
-  /** Execution status. For projected progress, pending means the task is planned and no terminal outcome is available yet. */
-  status: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** cks-game-api tag on GitHub that is not yet pinned by any available environment release. */
-export type CpUnreleasedGameApiTag = {
-  __typename?: 'CpUnreleasedGameApiTag';
-  /** Environment version that Publish & ingest would create (v0.1.N+1). */
-  proposedEnvironmentVersion: Scalars['String']['output'];
-  /** True when create-schema.sql differs between this tag and the current deploy-target game-api pin. */
-  schemaChanged: Scalars['Boolean']['output'];
-  tag: Scalars['String']['output'];
-  /** ISO timestamp when the tag was created on GitHub. */
-  taggedAt: Maybe<Scalars['String']['output']>;
-};
-
-/** Game-api tags eligible for one-click environment release publish. */
-export type CpUnreleasedGameApiTagsPage = {
-  __typename?: 'CpUnreleasedGameApiTagsPage';
-  /** gameApiGitTag on the current org deploy target, if any. */
-  currentDeployTargetGameApiTag: Maybe<Scalars['String']['output']>;
-  /** False when GitHub tag listing failed (e.g. invalid GITHUB_PAT). */
-  gitSourceAvailable: Scalars['Boolean']['output'];
-  tags: Array<CpUnreleasedGameApiTag>;
-};
-
-export type CpUsageMinuteRow = {
-  __typename?: 'CpUsageMinuteRow';
-  minute: Scalars['DateTime']['output'];
-  recvBytes: Scalars['String']['output'];
-  recvMsgs: Maybe<Scalars['String']['output']>;
-  sendBytes: Scalars['String']['output'];
-  sendMsgs: Maybe<Scalars['String']['output']>;
-};
-
-export type CpUsageRatePeaks = {
-  __typename?: 'CpUsageRatePeaks';
-  avgSendMbitPerSec: Scalars['Float']['output'];
-  avgSendMsgsPerSec: Scalars['Float']['output'];
-  peakSendMbitPerSec: Scalars['Float']['output'];
-  peakSendMsgsPerSec: Scalars['Float']['output'];
-  sampleMinutes: Scalars['Float']['output'];
-};
-
-export type CpUsageSummary = {
-  __typename?: 'CpUsageSummary';
-  buddyLive: Maybe<CpBuddyLiveRates>;
-  environmentSlug: Scalars['String']['output'];
-  graphql: Array<CpUsageMinuteRow>;
-  orgId: Maybe<Scalars['String']['output']>;
-  replication: Array<CpUsageMinuteRow>;
-  replicationRates: CpUsageRatePeaks;
 };
 
 /** Input for creating a new app access tier. */
@@ -2879,52 +2251,6 @@ export type CreateCrowdyStudioProjectInput = {
   sdkVersion?: InputMaybe<Scalars['String']['input']>;
   /** Optional stable crate-style SERVER module name. Deployment rechecks current authority. */
   serverModuleName?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** Input for createEnvironment. For dedicated (default) supply the four per-role flavors plus scaling counts; for dev_single supply a single flavor and the per-role/count fields are ignored. */
-export type CreateEnvironmentInput = {
-  /** Optional app ids to link to the new environment at creation. Each must be unique; omit or pass an empty list to link none. */
-  appIds?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** Buddy billing tier level from buddyBillingTiers. Defaults to tier 1 for dedicated environments. */
-  buddyBillingTier?: InputMaybe<Scalars['Int']['input']>;
-  /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. Required for dedicated. */
-  caddyFlavor?: InputMaybe<Scalars['String']['input']>;
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated. */
-  databaseFlavor?: InputMaybe<Scalars['String']['input']>;
-  /** OVH datacenter/region code from environmentDatacenters (e.g. 'GRA11'). */
-  datacenter: Scalars['String']['input'];
-  /** Human-readable environment name (max 80 chars). */
-  displayName: Scalars['String']['input'];
-  /** Deployment class: 'dedicated' (default, multi-VM) or 'dev_single' (one cheap dev-only VM running Postgres + management-api + game-api + Buddy). dev_single is not for production. */
-  environmentClass?: InputMaybe<Scalars['String']['input']>;
-  /** Single VM flavor for environmentClass='dev_single' (e.g. b3-8); must have a published hourly price. Ignored for dedicated. */
-  flavor?: InputMaybe<Scalars['String']['input']>;
-  /** Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. Required for dedicated. */
-  gameApiFlavor?: InputMaybe<Scalars['String']['input']>;
-  /** Autoscaling ceiling for game-api servers (min 1, ≥ gameApiMinServers). Required for dedicated; ignored for dev_single. */
-  gameApiMaxServers?: InputMaybe<Scalars['Int']['input']>;
-  /** Autoscaling floor for game-api servers (min 1). Required for dedicated; ignored for dev_single. */
-  gameApiMinServers?: InputMaybe<Scalars['Int']['input']>;
-  /** GraphQL billing tier level from graphqlBillingTiers. Defaults to tier 1 for dedicated environments. */
-  graphqlBillingTier?: InputMaybe<Scalars['Int']['input']>;
-  /** Super-admin only: designate this as the single platform-owned shared environment (slug 'shared') that hosts the shared game-api for apps with deploymentTarget='shared'. Must be a dedicated environment. Customers cannot set this; the management API rejects it for non-super-admins. */
-  isShared?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Number of Caddy load-balancer VMs in front of the game-api fleet (min 1). Required for dedicated; ignored for dev_single. */
-  loadBalancerCount?: InputMaybe<Scalars['Int']['input']>;
-  /** Organization id (BigInt) that will own and be billed for the environment. */
-  orgId: Scalars['BigInt']['input'];
-  /** Postgres billing tier level from postgresBillingTiers. Defaults to tier 1 for dedicated environments. */
-  postgresBillingTier?: InputMaybe<Scalars['Int']['input']>;
-  /** Optional explicit slug for scripts/E2E. When omitted, the API auto-assigns a short slug. Must fit Route 53 DNS limits for this tier (typically 11–16 characters when DBOS is enabled; up to 40 on legacy runner). Lowercase letters, numbers, and dashes only. */
-  slug?: InputMaybe<Scalars['String']['input']>;
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated. */
-  udpBuddyFlavor?: InputMaybe<Scalars['String']['input']>;
-  /** Autoscaling ceiling for Buddy UDP servers (min 1, ≥ udpBuddyMinServers). Required for dedicated; ignored for dev_single. */
-  udpBuddyMaxServers?: InputMaybe<Scalars['Int']['input']>;
-  /** Autoscaling floor for Buddy UDP servers (min 1). Required for dedicated; ignored for dev_single. */
-  udpBuddyMinServers?: InputMaybe<Scalars['Int']['input']>;
-  /** Base64-encoded 32-byte X25519 public key used to seal this environment’s secrets. Must decode to exactly 32 bytes. */
-  x25519PublicKeyBase64: Scalars['String']['input'];
 };
 
 /** Defines a new grid by its app and two opposite corner chunks. The corners are normalized server-side into a low/high chunk box, so corner order is irrelevant and a single chunk (corner1 == corner2) is allowed. */
@@ -3215,11 +2541,11 @@ export enum CrowdyStudioAgentLeaseType {
 
 /** Human-selected authority mode. The model cannot change modes or elevate itself. */
 export enum CrowdyStudioAgentMode {
-  /** Read-only assistance and proposals. */
+  /** Read bounded project, diagnostics, policy, and host context; no project or game writes. */
   Ask = 'ASK',
-  /** Routine project edits and draft tests under ordinary write/run permissions. */
+  /** Permit routine checkpointed project edits and draft tests under target write/run permissions and a workspace lease; live deployment is available only through an exact human approval. */
   Build = 'BUILD',
-  /** Game control only while a human-granted, scoped, time-boxed control lease is active. */
+  /** Permit bounded browser-host observation and gameplay tools only through a visible, human-granted, scoped lease; human input and policy/context changes preempt control immediately. */
   Play = 'PLAY'
 }
 
@@ -4008,15 +3334,6 @@ export type DeployPlayerComputeInput = {
   tickHz?: InputMaybe<Scalars['Float']['input']>;
 };
 
-export type DestroyEnvironmentInput = {
-  /** Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** Organization id (BigInt) that owns the environment. */
-  orgId: Scalars['BigInt']['input'];
-  /** Slug of the environment to destroy (all cloud resources are torn down). */
-  slug: Scalars['String']['input'];
-};
-
 /** Dev-only bypass sign-in (active only when DEV_AUTH_BYPASS is enabled; never in production). */
 export type DevLoginInput = {
   /** Email of the account to sign in as (created if absent). */
@@ -4043,120 +3360,6 @@ export type EnsureContainerInput = {
   sessionId?: InputMaybe<Scalars['String']['input']>;
   /** The container type to resolve or instantiate. */
   typeName: Scalars['String']['input'];
-};
-
-/** One manifest component's change in a redeploy plan: what the environment currently runs vs what the target release pins. */
-export type EnvironmentComponentChange = {
-  __typename?: 'EnvironmentComponentChange';
-  /** True when the redeploy would change this component. */
-  changed: Scalars['Boolean']['output'];
-  /** Manifest component kind (e.g. 'game_api_environment', 'buddy', 'game_api_base_image'). */
-  component: Scalars['String']['output'];
-  /** Version the environment currently runs for this component (observed, falling back to last-desired). Null when never deployed. */
-  fromVersion: Maybe<Scalars['String']['output']>;
-  /** Version the target release pins for this component. Null when the target manifest omits the component. */
-  toVersion: Maybe<Scalars['String']['output']>;
-};
-
-/** A task the redeploy pipeline would enqueue, with its step kinds in execution order. Enumerated from the same planner the real change order uses. */
-export type EnvironmentPlannedTask = {
-  __typename?: 'EnvironmentPlannedTask';
-  /** Task kinds this task waits on before starting. */
-  dependsOn: Array<Scalars['String']['output']>;
-  /** Task kind (e.g. 'apply_schema_in_place', 'update_game_api_1'). */
-  kind: Scalars['String']['output'];
-  /** Step kinds in order (e.g. 'pg:apply_schema', 'ssh:install_wasm_toolchain'). */
-  steps: Array<Scalars['String']['output']>;
-};
-
-/** Input for environmentQuote. Mirrors CreateEnvironmentInput’s class/flavor shape: dedicated needs the four per-role flavors + counts; dev_single needs only the single flavor. */
-export type EnvironmentQuoteInput = {
-  /** Flavor name from environmentFlavors(datacenter) for the Caddy LB VMs in front of the game-api fleet; must have a published hourly price. Required for dedicated. */
-  caddyFlavor?: InputMaybe<Scalars['String']['input']>;
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated. */
-  databaseFlavor?: InputMaybe<Scalars['String']['input']>;
-  /** OVH datacenter/region code from environmentDatacenters (e.g. 'GRA11'). */
-  datacenter: Scalars['String']['input'];
-  /** Deployment class: 'dedicated' (default) or 'dev_single'. */
-  environmentClass?: InputMaybe<Scalars['String']['input']>;
-  /** Single VM flavor for environmentClass='dev_single'. Ignored for dedicated. */
-  flavor?: InputMaybe<Scalars['String']['input']>;
-  /** Flavor name from environmentFlavors(datacenter) for per-tenant game-api VMs; must have a published hourly price. Required for dedicated. */
-  gameApiFlavor?: InputMaybe<Scalars['String']['input']>;
-  gameApiMaxServers?: InputMaybe<Scalars['Int']['input']>;
-  gameApiMinServers?: InputMaybe<Scalars['Int']['input']>;
-  loadBalancerCount?: InputMaybe<Scalars['Int']['input']>;
-  /** Organization id (BigInt) to quote against (uses its wallet balance). */
-  orgId: Scalars['BigInt']['input'];
-  /** Flavor name from environmentFlavors(datacenter); must have a published hourly price. Required for dedicated. */
-  udpBuddyFlavor?: InputMaybe<Scalars['String']['input']>;
-  udpBuddyMaxServers?: InputMaybe<Scalars['Int']['input']>;
-  udpBuddyMinServers?: InputMaybe<Scalars['Int']['input']>;
-};
-
-/** DRY RUN preview of redeployEnvironment: exactly what moving the environment to a target release version would do — component version diffs (game-api, Buddy, base images), whether game-DB schema DDL applies, and the pipeline tasks/steps that would run — WITHOUT creating a change order or touching any VM. Blockers list everything that would make the real mutation fail. */
-export type EnvironmentRedeployPlan = {
-  __typename?: 'EnvironmentRedeployPlan';
-  /** Why the real redeployEnvironment call would be rejected right now (active change order, missing flavors, version not deployable, ...). Empty when the redeploy would proceed. */
-  blockers: Array<Scalars['String']['output']>;
-  /** Change-order kind the real mutation would enqueue ('redeploy_environment_services' or 'deploy_environment_version'). */
-  changeOrderKind: Maybe<Scalars['String']['output']>;
-  /** Per-component version diff between what the environment runs and what the target release pins. */
-  componentChanges: Array<EnvironmentComponentChange>;
-  /** Release version the environment currently observes (null before first deploy). */
-  currentVersion: Maybe<Scalars['String']['output']>;
-  /** How the redeploy would run: 'services' (in-place bump on existing VMs) or 'full' (full reprovision). Null when blocked before resolution. */
-  deployMode: Maybe<Scalars['String']['output']>;
-  /** Environment slug. */
-  environmentSlug: Scalars['String']['output'];
-  /** Human-readable highlights of what the redeploy does (game-api tag movement, Buddy artifact resolution, schema apply/skip, VM counts). */
-  notes: Array<Scalars['String']['output']>;
-  /** Git ref whose create-schema.sql would be applied. */
-  schemaGitRef: Maybe<Scalars['String']['output']>;
-  /** True when the plan applies the game schema (create-schema.sql at the target's schemaGitRef) to the tenant game DB in place. False when the observed schema ref already matches (apply skipped) or when blocked. */
-  schemaWillApply: Scalars['Boolean']['output'];
-  /** Release version the redeploy would move to (the requested version, or the latest available for the class when omitted). Null when no version resolves — see blockers. */
-  targetVersion: Maybe<Scalars['String']['output']>;
-  /** Pipeline tasks the change order would run (enumerated for 'services' mode; empty for 'full' mode and when blocked). */
-  tasks: Array<EnvironmentPlannedTask>;
-};
-
-/** Aggregate byte totals for one environment over the requested window. All *Bytes fields are string counters (may exceed Int range). */
-export type EnvironmentUsageRollupRow = {
-  __typename?: 'EnvironmentUsageRollupRow';
-  /** Environment display name. */
-  displayName: Scalars['String']['output'];
-  /** Environment UUID (as a string). */
-  environmentId: Scalars['String']['output'];
-  /** Environment slug. */
-  environmentSlug: Scalars['String']['output'];
-  /** Total GraphQL bytes received (string counter). */
-  graphqlRecvBytes: Scalars['String']['output'];
-  /** Total GraphQL bytes sent (string counter). */
-  graphqlSendBytes: Scalars['String']['output'];
-  /** Total replication bytes received (string counter). */
-  replicationRecvBytes: Scalars['String']['output'];
-  /** Total replication bytes sent (string counter). */
-  replicationSendBytes: Scalars['String']['output'];
-};
-
-/** Per-minute replication and GraphQL usage time series for an environment, with rate peaks and live Buddy rates. */
-export type EnvironmentUsageSummary = {
-  __typename?: 'EnvironmentUsageSummary';
-  /** Live Buddy UDP rates, or null when no live server is reporting. */
-  buddyLive: Maybe<BuddyLiveRates>;
-  /** Environment UUID (as a string). */
-  environmentId: Scalars['String']['output'];
-  /** Environment slug. */
-  environmentSlug: Scalars['String']['output'];
-  /** GraphQL API usage, one row per minute. */
-  graphql: Array<UsageMinuteRow>;
-  /** Owning organization id (as a string). */
-  orgId: Scalars['String']['output'];
-  /** Replication (game state sync) usage, one row per minute. */
-  replication: Array<UsageMinuteRow>;
-  /** Peak/average replication send rates. */
-  replicationRates: UsageRatePeaks;
 };
 
 /** Input for exchangePortalCode: the destination game (public client) trades a one-time portal code for an app-scoped gameplay token. Public (the code + PKCE verifier authorize the call). */
@@ -4205,7 +3408,6 @@ export type FreeAppQuotaApp = {
   slug: Scalars['String']['output'];
 };
 
-/** Status of the recurring free-play window during which gameplay is open without entitlement. */
 export type FreePlayWindowInfo = {
   __typename?: 'FreePlayWindowInfo';
   /** Human-readable description of the free-play schedule. */
@@ -5165,24 +4367,6 @@ export type GraphQlServer = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-/** GraphQL (game API) billing tier: endpoint call rate + bandwidth allotments and capacity charge. */
-export type GraphqlBillingTier = {
-  __typename?: 'GraphqlBillingTier';
-  /** Maximum bandwidth allotment in megabits per second. */
-  bandwidthMbitPerSecond: Scalars['Float']['output'];
-  /** Capacity charge for this tier, in cents (placeholder until load tests). */
-  chargeCents: Scalars['BigInt']['output'];
-  /** ISO-4217 currency for chargeCents, e.g. 'usd'. */
-  currency: Scalars['String']['output'];
-  description: Maybe<Scalars['String']['output']>;
-  /** Maximum endpoint calls per second allotment (per endpoint). */
-  endpointCallsPerSecond: Scalars['Int']['output'];
-  /** Customer-facing tier label. */
-  label: Scalars['String']['output'];
-  /** Tier level (1 = lowest offered tier). */
-  tierLevel: Scalars['Int']['output'];
-};
-
 /** Usage totals for a single GraphQL operation over the window. */
 export type GraphqlOperationUsageRow = {
   __typename?: 'GraphqlOperationUsageRow';
@@ -5323,9 +4507,9 @@ export type GridListing = {
   /** Resale policy for the grid. */
   resalePolicy: Scalars['String']['output'];
   /** Catalog status: 'active' or 'delisted'. */
-  status: Scalars['String']['output'];
+  status: Maybe<Scalars['String']['output']>;
   /** Studio cut (bps) on resale, when applicable. */
-  studioCutBps: Scalars['Int']['output'];
+  studioCutBps: Maybe<Scalars['Int']['output']>;
 };
 
 /** Kind of principal holding grid title. P1 can assign USER owners; GROUP and ORG are schema-reserved for future shared ownership. */
@@ -5491,17 +4675,6 @@ export type ImportCrowdyStudioProjectFileInput = {
   source: CrowdyStudioImportSource;
 };
 
-export type IngestEnvironmentVersionInput = {
-  /** Overwrite an existing version row if one already exists (default false). */
-  force?: Scalars['Boolean']['input'];
-  /** Override the release notes. Defaults to the manifest value. */
-  notes?: InputMaybe<Scalars['String']['input']>;
-  /** Override the manifest status (e.g. 'available'). Defaults to the manifest value. */
-  status?: InputMaybe<Scalars['String']['input']>;
-  /** Environment release version to ingest, e.g. 'v0.1.4'. */
-  version: Scalars['String']['input'];
-};
-
 export type InviteOrgMemberInput = {
   /** Organization to add the user to (BigInt as string). */
   orgId: Scalars['BigInt']['input'];
@@ -5531,15 +4704,6 @@ export type JoinSessionInput = {
   role?: InputMaybe<Scalars['String']['input']>;
   /** The session id to join. */
   sessionId: Scalars['String']['input'];
-};
-
-export type LinkAppToEnvironmentInput = {
-  /** App id (BigInt) to link. Must be unlinked and not a shared app. */
-  appId: Scalars['BigInt']['input'];
-  /** Environment slug (cks_environments.slug) to link the app to. */
-  environmentSlug: Scalars['String']['input'];
-  /** Organization id (BigInt) that owns both the app and the environment. */
-  orgId: Scalars['BigInt']['input'];
 };
 
 /** Link an additional federated identity to the signed-in account. */
@@ -5691,8 +4855,6 @@ export type Mutation = {
   createChannelRole: GroupRole;
   /** Creates a Checkout row, opens a hosted payment session with the selected provider, and returns the row with `externalUrl` set — redirect the user there to pay. Status starts PENDING and is reconciled to COMPLETED/FAILED later via provider webhooks (this call does not itself capture funds). The side effect applied on completion depends on `purpose` (e.g. ORG_WALLET_TOPUP credits the org wallet, APP_ACCESS_PURCHASE grants app access). Requires an authenticated user; ORG_WALLET_TOPUP additionally requires the 'manage_billing' org permission. Purposes DONATION and PROPERTY_TOKENS are rejected. Pass `input.idempotencyKey` to make retries safe (a replay returns the first checkout instead of opening a second provider session). */
   createCheckout: Checkout;
-  /** Provisions a new environment. SIDE EFFECTS / COST: creates billable cloud infrastructure (OVH VMs + DNS) and starts hourly wallet charges; fails if the wallet's available balance is below the first-day reserve (see environmentQuote.canCreate). Each selected flavor must be available and customer-priced (use environmentFlavors / environmentDatacenters). When input.slug is omitted the slug is auto-generated as 'e-<12 chars>'. Returns immediately with status 'deploy_requested'; poll orgEnvironment for deploy progress. Requires the 'manage_environments' org permission. */
-  createEnvironment: CksEnvironmentDetail;
   /** Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit within one of the app's grid assignments (its buildable regions); it MAY be nested inside a broader containing grid such as the open-by-default world grid, but must not partially overlap a peer grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS). */
   createGrid: CreateGridResponse;
   /** Create a studio grid listing (07 §1.1): a blueprint that stamps a fresh grid per sale, or a concrete grid. Requires 'manage_apps'. Purchase (in-game) confers grid_ownership + the listed keys + quota preset atomically. */
@@ -5775,11 +4937,9 @@ export type Mutation = {
   deleteChannel: Scalars['Boolean']['output'];
   /** Delete a non-system channel role. Requires the 'manage_roles' channel permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members. Returns true if a role was deleted. */
   deleteChannelRole: Scalars['Boolean']['output'];
-  /** Operator only (is_operator). Deletes a control-plane secret by environment + name and writes an audit entry. Returns true when a secret was removed. */
-  deleteCpSecret: Scalars['Boolean']['output'];
   /** Delete a studio-created peer grid so its chunk box no longer blocks overlapping grid creation. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `gridId` is populated and `error` is NO_ERROR; on failure `gridId` is null and `error` is a UDP-style error code (e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN). The open-by-default world grid and any grid that still contains nested child grids cannot be deleted. */
   deleteGrid: DeleteGridResponse;
-  /** DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token. NOTE: the users table is management-owned, so in cks-game-api this throws ForbiddenException — call cks-management-api instead. */
+  /** DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token. */
   deleteMyAccount: Scalars['Boolean']['output'];
   /** Deletes an organization role. Requires the 'manage_members' permission on the role's org (super admins bypass). DESTRUCTIVE: removes the role and unassigns it from all members. Returns false if the role does not exist. */
   deleteOrgRole: Scalars['Boolean']['output'];
@@ -5793,15 +4953,13 @@ export type Mutation = {
   deleteTeamRole: Scalars['Boolean']['output'];
   /** DESTRUCTIVE: deletes the authenticated user’s per-app state row for `appId` and returns the deleted row. Requires a valid game token; acts only on the caller’s own state. Throws NotFound when no row exists. */
   deleteUserAppState: UserAppState;
-  /** DESTRUCTIVE and IRREVERSIBLE. Tears down all cloud resources for the environment (per-tenant Postgres, game-api, Buddy, and load-balancer VMs plus DNS records) and revokes its service tokens; all tenant data is lost. Sets status to 'destroy_requested' and returns the tracking change order — poll orgEnvironment.destroyProgress. Fails if a destroy is already queued. After it reaches 'destroyed', call purgeEnvironment to remove the record. Requires the 'manage_environments' org permission. */
-  destroyEnvironment: CksEnvironmentChangeOrder;
   /** DEV ONLY bypass sign-in: returns a session for the given email without email/social verification. Active only when DEV_AUTH_BYPASS is enabled; throws (FORBIDDEN) otherwise. Never enabled in production. */
   devLogin: AuthResponse;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
   exchangePortalCode: AppTokenResponse;
-  /** ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api. */
+  /** ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). */
   forceLogoutUser: Scalars['Boolean']['output'];
   /** Create a directed relationship edge between two containers (the game model is a graph), with a relationship type and optional weight. Requires a valid token. */
   gameModelAddEdge: GmEdge;
@@ -5865,8 +5023,6 @@ export type Mutation = {
   grantGridPermissions: GridUserPermissions;
   /** Org dashboard shortcut: the authenticated caller grants themselves access to an app using its default active tier. Requires that the caller is an active member of the app's owning org OR holds the 'manage_access_tiers' permission on the app. ENTITLEMENT CHANGE: upserts an active grant and notifies the game API. Errors if the app has no active tier, or the caller is neither a member nor a manager. */
   grantMyAppAccess: AppUserAccess;
-  /** Operator only (is_operator). Ingests a release manifest into cks_environment_versions, making the version deployable, and writes an audit entry. Use force to overwrite an existing row. */
-  ingestEnvironmentVersion: CpEnvironmentVersionRow;
   /** Install an acquired listing after consenting to its capability summary (echo the version's capabilityHash as consentCapabilityHash — a mismatch fails closed). Server halves register through the same P1 registry as instances in a grid the caller OWNS (requires run_server_code) and run as the grid owner on their quota/wallet — never as the author. Bundled client halves attach to the grid for per-visitor consent (D2); omitting gridId makes a personal client-only install. Fail-closed on entitlement, admission, consent, ownership, and run keys. */
   installPlayerCode: PlayerCodeInstall;
   /** Adds a user to an organization as a member. Requires the 'manage_members' permission on the target org (super admins bypass). */
@@ -5881,13 +5037,11 @@ export type Mutation = {
   leaveChannel: Scalars['Boolean']['output'];
   /** Leave a team (removes the caller's own membership). Returns true if a membership was removed. */
   leaveTeam: Scalars['Boolean']['output'];
-  /** Links an unlinked app to an existing environment for split-mode routing. Refuses shared apps and apps already linked elsewhere. Requires the 'manage_environments' org permission. */
-  linkAppToEnvironment: App;
   /** Link an additional federated identity (from a socialLoginStart callback) to the signed-in account. Requires a session token; throws if the identity is already linked to another account. */
   linkIdentity: UserIdentity;
   /** Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed. */
   login: AuthResponse;
-  /** Single-device logout: revokes the game token that authenticated this request by deleting its game_tokens row. Returns true if a token was revoked, false if the request had no game token. Other devices/tokens are unaffected (use the Management API to revoke all devices). After this, the bearer token is rejected and any open UDP proxy session will no longer authorize new traffic. */
+  /** Ends the current session by deleting the game_token that authenticated this request; other devices stay logged in. An identity session logout also cascades to (revokes) every app token it minted. Returns false if no token was resolved. */
   logout: Scalars['Boolean']['output'];
   /** Ends every active session for the authenticated user (deletes all their game_tokens and records revocations). Requires a valid session token. */
   logoutAllDevices: Scalars['Boolean']['output'];
@@ -5919,22 +5073,12 @@ export type Mutation = {
   playerModelSetProperty: PlayerModelContainer;
   /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
-  /** Operator only (is_operator). Cuts a new environment release from a cks-game-api git tag: ingests it as available and commits the manifest to the git ref. SIDE EFFECT: makes the version the new redeploy target and writes to GitHub. Use force to overwrite. Writes an audit entry. */
-  publishEnvironmentReleaseFromGameApiTag: CpPublishEnvironmentReleaseResult;
   /** Create a marketplace listing (free mode) for code the caller authors — personally, or org-owned via ownerOrgId (DN-9; requires manage_compute in that org). SIDE EFFECTS: the catalog row is written on cks-management-api with an ownership audit entry and replica-synced back. Publishing never uploads source; versions snapshot artifact hashes only. */
   publishPlayerCode: PlayerCodeListing;
   /** Publish an immutable version under a listing from the caller's successfully compiled module versions. Snapshots artifact hashes, explicit SERVER-to-required-CLIENT edges, and the derived aggregate capability summary; publishing fails if a required client version is absent from the bundle. Source never leaves the author's rows. */
   publishPlayerCodeVersion: PlayerCodeListingVersion;
   /** Buy a grid listing with real money (P4b). Debits the player wallet management-side (platform/org split), then assigns grid_ownership + the listed player-code keys atomically; a failure to apply ownership refunds the charge. For blueprint listings, targetChunk picks where the fresh grid is stamped. This is the ownership path for marketplace_only-policy apps. */
   purchaseGrid: GridPurchaseResult;
-  /** DESTRUCTIVE. Permanently deletes a destroyed environment's record and all cascaded metadata from the platform; returns true on success. The environment must already be in status 'destroyed' (run destroyEnvironment first) and must not have deletion protection enabled, otherwise this fails. Does not touch cloud resources. Requires the 'manage_environments' org permission. */
-  purgeEnvironment: Scalars['Boolean']['output'];
-  /** Operator only (is_operator). Creates or overwrites an environment-delivered secret (injected into the tenant runtime) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned. */
-  putCpEnvSecret: CpEnvSecretRow;
-  /** Operator only (is_operator). Creates or overwrites a control-plane secret (encrypted at rest) and writes an audit entry. SENSITIVE: plaintext is write-only and never returned by cpSecrets. */
-  putCpSecret: CpSecretRow;
-  /** Redeploys the environment to a target release version (input.version) or, when omitted, the latest available version for its class, reusing its current flavors/scaling and linked apps. Preserves the environment URLs. No-op-safe: re-running when already at latest still redeploys. If a prior deploy failed but stayed in_progress, it is abandoned first so the redeploy can proceed. Preview first with environmentRedeployPlan (the dry run). Requires the 'manage_environments' org permission. */
-  redeployEnvironment: CksEnvironmentChangeOrder;
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. */
   refreshAppToken: AppTokenResponse;
   /** Request a refund of a paid acquisition (P4b). Allowed only within the refund window and before meaningful use (first install/fetch voids it), capped per buyer; a successful refund credits the wallet, reverses the ledger split, claws back the seller balance, revokes the acquisition, and drains installs. Returns cents refunded. */
@@ -5967,10 +5111,6 @@ export type Mutation = {
   resendConfirmationEmail: Scalars['Boolean']['output'];
   /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call). Existing sessions are not revoked. */
   resetPassword: Scalars['Boolean']['output'];
-  /** SSH-restarts the Buddy systemd service on the active UDP runtime VM. Symptom relief when server_status heartbeat is stale (see CksBuddyHealth.isStale); does not replace cks-udp-api pool fixes. Requires the 'manage_environments' org permission. */
-  restartEnvironmentServices: CksEnvironmentChangeOrder;
-  /** Resumes a payment-suspended environment, queuing a change order and moving billingStatus to 'resume_queued' (and restarting runtime once it settles). Only valid when billingStatus is grace, suspension_queued, suspended, or resume_failed; otherwise fails. Resumes billable hourly charges. Requires the 'manage_environments' org permission. */
-  resumeEnvironment: CksEnvironmentChangeOrder;
   /** Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. */
   revokeAppAccess: AppUserAccess;
   /** Revoke a previously-granted app authorization and immediately revoke the user's live app tokens for it. Requires a SESSION token. */
@@ -6023,10 +5163,8 @@ export type Mutation = {
   setChannelPolicy: AppGroupPolicy;
   /** Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. Model/tool/mode/risk lists are intersected with platform allowlists and every numeric/retention value is clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision, appends a sanitized audit event, and transactionally notifies Game API to pull crowdy.studio-agent-policy/1. Runtime enforcement changes only after Game API obtains and validates the fresh replica. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   setCrowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
-  /** Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api. */
+  /** Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). */
   setEarlyAccessOverride: User;
-  /** Operator only (is_operator). Toggles deletion protection on an environment (when enabled, purgeEnvironment is blocked) and writes an audit entry. Returns true on success. */
-  setEnvironmentDeletionProtection: Scalars['Boolean']['output'];
   /** Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid. */
   setGridPermissionLimits: GridPermissionLimits;
   /** Set (author-only) the acquisition mode and pricing for a code listing. Non-free modes require completed seller onboarding. Curation can reject a listing but never reprice it (07 §1.2). */
@@ -6047,7 +5185,7 @@ export type Mutation = {
   setPlayerWasmPolicy: PlayerWasmPolicy;
   /** Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage. */
   setQuota: ServiceQuota;
-  /** ADMIN PRIVILEGE CHANGE: grants or revokes platform super-admin on the target user, changing their privileges across the whole platform. Requires a super-admin bearer game token (and the management API enabled). NOTE: in cks-game-api super-admin checks always fail and the users table is management-owned — perform this via cks-management-api. */
+  /** ADMIN PRIVILEGE CHANGE: grants or revokes platform super-admin on the target user, changing their privileges across the whole platform. Requires a super-admin bearer game token (and the management API enabled). */
   setSuperAdmin: User;
   /** Replace a member's roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' team permission (app admins bypass). */
   setTeamMemberRoles: GroupMember;
@@ -6099,11 +5237,7 @@ export type Mutation = {
   updateChunkLods: Maybe<Chunk>;
   /** Upserts ONLY the opaque base64 chunk-level state blob for a chunk, preserving its voxels, per-voxel states and LODs; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass). */
   updateChunkState: Maybe<Chunk>;
-  /** Updates an environment's three-dimension usage billing tier selections (Buddy, GraphQL, Postgres). Omitted tier fields are left unchanged. Requires the 'manage_environments' org permission. */
-  updateEnvironmentBillingTiers: CksEnvironment;
-  /** Updates a dedicated environment's autoscaling bounds (game-api / Buddy min & max server counts), load-balancer count, and optionally the Caddy flavor, queuing a change order that redeploys the affected tiers. May change the hourly cost. Rejected for 'dev_single' environments and when another change order is already active. Requires the 'manage_environments' org permission. */
-  updateEnvironmentScaling: CksEnvironmentChangeOrder;
-  /** Sets the authenticated user’s gamertag and disambiguation and appends a gamertag-history row. Requires a valid game token; only ever updates the caller. Fails if the gamertag+disambiguation pair is already taken. NOTE: the users table is management-owned, so in cks-game-api this throws ForbiddenException — call cks-management-api instead. */
+  /** Sets the authenticated user’s gamertag and disambiguation and appends a gamertag-history row. Requires a valid game token; only ever updates the caller. Fails if the gamertag+disambiguation pair is already taken. */
   updateGamertag: User;
   /** Replaces the full set of roles assigned to an org member. Requires the 'manage_members' permission on the org (super admins bypass). Pass the complete desired role list; roles not included are removed. */
   updateOrgMemberRoles: OrgMember;
@@ -6117,14 +5251,12 @@ export type Mutation = {
   updateTeamRole: GroupRole;
   /** Creates or replaces the authenticated user’s per-app state for `input.appId` (upsert keyed by appId+userId). Requires a valid game token; always writes the caller’s own state. `input.state` is base64-encoded binary. */
   updateUserAppState: UserAppState;
-  /** Replaces the authenticated user’s top-level `state` blob (base64-encoded binary; omit/null clears it). Requires a valid game token; only ever writes the caller. NOTE: users.state is management-owned, so in cks-game-api this throws ForbiddenException — call cks-management-api instead. */
+  /** Replaces the authenticated user’s top-level `state` blob (base64-encoded binary; omit/null clears it). Requires a valid game token; only ever writes the caller. */
   updateUserState: User;
-  /** Sets the target user’s account `user_type` (e.g. "direct", "deleted"). Requires a super-admin bearer game token (and the management API enabled). NOTE: management-owned in cks-game-api (throws ForbiddenException) — use cks-management-api. */
+  /** Sets the target user’s account `user_type` (e.g. "direct", "deleted"). Requires a super-admin bearer game token (and the management API enabled). */
   updateUserType: User;
   /** Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and (when grids cover the chunk) `update_voxel_data` on a covering grid. */
   updateVoxel: Voxel;
-  /** Operator only (is_operator). Yanks (withdraws) an environment version so it can no longer be deployed; existing environments are unaffected. Writes an audit entry. Returns true on success. */
-  yankEnvironmentVersion: Scalars['Boolean']['output'];
 };
 
 
@@ -6350,11 +5482,6 @@ export type MutationCreateCheckoutArgs = {
 };
 
 
-export type MutationCreateEnvironmentArgs = {
-  input: CreateEnvironmentInput;
-};
-
-
 export type MutationCreateGridArgs = {
   input: CreateGridInput;
 };
@@ -6567,12 +5694,6 @@ export type MutationDeleteChannelRoleArgs = {
 };
 
 
-export type MutationDeleteCpSecretArgs = {
-  environmentId: Scalars['String']['input'];
-  name: Scalars['String']['input'];
-};
-
-
 export type MutationDeleteGridArgs = {
   input: DeleteGridInput;
 };
@@ -6610,11 +5731,6 @@ export type MutationDeleteTeamRoleArgs = {
 
 export type MutationDeleteUserAppStateArgs = {
   appId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationDestroyEnvironmentArgs = {
-  input: DestroyEnvironmentInput;
 };
 
 
@@ -6799,11 +5915,6 @@ export type MutationGrantMyAppAccessArgs = {
 };
 
 
-export type MutationIngestEnvironmentVersionArgs = {
-  input: IngestEnvironmentVersionInput;
-};
-
-
 export type MutationInstallPlayerCodeArgs = {
   acquisitionId: Scalars['String']['input'];
   appId: Scalars['BigInt']['input'];
@@ -6843,11 +5954,6 @@ export type MutationLeaveChannelArgs = {
 export type MutationLeaveTeamArgs = {
   groupId: Scalars['BigInt']['input'];
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type MutationLinkAppToEnvironmentArgs = {
-  input: LinkAppToEnvironmentInput;
 };
 
 
@@ -6953,11 +6059,6 @@ export type MutationPublishAppToSharedArgs = {
 };
 
 
-export type MutationPublishEnvironmentReleaseFromGameApiTagArgs = {
-  input: PublishEnvironmentReleaseFromGameApiTagInput;
-};
-
-
 export type MutationPublishPlayerCodeArgs = {
   input: PublishPlayerCodeInput;
 };
@@ -6974,32 +6075,6 @@ export type MutationPurchaseGridArgs = {
   chunkY?: InputMaybe<Scalars['Int']['input']>;
   chunkZ?: InputMaybe<Scalars['Int']['input']>;
   gridListingId: Scalars['String']['input'];
-};
-
-
-export type MutationPurgeEnvironmentArgs = {
-  input: PurgeEnvironmentInput;
-};
-
-
-export type MutationPutCpEnvSecretArgs = {
-  environmentId: Scalars['String']['input'];
-  kind?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  plaintext: Scalars['String']['input'];
-};
-
-
-export type MutationPutCpSecretArgs = {
-  environmentId: Scalars['String']['input'];
-  kind?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  plaintext: Scalars['String']['input'];
-};
-
-
-export type MutationRedeployEnvironmentArgs = {
-  input: RedeployEnvironmentInput;
 };
 
 
@@ -7079,16 +6154,6 @@ export type MutationResendConfirmationEmailArgs = {
 
 export type MutationResetPasswordArgs = {
   resetPasswordInput: ResetPasswordInput;
-};
-
-
-export type MutationRestartEnvironmentServicesArgs = {
-  input: RestartEnvironmentServicesInput;
-};
-
-
-export type MutationResumeEnvironmentArgs = {
-  input: ResumeEnvironmentInput;
 };
 
 
@@ -7245,12 +6310,6 @@ export type MutationSetCrowdyStudioAgentPolicyArgs = {
 export type MutationSetEarlyAccessOverrideArgs = {
   userId: Scalars['BigInt']['input'];
   value: Scalars['Boolean']['input'];
-};
-
-
-export type MutationSetEnvironmentDeletionProtectionArgs = {
-  enabled: Scalars['Boolean']['input'];
-  environmentId: Scalars['String']['input'];
 };
 
 
@@ -7459,16 +6518,6 @@ export type MutationUpdateChunkStateArgs = {
 };
 
 
-export type MutationUpdateEnvironmentBillingTiersArgs = {
-  input: UpdateEnvironmentBillingTiersInput;
-};
-
-
-export type MutationUpdateEnvironmentScalingArgs = {
-  input: UpdateEnvironmentScalingInput;
-};
-
-
 export type MutationUpdateGamertagArgs = {
   input: UpdateGamertagInput;
 };
@@ -7521,11 +6570,6 @@ export type MutationUpdateUserTypeArgs = {
 
 export type MutationUpdateVoxelArgs = {
   input: UpdateVoxelInput;
-};
-
-
-export type MutationYankEnvironmentVersionArgs = {
-  version: Scalars['String']['input'];
 };
 
 /** A grid overlapping a scanned region, plus a user's effective permission keys on it (returned by nearbyGridPermissions). */
@@ -7775,14 +6819,10 @@ export type Organization = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-/** Offset/limit pagination metadata for a paginated list. */
 export type PageInfo = {
   __typename?: 'PageInfo';
-  /** Maximum number of items returned in this page (the page size that was applied). */
   limit: Scalars['Int']['output'];
-  /** Number of items skipped before this page (zero-based offset). */
   offset: Scalars['Int']['output'];
-  /** Total number of records matching the query across all pages, ignoring limit and offset. */
   totalCount: Scalars['Int']['output'];
 };
 
@@ -7977,8 +7017,8 @@ export type PlayerCodeAcquisition = {
   __typename?: 'PlayerCodeAcquisition';
   /** When acquired. */
   acquiredAt: Scalars['DateTime']['output'];
-  /** Numeric user id of the acquirer. */
-  acquirerUserId: Scalars['BigInt']['output'];
+  /** Numeric user id of the acquirer (management catalog reads). */
+  acquirerUserId: Maybe<Scalars['BigInt']['output']>;
   /** UUID of the acquisition. */
   acquisitionId: Scalars['String']['output'];
   /** App of the listing. */
@@ -8062,8 +7102,8 @@ export type PlayerCodeListing = {
   __typename?: 'PlayerCodeListing';
   /** Acquisition mode: FREE, or a paid mode (BUY / RENT / TIME_LIMITED / COST_LIMITED; P4b). Free listings carry no price. */
   acquisitionMode: PlayerCodeAcquisitionMode;
-  /** The listing's admission standing in this app. In implicit_allow apps this is always ADMITTED; in allow_list apps PENDING listings can be acquired but not installed. */
-  admissionState: PlayerCodeAdmissionState;
+  /** The listing's admission standing in this app. In implicit_allow apps this is always ADMITTED; in allow_list apps PENDING listings can be acquired but not installed. Null on management catalog reads that carry no app admission context. */
+  admissionState: Maybe<PlayerCodeAdmissionState>;
   /** App the listing belongs to. */
   appId: Scalars['BigInt']['output'];
   /** When the listing was created. */
@@ -8093,7 +7133,7 @@ export type PlayerCodeListing = {
   /** Compute-unit budget per purchase (COST_LIMITED mode). */
   unitBudget: Maybe<Scalars['BigInt']['output']>;
   /** When the listing was last updated. */
-  updatedAt: Scalars['DateTime']['output'];
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
   /** Fixed access window in days (TIME_LIMITED mode). */
   windowDays: Maybe<Scalars['Int']['output']>;
 };
@@ -8552,22 +7592,6 @@ export type PortalConsentState = {
   trusted: Scalars['Boolean']['output'];
 };
 
-/** Postgres billing tier: bandwidth allotment and capacity charge. Usage metering deferred. */
-export type PostgresBillingTier = {
-  __typename?: 'PostgresBillingTier';
-  /** Maximum bandwidth allotment in megabits per second. */
-  bandwidthMbitPerSecond: Scalars['Float']['output'];
-  /** Capacity charge for this tier, in cents (placeholder until load tests). */
-  chargeCents: Scalars['BigInt']['output'];
-  /** ISO-4217 currency for chargeCents, e.g. 'usd'. */
-  currency: Scalars['String']['output'];
-  description: Maybe<Scalars['String']['output']>;
-  /** Customer-facing tier label. */
-  label: Scalars['String']['output'];
-  /** Tier level (1 = lowest offered tier). */
-  tierLevel: Scalars['Int']['output'];
-};
-
 /** Result of publishing an app to the shared environment. All paths publish immediately; usage above the free hourly allowance is wallet-billed. */
 export type PublishAppResult = {
   __typename?: 'PublishAppResult';
@@ -8602,13 +7626,6 @@ export type PublishCrowdyStudioCommonFileInput = {
   title: Scalars['String']['input'];
 };
 
-export type PublishEnvironmentReleaseFromGameApiTagInput = {
-  /** Overwrite an existing environment version row if it already exists. */
-  force?: Scalars['Boolean']['input'];
-  /** cks-game-api semver tag (e.g. v0.6.20). */
-  gameApiTag: Scalars['String']['input'];
-};
-
 export type PublishPlayerCodeInput = {
   /** App the listing belongs to. */
   appId: Scalars['BigInt']['input'];
@@ -8635,15 +7652,6 @@ export type PublishPlayerCodeVersionInput = {
   moduleVersionIds: Array<Scalars['String']['input']>;
   /** Open-source this published version (irreversible for the version). */
   openSource?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-export type PurgeEnvironmentInput = {
-  /** Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** Organization id (BigInt) that owns the environment. */
-  orgId: Scalars['BigInt']['input'];
-  /** Slug of the already-destroyed environment whose record to permanently delete. */
-  slug: Scalars['String']['input'];
 };
 
 export type Query = {
@@ -8716,8 +7724,6 @@ export type Query = {
   avatarAppStates: Array<AppAvatarState>;
   /** Bulk-fetches actors by a list of 32-character ASCII uuids in one round-trip. Requires a valid game token. PUBLIC-STATE ONLY: `privateState` is stripped (null) for every result regardless of ownership. Unknown uuids are silently omitted. Use this to resolve many actors at once; use `actor` for a single owner-scoped fetch. */
   batchLookupActors: Array<Actor>;
-  /** Public read-only catalog of active Buddy (UDP replication) billing tiers. */
-  buddyBillingTiers: Array<BuddyBillingTier>;
   /** Fetch one channel by id. Errors if the id is not a channel. */
   channel: Group;
   /** List the members of a channel (the subscriber set, including pending requests), each with their status and roles. */
@@ -8756,32 +7762,10 @@ export type Query = {
   computeModules: Array<WasmModule>;
   /** The platform's engine-template registry: ready-made compute engines (mob/world/match/deck/instance/director/matchmaking/market/board/minigame/abilities/movement-warden/territory/racing/...) deployable by name with computeDeployTemplate. Requires the org 'manage_compute' permission. */
   computeTemplates: Array<ComputeTemplateInfo>;
-  /** Operator only (is_operator). Most recent operator audit entries, newest first, optionally filtered by environment. */
-  cpAudit: Array<CpAuditEntry>;
-  /** Operator only (is_operator). One change order with ordered task and step progress. Durable change orders may return read-only projected rows when exact live execution details are unavailable; planned work remains pending until an outcome is observed or inferred. Null when the id is not found. */
-  cpChangeOrder: Maybe<CpChangeOrderDetail>;
-  /** Operator only (is_operator). Paginated change orders, optionally filtered by environment. Returns a *Page (rows/total/page/pageSize); page is 1-based. */
-  cpChangeOrders: CpChangeOrdersPage;
   /** Operator only (is_operator). The stored platform ceilings for the per-app WASM compute policy (the nine knobs computeSetPolicy clamps against). Null fields mean no operator override: game-api uses its COMPUTE_PLATFORM_MAX_* env var, then the code default. Read-only. */
   cpComputePlatformCeilings: CpComputePlatformCeilings;
   /** Operator only (is_operator or is_super_admin). Read the platform Agentic Studio enablement, global emergency kill, model/tool/mode/risk allowlists, budget ceilings, retention/privacy policy, pilot funding seam, timestamps, and revision. No provider credential or request body is stored or returned. */
   cpCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
-  /** Operator only (is_operator). Lists environment-delivered secret metadata (names/kinds only, never plaintext) injected into the tenant runtime, optionally filtered by environment. */
-  cpEnvSecrets: Array<CpEnvSecretRow>;
-  /** Operator only (is_operator). Operator view of one environment by slug, across any org. Null when not found. */
-  cpEnvironment: Maybe<CpAdminEnvironment>;
-  /** Operator only (is_operator). Environment release manifests merged from git and the database, with the latest available version and git-source availability. Read-only. */
-  cpEnvironmentVersions: CpEnvironmentVersionsPage;
-  /** Operator only (is_operator). Paginated list of all environments across every org. Returns a *Page (rows/total/page/pageSize); page is 1-based. */
-  cpEnvironments: CpAdminEnvironmentsPage;
-  /** Operator only (is_operator). OVH flavor catalog with provider vs. customer pricing for cost analysis, optionally filtered by region. Read-only. */
-  cpOvhCatalogSummary: Array<CpOvhCatalogRow>;
-  /** Operator only (is_operator). Lists control-plane secret metadata (names/kinds only, never plaintext), optionally filtered by environment. */
-  cpSecrets: Array<CpSecretRow>;
-  /** Operator only (is_operator). cks-game-api git tags not yet pinned by any environment release, each with the version a publish would create. Read-only. */
-  cpUnreleasedGameApiTags: CpUnreleasedGameApiTagsPage;
-  /** Operator only (is_operator). Per-minute usage summary for any environment by slug (operator equivalent of environmentUsageSummary, not org-scoped). Read-only. */
-  cpUsageSummary: CpUsageSummary;
   /** Return every effective TURN, SESSION, and PLAYER_DAY request/token/reasoning/cost/tool-round/wall-clock/tool-call/compile dimension with reserved, consumed, and non-negative remaining values. The pilot is platform-funded and this owner/app query never debits a wallet. */
   crowdyStudioAgentBudget: AgentBudget;
   /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, exact model/tool/mode/risk intersections, minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
@@ -8808,22 +7792,6 @@ export type Query = {
   crowdyStudioProjects: Array<CrowdyStudioProject>;
   /** Resolves the single most-specific quota that applies to the given (tierId, appId, orgId, metric) by walking tier -> app -> org -> free-tier defaults and returning the first match; its limitValue/period describe the enforced limit. Returns null if no matching rule and no free-tier default exist for the metric. Requires the 'view_usage' permission on the most-specific scope provided: tierId or appId -> 'view_usage' on the (owning) app; orgId -> 'view_usage' on the org. A metric-only query (no scope ids) resolves the platform free-tier default and only requires an authenticated user. */
   effectiveQuota: Maybe<ServiceQuota>;
-  /** OVH datacenters that have at least one customer-priced instance flavor available for customer selection. */
-  environmentDatacenters: Array<CksOvhDatacenter>;
-  /** Customer-selectable instance flavors in the datacenter with current availability and customer pricing. */
-  environmentFlavors: Array<CksOvhFlavor>;
-  /** Release versions a specific environment may upgrade to: available, deployable by its environment class, and not older than the version it currently runs (forward-only — no rollback). Newest first; backs the version picker passed to redeployEnvironment. Requires the 'view_environments' org permission. */
-  environmentForwardVersions: Array<CksEnvironmentVersion>;
-  /** Pricing quote for the selected flavors plus the org wallet balance and a canCreate gate. Read-only — provisions nothing. Fails if any flavor is unavailable, hidden, or lacks customer pricing. Requires the 'view_billing' org permission. */
-  environmentQuote: CksEnvironmentQuote;
-  /** DRY RUN of redeployEnvironment: previews exactly what moving the environment to a target release version (input.version, or latest for its class when omitted) would do — component version diffs (game-api, Buddy, base images), whether game-DB schema DDL applies or is skipped, Buddy artifact resolution, and the pipeline tasks/steps that would run — WITHOUT creating a change order or touching any VM. Anything that would make the real mutation fail is returned in `blockers`. Read-only; requires the 'view_environments' org permission. */
-  environmentRedeployPlan: EnvironmentRedeployPlan;
-  /** Aggregate replication/GraphQL byte totals per app for the apps linked to an environment, over the time window. Read-only reporting. Requires the 'view_usage' org permission. */
-  environmentUsageByApp: Array<AppUsageRollupRow>;
-  /** Per-minute replication and GraphQL byte/message usage time series for the apps linked to an environment, plus replication rate peaks and live Buddy rates. Read-only observability. Requires the 'view_usage' org permission. */
-  environmentUsageSummary: EnvironmentUsageSummary;
-  /** Catalog of available environment release versions that can be deployed, newest first. Not org-scoped (any authenticated caller). For the versions a specific environment may move to, use environmentForwardVersions. */
-  environmentVersions: Array<CksEnvironmentVersion>;
   /** Reports whether a free-play window is active now, a human-readable schedule description, and the ISO-8601 start of the next window. PUBLIC: no authentication required. Takes no arguments; computed from server config and the current clock. */
   freePlayWindowInfo: FreePlayWindowInfo;
   /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
@@ -8888,8 +7856,6 @@ export type Query = {
   getChunksByDistance: ChunksByDistanceResponse;
   /** Returns all recorded voxel edits (the voxel_updates log) for a single chunk, newest first, as a ChunkVoxelResponse. Use getChunk instead when you want the packed voxel grid rather than the individual edit log. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   getVoxelList: ChunkVoxelResponse;
-  /** Public read-only catalog of active GraphQL (game API) billing tiers. */
-  graphqlBillingTiers: Array<GraphqlBillingTier>;
   /** List every registered GraphQL API server (both management-api and game-api kinds), regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers). */
   graphqlServers: Array<GraphQlServer>;
   /** The app's grid claim policy (D4): how a player claim confers grid ownership. */
@@ -8912,7 +7878,7 @@ export type Query = {
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   /** Lists recorded voxel edits for a single chunk (optionally only those at/after `since`), newest first. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   listVoxels: Array<Voxel>;
-  /** Returns the authenticated user for the bearer game token on this request, or null if the token is missing/invalid. Use this to validate a token and fetch the current player. The token is issued by the Management API login and sent as `Authorization: Bearer <token>` (and, for the udpNotifications WebSocket, in the graphql-transport-ws connection_init payload as `Authorization`). game-api does not issue tokens. */
+  /** Returns the authenticated user resolved from the token (sent as `Authorization: Bearer <token>`), or null if missing/invalid. Readable with either an identity session token or an app-scoped gameplay token. */
   me: Maybe<User>;
   /** Lists the roles assigned to a single org member. Requires a valid session token. */
   memberRoles: Array<OrgRole>;
@@ -8930,10 +7896,7 @@ export type Query = {
   myCheckouts: CheckoutsPage;
   /** Lists the authenticated caller's own checkouts (newest first), across every org and app. Use this for a self-service payment history; use `checkoutsConnection` for the cross-tenant super-admin view. Requires an authenticated user. Relay cursor connection; prefer this over the offset-based myCheckouts. */
   myCheckoutsConnection: CheckoutsConnection;
-  /**
-   * Lifetime donation totals for the authenticated user, summed across every app. Requires a valid game token. NOTE: donations are management-owned, so in cks-game-api this throws ForbiddenException — call cks-management-api instead.
-   * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
-   */
+  /** Lifetime donation totals for the authenticated user, summed across every app. Requires a valid game token. */
   myDonationData: UserDonationData;
   /** The signed-in user's linked sign-in identities. */
   myIdentities: Array<UserIdentity>;
@@ -8943,10 +7906,7 @@ export type Query = {
   myPlayerCodeAcquisitions: Array<PlayerCodeAcquisition>;
   /** The caller's active installs in this app: pinned versions, consent hashes, and target grids. */
   myPlayerCodeInstalls: Array<PlayerCodeInstall>;
-  /**
-   * The authenticated user’s property-token balances (available, in use, total). Requires a valid game token. NOTE: property tokens are management-owned, so in cks-game-api this throws ForbiddenException — call cks-management-api instead.
-   * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
-   */
+  /** The authenticated user’s property-token balances (available, in use, total). Requires a valid game token. */
   myPropertyTokens: UserPropertyTokenData;
   /** The calling player's seller payout balance (pending/payable/reserved). */
   mySellerPayoutBalance: SellerPayoutBalance;
@@ -8954,14 +7914,8 @@ export type Query = {
   myTeams: Array<GroupMembership>;
   /** List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps'). */
   nearbyGridPermissions: Array<NearbyGridPermissions>;
-  /** Operator only (is_operator). Lists users with is_operator or is_super_admin set, ordered by user id. Read-only. */
-  operatorUsers: Array<CpOperatorUser>;
   /** An org's off-session auto-billing configuration (enabled flag, recharge amount, low-water threshold, per-period cap, and last error). Requires the 'view_billing' org permission. */
   orgAutoBilling: OrgAutoBilling;
-  /** Full detail for one environment: the environment row plus components, change orders, audit log, secrets, outputs, billing resources, live deploy/destroy progress, and Buddy UDP health. Returns null when no environment with that slug exists for the org. Requires the 'view_environments' org permission. */
-  orgEnvironment: Maybe<CksEnvironmentDetail>;
-  /** Lists every environment owned by an organization, in any lifecycle state (including destroyed). Summary rows only — use orgEnvironment(slug) for full detail. Requires the 'view_environments' org permission. */
-  orgEnvironments: Array<CksEnvironment>;
   /** An org's free shared-app slot quota and how much of it is used. Apps beyond the quota still publish; metered usage is billed from the org wallet. Caller must be a member of the org. */
   orgFreeAppQuota: FreeAppQuota;
   /** Lists the members of an organization. Requires the 'manage_members' permission on the org (super admins bypass). */
@@ -8974,8 +7928,6 @@ export type Query = {
   orgRoles: Array<OrgRole>;
   /** Lists an organization's API tokens (metadata only; secret values are never returned here). Requires the 'manage_tokens' permission on the org (super admins bypass). */
   orgTokens: Array<OrgToken>;
-  /** Aggregate replication/GraphQL byte totals per environment across the org for the time window. Read-only reporting. Requires the 'view_usage' org permission. */
-  orgUsageByEnvironment: Array<EnvironmentUsageRollupRow>;
   /** Org rollup of per-app monthly egress projections for all shared apps, with upgrade prompts when on track to exceed free tier. Requires the 'view_usage' org permission. */
   orgUsageProjection: OrgUsageProjection;
   /** Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. Read-only reporting. Requires the 'view_usage' org permission. */
@@ -9036,8 +7988,6 @@ export type Query = {
   playerWasmPolicies: Array<PlayerWasmPolicy>;
   /** Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token. */
   portalConsent: PortalConsentState;
-  /** Public read-only catalog of active Postgres billing tiers. Usage metering deferred. */
-  postgresBillingTiers: Array<PostgresBillingTier>;
   /** Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission. */
   quotasForApp: Array<ServiceQuota>;
   /** Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission. */
@@ -9060,7 +8010,7 @@ export type Query = {
   teams: Array<Group>;
   /** UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy. */
   udpProxyConnectionStatus: UdpProxyConnectionStatus;
-  /** Looks up a single user by id. Requires a valid game token. NOTE: the users table is management-owned, so in cks-game-api this throws ForbiddenException directing you to call cks-management-api directly; use that API to read arbitrary users. Use `me` to read the caller’s own profile. */
+  /** Looks up a single user by id. Requires a valid game token. */
   user: Maybe<User>;
   /** Reads the authenticated user’s per-app state for `appId` (keyed by appId+userId). Requires a valid game token; only the caller’s own state is returned. Returns null when no row exists. `state` is base64-encoded binary. */
   userAppState: Maybe<UserAppState>;
@@ -9070,7 +8020,7 @@ export type Query = {
   userAvatars: Array<Avatar>;
   /** Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated. */
   usersConnection: UsersConnection;
-  /** SUPER-ADMIN ONLY paginated user search; replaces the legacy `users`/`usersByGamertag`/`usersByEmail` queries. `query` is ILIKE-prefix matched against email, gamertag, and disambiguation, plus an exact user_id match. Requires a super-admin bearer game token. NOTE: in cks-game-api super-admin checks always fail and the users table is management-owned, so this is effectively served only by cks-management-api. */
+  /** SUPER-ADMIN ONLY paginated user search; replaces the legacy `users`/`usersByGamertag`/`usersByEmail` queries. `query` is ILIKE-prefix matched against email, gamertag, and disambiguation, plus an exact user_id match. Requires a super-admin bearer game token. */
   usersPaginated: UsersPage;
   /** Current server version and the minimum client version the server accepts. No authentication required. Compare your client build against minimumClientVersion before connecting and prompt an update if it is too old. */
   versionInfo: ServerVersionInfo;
@@ -9384,56 +8334,6 @@ export type QueryComputeTemplatesArgs = {
 };
 
 
-export type QueryCpAuditArgs = {
-  environmentId?: InputMaybe<Scalars['String']['input']>;
-  limit?: Scalars['Int']['input'];
-};
-
-
-export type QueryCpChangeOrderArgs = {
-  id: Scalars['String']['input'];
-};
-
-
-export type QueryCpChangeOrdersArgs = {
-  environmentId?: InputMaybe<Scalars['String']['input']>;
-  page?: Scalars['Int']['input'];
-  pageSize?: Scalars['Int']['input'];
-};
-
-
-export type QueryCpEnvSecretsArgs = {
-  environmentId?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryCpEnvironmentArgs = {
-  slug: Scalars['String']['input'];
-};
-
-
-export type QueryCpEnvironmentsArgs = {
-  page?: Scalars['Int']['input'];
-  pageSize?: Scalars['Int']['input'];
-};
-
-
-export type QueryCpOvhCatalogSummaryArgs = {
-  region?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryCpSecretsArgs = {
-  environmentId?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryCpUsageSummaryArgs = {
-  environmentSlug: Scalars['String']['input'];
-  since: Scalars['DateTime']['input'];
-};
-
-
 export type QueryCrowdyStudioAgentBudgetArgs = {
   sessionId: Scalars['String']['input'];
 };
@@ -9516,41 +8416,6 @@ export type QueryEffectiveQuotaArgs = {
   metric: Scalars['String']['input'];
   orgId?: InputMaybe<Scalars['BigInt']['input']>;
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
-};
-
-
-export type QueryEnvironmentFlavorsArgs = {
-  datacenter: Scalars['String']['input'];
-};
-
-
-export type QueryEnvironmentForwardVersionsArgs = {
-  orgId: Scalars['BigInt']['input'];
-  slug: Scalars['String']['input'];
-};
-
-
-export type QueryEnvironmentQuoteArgs = {
-  input: EnvironmentQuoteInput;
-};
-
-
-export type QueryEnvironmentRedeployPlanArgs = {
-  input: RedeployEnvironmentInput;
-};
-
-
-export type QueryEnvironmentUsageByAppArgs = {
-  environmentSlug: Scalars['String']['input'];
-  orgId: Scalars['BigInt']['input'];
-  since: Scalars['DateTime']['input'];
-};
-
-
-export type QueryEnvironmentUsageSummaryArgs = {
-  environmentSlug: Scalars['String']['input'];
-  orgId: Scalars['BigInt']['input'];
-  since: Scalars['DateTime']['input'];
 };
 
 
@@ -9856,17 +8721,6 @@ export type QueryOrgAutoBillingArgs = {
 };
 
 
-export type QueryOrgEnvironmentArgs = {
-  orgId: Scalars['BigInt']['input'];
-  slug: Scalars['String']['input'];
-};
-
-
-export type QueryOrgEnvironmentsArgs = {
-  orgId: Scalars['BigInt']['input'];
-};
-
-
 export type QueryOrgFreeAppQuotaArgs = {
   orgId: Scalars['BigInt']['input'];
 };
@@ -9889,12 +8743,6 @@ export type QueryOrgRolesArgs = {
 
 export type QueryOrgTokensArgs = {
   orgId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryOrgUsageByEnvironmentArgs = {
-  orgId: Scalars['BigInt']['input'];
-  since: Scalars['DateTime']['input'];
 };
 
 
@@ -10164,23 +9012,6 @@ export type RealtimeConnectionEvent = {
   status: Scalars['String']['output'];
 };
 
-/** How redeployEnvironment rolls out a new version. Omit for automatic routing (services-only when active runtime VMs exist, otherwise full). */
-export enum RedeployDeployMode {
-  /** Replace the runtime VMs (reprovision game-api / Buddy instances). Slower; use when the box image or infra must change. */
-  Full = 'FULL',
-  /** Update services in place on the existing runtime VMs (no VM replacement). Faster; only valid when active runtime VMs exist. */
-  Services = 'SERVICES'
-}
-
-export type RedeployEnvironmentInput = {
-  /** How to roll out the version. When omitted, routes to services-only when active runtime VMs exist, otherwise full. */
-  deployMode?: InputMaybe<RedeployDeployMode>;
-  orgId: Scalars['BigInt']['input'];
-  slug: Scalars['String']['input'];
-  /** Target environment version. When omitted, redeploys to the latest available version for the class. Must be available, deployable by this class, and not older than the current version (forward-only — no rollback). */
-  version?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type RegisterUserInput = {
   /** Email for the new account; the confirmation email is sent here. */
   email: Scalars['String']['input'];
@@ -10227,20 +9058,6 @@ export type ResetPasswordInput = {
   newPassword: Scalars['String']['input'];
   /** Password-reset token from the emailed reset link. */
   token: Scalars['String']['input'];
-};
-
-export type RestartEnvironmentServicesInput = {
-  /** Organization id (BigInt) that owns the environment. */
-  orgId: Scalars['BigInt']['input'];
-  /** Slug of the environment whose Buddy service should be SSH-restarted. */
-  slug: Scalars['String']['input'];
-};
-
-export type ResumeEnvironmentInput = {
-  /** Organization id (BigInt) that owns the environment. */
-  orgId: Scalars['BigInt']['input'];
-  /** Slug of the suspended/grace environment to resume (billingStatus must be grace, suspension_queued, suspended, or resume_failed). */
-  slug: Scalars['String']['input'];
 };
 
 /** Immediately revoke one visible lease. */
@@ -10653,17 +9470,17 @@ export type ServerEventNotification = {
 
 /** Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers. */
 export enum ServerState {
-  /** Buddy hard resource overload: excluded from new-client selection and actively shedding clients (sends reconnect commands so they migrate elsewhere). */
+  /** Hard resource overload. Like NearCapacity (excluded from new-client selection), and the server is also actively shedding clients: it sends each affected client a reconnect command and drops their session after a short grace period so they migrate to another server. */
   Full = 'Full',
-  /** Buddy soft resource overload: excluded from new-client selection until it recovers; existing sessions continue. */
+  /** Soft resource overload (a CPU core or system memory has been high for several seconds). Existing sessions continue, but the server is excluded from serverWithLeastClients so no new clients are routed here until it recovers. */
   NearCapacity = 'NearCapacity',
-  /** Not running or unreachable (e.g. crashed or missed heartbeats). */
+  /** The server is down or unreachable (failed health checks). Do not route any traffic here. */
   Offline = 'Offline',
-  /** Healthy and accepting client traffic. The only state safe to route to. */
+  /** The server is healthy and accepting clients. This is the only state safe to route new connections to. */
   ReadyForClients = 'ReadyForClients',
-  /** Booting / not yet ready: registered but still initializing; do not route client traffic here. */
+  /** The server is booting and not yet accepting clients. Do not route new connections here; wait for ReadyForClients. */
   Starting = 'Starting',
-  /** Draining / shutting down: finishing in-flight work; do not send new traffic. */
+  /** The server is draining and shutting down: existing sessions may continue briefly but no new clients should be routed here. */
   Stopping = 'Stopping'
 }
 
@@ -10702,7 +9519,7 @@ export type ServerStatus = {
   peerSendMsgsPerSec: Maybe<Scalars['Float']['output']>;
   /** Number of peer (server-to-server P2P) connections this server currently holds. */
   peers: Scalars['Int']['output'];
-  /** Unique id of this game-server row in the fleet registry. */
+  /** Unique id of this game-server row in the fleet registry (the Buddy instance uuid). */
   serverId: Scalars['ID']['output'];
   /** Current lifecycle state of this server (see ServerState). Only ReadyForClients servers accept new clients. */
   status: ServerState;
@@ -11470,38 +10287,6 @@ export type UpdateChunkStateInput = {
   coordinates: ChunkCoordinatesInput;
 };
 
-export type UpdateEnvironmentBillingTiersInput = {
-  /** Buddy billing tier level from buddyBillingTiers. */
-  buddyBillingTier?: InputMaybe<Scalars['Int']['input']>;
-  /** GraphQL billing tier level from graphqlBillingTiers. */
-  graphqlBillingTier?: InputMaybe<Scalars['Int']['input']>;
-  /** Organization id (BigInt) that owns the environment. */
-  orgId: Scalars['BigInt']['input'];
-  /** Postgres billing tier level from postgresBillingTiers. */
-  postgresBillingTier?: InputMaybe<Scalars['Int']['input']>;
-  /** Slug of the environment whose billing tiers to update. */
-  slug: Scalars['String']['input'];
-};
-
-export type UpdateEnvironmentScalingInput = {
-  /** Caddy LB flavor (in front of the game-api fleet). When omitted the existing value is preserved. */
-  caddyFlavor?: InputMaybe<Scalars['String']['input']>;
-  /** Maximum game-api servers (autoscaling ceiling). Min 1; ≥ gameApiMinServers. */
-  gameApiMaxServers: Scalars['Int']['input'];
-  /** Minimum game-api servers (autoscaling floor). Min 1; ≤ gameApiMaxServers. */
-  gameApiMinServers: Scalars['Int']['input'];
-  /** Number of Caddy load-balancer VMs in front of the game-api fleet. Min 1. */
-  loadBalancerCount: Scalars['Int']['input'];
-  /** Organization id (BigInt) that owns the environment. */
-  orgId: Scalars['BigInt']['input'];
-  /** Slug of the dedicated environment to rescale (rejected for 'dev_single'). */
-  slug: Scalars['String']['input'];
-  /** Maximum Buddy UDP servers (autoscaling ceiling). Min 1; ≥ udpBuddyMinServers. */
-  udpBuddyMaxServers: Scalars['Int']['input'];
-  /** Minimum Buddy UDP servers (autoscaling floor). Min 1; ≤ udpBuddyMaxServers. */
-  udpBuddyMinServers: Scalars['Int']['input'];
-};
-
 export type UpdateGamertagInput = {
   /** Discriminator paired with `gamertag` (max 128 characters) to form a unique handle. */
   disambiguation: Scalars['String']['input'];
@@ -11808,7 +10593,7 @@ export type User = {
   isSuperAdmin: Scalars['Boolean']['output'];
   /** Organization the user belongs to, or null. BigInt serialized as a decimal string. */
   orgId: Maybe<Scalars['BigInt']['output']>;
-  /** The user's effective permission keys on the given org (empty if not a member; full set if super admin). Requires a valid bearer game token. NOTE: org permissions are management-owned, so in cks-game-api this currently resolves to an empty list — query cks-management-api for authoritative org permissions. */
+  /** The user's effective permission keys on the given org (empty if not a member; full set if super admin). Requires a valid bearer game token. */
   permissionsForOrg: Array<Scalars['String']['output']>;
   /** User-level state blob, base64-encoded binary (management-owned). Null when cleared. */
   state: Maybe<Scalars['String']['output']>;
@@ -11837,7 +10622,6 @@ export type UserAppState = {
   userId: Scalars['BigInt']['output'];
 };
 
-/** Aggregated lifetime donation totals for a user. LEGACY: donations are no longer purchasable. Returned by the deprecated myDonationData query. */
 export type UserDonationData = {
   __typename?: 'UserDonationData';
   /** ISO currency code for the total, e.g. "usd". */
@@ -11870,7 +10654,6 @@ export type UserIdentity = {
   userId: Scalars['ID']['output'];
 };
 
-/** Aggregated property-token balances for a user. LEGACY: property tokens are no longer purchasable. Returned by the deprecated myPropertyTokens query. */
 export type UserPropertyTokenData = {
   __typename?: 'UserPropertyTokenData';
   /** Property tokens currently available, as a decimal string. */
@@ -11892,7 +10675,6 @@ export type UsersConnection = {
   totalCount: Maybe<Scalars['Int']['output']>;
 };
 
-/** One page of users from usersPaginated, plus pagination metadata. */
 export type UsersPage = {
   __typename?: 'UsersPage';
   /** Users on the current page, ordered by ascending user id. */
@@ -12782,21 +11564,6 @@ export type AppBudgetsQueryVariables = Exact<{
 
 export type AppBudgetsQuery = { __typename?: 'Query', appBudgets: Array<{ __typename?: 'AppBudget', appBudgetId: string, orgId: string, appId: string, monthlyLimitCents: string | null, currentMonthUsageCents: string, periodStart: string, createdAt: string, updatedAt: string }> };
 
-export type BuddyBillingTiersQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type BuddyBillingTiersQuery = { __typename?: 'Query', buddyBillingTiers: Array<{ __typename?: 'BuddyBillingTier', tierLevel: number, messagesPerSecond: number, bandwidthMbitPerSecond: number, chargeCents: string, currency: string, label: string, description: string | null }> };
-
-export type GraphqlBillingTiersQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type GraphqlBillingTiersQuery = { __typename?: 'Query', graphqlBillingTiers: Array<{ __typename?: 'GraphqlBillingTier', tierLevel: number, endpointCallsPerSecond: number, bandwidthMbitPerSecond: number, chargeCents: string, currency: string, label: string, description: string | null }> };
-
-export type PostgresBillingTiersQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type PostgresBillingTiersQuery = { __typename?: 'Query', postgresBillingTiers: Array<{ __typename?: 'PostgresBillingTier', tierLevel: number, bandwidthMbitPerSecond: number, chargeCents: string, currency: string, label: string, description: string | null }> };
-
 export type SetAppBudgetMutationVariables = Exact<{
   orgId: Scalars['BigInt']['input'];
   appId: Scalars['BigInt']['input'];
@@ -13178,146 +11945,6 @@ export type ComputeDeployTemplateMutationVariables = Exact<{
 
 export type ComputeDeployTemplateMutation = { __typename?: 'Mutation', computeDeployTemplate: { __typename?: 'WasmModule', moduleId: string, appId: string, name: string, description: string | null, enabled: boolean, alwaysOn: boolean, currentVersionId: string | null, circuitState: string, consecutiveFailures: number, cooldownUntil: string | null, lastError: string | null, createdAt: string, updatedAt: string } };
 
-export type CpEnvironmentsQueryVariables = Exact<{
-  page?: InputMaybe<Scalars['Int']['input']>;
-  pageSize?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type CpEnvironmentsQuery = { __typename?: 'Query', cpEnvironments: { __typename?: 'CpAdminEnvironmentsPage', total: number, page: number, pageSize: number, rows: Array<{ __typename?: 'CpAdminEnvironment', id: string, orgId: string | null, slug: string, displayName: string, primaryCloud: string, primaryRegion: string, status: string, deletionProtectionEnabled: boolean, subdomainHandle: string | null, createdAt: string, updatedAt: string }> } };
-
-export type CpEnvironmentQueryVariables = Exact<{
-  slug: Scalars['String']['input'];
-}>;
-
-
-export type CpEnvironmentQuery = { __typename?: 'Query', cpEnvironment: { __typename?: 'CpAdminEnvironment', id: string, orgId: string | null, slug: string, displayName: string, primaryCloud: string, primaryRegion: string, status: string, deletionProtectionEnabled: boolean, deletionProtectionSetAt: string | null, deletionProtectionSetByEmail: string | null, subdomainHandle: string | null, createdAt: string, updatedAt: string } | null };
-
-export type CpChangeOrdersQueryVariables = Exact<{
-  environmentId?: InputMaybe<Scalars['String']['input']>;
-  page?: InputMaybe<Scalars['Int']['input']>;
-  pageSize?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type CpChangeOrdersQuery = { __typename?: 'Query', cpChangeOrders: { __typename?: 'CpChangeOrdersPage', total: number, page: number, pageSize: number, rows: Array<{ __typename?: 'CpChangeOrder', id: string, environmentId: string, kind: string, status: string, claimedBy: string | null, claimedAt: string | null, finishedAt: string | null, error: string | null, createdAt: string, updatedAt: string }> } };
-
-export type CpChangeOrderQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type CpChangeOrderQuery = { __typename?: 'Query', cpChangeOrder: { __typename?: 'CpChangeOrderDetail', order: { __typename?: 'CpChangeOrder', id: string, environmentId: string, kind: string, status: string, error: string | null, createdAt: string, updatedAt: string, finishedAt: string | null }, tasks: Array<{ __typename?: 'CpTaskRow', id: string, changeOrderId: string, kind: string, ordinal: number, status: string, error: string | null, createdAt: string, finishedAt: string | null }>, steps: Array<{ __typename?: 'CpStepRow', id: string, taskId: string, ordinal: number, kind: string, status: string, attempt: number, error: string | null, createdAt: string, finishedAt: string | null }> } | null };
-
-export type CpAuditQueryVariables = Exact<{
-  environmentId?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type CpAuditQuery = { __typename?: 'Query', cpAudit: Array<{ __typename?: 'CpAuditEntry', id: string, actorUserId: string | null, actorKind: string, action: string, entityKind: string | null, entityId: string | null, environmentId: string | null, payloadJson: string | null, createdAt: string }> };
-
-export type CpSecretsQueryVariables = Exact<{
-  environmentId?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type CpSecretsQuery = { __typename?: 'Query', cpSecrets: Array<{ __typename?: 'CpSecretRow', id: string, environmentId: string, name: string, kind: string | null, createdAt: string, rotatedAt: string | null }> };
-
-export type CpEnvSecretsQueryVariables = Exact<{
-  environmentId?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type CpEnvSecretsQuery = { __typename?: 'Query', cpEnvSecrets: Array<{ __typename?: 'CpEnvSecretRow', id: string, environmentId: string, name: string, kind: string | null, createdAt: string, rotatedAt: string | null }> };
-
-export type CpOvhCatalogSummaryQueryVariables = Exact<{
-  region?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type CpOvhCatalogSummaryQuery = { __typename?: 'Query', cpOvhCatalogSummary: Array<{ __typename?: 'CpOvhCatalogRow', region: string, flavorName: string, vcpus: number | null, ramMb: number | null, diskGb: number | null, ovhHourlyPriceCents: string | null, customerHourlyPriceCents: string | null, customerPricingMode: string, quotaAvailable: number | null }> };
-
-export type CpUsageSummaryQueryVariables = Exact<{
-  environmentSlug: Scalars['String']['input'];
-  since: Scalars['DateTime']['input'];
-}>;
-
-
-export type CpUsageSummaryQuery = { __typename?: 'Query', cpUsageSummary: { __typename?: 'CpUsageSummary', environmentSlug: string, orgId: string | null, replication: Array<{ __typename?: 'CpUsageMinuteRow', minute: string, recvBytes: string, sendBytes: string, recvMsgs: string | null, sendMsgs: string | null }>, graphql: Array<{ __typename?: 'CpUsageMinuteRow', minute: string, recvBytes: string, sendBytes: string }>, replicationRates: { __typename?: 'CpUsageRatePeaks', peakSendMsgsPerSec: number, peakSendMbitPerSec: number, avgSendMsgsPerSec: number, avgSendMbitPerSec: number, sampleMinutes: number }, buddyLive: { __typename?: 'CpBuddyLiveRates', serverId: string, clientSendMsgsPerSec: number, clientRecvMsgsPerSec: number, clients: number, updatedAt: string } | null } };
-
-export type CpUnreleasedGameApiTagsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type CpUnreleasedGameApiTagsQuery = { __typename?: 'Query', cpUnreleasedGameApiTags: { __typename?: 'CpUnreleasedGameApiTagsPage', currentDeployTargetGameApiTag: string | null, gitSourceAvailable: boolean, tags: Array<{ __typename?: 'CpUnreleasedGameApiTag', tag: string, taggedAt: string | null, proposedEnvironmentVersion: string, schemaChanged: boolean }> } };
-
-export type CpEnvironmentVersionsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type CpEnvironmentVersionsQuery = { __typename?: 'Query', cpEnvironmentVersions: { __typename?: 'CpEnvironmentVersionsPage', latestAvailableVersion: string | null, gitSourceAvailable: boolean, rows: Array<{ __typename?: 'CpEnvironmentVersionRow', version: string, releasedAt: string, status: string, notes: string | null, sourceCommit: string | null, gameApiGitTag: string | null, buddyVersion: string | null, ingestedAt: string, updatedAt: string, inGit: boolean, inDb: boolean, isLatestAvailable: boolean }> } };
-
-export type OperatorUsersQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type OperatorUsersQuery = { __typename?: 'Query', operatorUsers: Array<{ __typename?: 'CpOperatorUser', userId: string, email: string | null, gamertag: string | null, isOperator: boolean, isSuperAdmin: boolean, createdAt: string }> };
-
-export type SetEnvironmentDeletionProtectionMutationVariables = Exact<{
-  environmentId: Scalars['String']['input'];
-  enabled: Scalars['Boolean']['input'];
-}>;
-
-
-export type SetEnvironmentDeletionProtectionMutation = { __typename?: 'Mutation', setEnvironmentDeletionProtection: boolean };
-
-export type PutCpSecretMutationVariables = Exact<{
-  environmentId: Scalars['String']['input'];
-  name: Scalars['String']['input'];
-  plaintext: Scalars['String']['input'];
-  kind?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type PutCpSecretMutation = { __typename?: 'Mutation', putCpSecret: { __typename?: 'CpSecretRow', id: string, environmentId: string, name: string, kind: string | null, createdAt: string, rotatedAt: string | null } };
-
-export type DeleteCpSecretMutationVariables = Exact<{
-  environmentId: Scalars['String']['input'];
-  name: Scalars['String']['input'];
-}>;
-
-
-export type DeleteCpSecretMutation = { __typename?: 'Mutation', deleteCpSecret: boolean };
-
-export type PutCpEnvSecretMutationVariables = Exact<{
-  environmentId: Scalars['String']['input'];
-  name: Scalars['String']['input'];
-  plaintext: Scalars['String']['input'];
-  kind?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type PutCpEnvSecretMutation = { __typename?: 'Mutation', putCpEnvSecret: { __typename?: 'CpEnvSecretRow', id: string, environmentId: string, name: string, kind: string | null, createdAt: string, rotatedAt: string | null } };
-
-export type IngestEnvironmentVersionMutationVariables = Exact<{
-  input: IngestEnvironmentVersionInput;
-}>;
-
-
-export type IngestEnvironmentVersionMutation = { __typename?: 'Mutation', ingestEnvironmentVersion: { __typename?: 'CpEnvironmentVersionRow', version: string, releasedAt: string, status: string, notes: string | null, gameApiGitTag: string | null, inGit: boolean, inDb: boolean, isLatestAvailable: boolean } };
-
-export type PublishEnvironmentReleaseFromGameApiTagMutationVariables = Exact<{
-  input: PublishEnvironmentReleaseFromGameApiTagInput;
-}>;
-
-
-export type PublishEnvironmentReleaseFromGameApiTagMutation = { __typename?: 'Mutation', publishEnvironmentReleaseFromGameApiTag: { __typename?: 'CpPublishEnvironmentReleaseResult', schemaChanged: boolean, committedToGit: boolean, gitCommitError: string | null, version: { __typename?: 'CpEnvironmentVersionRow', version: string, status: string, gameApiGitTag: string | null } } };
-
-export type YankEnvironmentVersionMutationVariables = Exact<{
-  version: Scalars['String']['input'];
-}>;
-
-
-export type YankEnvironmentVersionMutation = { __typename?: 'Mutation', yankEnvironmentVersion: boolean };
-
 export type CpComputePlatformCeilingsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -13645,123 +12272,6 @@ export type CrowdyStudioAgentEventsSubscription = { __typename?: 'Subscription',
     | { __typename: 'AgentRunEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, runStatus: CrowdyStudioAgentRunStatus, runCode: string | null, runReason: string | null, runError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null }
     | { __typename: 'AgentToolEvent', protocolVersion: string, eventId: string, sessionId: string, seq: string, type: CrowdyStudioAgentEventType, runId: string | null, version: string, createdAt: string, toolEventCallId: string, toolEventName: string, toolEventVersion: string, toolStatus: CrowdyStudioAgentToolCallStatus, toolSafeSummary: string | null, toolDescriptorDigest: string | null, toolArgumentHash: string | null, toolExecutor: CrowdyStudioAgentToolExecutor | null, toolContextVersion: string | null, toolClientEpoch: string | null, toolArgumentsJson: string | null, toolLeaseId: string | null, toolApprovalGrant: string | null, toolIdempotencyKey: string | null, toolResultJson: string | null, toolDeadline: string | null, toolInvocation: { __typename?: 'AgentToolInvocation', protocolVersion: string, sessionId: string, runId: string, toolCallId: string, name: string, version: string, descriptorDigest: string, argumentsJson: string, argumentHash: string, contextVersion: string, clientEpoch: string | null, leaseId: string | null, approvalGrant: string | null, idempotencyKey: string | null, deadline: string } | null, toolResult: { __typename?: 'AgentToolResultEnvelope', protocolVersion: string, toolCallId: string, status: CrowdyStudioAgentToolResultStatus, outputJson: string | null, observedContextVersion: string, startedAt: string, finishedAt: string, error: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null } | null, toolError: { __typename?: 'AgentError', code: string, message: string, retryable: boolean, remediation: string | null, field: string | null, requiredScope: string | null } | null }
    };
-
-export type CreateEnvironmentMutationVariables = Exact<{
-  input: CreateEnvironmentInput;
-}>;
-
-
-export type CreateEnvironmentMutation = { __typename?: 'Mutation', createEnvironment: { __typename?: 'CksEnvironmentDetail', environment: { __typename?: 'CksEnvironment', id: string, orgId: string, slug: string, displayName: string, status: string, billingStatus: string, environmentClass: string, primaryRegion: string, desiredEnvironmentVersion: string | null, observedEnvironmentVersion: string | null, createdAt: string, updatedAt: string }, changeOrders: Array<{ __typename?: 'CksEnvironmentChangeOrder', id: string, kind: string, status: string, error: string | null, createdAt: string }> } };
-
-export type DestroyEnvironmentMutationVariables = Exact<{
-  input: DestroyEnvironmentInput;
-}>;
-
-
-export type DestroyEnvironmentMutation = { __typename?: 'Mutation', destroyEnvironment: { __typename?: 'CksEnvironmentChangeOrder', id: string, environmentId: string, kind: string, status: string, requestedBy: string | null, error: string | null, createdAt: string, updatedAt: string, finishedAt: string | null } };
-
-export type EnvironmentDatacentersQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type EnvironmentDatacentersQuery = { __typename?: 'Query', environmentDatacenters: Array<{ __typename?: 'CksOvhDatacenter', region: string, name: string | null, city: string | null, continent: string | null, status: string, isAvailable: boolean, selectableInstanceCount: number, syncedAt: string }> };
-
-export type EnvironmentFlavorsQueryVariables = Exact<{
-  datacenter: Scalars['String']['input'];
-}>;
-
-
-export type EnvironmentFlavorsQuery = { __typename?: 'Query', environmentFlavors: Array<{ __typename?: 'CksOvhFlavor', flavorName: string, flavorType: string | null, vcpus: number | null, ramMb: number | null, diskGb: number | null, quotaAvailable: number | null, customerHourlyPriceCents: string, customerMonthlyPriceCents: string | null, currency: string, availabilityStatus: string, pricingMode: string, syncedAt: string }> };
-
-export type EnvironmentForwardVersionsQueryVariables = Exact<{
-  orgId: Scalars['BigInt']['input'];
-  slug: Scalars['String']['input'];
-}>;
-
-
-export type EnvironmentForwardVersionsQuery = { __typename?: 'Query', environmentForwardVersions: Array<{ __typename?: 'CksEnvironmentVersion', version: string, releasedAt: string, status: string, notes: string | null, gameApiGitTag: string | null }> };
-
-export type EnvironmentQuoteQueryVariables = Exact<{
-  input: EnvironmentQuoteInput;
-}>;
-
-
-export type EnvironmentQuoteQuery = { __typename?: 'Query', environmentQuote: { __typename?: 'CksEnvironmentQuote', datacenter: string, databaseFlavor: string, gameApiFlavor: string, udpBuddyFlavor: string, caddyFlavor: string, gameApiMinServers: number, gameApiMaxServers: number, udpBuddyMinServers: number, udpBuddyMaxServers: number, loadBalancerCount: number, environmentClass: string, singleBoxFlavor: string | null, hourlyCostCents: string, firstDayReserveCents: string, walletBalanceCents: string, availableBalanceCents: string, currency: string, canCreate: boolean } };
-
-export type EnvironmentRedeployPlanQueryVariables = Exact<{
-  input: RedeployEnvironmentInput;
-}>;
-
-
-export type EnvironmentRedeployPlanQuery = { __typename?: 'Query', environmentRedeployPlan: { __typename?: 'EnvironmentRedeployPlan', environmentSlug: string, currentVersion: string | null, targetVersion: string | null, deployMode: string | null, changeOrderKind: string | null, schemaWillApply: boolean, schemaGitRef: string | null, blockers: Array<string>, notes: Array<string>, componentChanges: Array<{ __typename?: 'EnvironmentComponentChange', component: string, fromVersion: string | null, toVersion: string | null, changed: boolean }>, tasks: Array<{ __typename?: 'EnvironmentPlannedTask', kind: string, dependsOn: Array<string>, steps: Array<string> }> } };
-
-export type EnvironmentVersionsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type EnvironmentVersionsQuery = { __typename?: 'Query', environmentVersions: Array<{ __typename?: 'CksEnvironmentVersion', version: string, releasedAt: string, status: string, notes: string | null, gameApiGitTag: string | null }> };
-
-export type LinkAppToEnvironmentMutationVariables = Exact<{
-  input: LinkAppToEnvironmentInput;
-}>;
-
-
-export type LinkAppToEnvironmentMutation = { __typename?: 'Mutation', linkAppToEnvironment: { __typename?: 'App', appId: string, orgId: string, slug: string | null, name: string, splitMode: boolean, deploymentTarget: string, gameApiUrl: string | null, status: AppStatus } };
-
-export type OrgEnvironmentQueryVariables = Exact<{
-  orgId: Scalars['BigInt']['input'];
-  slug: Scalars['String']['input'];
-}>;
-
-
-export type OrgEnvironmentQuery = { __typename?: 'Query', orgEnvironment: { __typename?: 'CksEnvironmentDetail', environment: { __typename?: 'CksEnvironment', id: string, orgId: string, slug: string, displayName: string, status: string, billingStatus: string, environmentClass: string, singleBoxFlavor: string | null, primaryRegion: string, desiredEnvironmentVersion: string | null, observedEnvironmentVersion: string | null, gameApiMinServers: number, gameApiMaxServers: number, udpBuddyMinServers: number, udpBuddyMaxServers: number, loadBalancerCount: number, createdAt: string, updatedAt: string }, components: Array<{ __typename?: 'CksEnvironmentComponent', id: string, kind: string, status: string | null, desiredVersion: string | null, observedVersion: string | null }>, changeOrders: Array<{ __typename?: 'CksEnvironmentChangeOrder', id: string, kind: string, status: string, error: string | null, createdAt: string, finishedAt: string | null }>, outputs: Array<{ __typename?: 'CksEnvironmentOutput', name: string, label: string, value: string, valueKind: string }> } | null };
-
-export type OrgEnvironmentsQueryVariables = Exact<{
-  orgId: Scalars['BigInt']['input'];
-}>;
-
-
-export type OrgEnvironmentsQuery = { __typename?: 'Query', orgEnvironments: Array<{ __typename?: 'CksEnvironment', id: string, orgId: string, slug: string, displayName: string, status: string, billingStatus: string, environmentClass: string, singleBoxFlavor: string | null, primaryCloud: string, primaryRegion: string, desiredEnvironmentVersion: string | null, observedEnvironmentVersion: string | null, gameApiMinServers: number, gameApiMaxServers: number, udpBuddyMinServers: number, udpBuddyMaxServers: number, loadBalancerCount: number, createdAt: string, updatedAt: string }> };
-
-export type PurgeEnvironmentMutationVariables = Exact<{
-  input: PurgeEnvironmentInput;
-}>;
-
-
-export type PurgeEnvironmentMutation = { __typename?: 'Mutation', purgeEnvironment: boolean };
-
-export type RedeployEnvironmentMutationVariables = Exact<{
-  input: RedeployEnvironmentInput;
-}>;
-
-
-export type RedeployEnvironmentMutation = { __typename?: 'Mutation', redeployEnvironment: { __typename?: 'CksEnvironmentChangeOrder', id: string, environmentId: string, kind: string, status: string, requestedBy: string | null, error: string | null, createdAt: string, updatedAt: string, finishedAt: string | null } };
-
-export type RestartEnvironmentServicesMutationVariables = Exact<{
-  input: RestartEnvironmentServicesInput;
-}>;
-
-
-export type RestartEnvironmentServicesMutation = { __typename?: 'Mutation', restartEnvironmentServices: { __typename?: 'CksEnvironmentChangeOrder', id: string, environmentId: string, kind: string, status: string, requestedBy: string | null, error: string | null, createdAt: string, updatedAt: string, finishedAt: string | null } };
-
-export type ResumeEnvironmentMutationVariables = Exact<{
-  input: ResumeEnvironmentInput;
-}>;
-
-
-export type ResumeEnvironmentMutation = { __typename?: 'Mutation', resumeEnvironment: { __typename?: 'CksEnvironmentChangeOrder', id: string, environmentId: string, kind: string, status: string, requestedBy: string | null, error: string | null, createdAt: string, updatedAt: string, finishedAt: string | null } };
-
-export type UpdateEnvironmentBillingTiersMutationVariables = Exact<{
-  input: UpdateEnvironmentBillingTiersInput;
-}>;
-
-
-export type UpdateEnvironmentBillingTiersMutation = { __typename?: 'Mutation', updateEnvironmentBillingTiers: { __typename?: 'CksEnvironment', id: string, orgId: string, slug: string, displayName: string, status: string, billingStatus: string, environmentClass: string, singleBoxFlavor: string | null, primaryCloud: string, primaryRegion: string, desiredEnvironmentVersion: string | null, observedEnvironmentVersion: string | null, gameApiMinServers: number, gameApiMaxServers: number, udpBuddyMinServers: number, udpBuddyMaxServers: number, loadBalancerCount: number, createdAt: string, updatedAt: string } };
-
-export type UpdateEnvironmentScalingMutationVariables = Exact<{
-  input: UpdateEnvironmentScalingInput;
-}>;
-
-
-export type UpdateEnvironmentScalingMutation = { __typename?: 'Mutation', updateEnvironmentScaling: { __typename?: 'CksEnvironmentChangeOrder', id: string, environmentId: string, kind: string, status: string, requestedBy: string | null, error: string | null, createdAt: string, updatedAt: string, finishedAt: string | null } };
 
 export type GridOwnershipFieldsFragment = { __typename?: 'GridOwnership', gridOwnershipId: string, gridId: string, appId: string, ownerKind: GridOwnerKind, ownerRef: string, tenure: GridTenure, acquiredVia: string, acquiredAt: string, expiresAt: string | null };
 
@@ -14351,7 +12861,7 @@ export type MarketplaceListingsQueryVariables = Exact<{
 }>;
 
 
-export type MarketplaceListingsQuery = { __typename?: 'Query', playerCodeListings: Array<{ __typename?: 'PlayerCodeListing', admissionState: PlayerCodeAdmissionState, latestVersionId: string | null, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string }> };
+export type MarketplaceListingsQuery = { __typename?: 'Query', playerCodeListings: Array<{ __typename?: 'PlayerCodeListing', admissionState: PlayerCodeAdmissionState | null, latestVersionId: string | null, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string }> };
 
 export type MarketplaceListingVersionsQueryVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -14409,7 +12919,7 @@ export type MarketplacePublishListingMutationVariables = Exact<{
 }>;
 
 
-export type MarketplacePublishListingMutation = { __typename?: 'Mutation', publishPlayerCode: { __typename?: 'PlayerCodeListing', admissionState: PlayerCodeAdmissionState, latestVersionId: string | null, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string } };
+export type MarketplacePublishListingMutation = { __typename?: 'Mutation', publishPlayerCode: { __typename?: 'PlayerCodeListing', admissionState: PlayerCodeAdmissionState | null, latestVersionId: string | null, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string } };
 
 export type MarketplacePublishVersionMutationVariables = Exact<{
   input: PublishPlayerCodeVersionInput;
@@ -14523,21 +13033,21 @@ export type MarketplaceAppListingsQueryVariables = Exact<{
 }>;
 
 
-export type MarketplaceAppListingsQuery = { __typename?: 'Query', appPlayerCodeListings: Array<{ __typename?: 'PlayerCodeListing', updatedAt: string, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string }> };
+export type MarketplaceAppListingsQuery = { __typename?: 'Query', appPlayerCodeListings: Array<{ __typename?: 'PlayerCodeListing', updatedAt: string | null, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string }> };
 
 export type MarketplaceAppAcquisitionsQueryVariables = Exact<{
   appId: Scalars['BigInt']['input'];
 }>;
 
 
-export type MarketplaceAppAcquisitionsQuery = { __typename?: 'Query', appPlayerCodeAcquisitions: Array<{ __typename?: 'PlayerCodeAcquisition', acquirerUserId: string, revokedAt: string | null, acquisitionId: string, listingId: string, appId: string, mode: PlayerCodeAcquisitionMode, status: string, expiresAt: string | null, unitBudget: string | null, unitsConsumed: string, acquiredAt: string }> };
+export type MarketplaceAppAcquisitionsQuery = { __typename?: 'Query', appPlayerCodeAcquisitions: Array<{ __typename?: 'PlayerCodeAcquisition', acquirerUserId: string | null, revokedAt: string | null, acquisitionId: string, listingId: string, appId: string, mode: PlayerCodeAcquisitionMode, status: string, expiresAt: string | null, unitBudget: string | null, unitsConsumed: string, acquiredAt: string }> };
 
 export type MarketplaceTransferListingMutationVariables = Exact<{
   input: TransferPlayerCodeListingInput;
 }>;
 
 
-export type MarketplaceTransferListingMutation = { __typename?: 'Mutation', transferPlayerCodeListing: { __typename?: 'PlayerCodeListing', updatedAt: string, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string } };
+export type MarketplaceTransferListingMutation = { __typename?: 'Mutation', transferPlayerCodeListing: { __typename?: 'PlayerCodeListing', updatedAt: string | null, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string } };
 
 export type MarketplaceSetListingStatusMutationVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -14546,7 +13056,7 @@ export type MarketplaceSetListingStatusMutationVariables = Exact<{
 }>;
 
 
-export type MarketplaceSetListingStatusMutation = { __typename?: 'Mutation', setPlayerCodeListingStatus: { __typename?: 'PlayerCodeListing', updatedAt: string, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string } };
+export type MarketplaceSetListingStatusMutation = { __typename?: 'Mutation', setPlayerCodeListingStatus: { __typename?: 'PlayerCodeListing', updatedAt: string | null, listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string } };
 
 export type MarketplaceSetGridClaimPolicyMutationVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -14682,7 +13192,7 @@ export type MarketplaceCreateGridListingMutationVariables = Exact<{
 }>;
 
 
-export type MarketplaceCreateGridListingMutation = { __typename?: 'Mutation', createGridListing: { __typename?: 'GridListing', gridListingId: string, appId: string, kind: string, name: string, priceCents: number, resalePolicy: string, status: string } };
+export type MarketplaceCreateGridListingMutation = { __typename?: 'Mutation', createGridListing: { __typename?: 'GridListing', gridListingId: string, appId: string, kind: string, name: string, priceCents: number, resalePolicy: string, status: string | null } };
 
 export type CreateOrgRoleMutationVariables = Exact<{
   input: CreateOrgRoleInput;
@@ -15642,32 +14152,6 @@ export type AppUsageSummaryQueryVariables = Exact<{
 
 export type AppUsageSummaryQuery = { __typename?: 'Query', appUsageSummary: { __typename?: 'AppUsageSummary', appId: string, replicationSendBytes: string, replicationRecvBytes: string, graphqlSendBytes: string, graphqlRecvBytes: string, automationRuns: string, automationInvocations: string, automationComputeUnits: string, topGraphqlOperations: Array<{ __typename?: 'GraphqlOperationUsageRow', operationName: string, totalOps: string, sendBytes: string, recvBytes: string }> } };
 
-export type EnvironmentUsageByAppQueryVariables = Exact<{
-  orgId: Scalars['BigInt']['input'];
-  environmentSlug: Scalars['String']['input'];
-  since: Scalars['DateTime']['input'];
-}>;
-
-
-export type EnvironmentUsageByAppQuery = { __typename?: 'Query', environmentUsageByApp: Array<{ __typename?: 'AppUsageRollupRow', appId: string, appSlug: string, appName: string, replicationSendBytes: string, replicationRecvBytes: string, graphqlSendBytes: string, graphqlRecvBytes: string }> };
-
-export type EnvironmentUsageSummaryQueryVariables = Exact<{
-  orgId: Scalars['BigInt']['input'];
-  environmentSlug: Scalars['String']['input'];
-  since: Scalars['DateTime']['input'];
-}>;
-
-
-export type EnvironmentUsageSummaryQuery = { __typename?: 'Query', environmentUsageSummary: { __typename?: 'EnvironmentUsageSummary', environmentSlug: string, environmentId: string, orgId: string, replication: Array<{ __typename?: 'UsageMinuteRow', minute: string, recvBytes: string, sendBytes: string, recvMsgs: string | null, sendMsgs: string | null }>, graphql: Array<{ __typename?: 'UsageMinuteRow', minute: string, recvBytes: string, sendBytes: string }>, replicationRates: { __typename?: 'UsageRatePeaks', peakSendMsgsPerSec: number, peakSendMbitPerSec: number, avgSendMsgsPerSec: number, avgSendMbitPerSec: number, sampleMinutes: number }, buddyLive: { __typename?: 'BuddyLiveRates', serverId: string, clientSendMsgsPerSec: number, clientSendMbitPerSec: number, clientRecvMsgsPerSec: number, clientRecvMbitPerSec: number, clients: number, updatedAt: string } | null } };
-
-export type OrgUsageByEnvironmentQueryVariables = Exact<{
-  orgId: Scalars['BigInt']['input'];
-  since: Scalars['DateTime']['input'];
-}>;
-
-
-export type OrgUsageByEnvironmentQuery = { __typename?: 'Query', orgUsageByEnvironment: Array<{ __typename?: 'EnvironmentUsageRollupRow', environmentId: string, environmentSlug: string, displayName: string, replicationSendBytes: string, replicationRecvBytes: string, graphqlSendBytes: string, graphqlRecvBytes: string }> };
-
 export type PlayerPulseQueryVariables = Exact<{
   orgId: Scalars['BigInt']['input'];
 }>;
@@ -15910,9 +14394,6 @@ export const UpdateAvatarStateDocument = {"kind":"Document","definitions":[{"kin
 export const UpdateAvatarAppStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAvatarAppState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAvatarAppStateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAvatarAppState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"avatarId"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAvatarAppStateMutation, UpdateAvatarAppStateMutationVariables>;
 export const AppBudgetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppBudget"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudget"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudgetId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppBudgetQuery, AppBudgetQueryVariables>;
 export const AppBudgetsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppBudgets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudgets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudgetId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppBudgetsQuery, AppBudgetsQueryVariables>;
-export const BuddyBillingTiersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"BuddyBillingTiers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"buddyBillingTiers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierLevel"}},{"kind":"Field","name":{"kind":"Name","value":"messagesPerSecond"}},{"kind":"Field","name":{"kind":"Name","value":"bandwidthMbitPerSecond"}},{"kind":"Field","name":{"kind":"Name","value":"chargeCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<BuddyBillingTiersQuery, BuddyBillingTiersQueryVariables>;
-export const GraphqlBillingTiersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GraphqlBillingTiers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"graphqlBillingTiers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierLevel"}},{"kind":"Field","name":{"kind":"Name","value":"endpointCallsPerSecond"}},{"kind":"Field","name":{"kind":"Name","value":"bandwidthMbitPerSecond"}},{"kind":"Field","name":{"kind":"Name","value":"chargeCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<GraphqlBillingTiersQuery, GraphqlBillingTiersQueryVariables>;
-export const PostgresBillingTiersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PostgresBillingTiers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"postgresBillingTiers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tierLevel"}},{"kind":"Field","name":{"kind":"Name","value":"bandwidthMbitPerSecond"}},{"kind":"Field","name":{"kind":"Name","value":"chargeCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<PostgresBillingTiersQuery, PostgresBillingTiersQueryVariables>;
 export const SetAppBudgetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAppBudget"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"monthlyLimitCents"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAppBudget"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"monthlyLimitCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"monthlyLimitCents"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudgetId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SetAppBudgetMutation, SetAppBudgetMutationVariables>;
 export const WalletBalanceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"WalletBalance"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletBalance"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<WalletBalanceQuery, WalletBalanceQueryVariables>;
 export const WalletTransactionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"WalletTransactions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletTransactions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<WalletTransactionsQuery, WalletTransactionsQueryVariables>;
@@ -15962,25 +14443,6 @@ export const ComputeModuleLogsDocument = {"kind":"Document","definitions":[{"kin
 export const ComputeAppDiagnosticsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeAppDiagnostics"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeAppDiagnostics"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleCount"}},{"kind":"Field","name":{"kind":"Name","value":"enabledModuleCount"}},{"kind":"Field","name":{"kind":"Name","value":"versionCount"}},{"kind":"Field","name":{"kind":"Name","value":"triggerCount"}},{"kind":"Field","name":{"kind":"Name","value":"runs24h"}},{"kind":"Field","name":{"kind":"Name","value":"failedRuns24h"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed24h"}},{"kind":"Field","name":{"kind":"Name","value":"topModules"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"runs"}},{"kind":"Field","name":{"kind":"Name","value":"failures"}}]}},{"kind":"Field","name":{"kind":"Name","value":"toolchainRustVersion"}},{"kind":"Field","name":{"kind":"Name","value":"toolchainWasmOptVersion"}}]}}]}}]} as unknown as DocumentNode<ComputeAppDiagnosticsQuery, ComputeAppDiagnosticsQueryVariables>;
 export const ComputeTemplatesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputeTemplates"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeTemplates"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"exports"}}]}}]}}]} as unknown as DocumentNode<ComputeTemplatesQuery, ComputeTemplatesQueryVariables>;
 export const ComputeDeployTemplateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeDeployTemplate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"templateName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeDeployTemplate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"templateName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"templateName"}}},{"kind":"Argument","name":{"kind":"Name","value":"moduleName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"moduleName"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ComputeModuleFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"alwaysOn"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ComputeDeployTemplateMutation, ComputeDeployTemplateMutationVariables>;
-export const CpEnvironmentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpEnvironments"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"page"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"pageSize"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpEnvironments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"page"},"value":{"kind":"Variable","name":{"kind":"Name","value":"page"}}},{"kind":"Argument","name":{"kind":"Name","value":"pageSize"},"value":{"kind":"Variable","name":{"kind":"Name","value":"pageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rows"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"primaryCloud"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"deletionProtectionEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"subdomainHandle"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"total"}},{"kind":"Field","name":{"kind":"Name","value":"page"}},{"kind":"Field","name":{"kind":"Name","value":"pageSize"}}]}}]}}]} as unknown as DocumentNode<CpEnvironmentsQuery, CpEnvironmentsQueryVariables>;
-export const CpEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"primaryCloud"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"deletionProtectionEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"deletionProtectionSetAt"}},{"kind":"Field","name":{"kind":"Name","value":"deletionProtectionSetByEmail"}},{"kind":"Field","name":{"kind":"Name","value":"subdomainHandle"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CpEnvironmentQuery, CpEnvironmentQueryVariables>;
-export const CpChangeOrdersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpChangeOrders"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"page"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"pageSize"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpChangeOrders"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"page"},"value":{"kind":"Variable","name":{"kind":"Name","value":"page"}}},{"kind":"Argument","name":{"kind":"Name","value":"pageSize"},"value":{"kind":"Variable","name":{"kind":"Name","value":"pageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rows"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"claimedBy"}},{"kind":"Field","name":{"kind":"Name","value":"claimedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"total"}},{"kind":"Field","name":{"kind":"Name","value":"page"}},{"kind":"Field","name":{"kind":"Name","value":"pageSize"}}]}}]}}]} as unknown as DocumentNode<CpChangeOrdersQuery, CpChangeOrdersQueryVariables>;
-export const CpChangeOrderDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpChangeOrder"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpChangeOrder"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"order"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"tasks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"changeOrderId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"ordinal"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"steps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"taskId"}},{"kind":"Field","name":{"kind":"Name","value":"ordinal"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"attempt"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]}}]} as unknown as DocumentNode<CpChangeOrderQuery, CpChangeOrderQueryVariables>;
-export const CpAuditDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpAudit"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpAudit"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"actorUserId"}},{"kind":"Field","name":{"kind":"Name","value":"actorKind"}},{"kind":"Field","name":{"kind":"Name","value":"action"}},{"kind":"Field","name":{"kind":"Name","value":"entityKind"}},{"kind":"Field","name":{"kind":"Name","value":"entityId"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"payloadJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CpAuditQuery, CpAuditQueryVariables>;
-export const CpSecretsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpSecrets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpSecrets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"rotatedAt"}}]}}]}}]} as unknown as DocumentNode<CpSecretsQuery, CpSecretsQueryVariables>;
-export const CpEnvSecretsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpEnvSecrets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpEnvSecrets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"rotatedAt"}}]}}]}}]} as unknown as DocumentNode<CpEnvSecretsQuery, CpEnvSecretsQueryVariables>;
-export const CpOvhCatalogSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpOvhCatalogSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"region"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpOvhCatalogSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"region"},"value":{"kind":"Variable","name":{"kind":"Name","value":"region"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"flavorName"}},{"kind":"Field","name":{"kind":"Name","value":"vcpus"}},{"kind":"Field","name":{"kind":"Name","value":"ramMb"}},{"kind":"Field","name":{"kind":"Name","value":"diskGb"}},{"kind":"Field","name":{"kind":"Name","value":"ovhHourlyPriceCents"}},{"kind":"Field","name":{"kind":"Name","value":"customerHourlyPriceCents"}},{"kind":"Field","name":{"kind":"Name","value":"customerPricingMode"}},{"kind":"Field","name":{"kind":"Name","value":"quotaAvailable"}}]}}]}}]} as unknown as DocumentNode<CpOvhCatalogSummaryQuery, CpOvhCatalogSummaryQueryVariables>;
-export const CpUsageSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpUsageSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"since"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DateTime"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpUsageSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentSlug"}}},{"kind":"Argument","name":{"kind":"Name","value":"since"},"value":{"kind":"Variable","name":{"kind":"Name","value":"since"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"replication"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"minute"}},{"kind":"Field","name":{"kind":"Name","value":"recvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"sendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"recvMsgs"}},{"kind":"Field","name":{"kind":"Name","value":"sendMsgs"}}]}},{"kind":"Field","name":{"kind":"Name","value":"graphql"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"minute"}},{"kind":"Field","name":{"kind":"Name","value":"recvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"sendBytes"}}]}},{"kind":"Field","name":{"kind":"Name","value":"replicationRates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"peakSendMsgsPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"peakSendMbitPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"avgSendMsgsPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"avgSendMbitPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"sampleMinutes"}}]}},{"kind":"Field","name":{"kind":"Name","value":"buddyLive"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverId"}},{"kind":"Field","name":{"kind":"Name","value":"clientSendMsgsPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"clientRecvMsgsPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"clients"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<CpUsageSummaryQuery, CpUsageSummaryQueryVariables>;
-export const CpUnreleasedGameApiTagsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpUnreleasedGameApiTags"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpUnreleasedGameApiTags"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tags"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tag"}},{"kind":"Field","name":{"kind":"Name","value":"taggedAt"}},{"kind":"Field","name":{"kind":"Name","value":"proposedEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"schemaChanged"}}]}},{"kind":"Field","name":{"kind":"Name","value":"currentDeployTargetGameApiTag"}},{"kind":"Field","name":{"kind":"Name","value":"gitSourceAvailable"}}]}}]}}]} as unknown as DocumentNode<CpUnreleasedGameApiTagsQuery, CpUnreleasedGameApiTagsQueryVariables>;
-export const CpEnvironmentVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpEnvironmentVersions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpEnvironmentVersions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rows"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"releasedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}},{"kind":"Field","name":{"kind":"Name","value":"sourceCommit"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}},{"kind":"Field","name":{"kind":"Name","value":"buddyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"ingestedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"inGit"}},{"kind":"Field","name":{"kind":"Name","value":"inDb"}},{"kind":"Field","name":{"kind":"Name","value":"isLatestAvailable"}}]}},{"kind":"Field","name":{"kind":"Name","value":"latestAvailableVersion"}},{"kind":"Field","name":{"kind":"Name","value":"gitSourceAvailable"}}]}}]}}]} as unknown as DocumentNode<CpEnvironmentVersionsQuery, CpEnvironmentVersionsQueryVariables>;
-export const OperatorUsersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"OperatorUsers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"operatorUsers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"gamertag"}},{"kind":"Field","name":{"kind":"Name","value":"isOperator"}},{"kind":"Field","name":{"kind":"Name","value":"isSuperAdmin"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<OperatorUsersQuery, OperatorUsersQueryVariables>;
-export const SetEnvironmentDeletionProtectionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetEnvironmentDeletionProtection"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setEnvironmentDeletionProtection"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}}]}]}}]} as unknown as DocumentNode<SetEnvironmentDeletionProtectionMutation, SetEnvironmentDeletionProtectionMutationVariables>;
-export const PutCpSecretDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PutCpSecret"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"plaintext"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"kind"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"putCpSecret"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"plaintext"},"value":{"kind":"Variable","name":{"kind":"Name","value":"plaintext"}}},{"kind":"Argument","name":{"kind":"Name","value":"kind"},"value":{"kind":"Variable","name":{"kind":"Name","value":"kind"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"rotatedAt"}}]}}]}}]} as unknown as DocumentNode<PutCpSecretMutation, PutCpSecretMutationVariables>;
-export const DeleteCpSecretDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteCpSecret"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteCpSecret"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}}]}]}}]} as unknown as DocumentNode<DeleteCpSecretMutation, DeleteCpSecretMutationVariables>;
-export const PutCpEnvSecretDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PutCpEnvSecret"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"plaintext"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"kind"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"putCpEnvSecret"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"plaintext"},"value":{"kind":"Variable","name":{"kind":"Name","value":"plaintext"}}},{"kind":"Argument","name":{"kind":"Name","value":"kind"},"value":{"kind":"Variable","name":{"kind":"Name","value":"kind"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"rotatedAt"}}]}}]}}]} as unknown as DocumentNode<PutCpEnvSecretMutation, PutCpEnvSecretMutationVariables>;
-export const IngestEnvironmentVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"IngestEnvironmentVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"IngestEnvironmentVersionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ingestEnvironmentVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"releasedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}},{"kind":"Field","name":{"kind":"Name","value":"inGit"}},{"kind":"Field","name":{"kind":"Name","value":"inDb"}},{"kind":"Field","name":{"kind":"Name","value":"isLatestAvailable"}}]}}]}}]} as unknown as DocumentNode<IngestEnvironmentVersionMutation, IngestEnvironmentVersionMutationVariables>;
-export const PublishEnvironmentReleaseFromGameApiTagDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PublishEnvironmentReleaseFromGameApiTag"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PublishEnvironmentReleaseFromGameApiTagInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishEnvironmentReleaseFromGameApiTag"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}}]}},{"kind":"Field","name":{"kind":"Name","value":"schemaChanged"}},{"kind":"Field","name":{"kind":"Name","value":"committedToGit"}},{"kind":"Field","name":{"kind":"Name","value":"gitCommitError"}}]}}]}}]} as unknown as DocumentNode<PublishEnvironmentReleaseFromGameApiTagMutation, PublishEnvironmentReleaseFromGameApiTagMutationVariables>;
-export const YankEnvironmentVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"YankEnvironmentVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"version"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"yankEnvironmentVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"version"},"value":{"kind":"Variable","name":{"kind":"Name","value":"version"}}}]}]}}]} as unknown as DocumentNode<YankEnvironmentVersionMutation, YankEnvironmentVersionMutationVariables>;
 export const CpComputePlatformCeilingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CpComputePlatformCeilings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpComputePlatformCeilings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedByUserId"}}]}}]}}]} as unknown as DocumentNode<CpComputePlatformCeilingsQuery, CpComputePlatformCeilingsQueryVariables>;
 export const CpSetComputePlatformCeilingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CpSetComputePlatformCeilings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CpSetComputePlatformCeilingsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cpSetComputePlatformCeilings"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedByUserId"}}]}}]}}]} as unknown as DocumentNode<CpSetComputePlatformCeilingsMutation, CpSetComputePlatformCeilingsMutationVariables>;
 export const CrowdyStudioProjectsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CrowdyStudioProjects"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeArchived"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioProjects"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeArchived"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeArchived"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioProjectsQuery, CrowdyStudioProjectsQueryVariables>;
@@ -16012,23 +14474,6 @@ export const CrowdyStudioAgentResumeDocument = {"kind":"Document","definitions":
 export const CrowdyStudioAgentCancelRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentCancelRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CancelAgentRunInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentCancelRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentCancelRunMutation, CrowdyStudioAgentCancelRunMutationVariables>;
 export const CrowdyStudioAgentCloseSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioAgentCloseSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSessionControlInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentCloseSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerRounds"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"terminalReason"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelled"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLease"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"scopes"}},{"kind":"Field","name":{"kind":"Name","value":"holder"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedReason"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApproval"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"approved"}},{"kind":"Field","name":{"kind":"Name","value":"rejected"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"contractVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"requestedModel"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerDataConsent"}},{"kind":"Field","name":{"kind":"Name","value":"registryDigest"}},{"kind":"Field","name":{"kind":"Name","value":"providerPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"appPolicyVersion"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentClientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"lastEventSeq"}},{"kind":"Field","name":{"kind":"Name","value":"currentRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentRunFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeLeases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentLeaseFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pendingApproval"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentApprovalFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"closedAt"}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentCloseSessionMutation, CrowdyStudioAgentCloseSessionMutationVariables>;
 export const CrowdyStudioAgentEventsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"CrowdyStudioAgentEvents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"afterSeq"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"clientEpoch"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioAgentEvents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}},{"kind":"Argument","name":{"kind":"Name","value":"afterSeq"},"value":{"kind":"Variable","name":{"kind":"Name","value":"afterSeq"}}},{"kind":"Argument","name":{"kind":"Name","value":"clientEpoch"},"value":{"kind":"Variable","name":{"kind":"Name","value":"clientEpoch"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentEventFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentErrorFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentError"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}},{"kind":"Field","name":{"kind":"Name","value":"remediation"}},{"kind":"Field","name":{"kind":"Name","value":"field"}},{"kind":"Field","name":{"kind":"Name","value":"requiredScope"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudget"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"dimensions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"reserved"}},{"kind":"Field","name":{"kind":"Name","value":"consumed"}},{"kind":"Field","name":{"kind":"Name","value":"remaining"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}}]}},{"kind":"Field","name":{"kind":"Name","value":"resetAt"}},{"kind":"Field","name":{"kind":"Name","value":"platformFunded"}},{"kind":"Field","name":{"kind":"Name","value":"payer"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentEventBase"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"seq"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyAgentEventFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioAgentEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentEventBaseFields"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLifecycleEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"lifecycleMode"},"name":{"kind":"Name","value":"mode"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleReplayAfterSeq"},"name":{"kind":"Name","value":"replayAfterSeq"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"lifecycleContextVersion"},"name":{"kind":"Name","value":"contextVersion"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentMessageEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"messageEventId"},"name":{"kind":"Name","value":"messageId"}},{"kind":"Field","alias":{"kind":"Name","value":"messageRole"},"name":{"kind":"Name","value":"role"}},{"kind":"Field","alias":{"kind":"Name","value":"messageContent"},"name":{"kind":"Name","value":"content"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentRunEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"runStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"runCode"},"name":{"kind":"Name","value":"code"}},{"kind":"Field","alias":{"kind":"Name","value":"runReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"runError"},"name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentToolEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"toolEventCallId"},"name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","alias":{"kind":"Name","value":"toolEventName"},"name":{"kind":"Name","value":"toolName"}},{"kind":"Field","alias":{"kind":"Name","value":"toolEventVersion"},"name":{"kind":"Name","value":"toolVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"toolStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"toolSafeSummary"},"name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","alias":{"kind":"Name","value":"toolDescriptorDigest"},"name":{"kind":"Name","value":"descriptorDigest"}},{"kind":"Field","alias":{"kind":"Name","value":"toolArgumentHash"},"name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"toolExecutor"},"name":{"kind":"Name","value":"executor"}},{"kind":"Field","alias":{"kind":"Name","value":"toolContextVersion"},"name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"toolClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"toolArgumentsJson"},"name":{"kind":"Name","value":"argumentsJson"}},{"kind":"Field","alias":{"kind":"Name","value":"toolLeaseId"},"name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","alias":{"kind":"Name","value":"toolApprovalGrant"},"name":{"kind":"Name","value":"approvalGrant"}},{"kind":"Field","alias":{"kind":"Name","value":"toolIdempotencyKey"},"name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","alias":{"kind":"Name","value":"toolResultJson"},"name":{"kind":"Name","value":"resultJson"}},{"kind":"Field","alias":{"kind":"Name","value":"toolInvocation"},"name":{"kind":"Name","value":"invocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"descriptorDigest"}},{"kind":"Field","name":{"kind":"Name","value":"argumentsJson"}},{"kind":"Field","name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","name":{"kind":"Name","value":"approvalGrant"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","name":{"kind":"Name","value":"deadline"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolResult"},"name":{"kind":"Name","value":"result"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"protocolVersion"}},{"kind":"Field","name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"outputJson"}},{"kind":"Field","name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"observedContextVersion"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolError"},"name":{"kind":"Name","value":"error"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentErrorFields"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"toolDeadline"},"name":{"kind":"Name","value":"deadline"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentApprovalEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"approvalEventId"},"name":{"kind":"Name","value":"approvalId"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalToolCallId"},"name":{"kind":"Name","value":"toolCallId"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalArgumentHash"},"name":{"kind":"Name","value":"argumentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalSafeSummary"},"name":{"kind":"Name","value":"safeSummary"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalReasons"},"name":{"kind":"Name","value":"reasons"}},{"kind":"Field","alias":{"kind":"Name","value":"approvalExpiresAt"},"name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentLeaseEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"leaseEventId"},"name":{"kind":"Name","value":"leaseId"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseKind"},"name":{"kind":"Name","value":"kind"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseStatus"},"name":{"kind":"Name","value":"status"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseClientEpoch"},"name":{"kind":"Name","value":"clientEpoch"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseScopes"},"name":{"kind":"Name","value":"scopes"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseHolder"},"name":{"kind":"Name","value":"holder"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseContextVersion"},"name":{"kind":"Name","value":"contextVersion"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseControlledEntityId"},"name":{"kind":"Name","value":"controlledEntityId"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseHostCapabilityRevision"},"name":{"kind":"Name","value":"hostCapabilityRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseExpectedProjectRevision"},"name":{"kind":"Name","value":"expectedProjectRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseGrantedAt"},"name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseExpiresAt"},"name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","alias":{"kind":"Name","value":"leaseReason"},"name":{"kind":"Name","value":"reason"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentCheckpointEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"checkpointEventId"},"name":{"kind":"Name","value":"checkpointId"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointProjectRevision"},"name":{"kind":"Name","value":"projectRevision"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointContentHash"},"name":{"kind":"Name","value":"contentHash"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointReason"},"name":{"kind":"Name","value":"reason"}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointFiles"},"name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"contentHash"}},{"kind":"Field","name":{"kind":"Name","value":"byteLength"}}]}},{"kind":"Field","alias":{"kind":"Name","value":"checkpointRestoredAt"},"name":{"kind":"Name","value":"restoredAt"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudgetEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"budgetSnapshot"},"name":{"kind":"Name","value":"budget"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyAgentBudgetFields"}}]}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioAgentEventsSubscription, CrowdyStudioAgentEventsSubscriptionVariables>;
-export const CreateEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"billingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"desiredEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"changeOrders"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateEnvironmentMutation, CreateEnvironmentMutationVariables>;
-export const DestroyEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DestroyEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DestroyEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"destroyEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"requestedBy"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<DestroyEnvironmentMutation, DestroyEnvironmentMutationVariables>;
-export const EnvironmentDatacentersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentDatacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentDatacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"city"}},{"kind":"Field","name":{"kind":"Name","value":"continent"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"isAvailable"}},{"kind":"Field","name":{"kind":"Name","value":"selectableInstanceCount"}},{"kind":"Field","name":{"kind":"Name","value":"syncedAt"}}]}}]}}]} as unknown as DocumentNode<EnvironmentDatacentersQuery, EnvironmentDatacentersQueryVariables>;
-export const EnvironmentFlavorsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentFlavors"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"datacenter"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentFlavors"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"datacenter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"datacenter"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"flavorName"}},{"kind":"Field","name":{"kind":"Name","value":"flavorType"}},{"kind":"Field","name":{"kind":"Name","value":"vcpus"}},{"kind":"Field","name":{"kind":"Name","value":"ramMb"}},{"kind":"Field","name":{"kind":"Name","value":"diskGb"}},{"kind":"Field","name":{"kind":"Name","value":"quotaAvailable"}},{"kind":"Field","name":{"kind":"Name","value":"customerHourlyPriceCents"}},{"kind":"Field","name":{"kind":"Name","value":"customerMonthlyPriceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"availabilityStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pricingMode"}},{"kind":"Field","name":{"kind":"Name","value":"syncedAt"}}]}}]}}]} as unknown as DocumentNode<EnvironmentFlavorsQuery, EnvironmentFlavorsQueryVariables>;
-export const EnvironmentForwardVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentForwardVersions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentForwardVersions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"releasedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}}]}}]}}]} as unknown as DocumentNode<EnvironmentForwardVersionsQuery, EnvironmentForwardVersionsQueryVariables>;
-export const EnvironmentQuoteDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentQuote"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentQuoteInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentQuote"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"datacenter"}},{"kind":"Field","name":{"kind":"Name","value":"databaseFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"caddyFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"loadBalancerCount"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"singleBoxFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"hourlyCostCents"}},{"kind":"Field","name":{"kind":"Name","value":"firstDayReserveCents"}},{"kind":"Field","name":{"kind":"Name","value":"walletBalanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"availableBalanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"canCreate"}}]}}]}}]} as unknown as DocumentNode<EnvironmentQuoteQuery, EnvironmentQuoteQueryVariables>;
-export const EnvironmentRedeployPlanDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentRedeployPlan"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RedeployEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentRedeployPlan"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentSlug"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"targetVersion"}},{"kind":"Field","name":{"kind":"Name","value":"deployMode"}},{"kind":"Field","name":{"kind":"Name","value":"changeOrderKind"}},{"kind":"Field","name":{"kind":"Name","value":"schemaWillApply"}},{"kind":"Field","name":{"kind":"Name","value":"schemaGitRef"}},{"kind":"Field","name":{"kind":"Name","value":"componentChanges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"component"}},{"kind":"Field","name":{"kind":"Name","value":"fromVersion"}},{"kind":"Field","name":{"kind":"Name","value":"toVersion"}},{"kind":"Field","name":{"kind":"Name","value":"changed"}}]}},{"kind":"Field","name":{"kind":"Name","value":"tasks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"dependsOn"}},{"kind":"Field","name":{"kind":"Name","value":"steps"}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockers"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}}]}}]}}]} as unknown as DocumentNode<EnvironmentRedeployPlanQuery, EnvironmentRedeployPlanQueryVariables>;
-export const EnvironmentVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentVersions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentVersions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"releasedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiGitTag"}}]}}]}}]} as unknown as DocumentNode<EnvironmentVersionsQuery, EnvironmentVersionsQueryVariables>;
-export const LinkAppToEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"LinkAppToEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"LinkAppToEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"linkAppToEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentTarget"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<LinkAppToEnvironmentMutation, LinkAppToEnvironmentMutationVariables>;
-export const OrgEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"OrgEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"billingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"singleBoxFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"desiredEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"loadBalancerCount"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"components"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"desiredVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedVersion"}}]}},{"kind":"Field","name":{"kind":"Name","value":"changeOrders"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"outputs"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"valueKind"}}]}}]}}]}}]} as unknown as DocumentNode<OrgEnvironmentQuery, OrgEnvironmentQueryVariables>;
-export const OrgEnvironmentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"OrgEnvironments"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgEnvironments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"billingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"singleBoxFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"primaryCloud"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"desiredEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"loadBalancerCount"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<OrgEnvironmentsQuery, OrgEnvironmentsQueryVariables>;
-export const PurgeEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PurgeEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PurgeEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"purgeEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<PurgeEnvironmentMutation, PurgeEnvironmentMutationVariables>;
-export const RedeployEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RedeployEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RedeployEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"redeployEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"requestedBy"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<RedeployEnvironmentMutation, RedeployEnvironmentMutationVariables>;
-export const RestartEnvironmentServicesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RestartEnvironmentServices"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RestartEnvironmentServicesInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"restartEnvironmentServices"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"requestedBy"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<RestartEnvironmentServicesMutation, RestartEnvironmentServicesMutationVariables>;
-export const ResumeEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ResumeEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ResumeEnvironmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resumeEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"requestedBy"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<ResumeEnvironmentMutation, ResumeEnvironmentMutationVariables>;
-export const UpdateEnvironmentBillingTiersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateEnvironmentBillingTiers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateEnvironmentBillingTiersInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateEnvironmentBillingTiers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"billingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"environmentClass"}},{"kind":"Field","name":{"kind":"Name","value":"singleBoxFlavor"}},{"kind":"Field","name":{"kind":"Name","value":"primaryCloud"}},{"kind":"Field","name":{"kind":"Name","value":"primaryRegion"}},{"kind":"Field","name":{"kind":"Name","value":"desiredEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"observedEnvironmentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMinServers"}},{"kind":"Field","name":{"kind":"Name","value":"udpBuddyMaxServers"}},{"kind":"Field","name":{"kind":"Name","value":"loadBalancerCount"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateEnvironmentBillingTiersMutation, UpdateEnvironmentBillingTiersMutationVariables>;
-export const UpdateEnvironmentScalingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateEnvironmentScaling"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateEnvironmentScalingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateEnvironmentScaling"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"requestedBy"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateEnvironmentScalingMutation, UpdateEnvironmentScalingMutationVariables>;
 export const GridOwnershipDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GridOwnership"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnership"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GridOwnershipFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridOwnershipFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridOwnership"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]} as unknown as DocumentNode<GridOwnershipQuery, GridOwnershipQueryVariables>;
 export const AssignGridOwnershipDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AssignGridOwnership"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AssignGridOwnershipInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"assignGridOwnership"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GridOwnershipFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridOwnershipFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridOwnership"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]} as unknown as DocumentNode<AssignGridOwnershipMutation, AssignGridOwnershipMutationVariables>;
 export const TransferGridOwnershipDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"TransferGridOwnership"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"TransferGridOwnershipInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transferGridOwnership"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GridOwnershipFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridOwnershipFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridOwnership"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]} as unknown as DocumentNode<TransferGridOwnershipMutation, TransferGridOwnershipMutationVariables>;
@@ -16268,9 +14713,6 @@ export const UdpNotificationsDocument = {"kind":"Document","definitions":[{"kind
 export const UdpProxyConnectionStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"UdpProxyConnectionStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"udpProxyConnectionStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connected"}},{"kind":"Field","name":{"kind":"Name","value":"serverIp6"}},{"kind":"Field","name":{"kind":"Name","value":"serverClientPort"}},{"kind":"Field","name":{"kind":"Name","value":"lastMessageTime"}}]}}]}}]} as unknown as DocumentNode<UdpProxyConnectionStatusQuery, UdpProxyConnectionStatusQueryVariables>;
 export const AppGraphqlOperationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppGraphqlOperations"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"since"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DateTime"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appGraphqlOperations"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"since"},"value":{"kind":"Variable","name":{"kind":"Name","value":"since"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"operationName"}},{"kind":"Field","name":{"kind":"Name","value":"totalOps"}},{"kind":"Field","name":{"kind":"Name","value":"sendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"recvBytes"}}]}}]}}]} as unknown as DocumentNode<AppGraphqlOperationsQuery, AppGraphqlOperationsQueryVariables>;
 export const AppUsageSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppUsageSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"since"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DateTime"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"operationLimit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUsageSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"since"},"value":{"kind":"Variable","name":{"kind":"Name","value":"since"}}},{"kind":"Argument","name":{"kind":"Name","value":"operationLimit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"operationLimit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"replicationSendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"replicationRecvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"graphqlSendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"graphqlRecvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"automationRuns"}},{"kind":"Field","name":{"kind":"Name","value":"automationInvocations"}},{"kind":"Field","name":{"kind":"Name","value":"automationComputeUnits"}},{"kind":"Field","name":{"kind":"Name","value":"topGraphqlOperations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"operationName"}},{"kind":"Field","name":{"kind":"Name","value":"totalOps"}},{"kind":"Field","name":{"kind":"Name","value":"sendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"recvBytes"}}]}}]}}]}}]} as unknown as DocumentNode<AppUsageSummaryQuery, AppUsageSummaryQueryVariables>;
-export const EnvironmentUsageByAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentUsageByApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"since"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DateTime"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentUsageByApp"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"environmentSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentSlug"}}},{"kind":"Argument","name":{"kind":"Name","value":"since"},"value":{"kind":"Variable","name":{"kind":"Name","value":"since"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"appSlug"}},{"kind":"Field","name":{"kind":"Name","value":"appName"}},{"kind":"Field","name":{"kind":"Name","value":"replicationSendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"replicationRecvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"graphqlSendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"graphqlRecvBytes"}}]}}]}}]} as unknown as DocumentNode<EnvironmentUsageByAppQuery, EnvironmentUsageByAppQueryVariables>;
-export const EnvironmentUsageSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EnvironmentUsageSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"since"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DateTime"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentUsageSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"environmentSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentSlug"}}},{"kind":"Argument","name":{"kind":"Name","value":"since"},"value":{"kind":"Variable","name":{"kind":"Name","value":"since"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentSlug"}},{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"replication"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"minute"}},{"kind":"Field","name":{"kind":"Name","value":"recvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"sendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"recvMsgs"}},{"kind":"Field","name":{"kind":"Name","value":"sendMsgs"}}]}},{"kind":"Field","name":{"kind":"Name","value":"graphql"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"minute"}},{"kind":"Field","name":{"kind":"Name","value":"recvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"sendBytes"}}]}},{"kind":"Field","name":{"kind":"Name","value":"replicationRates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"peakSendMsgsPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"peakSendMbitPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"avgSendMsgsPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"avgSendMbitPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"sampleMinutes"}}]}},{"kind":"Field","name":{"kind":"Name","value":"buddyLive"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverId"}},{"kind":"Field","name":{"kind":"Name","value":"clientSendMsgsPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"clientSendMbitPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"clientRecvMsgsPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"clientRecvMbitPerSec"}},{"kind":"Field","name":{"kind":"Name","value":"clients"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<EnvironmentUsageSummaryQuery, EnvironmentUsageSummaryQueryVariables>;
-export const OrgUsageByEnvironmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"OrgUsageByEnvironment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"since"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DateTime"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgUsageByEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"since"},"value":{"kind":"Variable","name":{"kind":"Name","value":"since"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentId"}},{"kind":"Field","name":{"kind":"Name","value":"environmentSlug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"replicationSendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"replicationRecvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"graphqlSendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"graphqlRecvBytes"}}]}}]}}]} as unknown as DocumentNode<OrgUsageByEnvironmentQuery, OrgUsageByEnvironmentQueryVariables>;
 export const PlayerPulseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerPulse"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerPulse"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgLivePlayers"}},{"kind":"Field","name":{"kind":"Name","value":"orgAllTimePeak"}},{"kind":"Field","name":{"kind":"Name","value":"orgAllTimePeakAt"}},{"kind":"Field","name":{"kind":"Name","value":"globalLivePlayers"}},{"kind":"Field","name":{"kind":"Name","value":"percentile"}},{"kind":"Field","name":{"kind":"Name","value":"poolSize"}}]}}]}}]} as unknown as DocumentNode<PlayerPulseQuery, PlayerPulseQueryVariables>;
 export const DeleteMyAccountDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteMyAccount"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteMyAccount"}}]}}]} as unknown as DocumentNode<DeleteMyAccountMutation, DeleteMyAccountMutationVariables>;
 export const ForceLogoutUserDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ForceLogoutUser"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"forceLogoutUser"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}]}]}}]} as unknown as DocumentNode<ForceLogoutUserMutation, ForceLogoutUserMutationVariables>;

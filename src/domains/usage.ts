@@ -1,14 +1,8 @@
 import type { GraphQLClient } from '../client.js';
 import {
-  EnvironmentUsageSummaryDocument,
-  OrgUsageByEnvironmentDocument,
-  EnvironmentUsageByAppDocument,
   AppGraphqlOperationsDocument,
   AppUsageSummaryDocument,
   PlayerPulseDocument,
-  type EnvironmentUsageSummaryQuery,
-  type OrgUsageByEnvironmentQuery,
-  type EnvironmentUsageByAppQuery,
   type AppGraphqlOperationsQuery,
   type AppUsageSummaryQuery,
   type PlayerPulseQuery,
@@ -18,76 +12,20 @@ import {
  * Replication + GraphQL usage reporting — exposed as `client.usage` (and
  * grouped under `client.admin`).
  *
- * Targets the **management-api**. All operations are read-only observability and
- * require the `view_usage` org permission. `since` args are ISO-8601 `DateTime`
- * strings; byte/message counters are returned as string counters because they
- * can exceed the 32-bit Int range. `BigInt` ids are decimal strings.
+ * All operations are read-only observability and require the `view_usage` org
+ * permission. `since` args are ISO-8601 `DateTime` strings; byte/message
+ * counters are returned as string counters because they can exceed the 32-bit
+ * Int range. `BigInt` ids are decimal strings.
+ *
+ * As of the unified galaxy API the per-environment rollups
+ * (environmentSummary/orgByEnvironment/environmentByApp) were retired with
+ * dedicated customer environments — usage is org/app-scoped.
  *
  * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN` / `SCOPE_MISSING`
  *   per the permission notes above.
  */
 export class UsageAPI {
   constructor(private readonly management: GraphQLClient) {}
-
-  /**
-   * Per-minute replication + GraphQL usage time series for one environment,
-   * with rate peaks and live Buddy rates.
-   *
-   * @param orgId - Numeric org id.
-   * @param environmentSlug - Environment slug to report on.
-   * @param since - Start of the window (ISO-8601 DateTime) up to now.
-   * @returns The {@link EnvironmentUsageSummary}.
-   */
-  async environmentSummary(
-    orgId: string,
-    environmentSlug: string,
-    since: string,
-  ): Promise<EnvironmentUsageSummaryQuery['environmentUsageSummary']> {
-    const data = await this.management.request(
-      EnvironmentUsageSummaryDocument,
-      { orgId, environmentSlug, since },
-    );
-    return data.environmentUsageSummary;
-  }
-
-  /**
-   * Aggregate byte totals per environment across an org for a window.
-   *
-   * @param orgId - Numeric org id.
-   * @param since - Start of the window (ISO-8601 DateTime) up to now.
-   * @returns One rollup row per environment.
-   */
-  async orgByEnvironment(
-    orgId: string,
-    since: string,
-  ): Promise<OrgUsageByEnvironmentQuery['orgUsageByEnvironment']> {
-    const data = await this.management.request(OrgUsageByEnvironmentDocument, {
-      orgId,
-      since,
-    });
-    return data.orgUsageByEnvironment;
-  }
-
-  /**
-   * Aggregate byte totals per app for the apps linked to an environment.
-   *
-   * @param orgId - Numeric org id.
-   * @param environmentSlug - Environment slug whose apps to roll up.
-   * @param since - Start of the window (ISO-8601 DateTime) up to now.
-   * @returns One rollup row per app.
-   */
-  async environmentByApp(
-    orgId: string,
-    environmentSlug: string,
-    since: string,
-  ): Promise<EnvironmentUsageByAppQuery['environmentUsageByApp']> {
-    const data = await this.management.request(EnvironmentUsageByAppDocument, {
-      orgId,
-      environmentSlug,
-      since,
-    });
-    return data.environmentUsageByApp;
-  }
 
   /**
    * Top GraphQL operations for an app ranked by bytes.
