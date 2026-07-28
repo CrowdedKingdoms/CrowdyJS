@@ -123,6 +123,11 @@ export interface CrowdyClientConfig {
     retryMaxDelayMs?: number;
     /** Default timeout for `...AndWait` round-trips that await a matching echo. */
     waitTimeoutMs?: number;
+    /**
+     * Route `sendActorUpdate` over the existing graphql-transport-ws socket
+     * instead of HTTP POST (requires active `udp.subscribe`).
+     */
+    wsUplinkMutations?: boolean;
   };
   /**
    * Optional sticky-LB cookie jar shared with the game-api HTTP client. Node

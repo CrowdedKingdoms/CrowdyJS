@@ -1,4 +1,5 @@
 import { print } from 'graphql';
+import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { createClient, type Client } from 'graphql-ws';
 import type { SessionStore } from './session.js';
 import type { CrowdyLogger } from './logger.js';
@@ -201,6 +202,13 @@ export interface RealtimeConfig {
    * subscription land on the same game-api upstream.
    */
   lbCookieStore?: LbCookieStore;
+  /**
+   * When true, spatial `sendActorUpdate` mutations are sent over the existing
+   * graphql-transport-ws connection instead of HTTP POST. Requires an active
+   * `udpNotifications` subscription on the same socket. Falls back to HTTP when
+   * the socket is not connected.
+   */
+  wsUplinkMutations?: boolean;
 }
 
 interface PendingWait {
@@ -235,6 +243,7 @@ export class RealtimeClient {
   private readonly retryMaxDelayMs: number;
   private readonly waitTimeoutMs: number;
   private readonly lbCookieStore?: LbCookieStore;
+  private readonly wsUplinkMutations: boolean;
   private client: Client | null = null;
   private release: (() => void) | null = null;
   private desired = false;
@@ -272,6 +281,7 @@ export class RealtimeClient {
     this.retryMaxDelayMs = config.retryMaxDelayMs ?? 5000;
     this.waitTimeoutMs = config.waitTimeoutMs ?? 5000;
     this.lbCookieStore = config.lbCookieStore;
+    this.wsUplinkMutations = config.wsUplinkMutations === true;
 
     this.session.onChange((token) => {
       if (!this.desired) return;
@@ -400,6 +410,104 @@ export class RealtimeClient {
    *   or carrying the server `errorCode` when the match is a
    *   `GenericErrorResponse`.
    */
+  /**
+   * Whether {@link RealtimeConfig.wsUplinkMutations} is enabled for this client.
+   */
+  wsUplinkEnabled(): boolean {
+    return this.wsUplinkMutations;
+  }
+
+  /**
+   * True when the graphql-transport-ws socket is open and can carry mutations.
+   */
+  wsUplinkReady(): boolean {
+    return (
+      this.wsUplinkMutations &&
+      this.client != null &&
+      this.release != null &&
+      (this.statusValue === 'connected' || this.statusValue === 'connecting')
+    );
+  }
+
+  /**
+   * Execute a GraphQL mutation over the existing WebSocket (graphql-ws
+   * `subscribe` message with a mutation operation). Same JSON protocol as HTTP.
+   */
+  executeMutation<TResult, TVariables extends Record<string, unknown>>(
+    document: TypedDocumentNode<TResult, TVariables>,
+    variables?: TVariables,
+  ): Promise<TResult> {
+    if (!this.client || !this.release) {
+      return Promise.reject(
+        new CrowdyRealtimeError('Realtime WebSocket is not connected', {
+          code: 'WS_UPLINK_UNAVAILABLE',
+          retryable: true,
+        }),
+      );
+    }
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const dispose = this.client!.subscribe(
+        { query: print(document), variables },
+        {
+          next: (message) => {
+            if (settled) return;
+            settled = true;
+            dispose();
+            if (message.errors?.length) {
+              reject(
+                new CrowdyRealtimeError(
+                  message.errors[0]?.message ?? 'GraphQL mutation failed',
+                  {
+                    code: 'WS_MUTATION_ERROR',
+                    retryable: true,
+                    cause: message.errors,
+                  },
+                ),
+              );
+              return;
+            }
+            if (!message.data) {
+              reject(
+                new CrowdyRealtimeError('GraphQL mutation returned no data', {
+                  code: 'WS_MUTATION_EMPTY',
+                  retryable: true,
+                }),
+              );
+              return;
+            }
+            resolve(message.data as TResult);
+          },
+          error: (error) => {
+            if (settled) return;
+            settled = true;
+            dispose();
+            reject(
+              error instanceof CrowdyRealtimeError
+                ? error
+                : new CrowdyRealtimeError('Realtime mutation failed', {
+                    code: 'WS_MUTATION_FAILED',
+                    retryable: true,
+                    cause: error,
+                  }),
+            );
+          },
+          complete: () => {
+            if (settled) return;
+            settled = true;
+            reject(
+              new CrowdyRealtimeError('Realtime mutation completed without data', {
+                code: 'WS_MUTATION_EMPTY',
+                retryable: true,
+              }),
+            );
+          },
+        },
+      );
+    });
+  }
+
   waitForSequence(
     sequenceNumber: number,
     timeoutMs = this.waitTimeoutMs,

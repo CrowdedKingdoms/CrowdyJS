@@ -162,6 +162,32 @@ export class UdpAPI {
   async sendActorUpdate(
     input: SendActorUpdateMutationVariables['input'],
   ): Promise<boolean> {
+    if (this.subs.wsUplinkReady()) {
+      try {
+        const data = await this.subs.executeMutation(SendActorUpdateDocument, {
+          input,
+        });
+        this.record('actorUpdate', input);
+        return data.sendActorUpdate;
+      } catch (error) {
+        // Fall back to HTTP when the WS leg fails (reconnect, transient error).
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          (error as { code?: string }).code === 'WS_UPLINK_UNAVAILABLE'
+        ) {
+          // no socket — use HTTP below
+        } else if (
+          error instanceof Error &&
+          'code' in error &&
+          (error as { code?: string }).code?.startsWith('WS_MUTATION')
+        ) {
+          // mutation error over WS — still try HTTP once
+        } else {
+          throw error;
+        }
+      }
+    }
     const data = await this.gql.request(SendActorUpdateDocument, { input });
     this.record('actorUpdate', input);
     return data.sendActorUpdate;
