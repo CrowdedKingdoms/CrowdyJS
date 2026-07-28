@@ -10385,7 +10385,7 @@ input UpdateActorInput {
 
 input UpdateUserStateInput {
   """
-  New user-level state blob, base64-encoded binary. Omit or send null to clear it.
+  New user-level state blob, base64-encoded binary, at most 1,048,576 base64 characters (~768 KiB binary); larger payloads draw a structured validation error. Omit or send null to clear it.
   """
   state: String
 }
@@ -10433,7 +10433,7 @@ input CreateUserAppStateInput {
   """
   appId: BigInt!
   """
-  Per-app user state as base64-encoded binary. Omit or send null to clear it.
+  Per-app user state as base64-encoded binary, at most 1,048,576 base64 characters (~768 KiB binary); larger payloads draw a structured validation error. Omit or send null to clear it.
   """
   state: String
 }

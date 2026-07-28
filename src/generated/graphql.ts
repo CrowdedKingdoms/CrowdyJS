@@ -2411,7 +2411,7 @@ export type CreateTeamInput = {
 export type CreateUserAppStateInput = {
   /** App (game) id to scope the state to. Required. BigInt sent as a decimal string. */
   appId: Scalars['BigInt']['input'];
-  /** Per-app user state as base64-encoded binary. Omit or send null to clear it. */
+  /** Per-app user state as base64-encoded binary, at most 1,048,576 base64 characters (~768 KiB binary); larger payloads draw a structured validation error. Omit or send null to clear it. */
   state?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -10343,7 +10343,7 @@ export type UpdateTeamInput = {
 };
 
 export type UpdateUserStateInput = {
-  /** New user-level state blob, base64-encoded binary. Omit or send null to clear it. */
+  /** New user-level state blob, base64-encoded binary, at most 1,048,576 base64 characters (~768 KiB binary); larger payloads draw a structured validation error. Omit or send null to clear it. */
   state?: InputMaybe<Scalars['String']['input']>;
 };
 
