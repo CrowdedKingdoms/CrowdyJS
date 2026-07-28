@@ -96,12 +96,13 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.billing, 'billing', ['walletBalance', 'walletTransactions', 'appBudget', 'setAppBudget']);
   assertMethods(client.payments, 'payments', ['create', 'mine', 'all']);
   assertMethods(client.quotas, 'quotas', ['forOrg', 'forApp', 'effective', 'set', 'remove']);
-  assertMethods(client.environments, 'environments', ['list', 'get', 'versions', 'quote', 'create', 'destroy', 'redeploy', 'linkApp']);
-  assertMethods(client.usage, 'usage', ['environmentSummary', 'orgByEnvironment', 'environmentByApp', 'appGraphqlOperations', 'appSummary']);
+  // Dedicated environments retired with the unified galaxy API (v13).
+  assert.equal('environments' in client, false, 'client.environments was removed in v13');
+  assertMethods(client.usage, 'usage', ['appGraphqlOperations', 'appSummary', 'playerPulse']);
   assertMethods(client.sharedEnvironment, 'sharedEnvironment', ['plans', 'freeAppQuota', 'appRuntimeState', 'publishApp', 'setSpendCaps', 'setAutoBilling']);
 
   // Operator (control-plane) surface.
-  assertMethods(client.operator, 'operator', ['environments', 'environment', 'changeOrders', 'audit', 'secrets', 'putSecret', 'ingestEnvironmentVersion', 'yankEnvironmentVersion']);
+  assertMethods(client.operator, 'operator', ['computePlatformCeilings', 'setComputePlatformCeilings']);
 
   // New game-side sub-clients.
   assertMethods(client.avatars, 'avatars', ['listForUser', 'get', 'mine', 'appState', 'create', 'update', 'delete', 'updateState', 'updateAppState']);
@@ -210,7 +211,7 @@ test('client exposes the full management + game sub-client surface', async () =>
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');
   assert.equal(client.admin.apps, client.apps, 'admin.apps aliases client.apps');
   assert.equal(client.admin.billing, client.billing, 'admin.billing aliases client.billing');
-  assert.equal(client.admin.environments, client.environments, 'admin.environments aliases client.environments');
+  assert.equal('environments' in client.admin, false, 'admin.environments was removed in v13');
   assert.equal(client.admin.grids, client.gameApps, 'admin.grids aliases client.gameApps');
 
   client.close();

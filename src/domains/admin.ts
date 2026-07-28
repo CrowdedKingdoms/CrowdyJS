@@ -4,7 +4,6 @@ import type { AppAccessAPI } from './appAccess.js';
 import type { BillingAPI } from './billing.js';
 import type { PaymentsAPI } from './payments.js';
 import type { QuotasAPI } from './quotas.js';
-import type { EnvironmentsAPI } from './environments.js';
 import type { UsageAPI } from './usage.js';
 import type { SharedEnvironmentAPI } from './sharedEnvironment.js';
 import type { GameAppsAPI } from './gameApps.js';
@@ -42,8 +41,6 @@ export class AdminAPI {
   readonly payments: PaymentsAPI;
   /** Usage quotas at the org/app scope. */
   readonly quotas: QuotasAPI;
-  /** Dedicated customer environments: provision, scale, deploy. */
-  readonly environments: EnvironmentsAPI;
   /** Replication + GraphQL usage reporting. */
   readonly usage: UsageAPI;
   /** Shared-environment publishing, runtime gating, auto-billing. */
@@ -58,7 +55,6 @@ export class AdminAPI {
     billing: BillingAPI;
     payments: PaymentsAPI;
     quotas: QuotasAPI;
-    environments: EnvironmentsAPI;
     usage: UsageAPI;
     sharedEnvironment: SharedEnvironmentAPI;
     grids: GameAppsAPI;
@@ -69,7 +65,6 @@ export class AdminAPI {
     this.billing = deps.billing;
     this.payments = deps.payments;
     this.quotas = deps.quotas;
-    this.environments = deps.environments;
     this.usage = deps.usage;
     this.sharedEnvironment = deps.sharedEnvironment;
     this.grids = deps.grids;

@@ -1,3 +1,0 @@
-mutation PurgeEnvironment($input: PurgeEnvironmentInput!) {
-  purgeEnvironment(input: $input)
-}
