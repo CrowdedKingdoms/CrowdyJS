@@ -250,6 +250,12 @@ Canonical docs: <https://docs.crowdedkingdoms.com> (agent index:
 
 - Pull the latest `main` (this repo's canonical branch) before creating a
   feature branch; commit with descriptive messages.
+- **Publishing**: no git tags needed — bump the version (`npm version
+  patch|minor|major`) on your branch and merge to `main`; the `publish`
+  workflow auto-publishes `@crowdedkingdoms/crowdyjs@<version>` to npm
+  (Trusted Publishing) when `main` carries a version npm doesn't have.
+  Consumers (Crowdy-Games, external games) pick it up by bumping their npm
+  dependency range and redeploying.
 - Never hand-edit `src/generated/graphql.ts`. When the public GraphQL surface
   changes: `npm run schema:sync:*` → `npm run codegen` → commit `schema.gql`
   and `src/generated/graphql.ts` together.
