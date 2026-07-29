@@ -42,6 +42,7 @@
     "MIGRATION.md"
   ],
   "scripts": {
+    "version": "node scripts/sync-version.mjs && git add src/index.ts",
     "schema:sync": "npm run schema:sync:prod",
     "schema:sync:prod": "node scripts/sync-schema.mjs --prod",
     "schema:sync:local": "node scripts/sync-schema.mjs --local",
