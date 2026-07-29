@@ -61,7 +61,10 @@ test('v12 exports first-class agent, player-host, and Crowdy Studio surfaces', a
     import('../../dist/crowdy-studio/index.js'),
     import('../../dist/index.js'),
   ]);
-  assert.equal(root.VERSION, '13.0.0');
+  const pkg = JSON.parse(
+    await readFile(new URL('../../package.json', import.meta.url), 'utf8'),
+  );
+  assert.equal(root.VERSION, pkg.version);
   assert.equal(typeof agent.CrowdyStudioAgentController, 'function');
   assert.equal(typeof agent.CrowdyAgentToolRegistry, 'function');
   assert.equal(typeof host.AgentControlLeaseManager, 'function');
