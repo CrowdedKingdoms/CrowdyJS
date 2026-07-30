@@ -12,6 +12,8 @@ import {
   UdpNotificationsDocument,
   type UdpNotificationsSubscription,
 } from './generated/graphql.js';
+import { BinaryRelayTransport } from './binary-relay.js';
+import type { RelaySignContext } from './binary-wire.js';
 
 /**
  * Lifecycle state of the realtime WebSocket connection, as reported by
@@ -209,6 +211,22 @@ export interface RealtimeConfig {
    * the socket is not connected.
    */
   wsUplinkMutations?: boolean;
+  /**
+   * When true, realtime traffic uses the game-api's **binary relay**
+   * (`crowdy-relay-v1`): a raw WebSocket that carries complete client-signed
+   * Buddy wire datagrams as BINARY frames in both directions, bypassing the
+   * GraphQL send mutations + `udpNotifications` hot path entirely. Handlers
+   * and `...AndWait` correlation behave identically. Falls back to the
+   * GraphQL transport automatically when the relay endpoint is unavailable
+   * (older servers). Discover server support via
+   * `gameClientBootstrap.binaryRelayEnabled`.
+   */
+  binaryTransport?: boolean;
+  /**
+   * Absolute ws(s) URL of the binary relay endpoint. Defaults to the realtime
+   * `wsUrl` with its path replaced by `/realtime` (the game-api default).
+   */
+  binaryRelayUrl?: string;
 }
 
 interface PendingWait {
@@ -244,6 +262,10 @@ export class RealtimeClient {
   private readonly waitTimeoutMs: number;
   private readonly lbCookieStore?: LbCookieStore;
   private readonly wsUplinkMutations: boolean;
+  private readonly binaryTransport: boolean;
+  private readonly binaryRelayUrl: string;
+  private binaryRelay: BinaryRelayTransport | null = null;
+  private binaryUnavailable = false;
   private client: Client | null = null;
   private release: (() => void) | null = null;
   private desired = false;
@@ -282,6 +304,9 @@ export class RealtimeClient {
     this.waitTimeoutMs = config.waitTimeoutMs ?? 5000;
     this.lbCookieStore = config.lbCookieStore;
     this.wsUplinkMutations = config.wsUplinkMutations === true;
+    this.binaryTransport = config.binaryTransport === true;
+    this.binaryRelayUrl =
+      config.binaryRelayUrl ?? deriveBinaryRelayUrl(this.wsUrl);
 
     this.session.onChange((token) => {
       if (!this.desired) return;
@@ -344,6 +369,7 @@ export class RealtimeClient {
    */
   disconnect(): void {
     this.desired = false;
+    this.binaryRelay?.disconnect();
     this.release?.();
     this.release = null;
     this.client?.dispose();
@@ -529,7 +555,75 @@ export class RealtimeClient {
     });
   }
 
+  /**
+   * Whether the binary relay transport is currently active and able to carry
+   * spatial sends (socket open + handshake complete).
+   */
+  binarySendReady(): boolean {
+    return (
+      this.usingBinaryTransport() && this.binaryRelay?.isReady() === true
+    );
+  }
+
+  /** Whether this client is configured (and still eligible) to use the relay. */
+  usingBinaryTransport(): boolean {
+    return this.binaryTransport && !this.binaryUnavailable;
+  }
+
+  /**
+   * Serialize (with the session signing context) and send one datagram over
+   * the binary relay. Throws `BINARY_RELAY_UNAVAILABLE` when the relay is not
+   * connected — callers fall back to the GraphQL mutation.
+   */
+  async sendBinaryFrame(
+    serialize: (ctx: RelaySignContext) => Promise<Uint8Array>,
+  ): Promise<boolean> {
+    const relay = this.binaryRelay;
+    const ctx = relay?.getSignContext();
+    if (!relay || !ctx || !relay.isReady()) {
+      throw new CrowdyRealtimeError('Binary relay is not connected', {
+        code: 'BINARY_RELAY_UNAVAILABLE',
+        retryable: true,
+      });
+    }
+    const frame = await serialize(ctx);
+    relay.sendFrame(frame);
+    return true;
+  }
+
+  /**
+   * Resolve once the binary relay is ready (or reject on timeout). Requires a
+   * prior {@link subscribe} (the relay session is app-scoped).
+   */
+  async ensureBinaryReady(timeoutMs = 5000): Promise<boolean> {
+    if (!this.usingBinaryTransport() || this.subscribedAppId == null) {
+      return false;
+    }
+    this.desired = true;
+    this.ensureSubscription();
+    if (this.binarySendReady()) return true;
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const poll = setInterval(() => {
+        if (this.binarySendReady()) {
+          clearInterval(poll);
+          resolve(true);
+        } else if (
+          Date.now() - start > timeoutMs ||
+          !this.usingBinaryTransport()
+        ) {
+          clearInterval(poll);
+          resolve(false);
+        }
+      }, 25);
+    });
+  }
+
   private ensureSubscription(): void {
+    if (this.usingBinaryTransport()) {
+      this.ensureBinarySubscription();
+      return;
+    }
     if (this.release) return;
     if (this.opening) return;
 
@@ -677,7 +771,70 @@ export class RealtimeClient {
     );
   }
 
+  private ensureBinarySubscription(): void {
+    const token = this.session.getToken();
+    if (!token) {
+      const error = new CrowdyRealtimeError('Must be authenticated to subscribe', {
+        code: 'AUTH_REQUIRED',
+        retryable: false,
+      });
+      this.setStatus('failed');
+      this.dispatchError(error);
+      throw error;
+    }
+    if (this.subscribedAppId == null) {
+      this.setStatus('failed');
+      this.dispatchError(
+        new CrowdyRealtimeError(
+          'The binary relay requires an appId-scoped subscription',
+          { code: 'APP_ID_REQUIRED', retryable: false },
+        ),
+      );
+      return;
+    }
+
+    if (!this.binaryRelay) {
+      this.binaryRelay = new BinaryRelayTransport(
+        {
+          url: this.binaryRelayUrl,
+          retryAttempts: this.retryAttempts,
+          retryInitialDelayMs: this.retryInitialDelayMs,
+          retryMaxDelayMs: this.retryMaxDelayMs,
+          logger: this.logger,
+        },
+        {
+          getToken: () => this.session.getToken(),
+          onNotification: (notification) => this.dispatch(notification),
+          onError: (error) => this.dispatchError(error),
+          onStatus: (status) => {
+            if (status === 'disconnected' && this.desired) return;
+            this.setStatus(status);
+          },
+          onUnavailable: () => {
+            this.binaryUnavailable = true;
+            this.logger.warn?.(
+              'Binary relay unavailable; falling back to the GraphQL realtime transport',
+            );
+            this.dispatchError(
+              new CrowdyRealtimeError(
+                'Binary relay unavailable; using GraphQL transport',
+                { code: 'BINARY_RELAY_UNAVAILABLE', retryable: true },
+              ),
+            );
+            if (this.desired) this.ensureSubscription();
+          },
+        },
+      );
+    }
+    this.binaryRelay.connect(this.subscribedAppId);
+  }
+
   private restart(): void {
+    if (this.usingBinaryTransport()) {
+      this.binaryRelay?.restart();
+      if (!this.binaryRelay) this.ensureSubscription();
+      return;
+    }
     this.release?.();
     this.release = null;
     this.client?.dispose();
@@ -827,6 +984,18 @@ const NOTIFICATION_KINDS: Record<string, string> = {
 function notificationKind(typename: string | undefined): string {
   if (!typename) return 'unknown';
   return NOTIFICATION_KINDS[typename] ?? typename;
+}
+
+/** Default relay endpoint: the realtime wsUrl with its path set to /realtime. */
+function deriveBinaryRelayUrl(wsUrl: string): string {
+  try {
+    const url = new URL(wsUrl);
+    url.pathname = '/realtime';
+    url.search = '';
+    return url.toString();
+  } catch {
+    return wsUrl.replace(/\/graphql\/?($|\?)/, '/realtime$1');
+  }
 }
 
 function isNodeRuntime(): boolean {

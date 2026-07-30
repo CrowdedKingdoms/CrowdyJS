@@ -127,6 +127,20 @@ export interface CrowdyClientConfig {
      * instead of HTTP POST (requires active `udp.subscribe`).
      */
     wsUplinkMutations?: boolean;
+    /**
+     * Use the game-api's binary realtime relay (`crowdy-relay-v1`): raw
+     * WebSocket BINARY frames carrying complete client-signed Buddy wire
+     * datagrams both ways, bypassing the GraphQL hot path. All `udp.*` /
+     * `world()` / stores APIs behave identically; the SDK falls back to the
+     * GraphQL transport when the relay endpoint is unavailable. Check server
+     * support via `gameClientBootstrap.binaryRelayEnabled`.
+     */
+    binaryTransport?: boolean;
+    /**
+     * Absolute ws(s) URL of the binary relay endpoint. Defaults to the
+     * realtime WebSocket URL with its path replaced by `/realtime`.
+     */
+    binaryRelayUrl?: string;
   };
   /**
    * Optional sticky-LB cookie jar shared with the game-api HTTP client. Node

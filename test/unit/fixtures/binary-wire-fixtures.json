@@ -1,0 +1,333 @@
+{
+  "generatedBy": "cks-game-api scripts/generate-binary-wire-fixtures.mjs",
+  "gameTokenId": "123456789",
+  "gameToken": "AbCdEfGhIjKlMnOpQrStUvWxYz012345aBcDeFgHiJkLmNoPqRsTuVwXyZ543210",
+  "uplink": [
+    {
+      "kind": "actorUpdate",
+      "input": {
+        "appId": "42",
+        "chunk": {
+          "x": "3",
+          "y": "-2",
+          "z": "7"
+        },
+        "uuid": "actor-0123456789abcdef0123456789",
+        "state": "AQIDBPo=",
+        "distance": 5,
+        "decayRate": 1,
+        "sequenceNumber": 77
+      },
+      "bytesHex": "802a000000000000000300000000000000feffffffffffffff07000000000000000501016163746f722d303132333435363738396162636465663031323334353637383901020304fa146138b40942e477497b161aefb6f0375ce66851fe61c223f31fedd5919aa97b15cd5b07000000004d"
+    },
+    {
+      "kind": "actorUpdateDefaults",
+      "input": {
+        "appId": "42",
+        "chunk": {
+          "x": "0",
+          "y": "0",
+          "z": "0"
+        },
+        "uuid": "actor-0123456789abcdef0123456789",
+        "state": ""
+      },
+      "bytesHex": "802a000000000000000000000000000000000000000000000000000000000000000801016163746f722d30313233343536373839616263646566303132333435363738396c3ef7d85ea20456df19b56c809f6436984c2a907d15041debf343ef5bec552915cd5b070000000000"
+    },
+    {
+      "kind": "voxelUpdate",
+      "input": {
+        "appId": "42",
+        "chunk": {
+          "x": "3",
+          "y": "-2",
+          "z": "7"
+        },
+        "uuid": "actor-0123456789abcdef0123456789",
+        "voxel": {
+          "x": -5,
+          "y": 15,
+          "z": 300
+        },
+        "voxelType": 9,
+        "voxelState": "CQkJ",
+        "distance": 8,
+        "decayRate": 0,
+        "sequenceNumber": 3
+      },
+      "bytesHex": "832a000000000000000300000000000000feffffffffffffff07000000000000000800016163746f722d3031323334353637383961626364656630313233343536373839fbff0f002c0109000300090909c1701c072e4488452c06d059497c6dad978d22e0425c66f2b63c14ccc8f47c4c15cd5b070000000003"
+    },
+    {
+      "kind": "audioPacket",
+      "input": {
+        "appId": "42",
+        "chunk": {
+          "x": "3",
+          "y": "-2",
+          "z": "7"
+        },
+        "uuid": "actor-0123456789abcdef0123456789",
+        "audioData": "b3B1cy1mcmFtZS1ieXRlcw==",
+        "sequenceNumber": 200
+      },
+      "bytesHex": "862a000000000000000300000000000000feffffffffffffff07000000000000000100016163746f722d30313233343536373839616263646566303132333435363738396f7075732d6672616d652d6279746573d00e3e005ce0b7cb170db7218b018d24d255e7f4a6257e2cf55b2ed253f0abd115cd5b0700000000c8"
+    },
+    {
+      "kind": "textPacket",
+      "input": {
+        "appId": "42",
+        "chunk": {
+          "x": "3",
+          "y": "-2",
+          "z": "7"
+        },
+        "uuid": "actor-0123456789abcdef0123456789",
+        "text": "hello wörld",
+        "sequenceNumber": 9
+      },
+      "bytesHex": "882a000000000000000300000000000000feffffffffffffff07000000000000000800016163746f722d303132333435363738396162636465663031323334353637383968656c6c6f2077c3b6726c64e68ac7456aacd111ddecd6f1bbbff4de64fc6adc3caa38272158d37e7418449315cd5b070000000009"
+    },
+    {
+      "kind": "clientEvent",
+      "input": {
+        "appId": "42",
+        "chunk": {
+          "x": "3",
+          "y": "-2",
+          "z": "7"
+        },
+        "uuid": "actor-0123456789abcdef0123456789",
+        "eventType": 4242,
+        "state": "Bw==",
+        "sequenceNumber": 1
+      },
+      "bytesHex": "8a2a000000000000000300000000000000feffffffffffffff07000000000000000800016163746f722d3031323334353637383961626364656630313233343536373839921007a3cfcc9e4ada85e3915c397d90ed1bd6b7330bcbc679c9180a92d179d00f485815cd5b070000000001"
+    },
+    {
+      "kind": "singleActorMessage",
+      "input": {
+        "appId": "42",
+        "chunk": {
+          "x": "3",
+          "y": "-2",
+          "z": "7"
+        },
+        "targetUuid": "actor-0123456789abcdef0123456789",
+        "payload": "ZGlyZWN0LW1lc3NhZ2U=",
+        "sequenceNumber": 12
+      },
+      "bytesHex": "8e2a000000000000000300000000000000feffffffffffffff07000000000000000000016163746f722d30313233343536373839616263646566303132333435363738396469726563742d6d657373616765e64a70037cf9559778b988feacc9d6386b7804c4ea09e22188a8021019dd26cd15cd5b07000000000c"
+    },
+    {
+      "kind": "channelMessage",
+      "input": {
+        "channelId": "987654321",
+        "uuid": "actor-0123456789abcdef0123456789",
+        "payload": "Y2hhbm5lbC1wYXlsb2Fk",
+        "sequenceNumber": 33
+      },
+      "bytesHex": "11b168de3a000000006163746f722d30313233343536373839616263646566303132333435363738390f006368616e6e656c2d7061796c6f61640176952a1798cc0db90d09046029692bbfe5a9299aa6af2f4b8a33b8e00ff2b84115cd5b070000000021"
+    }
+  ],
+  "downlink": [
+    {
+      "kind": "actorNotification",
+      "bytesHex": "822a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d30313233343536373839616263646566303132333435363738390a141e7b23965c9801000037",
+      "expected": [
+        {
+          "__typename": "ActorUpdateNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "distance": 4,
+          "decayRate": 1,
+          "uuid": "actor-0123456789abcdef0123456789",
+          "state": "ChQe",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        }
+      ]
+    },
+    {
+      "kind": "voxelNotification",
+      "bytesHex": "852a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d3031323334353637383961626364656630313233343536373839ffff020003004d000200aabb7b23965c9801000037",
+      "expected": [
+        {
+          "__typename": "VoxelUpdateNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "distance": 4,
+          "decayRate": 1,
+          "uuid": "actor-0123456789abcdef0123456789",
+          "voxelX": -1,
+          "voxelY": 2,
+          "voxelZ": 3,
+          "voxelType": 77,
+          "voxelState": "qrs=",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        }
+      ]
+    },
+    {
+      "kind": "audioNotification",
+      "bytesHex": "872a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d3031323334353637383961626364656630313233343536373839617564696f2d62797465737b23965c9801000037",
+      "expected": [
+        {
+          "__typename": "ClientAudioNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "distance": 4,
+          "decayRate": 1,
+          "uuid": "actor-0123456789abcdef0123456789",
+          "audioData": "YXVkaW8tYnl0ZXM=",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        }
+      ]
+    },
+    {
+      "kind": "textNotification",
+      "bytesHex": "892a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d303132333435363738396162636465663031323334353637383963686174206d6573736167657b23965c9801000037",
+      "expected": [
+        {
+          "__typename": "ClientTextNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "distance": 4,
+          "decayRate": 1,
+          "uuid": "actor-0123456789abcdef0123456789",
+          "text": "chat message",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        }
+      ]
+    },
+    {
+      "kind": "clientEventNotification",
+      "bytesHex": "8a2a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d3031323334353637383961626364656630313233343536373839ff010102037b23965c9801000037",
+      "expected": [
+        {
+          "__typename": "ClientEventNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "distance": 4,
+          "decayRate": 1,
+          "uuid": "actor-0123456789abcdef0123456789",
+          "eventType": 511,
+          "state": "AQID",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        }
+      ]
+    },
+    {
+      "kind": "serverEventNotification",
+      "bytesHex": "8b2a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d3031323334353637383961626364656630313233343536373839ff010102037b23965c9801000037",
+      "expected": [
+        {
+          "__typename": "ServerEventNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "distance": 4,
+          "decayRate": 1,
+          "uuid": "actor-0123456789abcdef0123456789",
+          "eventType": 511,
+          "state": "AQID",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        }
+      ]
+    },
+    {
+      "kind": "singleActorMessage",
+      "bytesHex": "8e2a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d3031323334353637383961626364656630313233343536373839746f2d796f757b23965c9801000037",
+      "expected": [
+        {
+          "__typename": "SingleActorMessageNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "uuid": "actor-0123456789abcdef0123456789",
+          "payload": "dG8teW91",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        }
+      ]
+    },
+    {
+      "kind": "genericError",
+      "bytesHex": "034d07",
+      "expected": [
+        {
+          "__typename": "GenericErrorResponse",
+          "sequenceNumber": 77,
+          "errorCode": "UNAUTHORIZED"
+        }
+      ]
+    },
+    {
+      "kind": "channelNotification",
+      "bytesHex": "12b168de3a000000006163746f722d303132333435363738396162636465663031323334353637383909006368616e2d6e6f7465c824965c9801000015",
+      "expected": [
+        {
+          "__typename": "ChannelMessageNotification",
+          "channelId": "987654321",
+          "uuid": "actor-0123456789abcdef0123456789",
+          "payload": "Y2hhbi1ub3Rl",
+          "sequenceNumber": 21,
+          "epochMillis": "1753900000456"
+        }
+      ]
+    },
+    {
+      "kind": "bundle",
+      "bytesHex": "025000822a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d30313233343536373839616263646566303132333435363738390a141e7b23965c98010000370300034d075900892a000000000000000300000000000000feffffffffffffff07000000000000000401006163746f722d303132333435363738396162636465663031323334353637383963686174206d6573736167657b23965c9801000037",
+      "expected": [
+        {
+          "__typename": "ActorUpdateNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "distance": 4,
+          "decayRate": 1,
+          "uuid": "actor-0123456789abcdef0123456789",
+          "state": "ChQe",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        },
+        {
+          "__typename": "GenericErrorResponse",
+          "sequenceNumber": 77,
+          "errorCode": "UNAUTHORIZED"
+        },
+        {
+          "__typename": "ClientTextNotification",
+          "appId": "42",
+          "chunkX": "3",
+          "chunkY": "-2",
+          "chunkZ": "7",
+          "distance": 4,
+          "decayRate": 1,
+          "uuid": "actor-0123456789abcdef0123456789",
+          "text": "chat message",
+          "sequenceNumber": 55,
+          "epochMillis": "1753900000123"
+        }
+      ]
+    }
+  ]
+}

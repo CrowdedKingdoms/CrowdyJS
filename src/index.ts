@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '13.0.2';
+export const VERSION = '13.1.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -73,6 +73,26 @@ export {
   type UdpNotification,
   type UdpNotificationHandlers,
 } from './realtime.js';
+export {
+  BinaryRelayTransport,
+  RELAY_SUBPROTOCOL,
+  type BinaryRelayCallbacks,
+  type BinaryRelayConfig,
+} from './binary-relay.js';
+export {
+  RELAY_MAX_DATAGRAM_BYTES,
+  WireMessageType,
+  createSignContext,
+  parseRelayFrame,
+  serializeActorUpdate,
+  serializeAudioPacket,
+  serializeChannelMessage,
+  serializeClientEvent,
+  serializeSingleActorMessage,
+  serializeTextPacket,
+  serializeVoxelUpdate,
+  type RelaySignContext,
+} from './binary-wire.js';
 export {
   RealtimeMetrics,
   payloadBytesOf,
