@@ -168,6 +168,15 @@ import {
   GameModelAppDiagnosticsDocument,
   type GameModelAppDiagnosticsQuery,
   type GameModelAppDiagnosticsQueryVariables,
+  GameModelScheduleInvokeDocument,
+  type GameModelScheduleInvokeMutation,
+  type GameModelScheduleInvokeMutationVariables,
+  GameModelCancelTimerDocument,
+  type GameModelCancelTimerMutation,
+  type GameModelCancelTimerMutationVariables,
+  GameModelTimersDocument,
+  type GameModelTimersQuery,
+  type GameModelTimersQueryVariables,
 } from '../generated/graphql.js';
 
 /**
@@ -1290,12 +1299,26 @@ export class GameModelAPI {
   /**
    * **Automations** — create an event trigger that fires an automation in
    * reaction to model activity (`function_invoked` | `property_changed` |
-   * `container_created`), matched in the API server post-commit. Requires the
-   * app-admin **`manage_apps`** permission.
+   * `container_created` | `player_count_changed`), matched in the API server
+   * post-commit. Requires the app-admin **`manage_apps`** permission.
+   *
+   * Each event matches on its own filters, and a filter the event does not
+   * match on is rejected rather than silently never firing:
+   * `function_invoked` takes `functionName` and `containerTypeName` (the type
+   * of the invocation's `self` container); `property_changed` takes
+   * `containerTypeName`, `propertyKey`, and `writeSource`;
+   * `container_created` takes `containerTypeName`; `player_count_changed`
+   * takes none.
+   *
+   * `writeSource` decides which writes a `property_changed` trigger sees:
+   * `direct` (a {@link GameModelAPI.setProperty} call), `function` (a mutation
+   * applied inside an invoke, automation run, or timer fire), or `any`
+   * (default). Most game logic writes properties from inside functions, so a
+   * trigger watching such a property needs `function` or `any`.
    *
    * @param input - {@link UpsertAutomationTriggerInput}: `appId`,
-   *   `automationName`, `onEvent`, optional `functionName` /
-   *   `containerTypeName` / `propertyKey` filters, and `debounceMs`.
+   *   `automationName`, `onEvent`, the filters valid for that event, and
+   *   `debounceMs`.
    * @returns The created {@link GmAutomationTrigger}.
    */
   async upsertAutomationTrigger(
@@ -1322,7 +1345,8 @@ export class GameModelAPI {
   /**
    * **Automations** — set the app's automation policy (platform guardrails: the
    * kill switch, max automations, the minimum schedule interval floor, max
-   * fan-out, max event cascade depth, and the aggregate per-minute run ceiling).
+   * fan-out, max event cascade depth, the aggregate per-minute run ceiling, and
+   * the timer floor / pending-timer ceiling).
    * Requires the app-admin **`manage_apps`** permission.
    *
    * @param input - {@link SetAutomationPolicyInput}.
@@ -1382,6 +1406,10 @@ export class GameModelAPI {
   /**
    * **Automations** — list event triggers for an app, optionally filtered to one
    * automation by name. Requires the app-admin **`manage_apps`** permission.
+   *
+   * Use this to debug a trigger that isn't firing: `warnings` reports filters
+   * that can never match, `lastMatchedAt` is null until the trigger has
+   * actually dispatched a run, and `matchCount24h` shows recent activity.
    *
    * @param variables - `{ appId, automationName? }`.
    * @returns The {@link GmAutomationTrigger}s.
@@ -1452,5 +1480,66 @@ export class GameModelAPI {
   ): Promise<GameModelAppDiagnosticsQuery['gameModelAppDiagnostics']> {
     const data = await this.gql.request(GameModelAppDiagnosticsDocument, variables);
     return data.gameModelAppDiagnostics;
+  }
+
+  /**
+   * **Timers** — arm a one-shot timer: invoke a function once, after a delay.
+   * The timer is durable (it survives an API restart) and claimed by exactly one
+   * replica, so it fires once. Requires the app-admin **`manage_apps`**
+   * permission, because a timer fires headlessly with system authority rather
+   * than a player's.
+   *
+   * For player-driven delays, declare a `timers` effect on the function instead
+   * (see {@link GameModelAPI.upsertFunction}) so the delay is part of your game
+   * logic and is armed atomically with that invocation's mutations.
+   *
+   * The target function must be `autonomousInvocable`. Pass `dedupeKey` to make
+   * re-arming replace the pending timer instead of queueing another fire, which
+   * is how you implement "reset the countdown".
+   *
+   * @param input - {@link ScheduleInvokeInput}: `appId`, `functionName`,
+   *   `selfContainerId`, `delayMs`, and optional `paramsJson`, `sessionId`, and
+   *   `dedupeKey`.
+   * @returns The armed {@link GmTimer}.
+   */
+  async scheduleInvoke(
+    input: GameModelScheduleInvokeMutationVariables['input'],
+  ): Promise<GameModelScheduleInvokeMutation['gameModelScheduleInvoke']> {
+    const data = await this.gql.request(GameModelScheduleInvokeDocument, { input });
+    return data.gameModelScheduleInvoke;
+  }
+
+  /**
+   * **Timers** — cancel pending timers by id or by dedupe key. A timer already
+   * claimed for execution cannot be cancelled. Requires the app-admin
+   * **`manage_apps`** permission.
+   *
+   * @param variables - `{ appId, timerId?, dedupeKey? }` (supply at least one
+   *   selector).
+   * @returns How many pending timers were removed.
+   */
+  async cancelTimer(
+    variables: GameModelCancelTimerMutationVariables,
+  ): Promise<GameModelCancelTimerMutation['gameModelCancelTimer']> {
+    const data = await this.gql.request(GameModelCancelTimerDocument, variables);
+    return data.gameModelCancelTimer;
+  }
+
+  /**
+   * **Timers** — list pending one-shot timers, soonest first. A timer leaves
+   * this list the instant it is claimed for execution, so an empty list means
+   * nothing is *scheduled* — not that nothing ran. Fires that already happened
+   * appear in {@link GameModelAPI.automationRuns} with
+   * `triggerSource: 'timer'`. Requires the app-admin **`manage_apps`**
+   * permission.
+   *
+   * @param variables - `{ appId, sessionId?, limit? }` (limit 1-200, default 50).
+   * @returns The pending {@link GmTimer}s.
+   */
+  async timers(
+    variables: GameModelTimersQueryVariables,
+  ): Promise<GameModelTimersQuery['gameModelTimers']> {
+    const data = await this.gql.request(GameModelTimersDocument, variables);
+    return data.gameModelTimers;
   }
 }

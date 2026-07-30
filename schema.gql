@@ -4490,6 +4490,18 @@ type GameClientBootstrap {
   The modulus the per-message sequenceNumber wraps at (256), i.e. sequenceNumber is a uint8 in 0-255. sequenceNumber exists ONLY to correlate asynchronous responses/errors (delivered on udpNotifications) with the send that produced them — it is NOT an idempotency key, and the server does not dedupe replays.
   """
   sequenceNumberModulo: Int!
+  """
+  Whether this server exposes the binary realtime relay (crowdy-relay-v1): a raw WebSocket endpoint at binaryRelayPath that relays complete client-signed Buddy wire datagrams as BINARY frames in both directions, replacing the GraphQL send*/udpNotifications hot path. When false, use the GraphQL realtime surface.
+  """
+  binaryRelayEnabled: Boolean!
+  """
+  HTTP path of the binary realtime relay WebSocket endpoint on this origin (e.g. "/realtime"). Connect with `?appId=<appId>` and offer the binaryRelayProtocol subprotocol; authenticate with an app-scoped bearer token via the Authorization header, a `bearer.<base64url(token)>` subprotocol entry, or `?token=`. Wire format: cks docs, client-wire-formats.
+  """
+  binaryRelayPath: String!
+  """
+  Required WebSocket subprotocol for the binary realtime relay. The client must offer it during the upgrade; the server selects it. Currently "crowdy-relay-v1".
+  """
+  binaryRelayProtocol: String!
 }
 
 """
@@ -5121,9 +5133,25 @@ type GmAutomationTrigger {
   """Filter: only this property key. Always null for player_count_changed."""
   propertyKey: String
   """
+  property_changed only: which writes are observed — "direct" (gameModelSetProperty), "function" (a mutation applied inside an invoke, automation run, or timer fire), or "any". Always "any" for other events, which ignore it.
+  """
+  writeSource: String!
+  """
   Debounce window in ms. player_count_changed coalesces on the trailing edge; other model events use their existing leading-edge behavior.
   """
   debounceMs: Int!
+  """
+  When this trigger last matched an event and dispatched a run, or null if it has never matched. A trigger that stays null while its event is happening is almost always a filter that cannot match — see warnings.
+  """
+  lastMatchedAt: DateTime
+  """
+  Runs this trigger dispatched in the last 24 hours, including runs a guard then dropped. Fires suppressed by debounceMs never reach a run and are not counted.
+  """
+  matchCount24h: Int!
+  """
+  Authoring problems detected for this trigger, empty when healthy. Reported rather than silently never firing.
+  """
+  warnings: [String!]!
 }
 
 """
@@ -5138,12 +5166,20 @@ type GmAutomationRun {
   Flow correlation id: shared with gm event-log rows and compute module runs triggered by the same entry call (player invoke / automation run / computeInvoke).
   """
   flowId: String
-  """The automation that ran."""
-  automationId: String!
-  """The automation name at run time."""
+  """
+  The automation that ran, or null for a timer fire (which has no owning automation).
+  """
+  automationId: String
+  """
+  The automation name at run time, or the invoked function name for a timer fire.
+  """
   automationName: String!
-  """What triggered the run: schedule | event | manual | cascade."""
+  """What triggered the run: schedule | event | manual | cascade | timer."""
   triggerSource: String!
+  """
+  The event trigger that matched, when the run came from one. Null for schedule, manual, and timer-fired runs.
+  """
+  triggerId: String
   """Parent run id when triggered as a cascade."""
   parentRunId: String
   """Cascade depth (0 = top-level)."""
@@ -5276,6 +5312,54 @@ type GmAutomationPolicy {
   maxCascadeDepth: Int!
   """Maximum aggregate automation runs per minute for the app."""
   globalRunsPerMinute: Int!
+  """
+  Minimum timer delay (ms) floor for gameModelScheduleInvoke and function timer effects.
+  """
+  minTimerDelayMs: Int!
+  """
+  Maximum pending (armed but not yet fired) timers the app may hold at once.
+  """
+  maxPendingTimers: Int!
+}
+
+"""
+A pending one-shot timer: a delayed invocation that has been armed but has not fired yet. Timers are removed from this list the moment they are claimed for execution.
+"""
+type GmTimer {
+  """Unique timer id (UUID)."""
+  timerId: String!
+  """The app (tenant)."""
+  appId: BigInt!
+  """Session the delayed invocation runs in, or null if app-global."""
+  sessionId: String
+  """Container the delayed invocation runs against ("self")."""
+  selfContainerId: String!
+  """The function that will be invoked when it fires."""
+  functionName: String!
+  """
+  JSON object of parameters bound at arm time and passed to the invocation.
+  """
+  paramsJson: String!
+  """When the timer becomes due."""
+  fireAt: DateTime!
+  """
+  App-scoped dedupe key, or null. Re-arming the same key replaces this timer instead of adding another.
+  """
+  dedupeKey: String
+  """
+  Cascade depth inherited from whatever armed the timer. The fired invocation runs one deeper, so timer chains are bounded by the app's maxCascadeDepth.
+  """
+  cascadeDepth: Int!
+  """
+  Flow correlation id carried from the arming call, so the eventual fire stays visible in gameModelFlow.
+  """
+  flowId: String
+  """
+  What armed it: function (a timer effect inside an invoke) | client (gameModelScheduleInvoke) | automation.
+  """
+  armedBy: String!
+  """When the timer was armed."""
+  createdAt: DateTime!
 }
 
 """
@@ -5393,6 +5477,36 @@ type GmFunctionPermissionEffect {
 }
 
 """
+One named parameter expression bound into a timer invocation at arm time.
+"""
+type GmTimerParam {
+  """Parameter name on the timer's target function."""
+  name: String!
+  """The expression (source) evaluated when arming."""
+  expression: String!
+}
+
+"""
+A declarative one-shot timer the function arms transactionally with its mutations: invoke another function after a delay. Fires exactly once, survives replica restarts, and is bounded by the app's automation guardrails.
+"""
+type GmFunctionTimer {
+  """The function invoked when the timer fires."""
+  functionName: String!
+  """
+  Container reference (source) the delayed invocation runs against, e.g. "self".
+  """
+  target: String!
+  """The expression (source) resolving the delay in milliseconds."""
+  delayMsExpression: String!
+  """
+  Optional expression (source) resolving the app-scoped dedupe key; re-arming the same key replaces the pending timer.
+  """
+  dedupeKeyExpression: String
+  """Parameters bound into the delayed invocation."""
+  params: [GmTimerParam!]!
+}
+
+"""
 A studio-defined function: a named, sandboxed behavior over containers (parameters, declared mutations, optional return, and an authority invoke policy).
 """
 type GmFunction {
@@ -5430,6 +5544,10 @@ type GmFunction {
   Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations.
   """
   permissionEffects: [GmFunctionPermissionEffect!]!
+  """
+  Declarative one-shot timers armed atomically with the function's mutations.
+  """
+  timers: [GmFunctionTimer!]!
   """Non-fatal static-analysis warnings from the last upload."""
   warnings: [String!]!
 }
@@ -7443,6 +7561,17 @@ type Query {
     """Optional: only triggers for this automation. Omit for all."""
     automationName: String
   ): [GmAutomationTrigger!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Pending one-shot timers for the app, soonest first. A timer leaves this list the moment it is claimed for execution, so an empty list means nothing is scheduled (not that nothing ran). Requires app-admin ('manage_apps').
+  """
+  gameModelTimers(
+    """The app (tenant) whose pending timers to list."""
+    appId: BigInt!
+    """Only timers scoped to this session."""
+    sessionId: String
+    """Max rows to return (1-200, default 50)."""
+    limit: Int
+  ): [GmTimer!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Read the app's automation policy (guardrails / platform ceilings). Requires app-admin ('manage_apps').
   """
@@ -9555,6 +9684,26 @@ type Mutation {
     """The automation name to run now."""
     name: String!
   ): GmAutomationRun! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Arm a one-shot timer: invoke a function once, after a delay. The timer is durable (it survives an API restart) and claimed by exactly one replica, so it fires once. The target function must be autonomousInvocable, because the fire is headless and runs with system authority rather than a player's — which is also why this needs app-admin ('manage_apps'). For player-driven delays, author a timers effect on a function instead so the delay is part of your game logic. Supply dedupeKey to make re-arming replace the pending timer rather than queue another fire.
+  """
+  gameModelScheduleInvoke(
+    """
+    The app, function name, self container, delay in ms, and optional params, session, and dedupe key.
+    """
+    input: ScheduleInvokeInput!
+  ): GmTimer! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Cancel pending timers by id or by dedupe key, returning how many were removed. A timer already claimed for execution cannot be cancelled. Requires app-admin ('manage_apps').
+  """
+  gameModelCancelTimer(
+    """The app (tenant) that owns the timer."""
+    appId: BigInt!
+    """Cancel this specific timer id."""
+    timerId: String
+    """Cancel the pending timer holding this dedupe key."""
+    dedupeKey: String
+  ): Int! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save). Subject to the app's session creation policy. The caller becomes the creator and a participant. Requires a valid token.
   """
@@ -11717,6 +11866,10 @@ input UpsertFunctionInput {
   Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations. Max 4 per function.
   """
   permissionEffects: [FunctionPermissionEffectInput!]
+  """
+  Declarative one-shot timers armed atomically with the function's mutations: invoke another function after a delay. Max 4 per function.
+  """
+  timers: [FunctionTimerInput!]
 }
 
 """A typed parameter declaration for a function."""
@@ -11799,6 +11952,42 @@ input FunctionPermissionEffectInput {
   Grant only: optional expression resolving a TTL in seconds (int > 0) after which the grant expires (rentals/leases), e.g. '86400'. Omit for a non-expiring grant.
   """
   ttlSecondsExpression: String
+}
+
+"""
+A declarative one-shot timer the function arms TRANSACTIONALLY with its property mutations: "invoke this function again in N ms". The timer survives replica restarts and is claimed by the same dispatcher that runs scheduled automations, so it fires exactly once. Rolling back the invocation arms nothing. The target function must be autonomousInvocable, because a timer fires headlessly with no player in the request.
+"""
+input FunctionTimerInput {
+  """
+  The function to invoke when the timer fires. Must exist and be autonomousInvocable.
+  """
+  functionName: String!
+  """
+  Container reference the delayed invocation runs against, e.g. "self" (default) or "$target_id".
+  """
+  target: String
+  """
+  Expression resolving the delay in milliseconds (int > 0), floored by the app's minTimerDelayMs policy.
+  """
+  delayMsExpression: String!
+  """
+  Optional expression resolving an app-scoped string key. Re-arming the same key replaces the pending timer instead of queueing another fire, so a repeatedly invoked function cannot flood the timer queue.
+  """
+  dedupeKeyExpression: String
+  """
+  Parameters bound into the delayed invocation. Expressions are evaluated at arm time on post-mutation state, so the fired invocation sees the values the arming logic decided.
+  """
+  params: [TimerParamInput!]
+}
+
+"""One named parameter expression bound into a timer invocation."""
+input TimerParamInput {
+  """Parameter name on the timer's target function."""
+  name: String!
+  """
+  Expression evaluated when the timer is armed (not when it fires), in the arming invocation context.
+  """
+  expression: String!
 }
 
 """
@@ -11887,6 +12076,10 @@ input SeedFunctionInput {
   Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations. Max 4 per function.
   """
   permissionEffects: [FunctionPermissionEffectInput!]
+  """
+  Declarative one-shot timers armed atomically with the function's mutations: invoke another function after a delay. Max 4 per function.
+  """
+  timers: [FunctionTimerInput!]
 }
 
 """A container (instance) to create as part of a seed."""
@@ -12043,12 +12236,22 @@ input UpsertAutomationTriggerInput {
   Event to observe: function_invoked | property_changed | container_created | player_count_changed. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params.
   """
   onEvent: String!
-  """Filter: only this function name. Rejected for player_count_changed."""
+  """
+  Filter: only this function name. Applies to function_invoked; rejected for property_changed, container_created, and player_count_changed.
+  """
   functionName: String
-  """Filter: only this container type. Rejected for player_count_changed."""
+  """
+  Filter: only this container type. For function_invoked this is the type of the invocation's "self" container, so you can watch "this function, on this type". Rejected for player_count_changed.
+  """
   containerTypeName: String
-  """Filter: only this property key. Rejected for player_count_changed."""
+  """
+  Filter: only this property key. Applies to property_changed; rejected for function_invoked, container_created, and player_count_changed.
+  """
   propertyKey: String
+  """
+  property_changed only: which writes to observe — "direct" (gameModelSetProperty), "function" (a mutation applied inside a gameModelInvoke, automation run, or timer fire), or "any" (default). Rejected for other events.
+  """
+  writeSource: String
   """
   Debounce window in ms. player_count_changed uses trailing-edge coalescing (first previous count plus latest current count/revision); existing model events retain leading-edge suppression.
   """
@@ -12071,6 +12274,44 @@ input SetAutomationPolicyInput {
   maxCascadeDepth: Int
   """Max aggregate runs per minute for the app."""
   globalRunsPerMinute: Int
+  """
+  Minimum timer delay (ms) floor for gameModelScheduleInvoke and function timer effects.
+  """
+  minTimerDelayMs: Int
+  """Max pending (armed but not yet fired) timers the app may hold at once."""
+  maxPendingTimers: Int
+}
+
+"""
+Arm a one-shot timer that invokes a function after a delay. The target function must be autonomousInvocable, because the timer fires headlessly with no player in the request.
+"""
+input ScheduleInvokeInput {
+  """The app (tenant)."""
+  appId: BigInt!
+  """
+  The function to invoke when the timer fires. Must be autonomousInvocable.
+  """
+  functionName: String!
+  """
+  The 'self' container the delayed invocation runs against. Must belong to the app, and match the function's bound container type when it has one.
+  """
+  selfContainerId: String!
+  """
+  Delay in milliseconds before the timer fires. Must be at least the app's minTimerDelayMs and at most 30 days.
+  """
+  delayMs: Int!
+  """
+  JSON object of parameters passed to the delayed invocation. Defaults to '{}'.
+  """
+  paramsJson: String
+  """
+  Session for the delayed invocation. Defaults to the container's own session.
+  """
+  sessionId: String
+  """
+  Optional app-scoped key. Re-arming the same key replaces the pending timer instead of adding another, which makes "reset the countdown" a single call.
+  """
+  dedupeKey: String
 }
 
 """Create a runtime session."""

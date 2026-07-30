@@ -38,6 +38,16 @@ fragment GmFunctionFields on GmFunction {
     gridIdExpression
     ttlSecondsExpression
   }
+  timers {
+    functionName
+    target
+    delayMsExpression
+    dedupeKeyExpression
+    params {
+      name
+      expression
+    }
+  }
 }
 
 fragment GmPropertyDefFields on GmPropertyDef {

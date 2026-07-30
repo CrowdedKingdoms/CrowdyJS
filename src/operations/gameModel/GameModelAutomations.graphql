@@ -42,7 +42,11 @@ fragment GmAutomationTriggerFields on GmAutomationTrigger {
   functionName
   containerTypeName
   propertyKey
+  writeSource
   debounceMs
+  lastMatchedAt
+  matchCount24h
+  warnings
 }
 
 fragment GmAutomationPolicyFields on GmAutomationPolicy {
@@ -53,6 +57,8 @@ fragment GmAutomationPolicyFields on GmAutomationPolicy {
   maxFanout
   maxCascadeDepth
   globalRunsPerMinute
+  minTimerDelayMs
+  maxPendingTimers
 }
 
 fragment GmAutomationRunFields on GmAutomationRun {
@@ -62,6 +68,7 @@ fragment GmAutomationRunFields on GmAutomationRun {
   automationId
   automationName
   triggerSource
+  triggerId
   parentRunId
   cascadeDepth
   startedAt
@@ -199,5 +206,36 @@ query GameModelAppDiagnostics($appId: BigInt!) {
       invocations
       failures
     }
+  }
+}
+
+fragment GmTimerFields on GmTimer {
+  timerId
+  appId
+  sessionId
+  selfContainerId
+  functionName
+  paramsJson
+  fireAt
+  dedupeKey
+  cascadeDepth
+  flowId
+  armedBy
+  createdAt
+}
+
+mutation GameModelScheduleInvoke($input: ScheduleInvokeInput!) {
+  gameModelScheduleInvoke(input: $input) {
+    ...GmTimerFields
+  }
+}
+
+mutation GameModelCancelTimer($appId: BigInt!, $timerId: String, $dedupeKey: String) {
+  gameModelCancelTimer(appId: $appId, timerId: $timerId, dedupeKey: $dedupeKey)
+}
+
+query GameModelTimers($appId: BigInt!, $sessionId: String, $limit: Int) {
+  gameModelTimers(appId: $appId, sessionId: $sessionId, limit: $limit) {
+    ...GmTimerFields
   }
 }
