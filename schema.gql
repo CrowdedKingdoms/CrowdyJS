@@ -4031,6 +4031,10 @@ type ServerStatus {
   """
   clients: Int!
   """
+  True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself.
+  """
+  drainRequested: Boolean!
+  """
   Peak CPU utilization percentage (0-100) observed in the last reporting window. Null until reported.
   """
   cpuPeakPct: Float

@@ -9645,6 +9645,8 @@ export type ServerStatus = {
   cpuPeakPct: Maybe<Scalars['Float']['output']>;
   /** When this server was first registered in the fleet. */
   createdAt: Scalars['DateTime']['output'];
+  /** True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself. */
+  drainRequested: Scalars['Boolean']['output'];
   /** IPv4 address native clients send spatial UDP datagrams to (paired with clientPort). Preferred over ip6 for inter-host UDP in current deployments. */
   ip4: Scalars['String']['output'];
   /** IPv6 address of the UDP game server. Global IPv6 between hosts can be unroutable in some deployments, so native clients generally use ip4 + clientPort. */
