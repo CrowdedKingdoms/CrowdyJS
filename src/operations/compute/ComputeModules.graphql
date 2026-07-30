@@ -9,6 +9,8 @@ fragment ComputeModuleFields on WasmModule {
   circuitState
   consecutiveFailures
   cooldownUntil
+  breakerLatchedAt
+  breakerReason
   lastError
   createdAt
   updatedAt
@@ -61,6 +63,9 @@ fragment ComputePolicyFields on WasmModulePolicy {
   maxEgressBytesPerMin
   failureThreshold
   cooldownMs
+  statePersistMinIntervalMs
+  maxStateWritesPerMin
+  maxStateBytesPerMin
 }
 
 fragment ComputeRunFields on WasmModuleRun {
@@ -97,6 +102,12 @@ mutation ComputeDeployVersion($input: DeployComputeVersionInput!) {
 
 mutation ComputeSetModuleEnabled($appId: BigInt!, $name: String!, $enabled: Boolean!) {
   computeSetModuleEnabled(appId: $appId, name: $name, enabled: $enabled) {
+    ...ComputeModuleFields
+  }
+}
+
+mutation ComputeResetBreaker($appId: BigInt!, $name: String!, $reason: String!) {
+  computeResetBreaker(appId: $appId, name: $name, reason: $reason) {
     ...ComputeModuleFields
   }
 }
