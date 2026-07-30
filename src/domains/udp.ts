@@ -29,6 +29,16 @@ import type { RealtimeMetrics } from '../metrics.js';
 import { payloadBytesOf } from '../metrics.js';
 import type { SpatialNotification } from '../realtime.js';
 import { SequenceAllocator } from '../utils.js';
+import {
+  serializeActorUpdate,
+  serializeAudioPacket,
+  serializeChannelMessage,
+  serializeClientEvent,
+  serializeSingleActorMessage,
+  serializeTextPacket,
+  serializeVoxelUpdate,
+  type RelaySignContext,
+} from '../binary-wire.js';
 
 /**
  * UDP proxy access for browser-style clients that can't open raw UDP sockets.
@@ -78,6 +88,23 @@ export class UdpAPI {
   }
 
   /**
+   * Try to send over the binary relay (`crowdy-relay-v1`). Returns `null`
+   * when the relay is not active/ready so the caller falls back to the
+   * GraphQL mutation. Client-side serialize + HMAC; no GraphQL on this path.
+   */
+  private async sendViaRelay(
+    serialize: (ctx: RelaySignContext) => Promise<Uint8Array>,
+  ): Promise<boolean | null> {
+    if (!this.subs.binarySendReady()) return null;
+    try {
+      return await this.subs.sendBinaryFrame(serialize);
+    } catch {
+      // Relay hiccup (socket flapped mid-send) — let GraphQL carry this one.
+      return null;
+    }
+  }
+
+  /**
    * Open (or re-fetch) the UDP proxy session for this game token. Idempotent:
    * if a session is already open it returns the existing status; on first open
    * it binds a socket and selects the game server with the fewest clients.
@@ -92,6 +119,19 @@ export class UdpAPI {
    *   valid bearer game token.
    */
   async connect(): Promise<ConnectUdpProxyMutation['connectUdpProxy']> {
+    if (this.subs.usingBinaryTransport()) {
+      // Binary relay mode: the relay session (opened by subscribe) IS the
+      // proxy session. Never open a parallel GraphQL proxy session for the
+      // same token — its idle teardown would deauthorize the token on the
+      // game server underneath the relay.
+      const ready = await this.subs.ensureBinaryReady();
+      return {
+        connected: ready,
+        serverIp6: null,
+        serverClientPort: null,
+        lastMessageTime: null,
+      };
+    }
     const data = await this.gql.request(ConnectUdpProxyDocument, undefined);
     return data.connectUdpProxy;
   }
@@ -106,6 +146,10 @@ export class UdpAPI {
    * @throws {CrowdyGraphQLError} on auth failures.
    */
   async disconnect(): Promise<boolean> {
+    if (this.subs.usingBinaryTransport()) {
+      this.subs.disconnect();
+      return true;
+    }
     const data = await this.gql.request(DisconnectUdpProxyDocument, undefined);
     return data.disconnectUdpProxy;
   }
@@ -162,6 +206,13 @@ export class UdpAPI {
   async sendActorUpdate(
     input: SendActorUpdateMutationVariables['input'],
   ): Promise<boolean> {
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeActorUpdate(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('actorUpdate', input);
+      return viaRelay;
+    }
     if (this.subs.wsUplinkReady()) {
       try {
         const data = await this.subs.executeMutation(SendActorUpdateDocument, {
@@ -269,6 +320,13 @@ export class UdpAPI {
   async sendVoxelUpdate(
     input: SendVoxelUpdateMutationVariables['input'],
   ): Promise<boolean> {
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeVoxelUpdate(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('voxelUpdate', input);
+      return viaRelay;
+    }
     const data = await this.gql.request(SendVoxelUpdateDocument, { input });
     this.record('voxelUpdate', input);
     return data.sendVoxelUpdate;
@@ -329,6 +387,13 @@ export class UdpAPI {
   async sendAudioPacket(
     input: SendAudioPacketMutationVariables['input'],
   ): Promise<boolean> {
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeAudioPacket(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('audio', input);
+      return viaRelay;
+    }
     const data = await this.gql.request(SendAudioPacketDocument, { input });
     this.record('audio', input);
     return data.sendAudioPacket;
@@ -385,6 +450,13 @@ export class UdpAPI {
   async sendTextPacket(
     input: SendTextPacketMutationVariables['input'],
   ): Promise<boolean> {
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeTextPacket(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('text', input);
+      return viaRelay;
+    }
     const data = await this.gql.request(SendTextPacketDocument, { input });
     this.record('text', input);
     return data.sendTextPacket;
@@ -445,6 +517,13 @@ export class UdpAPI {
   async sendClientEvent(
     input: SendClientEventMutationVariables['input'],
   ): Promise<boolean> {
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeClientEvent(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('clientEvent', input);
+      return viaRelay;
+    }
     const data = await this.gql.request(SendClientEventDocument, { input });
     this.record('clientEvent', input);
     return data.sendClientEvent;
@@ -503,6 +582,13 @@ export class UdpAPI {
   async sendSingleActorMessage(
     input: SendSingleActorMessageMutationVariables['input'],
   ): Promise<boolean> {
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeSingleActorMessage(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('singleActorMessage', input);
+      return viaRelay;
+    }
     const data = await this.gql.request(SendSingleActorMessageDocument, {
       input,
     });
@@ -533,6 +619,13 @@ export class UdpAPI {
   async sendChannelMessage(
     input: SendChannelMessageMutationVariables['input'],
   ): Promise<boolean> {
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeChannelMessage(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('channelMessage', input);
+      return viaRelay;
+    }
     const data = await this.gql.request(SendChannelMessageDocument, { input });
     this.record('channelMessage', input);
     return data.sendChannelMessage;

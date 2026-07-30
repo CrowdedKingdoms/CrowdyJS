@@ -74,6 +74,26 @@ export {
   type UdpNotificationHandlers,
 } from './realtime.js';
 export {
+  BinaryRelayTransport,
+  RELAY_SUBPROTOCOL,
+  type BinaryRelayCallbacks,
+  type BinaryRelayConfig,
+} from './binary-relay.js';
+export {
+  RELAY_MAX_DATAGRAM_BYTES,
+  WireMessageType,
+  createSignContext,
+  parseRelayFrame,
+  serializeActorUpdate,
+  serializeAudioPacket,
+  serializeChannelMessage,
+  serializeClientEvent,
+  serializeSingleActorMessage,
+  serializeTextPacket,
+  serializeVoxelUpdate,
+  type RelaySignContext,
+} from './binary-wire.js';
+export {
   RealtimeMetrics,
   payloadBytesOf,
   type RealtimeMetricsCounters,
