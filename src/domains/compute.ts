@@ -9,6 +9,9 @@ import {
   ComputeSetModuleEnabledDocument,
   type ComputeSetModuleEnabledMutation,
   type ComputeSetModuleEnabledMutationVariables,
+  ComputeResetBreakerDocument,
+  type ComputeResetBreakerMutation,
+  type ComputeResetBreakerMutationVariables,
   ComputeDeleteModuleDocument,
   type ComputeDeleteModuleMutation,
   type ComputeDeleteModuleMutationVariables,
@@ -155,12 +158,34 @@ export class ComputeAPI {
    * Enable or disable a module. Enabling requires a successfully compiled
    * deployed version and resets the failure circuit; disabling stops all
    * scheduling. Requires the org **`manage_compute`** permission.
+   *
+   * This does **not** restart a module that was stopped for exceeding a
+   * resource limit (`breakerLatchedAt`). Deploy a fixed version, or call
+   * {@link resetBreaker}.
    */
   async setModuleEnabled(
     variables: ComputeSetModuleEnabledMutationVariables,
   ): Promise<ComputeSetModuleEnabledMutation['computeSetModuleEnabled']> {
     const data = await this.gql.request(ComputeSetModuleEnabledDocument, variables);
     return data.computeSetModuleEnabled;
+  }
+
+  /**
+   * Restart a module that was stopped for exceeding a resource limit, without
+   * deploying a new version.
+   *
+   * A module stopped this way reports `breakerLatchedAt` and a
+   * `breakerReason` saying what it exceeded. Deploying a fix clears it
+   * automatically and is the normal path; use this when the limit itself was
+   * wrong, or the load is being accepted deliberately. The reason is recorded
+   * with the module's history. Requires the org **`manage_compute`**
+   * permission.
+   */
+  async resetBreaker(
+    variables: ComputeResetBreakerMutationVariables,
+  ): Promise<ComputeResetBreakerMutation['computeResetBreaker']> {
+    const data = await this.gql.request(ComputeResetBreakerDocument, variables);
+    return data.computeResetBreaker;
   }
 
   /**
