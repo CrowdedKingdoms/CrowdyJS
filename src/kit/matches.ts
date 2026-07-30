@@ -44,6 +44,25 @@ export interface KitMatch {
   channelId: string;
   /** Present when the blueprint was deployed with `turnTick`. */
   tickCount?: number;
+  /**
+   * The current turn's sequence number. Present only when the blueprint was
+   * deployed with `turnTimer`, which is how the helpers detect that turns
+   * carry a deadline.
+   */
+  turnSeq?: number;
+  /** The highest turn sequence whose deadline elapsed. See {@link turnExpired}. */
+  turnExpiredSeq?: number;
+}
+
+/**
+ * Whether the match's current turn has run out of time — true once the
+ * deadline for the open turn has fired. Always false for a match deployed
+ * without `turnTimer`, and false for a deadline stranded by an earlier turn,
+ * since those record a lower sequence than the one now open.
+ */
+export function turnExpired(match: KitMatch): boolean {
+  if (match.turnSeq === undefined || match.turnExpiredSeq === undefined) return false;
+  return match.turnSeq > 0 && match.turnExpiredSeq >= match.turnSeq;
 }
 
 /** One row of the match standings. */
@@ -224,8 +243,14 @@ export class MatchesKit {
    * Pass the turn to the next player via the platform's session-turn
    * authority (current holder, host, or admin — enforced by the service),
    * then ping the match channel so everyone re-pulls.
+   *
+   * For a match deployed with `turnTimer`, this opens the incoming turn first
+   * so it arrives with a deadline already running. Opening it before the
+   * handover also means the outgoing holder is still the session's turn user,
+   * which is what authorizes them to do it.
    */
   async endTurn(match: KitMatch, nextUserId: Scalars['BigInt']['input']) {
+    if (match.turnSeq !== undefined) await this.beginTurn(match);
     const session = await this.gameModel.setSessionTurn({
       appId: this.appId,
       sessionId: match.sessionId,
@@ -233,6 +258,35 @@ export class MatchesKit {
     });
     await this.notifyChanged(match);
     return session;
+  }
+
+  /**
+   * Open a turn and arm its deadline (`turnTimer` deployments only) — the
+   * deadline replaces any still pending for this match. `endTurn` calls this
+   * for you; call it directly to give the current player a fresh clock, e.g.
+   * after granting extra time.
+   */
+  async beginTurn(match: KitMatch): Promise<KitInvokeResult<number>> {
+    return kitInvoke<number>(this.gameModel, {
+      appId: String(this.appId),
+      functionName: this.names.beginTurnFn,
+      selfContainerId: match.metaId,
+      sessionId: match.sessionId,
+      params: {},
+    });
+  }
+
+  /**
+   * Cancel the pending turn deadline for this match, if any. Returns how many
+   * timers were dropped. Ending a match already strands its deadline, so this
+   * is only needed when you want turns to stop being timed while play
+   * continues.
+   */
+  async cancelTurnDeadline(match: KitMatch): Promise<number> {
+    return this.gameModel.cancelTimer({
+      appId: this.appId,
+      dedupeKey: `match_turn:${match.metaId}`,
+    });
   }
 
   /** Find-or-create a player's session-scoped Score row. */
@@ -299,18 +353,26 @@ export class MatchesKit {
     return rows.sort((a, b) => b.points - a.points);
   }
 
-  /** Finish the match and record the winner (creator or host). */
+  /**
+   * Finish the match and record the winner (creator or host). Also drops the
+   * pending turn deadline on a `turnTimer` match — `end_match` already
+   * strands it, so this just saves the pointless fire and channel ping.
+   */
   async finish(
     match: KitMatch,
     winnerUserId: Scalars['BigInt']['input'],
   ): Promise<KitInvokeResult<string>> {
-    return kitInvoke<string>(this.gameModel, {
+    const result = await kitInvoke<string>(this.gameModel, {
       appId: String(this.appId),
       functionName: this.names.endFn,
       selfContainerId: match.metaId,
       sessionId: match.sessionId,
       params: { winner_user_id: Number(winnerUserId) },
     });
+    if (result.success && match.turnSeq !== undefined) {
+      await this.cancelTurnDeadline(match);
+    }
+    return result;
   }
 
   /**
@@ -367,6 +429,10 @@ export class MatchesKit {
       channelId: String(props.channel_id ?? '0'),
       ...(props.tick_count !== undefined
         ? { tickCount: Number(props.tick_count) }
+        : {}),
+      ...(props.turn_seq !== undefined ? { turnSeq: Number(props.turn_seq) } : {}),
+      ...(props.turn_expired_seq !== undefined
+        ? { turnExpiredSeq: Number(props.turn_expired_seq) }
         : {}),
     };
   }

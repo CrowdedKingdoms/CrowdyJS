@@ -1,5 +1,6 @@
 import type {
   FunctionNotificationInput,
+  FunctionTimerInput,
   SeedFunctionInput,
   SeedPropertyDefInput,
 } from '../../generated/graphql.js';
@@ -26,11 +27,32 @@ export interface MatchesBlueprintOptions {
    */
   scoreAuthority?: KitTrustedAuthority;
   /**
-   * When set, adds a `turn_tick` interval automation that increments each
-   * active match's `tick_count` — the wall-clock-free timer primitive: store
-   * the tick at turn start and treat `tick_count - turn_started_tick >= N`
-   * as a timeout (there is no `now()` in expressions; counters replace
-   * clocks).
+   * When set, gives each turn a real wall-clock deadline. `begin_turn` bumps
+   * `turn_seq` and arms a one-shot timer — deduped per match, so arming the
+   * next turn replaces the previous deadline — that invokes `expire_turn`
+   * after `delayMs`. `expire_turn` records `turn_expired_seq` and pings the
+   * match channel, so the current turn is out of time exactly when
+   * `turn_expired_seq >= turn_seq`.
+   *
+   * That comparison is also the stale-fire guard: a timer already claimed
+   * when the player beat the clock fires against an older `turn_seq`, writes
+   * a lower `turn_expired_seq`, and can never satisfy it.
+   *
+   * Prefer this to {@link turnTick} — one timer per active match beats
+   * re-scanning every match on an interval, and the deadline is exact rather
+   * than rounded to the tick.
+   */
+  turnTimer?: { delayMs: number };
+  /**
+   * Adds a `turn_tick` interval automation that increments each active
+   * match's `tick_count`, so turn logic can compare
+   * `tick_count - turn_started_tick >= N`.
+   *
+   * @deprecated Counters were a workaround for expressions having no
+   * `now()`; one-shot timers made that unnecessary. Use {@link turnTimer},
+   * which gives an exact deadline and arms work per match instead of
+   * scanning all of them every interval. Still honoured, and slated for
+   * removal in the next major.
    */
   turnTick?: { intervalMs: number };
   /** Owner-mirror typing (see the kit convention). Defaults to `'int'`. */
@@ -45,6 +67,8 @@ export interface MatchesNames {
   advanceRoundFn: string;
   scoreFn: string;
   endFn: string;
+  beginTurnFn: string;
+  expireTurnFn: string;
   turnTickFn: string;
   turnTickAutomation: string;
 }
@@ -59,6 +83,8 @@ export function matchesNames(typePrefix = ''): MatchesNames {
     advanceRoundFn: `${fnPrefix}advance_round`,
     scoreFn: `${fnPrefix}score_points`,
     endFn: `${fnPrefix}end_match`,
+    beginTurnFn: `${fnPrefix}begin_turn`,
+    expireTurnFn: `${fnPrefix}expire_turn`,
     turnTickFn: `${fnPrefix}turn_tick`,
     turnTickAutomation: `${fnPrefix.replace(/_/g, '-')}match-turn-tick`,
   };
@@ -72,6 +98,21 @@ function matchChangedNotification(): FunctionNotificationInput {
       { name: 'channel_id', expression: 'self.channel_id' },
       { name: 'payload', expression: '"match_changed"' },
     ],
+  };
+}
+
+/**
+ * The one-shot deadline a turn arms for itself. Deduped per match container,
+ * so opening the next turn replaces the pending deadline rather than stacking
+ * another one; the seq travels as a parameter so the fire can tell whether the
+ * turn it was armed for is still open.
+ */
+function turnDeadlineTimer(names: MatchesNames, delayMs: number): FunctionTimerInput {
+  return {
+    functionName: names.expireTurnFn,
+    delayMsExpression: String(delayMs),
+    dedupeKeyExpression: 'concat("match_turn:", $self_container_id)',
+    params: [{ name: 'turn_seq', expression: 'self.turn_seq' }],
   };
 }
 
@@ -99,6 +140,7 @@ export function matchesBlueprint(options: MatchesBlueprintOptions = {}): KitBlue
   const {
     typePrefix = '',
     scoreAuthority = 'host',
+    turnTimer,
     turnTick,
     ownerIdKind: kind = 'int',
   } = options;
@@ -169,6 +211,26 @@ export function matchesBlueprint(options: MatchesBlueprintOptions = {}): KitBlue
       description:
         'The per-match channel lifecycle notifications ping (notify-to-pull).',
     },
+    ...(turnTimer
+      ? [
+          {
+            containerTypeName: names.metaType,
+            key: 'turn_seq',
+            valueType: 'int',
+            defaultValueJson: '0',
+            description:
+              'Monotonic turn counter bumped by begin_turn; each turn arms a deadline tagged with this value.',
+          },
+          {
+            containerTypeName: names.metaType,
+            key: 'turn_expired_seq',
+            valueType: 'int',
+            defaultValueJson: '0',
+            description:
+              'Highest turn_seq whose deadline elapsed. The turn is out of time iff turn_expired_seq >= turn_seq.',
+          },
+        ]
+      : []),
     ...(turnTick
       ? [
           {
@@ -191,7 +253,41 @@ export function matchesBlueprint(options: MatchesBlueprintOptions = {}): KitBlue
     },
   ];
 
+  // expire_turn is declared before anything arms it, so the seed resolves the
+  // timer target in one pass instead of warning about a forward reference.
+  const expireTurnFunction: SeedFunctionInput[] = turnTimer
+    ? [
+        {
+          name: names.expireTurnFn,
+          containerTypeName: names.metaType,
+          returnType: 'int',
+          parameters: [
+            {
+              name: 'turn_seq',
+              valueType: 'int',
+              required: true,
+              description: 'The turn this deadline was armed for.',
+            },
+          ],
+          mutations: [
+            {
+              target: 'self',
+              property: 'turn_expired_seq',
+              expression: 'max(self.turn_expired_seq, $turn_seq)',
+            },
+          ],
+          returnExpression: 'self.turn_expired_seq',
+          invokePolicyJson: kitPolicyJson({ type: 'is_automation' }),
+          autonomousInvocable: true,
+          notifications: [matchChangedNotification()],
+          description:
+            'Fired by the turn deadline: record that turn $turn_seq ran out and ping the match channel. max() keeps turn_expired_seq monotonic, so a deadline that was already claimed when the player beat the clock lands below turn_seq and is ignored.',
+        },
+      ]
+    : [];
+
   const functions: SeedFunctionInput[] = [
+    ...expireTurnFunction,
     {
       name: names.startFn,
       containerTypeName: names.metaType,
@@ -199,12 +295,17 @@ export function matchesBlueprint(options: MatchesBlueprintOptions = {}): KitBlue
       mutations: [
         { target: 'self', property: 'state', expression: '"active"' },
         { target: 'self', property: 'round', expression: '1' },
+        ...(turnTimer
+          ? [{ target: 'self', property: 'turn_seq', expression: '1' }]
+          : []),
       ],
       returnExpression: 'self.state',
+      ...(turnTimer ? { timers: [turnDeadlineTimer(names, turnTimer.delayMs)] } : {}),
       invokePolicyJson: creatorOrHost('self.state == "lobby"'),
       notifications: [matchChangedNotification()],
-      description:
-        'Start the match (creator or host): lobby → active, round 1; pings the match channel post-commit.',
+      description: turnTimer
+        ? 'Start the match (creator or host): lobby → active, round 1, and arm the first turn’s deadline; pings the match channel post-commit.'
+        : 'Start the match (creator or host): lobby → active, round 1; pings the match channel post-commit.',
     },
     {
       name: names.advanceRoundFn,
@@ -232,6 +333,12 @@ export function matchesBlueprint(options: MatchesBlueprintOptions = {}): KitBlue
       mutations: [
         { target: 'self', property: 'state', expression: '"finished"' },
         { target: 'self', property: 'winner_user_id', expression: '$winner_user_id' },
+        // Advancing the seq strands any deadline still pending: it was armed
+        // for the previous turn, so its write can no longer reach turn_seq and
+        // a finished match never reads as out of time.
+        ...(turnTimer
+          ? [{ target: 'self', property: 'turn_seq', expression: 'self.turn_seq + 1' }]
+          : []),
       ],
       returnExpression: 'self.state',
       invokePolicyJson: creatorOrHost('self.state == "active"'),
@@ -260,6 +367,33 @@ export function matchesBlueprint(options: MatchesBlueprintOptions = {}): KitBlue
         "Add points to a player's Score row — trusted (host-refereed by default).",
     },
   ];
+
+  if (turnTimer) {
+    functions.push({
+      name: names.beginTurnFn,
+      containerTypeName: names.metaType,
+      returnType: 'int',
+      mutations: [{ target: 'self', property: 'turn_seq', expression: 'self.turn_seq + 1' }],
+      returnExpression: 'self.turn_seq',
+      timers: [turnDeadlineTimer(names, turnTimer.delayMs)],
+      invokePolicyJson: kitPolicyJson({
+        type: 'and',
+        rules: [
+          {
+            type: 'or',
+            rules: [
+              { type: 'is_host' },
+              { type: 'condition', expression: 'self.creator_user_id == $caller_user_id' },
+              { type: 'condition', expression: '$current_turn_user_id == $caller_user_id' },
+            ],
+          },
+          { type: 'condition', expression: 'self.state == "active"' },
+        ],
+      }),
+      description:
+        "Open a turn: bump turn_seq and arm this turn's deadline (host, creator, or the outgoing turn holder). Call it before handing the turn over so the incoming player is never left without a clock.",
+    });
+  }
 
   const automations: KitAutomationSpec[] = [];
   if (turnTick) {

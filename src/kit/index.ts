@@ -108,6 +108,7 @@ export {
 } from './kit.js';
 export {
   MatchesKit,
+  turnExpired,
   type KitMatch,
   type KitMatchScore,
   type MatchesKitOptions,

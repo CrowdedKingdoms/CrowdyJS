@@ -26,6 +26,13 @@ export interface QuestAdvanceSpec {
   functionName?: string;
   containerTypeName?: string;
   propertyKey?: string;
+  /**
+   * `property_changed` only: which writes advance the quest. Kit progress
+   * properties are written by functions (`advance_quest`, the daily reset),
+   * not by client `setProperty` calls, so watching one needs `'function'` or
+   * `'any'` — the default `'direct'` would never match.
+   */
+  writeSource?: 'direct' | 'function' | 'any';
   debounceMs?: number;
   /** Progress added per event. Defaults to 1. */
   amount?: number;
@@ -340,6 +347,7 @@ export function questsBlueprint(options: QuestsBlueprintOptions = {}): KitBluepr
         ? { containerTypeName: spec.containerTypeName }
         : {}),
       ...(spec.propertyKey !== undefined ? { propertyKey: spec.propertyKey } : {}),
+      ...(spec.writeSource !== undefined ? { writeSource: spec.writeSource } : {}),
       ...(spec.debounceMs !== undefined ? { debounceMs: spec.debounceMs } : {}),
     });
   }
