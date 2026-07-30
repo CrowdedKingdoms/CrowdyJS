@@ -95,7 +95,15 @@ export class UdpAPI {
   private async sendViaRelay(
     serialize: (ctx: RelaySignContext) => Promise<Uint8Array>,
   ): Promise<boolean | null> {
-    if (!this.subs.binarySendReady()) return null;
+    if (!this.subs.usingBinaryTransport()) return null;
+    if (!this.subs.binarySendReady()) {
+      // Relay configured but not open yet (e.g. right after subscribe or a
+      // token rotation). Wait briefly rather than falling back to HTTP — an
+      // HTTP send would open a parallel GraphQL proxy session for the same
+      // token whose idle teardown deauthorizes it under the relay session.
+      const ready = await this.subs.ensureBinaryReady(2000);
+      if (!ready) return null;
+    }
     try {
       return await this.subs.sendBinaryFrame(serialize);
     } catch {
