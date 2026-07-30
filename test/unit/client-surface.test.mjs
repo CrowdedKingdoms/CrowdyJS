@@ -109,6 +109,7 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.host, 'host', ['get', 'heartbeat']);
   assertMethods(client.gameModel, 'gameModel', [
     'activePlayerCount', 'activePlayerCountChanged',
+    'scheduleInvoke', 'cancelTimer', 'timers',
   ]);
   assertMethods(client.gameApps, 'gameApps', [
     'ownership', 'assignOwnership', 'transferOwnership', 'userPermissions',
