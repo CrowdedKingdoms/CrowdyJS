@@ -945,6 +945,180 @@ test('matchesBlueprint generates lifecycle functions with channel notifications 
   );
 });
 
+test('matchesBlueprint turnTimer arms a deduped one-shot turn deadline instead of polling', async () => {
+  const { matchesBlueprint } = await loadSdk();
+
+  const bp = matchesBlueprint({ turnTimer: { delayMs: 30000 } });
+
+  // The deadline replaces the interval automation outright — nothing is
+  // scanned on a schedule.
+  assert.equal(bp.automations, undefined);
+  assert.equal(bp.functions.find((f) => f.name === 'turn_tick'), undefined);
+  assert.equal(
+    bp.propertyDefinitions.find((p) => p.key === 'tick_count'),
+    undefined,
+  );
+
+  const seqProps = bp.propertyDefinitions
+    .filter((p) => p.key === 'turn_seq' || p.key === 'turn_expired_seq')
+    .map((p) => [p.key, p.valueType, p.defaultValueJson]);
+  assert.deepEqual(seqProps, [
+    ['turn_seq', 'int', '0'],
+    ['turn_expired_seq', 'int', '0'],
+  ]);
+
+  // start_match opens turn 1 and arms its deadline, so the opening player is
+  // never left without a clock.
+  const start = bp.functions.find((f) => f.name === 'start_match');
+  assert.deepEqual(
+    start.mutations.map((m) => [m.property, m.expression]),
+    [['state', '"active"'], ['round', '1'], ['turn_seq', '1']],
+  );
+  assert.deepEqual(start.timers, [
+    {
+      functionName: 'expire_turn',
+      delayMsExpression: '30000',
+      dedupeKeyExpression: 'concat("match_turn:", $self_container_id)',
+      params: [{ name: 'turn_seq', expression: 'self.turn_seq' }],
+    },
+  ]);
+
+  // begin_turn re-arms with the same dedupe key, so the pending deadline is
+  // replaced rather than stacked.
+  const begin = bp.functions.find((f) => f.name === 'begin_turn');
+  assert.equal(begin.mutations[0].expression, 'self.turn_seq + 1');
+  assert.deepEqual(begin.timers, start.timers);
+  const beginPolicy = JSON.parse(begin.invokePolicyJson);
+  assert.deepEqual(
+    beginPolicy.rules.find((r) => r.type === 'or').rules.map((r) => r.type),
+    ['is_host', 'condition', 'condition'],
+  );
+  // The outgoing turn holder must be able to open the next turn.
+  assert.ok(
+    beginPolicy.rules
+      .find((r) => r.type === 'or')
+      .rules.some((r) => r.expression === '$current_turn_user_id == $caller_user_id'),
+  );
+
+  // expire_turn is timer-driven, monotonic, and pings the channel.
+  const expire = bp.functions.find((f) => f.name === 'expire_turn');
+  assert.equal(expire.autonomousInvocable, true);
+  assert.equal(expire.parameters[0].name, 'turn_seq');
+  assert.equal(
+    expire.mutations[0].expression,
+    'max(self.turn_expired_seq, $turn_seq)',
+  );
+  assert.equal(expire.notifications.length, 1);
+
+  // end_match advances the seq so a deadline still pending cannot mark a
+  // finished match as out of time.
+  const end = bp.functions.find((f) => f.name === 'end_match');
+  assert.equal(
+    end.mutations.find((m) => m.property === 'turn_seq').expression,
+    'self.turn_seq + 1',
+  );
+
+  // Without turnTimer none of the surface appears.
+  const plain = matchesBlueprint({});
+  assert.equal(plain.functions.find((f) => f.name === 'begin_turn'), undefined);
+  assert.equal(plain.functions.find((f) => f.name === 'expire_turn'), undefined);
+  assert.equal(
+    plain.functions.find((f) => f.name === 'start_match').timers,
+    undefined,
+  );
+});
+
+test('turnExpired only reports the open turn, ignoring a stranded deadline', async () => {
+  const { turnExpired } = await loadSdk();
+
+  // No turnTimer deployed → never expired.
+  assert.equal(turnExpired({ turnSeq: undefined, turnExpiredSeq: undefined }), false);
+  // Fresh match, nothing armed yet.
+  assert.equal(turnExpired({ turnSeq: 0, turnExpiredSeq: 0 }), false);
+  // Turn 3 open, its deadline fired.
+  assert.equal(turnExpired({ turnSeq: 3, turnExpiredSeq: 3 }), true);
+  // The player beat the clock and turn 4 opened, but turn 3's deadline had
+  // already been claimed and fired late — it must not read as expired.
+  assert.equal(turnExpired({ turnSeq: 4, turnExpiredSeq: 3 }), false);
+});
+
+test('quest, loot, and npc event triggers pass writeSource through to the API', async () => {
+  const { questsBlueprint, lootBlueprint, npcBlueprint } = await loadSdk();
+
+  // Kit progress properties are function-written, so a property_changed
+  // trigger needs an explicit writeSource or it would never match.
+  const quests = questsBlueprint({
+    quests: [{ questId: 'q1', title: 'Q1', goal: 3 }],
+    advanceOn: [
+      {
+        name: 'advance-on-count',
+        questId: 'q1',
+        onEvent: 'property_changed',
+        propertyKey: 'count',
+        writeSource: 'function',
+      },
+    ],
+  });
+  const questTrigger = quests.automationTriggers.find(
+    (t) => t.automationName === 'advance-on-count',
+  );
+  assert.equal(questTrigger.writeSource, 'function');
+
+  const loot = lootBlueprint({
+    tables: [{ tableId: 't1', entries: [{ itemId: 'gold', weight: 1 }] }],
+    drops: [
+      {
+        name: 'drop-on-death',
+        tableId: 't1',
+        onEvent: 'property_changed',
+        propertyKey: 'hp',
+        writeSource: 'any',
+      },
+    ],
+  });
+  assert.equal(
+    loot.automationTriggers.find((t) => t.automationName === 'drop-on-death')
+      .writeSource,
+    'any',
+  );
+
+  const npcs = npcBlueprint({
+    behaviors: [
+      {
+        name: 'flee-when-hurt',
+        functionName: 'npc_wander',
+        trigger: {
+          onEvent: 'property_changed',
+          propertyKey: 'health',
+          writeSource: 'function',
+        },
+      },
+    ],
+  });
+  assert.equal(
+    npcs.automationTriggers.find((t) => t.automationName === 'flee-when-hurt')
+      .writeSource,
+    'function',
+  );
+
+  // Omitted → absent, so the API default still applies.
+  const bare = questsBlueprint({
+    quests: [{ questId: 'q1', title: 'Q1', goal: 3 }],
+    advanceOn: [
+      {
+        name: 'advance-on-craft',
+        questId: 'q1',
+        onEvent: 'function_invoked',
+        functionName: 'consume_stack',
+      },
+    ],
+  });
+  assert.ok(
+    !('writeSource' in
+      bare.automationTriggers.find((t) => t.automationName === 'advance-on-craft')),
+  );
+});
+
 test('decksBlueprint generates owner-visibility hidden hands and position dealing', async () => {
   const { decksBlueprint, decksNames } = await loadSdk();
 

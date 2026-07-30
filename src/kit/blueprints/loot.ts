@@ -45,6 +45,12 @@ export interface LootDropSpec {
   functionName?: string;
   containerTypeName?: string;
   propertyKey?: string;
+  /**
+   * `property_changed` only: which writes roll the drop. Properties mutated
+   * by kit functions (a mob's `hp` reaching 0, say) need `'function'` or
+   * `'any'`; the default `'direct'` only sees client `setProperty` calls.
+   */
+  writeSource?: 'direct' | 'function' | 'any';
   debounceMs?: number;
   /** Rolls per event. Defaults to 1. */
   maxTargets?: number;
@@ -315,6 +321,7 @@ export function lootBlueprint(options: LootBlueprintOptions): KitBlueprint {
         ? { containerTypeName: drop.containerTypeName }
         : {}),
       ...(drop.propertyKey !== undefined ? { propertyKey: drop.propertyKey } : {}),
+      ...(drop.writeSource !== undefined ? { writeSource: drop.writeSource } : {}),
       ...(drop.debounceMs !== undefined ? { debounceMs: drop.debounceMs } : {}),
     });
   }

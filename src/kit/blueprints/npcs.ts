@@ -23,6 +23,13 @@ export type NpcBehaviorTrigger =
       functionName?: string;
       containerTypeName?: string;
       propertyKey?: string;
+      /**
+       * `property_changed` only: which writes wake the behavior. NPC state is
+       * written by behavior functions rather than by clients, so reacting to
+       * one needs `'function'` or `'any'` — the default `'direct'` sees only
+       * client `setProperty` calls.
+       */
+      writeSource?: 'direct' | 'function' | 'any';
       debounceMs?: number;
     };
 
@@ -176,6 +183,9 @@ export function npcBlueprint(options: NpcBlueprintOptions): KitBlueprint {
           : {}),
         ...(behavior.trigger.propertyKey !== undefined
           ? { propertyKey: behavior.trigger.propertyKey }
+          : {}),
+        ...(behavior.trigger.writeSource !== undefined
+          ? { writeSource: behavior.trigger.writeSource }
           : {}),
         ...(behavior.trigger.debounceMs !== undefined
           ? { debounceMs: behavior.trigger.debounceMs }
