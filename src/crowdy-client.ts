@@ -141,6 +141,25 @@ export interface CrowdyClientConfig {
      * realtime WebSocket URL with its path replaced by `/realtime`.
      */
     binaryRelayUrl?: string;
+    /**
+     * Ask where to reconnect when the current instance stops answering.
+     *
+     * Only needed under direct connect, where `gameApiUrl` names one api
+     * instance rather than a load balancer, so retrying it forever cannot
+     * recover from that instance going away. Wire it to whatever produced the
+     * URLs in the first place — usually `mintAppToken`, which picks a
+     * low-load instance — and the client will move itself.
+     *
+     * The returned pair is applied together: see the note on
+     * `GraphQLClient.setEndpoint` for why splitting HTTP and WS across two
+     * instances is worse than staying on a dead one.
+     */
+    rediscover?: () => Promise<{
+      httpUrl?: string | null;
+      wsUrl?: string | null;
+    } | null>;
+    /** Consecutive failures before re-discovering. Defaults to 3. */
+    rediscoverAfterFailures?: number;
   };
   /**
    * Optional sticky-LB cookie jar shared with the game-api HTTP client. Node
@@ -270,13 +289,34 @@ export class CrowdyClient {
 
     this.metrics = new RealtimeMetrics();
 
+    const { rediscover, ...realtimeConfig } = config.realtime ?? {};
     this.realtime = new SubscriptionManager(
       {
         wsEndpoint:
           config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
         logger: config.logger,
         lbCookieStore,
-        ...config.realtime,
+        ...realtimeConfig,
+        // Moving the websocket without moving HTTP would split one session
+        // across two instances, and both the UDP proxy socket and the relay
+        // worker are per-process — the client would look connected and
+        // receive nothing. So the two are applied as one step here rather
+        // than being left to the caller to remember.
+        ...(rediscover
+          ? {
+              rediscover: async () => {
+                const next = await rediscover();
+                if (!next) return null;
+                if (next.httpUrl) {
+                  this.graphql.setEndpoint(
+                    toGraphqlEndpoint(next.httpUrl, 'graphql') ??
+                      next.httpUrl,
+                  );
+                }
+                return { wsUrl: toGraphqlEndpoint(next.wsUrl ?? undefined, 'graphql') ?? null };
+              },
+            }
+          : {}),
       },
       this.session,
       this.metrics,
