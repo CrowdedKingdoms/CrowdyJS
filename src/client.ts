@@ -81,7 +81,8 @@ export interface GraphQLClientConfig {
  * Also exported under the alias {@link GraphQLTransport}.
  */
 export class GraphQLClient {
-  private readonly graphqlEndpoint: string;
+  /** Mutable: direct-connect re-discovery moves it to another instance. */
+  private graphqlEndpoint: string;
   private readonly timeout: number;
   private readonly session: SessionStore;
   private readonly logger: CrowdyLogger;
@@ -112,6 +113,22 @@ export class GraphQLClient {
    */
   getEndpoint(): string {
     return this.graphqlEndpoint;
+  }
+
+  /**
+   * Point subsequent requests at a different instance.
+   *
+   * Only meaningful under direct connect, where the endpoint names one api
+   * instance rather than a load balancer. It exists so HTTP can be moved in
+   * the SAME step as the WebSocket: the UDP proxy session and the relay
+   * session are per-process, so a client with its HTTP on one instance and
+   * its subscription on another gets no realtime traffic at all — the exact
+   * failure the sticky LB cookie was invented to prevent.
+   *
+   * @param endpoint Absolute GraphQL URL to POST to from now on.
+   */
+  setEndpoint(endpoint: string): void {
+    this.graphqlEndpoint = endpoint;
   }
 
   /**

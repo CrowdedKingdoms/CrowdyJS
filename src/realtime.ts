@@ -196,6 +196,28 @@ export interface RealtimeConfig {
    * {@link RealtimeClient.waitForSequence}). Defaults to `5000`.
    */
   waitTimeoutMs?: number;
+  /**
+   * Ask where to connect, when the current instance stops answering.
+   *
+   * Under direct connect a client is pinned to ONE api instance, so a
+   * reconnect loop against a dead or drained address never recovers — the
+   * instance the URL names is gone. This is called after
+   * {@link rediscoverAfterFailures} consecutive failures, and immediately when
+   * the server says it is draining, to ask the load balancer for a new one.
+   * The same idea as CrowdyCPP's `doAssign()` on Buddy's COMMAND_RECONNECT.
+   *
+   * Return null to keep the current URL (nothing better is available).
+   * Omitting it entirely keeps the old behaviour: retry one URL forever.
+   */
+  rediscover?: () => Promise<{ wsUrl?: string | null } | null>;
+  /**
+   * Consecutive connection failures before re-discovery. Defaults to `3`.
+   *
+   * Not 1: an instance is usually still there and a single failure is far
+   * more often a blip than a dead server, and re-resolving on every blip
+   * would move clients off healthy instances for no reason.
+   */
+  rediscoverAfterFailures?: number;
   /** Optional logger for realtime diagnostics. Defaults to a silent logger. */
   logger?: CrowdyLogger;
   /**
@@ -254,16 +276,24 @@ interface PendingWait {
  * rather than constructing it directly.
  */
 export class RealtimeClient {
-  private readonly wsUrl: string;
+  /** Mutable: re-discovery replaces it in place. */
+  private wsUrl: string;
   private readonly logger: CrowdyLogger;
   private readonly retryAttempts: number;
+  private readonly rediscover?: () => Promise<{ wsUrl?: string | null } | null>;
+  private readonly rediscoverAfterFailures: number;
+  /** Consecutive failed connects; reset by a successful one. */
+  private connectFailures = 0;
+  /** Guards against several failing attempts all re-resolving at once. */
+  private rediscovering: Promise<void> | null = null;
   private readonly retryInitialDelayMs: number;
   private readonly retryMaxDelayMs: number;
   private readonly waitTimeoutMs: number;
   private readonly lbCookieStore?: LbCookieStore;
   private readonly wsUplinkMutations: boolean;
   private readonly binaryTransport: boolean;
-  private readonly binaryRelayUrl: string;
+  /** Mutable alongside wsUrl: re-discovery moves both. */
+  private binaryRelayUrl: string;
   private binaryRelay: BinaryRelayTransport | null = null;
   private binaryUnavailable = false;
   private client: Client | null = null;
@@ -297,6 +327,8 @@ export class RealtimeClient {
     private readonly metrics?: RealtimeMetrics,
   ) {
     this.wsUrl = config.wsUrl || config.wsEndpoint || 'ws://localhost:3000/graphql';
+    this.rediscover = config.rediscover;
+    this.rediscoverAfterFailures = config.rediscoverAfterFailures ?? 3;
     this.logger = config.logger ?? silentLogger;
     this.retryAttempts = config.retryAttempts ?? 8;
     this.retryInitialDelayMs = config.retryInitialDelayMs ?? 250;
@@ -682,7 +714,10 @@ export class RealtimeClient {
     this.setStatus('connecting');
     const webSocketImpl = createStickyWebSocketImpl(this.lbCookieStore);
     this.client = createClient({
-      url: this.wsUrl,
+      // A function, not a string: graphql-ws calls it on every connect, so a
+      // re-discovered address is picked up by the reconnect already in
+      // flight rather than needing the client to be torn down and rebuilt.
+      url: () => this.wsUrl,
       lazy: true,
       retryAttempts: this.retryAttempts,
       ...(webSocketImpl ? { webSocketImpl } : {}),
@@ -712,7 +747,10 @@ export class RealtimeClient {
         await new Promise((resolve) => setTimeout(resolve, delay + jitter));
       },
       on: {
-        connected: () => this.setStatus('connected'),
+        connected: () => {
+          this.connectFailures = 0;
+          this.setStatus('connected');
+        },
         closed: () => {
           if (this.desired) {
             this.setStatus('reconnecting');
@@ -722,6 +760,18 @@ export class RealtimeClient {
         },
         error: (error) => {
           this.logger.error?.('Realtime WebSocket error', error);
+          // Under direct connect the URL names one instance, so repeated
+          // failures are evidence the instance is gone rather than that the
+          // network is briefly unhappy. Retrying the same address forever
+          // would leave the client permanently offline while the rest of the
+          // fleet is healthy.
+          this.connectFailures += 1;
+          if (
+            this.desired &&
+            this.connectFailures >= this.rediscoverAfterFailures
+          ) {
+            void this.rediscoverEndpoint('repeated connection failures');
+          }
           this.dispatchError(
             new CrowdyRealtimeError('Realtime WebSocket error', {
               code: 'WEBSOCKET_ERROR',
@@ -842,12 +892,88 @@ export class RealtimeClient {
     this.ensureSubscription();
   }
 
+  /**
+   * Ask discovery for a different instance and reconnect to it.
+   *
+   * Coalesced: several failing attempts arriving together must not produce
+   * several discovery calls, which would spread one client's reconnect across
+   * several instances and defeat the point of being pinned to one.
+   *
+   * Never throws. Discovery being unreachable is not worse than the situation
+   * that prompted the call, and the existing backoff keeps retrying the URL we
+   * already have.
+   */
+  private async rediscoverEndpoint(reason: string): Promise<void> {
+    if (!this.rediscover) return;
+    if (this.rediscovering) return this.rediscovering;
+
+    this.rediscovering = (async () => {
+      try {
+        const next = await this.rediscover!();
+        const wsUrl = next?.wsUrl;
+        if (!wsUrl || wsUrl === this.wsUrl) {
+          this.logger.debug?.(
+            `Re-discovery (${reason}) returned no new endpoint; staying on ${this.wsUrl}`,
+          );
+          return;
+        }
+        this.logger.warn?.(
+          `Re-discovery (${reason}): moving realtime from ${this.wsUrl} to ${wsUrl}`,
+        );
+        this.wsUrl = wsUrl;
+        this.binaryRelayUrl = deriveBinaryRelayUrl(wsUrl);
+        this.connectFailures = 0;
+        // The graphql-ws client reads its URL through a function, so the
+        // reconnect already in flight picks this up. The binary relay holds
+        // its URL at construction, so it has to be rebuilt.
+        this.restartBinaryRelay();
+      } catch (error) {
+        this.logger.warn?.(
+          `Re-discovery (${reason}) failed; continuing with ${this.wsUrl}`,
+          error,
+        );
+      } finally {
+        this.rediscovering = null;
+      }
+    })();
+    return this.rediscovering;
+  }
+
+  /** Drop the relay so the next subscribe builds one against the new URL. */
+  private restartBinaryRelay(): void {
+    if (!this.binaryRelay) return;
+    try {
+      this.binaryRelay.disconnect();
+    } catch {
+      // Already closing; the point is only that it stops using the old URL.
+    }
+    this.binaryRelay = null;
+    if (this.desired && this.binaryTransport && !this.binaryUnavailable) {
+      this.ensureBinarySubscription();
+    }
+  }
+
   private dispatch(notification: UdpNotification): void {
     this.metrics?.recordReceived(
       notificationKind(notification.__typename),
       payloadBytesOf(notification as Record<string, unknown>),
     );
     this.resolvePending(notification);
+
+    // The instance is going away on purpose. Move now rather than waiting to
+    // fail: during a rolling deploy the server knows it is about to stop, and
+    // a client that waits for the socket to drop loses the seconds between
+    // the warning and the shutdown. Retryable, unlike the events below —
+    // there IS somewhere else to go, which is the whole point of the signal.
+    if (
+      notification.__typename === 'RealtimeConnectionEvent' &&
+      notification.code === SERVER_DRAINING_CODE
+    ) {
+      this.logger.warn?.(
+        'Server is draining; re-discovering a realtime endpoint',
+      );
+      void this.rediscoverEndpoint('server draining');
+    }
 
     // A non-retryable connection event (e.g. APP_ID_REQUIRED, AUTH_REQUIRED)
     // means the server completed the subscription and resubscribing would just
@@ -985,6 +1111,13 @@ function notificationKind(typename: string | undefined): string {
   if (!typename) return 'unknown';
   return NOTIFICATION_KINDS[typename] ?? typename;
 }
+
+/**
+ * Emitted by an instance the control plane has asked to drain. Matches the
+ * server's RealtimeConnectionEvent code so a rolling deploy can move clients
+ * off before it stops, instead of dropping them and letting them find out.
+ */
+export const SERVER_DRAINING_CODE = 'SERVER_DRAINING';
 
 /** Default relay endpoint: the realtime wsUrl with its path set to /realtime. */
 function deriveBinaryRelayUrl(wsUrl: string): string {
