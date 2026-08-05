@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '13.6.0';
+export const VERSION = '13.7.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -524,6 +524,10 @@ export {
   createMintRediscover,
   type MintCapablePortal,
 } from './rediscover.js';
+export {
+  createBootstrapRediscover,
+  type BootstrapRediscoverOptions,
+} from './bootstrap-rediscover.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from

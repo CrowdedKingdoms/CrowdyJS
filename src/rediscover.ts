@@ -15,10 +15,14 @@ export interface MintCapablePortal {
  * and the symptom is a realtime session that connects and then carries nothing.
  *
  * Re-minting is the fix because it goes back through the load balancer, which
- * picks a healthy instance. It has to be wired from the IDENTITY client rather
- * than defaulted inside the game client: minting needs the session token, a
- * game client holds an app-scoped one, and `gameClientBootstrap` exposes no
- * hostname a game client could use to find its own way.
+ * picks a healthy instance. It must be wired from the IDENTITY client, because
+ * minting needs the session token and a game client holds an app-scoped one.
+ *
+ * If you only have an app token, prefer `realtime.discoveryUrl` — since ck-api
+ * v1.20.0 `gameClientBootstrap` publishes the load balancer as `discoveryUrl`,
+ * and the client builds re-discovery from it with no callback at all. This
+ * helper remains the right choice when you already hold an identity client,
+ * since it re-mints rather than reusing a token that may be near expiry.
  *
  * ```ts
  * const gameClient = new CrowdyClient({
