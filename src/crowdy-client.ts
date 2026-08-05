@@ -337,6 +337,14 @@ export class CrowdyClient {
         // worker are per-process — the client would look connected and
         // receive nothing. So the two are applied as one step here rather
         // than being left to the caller to remember.
+        // A server-directed move needs HTTP to follow for exactly the same
+        // reason, and it always applies - it does not depend on the caller
+        // having wired re-discovery, because the server supplied the target.
+        onEndpointMove: (target: { httpUrl: string }) => {
+          this.graphql.setEndpoint(
+            toGraphqlEndpoint(target.httpUrl, 'graphql') ?? target.httpUrl,
+          );
+        },
         ...(rediscover
           ? {
               rediscover: async (appId: string | null) => {
