@@ -24,6 +24,7 @@
 import { AuthState } from './auth-state.js';
 import { GraphQLClient } from './client.js';
 import { LbCookieStore } from './lb-cookie-store.js';
+import { createBootstrapRediscover } from './bootstrap-rediscover.js';
 import { RealtimeMetrics } from './metrics.js';
 import { SubscriptionManager } from './subscriptions.js';
 import type { CrowdyLogger } from './logger.js';
@@ -154,12 +155,10 @@ export interface CrowdyClientConfig {
      * `GraphQLClient.setEndpoint` for why splitting HTTP and WS across two
      * instances is worse than staying on a dead one.
      *
-     * There is no default, and the reason is a server limitation worth knowing:
-     * re-discovery means calling `mintAppToken`, which requires the identity
-     * SESSION token, while a game client holds an app-scoped token.
-     * `gameClientBootstrap` returns no hostname, so a game client cannot ask
-     * where else to go. Until the server offers that, the identity client has
-     * to supply this — {@link createMintRediscover} does it in one line.
+     * Usually you do NOT need this: set `discoveryUrl` instead and the client
+     * builds re-discovery itself. Supply a callback only to override, e.g.
+     * {@link createMintRediscover} when you hold an identity client and would
+     * rather re-mint than reuse a token that may be near expiry.
      *
      * It receives the appId the realtime session is subscribed to, so one
      * implementation can serve a client that switches apps.
@@ -168,6 +167,17 @@ export interface CrowdyClientConfig {
       httpUrl?: string | null;
       wsUrl?: string | null;
     } | null>;
+    /**
+     * `gameClientBootstrap.discoveryUrl` — the environment's shared load
+     * balancer. Supplying it is enough to get re-discovery: the client builds a
+     * default {@link createBootstrapRediscover} from it, using the app-scoped
+     * token it already holds. Prefer this over writing a callback; pass an
+     * explicit `rediscover` only to override.
+     *
+     * Must be the LOAD BALANCER, not an instance hostname — a discovery URL
+     * that dies with the instance it is meant to replace is worse than none.
+     */
+    discoveryUrl?: string;
     /** Consecutive failures before re-discovering. Defaults to 3. */
     rediscoverAfterFailures?: number;
   };
@@ -299,7 +309,22 @@ export class CrowdyClient {
 
     this.metrics = new RealtimeMetrics();
 
-    const { rediscover, ...realtimeConfig } = config.realtime ?? {};
+    const {
+      rediscover: explicitRediscover,
+      discoveryUrl,
+      ...realtimeConfig
+    } = config.realtime ?? {};
+    // Recovery should not depend on every game remembering to write a callback,
+    // so a discoveryUrl alone is enough. An explicit rediscover still wins.
+    const rediscover =
+      explicitRediscover ??
+      (discoveryUrl
+        ? createBootstrapRediscover({
+            discoveryUrl,
+            getToken: () => this.session.getToken(),
+            logger: config.logger,
+          })
+        : undefined);
     this.realtime = new SubscriptionManager(
       {
         wsEndpoint:
