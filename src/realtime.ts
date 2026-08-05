@@ -220,6 +220,15 @@ export interface RealtimeConfig {
    * would move clients off healthy instances for no reason.
    */
   rediscoverAfterFailures?: number;
+  /**
+   * Called when the server directs this client to a specific instance, so the
+   * owner can move the HTTP endpoint alongside the WebSocket.
+   *
+   * Moving one without the other splits a session across two instances, and
+   * both the UDP proxy session and the relay worker are per-process — the
+   * client would look connected and receive nothing.
+   */
+  onEndpointMove?: (target: { httpUrl: string; wsUrl: string }) => void;
   /** Optional logger for realtime diagnostics. Defaults to a silent logger. */
   logger?: CrowdyLogger;
   /**
@@ -286,6 +295,10 @@ export class RealtimeClient {
     appId: string | null,
   ) => Promise<{ wsUrl?: string | null } | null>;
   private readonly rediscoverAfterFailures: number;
+  private readonly onEndpointMove?: (target: {
+    httpUrl: string;
+    wsUrl: string;
+  }) => void;
   /** Consecutive failed connects; reset by a successful one. */
   private connectFailures = 0;
   /** Guards against several failing attempts all re-resolving at once. */
@@ -333,6 +346,7 @@ export class RealtimeClient {
     this.wsUrl = config.wsUrl || config.wsEndpoint || 'ws://localhost:3000/graphql';
     this.rediscover = config.rediscover;
     this.rediscoverAfterFailures = config.rediscoverAfterFailures ?? 3;
+    this.onEndpointMove = config.onEndpointMove;
     this.logger = config.logger ?? silentLogger;
     this.retryAttempts = config.retryAttempts ?? 8;
     this.retryInitialDelayMs = config.retryInitialDelayMs ?? 250;
@@ -867,6 +881,9 @@ export class RealtimeClient {
           onUnavailable: () => {
             void this.handleBinaryRelayUnavailable();
           },
+          onReconnectDirective: (target) => {
+            this.moveToDirectedEndpoint(target);
+          },
         },
       );
     }
@@ -931,6 +948,32 @@ export class RealtimeClient {
       }
     })();
     return this.rediscovering;
+  }
+
+  /**
+   * Move to the instance the server named.
+   *
+   * The difference from re-discovery is who chose the destination: here the
+   * server did, because it is shedding load or draining, so there is no
+   * discovery round trip and no reason to consult the rediscover callback. The
+   * binary relay has already refused any target outside this estate.
+   */
+  private moveToDirectedEndpoint(target: {
+    httpUrl: string;
+    wsUrl: string;
+    reason: string;
+  }): void {
+    if (target.wsUrl === this.wsUrl) return;
+    this.logger.warn?.(
+      `Server-directed move (${target.reason}): realtime from ${this.wsUrl} to ${target.wsUrl}`,
+    );
+    this.wsUrl = target.wsUrl;
+    this.binaryRelayUrl = deriveBinaryRelayUrl(target.wsUrl);
+    this.connectFailures = 0;
+    // HTTP has to follow, or the session is split across two instances and the
+    // client looks connected while receiving nothing.
+    this.onEndpointMove?.({ httpUrl: target.httpUrl, wsUrl: target.wsUrl });
+    this.restartBinaryRelay();
   }
 
   /** Drop the relay so the next subscribe builds one against the new URL. */

@@ -40,6 +40,46 @@ export interface BinaryRelayCallbacks {
    * upgrade). The owner should fall back to the GraphQL transport.
    */
   onUnavailable(): void;
+  /**
+   * The server asked this client to move to another API instance — either it is
+   * rebalancing load, or it is draining. The socket is still open, so this is
+   * advice: acting on it promptly is better for the fleet, but ignoring it only
+   * costs this client its share of an imbalance.
+   */
+  onReconnectDirective?(target: {
+    httpUrl: string;
+    wsUrl: string;
+    reason: string;
+  }): void;
+}
+
+/**
+ * Would honouring `candidate` keep us on the same site as `current`?
+ *
+ * The directive arrives over an authenticated TLS socket, so the server saying
+ * it is the server we already trust. This guards the next step instead: a
+ * redirect must never be able to move a client onto an origin outside the
+ * estate it is already talking to — otherwise one compromised instance could
+ * walk an entire fleet's clients somewhere else, which is a much worse outcome
+ * than an unbalanced fleet.
+ *
+ * Compares the last two labels, so `ck-api-4.pgc.prod.cp.cks-env.com` and
+ * `ck.pgc.prod.cp.cks-env.com` match, and `evil.example.com` does not.
+ */
+export function isSameEstate(current: string, candidate: string): boolean {
+  const host = (raw: string): string | null => {
+    try {
+      return new URL(raw).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  };
+  const a = host(current);
+  const b = host(candidate);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const site = (h: string) => h.split('.').slice(-2).join('.');
+  return site(a) === site(b) && site(a).includes('.');
 }
 
 export interface BinaryRelayConfig {
@@ -242,12 +282,26 @@ export class BinaryRelayTransport {
     data: string,
     generation: number,
   ): Promise<void> {
-    let frame: { type?: string; gameTokenId?: string };
+    let frame: {
+      type?: string;
+      gameTokenId?: string;
+      gameApiUrl?: string;
+      gameApiWsUrl?: string;
+      reason?: string;
+    };
     try {
-      frame = JSON.parse(data) as { type?: string; gameTokenId?: string };
+      frame = JSON.parse(data) as typeof frame;
     } catch {
       return;
     }
+
+    if (frame.type === 'reconnect') {
+      this.handleReconnectDirective(frame);
+      return;
+    }
+
+    // Anything else we do not recognise is ignored on purpose: the server may
+    // add control frames, and an older client must keep working when it does.
     if (frame.type !== 'ready' || !frame.gameTokenId) return;
 
     const token = this.callbacks.getToken();
@@ -260,6 +314,40 @@ export class BinaryRelayTransport {
     this.preReadyFailures = 0;
     this.retries = 0;
     this.callbacks.onStatus('connected');
+  }
+
+  /**
+   * The server wants this client on a different instance.
+   *
+   * Refusing a malformed or off-estate target is not a failure worth surfacing
+   * to the application: the current connection is still working, so the correct
+   * behaviour is to stay put and say so in the log.
+   */
+  private handleReconnectDirective(frame: {
+    gameApiUrl?: string;
+    gameApiWsUrl?: string;
+    reason?: string;
+  }): void {
+    const httpUrl = frame.gameApiUrl;
+    const wsUrl = frame.gameApiWsUrl;
+    if (!httpUrl || !wsUrl) {
+      this.logger.warn?.('Ignoring a reconnect directive with no target');
+      return;
+    }
+    if (!isSameEstate(this.url, wsUrl)) {
+      this.logger.warn?.(
+        `Ignoring a reconnect directive pointing outside this estate: ${wsUrl}`,
+      );
+      return;
+    }
+    this.logger.info?.(
+      `Server asked us to move to ${httpUrl} (${frame.reason ?? 'unspecified'})`,
+    );
+    this.callbacks.onReconnectDirective?.({
+      httpUrl,
+      wsUrl,
+      reason: frame.reason ?? 'rebalance',
+    });
   }
 
   private maybeRetry(generation: number): void {
