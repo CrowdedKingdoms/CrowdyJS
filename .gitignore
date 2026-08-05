@@ -1,4 +1,7 @@
 node_modules/
+# also match a symlink named node_modules: the trailing-slash form does not,
+# so a worktree that symlinks it to a sibling checkout can commit the link.
+node_modules
 dist/
 *.log
 .DS_Store
