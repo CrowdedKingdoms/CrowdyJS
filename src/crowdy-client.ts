@@ -153,8 +153,18 @@ export interface CrowdyClientConfig {
      * The returned pair is applied together: see the note on
      * `GraphQLClient.setEndpoint` for why splitting HTTP and WS across two
      * instances is worse than staying on a dead one.
+     *
+     * There is no default, and the reason is a server limitation worth knowing:
+     * re-discovery means calling `mintAppToken`, which requires the identity
+     * SESSION token, while a game client holds an app-scoped token.
+     * `gameClientBootstrap` returns no hostname, so a game client cannot ask
+     * where else to go. Until the server offers that, the identity client has
+     * to supply this — {@link createMintRediscover} does it in one line.
+     *
+     * It receives the appId the realtime session is subscribed to, so one
+     * implementation can serve a client that switches apps.
      */
-    rediscover?: () => Promise<{
+    rediscover?: (appId: string | null) => Promise<{
       httpUrl?: string | null;
       wsUrl?: string | null;
     } | null>;
@@ -304,8 +314,8 @@ export class CrowdyClient {
         // than being left to the caller to remember.
         ...(rediscover
           ? {
-              rediscover: async () => {
-                const next = await rediscover();
+              rediscover: async (appId: string | null) => {
+                const next = await rediscover(appId);
                 if (!next) return null;
                 if (next.httpUrl) {
                   this.graphql.setEndpoint(

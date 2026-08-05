@@ -209,7 +209,9 @@ export interface RealtimeConfig {
    * Return null to keep the current URL (nothing better is available).
    * Omitting it entirely keeps the old behaviour: retry one URL forever.
    */
-  rediscover?: () => Promise<{ wsUrl?: string | null } | null>;
+  rediscover?: (
+    appId: string | null,
+  ) => Promise<{ wsUrl?: string | null } | null>;
   /**
    * Consecutive connection failures before re-discovery. Defaults to `3`.
    *
@@ -280,7 +282,9 @@ export class RealtimeClient {
   private wsUrl: string;
   private readonly logger: CrowdyLogger;
   private readonly retryAttempts: number;
-  private readonly rediscover?: () => Promise<{ wsUrl?: string | null } | null>;
+  private readonly rediscover?: (
+    appId: string | null,
+  ) => Promise<{ wsUrl?: string | null } | null>;
   private readonly rediscoverAfterFailures: number;
   /** Consecutive failed connects; reset by a successful one. */
   private connectFailures = 0;
@@ -861,17 +865,7 @@ export class RealtimeClient {
             this.setStatus(status);
           },
           onUnavailable: () => {
-            this.binaryUnavailable = true;
-            this.logger.warn?.(
-              'Binary relay unavailable; falling back to the GraphQL realtime transport',
-            );
-            this.dispatchError(
-              new CrowdyRealtimeError(
-                'Binary relay unavailable; using GraphQL transport',
-                { code: 'BINARY_RELAY_UNAVAILABLE', retryable: true },
-              ),
-            );
-            if (this.desired) this.ensureSubscription();
+            void this.handleBinaryRelayUnavailable();
           },
         },
       );
@@ -909,7 +903,7 @@ export class RealtimeClient {
 
     this.rediscovering = (async () => {
       try {
-        const next = await this.rediscover!();
+        const next = await this.rediscover!(this.subscribedAppId);
         const wsUrl = next?.wsUrl;
         if (!wsUrl || wsUrl === this.wsUrl) {
           this.logger.debug?.(
@@ -940,6 +934,55 @@ export class RealtimeClient {
   }
 
   /** Drop the relay so the next subscribe builds one against the new URL. */
+  /**
+   * The binary relay could not be established. Try to move before degrading.
+   *
+   * Under direct connect the relay URL names ONE instance, so "the relay is
+   * unavailable" usually means that instance is gone — not that the relay is
+   * unavailable anywhere. Falling straight back to GraphQL used to be the only
+   * response, and it fails for the same reason: the GraphQL websocket points at
+   * the same dead host. The client then sat retrying a dead hostname while the
+   * rest of the fleet was healthy.
+   *
+   * So ask for a new endpoint first. If one arrives, rediscoverEndpoint has
+   * already rebuilt the relay against it and there is nothing to degrade.
+   */
+  private async handleBinaryRelayUnavailable(): Promise<void> {
+    if (this.rediscover) {
+      const previous = this.wsUrl;
+      await this.rediscoverEndpoint('binary relay unavailable');
+      if (this.wsUrl !== previous) {
+        // Moved. binaryUnavailable was never set, so restartBinaryRelay has
+        // already stood the relay back up on the new instance.
+        this.logger.warn?.(
+          'Binary relay moved to a new instance after being unavailable',
+        );
+        return;
+      }
+    } else {
+      // Worth saying out loud: without a rediscover callback there is nothing
+      // this client can do about a dead instance, and the symptom (a session
+      // that never carries anything) does not point at the cause.
+      this.logger.warn?.(
+        'Binary relay unavailable and no `realtime.rediscover` is configured, ' +
+          'so this client cannot move to another instance. Wire one if the ' +
+          'endpoint came from mintAppToken under direct connect.',
+      );
+    }
+
+    this.binaryUnavailable = true;
+    this.logger.warn?.(
+      'Binary relay unavailable; falling back to the GraphQL realtime transport',
+    );
+    this.dispatchError(
+      new CrowdyRealtimeError(
+        'Binary relay unavailable; using GraphQL transport',
+        { code: 'BINARY_RELAY_UNAVAILABLE', retryable: true },
+      ),
+    );
+    if (this.desired) this.ensureSubscription();
+  }
+
   private restartBinaryRelay(): void {
     if (!this.binaryRelay) return;
     try {

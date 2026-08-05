@@ -46,7 +46,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '13.5.0';
+export const VERSION = '13.6.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -520,6 +520,10 @@ export {
   type GlueSab,
 } from './player-runtime/glue-sab.js';
 export * from './crowdy-studio/index.js';
+export {
+  createMintRediscover,
+  type MintCapablePortal,
+} from './rediscover.js';
 
 // -----------------------------------------------------------------------------
 // Re-export schema-derived game-side input/output types and enums from
