@@ -42,6 +42,23 @@ export interface AppTokenResponse {
   gameApiUrl: string | null;
   /** WebSocket URL of the Game API serving this app. */
   gameApiWsUrl: string | null;
+  /**
+   * Stable entry origin that reaches SOME healthy instance, whatever has failed.
+   *
+   * WHY THIS IS NOT `gameApiUrl`. The published origin resolves to EVERY datacenter's
+   * load balancer, while `gameApiUrl` is the ONE datacenter holding this app's shards.
+   * So `gameApiUrl` is where the gameplay goes and this is the way back: it is the only
+   * address that survives losing a datacenter.
+   *
+   * It matters most for a client holding only an app token, which is the normal state
+   * after a portal entry. Such a client CANNOT re-mint — minting needs the identity
+   * session it does not have — so without this it has nothing left to ask when its
+   * endpoint stops answering. Pass it as `realtime.discoveryUrl` and the SDK builds
+   * re-discovery from it.
+   *
+   * Null against a Game API older than the datacenter rebuild, which did not return it.
+   */
+  discoveryUrl: string | null;
   /** Browser launch URL for this app, if configured. */
   launchUrl: string | null;
 }
@@ -77,7 +94,7 @@ export class BrowserSessionPkceStore implements PkceStore {
 }
 
 const APP_TOKEN_FIELDS =
-  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl launchUrl';
+  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl';
 
 const MintAppTokenDocument = parse(
   `mutation MintAppToken($input: MintAppTokenInput!) { mintAppToken(input: $input) { ${APP_TOKEN_FIELDS} } }`,

@@ -74,7 +74,7 @@ export interface BinaryRelayCallbacks {
  * than an unbalanced fleet.
  *
  * Compares the last two labels, so `ck-api-4.pgc.prod.cp.cks-env.com` and
- * `ck.pgc.prod.cp.cks-env.com` match, and `evil.example.com` does not.
+ * `ck.prod.cp.cks-env.com` match, and `evil.example.com` does not.
  */
 export function isSameEstate(current: string, candidate: string): boolean {
   const host = (raw: string): string | null => {
