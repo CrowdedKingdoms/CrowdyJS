@@ -26,7 +26,7 @@ test('accepts the shared load balancer', () => {
   assert.equal(
     isSameEstate(
       'wss://ck-api-1.pgc.prod.cp.cks-env.com/realtime',
-      'wss://ck.pgc.prod.cp.cks-env.com',
+      'wss://ck.prod.cp.cks-env.com',
     ),
     true,
   );
@@ -53,8 +53,8 @@ test('refuses a lookalike that only shares a prefix', () => {
   // cks-env.com.evil.com must not pass as cks-env.com.
   assert.equal(
     isSameEstate(
-      'wss://ck.pgc.prod.cp.cks-env.com/realtime',
-      'wss://ck.pgc.prod.cp.cks-env.com.evil.com',
+      'wss://ck.prod.cp.cks-env.com/realtime',
+      'wss://ck.prod.cp.cks-env.com.evil.com',
     ),
     false,
   );
