@@ -28,6 +28,16 @@ const BEARER_PREFIX = 'bearer.';
 /** Consecutive pre-ready failures before we declare the relay unavailable. */
 const UNAVAILABLE_AFTER_FAILURES = 2;
 
+/**
+ * The same, for a relay that HAD been ready and then lost its socket.
+ *
+ * Higher than the pre-ready limit on purpose. Never having connected is
+ * evidence about the endpoint; a working relay dropping once is evidence about
+ * the network, and escalating on the first blip would move clients off healthy
+ * instances during an ordinary reconnect.
+ */
+const UNAVAILABLE_AFTER_RECONNECT_FAILURES = 3;
+
 export interface BinaryRelayCallbacks {
   getToken(): string | null;
   onNotification(notification: UdpNotification): void;
@@ -262,9 +272,30 @@ export class BinaryRelayTransport {
 
       if (!hadReady) {
         this.preReadyFailures += 1;
-        if (!this.everReady && this.preReadyFailures >= UNAVAILABLE_AFTER_FAILURES) {
+        // Two different failures hide behind "the handshake did not complete",
+        // and for a long time only one of them could ever escalate:
+        //
+        //   never ready at all  - the relay is not available at this endpoint,
+        //                         so fall back to the GraphQL transport.
+        //   ready before, not now - the INSTANCE went away. This is the case
+        //                         re-discovery exists for, and `!everReady`
+        //                         excluded it.
+        //
+        // The consequence was that only a client which had never worked could
+        // ever be moved. A client that was healthy and whose ck-api instance
+        // then died retried that one dead address forever, silently: onclose
+        // fell through to maybeRetry, onUnavailable was never called, and so
+        // the re-discovery path below it never ran no matter how the caller had
+        // configured discoveryUrl. Measured on pgc-prod on 2026-08-06 — four
+        // bots pinned to a stopped instance never attempted to move.
+        const limit = this.everReady
+          ? UNAVAILABLE_AFTER_RECONNECT_FAILURES
+          : UNAVAILABLE_AFTER_FAILURES;
+        if (this.preReadyFailures >= limit) {
           this.logger.warn?.(
-            `Binary relay unavailable after ${this.preReadyFailures} failed handshakes (close ${event.code}); falling back`,
+            this.everReady
+              ? `Binary relay lost and not re-established after ${this.preReadyFailures} attempts (close ${event.code}); the instance is probably gone`
+              : `Binary relay unavailable after ${this.preReadyFailures} failed handshakes (close ${event.code}); falling back`,
           );
           this.desired = false;
           this.callbacks.onUnavailable();
