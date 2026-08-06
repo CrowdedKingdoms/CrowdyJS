@@ -1,14 +1,11 @@
 /**
  * CrowdyJS SDK — client SDK for Crowded Kingdoms.
  *
- * As of the management/game-api split, the SDK targets **two** GraphQL
- * endpoints behind a single `CrowdyClient`:
- *
- *   - `cks-management-api` for identity (`client.auth`, `client.users`).
- *     This is where `game_tokens` get minted.
- *   - `cks-game-api` for everything game-side (`client.chunks`,
- *     `client.voxels`, `client.actors`, `client.teleport`, `client.state`,
- *     `client.serverStatus`, `client.udp`).
+ * The SDK targets ONE GraphQL endpoint behind a single `CrowdyClient`. Identity
+ * (`client.auth`, `client.users`, `client.portal`) and everything game-side
+ * (`client.chunks`, `client.voxels`, `client.actors`, `client.teleport`,
+ * `client.state`, `client.serverStatus`, `client.udp`) are surfaces of the same
+ * API. `managementUrl` was removed in v14 — see MIGRATION.md.
  *
  * Authentication is **passwordless** (as of v8): sign in with an emailed magic
  * link, a federated social provider, or — in dev — the dev bypass. The returned
@@ -21,9 +18,8 @@
  *   import { CrowdyClient } from '@crowdedkingdoms/crowdyjs';
  *
  *   const client = new CrowdyClient({
- *     httpUrl: 'https://dev-game-api.crowdedkingdoms.com',
- *     wsUrl:   'wss://dev-game-api.crowdedkingdoms.com',
- *     managementUrl: 'https://dev-management-api.crowdedkingdoms.com',
+ *     httpUrl: 'https://api.crowdedkingdoms.com/graphql',
+ *     wsUrl:   'wss://api.crowdedkingdoms.com/graphql',
  *   });
  *
  *   // passwordless sign-in (magic link): emails a one-time link
@@ -32,7 +28,7 @@
  *   const { user } = await client.auth.completeLoginLink(tokenFromUrl);
  *   const me = await client.users.me();
  *
- * As of v6 the SDK wraps the **full** public surface of both APIs, namespaced
+ * As of v6 the SDK wraps the **full** public API surface, namespaced
  * by audience: the game-client surface (`auth`, `users`, `udp`, `world`,
  * `chunks`/`voxels`/`actors`/`avatars`/`state`/`teleport`/`channels`/`teams`/
  * `gameModel`/`host`), the privileged studio-admin surface grouped under
@@ -421,9 +417,8 @@ export type {
 export { UdpErrorCode } from './types.js';
 
 // -----------------------------------------------------------------------------
-// Domain wrappers.
-// AuthAPI / UsersAPI / AppsAPI target cks-management-api; the rest target
-// cks-game-api.
+// Domain wrappers. All share one endpoint; they differ in the token and
+// permissions they require.
 // -----------------------------------------------------------------------------
 export {
   AuthAPI,
@@ -530,9 +525,9 @@ export {
 } from './bootstrap-rediscover.js';
 
 // -----------------------------------------------------------------------------
-// Re-export schema-derived game-side input/output types and enums from
-// codegen. Run `npm run codegen` against `cks-game-api/schema.gql` after
-// schema changes; the management-side types are no longer included.
+// Re-export schema-derived input/output types and enums from codegen. Refresh
+// with `npm run schema:sync:*` then `npm run codegen`; the unified schema covers
+// both the management and game surfaces.
 // -----------------------------------------------------------------------------
 export type {
   ChunkCoordinatesInput,

@@ -1,19 +1,19 @@
-// Management-plane portal validation against a deployed env (no game-api needed).
+// Portal validation of the management surface against a deployed API.
 // Validates mint / PKCE exchange / refresh / capability-confinement / expiry /
-// logout-cascade on the real management API.
+// logout-cascade.
 //
-// Run: MGMT=https://api.test.crowdedkingdoms.com TEST_DB_CONN="host=... dbname=... user=postgres sslmode=require" \
+// Run: API=https://api.dev.crowdedkingdoms.com TEST_DB_CONN="host=... dbname=... user=postgres sslmode=require" \
 //      PGPASSWORD=... node test/portal-mgmt-test.mjs
 import { createHash, randomBytes } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
-const MGMT = (process.env.MGMT ?? 'https://api.test.crowdedkingdoms.com') + '/graphql';
+const API = (process.env.API ?? 'https://api.dev.crowdedkingdoms.com') + '/graphql';
 const APP_A = process.env.APP_A ?? '1';
 const CONN = process.env.TEST_DB_CONN; // optional; enables the expiry test
 let pass = 0, fail = 0;
 const log = (ok, m, x = '') => { ok ? (pass++, console.log(`  PASS  ${m}`)) : (fail++, console.error(`  FAIL  ${m}  ${x}`)); };
 async function gql(q, v, t) {
-  const r = await fetch(MGMT, { method: 'POST', headers: { 'content-type': 'application/json', ...(t ? { authorization: `Bearer ${t}` } : {}) }, body: JSON.stringify({ query: q, variables: v }) });
+  const r = await fetch(API, { method: 'POST', headers: { 'content-type': 'application/json', ...(t ? { authorization: `Bearer ${t}` } : {}) }, body: JSON.stringify({ query: q, variables: v }) });
   return r.json();
 }
 const code = (j) => j?.errors?.[0]?.extensions?.code ?? null;

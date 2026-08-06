@@ -19,7 +19,7 @@ import {
  * Org wallet + per-app budgets — exposed as `client.billing` (and grouped under
  * `client.admin`).
  *
- * Targets the **management-api**. Reads require the `view_billing` org/app
+ * Part of the management surface. Reads require the `view_billing` org/app
  * permission; {@link setAppBudget} requires `manage_billing`. Monetary values
  * are minor currency units (`*Cents`) and serialized as `BigInt` decimal
  * strings.
@@ -28,7 +28,7 @@ import {
  *   per the permission notes above.
  */
 export class BillingAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * Return an organization's wallet balance. Requires the `view_billing` org
@@ -40,7 +40,7 @@ export class BillingAPI {
   async walletBalance(
     orgId: string,
   ): Promise<WalletBalanceQuery['walletBalance']> {
-    const data = await this.management.request(WalletBalanceDocument, { orgId });
+    const data = await this.api.request(WalletBalanceDocument, { orgId });
     return data.walletBalance;
   }
 
@@ -56,7 +56,7 @@ export class BillingAPI {
     orgId: string,
     opts: { limit?: number; offset?: number } = {},
   ): Promise<WalletTransactionsQuery['walletTransactions']> {
-    const data = await this.management.request(WalletTransactionsDocument, {
+    const data = await this.api.request(WalletTransactionsDocument, {
       orgId,
       limit: opts.limit,
       offset: opts.offset,
@@ -76,7 +76,7 @@ export class BillingAPI {
     orgId: string,
     appId: string,
   ): Promise<AppBudgetQuery['appBudget']> {
-    const data = await this.management.request(AppBudgetDocument, {
+    const data = await this.api.request(AppBudgetDocument, {
       orgId,
       appId,
     });
@@ -91,7 +91,7 @@ export class BillingAPI {
    * @returns The app budgets.
    */
   async appBudgets(orgId: string): Promise<AppBudgetsQuery['appBudgets']> {
-    const data = await this.management.request(AppBudgetsDocument, { orgId });
+    const data = await this.api.request(AppBudgetsDocument, { orgId });
     return data.appBudgets;
   }
 
@@ -110,7 +110,7 @@ export class BillingAPI {
     appId: string,
     monthlyLimitCents: string,
   ): Promise<SetAppBudgetMutation['setAppBudget']> {
-    const data = await this.management.request(SetAppBudgetDocument, {
+    const data = await this.api.request(SetAppBudgetDocument, {
       orgId,
       appId,
       monthlyLimitCents,
@@ -132,7 +132,7 @@ export class BillingAPI {
   ): Promise<
     WalletTransactionsConnectionQuery['walletTransactionsConnection']
   > {
-    const data = await this.management.request(
+    const data = await this.api.request(
       WalletTransactionsConnectionDocument,
       args,
     );

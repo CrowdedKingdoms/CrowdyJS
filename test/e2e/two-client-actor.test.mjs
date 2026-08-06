@@ -11,15 +11,15 @@
  * leave in the default `npm test` matrix. To run it against an env, point it at
  * the URLs the management UI returned for that env after the deploy completed:
  *
- *   CROWDY_MANAGEMENT_URL='http://127.0.0.1:3001' \
+ *   CROWDY_HTTP_URL='http://127.0.0.1:3001' \
  *   CROWDY_HTTP_URL='http://127.0.0.1:3000/graphql' \
  *   CROWDY_WS_URL='ws://127.0.0.1:3000/graphql' \
  *   npm test
  *
  * Everything is black-box: the owner, org, app, access tier, and players are all
- * created through the management API (see provision.mjs). Granting a player
- * access auto-provisions the game-DB grid permissions server-side via
- * replica-sync, so no MGMT_DB_* / DB_WRITER_* credentials are needed.
+ * created through the API (see provision.mjs). Granting a player access
+ * auto-provisions the grid permissions server-side, so no MGMT_DB_* /
+ * DB_WRITER_* credentials are needed.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,7 +31,6 @@ import { provisionAppWithPlayers, mintAppToken } from '../provision.mjs';
 globalThis.WebSocket = WebSocket;
 
 const REQUIRED_ENV = [
-  'CROWDY_MANAGEMENT_URL',
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   // App owner that owns CROWDY_TEST_APP_ID (default app 1); entitles players via
@@ -65,7 +64,6 @@ function sleep(ms) {
 
 function clientConfig() {
   return {
-    managementUrl: process.env.CROWDY_MANAGEMENT_URL,
     httpUrl: process.env.CROWDY_HTTP_URL,
     wsUrl: process.env.CROWDY_WS_URL,
     realtime: {

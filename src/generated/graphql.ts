@@ -81,7 +81,7 @@ export type ActorType = {
   email: Maybe<Scalars['String']['output']>;
   /** Legacy bigint public user id (Buddy / CK wire), as a string. */
   userId: Scalars['String']['output'];
-  /** User identity (galaxy row uuid). */
+  /** User identity: the users.galaxy_row_uuid value. The column keeps its historical name; the datastore is PostgreSQL/Citus. */
   userUuid: Scalars['String']['output'];
   username: Maybe<Scalars['String']['output']>;
 };
@@ -1268,9 +1268,11 @@ export type AppTokenResponse = {
   __typename?: 'AppTokenResponse';
   /** The app this token is confined to, as a String. */
   appId: Scalars['String']['output'];
+  /** Stable entry origin, resolving to every datacenter, that always reaches SOME healthy instance. Use it to re-discover endpoints when `gameApiUrl` stops answering: a token-holding client cannot re-mint, because that needs the identity session it does not have. Never a per-datacenter or per-instance address. */
+  discoveryUrl: Maybe<Scalars['String']['output']>;
   /** ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this, or re-portal through the Overworld for a different app. */
   expiresAt: Scalars['String']['output'];
-  /** Base HTTPS URL of the Game API that serves this app (null if the app has no dedicated/shared game-api route yet). */
+  /** Base HTTPS URL of the Game API that serves this app — its OWN datacenter's endpoint when a placement exists, because that is where the app's shards are. Null if the app has no dedicated/shared game-api route yet. Use this for gameplay; use `discoveryUrl` to recover if it stops answering. */
   gameApiUrl: Maybe<Scalars['String']['output']>;
   /** WebSocket URL of the Game API that serves this app (wss://), for realtime subscriptions. */
   gameApiWsUrl: Maybe<Scalars['String']['output']>;
@@ -3501,6 +3503,12 @@ export type GameClientBootstrap = {
   binaryRelayPath: Scalars['String']['output'];
   /** Required WebSocket subprotocol for the binary realtime relay. The client must offer it during the upgrade; the server selects it. Currently "crowdy-relay-v1". */
   binaryRelayProtocol: Scalars['String']['output'];
+  /** Stable entry point that always resolves to SOME healthy API instance — the environment’s shared load balancer. Use this to RE-DISCOVER an endpoint when the instance you are connected to stops answering: call gameClientBootstrap (or mintAppToken) against it and use the gameApiUrl it returns. This is the recovery path for direct connect, where gameApiUrl is a single instance that can die; discoveryUrl is chosen so that it cannot die with it. Null only if the server has no public URL configured. */
+  discoveryUrl: Maybe<Scalars['String']['output']>;
+  /** HTTPS origin the client should use for GraphQL right now: the app's OWN datacenter, because that is where its shards live and a query answered elsewhere crosses a WAN silently. Under direct connect it is one specific instance in that datacenter, which is NOT interchangeable with other instances for an open realtime session. Not to be confused with discoveryUrl, which is the shared origin resolving to every datacenter — fall back to that if requests here start failing. */
+  gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** The wss:// form of gameApiUrl, for the graphql-transport-ws subscription socket and the binary relay. Same origin, same caveat: under direct connect it is one instance. */
+  gameApiWsUrl: Maybe<Scalars['String']['output']>;
   /** Maximum allowed value for the `decayRate` (named attenuation algorithm id) field on spatial sends. Currently 5; the server clamps send `decayRate` to 0..this. decayRate selects how the message attenuates with distance (0 = none). */
   maxDecayRate: Scalars['Int']['output'];
   /** Maximum allowed value for the `distance` (chunk fan-out radius) field on spatial sends. Currently 8; the server clamps send `distance` to 0..this. distance is the number of chunks outward the message is replicated. */
@@ -3787,7 +3795,7 @@ export type GmAutomationRun = {
   /** The app (tenant). */
   appId: Scalars['BigInt']['output'];
   /** The automation that ran, or null for a timer fire (which has no owning automation). */
-  automationId: Scalars['String']['output'];
+  automationId: Maybe<Scalars['String']['output']>;
   /** The automation name at run time, or the invoked function name for a timer fire. */
   automationName: Scalars['String']['output'];
   /** Cascade depth (0 = top-level). */
@@ -4429,7 +4437,7 @@ export type GrantTierFeatureInput = {
   tierId: Scalars['BigInt']['input'];
 };
 
-/** A registered GraphQL API server instance in the fleet (either a management-api or a game-api, see `kind`), with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy. */
+/** A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy. */
 export type GraphQlServer = {
   __typename?: 'GraphQLServer';
   /** TCP port the GraphQL/HTTP API listens on (default 4000). */
@@ -4444,7 +4452,7 @@ export type GraphQlServer = {
   ip4: Maybe<Scalars['String']['output']>;
   /** Internal/private IPv6 address of this server. Use publicIp6 for external reachability. */
   ip6: Maybe<Scalars['String']['output']>;
-  /** Logical kind of GraphQL service: 'management-api' or 'game-api'. */
+  /** Logical kind of GraphQL service. Every current server is 'game-api', which serves both the management and game surfaces; 'management-api' appears only on rows predating their unification. */
   kind: Maybe<Scalars['String']['output']>;
   /** 1-minute load average of the host, if reported. */
   loadAverage1m: Maybe<Scalars['Float']['output']>;
@@ -4452,6 +4460,8 @@ export type GraphQlServer = {
   memoryUsagePct: Maybe<Scalars['Float']['output']>;
   /** Cloud provider instance id of the underlying host, if known. */
   providerInstanceId: Maybe<Scalars['String']['output']>;
+  /** Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-2.gxca.prod.cp.cks-env.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you. */
+  publicHostname: Maybe<Scalars['String']['output']>;
   /** Public IPv4 address clients use to reach this server, if assigned. */
   publicIp4: Maybe<Scalars['String']['output']>;
   /** Public IPv6 address clients use to reach this server, if assigned. */
@@ -4974,6 +4984,8 @@ export type Mutation = {
   createTeam: Group;
   /** Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs). */
   createTeamRole: GroupRole;
+  /** OPERATOR ONLY. Credits an organization wallet without a payment provider, for seeding a test environment or making an operator adjustment, and records it in the wallet ledger as an "admin_credit" transaction. Use this instead of writing to org_wallets by hand: it creates the wallet if absent, repairs a missing wallet id, and moves the balance and the ledger row together in one transaction. Pass a referenceId to make retries idempotent. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so a credit that clears an insufficient_funds denial lifts it immediately instead of leaving the app refusing clients. */
+  creditOrgWallet: WalletTransaction;
   /** Monotonically persist one attached epoch’s highest contiguous applied event sequence. Requires the app-scoped owner, exact current epoch, and idempotency key; stale epochs and gaps fail with stable errors. */
   crowdyStudioAgentAcknowledgeEvents: AgentEventAcknowledgement;
   /** Human-grant one unexpired pending tool call by exact argument hash. The server revalidates epoch, context, policy, lease, descriptor, permissions, and project revision before single-use consumption. Requires the app-scoped owner, use_studio_agent, and idempotency key; approval never creates missing authority. */
@@ -5176,7 +5188,7 @@ export type Mutation = {
   playerModelSetProperty: PlayerModelContainer;
   /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
-  /** Create a marketplace listing (free mode) for code the caller authors — personally, or org-owned via ownerOrgId (DN-9; requires manage_compute in that org). SIDE EFFECTS: the catalog row is written on cks-management-api with an ownership audit entry and replica-synced back. Publishing never uploads source; versions snapshot artifact hashes only. */
+  /** Create a marketplace listing (free mode) for code the caller authors — personally, or org-owned via ownerOrgId (DN-9; requires manage_compute in that org). SIDE EFFECTS: writes the catalog row with an ownership audit entry. Publishing never uploads source; versions snapshot artifact hashes only. */
   publishPlayerCode: PlayerCodeListing;
   /** Publish an immutable version under a listing from the caller's successfully compiled module versions. Snapshots artifact hashes, explicit SERVER-to-required-CLIENT edges, and the derived aggregate capability summary; publishing fails if a required client version is absent from the bundle. Source never leaves the author's rows. */
   publishPlayerCodeVersion: PlayerCodeListingVersion;
@@ -5640,6 +5652,14 @@ export type MutationCreateTeamArgs = {
 
 export type MutationCreateTeamRoleArgs = {
   input: CreateGroupRoleInput;
+};
+
+
+export type MutationCreditOrgWalletArgs = {
+  amountCents: Scalars['BigInt']['input'];
+  orgId: Scalars['BigInt']['input'];
+  reason: Scalars['String']['input'];
+  referenceId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -7980,7 +8000,7 @@ export type Query = {
   getChunksByDistance: ChunksByDistanceResponse;
   /** Returns all recorded voxel edits (the voxel_updates log) for a single chunk, newest first, as a ChunkVoxelResponse. Use getChunk instead when you want the packed voxel grid rather than the individual edit log. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   getVoxelList: ChunkVoxelResponse;
-  /** List every registered GraphQL API server (both management-api and game-api kinds), regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers). */
+  /** List every registered GraphQL API server regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers). */
   graphqlServers: Array<GraphQlServer>;
   /** The app's grid claim policy (D4): how a player claim confers grid ownership. */
   gridClaimPolicy: GridClaimPolicy;
@@ -8124,7 +8144,7 @@ export type Query = {
   quotasForOrg: Array<ServiceQuota>;
   /** Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index. */
   runtimePermissions: Array<Scalars['String']['output']>;
-  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
+  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, preferring one co-located with the datacenter that holds the data for this app (all rows for one app live in a single datacenter) and falling back to any healthy server if none is. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
   serverWithLeastClients: ServerStatus;
   /** @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only. */
   sharedEnvPlans: Array<SharedEnvPlan>;
@@ -9136,16 +9156,16 @@ export type QueryWalletTransactionsConnectionArgs = {
   orgId: Scalars['BigInt']['input'];
 };
 
-/** Realtime lifecycle/error event delivered on the udpNotifications subscription when a session cannot be opened or correctly scoped. It is a control frame — it carries no appId, so it is never dropped by the per-app fan-out filter — and it is terminal: the subscription completes immediately after emitting it, so the client must fix the cause and resubscribe. Branch on `code`; use `retryable` to decide whether retrying can succeed. A healthy subscription never emits this type; it yields game-server notifications/responses instead. */
+/** Realtime lifecycle event delivered on the udpNotifications subscription. It is a control frame — it carries no appId, so it is never dropped by the per-app fan-out filter. Branch on `code`; use `retryable` to decide whether retrying can succeed. Most codes report that a session could not be opened or correctly scoped and are TERMINAL: the subscription completes immediately after emitting one, so the client must fix the cause and resubscribe. The exception is SERVER_DRAINING, which arrives mid-stream on a healthy subscription and does NOT end it — see that code below. */
 export type RealtimeConnectionEvent = {
   __typename?: 'RealtimeConnectionEvent';
-  /** Machine-readable failure reason. Branch on this (not on `message`). Known values: AUTH_REQUIRED — no valid bearer game token was presented on the WS connection_init / request; authenticate via the Management API and resubscribe (not retryable as-is). APP_ID_REQUIRED — the subscription was opened without an appId scope; udpNotifications must be app-scoped (game tokens are app-agnostic and one socket is shared across apps), so pass the app you are playing and resubscribe (not retryable as-is). UDP_PROXY_CONNECTION_FAILED — the proxy could not open or keep a UDP socket to the selected game server (transient/infrastructure); back off and resubscribe (retryable). `message` carries the specific underlying detail for this case. */
+  /** Machine-readable failure reason. Branch on this (not on `message`). Known values: AUTH_REQUIRED — no valid bearer game token was presented on the WS connection_init / request; authenticate via the Management API and resubscribe (not retryable as-is). APP_ID_REQUIRED — the subscription was opened without an appId scope; udpNotifications must be app-scoped (game tokens are app-agnostic and one socket is shared across apps), so pass the app you are playing and resubscribe (not retryable as-is). UDP_PROXY_CONNECTION_FAILED — the proxy could not open or keep a UDP socket to the selected game server (transient/infrastructure); back off and resubscribe (retryable). `message` carries the specific underlying detail for this case. SERVER_DRAINING — this API instance is being taken out of service; the stream KEEPS WORKING, but you should re-run discovery (mintAppToken) and reconnect to the instance it returns before this one stops. Only reaches clients connected directly to an instance; clients behind the load balancer are moved for them. */
   code: Scalars['String']['output'];
   /** Human-readable explanation of the failure, suitable for logs and developer-facing surfaces. Do not parse or branch on this text — branch on `code` instead. */
   message: Scalars['String']['output'];
   /** Whether resubscribing without changing anything may succeed. true for transient failures (e.g. UDP_PROXY_CONNECTION_FAILED) — back off and retry. false for caller errors that must be fixed first (AUTH_REQUIRED needs a fresh/valid game token; APP_ID_REQUIRED needs an appId-scoped subscription). */
   retryable: Scalars['Boolean']['output'];
-  /** Lifecycle status of the session attempt. Currently always "failed" — this event is only emitted when udpNotifications could not establish (or had to tear down) the underlying UDP proxy session. */
+  /** Lifecycle status: "failed" when the session could not be established or had to be torn down, or "draining" for the one advisory case (SERVER_DRAINING) where the stream stays open. */
   status: Scalars['String']['output'];
 };
 
@@ -11090,7 +11110,7 @@ export type WalletTransaction = {
   referenceId: Maybe<Scalars['String']['output']>;
   /** Unique transaction id (BigInt as a decimal string). */
   transactionId: Scalars['BigInt']['output'];
-  /** What produced this transaction. Known values: "topup" (wallet credit from a checkout/top-up), "usage" (per-app usage charge, negative), "shared_usage" (shared-environment usage charge, negative), "reserved_throughput" (monthly/prorated reserved egress capacity, negative), "environment_usage" (hourly environment cost, negative), "auto_recharge" (automatic wallet recharge). Other caller-supplied deposit types are possible. */
+  /** What produced this transaction. Known values: "topup" (wallet credit from a checkout/top-up), "usage" (per-app usage charge, negative), "shared_usage" (shared-environment usage charge, negative), "reserved_throughput" (monthly/prorated reserved egress capacity, negative), "environment_usage" (hourly environment cost, negative), "auto_recharge" (automatic wallet recharge), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "admin_credit" (operator credit applied without a payment provider). Other caller-supplied deposit types are possible. */
   transactionType: Scalars['String']['output'];
   /** Wallet this transaction belongs to (BigInt as a decimal string). */
   walletId: Scalars['BigInt']['output'];
@@ -12585,7 +12605,7 @@ export type GmAutomationTriggerFieldsFragment = { __typename?: 'GmAutomationTrig
 
 export type GmAutomationPolicyFieldsFragment = { __typename?: 'GmAutomationPolicy', appId: string, enabled: boolean, maxAutomations: number, minIntervalMs: number, maxFanout: number, maxCascadeDepth: number, globalRunsPerMinute: number, minTimerDelayMs: number, maxPendingTimers: number };
 
-export type GmAutomationRunFieldsFragment = { __typename?: 'GmAutomationRun', runId: string, appId: string, flowId: string | null, automationId: string, automationName: string, triggerSource: string, triggerId: string | null, parentRunId: string | null, cascadeDepth: number, startedAt: string, finishedAt: string | null, durationUs: number, targets: number, invocations: number, mutations: number, fnCalls: number, gasUsed: number, success: boolean, errorMessage: string | null, circuitAction: string | null, computeUnits: number };
+export type GmAutomationRunFieldsFragment = { __typename?: 'GmAutomationRun', runId: string, appId: string, flowId: string | null, automationId: string | null, automationName: string, triggerSource: string, triggerId: string | null, parentRunId: string | null, cascadeDepth: number, startedAt: string, finishedAt: string | null, durationUs: number, targets: number, invocations: number, mutations: number, fnCalls: number, gasUsed: number, success: boolean, errorMessage: string | null, circuitAction: string | null, computeUnits: number };
 
 export type GameModelUpsertAutomationMutationVariables = Exact<{
   input: UpsertAutomationInput;
@@ -12639,7 +12659,7 @@ export type GameModelRunAutomationMutationVariables = Exact<{
 }>;
 
 
-export type GameModelRunAutomationMutation = { __typename?: 'Mutation', gameModelRunAutomation: { __typename?: 'GmAutomationRun', runId: string, appId: string, flowId: string | null, automationId: string, automationName: string, triggerSource: string, triggerId: string | null, parentRunId: string | null, cascadeDepth: number, startedAt: string, finishedAt: string | null, durationUs: number, targets: number, invocations: number, mutations: number, fnCalls: number, gasUsed: number, success: boolean, errorMessage: string | null, circuitAction: string | null, computeUnits: number } };
+export type GameModelRunAutomationMutation = { __typename?: 'Mutation', gameModelRunAutomation: { __typename?: 'GmAutomationRun', runId: string, appId: string, flowId: string | null, automationId: string | null, automationName: string, triggerSource: string, triggerId: string | null, parentRunId: string | null, cascadeDepth: number, startedAt: string, finishedAt: string | null, durationUs: number, targets: number, invocations: number, mutations: number, fnCalls: number, gasUsed: number, success: boolean, errorMessage: string | null, circuitAction: string | null, computeUnits: number } };
 
 export type GameModelAutomationsQueryVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -12680,7 +12700,7 @@ export type GameModelAutomationRunsQueryVariables = Exact<{
 }>;
 
 
-export type GameModelAutomationRunsQuery = { __typename?: 'Query', gameModelAutomationRuns: Array<{ __typename?: 'GmAutomationRun', runId: string, appId: string, flowId: string | null, automationId: string, automationName: string, triggerSource: string, triggerId: string | null, parentRunId: string | null, cascadeDepth: number, startedAt: string, finishedAt: string | null, durationUs: number, targets: number, invocations: number, mutations: number, fnCalls: number, gasUsed: number, success: boolean, errorMessage: string | null, circuitAction: string | null, computeUnits: number }> };
+export type GameModelAutomationRunsQuery = { __typename?: 'Query', gameModelAutomationRuns: Array<{ __typename?: 'GmAutomationRun', runId: string, appId: string, flowId: string | null, automationId: string | null, automationName: string, triggerSource: string, triggerId: string | null, parentRunId: string | null, cascadeDepth: number, startedAt: string, finishedAt: string | null, durationUs: number, targets: number, invocations: number, mutations: number, fnCalls: number, gasUsed: number, success: boolean, errorMessage: string | null, circuitAction: string | null, computeUnits: number }> };
 
 export type GameModelAutomationStatsQueryVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -12904,7 +12924,7 @@ export type GameModelFlowQueryVariables = Exact<{
 }>;
 
 
-export type GameModelFlowQuery = { __typename?: 'Query', gameModelFlow: { __typename?: 'GmFlowTimeline', flowId: string, events: Array<{ __typename?: 'GmEvent', eventId: string, flowId: string | null, sessionId: string | null, functionName: string, selfContainerId: string | null, callerUserId: string | null, callerKind: string, automationId: string | null, paramsJson: string, mutationsAppliedJson: string, permissionEffectsAppliedJson: string, returnValueJson: string | null, success: boolean, errorMessage: string | null, executedAt: string }>, automationRuns: Array<{ __typename?: 'GmAutomationRun', runId: string, appId: string, flowId: string | null, automationId: string, automationName: string, triggerSource: string, triggerId: string | null, parentRunId: string | null, cascadeDepth: number, startedAt: string, finishedAt: string | null, durationUs: number, targets: number, invocations: number, mutations: number, fnCalls: number, gasUsed: number, success: boolean, errorMessage: string | null, circuitAction: string | null, computeUnits: number }>, moduleRuns: Array<{ __typename?: 'WasmModuleRun', runId: string, appId: string, flowId: string | null, moduleId: string, moduleName: string, triggerSource: string, entry: string | null, startedAt: string, durationUs: number, fuelUsed: string, dbReads: number, dbWrites: number, egressMsgs: number, egressBytes: string, success: boolean, errorMessage: string | null, circuitAction: string | null }> } };
+export type GameModelFlowQuery = { __typename?: 'Query', gameModelFlow: { __typename?: 'GmFlowTimeline', flowId: string, events: Array<{ __typename?: 'GmEvent', eventId: string, flowId: string | null, sessionId: string | null, functionName: string, selfContainerId: string | null, callerUserId: string | null, callerKind: string, automationId: string | null, paramsJson: string, mutationsAppliedJson: string, permissionEffectsAppliedJson: string, returnValueJson: string | null, success: boolean, errorMessage: string | null, executedAt: string }>, automationRuns: Array<{ __typename?: 'GmAutomationRun', runId: string, appId: string, flowId: string | null, automationId: string | null, automationName: string, triggerSource: string, triggerId: string | null, parentRunId: string | null, cascadeDepth: number, startedAt: string, finishedAt: string | null, durationUs: number, targets: number, invocations: number, mutations: number, fnCalls: number, gasUsed: number, success: boolean, errorMessage: string | null, circuitAction: string | null, computeUnits: number }>, moduleRuns: Array<{ __typename?: 'WasmModuleRun', runId: string, appId: string, flowId: string | null, moduleId: string, moduleName: string, triggerSource: string, entry: string | null, startedAt: string, durationUs: number, fuelUsed: string, dbReads: number, dbWrites: number, egressMsgs: number, egressBytes: string, success: boolean, errorMessage: string | null, circuitAction: string | null }> } };
 
 export type GmFunctionFieldsFragment = { __typename?: 'GmFunction', functionId: string, appId: string, name: string, containerTypeName: string | null, description: string | null, returnType: string | null, invokeScope: string, invokePolicyJson: string | null, autonomousInvocable: boolean, returnExpression: string | null, warnings: Array<string>, parameters: Array<{ __typename?: 'GmFunctionParam', name: string, valueType: string, required: boolean, defaultValueJson: string | null, description: string | null, sortOrder: number }>, mutations: Array<{ __typename?: 'GmFunctionMutation', target: string, property: string, expression: string }>, notifications: Array<{ __typename?: 'GmFunctionNotification', kind: string, emitAs: string | null, args: Array<{ __typename?: 'GmNotificationArg', name: string, expression: string }> }>, permissionEffects: Array<{ __typename?: 'GmFunctionPermissionEffect', action: string, permissionKeys: Array<string>, userExpression: string, gridIdExpression: string, ttlSecondsExpression: string | null }>, timers: Array<{ __typename?: 'GmFunctionTimer', functionName: string, target: string, delayMsExpression: string, dedupeKeyExpression: string | null, params: Array<{ __typename?: 'GmTimerParam', name: string, expression: string }> }> };
 

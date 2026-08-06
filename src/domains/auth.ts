@@ -13,7 +13,7 @@ import { LogoutAllDevicesDocument, LogoutDocument } from '../generated/graphql.j
  * SESSION token (management-plane), which is stored on the shared session state
  * automatically. Gameplay tokens are minted separately via `client.portal`.
  *
- * Targets the **management-api** (`managementUrl`).
+ * Part of the management surface.
  *
  * **Public (no session):** {@link requestLoginLink}, {@link completeLoginLink},
  * {@link socialLoginStart}, {@link socialLoginComplete}, {@link devLogin},

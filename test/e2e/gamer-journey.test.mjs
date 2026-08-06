@@ -6,7 +6,7 @@
  * acceptance while a GenericErrorResponse arrives asynchronously on the
  * subscription).
  *
- * Full-stack: needs management-api + game-api + realtime + a Buddy. Auto-skips
+ * Full-stack: needs the API + realtime + a Buddy. Auto-skips
  * without the full e2e env.
  */
 import test from 'node:test';

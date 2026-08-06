@@ -25,7 +25,7 @@ import {
  *   per the permission notes above.
  */
 export class UsageAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * Top GraphQL operations for an app ranked by bytes.
@@ -42,7 +42,7 @@ export class UsageAPI {
     since: string,
     limit?: number,
   ): Promise<AppGraphqlOperationsQuery['appGraphqlOperations']> {
-    const data = await this.management.request(AppGraphqlOperationsDocument, {
+    const data = await this.api.request(AppGraphqlOperationsDocument, {
       orgId,
       appId,
       since,
@@ -66,7 +66,7 @@ export class UsageAPI {
     since: string,
     operationLimit?: number,
   ): Promise<AppUsageSummaryQuery['appUsageSummary']> {
-    const data = await this.management.request(AppUsageSummaryDocument, {
+    const data = await this.api.request(AppUsageSummaryDocument, {
       orgId,
       appId,
       since,
@@ -87,7 +87,7 @@ export class UsageAPI {
   async playerPulse(
     orgId: string,
   ): Promise<PlayerPulseQuery['playerPulse']> {
-    const data = await this.management.request(PlayerPulseDocument, { orgId });
+    const data = await this.api.request(PlayerPulseDocument, { orgId });
     return data.playerPulse;
   }
 }

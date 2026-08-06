@@ -32,7 +32,7 @@ import {
  * auto-billing — exposed as `client.sharedEnvironment` (and grouped under
  * `client.admin`).
  *
- * Targets the **management-api**. {@link plans} is public; the read operations
+ * Part of the management surface. {@link plans} is public; the read operations
  * require org membership; spend-cap / auto-billing / subscription mutations
  * require the `manage_billing` org permission; {@link publishApp} currently
  * requires super-admin (preview). Monetary values are `*Cents` (minor units).
@@ -42,7 +42,7 @@ import {
  *   different args.
  */
 export class SharedEnvironmentAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * Public catalog of paid shared-environment app-slot plans.
@@ -50,7 +50,7 @@ export class SharedEnvironmentAPI {
    * @returns The available plans.
    */
   async plans(): Promise<SharedEnvPlansQuery['sharedEnvPlans']> {
-    const data = await this.management.request(SharedEnvPlansDocument, {});
+    const data = await this.api.request(SharedEnvPlansDocument, {});
     return data.sharedEnvPlans;
   }
 
@@ -63,7 +63,7 @@ export class SharedEnvironmentAPI {
   async freeAppQuota(
     orgId: string,
   ): Promise<OrgFreeAppQuotaQuery['orgFreeAppQuota']> {
-    const data = await this.management.request(OrgFreeAppQuotaDocument, {
+    const data = await this.api.request(OrgFreeAppQuotaDocument, {
       orgId,
     });
     return data.orgFreeAppQuota;
@@ -78,7 +78,7 @@ export class SharedEnvironmentAPI {
   async appSubscription(
     appId: string,
   ): Promise<AppSharedSubscriptionQuery['appSharedSubscription']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       AppSharedSubscriptionDocument,
       { appId },
     );
@@ -94,7 +94,7 @@ export class SharedEnvironmentAPI {
   async appRuntimeState(
     appId: string,
   ): Promise<AppRuntimeStateQuery['appRuntimeState']> {
-    const data = await this.management.request(AppRuntimeStateDocument, {
+    const data = await this.api.request(AppRuntimeStateDocument, {
       appId,
     });
     return data.appRuntimeState;
@@ -109,7 +109,7 @@ export class SharedEnvironmentAPI {
   async autoBilling(
     orgId: string,
   ): Promise<OrgAutoBillingQuery['orgAutoBilling']> {
-    const data = await this.management.request(OrgAutoBillingDocument, {
+    const data = await this.api.request(OrgAutoBillingDocument, {
       orgId,
     });
     return data.orgAutoBilling;
@@ -124,7 +124,7 @@ export class SharedEnvironmentAPI {
   async paymentMethods(
     orgId: string,
   ): Promise<OrgPaymentMethodsQuery['orgPaymentMethods']> {
-    const data = await this.management.request(OrgPaymentMethodsDocument, {
+    const data = await this.api.request(OrgPaymentMethodsDocument, {
       orgId,
     });
     return data.orgPaymentMethods;
@@ -150,7 +150,7 @@ export class SharedEnvironmentAPI {
       idempotencyKey?: string;
     } = {},
   ): Promise<PublishAppToSharedMutation['publishAppToShared']> {
-    const data = await this.management.request(PublishAppToSharedDocument, {
+    const data = await this.api.request(PublishAppToSharedDocument, {
       appId,
       planId: opts.planId,
       provider: opts.provider,
@@ -172,7 +172,7 @@ export class SharedEnvironmentAPI {
     appId: string,
     idempotencyKey?: string,
   ): Promise<CancelSharedSubscriptionMutation['cancelSharedSubscription']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       CancelSharedSubscriptionDocument,
       { appId, idempotencyKey },
     );
@@ -191,7 +191,7 @@ export class SharedEnvironmentAPI {
     appId: string,
     caps: { hourlyLimitCents?: string | null; dailyLimitCents?: string | null } = {},
   ): Promise<SetAppSpendCapsMutation['setAppSpendCaps']> {
-    const data = await this.management.request(SetAppSpendCapsDocument, {
+    const data = await this.api.request(SetAppSpendCapsDocument, {
       appId,
       hourlyLimitCents: caps.hourlyLimitCents,
       dailyLimitCents: caps.dailyLimitCents,
@@ -218,7 +218,7 @@ export class SharedEnvironmentAPI {
       idempotencyKey?: string;
     },
   ): Promise<SetAutoBillingMutation['setAutoBilling']> {
-    const data = await this.management.request(SetAutoBillingDocument, {
+    const data = await this.api.request(SetAutoBillingDocument, {
       orgId,
       enabled: config.enabled,
       limitCents: config.limitCents,
@@ -241,7 +241,7 @@ export class SharedEnvironmentAPI {
     orgId: string,
     idempotencyKey?: string,
   ): Promise<SetupSharedPaymentMethodMutation['setupSharedPaymentMethod']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       SetupSharedPaymentMethodDocument,
       { orgId, idempotencyKey },
     );
@@ -261,7 +261,7 @@ export class SharedEnvironmentAPI {
     paymentMethodId: string,
     idempotencyKey?: string,
   ): Promise<RemoveSharedPaymentMethodMutation['removeSharedPaymentMethod']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       RemoveSharedPaymentMethodDocument,
       { orgId, paymentMethodId, idempotencyKey },
     );

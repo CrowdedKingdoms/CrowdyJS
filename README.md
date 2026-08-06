@@ -39,11 +39,9 @@ import {
 } from '@crowdedkingdoms/crowdyjs';
 
 const client = createCrowdyClient({
-  // Game API (world data + UDP proxy)
-  httpUrl: 'https://game.example.com',
-  wsUrl: 'wss://game.example.com',
-  // Management API (passwordless sign-in, profile, admin)
-  managementUrl: 'https://management.example.com',
+  // One API: identity, studio admin, world data and the UDP proxy.
+  httpUrl: 'https://api.example.com/graphql',
+  wsUrl: 'wss://api.example.com/graphql',
   tokenStore: new BrowserLocalStorageTokenStore(),
   realtime: {
     retryAttempts: 8,
@@ -61,33 +59,34 @@ if (!client.session.getToken()) {
   // Or dev/test only (server has DEV_AUTH_BYPASS): client.auth.devLogin('player@example.com')
 }
 
-// Passwordless sign-in returns an identity SESSION token (Management API only);
+// Passwordless sign-in returns an identity SESSION token (rejected for gameplay);
 // the account is created on first sign-in. Identity reads run on it:
 const me = await client.users.me();
 console.log(me.email);
 ```
 
-The Management and Game APIs may share one origin or be split; if
-`managementUrl` is omitted, the SDK falls back to `httpUrl`.
+There is one endpoint. `managementUrl` was removed in v14 — see
+[MIGRATION.md](MIGRATION.md).
 
 **Gameplay needs an app-scoped token, not the session token.** Mint one per
-app and drive the Game API world/UDP surface from a per-game client — see
+app and drive the world/UDP surface from a per-game client — see
 [Authentication](#authentication-session-token-vs-app-scoped-tokens).
 
 ## Authentication: session token vs app-scoped tokens
 
-Passwordless sign-in returns an **identity session token** that works only
-against the Management API — account, studio admin, and token minting. Each
-game is entered with a short-lived **app-scoped token** confined to that one
-app, so a game stack never receives the player's full session.
+Passwordless sign-in returns an **identity session token** good for account,
+studio admin and token minting, and **rejected for gameplay**. Each game is
+entered with a short-lived **app-scoped token** confined to that one app, so a
+game stack never receives the player's full session.
 
 Use two clients: an Overworld/identity client (session token) and a per-game
-client (app token), sharing only the Management URL.
+client (app token). They never share a token store, and they need not share a
+URL — `mintAppToken` returns the endpoint for the app's own datacenter.
 
 ```ts
 // Overworld/identity client
 const overworld = createCrowdyClient({
-  managementUrl,
+  httpUrl: apiUrl,
   tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:session'),
 });
 // Passwordless sign-in (magic link, social/OIDC, or dev bypass) yields the session token.
@@ -99,7 +98,6 @@ const t = await overworld.portal.mintAppToken(appId);
 const game = createCrowdyClient({
   httpUrl: t.gameApiUrl!,
   wsUrl: t.gameApiWsUrl!,
-  managementUrl,
   tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:app:' + appId),
 });
 game.setToken(t.token);
@@ -158,7 +156,7 @@ lifecycle to preserve.
 
 1. Sign in (passwordless) on the identity client with `client.auth`, or
    restore a stored session with `client.session.restore()`. This yields the
-   **session token** (Management API only).
+   **session token**, which gameplay rejects.
 2. Mint an **app-scoped token** for the app (`identity.portal.mintAppToken(appId)`,
    or the PKCE portal flow across origins) and build a per-game client holding
    it (`game.setToken(token)`). The gameplay steps below run on that **game**
@@ -224,12 +222,11 @@ grouped under `client.admin` and mirrored at the top level):
 |---|---|
 | `client.operator` | Platform compute ceilings (`computePlatformCeilings`, `setComputePlatformCeilings`). Infrastructure operations live in the separate infra-control-plane service, not this SDK. |
 
-Auth, user reads, and the studio-admin / operator surfaces target
-`managementUrl` and use the **identity session token**; the game-client
-world/UDP surfaces target `httpUrl` / `wsUrl` and require an **app-scoped
-token** for that app.
+Auth, user reads and the studio-admin / operator surfaces use the **identity
+session token**; the world/UDP surfaces require an **app-scoped token** for that
+app. Both go to the same endpoint.
 
-CrowdyJS wraps the full public Management + Game API surface — every
+CrowdyJS wraps the full public API surface — every
 non-deprecated public root field has a typed method, with Relay `*Connection`
 cursor-pagination variants alongside the legacy offset lists. The SDK never
 relaxes server-side authorization: exposing an operation here just gives you a
@@ -241,7 +238,7 @@ not from an untrusted browser.
 
 `mintAppToken` returns `gameApiUrl` / `gameApiWsUrl`, so you rarely need a
 separate routing query. When you do (e.g. pre-flight discovery), query the
-app's routing fields on the Management API:
+app's routing fields:
 
 ```graphql
 query AppForRouting($appId: BigInt!) {
@@ -710,8 +707,7 @@ The key parameter is optional and trailing, so it's safe to omit.
 ## Low-level GraphQL access
 
 Typed sub-client methods are first-class, but generated operation documents
-are also available through a transport escape hatch — `client.graphql` for the
-Game API and `client.management` for the Management API:
+are also available through a transport escape hatch, `client.graphql`:
 
 ```ts
 import { VersionInfoDocument } from '@crowdedkingdoms/crowdyjs/generated';
@@ -719,8 +715,9 @@ import { VersionInfoDocument } from '@crowdedkingdoms/crowdyjs/generated';
 const data = await client.graphql.request(VersionInfoDocument);
 ```
 
-For any brand-new server field not yet wrapped, `client.graphql.request(...)` /
-`client.management.request(...)` always works.
+For any brand-new server field not yet wrapped, `client.graphql.request(...)`
+always works. (`client.management` was removed in v14 along with the second
+endpoint; `client.graphql` reaches every surface.)
 
 ## Maintainers: schema artifacts and fixtures
 
@@ -728,20 +725,19 @@ CrowdyJS is a standalone public package: a clean clone builds with
 `npm install && npm run build` using the artifacts committed to this repo —
 no other repositories and no network access required:
 
-- `schema.gql` — merged Management API + Game API SDL.
+- `schema.gql` — the unified API SDL (management and game surfaces).
 - `src/generated/graphql.ts` — generated TypeScript operation types.
 
-Schema refresh is explicit, from the published SDLs
-([management-api.graphql](https://docs.crowdedkingdoms.com/schema/management-api.graphql),
-[game-api.graphql](https://docs.crowdedkingdoms.com/schema/game-api.graphql)):
+Schema refresh is explicit, from the published
+[SDL](https://docs.crowdedkingdoms.com/schema/game-api.graphql):
 
 ```bash
 npm run schema:sync:prod
 npm run codegen
 ```
 
-(`npm run schema:sync:paths -- --management <file-or-url> --game <file-or-url>`
-accepts explicit sources.) Commit `schema.gql` and `src/generated/graphql.ts`
+(`npm run schema:sync:paths -- --schema <file-or-url>` accepts an explicit
+source, and `npm run schema:sync:local` reads `../cks-game-api/schema.gql`.) Commit `schema.gql` and `src/generated/graphql.ts`
 together whenever the public GraphQL surface changes; `npm run check:schema`
 detects drift in CI/release work.
 

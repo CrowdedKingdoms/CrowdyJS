@@ -29,7 +29,6 @@ async function clientWith(payload, t) {
     };
   };
   const client = createCrowdyClient({
-    managementUrl: 'https://example.test/graphql',
     gameUrl: 'https://example.test/graphql',
   });
   client.auth.setToken('token');

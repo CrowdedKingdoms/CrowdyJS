@@ -18,19 +18,18 @@ if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket;
 }
 
-/** Env required for a FULL e2e run (management-api + game-api + realtime). */
+/** Env required for a FULL e2e run (HTTP + realtime). */
 export const FULL_E2E_ENV = [
-  'CROWDY_MANAGEMENT_URL',
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   'CROWDY_OWNER_EMAIL',
 ];
 
-/** Env required for management-only e2e (no game-api / realtime needed). */
-export const MANAGEMENT_E2E_ENV = [
-  'CROWDY_MANAGEMENT_URL',
-  'CROWDY_OWNER_EMAIL',
-];
+/**
+ * Env required for management-surface-only e2e (no realtime needed). Both point at
+ * the same API: CROWDY_MANAGEMENT_URL was retired with the separate server.
+ */
+export const MANAGEMENT_E2E_ENV = ['CROWDY_HTTP_URL', 'CROWDY_OWNER_EMAIL'];
 
 /** Return the subset of `keys` that are missing from the environment. */
 export function missingEnv(keys) {
@@ -82,7 +81,6 @@ export const TEST_UUID_C = 'ccccccccddddeeeeeeeeeeeeeeeeeeee';
 /** Standard CrowdyClient config from env, with optional overrides. */
 export function clientConfig(overrides = {}) {
   return {
-    managementUrl: process.env.CROWDY_MANAGEMENT_URL,
     httpUrl: process.env.CROWDY_HTTP_URL,
     wsUrl: process.env.CROWDY_WS_URL,
     realtime: {

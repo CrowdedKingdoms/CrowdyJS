@@ -15,7 +15,6 @@ import { loadSdk, clientConfig, skipReasonFor } from '../helpers.mjs';
 import { provisionOwner, mintAppToken } from '../provision.mjs';
 
 const COMPUTE_E2E_ENV = [
-  'CROWDY_MANAGEMENT_URL',
   'CROWDY_HTTP_URL',
   'CROWDY_OWNER_EMAIL',
 ];

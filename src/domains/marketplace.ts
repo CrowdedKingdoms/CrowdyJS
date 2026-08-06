@@ -122,9 +122,9 @@ import {
 /**
  * The P4a player-code marketplace (free mode) — exposed as
  * `client.marketplace`. Player-facing browse/publish/acquire/install/consent
- * and the D4 grid claim flows route to the Game API; studio moderation
- * (admission queue, catalog administration, ownership transfer, claim-policy
- * config) routes to the Management API.
+ * and the D4 grid claim flows, plus studio moderation (admission queue, catalog
+ * administration, ownership transfer, claim-policy config). Player and moderation
+ * operations differ by the permissions they require, not by endpoint.
  *
  * No money moves through any of these calls: every listing is free in P4a,
  * an acquisition is an entitlement write, and the paid modes ship with P4b.
@@ -132,12 +132,9 @@ import {
  * never source; installs consent to the summary's hash.
  */
 export class MarketplaceAPI {
-  constructor(
-    private readonly game: GraphQLClient,
-    private readonly management: GraphQLClient,
-  ) {}
+  constructor(private readonly game: GraphQLClient) {}
 
-  // -- Store (Game API) ---------------------------------------------------------
+  // -- Store ---------------------------------------------------------
 
   /** Browse the app's active listings with admission standing per listing. */
   async listings(
@@ -406,13 +403,13 @@ export class MarketplaceAPI {
     return data.issueGridClaimInvite;
   }
 
-  // -- Studio moderation (Management API) ------------------------------------------
+  // -- Studio moderation (requires studio permissions) -----------------------------
 
   /** The admission queue: listings joined with allow-list standing. */
   async admissionQueue(
     variables: MarketplaceAdmissionQueueQueryVariables,
   ): Promise<MarketplaceAdmissionQueueQuery['appCodeAdmissionQueue']> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceAdmissionQueueDocument,
       variables,
     );
@@ -423,7 +420,7 @@ export class MarketplaceAPI {
   async appListings(
     variables: MarketplaceAppListingsQueryVariables,
   ): Promise<MarketplaceAppListingsQuery['appPlayerCodeListings']> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceAppListingsDocument,
       variables,
     );
@@ -435,7 +432,7 @@ export class MarketplaceAPI {
     variables: MarketplaceAppAcquisitionsQueryVariables,
   ): Promise<MarketplaceAppAcquisitionsQuery['appPlayerCodeAcquisitions']> {
     const data =
-      await this.management.request(
+      await this.game.request(
         MarketplaceAppAcquisitionsDocument,
         variables,
       );
@@ -447,7 +444,7 @@ export class MarketplaceAPI {
     variables: MarketplaceTransferListingMutationVariables,
   ): Promise<MarketplaceTransferListingMutation['transferPlayerCodeListing']> {
     const data =
-      await this.management.request(
+      await this.game.request(
         MarketplaceTransferListingDocument,
         variables,
       );
@@ -463,7 +460,7 @@ export class MarketplaceAPI {
     variables: MarketplaceSetListingStatusMutationVariables,
   ): Promise<MarketplaceSetListingStatusMutation['setPlayerCodeListingStatus']> {
     const data =
-      await this.management.request(
+      await this.game.request(
         MarketplaceSetListingStatusDocument,
         variables,
       );
@@ -475,7 +472,7 @@ export class MarketplaceAPI {
     variables: MarketplaceSetGridClaimPolicyMutationVariables,
   ): Promise<MarketplaceSetGridClaimPolicyMutation['setAppGridClaimPolicy']> {
     const data =
-      await this.management.request(
+      await this.game.request(
         MarketplaceSetGridClaimPolicyDocument,
         variables,
       );
@@ -535,13 +532,13 @@ export class MarketplaceAPI {
     return data.purchaseGrid;
   }
 
-  // -- P4b: pricing, seller payouts, grid catalog, risk (Management API) ----------
+  // -- P4b: pricing, seller payouts, grid catalog, risk ---------------------------
 
   /** Author-only: set a listing's acquisition mode + price. */
   async setListingPricing(
     variables: MarketplaceSetListingPricingMutationVariables,
   ): Promise<boolean> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceSetListingPricingDocument,
       variables,
     );
@@ -552,7 +549,7 @@ export class MarketplaceAPI {
   async setOrgShare(
     variables: MarketplaceSetOrgShareMutationVariables,
   ): Promise<number> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceSetOrgShareDocument,
       variables,
     );
@@ -571,7 +568,7 @@ export class MarketplaceAPI {
   ): Promise<
     MarketplaceCreateAccountSessionMutation['createSellerAccountSession']
   > {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceCreateAccountSessionDocument,
       variables,
     );
@@ -584,7 +581,7 @@ export class MarketplaceAPI {
   ): Promise<
     MarketplaceCreateOrgAccountSessionMutation['createOrgSellerAccountSession']
   > {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceCreateOrgAccountSessionDocument,
       variables,
     );
@@ -595,7 +592,7 @@ export class MarketplaceAPI {
   async beginSellerOnboarding(
     variables: MarketplaceBeginSellerOnboardingMutationVariables,
   ): Promise<MarketplaceBeginSellerOnboardingMutation['beginSellerOnboarding']> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceBeginSellerOnboardingDocument,
       variables,
     );
@@ -608,7 +605,7 @@ export class MarketplaceAPI {
   ): Promise<
     MarketplaceBeginOrgSellerOnboardingMutation['beginOrgSellerOnboarding']
   > {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceBeginOrgSellerOnboardingDocument,
       variables,
     );
@@ -619,7 +616,7 @@ export class MarketplaceAPI {
   async mySellerBalance(): Promise<
     MarketplaceMySellerBalanceQuery['mySellerPayoutBalance']
   > {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceMySellerBalanceDocument,
       {},
     );
@@ -630,7 +627,7 @@ export class MarketplaceAPI {
   async requestPayout(
     variables: MarketplaceRequestPayoutMutationVariables = {},
   ): Promise<number> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceRequestPayoutDocument,
       variables,
     );
@@ -641,7 +638,7 @@ export class MarketplaceAPI {
   async spendPayoutToWallet(
     variables: MarketplaceSpendPayoutToWalletMutationVariables,
   ): Promise<number> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceSpendPayoutToWalletDocument,
       variables,
     );
@@ -652,7 +649,7 @@ export class MarketplaceAPI {
   async commerceRiskQueue(
     variables: MarketplaceCommerceRiskQueueQueryVariables,
   ): Promise<MarketplaceCommerceRiskQueueQuery['commerceRiskQueue']> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceCommerceRiskQueueDocument,
       variables,
     );
@@ -663,7 +660,7 @@ export class MarketplaceAPI {
   async decideRiskFlag(
     variables: MarketplaceDecideRiskFlagMutationVariables,
   ): Promise<boolean> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceDecideRiskFlagDocument,
       variables,
     );
@@ -674,7 +671,7 @@ export class MarketplaceAPI {
   async createGridListing(
     variables: MarketplaceCreateGridListingMutationVariables,
   ): Promise<MarketplaceCreateGridListingMutation['createGridListing']> {
-    const data = await this.management.request(
+    const data = await this.game.request(
       MarketplaceCreateGridListingDocument,
       variables,
     );

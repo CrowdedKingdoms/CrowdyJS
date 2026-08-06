@@ -4,11 +4,12 @@
 // the game client obtains an app token via the code+verifier WITHOUT ever
 // holding the identity session token.
 //
-// Run: MGMT=https://api.<box> GAME=https://game.<box> APP_A=1 node test/portal-browser-flow.mjs
+// Run: API=https://api.<host> GAME=https://<app-datacenter-host> APP_A=1 node test/portal-browser-flow.mjs
+// GAME defaults to API: the two differ only when the app is placed in another datacenter.
 import { createCrowdyClient } from '../dist/index.js';
 
-const MGMT = process.env.MGMT ?? 'https://api.ow-box-587206.test.cks-env.com';
-const GAME = process.env.GAME ?? 'https://game.ow-box-587206.test.cks-env.com';
+const API = process.env.API ?? 'https://api.dev.crowdedkingdoms.com';
+const GAME = process.env.GAME ?? API;
 const APP_A = process.env.APP_A ?? '1';
 let pass = 0, fail = 0;
 const log = (ok, m, x = '') => { ok ? (pass++, console.log(`  PASS  ${m}`)) : (fail++, console.error(`  FAIL  ${m}  ${x}`)); };
@@ -19,17 +20,17 @@ function memPkceStore() { const m = new Map(); return { get: (s) => m.get(s) ?? 
 
 async function main() {
   // Overworld identity origin: holds the session token.
-  const overworld = createCrowdyClient({ managementUrl: MGMT, tokenStore: memTokenStore() });
+  const overworld = createCrowdyClient({ httpUrl: API, tokenStore: memTokenStore() });
   // Game origin: separate client + its own PKCE store; starts with no token.
   const gamePkce = memPkceStore();
-  const game = createCrowdyClient({ managementUrl: MGMT, httpUrl: GAME, wsUrl: GAME.replace(/^http/, 'ws'), tokenStore: memTokenStore(), pkceStore: gamePkce });
+  const game = createCrowdyClient({ httpUrl: GAME, wsUrl: GAME.replace(/^http/, 'ws'), tokenStore: memTokenStore(), pkceStore: gamePkce });
 
   await overworld.auth.devLogin(`portal-browser-${Date.now()}@test.invalid`);
   const sessionTok = overworld.getToken();
   log(!!sessionTok, '1. overworld signed in via devLogin (identity session token held on overworld origin)');
 
   // Game origin step 1: beginEntry -> build the Overworld authorize URL (verifier kept locally).
-  const authorizeUrl = await game.portal.beginEntry({ appId: APP_A, authorizeUrl: `${MGMT}/authorize`, redirectUri: 'https://game.example/callback' });
+  const authorizeUrl = await game.portal.beginEntry({ appId: APP_A, authorizeUrl: `${API}/authorize`, redirectUri: 'https://game.example/callback' });
   log(authorizeUrl.includes('code_challenge=') && authorizeUrl.includes('state='), '2. beginEntry builds authorize URL with PKCE challenge + state');
   log(game.getToken() === null, '3. game origin has NO token yet');
 

@@ -52,7 +52,7 @@ import {
  * WebSocket (same game-api endpoint) managed by `SubscriptionManager` — the
  * first subscriber opens it and the last to unsubscribe closes it. Every call
  * requires an authenticated session carrying a **bearer game token** (minted
- * by the management-api, set via `client.auth.login()` or `client.setToken()`);
+ * by the API, set via `client.auth.login()` or `client.setToken()`);
  * a UDP proxy session is opened lazily on the first send or subscribe if you
  * didn't call {@link connect} first.
  *

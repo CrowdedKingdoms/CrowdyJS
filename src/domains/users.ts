@@ -34,7 +34,7 @@ import {
 /**
  * User identity & account management — exposed as `client.users`.
  *
- * Targets the **management-api** (every call routes to `managementUrl`). After
+ * Part of the management surface. After
  * the database split the users table is management-owned, so game-api no longer
  * exposes these identity mutations — calling them against a game-api endpoint
  * throws {@link CrowdyGraphQLError} with `FORBIDDEN`, directing you to the

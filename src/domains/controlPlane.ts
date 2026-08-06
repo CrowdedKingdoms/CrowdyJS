@@ -21,7 +21,7 @@ import {
  *   when the caller is not an operator.
  */
 export class ControlPlaneAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * The platform-wide compute ceilings (max modules, tick rates, fuel,
@@ -32,7 +32,7 @@ export class ControlPlaneAPI {
   async computePlatformCeilings(): Promise<
     CpComputePlatformCeilingsQuery['cpComputePlatformCeilings']
   > {
-    const data = await this.management.request(
+    const data = await this.api.request(
       CpComputePlatformCeilingsDocument,
     );
     return data.cpComputePlatformCeilings;
@@ -53,7 +53,7 @@ export class ControlPlaneAPI {
   ): Promise<
     CpSetComputePlatformCeilingsMutation['cpSetComputePlatformCeilings']
   > {
-    const data = await this.management.request(
+    const data = await this.api.request(
       CpSetComputePlatformCeilingsDocument,
       { input },
     );

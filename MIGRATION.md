@@ -1,3 +1,47 @@
+# CrowdyJS v14 — one endpoint (breaking)
+
+v13 made the two GraphQL origins optional-but-supported. v14 removes the second
+one entirely, because `cks-management-api` has been retired: the management
+surface is served by the unified API, and there is nothing else to point at.
+
+**What changed**
+
+- **`managementUrl` and `managementGraphqlEndpoint` removed** from
+  `CrowdyClientConfig`. Passing either now **throws** rather than being ignored —
+  a JavaScript caller that kept the old option would otherwise have its identity
+  calls silently redirected to `httpUrl`, or nowhere at all if `managementUrl`
+  was the only URL it set.
+- **`client.management` removed.** Use `client.graphql`; it reaches every
+  surface. `MarketplaceAPI` also collapsed from two transports to one.
+
+**What did not change:** the two-**token** model. An identity session token is
+still rejected for gameplay, and you still mint a short-lived app-scoped token
+per app. Keep using two clients — one per token — they just no longer need a
+shared management URL.
+
+**Upgrading**
+
+```diff
+ const client = createCrowdyClient({
+-  httpUrl: 'https://game.example.com',
+-  wsUrl: 'wss://game.example.com',
+-  managementUrl: 'https://management.example.com',
++  httpUrl: 'https://api.example.com/graphql',
++  wsUrl: 'wss://api.example.com/graphql',
+ });
+
+-await client.management.request(SomeDocument);
++await client.graphql.request(SomeDocument);
+```
+
+If you configured both to the same origin under v13, delete the `managementUrl`
+line and you are done.
+
+**One thing worth getting right:** the per-game client should use the
+`gameApiUrl` / `gameApiWsUrl` that `mintAppToken` returns, not a hardcoded host.
+An app lives in a single datacenter, and those fields name it. The identity
+client can stay on the shared origin.
+
 # CrowdyJS v13 — unified galaxy API (breaking)
 
 The platform merged the Management API and Game API into ONE server on the

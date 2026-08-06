@@ -50,7 +50,7 @@ import {
  * Organizations, members, roles (RBAC), and org API tokens — exposed as
  * `client.organizations` (and grouped under `client.admin`).
  *
- * Targets the **management-api**. This is the studio-admin surface: an
+ * Part of the management surface. This is the studio-admin surface: an
  * organization owns apps, billing, quotas, and environments, and its RBAC
  * grants (`manage_members`, `manage_tokens`, ...) gate the rest of the admin
  * APIs. Most operations require an authenticated caller who is an active member
@@ -64,7 +64,7 @@ import {
  *   / `SCOPE_MISSING` when the caller lacks the required org permission.
  */
 export class OrganizationsAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * Fetch a single organization by numeric id. Requires authentication.
@@ -73,7 +73,7 @@ export class OrganizationsAPI {
    * @returns The {@link Organization}, or `null` if it does not exist.
    */
   async get(orgId: string): Promise<OrganizationQuery['organization']> {
-    const data = await this.management.request(OrganizationDocument, {
+    const data = await this.api.request(OrganizationDocument, {
       id: orgId,
     });
     return data.organization;
@@ -88,7 +88,7 @@ export class OrganizationsAPI {
   async bySlug(
     slug: string,
   ): Promise<OrganizationBySlugQuery['organizationBySlug']> {
-    const data = await this.management.request(OrganizationBySlugDocument, {
+    const data = await this.api.request(OrganizationBySlugDocument, {
       slug,
     });
     return data.organizationBySlug;
@@ -102,7 +102,7 @@ export class OrganizationsAPI {
    *   no orgs).
    */
   async mine(): Promise<MyOrganizationsQuery['myOrganizations']> {
-    const data = await this.management.request(MyOrganizationsDocument, {});
+    const data = await this.api.request(MyOrganizationsDocument, {});
     return data.myOrganizations;
   }
 
@@ -114,7 +114,7 @@ export class OrganizationsAPI {
    * @returns The org's members with their roles.
    */
   async members(orgId: string): Promise<OrgMembersQuery['orgMembers']> {
-    const data = await this.management.request(OrgMembersDocument, { orgId });
+    const data = await this.api.request(OrgMembersDocument, { orgId });
     return data.orgMembers;
   }
 
@@ -126,7 +126,7 @@ export class OrganizationsAPI {
    * @returns The org's roles.
    */
   async roles(orgId: string): Promise<OrgRolesQuery['orgRoles']> {
-    const data = await this.management.request(OrgRolesDocument, { orgId });
+    const data = await this.api.request(OrgRolesDocument, { orgId });
     return data.orgRoles;
   }
 
@@ -140,7 +140,7 @@ export class OrganizationsAPI {
   async memberRoles(
     orgMemberId: string,
   ): Promise<MemberRolesQuery['memberRoles']> {
-    const data = await this.management.request(MemberRolesDocument, {
+    const data = await this.api.request(MemberRolesDocument, {
       orgMemberId,
     });
     return data.memberRoles;
@@ -153,7 +153,7 @@ export class OrganizationsAPI {
    * @returns The catalog of org permissions.
    */
   async permissions(): Promise<OrgPermissionsQuery['orgPermissions']> {
-    const data = await this.management.request(OrgPermissionsDocument, {});
+    const data = await this.api.request(OrgPermissionsDocument, {});
     return data.orgPermissions;
   }
 
@@ -165,7 +165,7 @@ export class OrganizationsAPI {
    * @returns The org's API tokens.
    */
   async tokens(orgId: string): Promise<OrgTokensQuery['orgTokens']> {
-    const data = await this.management.request(OrgTokensDocument, { orgId });
+    const data = await this.api.request(OrgTokensDocument, { orgId });
     return data.orgTokens;
   }
 
@@ -179,7 +179,7 @@ export class OrganizationsAPI {
   async create(
     input: CreateOrganizationInput,
   ): Promise<CreateOrganizationMutation['createOrganization']> {
-    const data = await this.management.request(CreateOrganizationDocument, {
+    const data = await this.api.request(CreateOrganizationDocument, {
       input,
     });
     return data.createOrganization;
@@ -196,7 +196,7 @@ export class OrganizationsAPI {
     orgId: string,
     status: string,
   ): Promise<SetOrgStatusMutation['setOrgStatus']> {
-    const data = await this.management.request(SetOrgStatusDocument, {
+    const data = await this.api.request(SetOrgStatusDocument, {
       orgId,
       status,
     });
@@ -214,7 +214,7 @@ export class OrganizationsAPI {
   async createToken(
     input: CreateOrgTokenInput,
   ): Promise<CreateOrgTokenMutation['createOrgToken']> {
-    const data = await this.management.request(CreateOrgTokenDocument, {
+    const data = await this.api.request(CreateOrgTokenDocument, {
       input,
     });
     return data.createOrgToken;
@@ -232,7 +232,7 @@ export class OrganizationsAPI {
     orgTokenId: string,
     input: UpdateOrgTokenInput,
   ): Promise<UpdateOrgTokenMutation['updateOrgToken']> {
-    const data = await this.management.request(UpdateOrgTokenDocument, {
+    const data = await this.api.request(UpdateOrgTokenDocument, {
       orgTokenId,
       input,
     });
@@ -248,7 +248,7 @@ export class OrganizationsAPI {
   async revokeToken(
     orgTokenId: string,
   ): Promise<RevokeOrgTokenMutation['revokeOrgToken']> {
-    const data = await this.management.request(RevokeOrgTokenDocument, {
+    const data = await this.api.request(RevokeOrgTokenDocument, {
       orgTokenId,
     });
     return data.revokeOrgToken;
@@ -264,7 +264,7 @@ export class OrganizationsAPI {
   async inviteMember(
     input: InviteOrgMemberInput,
   ): Promise<InviteOrgMemberMutation['inviteOrgMember']> {
-    const data = await this.management.request(InviteOrgMemberDocument, {
+    const data = await this.api.request(InviteOrgMemberDocument, {
       input,
     });
     return data.inviteOrgMember;
@@ -282,7 +282,7 @@ export class OrganizationsAPI {
     orgId: string,
     userId: string,
   ): Promise<RemoveOrgMemberMutation['removeOrgMember']> {
-    const data = await this.management.request(RemoveOrgMemberDocument, {
+    const data = await this.api.request(RemoveOrgMemberDocument, {
       orgId,
       userId,
     });
@@ -303,7 +303,7 @@ export class OrganizationsAPI {
     userId: string,
     roleIds: string[],
   ): Promise<UpdateOrgMemberRolesMutation['updateOrgMemberRoles']> {
-    const data = await this.management.request(UpdateOrgMemberRolesDocument, {
+    const data = await this.api.request(UpdateOrgMemberRolesDocument, {
       orgId,
       userId,
       roleIds,
@@ -322,7 +322,7 @@ export class OrganizationsAPI {
   async createRole(
     input: CreateOrgRoleInput,
   ): Promise<CreateOrgRoleMutation['createOrgRole']> {
-    const data = await this.management.request(CreateOrgRoleDocument, {
+    const data = await this.api.request(CreateOrgRoleDocument, {
       input,
     });
     return data.createOrgRole;
@@ -340,7 +340,7 @@ export class OrganizationsAPI {
     orgRoleId: string,
     input: UpdateOrgRoleInput,
   ): Promise<UpdateOrgRoleMutation['updateOrgRole']> {
-    const data = await this.management.request(UpdateOrgRoleDocument, {
+    const data = await this.api.request(UpdateOrgRoleDocument, {
       orgRoleId,
       input,
     });
@@ -357,7 +357,7 @@ export class OrganizationsAPI {
   async deleteRole(
     orgRoleId: string,
   ): Promise<DeleteOrgRoleMutation['deleteOrgRole']> {
-    const data = await this.management.request(DeleteOrgRoleDocument, {
+    const data = await this.api.request(DeleteOrgRoleDocument, {
       orgRoleId,
     });
     return data.deleteOrgRole;

@@ -59,8 +59,7 @@ export class ServerStatusAPI {
   }
 
   /**
-   * List every registered GraphQL API server (both `management-api` and
-   * `game-api` kinds), regardless of health/state — for service discovery. To
+   * List every registered GraphQL API server, regardless of health/state — for service discovery. To
    * route clients, prefer {@link ServerStatusAPI.listActiveGraphqlServers}
    * (healthy only). No authentication required.
    *

@@ -1,23 +1,22 @@
 /**
- * Black-box e2e provisioning via the PUBLIC management API — no database access.
+ * Black-box e2e provisioning via the PUBLIC API — no database access.
  *
  * CrowdyJS is a public client SDK, so its tests must set themselves up the way a
- * real integrator would: through the management API, never the database.
+ * real integrator would: through the API, never the database.
  *
  * An app **owner** (an org admin who owns the target app) signs in (passwordless
  * dev bypass), ensures the app has an access tier holding every runtime
  * permission, then creates players (devLogin create-on-first-use) and grants
- * each one access to the app. Granting access fires the
- * management -> game-api replica-sync, which server-side mirrors the access row
- * into the per-tenant game DB AND auto-grants the user full grid permissions on
- * the app's open-by-default world grid (see cks-game-api
- * ReplicaSyncService.grantDefaultGridAccess). So after a grant the player's
- * spatial traffic is authorized end to end with zero direct DB writes.
+ * each one access to the app. Granting access also auto-grants the user full grid
+ * permissions on the app's open-by-default world grid, so after a grant the
+ * player's spatial traffic is authorized end to end with zero direct DB writes.
+ * (This used to cross a management -> game-api replica-sync; since the two became
+ * one service it is a single in-process write.)
  *
  * This matches production: an integrator (studio) owns its app and entitles its
  * own users. The test targets the app the game-api is serving:
  *
- *   CROWDY_MANAGEMENT_URL   management-api root (the SDK appends /graphql)
+ *   CROWDY_HTTP_URL         API root (the SDK appends /graphql)
  *   CROWDY_OWNER_EMAIL      owner sign-in (owns CROWDY_TEST_APP_ID; passwordless)
  *   CROWDY_TEST_APP_ID      app to test against (default '1')
  *
@@ -27,7 +26,7 @@ import { randomBytes } from 'node:crypto';
 
 const DEFAULT_PERMISSION_KEYS = ['access', 'teleport', 'update_voxel_data', 'use_voice_chat'];
 
-export const OWNER_ENV = ['CROWDY_MANAGEMENT_URL', 'CROWDY_OWNER_EMAIL'];
+export const OWNER_ENV = ['CROWDY_HTTP_URL', 'CROWDY_OWNER_EMAIL'];
 
 export function ownerEnvReady() {
   return OWNER_ENV.every((k) => !!process.env[k]);
@@ -38,8 +37,8 @@ export function appId() {
 }
 
 function managementEndpoint() {
-  const base = process.env.CROWDY_MANAGEMENT_URL;
-  if (!base) throw new Error('CROWDY_MANAGEMENT_URL is not set');
+  const base = process.env.CROWDY_HTTP_URL;
+  if (!base) throw new Error('CROWDY_HTTP_URL is not set');
   return `${base.replace(/\/$/, '')}/graphql`;
 }
 
