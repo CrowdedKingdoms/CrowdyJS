@@ -323,6 +323,45 @@ while `AUTH_REQUIRED` / `APP_ID_REQUIRED` must be fixed by the caller first.
 Unsubscribing stops delivery only; call `client.udp.disconnect()` to close the
 UDP proxy session.
 
+### Surviving the loss of an instance (direct connect)
+
+**If your environment uses direct connect, set `realtime.discoveryUrl`.** Under
+direct connect `mintAppToken` hands the client ONE api instance, and without a way
+to ask for another the client cannot leave it: it re-dials a dead host until its
+retries run out and then sits there, connected to nothing.
+
+```ts
+const bootstrap = await client.udp.gameClientBootstrap(appId);
+
+const client = createCrowdyClient({
+  httpUrl: bootstrap.gameApiUrl,
+  wsUrl: bootstrap.gameApiWsUrl,
+  realtime: {
+    // The LOAD BALANCER, not the instance above. A discovery URL that dies with
+    // the instance it exists to replace is worse than none.
+    discoveryUrl: bootstrap.discoveryUrl,
+  },
+});
+```
+
+That is the whole integration — the SDK builds re-discovery from the URL itself,
+so recovery does not depend on every game remembering to write a callback. Pass an
+explicit `realtime.rediscover` only to override it (e.g. `createMintRediscover`
+when you hold an identity client and would rather re-mint than reuse a token near
+expiry).
+
+**Requires 13.9.0 or later, and the version matters more than it looks.** Before
+13.9.0 the escalation to re-discovery was reachable only by a client that had
+NEVER connected: a session that was working and then lost its instance re-dialled
+one dead address forever, logging only `Binary relay socket error`. Setting
+`discoveryUrl` on an older build therefore changes nothing in the case you set it
+for. `ck-api` must be v1.20.0+ to return `discoveryUrl` at all.
+
+**Pass a `logger`.** Everything the SDK knows about losing an instance it says
+through that logger, including an explicit warning when it cannot move. With none
+wired, a client that failed to re-discover and one that never tried look
+identical.
+
 ## Spatial sends
 
 ```ts
