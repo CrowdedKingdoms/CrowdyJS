@@ -12,7 +12,7 @@
  * Black-box: the app + its default tier + the players are all created through the
  * public management API; the test never calls grantAppAccess. Point it at an env:
  *
- *   CROWDY_MANAGEMENT_URL='https://api.dev-1.dev.cks-env.com' \
+ *   CROWDY_HTTP_URL='https://api.dev-1.dev.cks-env.com' \
  *   CROWDY_HTTP_URL='https://game.dev-1.dev.cks-env.com/graphql' \
  *   CROWDY_WS_URL='wss://game.dev-1.dev.cks-env.com/graphql' \
  *   CROWDY_OWNER_EMAIL='admin@dev-1.dev.cks-env.com' \
@@ -27,7 +27,6 @@ import { provisionNewAppWithPlayers, mintAppToken } from '../provision.mjs';
 globalThis.WebSocket = WebSocket;
 
 const REQUIRED_ENV = [
-  'CROWDY_MANAGEMENT_URL',
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   'CROWDY_OWNER_EMAIL',
@@ -51,7 +50,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function clientConfig() {
   return {
-    managementUrl: process.env.CROWDY_MANAGEMENT_URL,
     httpUrl: process.env.CROWDY_HTTP_URL,
     wsUrl: process.env.CROWDY_WS_URL,
     realtime: { retryAttempts: 4, retryInitialDelayMs: 250, retryMaxDelayMs: 2000, waitTimeoutMs: 5000 },

@@ -1,15 +1,16 @@
 import type { CodegenConfig } from '@graphql-codegen/cli';
 
 /**
- * CrowdyJS targets two GraphQL endpoints (cks-management-api for auth / users,
- * cks-game-api for runtime/world). Codegen consumes the committed ./schema.gql,
- * which is a merged union of both public SDLs.
+ * CrowdyJS targets one GraphQL endpoint, whose schema covers both the management
+ * and game surfaces. Codegen consumes the committed ./schema.gql, a copy of that
+ * unified SDL (it was a merge of two SDLs until cks-management-api was retired on
+ * 2026-08-06).
  *
  * Standalone builds never look outside this package. To intentionally refresh
  * the schema artifact, run one of:
  *   npm run schema:sync:prod
  *   npm run schema:sync:local
- *   npm run schema:sync:paths -- --management <file-or-url> --game <file-or-url>
+ *   npm run schema:sync:paths -- --schema <file-or-url>
  * Then run `npm run codegen` and commit both schema.gql and
  * src/generated/graphql.ts.
  */

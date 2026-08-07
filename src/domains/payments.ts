@@ -28,7 +28,7 @@ import {
  * Payment checkouts (wallet top-ups, plan purchases) — exposed as
  * `client.payments` (and grouped under `client.admin`).
  *
- * Targets the **management-api**. {@link create} and {@link mine} require an
+ * Part of the management surface. {@link create} and {@link mine} require an
  * authenticated caller and act on their own checkouts; {@link all} is
  * super-admin only. Amounts are minor currency units (`*Cents`).
  *
@@ -40,7 +40,7 @@ import {
  *   above.
  */
 export class PaymentsAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * Start a checkout (e.g. an `ORG_WALLET_TOPUP`). Requires authentication.
@@ -52,7 +52,7 @@ export class PaymentsAPI {
   async create(
     input: CreateCheckoutInput,
   ): Promise<CreateCheckoutMutation['createCheckout']> {
-    const data = await this.management.request(CreateCheckoutDocument, {
+    const data = await this.api.request(CreateCheckoutDocument, {
       input,
     });
     return data.createCheckout;
@@ -67,7 +67,7 @@ export class PaymentsAPI {
   async mine(
     opts: { limit?: number; offset?: number } = {},
   ): Promise<MyCheckoutsQuery['myCheckouts']> {
-    const data = await this.management.request(MyCheckoutsDocument, {
+    const data = await this.api.request(MyCheckoutsDocument, {
       limit: opts.limit,
       offset: opts.offset,
     });
@@ -89,7 +89,7 @@ export class PaymentsAPI {
       offset?: number;
     } = {},
   ): Promise<CheckoutsQuery['checkouts']> {
-    const data = await this.management.request(CheckoutsDocument, {
+    const data = await this.api.request(CheckoutsDocument, {
       filter: opts.filter,
       limit: opts.limit,
       offset: opts.offset,
@@ -113,7 +113,7 @@ export class PaymentsAPI {
     orderId: string,
     idempotencyKey?: string,
   ): Promise<CapturePaypalCheckoutMutation['capturePaypalCheckout']> {
-    const data = await this.management.request(CapturePaypalCheckoutDocument, {
+    const data = await this.api.request(CapturePaypalCheckoutDocument, {
       orderId,
       idempotencyKey,
     });
@@ -131,7 +131,7 @@ export class PaymentsAPI {
   async mineConnection(
     args: MyCheckoutsConnectionQueryVariables = {},
   ): Promise<MyCheckoutsConnectionQuery['myCheckoutsConnection']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       MyCheckoutsConnectionDocument,
       args,
     );
@@ -148,7 +148,7 @@ export class PaymentsAPI {
   async allConnection(
     args: CheckoutsConnectionQueryVariables = {},
   ): Promise<CheckoutsConnectionQuery['checkoutsConnection']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       CheckoutsConnectionDocument,
       args,
     );
@@ -170,7 +170,7 @@ export class PaymentsAPI {
       offset?: PaymentEventsQueryVariables['offset'];
     } = {},
   ): Promise<PaymentEventsQuery['paymentEvents']> {
-    const data = await this.management.request(PaymentEventsDocument, opts);
+    const data = await this.api.request(PaymentEventsDocument, opts);
     return data.paymentEvents;
   }
 
@@ -184,7 +184,7 @@ export class PaymentsAPI {
   async eventsConnection(
     args: PaymentEventsConnectionQueryVariables = {},
   ): Promise<PaymentEventsConnectionQuery['paymentEventsConnection']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       PaymentEventsConnectionDocument,
       args,
     );

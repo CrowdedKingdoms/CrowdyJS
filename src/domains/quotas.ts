@@ -17,7 +17,7 @@ import {
  * Usage quotas at the org and app scope — exposed as `client.quotas` (and
  * grouped under `client.admin`).
  *
- * Targets the **management-api**. Reads require the `view_usage` org/app
+ * Part of the management surface. Reads require the `view_usage` org/app
  * permission; {@link set} / {@link remove} require `manage_quotas` (global
  * quotas are super-admin only). A quota is keyed by a `metric` string; the
  * effective value resolves app → org → platform default.
@@ -26,7 +26,7 @@ import {
  *   per the permission notes above.
  */
 export class QuotasAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * List the quotas configured directly on an organization. Requires the
@@ -36,7 +36,7 @@ export class QuotasAPI {
    * @returns The org's quotas.
    */
   async forOrg(orgId: string): Promise<QuotasForOrgQuery['quotasForOrg']> {
-    const data = await this.management.request(QuotasForOrgDocument, { orgId });
+    const data = await this.api.request(QuotasForOrgDocument, { orgId });
     return data.quotasForOrg;
   }
 
@@ -48,7 +48,7 @@ export class QuotasAPI {
    * @returns The app's quotas.
    */
   async forApp(appId: string): Promise<QuotasForAppQuery['quotasForApp']> {
-    const data = await this.management.request(QuotasForAppDocument, { appId });
+    const data = await this.api.request(QuotasForAppDocument, { appId });
     return data.quotasForApp;
   }
 
@@ -64,7 +64,7 @@ export class QuotasAPI {
     metric: string,
     scope: { orgId?: string; appId?: string } = {},
   ): Promise<EffectiveQuotaQuery['effectiveQuota']> {
-    const data = await this.management.request(EffectiveQuotaDocument, {
+    const data = await this.api.request(EffectiveQuotaDocument, {
       metric,
       orgId: scope.orgId,
       appId: scope.appId,
@@ -80,7 +80,7 @@ export class QuotasAPI {
    * @returns The created/updated quota.
    */
   async set(input: SetQuotaInput): Promise<SetQuotaMutation['setQuota']> {
-    const data = await this.management.request(SetQuotaDocument, { input });
+    const data = await this.api.request(SetQuotaDocument, { input });
     return data.setQuota;
   }
 
@@ -91,7 +91,7 @@ export class QuotasAPI {
    * @returns `true` on success.
    */
   async remove(quotaId: string): Promise<DeleteQuotaMutation['deleteQuota']> {
-    const data = await this.management.request(DeleteQuotaDocument, {
+    const data = await this.api.request(DeleteQuotaDocument, {
       quotaId,
     });
     return data.deleteQuota;

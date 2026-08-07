@@ -30,7 +30,7 @@ export interface MintCapablePortal {
  *
  * ```ts
  * const gameClient = new CrowdyClient({
- *   httpUrl, wsUrl, managementUrl,
+ *   httpUrl, wsUrl,
  *   realtime: {
  *     binaryTransport: true,
  *     rediscover: createMintRediscover(identityClient.portal),

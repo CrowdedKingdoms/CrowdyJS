@@ -36,7 +36,7 @@ import {
  * App access tiers + per-user access grants — exposed as `client.appAccess`
  * (and grouped under `client.admin`).
  *
- * Targets the **management-api**. Tiers define the runtime-permission bundles
+ * Part of the management surface. Tiers define the runtime-permission bundles
  * (`access`, `teleport`, `update_voxel_data`, `use_voice_chat`, ...) a player
  * gets; grants attach a user to a tier. New apps auto-provision an open default
  * tier, so most players need no explicit grant.
@@ -49,7 +49,7 @@ import {
  *   per the permission notes above.
  */
 export class AppAccessAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * List the access tiers defined for an app. **Public.**
@@ -58,7 +58,7 @@ export class AppAccessAPI {
    * @returns The app's tiers, ordered.
    */
   async tiers(appId: string): Promise<AppAccessTiersQuery['appAccessTiers']> {
-    const data = await this.management.request(AppAccessTiersDocument, {
+    const data = await this.api.request(AppAccessTiersDocument, {
       appId,
     });
     return data.appAccessTiers;
@@ -72,7 +72,7 @@ export class AppAccessAPI {
    * @returns The caller's {@link AppUserAccess}, or `null`.
    */
   async myAccess(appId: string): Promise<MyAppAccessQuery['myAppAccess']> {
-    const data = await this.management.request(MyAppAccessDocument, { appId });
+    const data = await this.api.request(MyAppAccessDocument, { appId });
     return data.myAppAccess;
   }
 
@@ -89,7 +89,7 @@ export class AppAccessAPI {
     appId: string,
     opts: { status?: string; limit?: number; offset?: number } = {},
   ): Promise<AppUserAccessByAppQuery['appUserAccessByApp']> {
-    const data = await this.management.request(AppUserAccessByAppDocument, {
+    const data = await this.api.request(AppUserAccessByAppDocument, {
       appId,
       status: opts.status,
       limit: opts.limit,
@@ -111,7 +111,7 @@ export class AppAccessAPI {
   async usersByAppConnection(
     args: AppUserAccessConnectionQueryVariables,
   ): Promise<AppUserAccessConnectionQuery['appUserAccessConnection']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       AppUserAccessConnectionDocument,
       args,
     );
@@ -128,7 +128,7 @@ export class AppAccessAPI {
   async runtimePermissions(): Promise<
     RuntimePermissionsQuery['runtimePermissions']
   > {
-    const data = await this.management.request(RuntimePermissionsDocument);
+    const data = await this.api.request(RuntimePermissionsDocument);
     return data.runtimePermissions;
   }
 
@@ -143,7 +143,7 @@ export class AppAccessAPI {
   async grantMemberCandidates(
     appId: string,
   ): Promise<AppGrantMemberCandidatesQuery['appGrantMemberCandidates']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       AppGrantMemberCandidatesDocument,
       { appId },
     );
@@ -161,7 +161,7 @@ export class AppAccessAPI {
   async claimFree(
     appId: string,
   ): Promise<ClaimFreeAppAccessMutation['claimFreeAppAccess']> {
-    const data = await this.management.request(ClaimFreeAppAccessDocument, {
+    const data = await this.api.request(ClaimFreeAppAccessDocument, {
       appId,
     });
     return data.claimFreeAppAccess;
@@ -177,7 +177,7 @@ export class AppAccessAPI {
   async grantMine(
     appId: string,
   ): Promise<GrantMyAppAccessMutation['grantMyAppAccess']> {
-    const data = await this.management.request(GrantMyAppAccessDocument, {
+    const data = await this.api.request(GrantMyAppAccessDocument, {
       appId,
     });
     return data.grantMyAppAccess;
@@ -194,7 +194,7 @@ export class AppAccessAPI {
   async createTier(
     input: CreateAccessTierInput,
   ): Promise<CreateAccessTierMutation['createAccessTier']> {
-    const data = await this.management.request(CreateAccessTierDocument, {
+    const data = await this.api.request(CreateAccessTierDocument, {
       input,
     });
     return data.createAccessTier;
@@ -212,7 +212,7 @@ export class AppAccessAPI {
     tierId: string,
     input: UpdateAccessTierInput,
   ): Promise<UpdateAccessTierMutation['updateAccessTier']> {
-    const data = await this.management.request(UpdateAccessTierDocument, {
+    const data = await this.api.request(UpdateAccessTierDocument, {
       tierId,
       input,
     });
@@ -229,7 +229,7 @@ export class AppAccessAPI {
   async archiveTier(
     tierId: string,
   ): Promise<ArchiveAccessTierMutation['archiveAccessTier']> {
-    const data = await this.management.request(ArchiveAccessTierDocument, {
+    const data = await this.api.request(ArchiveAccessTierDocument, {
       tierId,
     });
     return data.archiveAccessTier;
@@ -246,7 +246,7 @@ export class AppAccessAPI {
   async grant(
     input: GrantAppAccessInput,
   ): Promise<GrantAppAccessMutation['grantAppAccess']> {
-    const data = await this.management.request(GrantAppAccessDocument, {
+    const data = await this.api.request(GrantAppAccessDocument, {
       input,
     });
     return data.grantAppAccess;
@@ -264,7 +264,7 @@ export class AppAccessAPI {
     appId: string,
     userId: string,
   ): Promise<RevokeAppAccessMutation['revokeAppAccess']> {
-    const data = await this.management.request(RevokeAppAccessDocument, {
+    const data = await this.api.request(RevokeAppAccessDocument, {
       appId,
       userId,
     });

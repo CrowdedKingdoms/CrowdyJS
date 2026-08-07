@@ -36,7 +36,6 @@ test('client normalizes routed WebSocket base URLs to the GraphQL endpoint', asy
 test('client exposes the full management + game sub-client surface', async () => {
   const { createCrowdyClient } = await loadSdk();
   const client = createCrowdyClient({
-    managementUrl: 'https://management.invalid',
     httpUrl: 'https://game.invalid',
     wsUrl: 'wss://game.invalid',
   });
@@ -221,7 +220,6 @@ test('client exposes the full management + game sub-client surface', async () =>
 test('marketplace chunk claim wrappers map variables, results, and documents', async () => {
   const { createCrowdyClient } = await loadSdk();
   const client = createCrowdyClient({
-    managementUrl: 'https://management.invalid',
     httpUrl: 'https://game.invalid',
   });
   const calls = [];
@@ -304,15 +302,17 @@ test('marketplace chunk claim wrappers map variables, results, and documents', a
   client.close();
 });
 
-test('player runtime wrappers route to the correct GraphQL planes', async () => {
+// Both families used to be asserted as routing to different endpoints. Since v14
+// there is one endpoint, so what is worth pinning is that every wrapper still sends
+// the right variables — and that both families reach the SAME client, which is what
+// actually broke when the management client was removed.
+test('player runtime and app-admission wrappers send the right variables on one client', async () => {
   const { createCrowdyClient, CodeAdmissionMode } = await loadSdk();
   const client = createCrowdyClient({
-    managementUrl: 'https://management.invalid',
     httpUrl: 'https://game.invalid',
   });
-  const gameCalls = [];
-  const managementCalls = [];
-  const gameResults = [
+  const calls = [];
+  const results = [
     { gridOwnership: { gridOwnershipId: 'ownership-1' } },
     { assignGridOwnership: { gridOwnershipId: 'ownership-2' } },
     { transferGridOwnership: { gridOwnershipId: 'ownership-3' } },
@@ -321,21 +321,15 @@ test('player runtime wrappers route to the correct GraphQL planes', async () => 
     { playerComputeMyModules: [{ moduleId: 'module-1' }] },
     { playerComputeVersions: [{ versionId: 'version-1' }] },
     { playerComputeDelete: true },
-  ];
-  client.graphql.request = async (_document, variables) => {
-    gameCalls.push(variables);
-    return gameResults.shift();
-  };
-  const managementResults = [
     { appCodeAdmissionMode: CodeAdmissionMode.ImplicitAllow },
     { appCodeAdmissions: [{ admissionId: 'admission-1' }] },
     { setAppCodeAdmissionMode: CodeAdmissionMode.AllowList },
     { admitAppCode: { admissionId: 'admission-2' } },
     { revokeAppCodeAdmission: { admissionId: 'admission-2' } },
   ];
-  client.management.request = async (_document, variables) => {
-    managementCalls.push(variables);
-    return managementResults.shift();
+  client.graphql.request = async (_document, variables) => {
+    calls.push(variables);
+    return results.shift();
   };
 
   await client.gameApps.ownership('1', '2');
@@ -360,11 +354,14 @@ test('player runtime wrappers route to the correct GraphQL planes', async () => 
   });
   await client.apps.revokeCodeAdmission('1', 'admission-2');
 
-  assert.deepEqual(gameCalls[0], { appId: '1', gridId: '2' });
-  assert.deepEqual(gameCalls[4], {
+  // All 13 landed on the one client; a wrapper wired to a second client would
+  // short this list rather than fail an assertion.
+  assert.equal(calls.length, 13);
+  assert.deepEqual(calls[0], { appId: '1', gridId: '2' });
+  assert.deepEqual(calls[4], {
     appId: '1', gridId: '2', name: 'weather', enabled: true,
   });
-  assert.deepEqual(managementCalls, [
+  assert.deepEqual(calls.slice(8), [
     { appId: '1' },
     { appId: '1', includeRevoked: true },
     { appId: '1', mode: CodeAdmissionMode.AllowList },
@@ -378,7 +375,6 @@ test('World Stores session exposes exactly the configured stores', async () => {
   const { createCrowdyClient } = await loadSdk();
   const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
   const client = createCrowdyClient({
-    managementUrl: 'https://management.invalid',
     httpUrl: 'https://game.invalid',
     wsUrl: 'wss://game.invalid',
   });

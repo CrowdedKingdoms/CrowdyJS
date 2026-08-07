@@ -3,22 +3,22 @@
  * access everything via the typed sub-clients (`client.auth`, `client.udp`,
  * `client.chunks`, ...).
  *
- * The management/game-api split means CrowdyJS now talks to **two** GraphQL
- * endpoints behind the scenes:
+ * All sub-clients share ONE GraphQL endpoint: `httpUrl` / `graphqlEndpoint`, with
+ * `wsUrl` / `wsEndpoint` for subscriptions. Identity (`auth`, `users`, `portal`) and
+ * world/replication (`chunks`, `voxels`, `actors`, `udp`, ...) are surfaces of the
+ * same API, not separate services.
  *
- *   - `managementUrl` / `managementGraphqlEndpoint` -> `cks-management-api`
- *     used by `auth` (login, register, logout, password / email flows) and
- *     `users` (me, updateGamertag, deleteMyAccount). This is also where
- *     `game_tokens` are minted.
+ * BREAKING in v14: `managementUrl` and `managementGraphqlEndpoint` were removed,
+ * along with the `client.management` escape hatch, when `cks-management-api` was
+ * retired and its surface absorbed into the unified API. Set `httpUrl` and use
+ * `client.graphql`.
  *
- *   - `httpUrl` / `graphqlEndpoint` -> `cks-game-api`
- *     used by every game / world / replication sub-client
- *     (`chunks`, `voxels`, `actors`, `teleport`, `state`, `serverStatus`,
- *     `udp`). WebSocket subscriptions (`wsUrl`) also target this endpoint.
- *
- * A single `AuthState` is shared across both clients, so once
- * `client.auth.login()` returns, every subsequent SDK call (against either
- * endpoint) carries the Bearer token automatically.
+ * One `AuthState` backs the whole client, so once `client.auth` has a token every
+ * subsequent call carries it. Note that this is per-client by design: drive identity
+ * from a client holding the session token and gameplay from a per-app client holding
+ * that app's app-scoped token, because a session token is rejected for gameplay.
+ * Those two clients may point at different origins — an app lives in one datacenter,
+ * and `mintAppToken` returns its `gameApiUrl` / `gameApiWsUrl`.
  */
 
 import { AuthState } from './auth-state.js';
@@ -73,30 +73,18 @@ import { MarketplaceAPI } from './domains/marketplace.js';
 import { PlayerModelAPI } from './domains/playerModel.js';
 
 export interface CrowdyClientConfig {
-  // ----- Game API (default endpoint) -----
-  /** game-api HTTP root (e.g. `https://dev-game-api.crowdedkingdoms.com`). */
+  // ----- API endpoint (identity AND gameplay; there is only one) -----
+  /** HTTP root (e.g. `https://api.crowdedkingdoms.com`). */
   httpUrl?: string;
-  /** game-api WS root. */
+  /** WS root. */
   wsUrl?: string;
-  /** game-api GraphQL endpoint. Defaults to `${httpUrl}/graphql`. */
+  /** GraphQL endpoint. Defaults to `${httpUrl}/graphql`. */
   graphqlEndpoint?: string;
-  /** game-api WS endpoint. Defaults to `${wsUrl}/graphql`. */
+  /** WS endpoint. Defaults to `${wsUrl}/graphql`. */
   wsEndpoint?: string;
 
-  // ----- Management API (auth + identity) -----
-  /**
-   * management-api HTTP root (e.g.
-   * `https://dev-management-api.crowdedkingdoms.com`). When set,
-   * `client.auth` and `client.users` route here. If left empty the SDK
-   * falls back to `httpUrl` for backwards-compatibility with the legacy
-   * single-endpoint deployment, but new code should set this explicitly.
-   */
-  managementUrl?: string;
-  /** management-api GraphQL endpoint. Defaults to `${managementUrl}/graphql`. */
-  managementGraphqlEndpoint?: string;
-
   // ----- Common -----
-  /** Per-request HTTP timeout in milliseconds (applies to both endpoints). */
+  /** Per-request HTTP timeout in milliseconds. */
   timeout?: number;
   /**
    * Persistence for the Bearer token across reloads. `BrowserLocalStorageTokenStore`
@@ -192,9 +180,9 @@ export interface CrowdyClientConfig {
 export class CrowdyClient {
   private gameplayTokenRefresh: Promise<AppTokenResponse> | null = null;
 
-  /** Shared token state for both game-api and management-api requests. */
+  /** Shared token state for every request this client makes. */
   readonly session: AuthState;
-  /** game-api HTTP client. */
+  /** HTTP client for the API. */
   readonly graphql: GraphQLClient;
   /** game-api WebSocket subscription manager. */
   readonly realtime: SubscriptionManager;
@@ -207,10 +195,8 @@ export class CrowdyClient {
    * fields (not wire framing). See {@link RealtimeMetrics}.
    */
   readonly metrics: RealtimeMetrics;
-  /** management-api HTTP client. Same `AuthState` as `graphql`. */
-  readonly management: GraphQLClient;
 
-  // Identity + catalog (management-api).
+  // Identity + catalog.
   /** Auth + session: login, register, logout, password/email flows. */
   readonly auth: AuthAPI;
   /** Current-user identity: `me`, gamertag, account deletion. */
@@ -242,7 +228,7 @@ export class CrowdyClient {
   /** Operator (control-plane) surface — requires `is_operator`. */
   readonly operator: ControlPlaneAPI;
   /**
-   * Studio-admin facade grouping the privileged management sub-clients
+   * Studio-admin facade grouping the privileged management-surface sub-clients
    * (`organizations`, `appAccess`, `billing`, `payments`, `quotas`,
    * `usage`, `sharedEnvironment`, `grids`) under one namespace.
    */
@@ -292,6 +278,20 @@ export class CrowdyClient {
   readonly gameApps: GameAppsAPI;
 
   constructor(config: CrowdyClientConfig = {}) {
+    // TypeScript rejects these, JavaScript would not: a caller still passing
+    // managementUrl would have its identity calls silently sent to httpUrl, or
+    // nowhere at all if managementUrl was the only URL it set. Say so instead.
+    for (const removed of ['managementUrl', 'managementGraphqlEndpoint'] as const) {
+      if ((config as Record<string, unknown>)[removed] !== undefined) {
+        throw new TypeError(
+          `\`${removed}\` was removed in CrowdyJS v14: the management and game ` +
+            `surfaces are one API at one endpoint. Pass \`httpUrl\` (and \`wsUrl\`) ` +
+            `instead, and use \`client.graphql\` where you used \`client.management\`. ` +
+            `Per-app gameplay endpoints come from mintAppToken's gameApiUrl/gameApiWsUrl.`,
+        );
+      }
+    }
+
     this.session = new AuthState(config.tokenStore);
     const lbCookieStore = config.lbCookieStore ?? new LbCookieStore();
 
@@ -365,36 +365,19 @@ export class CrowdyClient {
       this.metrics,
     );
 
-    const managementGraphqlEndpoint =
-      config.managementGraphqlEndpoint ??
-      toGraphqlEndpoint(config.managementUrl, 'graphql') ??
-      config.graphqlEndpoint;
-
-    // Management-api client. Falls back to game-api endpoint if the caller
-    // hasn't configured `managementUrl` yet (single-endpoint legacy mode).
-    this.management = new GraphQLClient(
-      {
-        httpUrl: config.managementUrl ?? config.httpUrl,
-        graphqlEndpoint: managementGraphqlEndpoint,
-        timeout: config.timeout,
-        logger: config.logger,
-      },
-      this.session,
-    );
-
-    this.auth = new AuthAPI(this.management, this.session);
-    this.users = new UsersAPI(this.management);
-    this.apps = new AppsAPI(this.management);
-    this.portal = new PortalAPI(this.management, this.session, config.pkceStore);
-    this.platform = new PlatformAPI(this.management);
-    this.organizations = new OrganizationsAPI(this.management);
-    this.appAccess = new AppAccessAPI(this.management);
-    this.billing = new BillingAPI(this.management);
-    this.payments = new PaymentsAPI(this.management);
-    this.quotas = new QuotasAPI(this.management);
-    this.usage = new UsageAPI(this.management);
-    this.sharedEnvironment = new SharedEnvironmentAPI(this.management);
-    this.operator = new ControlPlaneAPI(this.management);
+    this.auth = new AuthAPI(this.graphql, this.session);
+    this.users = new UsersAPI(this.graphql);
+    this.apps = new AppsAPI(this.graphql);
+    this.portal = new PortalAPI(this.graphql, this.session, config.pkceStore);
+    this.platform = new PlatformAPI(this.graphql);
+    this.organizations = new OrganizationsAPI(this.graphql);
+    this.appAccess = new AppAccessAPI(this.graphql);
+    this.billing = new BillingAPI(this.graphql);
+    this.payments = new PaymentsAPI(this.graphql);
+    this.quotas = new QuotasAPI(this.graphql);
+    this.usage = new UsageAPI(this.graphql);
+    this.sharedEnvironment = new SharedEnvironmentAPI(this.graphql);
+    this.operator = new ControlPlaneAPI(this.graphql);
 
     this.chunks = new ChunksAPI(this.graphql);
     this.voxels = new VoxelsAPI(this.graphql);
@@ -416,8 +399,8 @@ export class CrowdyClient {
       wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),
     });
-    this.playerWallet = new PlayerWalletAPI(this.management);
-    this.marketplace = new MarketplaceAPI(this.graphql, this.management);
+    this.playerWallet = new PlayerWalletAPI(this.graphql);
+    this.marketplace = new MarketplaceAPI(this.graphql);
     this.playerModel = new PlayerModelAPI(this.graphql);
     this.avatars = new AvatarsAPI(this.graphql);
     this.host = new HostAPI(this.graphql);

@@ -5,35 +5,34 @@
 // src/generated/graphql.ts. Run this script only when intentionally refreshing
 // the SDK schema:
 //
-//   npm run schema:sync:prod   # fetch published SDLs from docs.crowdedkingdoms.com
-//   npm run schema:sync:local  # merge ../cks-management-api + ../cks-game-api
-//   npm run schema:sync:paths -- --management <file-or-url> --game <file-or-url>
+//   npm run schema:sync:prod    # fetch the published SDL from docs.crowdedkingdoms.com
+//   npm run schema:sync:local   # read ../cks-game-api/schema.gql
+//   npm run schema:sync:paths -- --schema <file-or-url>
+//
+// There is ONE schema. Until 2026-08-06 this merged a management SDL from
+// cks-management-api with a game SDL from cks-game-api; that repo was retired and
+// its surface absorbed, so the unified cks-game-api schema is the whole thing and
+// there is nothing left to merge.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { mergeTypeDefs } from '@graphql-tools/merge';
-import { print } from 'graphql';
 
-const PROD_MANAGEMENT_SCHEMA_URL =
-  'https://docs.crowdedkingdoms.com/schema/management-api.graphql';
-const PROD_GAME_SCHEMA_URL =
-  'https://docs.crowdedkingdoms.com/schema/game-api.graphql';
-const LOCAL_MANAGEMENT_SCHEMA = '../cks-management-api/schema.gql';
-const LOCAL_GAME_SCHEMA = '../cks-game-api/schema.gql';
+const PROD_SCHEMA_URL = 'https://docs.crowdedkingdoms.com/schema/game-api.graphql';
+const LOCAL_SCHEMA = '../cks-game-api/schema.gql';
 const DEST = './schema.gql';
 
 const args = parseArgs(process.argv.slice(2));
-const sources = resolveSources(args);
+const source = resolveSource(args);
 
-if (!sources.management || !sources.game) {
-  usage('Both --management and --game sources are required unless using --prod or --local.');
+if (!source) {
+  usage('A schema source is required: pass --prod, --local, or --schema <file-or-url>.');
 }
 
-const managementSdl = await readSource(sources.management);
-const gameSdl = await readSource(sources.game);
-const merged = mergeTypeDefs([managementSdl, gameSdl]);
-writeFileSync(DEST, print(merged) + '\n');
-console.log(
-  `sync-schema: merged ${sources.management} + ${sources.game} -> ${DEST}`,
-);
+const sdl = await readSource(source);
+if (!sdl.trim()) {
+  console.error(`sync-schema: ${source} is empty; refusing to overwrite ${DEST}.`);
+  process.exit(1);
+}
+writeFileSync(DEST, sdl.endsWith('\n') ? sdl : sdl + '\n');
+console.log(`sync-schema: ${source} -> ${DEST}`);
 
 function parseArgs(rawArgs) {
   const parsed = {};
@@ -43,14 +42,19 @@ function parseArgs(rawArgs) {
       parsed.mode = 'prod';
     } else if (arg === '--local') {
       parsed.mode = 'local';
-    } else if (arg === '--management' || arg === '--game') {
+    } else if (arg === '--schema') {
       const value = rawArgs[++i];
       if (!value) usage(`Missing value for ${arg}`);
-      parsed[arg.slice(2)] = value;
-    } else if (arg.startsWith('--management=')) {
-      parsed.management = arg.slice('--management='.length);
-    } else if (arg.startsWith('--game=')) {
-      parsed.game = arg.slice('--game='.length);
+      parsed.schema = value;
+    } else if (arg.startsWith('--schema=')) {
+      parsed.schema = arg.slice('--schema='.length);
+    } else if (arg === '--management' || arg.startsWith('--management=')) {
+      usage(
+        '--management was removed: cks-management-api is retired and the game SDL ' +
+          'is the unified schema. Use --schema (or --prod / --local).',
+      );
+    } else if (arg === '--game' || arg.startsWith('--game=')) {
+      usage('--game is now --schema, since there is only one source.');
     } else {
       usage(`Unknown argument: ${arg}`);
     }
@@ -58,23 +62,10 @@ function parseArgs(rawArgs) {
   return parsed;
 }
 
-function resolveSources(parsed) {
-  if (parsed.mode === 'prod') {
-    return {
-      management: process.env.CROWDY_MANAGEMENT_SCHEMA_URL || PROD_MANAGEMENT_SCHEMA_URL,
-      game: process.env.CROWDY_GAME_SCHEMA_URL || PROD_GAME_SCHEMA_URL,
-    };
-  }
-  if (parsed.mode === 'local') {
-    return {
-      management: process.env.CROWDY_MANAGEMENT_SCHEMA_PATH || LOCAL_MANAGEMENT_SCHEMA,
-      game: process.env.CROWDY_GAME_SCHEMA_PATH || LOCAL_GAME_SCHEMA,
-    };
-  }
-  return {
-    management: parsed.management,
-    game: parsed.game,
-  };
+function resolveSource(parsed) {
+  if (parsed.mode === 'prod') return process.env.CROWDY_SCHEMA_URL || PROD_SCHEMA_URL;
+  if (parsed.mode === 'local') return process.env.CROWDY_SCHEMA_PATH || LOCAL_SCHEMA;
+  return parsed.schema;
 }
 
 async function readSource(source) {
@@ -98,7 +89,7 @@ function usage(message) {
       'Usage:',
       '  node scripts/sync-schema.mjs --prod',
       '  node scripts/sync-schema.mjs --local',
-      '  node scripts/sync-schema.mjs --management <file-or-url> --game <file-or-url>',
+      '  node scripts/sync-schema.mjs --schema <file-or-url>',
     ].join('\n'),
   );
   process.exit(2);

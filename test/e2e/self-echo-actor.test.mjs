@@ -15,7 +15,7 @@
  * Black-box: provisions one entitled player through the management API only
  * (see provision.mjs). Auto-skips unless the full e2e env is present:
  *
- *   CROWDY_MANAGEMENT_URL='http://127.0.0.1:3001' \
+ *   CROWDY_HTTP_URL='http://127.0.0.1:3001' \
  *   CROWDY_HTTP_URL='http://127.0.0.1:3000/graphql' \
  *   CROWDY_WS_URL='ws://127.0.0.1:3000/graphql' \
  *   CROWDY_OWNER_EMAIL='owner@example.com' \
@@ -29,7 +29,6 @@ import { provisionAppWithPlayers, mintAppToken } from '../provision.mjs';
 globalThis.WebSocket = WebSocket;
 
 const REQUIRED_ENV = [
-  'CROWDY_MANAGEMENT_URL',
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   'CROWDY_OWNER_EMAIL',
@@ -51,7 +50,6 @@ function sleep(ms) {
 
 function clientConfig() {
   return {
-    managementUrl: process.env.CROWDY_MANAGEMENT_URL,
     httpUrl: process.env.CROWDY_HTTP_URL,
     wsUrl: process.env.CROWDY_WS_URL,
     realtime: {

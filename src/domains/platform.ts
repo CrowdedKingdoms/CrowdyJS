@@ -34,17 +34,16 @@ const PlatformConfigDocument = parse(/* GraphQL */ `
 /**
  * Public platform discovery — exposed as `client.platform`.
  *
- * Targets the **management-api** (every call routes to `managementUrl`).
+ * Part of the management surface.
  * **Public**: no authentication required. Lets a client discover the shared
  * game-api URL (for apps published to the shared environment) *before* it has a
- * per-app endpoint, then build a game-api `CrowdyClient` against it.
+ * per-app endpoint, then build a per-app `CrowdyClient` against it.
  *
  * @example
  * ```ts
- * const base = createCrowdyClient({ managementUrl: 'https://api.example.com' });
+ * const base = createCrowdyClient({ httpUrl: 'https://api.example.com/graphql' });
  * const cfg = await base.platform.config();
  * const gameClient = createCrowdyClient({
- *   managementUrl: 'https://api.example.com',
  *   httpUrl: cfg.sharedGameApiUrl ?? undefined,
  *   wsUrl: cfg.sharedGameApiWsUrl ?? undefined,
  *   tokenStore: base.session.tokenStore,
@@ -52,7 +51,7 @@ const PlatformConfigDocument = parse(/* GraphQL */ `
  * ```
  */
 export class PlatformAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * Fetch public platform discovery: the shared game-api URL clients use for
@@ -64,7 +63,7 @@ export class PlatformAPI {
    * @throws {CrowdyGraphQLError} on transport/validation failures.
    */
   async config(): Promise<PlatformConfig> {
-    const data = await this.management.request(PlatformConfigDocument, {});
+    const data = await this.api.request(PlatformConfigDocument, {});
     return data.platformConfig;
   }
 }

@@ -19,7 +19,6 @@ import { provisionClients } from '../provision.mjs';
 globalThis.WebSocket = WebSocket;
 
 const REQUIRED_ENV = [
-  'CROWDY_MANAGEMENT_URL',
   'CROWDY_HTTP_URL',
   'CROWDY_WS_URL',
   'CROWDY_OWNER_EMAIL',
@@ -52,7 +51,6 @@ function sleep(ms) {
 
 function clientConfig() {
   return {
-    managementUrl: process.env.CROWDY_MANAGEMENT_URL,
     httpUrl: process.env.CROWDY_HTTP_URL,
     wsUrl: process.env.CROWDY_WS_URL,
     realtime: { retryAttempts: 4, retryInitialDelayMs: 250, retryMaxDelayMs: 2000, waitTimeoutMs: 5000 },

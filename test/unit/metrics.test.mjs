@@ -91,7 +91,6 @@ test('payloadBytesOf measures the first app-defined payload field', async () => 
 test('client exposes metrics wired into udp and realtime', async () => {
   const { createCrowdyClient } = await loadSdk();
   const client = createCrowdyClient({
-    managementUrl: 'https://management.invalid',
     httpUrl: 'https://game.invalid',
     wsUrl: 'wss://game.invalid',
   });

@@ -1,8 +1,8 @@
 # AGENTS
 
 CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**: it wraps
-the Management API, the Game API, and the UDP replication service (reached
-through the Game API's GraphQL UDP proxy). Games built on it have no limit on
+the one GraphQL API — management and game surfaces alike — and the UDP
+replication service (reached through that API's GraphQL UDP proxy). Games built on it have no limit on
 player concurrency because all realtime traffic is spatially routed by chunk.
 
 Read [README.md](README.md) first (install, quick start, sub-client tables,
@@ -61,12 +61,12 @@ self-contained here or in the public docs.)
 - `test/unit`, `test/e2e` — e2e suites (two-client, gamer-journey, audio,
   voxel, channel) double as usage examples.
 
-## Core mental model: two tokens, two clients
+## Core mental model: one endpoint, two tokens, two clients
 
 1. Passwordless sign-in (`client.auth.requestLoginLink`/`completeLoginLink`,
    `socialLoginStart`/`socialLoginComplete`, or dev-only `devLogin`) yields an
-   **identity session token** — valid only for the Management API (account,
-   studio admin, minting).
+   **identity session token** — good for account, studio admin and minting, and
+   rejected for gameplay.
 2. Gameplay requires a short-lived **app-scoped token** per game:
    `portal.mintAppToken(appId)` same-origin, or the PKCE portal flow
    (`portal.beginEntry` → Overworld `portal.handleAuthorizeRequest` →
@@ -231,8 +231,8 @@ walks the same patterns end to end with public code.
 
 Canonical docs: <https://docs.crowdedkingdoms.com> (agent index:
 [/llms.txt](https://docs.crowdedkingdoms.com/llms.txt); published SDLs at
-`/schema/management-api.graphql`, `/schema/game-api.graphql`,
-`/schema/crowdyjs.graphql`).
+`/schema/game-api.graphql` for the whole schema, `/schema/management-api.graphql`
+for the management surface alone, `/schema/crowdyjs.graphql`).
 
 - [Overview for AI agents](https://docs.crowdedkingdoms.com/overview/for-ai-agents)
 - [CrowdyJS guides](https://docs.crowdedkingdoms.com/crowdyjs/intro)

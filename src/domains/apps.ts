@@ -87,7 +87,7 @@ function appRouteFromAppRow(row: unknown): AppRoute | null {
 /**
  * App discovery & game-api routing — exposed as `client.apps`.
  *
- * Targets the **management-api** (every call routes to `managementUrl`), where
+ * Part of the management surface, where
  * the apps catalog lives. After the database split an app may be served by its
  * own per-tenant cks-game-api; the catalog returns each app's `gameApiUrl` so
  * you can build a per-app `CrowdyClient` against the correct endpoint (see
@@ -102,17 +102,13 @@ function appRouteFromAppRow(row: unknown): AppRoute | null {
  *
  * @example
  * ```ts
- * const base = createCrowdyClient({
- *   managementUrl: 'https://api.example.com',
- *   httpUrl: 'https://legacy-game-api.example.com', // pre-split fallback
- * });
+ * const base = createCrowdyClient({ httpUrl: 'https://api.example.com/graphql' });
  * await base.auth.login({ email, password });
  *
  * const route = await base.apps.routeFor(appId);
  * if (route.gameApiUrl) {
  *   // route gameplay to the app's resolved game-api endpoint
  *   const perAppClient = createCrowdyClient({
- *     managementUrl: 'https://api.example.com',
  *     httpUrl: route.gameApiUrl,
  *     wsUrl: route.gameApiUrl.replace(/^http/, 'ws'),
  *     tokenStore: base.session.tokenStore,
@@ -121,7 +117,7 @@ function appRouteFromAppRow(row: unknown): AppRoute | null {
  * ```
  */
 export class AppsAPI {
-  constructor(private readonly management: GraphQLClient) {}
+  constructor(private readonly api: GraphQLClient) {}
 
   /**
    * Read the app's player-code admission mode. Requires
@@ -130,7 +126,7 @@ export class AppsAPI {
   async codeAdmissionMode(
     appId: string,
   ): Promise<AppCodeAdmissionModeQuery['appCodeAdmissionMode']> {
-    const data = await this.management.request(AppCodeAdmissionModeDocument, {
+    const data = await this.api.request(AppCodeAdmissionModeDocument, {
       appId,
     });
     return data.appCodeAdmissionMode;
@@ -149,7 +145,7 @@ export class AppsAPI {
       appId,
       includeRevoked,
     };
-    const data = await this.management.request(
+    const data = await this.api.request(
       AppCodeAdmissionsDocument,
       variables,
     );
@@ -165,7 +161,7 @@ export class AppsAPI {
     appId: string,
     mode: CodeAdmissionMode,
   ): Promise<SetAppCodeAdmissionModeMutation['setAppCodeAdmissionMode']> {
-    const data = await this.management.request(SetAppCodeAdmissionModeDocument, {
+    const data = await this.api.request(SetAppCodeAdmissionModeDocument, {
       appId,
       mode,
     });
@@ -179,7 +175,7 @@ export class AppsAPI {
   async admitCode(
     input: AdmitAppCodeInput,
   ): Promise<AdmitAppCodeMutation['admitAppCode']> {
-    const data = await this.management.request(AdmitAppCodeDocument, { input });
+    const data = await this.api.request(AdmitAppCodeDocument, { input });
     return data.admitAppCode;
   }
 
@@ -191,7 +187,7 @@ export class AppsAPI {
     appId: string,
     admissionId: string,
   ): Promise<RevokeAppCodeAdmissionMutation['revokeAppCodeAdmission']> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       RevokeAppCodeAdmissionDocument,
       { appId, admissionId },
     );
@@ -209,7 +205,7 @@ export class AppsAPI {
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` if the caller is not signed in.
    */
   async app(appId: string): Promise<AppQuery['app']> {
-    const data = await this.management.request<AppQuery, AppQueryVariables>(
+    const data = await this.api.request<AppQuery, AppQueryVariables>(
       AppDocument,
       { appId },
     );
@@ -233,7 +229,7 @@ export class AppsAPI {
     orgSlug: string,
     appSlug: string,
   ): Promise<AppBySlugQuery['appBySlug']> {
-    const data = await this.management.request<
+    const data = await this.api.request<
       AppBySlugQuery,
       AppBySlugQueryVariables
     >(AppBySlugDocument, { orgSlug, appSlug });
@@ -250,7 +246,7 @@ export class AppsAPI {
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` if the caller is not signed in.
    */
   async myApps(): Promise<MyAppsQuery['myApps']> {
-    const data = await this.management.request<
+    const data = await this.api.request<
       MyAppsQuery,
       Record<string, never>
     >(MyAppsDocument, {});
@@ -292,7 +288,7 @@ export class AppsAPI {
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN`.
    */
   async forOrg(orgSlug: string): Promise<AppsForOrgQuery['appsForOrg']> {
-    const data = await this.management.request(AppsForOrgDocument, { orgSlug });
+    const data = await this.api.request(AppsForOrgDocument, { orgSlug });
     return data.appsForOrg;
   }
 
@@ -313,7 +309,7 @@ export class AppsAPI {
       offset?: MarketplaceAppsQueryVariables['offset'];
     } = {},
   ): Promise<MarketplaceAppsQuery['apps']> {
-    const data = await this.management.request(MarketplaceAppsDocument, opts);
+    const data = await this.api.request(MarketplaceAppsDocument, opts);
     return data.apps;
   }
 
@@ -328,7 +324,7 @@ export class AppsAPI {
   async marketplaceConnection(
     args: AppsConnectionQueryVariables = {},
   ): Promise<AppsConnectionQuery['appsConnection']> {
-    const data = await this.management.request(AppsConnectionDocument, args);
+    const data = await this.api.request(AppsConnectionDocument, args);
     return data.appsConnection;
   }
 
@@ -345,7 +341,7 @@ export class AppsAPI {
   async create(
     input: CreateAppInput,
   ): Promise<CreateAppMutation['createApp']> {
-    const data = await this.management.request(CreateAppDocument, { input });
+    const data = await this.api.request(CreateAppDocument, { input });
     return data.createApp;
   }
 
@@ -362,7 +358,7 @@ export class AppsAPI {
     appId: string,
     input: UpdateAppInput,
   ): Promise<UpdateAppMutation['updateApp']> {
-    const data = await this.management.request(UpdateAppDocument, {
+    const data = await this.api.request(UpdateAppDocument, {
       appId,
       input,
     });
@@ -380,7 +376,7 @@ export class AppsAPI {
   async archive(
     appId: string,
   ): Promise<ArchiveAppMutation['archiveApp']> {
-    const data = await this.management.request(ArchiveAppDocument, { appId });
+    const data = await this.api.request(ArchiveAppDocument, { appId });
     return data.archiveApp;
   }
 
@@ -396,7 +392,7 @@ export class AppsAPI {
     appId: string,
     visibility: AppVisibility,
   ): Promise<SetAppVisibilityMutation['setAppVisibility']> {
-    const data = await this.management.request(SetAppVisibilityDocument, {
+    const data = await this.api.request(SetAppVisibilityDocument, {
       appId,
       visibility,
     });

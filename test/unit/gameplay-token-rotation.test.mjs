@@ -15,7 +15,6 @@ const FRESH_TOKEN = {
 
 function createClient(createCrowdyClient, tokenStore) {
   return createCrowdyClient({
-    managementUrl: 'https://management.invalid',
     httpUrl: 'https://game.invalid',
     wsUrl: 'wss://game.invalid',
     tokenStore,
@@ -49,8 +48,8 @@ test('refreshGameplayToken orders proxy teardown, refresh/store, and reconnect w
     order.push(`disconnect:${client.getToken()}`);
     return true;
   };
-  client.management.request = async () => {
-    order.push(`management-refresh:${client.getToken()}`);
+  client.graphql.request = async () => {
+    order.push(`refresh:${client.getToken()}`);
     return { refreshAppToken: FRESH_TOKEN };
   };
   client.udp.connect = async () => {
@@ -64,7 +63,7 @@ test('refreshGameplayToken orders proxy teardown, refresh/store, and reconnect w
   assert.equal(client.getToken(), FRESH_TOKEN.token);
   assert.deepEqual(order, [
     `disconnect:${OLD_TOKEN}`,
-    `management-refresh:${OLD_TOKEN}`,
+    `refresh:${OLD_TOKEN}`,
     `set:${FRESH_TOKEN.token}`,
     'realtime-restart',
     `connect:${FRESH_TOKEN.token}`,
@@ -86,7 +85,7 @@ test('refreshGameplayToken aborts rotation when old proxy closure is not confirm
   let connectCalls = 0;
 
   client.udp.disconnect = async () => false;
-  client.management.request = async () => {
+  client.graphql.request = async () => {
     refreshCalls++;
     return { refreshAppToken: FRESH_TOKEN };
   };
@@ -105,7 +104,7 @@ test('refreshGameplayToken aborts rotation when old proxy closure is not confirm
   client.close();
 });
 
-test('refreshGameplayToken preserves the old token when management refresh fails', async () => {
+test('refreshGameplayToken preserves the old token when the token refresh fails', async () => {
   const { createCrowdyClient } = await loadSdk();
   const client = createClient(createCrowdyClient);
   const refreshError = new Error('refresh failed');
@@ -113,7 +112,7 @@ test('refreshGameplayToken preserves the old token when management refresh fails
   let connectCalls = 0;
 
   client.udp.disconnect = async () => true;
-  client.management.request = async () => {
+  client.graphql.request = async () => {
     throw refreshError;
   };
   client.udp.connect = async () => {
@@ -138,7 +137,7 @@ test('refreshGameplayToken retains the fresh token when reconnect fails so conne
   let connectCalls = 0;
 
   client.udp.disconnect = async () => true;
-  client.management.request = async () => ({ refreshAppToken: FRESH_TOKEN });
+  client.graphql.request = async () => ({ refreshAppToken: FRESH_TOKEN });
   client.udp.connect = async () => {
     connectCalls++;
     assert.equal(client.getToken(), FRESH_TOKEN.token);

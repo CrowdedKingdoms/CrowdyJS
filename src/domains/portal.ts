@@ -214,7 +214,7 @@ export interface BeginEntryParams {
 
 export class PortalAPI {
   constructor(
-    private readonly management: GraphQLClient,
+    private readonly api: GraphQLClient,
     private readonly session: SessionStore,
     private readonly pkceStore: PkceStore = new BrowserSessionPkceStore(),
   ) {}
@@ -226,7 +226,7 @@ export class PortalAPI {
    * paid apps require an existing entitlement.
    */
   async mintAppToken(appId: string): Promise<AppTokenResponse> {
-    const data = await this.management.request(MintAppTokenDocument, {
+    const data = await this.api.request(MintAppTokenDocument, {
       input: { appId },
     });
     return data.mintAppToken;
@@ -243,7 +243,7 @@ export class PortalAPI {
     codeChallengeMethod?: string;
     redirectUri: string;
   }): Promise<PortalAuthorizationCode> {
-    const data = await this.management.request(
+    const data = await this.api.request(
       CreatePortalAuthorizationCodeDocument,
       { input: params },
     );
@@ -259,7 +259,7 @@ export class PortalAPI {
     code: string,
     codeVerifier?: string,
   ): Promise<AppTokenResponse> {
-    const data = await this.management.request(ExchangePortalCodeDocument, {
+    const data = await this.api.request(ExchangePortalCodeDocument, {
       input: { code, codeVerifier },
     });
     this.session.setToken(data.exchangePortalCode.token);
@@ -272,7 +272,7 @@ export class PortalAPI {
    * through the Overworld. Requires the current app token on this session.
    */
   async refresh(): Promise<AppTokenResponse> {
-    const data = await this.management.request(RefreshAppTokenDocument, {});
+    const data = await this.api.request(RefreshAppTokenDocument, {});
     this.session.setToken(data.refreshAppToken.token);
     return data.refreshAppToken;
   }
@@ -281,7 +281,7 @@ export class PortalAPI {
 
   /** Whether portaling into an app needs a consent prompt (Overworld side). */
   async getConsent(appId: string): Promise<PortalConsentState> {
-    const data = await this.management.request(PortalConsentDocument, { appId });
+    const data = await this.api.request(PortalConsentDocument, { appId });
     return data.portalConsent;
   }
 
@@ -290,7 +290,7 @@ export class PortalAPI {
     appId: string,
     scopes?: string[],
   ): Promise<AppAuthorizationGrant> {
-    const data = await this.management.request(AuthorizeAppDocument, {
+    const data = await this.api.request(AuthorizeAppDocument, {
       input: { appId, scopes },
     });
     return data.authorizeApp;
@@ -298,7 +298,7 @@ export class PortalAPI {
 
   /** Revoke a prior authorization; also revokes the user's live tokens for it. */
   async revokeAppAuthorization(appId: string): Promise<boolean> {
-    const data = await this.management.request(RevokeAppAuthorizationDocument, {
+    const data = await this.api.request(RevokeAppAuthorizationDocument, {
       appId,
     });
     return data.revokeAppAuthorization;
@@ -306,7 +306,7 @@ export class PortalAPI {
 
   /** The user's active app authorizations ("connected apps"). */
   async myAuthorizedApps(): Promise<AppAuthorizationGrant[]> {
-    const data = await this.management.request(MyAuthorizedAppsDocument);
+    const data = await this.api.request(MyAuthorizedAppsDocument);
     return data.myAuthorizedApps;
   }
 
@@ -317,7 +317,7 @@ export class PortalAPI {
     clientType?: string;
     launchUrl?: string;
   }): Promise<PortalConsentState> {
-    const data = await this.management.request(SetAppClientSettingsDocument, {
+    const data = await this.api.request(SetAppClientSettingsDocument, {
       input,
     });
     return data.setAppClientSettings;

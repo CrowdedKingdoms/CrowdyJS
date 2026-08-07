@@ -1,3 +1,9 @@
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
 """
 Machine-readable auth scope required to call this field. Enforcement is via server-side guards, not directive execution; super admins bypass org/app permission checks. The field description carries the same requirement in prose.
 """
@@ -16,15 +22,11 @@ directive @requiresPermission(
   scopeArg: String
 ) on FIELD_DEFINITION
 
-schema {
-  query: Query
-  mutation: Mutation
-  subscription: Subscription
-}
-
 """The signed-in identity behind a bearer token."""
 type ActorType {
-  """User identity (galaxy row uuid)."""
+  """
+  User identity: the users.galaxy_row_uuid value. The column keeps its historical name; the datastore is PostgreSQL/Citus.
+  """
   userUuid: String!
   """Legacy bigint public user id (Buddy / CK wire), as a string."""
   userId: String!
@@ -33,31 +35,6 @@ type ActorType {
   username: String
   email: String
 }
-
-"""
-A federated / passwordless sign-in identity linked to a user account (a social provider, an emailed magic link, or the dev bypass).
-"""
-type UserIdentity {
-  identityId: ID!
-  userId: ID!
-  """
-  The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'dev' (dev bypass).
-  """
-  provider: String!
-  """
-  The provider's stable subject id ('sub'). For 'email'/'dev' this is the lowercased email.
-  """
-  subject: String!
-  email: String
-  emailVerified: Boolean!
-  createdAt: DateTime!
-  lastLoginAt: DateTime
-}
-
-"""
-A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
-"""
-scalar DateTime
 
 type Avatar {
   """
@@ -79,6 +56,11 @@ type Avatar {
   """Server timestamp (ISO-8601) when the avatar was created."""
   createdAt: DateTime!
 }
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
 
 """
 Integer (x, y, z) address of a 16x16x16-voxel chunk within an app's world grid. Each unit step moves one whole chunk (16 voxels) along that axis. Components are signed 64-bit integers serialized as decimal strings (see the BigInt scalar).
@@ -201,6 +183,26 @@ type User {
     """
     orgId: BigInt!
   ): [String!]!
+}
+
+"""
+A federated / passwordless sign-in identity linked to a user account (a social provider, an emailed magic link, or the dev bypass).
+"""
+type UserIdentity {
+  identityId: ID!
+  userId: ID!
+  """
+  The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'dev' (dev bypass).
+  """
+  provider: String!
+  """
+  The provider's stable subject id ('sub'). For 'email'/'dev' this is the lowercased email.
+  """
+  subject: String!
+  email: String
+  emailVerified: Boolean!
+  createdAt: DateTime!
+  lastLoginAt: DateTime
 }
 
 type AppAvatarState {
@@ -943,6 +945,120 @@ enum CodeAdmissionSubjectKind {
 }
 
 """
+Live status and load/telemetry for one UDP game server (Buddy) in the fleet. Returned by serverWithLeastClients (which picks a low-load ReadyForClients server). Throughput metrics are per-second samples from the last reporting window and are null until first reported.
+"""
+type ServerStatus {
+  """
+  Unique id of this game-server row in the fleet registry (the Buddy instance uuid).
+  """
+  serverId: ID!
+  """
+  IPv4 address native clients send spatial UDP datagrams to (paired with clientPort). Preferred over ip6 for inter-host UDP in current deployments.
+  """
+  ip4: String!
+  """
+  IPv6 address of the UDP game server. Global IPv6 between hosts can be unroutable in some deployments, so native clients generally use ip4 + clientPort.
+  """
+  ip6: String!
+  """
+  UDP port that native clients send spatial datagrams to (typically 9091). Browser clients do not use this directly — they reach the server through the UDP proxy / udpNotifications.
+  """
+  clientPort: Int!
+  """
+  Current lifecycle state of this server (see ServerState). Only ReadyForClients servers accept new clients.
+  """
+  status: ServerState!
+  """
+  Number of peer (server-to-server P2P) connections this server currently holds.
+  """
+  peers: Int!
+  """
+  Number of game clients currently connected to this server. serverWithLeastClients uses this to balance load across the fleet.
+  """
+  clients: Int!
+  """
+  True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself.
+  """
+  drainRequested: Boolean!
+  """
+  Peak CPU utilization percentage (0-100) observed in the last reporting window. Null until reported.
+  """
+  cpuPeakPct: Float
+  """
+  Messages per second received from clients in the last reporting window. Null until reported.
+  """
+  clientRecvMsgsPerSec: Float
+  """
+  Bytes per second received from clients in the last reporting window. Null until reported.
+  """
+  clientRecvBytesPerSec: Float
+  """
+  Messages per second sent to clients in the last reporting window. Null until reported.
+  """
+  clientSendMsgsPerSec: Float
+  """
+  Bytes per second sent to clients in the last reporting window. Null until reported.
+  """
+  clientSendBytesPerSec: Float
+  """
+  Messages per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerRecvMsgsPerSec: Float
+  """
+  Bytes per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerRecvBytesPerSec: Float
+  """
+  Messages per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerSendMsgsPerSec: Float
+  """
+  Bytes per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerSendBytesPerSec: Float
+  """
+  Per-second rate of individually-addressed (single-actor) messages sent to clients in the last window, as opposed to spatial fan-out. Null until reported.
+  """
+  clientSendIndividualMsgsPerSec: Float
+  """
+  When this status row was last updated (server heartbeat). Use to judge how fresh the metrics/state are.
+  """
+  updatedAt: DateTime!
+  """When this server was first registered in the fleet."""
+  createdAt: DateTime!
+}
+
+"""
+Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers.
+"""
+enum ServerState {
+  """
+  The server is booting and not yet accepting clients. Do not route new connections here; wait for ReadyForClients.
+  """
+  Starting
+  """
+  The server is healthy and accepting clients. This is the only state safe to route new connections to.
+  """
+  ReadyForClients
+  """
+  The server is draining and shutting down: existing sessions may continue briefly but no new clients should be routed here.
+  """
+  Stopping
+  """
+  The server is down or unreachable (failed health checks). Do not route any traffic here.
+  """
+  Offline
+  """
+  Soft resource overload (a CPU core or system memory has been high for several seconds). Existing sessions continue, but the server is excluded from serverWithLeastClients so no new clients are routed here until it recovers.
+  """
+  NearCapacity
+  """
+  Hard resource overload. Like NearCapacity (excluded from new-client selection), and the server is also actively shedding clients: it sends each affected client a reconnect command and drops their session after a short grace period so they migrate to another server.
+  """
+  Full
+}
+
+"""
 A short-lived, app-scoped gameplay token (Overworld portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session.
 """
 type AppTokenResponse {
@@ -959,13 +1075,17 @@ type AppTokenResponse {
   """
   expiresAt: String!
   """
-  Base HTTPS URL of the Game API that serves this app (null if the app has no dedicated/shared game-api route yet).
+  Base HTTPS URL of the Game API that serves this app — its OWN datacenter's endpoint when a placement exists, because that is where the app's shards are. Null if the app has no dedicated/shared game-api route yet. Use this for gameplay; use `discoveryUrl` to recover if it stops answering.
   """
   gameApiUrl: String
   """
   WebSocket URL of the Game API that serves this app (wss://), for realtime subscriptions.
   """
   gameApiWsUrl: String
+  """
+  Stable entry origin, resolving to every datacenter, that always reaches SOME healthy instance. Use it to re-discover endpoints when `gameApiUrl` stops answering: a token-holding client cannot re-mint, because that needs the identity session it does not have. Never a per-datacenter or per-instance address.
+  """
+  discoveryUrl: String
   """
   Browser launch URL for this app (where the player's browser plays it), if configured.
   """
@@ -1059,7 +1179,7 @@ type WalletTransaction {
   """
   balanceAfter: BigInt!
   """
-  What produced this transaction. Known values: "topup" (wallet credit from a checkout/top-up), "usage" (per-app usage charge, negative), "shared_usage" (shared-environment usage charge, negative), "reserved_throughput" (monthly/prorated reserved egress capacity, negative), "environment_usage" (hourly environment cost, negative), "auto_recharge" (automatic wallet recharge). Other caller-supplied deposit types are possible.
+  What produced this transaction. Known values: "topup" (wallet credit from a checkout/top-up), "usage" (per-app usage charge, negative), "shared_usage" (shared-environment usage charge, negative), "reserved_throughput" (monthly/prorated reserved egress capacity, negative), "environment_usage" (hourly environment cost, negative), "auto_recharge" (automatic wallet recharge), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "admin_credit" (operator credit applied without a payment provider). Other caller-supplied deposit types are possible.
   """
   transactionType: String!
   """
@@ -1100,65 +1220,6 @@ type AppBudget {
   """When the budget was first created (ISO-8601 UTC timestamp)."""
   createdAt: DateTime!
   """When the budget was last updated (ISO-8601 UTC timestamp)."""
-  updatedAt: DateTime!
-}
-
-"""An edge in a WalletTransaction connection."""
-type WalletTransactionEdge {
-  """Opaque cursor for this edge."""
-  cursor: String!
-  """The node at the end of this edge."""
-  node: WalletTransaction!
-}
-
-"""
-A Relay cursor connection over WalletTransaction records. Page with first/after; pass pageInfo.endCursor back as after for the next page.
-"""
-type WalletTransactionsConnection {
-  """Edges on this page."""
-  edges: [WalletTransactionEdge!]!
-  """Pagination metadata."""
-  pageInfo: ConnectionPageInfo!
-  """
-  Total matching records across all pages, when known (null for sources that do not compute a total).
-  """
-  totalCount: Int
-}
-
-type ServiceQuota {
-  """Unique quota rule id (BigInt as a decimal string)."""
-  quotaId: BigInt!
-  """
-  Organization this rule is scoped to (BigInt as a decimal string); null if not org-scoped.
-  """
-  orgId: BigInt
-  """
-  App this rule is scoped to (BigInt as a decimal string); null if not app-scoped.
-  """
-  appId: BigInt
-  """
-  Access tier this rule is scoped to (BigInt as a decimal string); null if not tier-scoped.
-  """
-  tierId: BigInt
-  """
-  The metered resource this rule limits (e.g. "api_requests", "storage_bytes"). Free-form metric key, matched exactly.
-  """
-  metric: String!
-  """
-  Maximum allowed amount of the metric per `period`, as a BigInt decimal string.
-  """
-  limitValue: BigInt!
-  """
-  Time window the limit applies over. Free-form string; defaults to "per_minute" (typical values: "per_minute", "per_hour", "per_day").
-  """
-  period: String!
-  """
-  What happens when the limit is exceeded. Free-form string; defaults to "throttle" (typical values: "throttle" to rate-limit, "block" to reject).
-  """
-  actionOnExceed: String!
-  """When the rule was created (ISO-8601 UTC timestamp)."""
-  createdAt: DateTime!
-  """When the rule was last updated (ISO-8601 UTC timestamp)."""
   updatedAt: DateTime!
 }
 
@@ -1515,6 +1576,28 @@ type PaymentMethodSetup {
   publishableKey: String
 }
 
+"""An edge in a WalletTransaction connection."""
+type WalletTransactionEdge {
+  """Opaque cursor for this edge."""
+  cursor: String!
+  """The node at the end of this edge."""
+  node: WalletTransaction!
+}
+
+"""
+A Relay cursor connection over WalletTransaction records. Page with first/after; pass pageInfo.endCursor back as after for the next page.
+"""
+type WalletTransactionsConnection {
+  """Edges on this page."""
+  edges: [WalletTransactionEdge!]!
+  """Pagination metadata."""
+  pageInfo: ConnectionPageInfo!
+  """
+  Total matching records across all pages, when known (null for sources that do not compute a total).
+  """
+  totalCount: Int
+}
+
 """
 A single inbound payment-provider webhook event from the reconciliation audit log.
 """
@@ -1609,6 +1692,43 @@ type PaymentEventsConnection {
   Total matching records across all pages, when known (null for sources that do not compute a total).
   """
   totalCount: Int
+}
+
+type ServiceQuota {
+  """Unique quota rule id (BigInt as a decimal string)."""
+  quotaId: BigInt!
+  """
+  Organization this rule is scoped to (BigInt as a decimal string); null if not org-scoped.
+  """
+  orgId: BigInt
+  """
+  App this rule is scoped to (BigInt as a decimal string); null if not app-scoped.
+  """
+  appId: BigInt
+  """
+  Access tier this rule is scoped to (BigInt as a decimal string); null if not tier-scoped.
+  """
+  tierId: BigInt
+  """
+  The metered resource this rule limits (e.g. "api_requests", "storage_bytes"). Free-form metric key, matched exactly.
+  """
+  metric: String!
+  """
+  Maximum allowed amount of the metric per `period`, as a BigInt decimal string.
+  """
+  limitValue: BigInt!
+  """
+  Time window the limit applies over. Free-form string; defaults to "per_minute" (typical values: "per_minute", "per_hour", "per_day").
+  """
+  period: String!
+  """
+  What happens when the limit is exceeded. Free-form string; defaults to "throttle" (typical values: "throttle" to rate-limit, "block" to reject).
+  """
+  actionOnExceed: String!
+  """When the rule was created (ISO-8601 UTC timestamp)."""
+  createdAt: DateTime!
+  """When the rule was last updated (ISO-8601 UTC timestamp)."""
+  updatedAt: DateTime!
 }
 
 """
@@ -3780,12 +3900,6 @@ type CpComputePlatformCeilings {
   Max module-emitted replication bytes per minute (max_egress_bytes_per_min ceiling; decimal string). Null = no override (game-api bootstrap default 100000000).
   """
   maxEgressBytesPerMin: BigInt
-  """When the ceilings row was last updated (UTC)."""
-  updatedAt: DateTime!
-  """
-  users.user_id of the operator who last updated the ceilings. Null when never edited.
-  """
-  updatedByUserId: String
   """
   Max module state saves per minute (max_state_writes_per_min ceiling). Null = no override (game-api bootstrap default 6000).
   """
@@ -3794,6 +3908,12 @@ type CpComputePlatformCeilings {
   Max module state bytes written per minute (max_state_bytes_per_min ceiling; decimal string). Null = no override (game-api bootstrap default 1073741824).
   """
   maxStateBytesPerMin: BigInt
+  """When the ceilings row was last updated (UTC)."""
+  updatedAt: DateTime!
+  """
+  users.user_id of the operator who last updated the ceilings. Null when never edited.
+  """
+  updatedByUserId: String
 }
 
 """
@@ -4007,126 +4127,14 @@ type PlayerPulse {
 }
 
 """
-Live status and load/telemetry for one UDP game server (Buddy) in the fleet. Returned by serverWithLeastClients (which picks a low-load ReadyForClients server). Throughput metrics are per-second samples from the last reporting window and are null until first reported.
-"""
-type ServerStatus {
-  """
-  Unique id of this game-server row in the fleet registry (the Buddy instance uuid).
-  """
-  serverId: ID!
-  """
-  IPv4 address native clients send spatial UDP datagrams to (paired with clientPort). Preferred over ip6 for inter-host UDP in current deployments.
-  """
-  ip4: String!
-  """
-  IPv6 address of the UDP game server. Global IPv6 between hosts can be unroutable in some deployments, so native clients generally use ip4 + clientPort.
-  """
-  ip6: String!
-  """
-  UDP port that native clients send spatial datagrams to (typically 9091). Browser clients do not use this directly — they reach the server through the UDP proxy / udpNotifications.
-  """
-  clientPort: Int!
-  """
-  Current lifecycle state of this server (see ServerState). Only ReadyForClients servers accept new clients.
-  """
-  status: ServerState!
-  """
-  Number of peer (server-to-server P2P) connections this server currently holds.
-  """
-  peers: Int!
-  """
-  Number of game clients currently connected to this server. serverWithLeastClients uses this to balance load across the fleet.
-  """
-  clients: Int!
-  """
-  Peak CPU utilization percentage (0-100) observed in the last reporting window. Null until reported.
-  """
-  cpuPeakPct: Float
-  """
-  Messages per second received from clients in the last reporting window. Null until reported.
-  """
-  clientRecvMsgsPerSec: Float
-  """
-  Bytes per second received from clients in the last reporting window. Null until reported.
-  """
-  clientRecvBytesPerSec: Float
-  """
-  Messages per second sent to clients in the last reporting window. Null until reported.
-  """
-  clientSendMsgsPerSec: Float
-  """
-  Bytes per second sent to clients in the last reporting window. Null until reported.
-  """
-  clientSendBytesPerSec: Float
-  """
-  Messages per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerRecvMsgsPerSec: Float
-  """
-  Bytes per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerRecvBytesPerSec: Float
-  """
-  Messages per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerSendMsgsPerSec: Float
-  """
-  Bytes per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerSendBytesPerSec: Float
-  """
-  Per-second rate of individually-addressed (single-actor) messages sent to clients in the last window, as opposed to spatial fan-out. Null until reported.
-  """
-  clientSendIndividualMsgsPerSec: Float
-  """
-  When this status row was last updated (server heartbeat). Use to judge how fresh the metrics/state are.
-  """
-  updatedAt: DateTime!
-  """When this server was first registered in the fleet."""
-  createdAt: DateTime!
-  """
-  True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself.
-  """
-  drainRequested: Boolean!
-}
-
-"""
-Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers.
-"""
-enum ServerState {
-  """
-  The server is booting and not yet accepting clients. Do not route new connections here; wait for ReadyForClients.
-  """
-  Starting
-  """
-  The server is healthy and accepting clients. This is the only state safe to route new connections to.
-  """
-  ReadyForClients
-  """
-  The server is draining and shutting down: existing sessions may continue briefly but no new clients should be routed here.
-  """
-  Stopping
-  """
-  The server is down or unreachable (failed health checks). Do not route any traffic here.
-  """
-  Offline
-  """
-  Soft resource overload (a CPU core or system memory has been high for several seconds). Existing sessions continue, but the server is excluded from serverWithLeastClients so no new clients are routed here until it recovers.
-  """
-  NearCapacity
-  """
-  Hard resource overload. Like NearCapacity (excluded from new-client selection), and the server is also actively shedding clients: it sends each affected client a reconnect command and drops their session after a short grace period so they migrate to another server.
-  """
-  Full
-}
-
-"""
-A registered GraphQL API server instance in the fleet (either a management-api or a game-api, see `kind`), with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy.
+A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy.
 """
 type GraphQLServer {
   """Unique id of this GraphQL server registration."""
   graphqlServerId: ID!
-  """Logical kind of GraphQL service: 'management-api' or 'game-api'."""
+  """
+  Logical kind of GraphQL service. Every current server is 'game-api', which serves both the management and game surfaces; 'management-api' appears only on rows predating their unification.
+  """
   kind: String
   """
   Internal/private IPv4 address of this server. Use publicIp4 for external reachability.
@@ -4148,6 +4156,10 @@ type GraphQLServer {
   publicIp6: String
   """TCP port the GraphQL/HTTP API listens on (default 4000)."""
   apiPort: Int!
+  """
+  Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-2.gxca.prod.cp.cks-env.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you.
+  """
+  publicHostname: String
   """
   Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients.
   """
@@ -4514,6 +4526,18 @@ type GameClientBootstrap {
   Required WebSocket subprotocol for the binary realtime relay. The client must offer it during the upgrade; the server selects it. Currently "crowdy-relay-v1".
   """
   binaryRelayProtocol: String!
+  """
+  Stable entry point that always resolves to SOME healthy API instance — the environment’s shared load balancer. Use this to RE-DISCOVER an endpoint when the instance you are connected to stops answering: call gameClientBootstrap (or mintAppToken) against it and use the gameApiUrl it returns. This is the recovery path for direct connect, where gameApiUrl is a single instance that can die; discoveryUrl is chosen so that it cannot die with it. Null only if the server has no public URL configured.
+  """
+  discoveryUrl: String
+  """
+  HTTPS origin the client should use for GraphQL right now: the app's OWN datacenter, because that is where its shards live and a query answered elsewhere crosses a WAN silently. Under direct connect it is one specific instance in that datacenter, which is NOT interchangeable with other instances for an open realtime session. Not to be confused with discoveryUrl, which is the shared origin resolving to every datacenter — fall back to that if requests here start failing.
+  """
+  gameApiUrl: String
+  """
+  The wss:// form of gameApiUrl, for the graphql-transport-ws subscription socket and the binary relay. Same origin, same caveat: under direct connect it is one instance.
+  """
+  gameApiWsUrl: String
 }
 
 """
@@ -4758,12 +4782,6 @@ type WasmModule {
   consecutiveFailures: Int!
   """When the open circuit may retry (half-open)."""
   cooldownUntil: DateTime
-  """Last error recorded for this module."""
-  lastError: String
-  """When the module was created."""
-  createdAt: DateTime!
-  """When the module was last updated."""
-  updatedAt: DateTime!
   """
   When this module was stopped for exceeding a resource limit. Null when it is running normally. Unlike the circuit breaker this does not clear on its own: deploy a new version, or ask an admin to reset it.
   """
@@ -4772,6 +4790,12 @@ type WasmModule {
   What the module exceeded and what to change, when it has been stopped for a resource limit. Null when it is running normally.
   """
   breakerReason: String
+  """Last error recorded for this module."""
+  lastError: String
+  """When the module was created."""
+  createdAt: DateTime!
+  """When the module was last updated."""
+  updatedAt: DateTime!
 }
 
 """
@@ -5165,13 +5189,13 @@ type GmAutomationTrigger {
   """Filter: only this property key. Always null for player_count_changed."""
   propertyKey: String
   """
-  Debounce window in ms. player_count_changed coalesces on the trailing edge; other model events use their existing leading-edge behavior.
-  """
-  debounceMs: Int!
-  """
   property_changed only: which writes are observed — "direct" (gameModelSetProperty), "function" (a mutation applied inside an invoke, automation run, or timer fire), or "any". Always "any" for other events, which ignore it.
   """
   writeSource: String!
+  """
+  Debounce window in ms. player_count_changed coalesces on the trailing edge; other model events use their existing leading-edge behavior.
+  """
+  debounceMs: Int!
   """
   When this trigger last matched an event and dispatched a run, or null if it has never matched. A trigger that stays null while its event is happening is almost always a filter that cannot match — see warnings.
   """
@@ -5201,13 +5225,17 @@ type GmAutomationRun {
   """
   The automation that ran, or null for a timer fire (which has no owning automation).
   """
-  automationId: String!
+  automationId: String
   """
   The automation name at run time, or the invoked function name for a timer fire.
   """
   automationName: String!
   """What triggered the run: schedule | event | manual | cascade | timer."""
   triggerSource: String!
+  """
+  The event trigger that matched, when the run came from one. Null for schedule, manual, and timer-fired runs.
+  """
+  triggerId: String
   """Parent run id when triggered as a cascade."""
   parentRunId: String
   """Cascade depth (0 = top-level)."""
@@ -5238,10 +5266,6 @@ type GmAutomationRun {
   circuitAction: String
   """Billed compute units for this run."""
   computeUnits: Int!
-  """
-  The event trigger that matched, when the run came from one. Null for schedule, manual, and timer-fired runs.
-  """
-  triggerId: String
 }
 
 """Per-automation rollup within a stats window."""
@@ -5352,6 +5376,46 @@ type GmAutomationPolicy {
   Maximum pending (armed but not yet fired) timers the app may hold at once.
   """
   maxPendingTimers: Int!
+}
+
+"""
+A pending one-shot timer: a delayed invocation that has been armed but has not fired yet. Timers are removed from this list the moment they are claimed for execution.
+"""
+type GmTimer {
+  """Unique timer id (UUID)."""
+  timerId: String!
+  """The app (tenant)."""
+  appId: BigInt!
+  """Session the delayed invocation runs in, or null if app-global."""
+  sessionId: String
+  """Container the delayed invocation runs against ("self")."""
+  selfContainerId: String!
+  """The function that will be invoked when it fires."""
+  functionName: String!
+  """
+  JSON object of parameters bound at arm time and passed to the invocation.
+  """
+  paramsJson: String!
+  """When the timer becomes due."""
+  fireAt: DateTime!
+  """
+  App-scoped dedupe key, or null. Re-arming the same key replaces this timer instead of adding another.
+  """
+  dedupeKey: String
+  """
+  Cascade depth inherited from whatever armed the timer. The fired invocation runs one deeper, so timer chains are bounded by the app's maxCascadeDepth.
+  """
+  cascadeDepth: Int!
+  """
+  Flow correlation id carried from the arming call, so the eventual fire stays visible in gameModelFlow.
+  """
+  flowId: String
+  """
+  What armed it: function (a timer effect inside an invoke) | client (gameModelScheduleInvoke) | automation.
+  """
+  armedBy: String!
+  """When the timer was armed."""
+  createdAt: DateTime!
 }
 
 """
@@ -5469,6 +5533,36 @@ type GmFunctionPermissionEffect {
 }
 
 """
+One named parameter expression bound into a timer invocation at arm time.
+"""
+type GmTimerParam {
+  """Parameter name on the timer's target function."""
+  name: String!
+  """The expression (source) evaluated when arming."""
+  expression: String!
+}
+
+"""
+A declarative one-shot timer the function arms transactionally with its mutations: invoke another function after a delay. Fires exactly once, survives replica restarts, and is bounded by the app's automation guardrails.
+"""
+type GmFunctionTimer {
+  """The function invoked when the timer fires."""
+  functionName: String!
+  """
+  Container reference (source) the delayed invocation runs against, e.g. "self".
+  """
+  target: String!
+  """The expression (source) resolving the delay in milliseconds."""
+  delayMsExpression: String!
+  """
+  Optional expression (source) resolving the app-scoped dedupe key; re-arming the same key replaces the pending timer.
+  """
+  dedupeKeyExpression: String
+  """Parameters bound into the delayed invocation."""
+  params: [GmTimerParam!]!
+}
+
+"""
 A studio-defined function: a named, sandboxed behavior over containers (parameters, declared mutations, optional return, and an authority invoke policy).
 """
 type GmFunction {
@@ -5506,12 +5600,12 @@ type GmFunction {
   Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations.
   """
   permissionEffects: [GmFunctionPermissionEffect!]!
-  """Non-fatal static-analysis warnings from the last upload."""
-  warnings: [String!]!
   """
   Declarative one-shot timers armed atomically with the function's mutations.
   """
   timers: [GmFunctionTimer!]!
+  """Non-fatal static-analysis warnings from the last upload."""
+  warnings: [String!]!
 }
 
 """
@@ -6825,42 +6919,48 @@ type Query {
     orgId: BigInt!
   ): [AppBudget!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
-  Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission.
+  Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required.
   """
-  quotasForOrg(
-    """
-    Organization id (BigInt as a decimal string) whose quota rules to list.
-    """
+  platformConfig: PlatformConfig!
+  """
+  @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only.
+  """
+  sharedEnvPlans: [SharedEnvPlan!]!
+  """
+  An org's free shared-app slot quota and how much of it is used. Apps beyond the quota still publish; metered usage is billed from the org wallet. Caller must be a member of the org.
+  """
+  orgFreeAppQuota(
+    """Organization id (BigInt) to read the free quota for."""
     orgId: BigInt!
-  ): [ServiceQuota!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
+  ): FreeAppQuota!
   """
-  Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission.
+  An app's paid shared-environment subscription, or null when it has none (e.g. unpublished or on the free quota). Caller must be a member of the app's org.
   """
-  quotasForApp(
-    """App id (BigInt as a decimal string) whose quota rules to list."""
+  appSharedSubscription(
+    """App id (BigInt) to look up the subscription for."""
     appId: BigInt!
-  ): [ServiceQuota!]! @requiresPermission(scope: "app", permission: "view_usage", scopeArg: "appId")
+  ): AppSharedSubscription
   """
-  Resolves the single most-specific quota that applies to the given (tierId, appId, orgId, metric) by walking tier -> app -> org -> free-tier defaults and returning the first match; its limitValue/period describe the enforced limit. Returns null if no matching rule and no free-tier default exist for the metric. Requires the 'view_usage' permission on the most-specific scope provided: tierId or appId -> 'view_usage' on the (owning) app; orgId -> 'view_usage' on the org. A metric-only query (no scope ids) resolves the platform free-tier default and only requires an authenticated user.
+  Shared-environment runtime gate decision plus current hour/day billing-window usage for an app. Read this to learn why an app is not running (runtimeDenialReason). Caller must be a member of the app's org.
   """
-  effectiveQuota(
-    """
-    The metered resource key to resolve (max 64 characters), e.g. "api_requests".
-    """
-    metric: String!
-    """
-    Organization context (BigInt as a decimal string). Optional; include to consider org-scoped rules in the precedence walk.
-    """
-    orgId: BigInt
-    """
-    App context (BigInt as a decimal string). Optional; include to consider app-scoped rules in the precedence walk.
-    """
-    appId: BigInt
-    """
-    Access tier context (BigInt as a decimal string). Optional; include to consider tier-scoped rules (the most specific level).
-    """
-    tierId: BigInt
-  ): ServiceQuota
+  appRuntimeState(
+    """App id (BigInt) to evaluate the runtime gate for."""
+    appId: BigInt!
+  ): AppRuntimeState!
+  """
+  An org's off-session auto-billing configuration (enabled flag, recharge amount, low-water threshold, per-period cap, and last error). Requires the 'view_billing' org permission.
+  """
+  orgAutoBilling(
+    """Organization id (BigInt) to read auto-billing config for."""
+    orgId: BigInt!
+  ): OrgAutoBilling!
+  """
+  Lists the org's saved (vaulted) off-session payment methods. Returns metadata only (brand/last4/status), never card numbers. Requires the 'view_billing' org permission.
+  """
+  orgPaymentMethods(
+    """Organization id (BigInt) to list payment methods for."""
+    orgId: BigInt!
+  ): [SavedPaymentMethod!]!
   """
   Lists the authenticated caller's own checkouts (newest first), across every org and app. Use this for a self-service payment history; use `checkouts` for the cross-tenant super-admin view. Requires an authenticated user.
   """
@@ -6942,48 +7042,42 @@ type Query {
     after: String
   ): PaymentEventsConnection! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
-  Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required.
+  Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission.
   """
-  platformConfig: PlatformConfig!
-  """
-  @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only.
-  """
-  sharedEnvPlans: [SharedEnvPlan!]!
-  """
-  An org's free shared-app slot quota and how much of it is used. Apps beyond the quota still publish; metered usage is billed from the org wallet. Caller must be a member of the org.
-  """
-  orgFreeAppQuota(
-    """Organization id (BigInt) to read the free quota for."""
+  quotasForOrg(
+    """
+    Organization id (BigInt as a decimal string) whose quota rules to list.
+    """
     orgId: BigInt!
-  ): FreeAppQuota!
+  ): [ServiceQuota!]! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
-  An app's paid shared-environment subscription, or null when it has none (e.g. unpublished or on the free quota). Caller must be a member of the app's org.
+  Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission.
   """
-  appSharedSubscription(
-    """App id (BigInt) to look up the subscription for."""
+  quotasForApp(
+    """App id (BigInt as a decimal string) whose quota rules to list."""
     appId: BigInt!
-  ): AppSharedSubscription
+  ): [ServiceQuota!]! @requiresPermission(scope: "app", permission: "view_usage", scopeArg: "appId")
   """
-  Shared-environment runtime gate decision plus current hour/day billing-window usage for an app. Read this to learn why an app is not running (runtimeDenialReason). Caller must be a member of the app's org.
+  Resolves the single most-specific quota that applies to the given (tierId, appId, orgId, metric) by walking tier -> app -> org -> free-tier defaults and returning the first match; its limitValue/period describe the enforced limit. Returns null if no matching rule and no free-tier default exist for the metric. Requires the 'view_usage' permission on the most-specific scope provided: tierId or appId -> 'view_usage' on the (owning) app; orgId -> 'view_usage' on the org. A metric-only query (no scope ids) resolves the platform free-tier default and only requires an authenticated user.
   """
-  appRuntimeState(
-    """App id (BigInt) to evaluate the runtime gate for."""
-    appId: BigInt!
-  ): AppRuntimeState!
-  """
-  An org's off-session auto-billing configuration (enabled flag, recharge amount, low-water threshold, per-period cap, and last error). Requires the 'view_billing' org permission.
-  """
-  orgAutoBilling(
-    """Organization id (BigInt) to read auto-billing config for."""
-    orgId: BigInt!
-  ): OrgAutoBilling!
-  """
-  Lists the org's saved (vaulted) off-session payment methods. Returns metadata only (brand/last4/status), never card numbers. Requires the 'view_billing' org permission.
-  """
-  orgPaymentMethods(
-    """Organization id (BigInt) to list payment methods for."""
-    orgId: BigInt!
-  ): [SavedPaymentMethod!]!
+  effectiveQuota(
+    """
+    The metered resource key to resolve (max 64 characters), e.g. "api_requests".
+    """
+    metric: String!
+    """
+    Organization context (BigInt as a decimal string). Optional; include to consider org-scoped rules in the precedence walk.
+    """
+    orgId: BigInt
+    """
+    App context (BigInt as a decimal string). Optional; include to consider app-scoped rules in the precedence walk.
+    """
+    appId: BigInt
+    """
+    Access tier context (BigInt as a decimal string). Optional; include to consider tier-scoped rules (the most specific level).
+    """
+    tierId: BigInt
+  ): ServiceQuota
   """
   The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet funds the player's grid compute across every org/app (DN-5); org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP.
   """
@@ -7196,11 +7290,11 @@ type Query {
     orgId: BigInt!
   ): PlayerPulse! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
-  Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this.
+  Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, preferring one co-located with the datacenter that holds the data for this app (all rows for one app live in a single datacenter) and falling back to any healthy server if none is. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this.
   """
   serverWithLeastClients: ServerStatus!
   """
-  List every registered GraphQL API server (both management-api and game-api kinds), regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers).
+  List every registered GraphQL API server regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers).
   """
   graphqlServers: [GraphQLServer!]!
   """
@@ -7523,6 +7617,17 @@ type Query {
     """Optional: only triggers for this automation. Omit for all."""
     automationName: String
   ): [GmAutomationTrigger!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Pending one-shot timers for the app, soonest first. A timer leaves this list the moment it is claimed for execution, so an empty list means nothing is scheduled (not that nothing ran). Requires app-admin ('manage_apps').
+  """
+  gameModelTimers(
+    """The app (tenant) whose pending timers to list."""
+    appId: BigInt!
+    """Only timers scoped to this session."""
+    sessionId: String
+    """Max rows to return (1-200, default 50)."""
+    limit: Int
+  ): [GmTimer!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Read the app's automation policy (guardrails / platform ceilings). Requires app-admin ('manage_apps').
   """
@@ -8065,17 +8170,6 @@ type Query {
     """Grid currently owned by the caller."""
     gridId: BigInt!
   ): [PlayerAutomation!]!
-  """
-  Pending one-shot timers for the app, soonest first. A timer leaves this list the moment it is claimed for execution, so an empty list means nothing is scheduled (not that nothing ran). Requires app-admin ('manage_apps').
-  """
-  gameModelTimers(
-    """The app (tenant) whose pending timers to list."""
-    appId: BigInt!
-    """Only timers scoped to this session."""
-    sessionId: String
-    """Max rows to return (1-200, default 50)."""
-    limit: Int
-  ): [GmTimer!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
 }
 
 input ActorFilterInput {
@@ -8827,47 +8921,24 @@ type Mutation {
     idempotencyKey: String
   ): AppBudget! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
   """
-  Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage.
+  OPERATOR ONLY. Credits an organization wallet without a payment provider, for seeding a test environment or making an operator adjustment, and records it in the wallet ledger as an "admin_credit" transaction. Use this instead of writing to org_wallets by hand: it creates the wallet if absent, repairs a missing wallet id, and moves the balance and the ledger row together in one transaction. Pass a referenceId to make retries idempotent. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so a credit that clears an insufficient_funds denial lifts it immediately instead of leaving the app refusing clients.
   """
-  setQuota(
+  creditOrgWallet(
+    """Organization whose wallet is credited."""
+    orgId: BigInt!
     """
-    The quota rule to create or update: scope ids (orgId/appId/tierId), metric, limitValue, and optional period/actionOnExceed.
+    Amount to add, in minor units (cents) of the wallet currency, as a BigInt decimal string. Must be positive — this mutation only credits.
     """
-    input: SetQuotaInput!
-  ): ServiceQuota!
-  """
-  Permanently deletes a quota enforcement rule by id. Returns true if a rule was removed, or false if no quota with that id exists. Destructive and not reversible: once removed, the metric falls back to the next-most-specific rule or the free-tier default. Requires the 'manage_quotas' permission on the same scope (app or org) the quota belongs to, or super admin for global quotas.
-  """
-  deleteQuota(
-    """Id (BigInt as a decimal string) of the quota rule to delete."""
-    quotaId: BigInt!
+    amountCents: BigInt!
     """
-    Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
+    Why the credit is being made. Stored as the ledger description, so write it for whoever reads the ledger later rather than for yourself.
     """
-    idempotencyKey: String
-  ): Boolean!
-  """
-  Creates a Checkout row, opens a hosted payment session with the selected provider, and returns the row with `externalUrl` set — redirect the user there to pay. Status starts PENDING and is reconciled to COMPLETED/FAILED later via provider webhooks (this call does not itself capture funds). The side effect applied on completion depends on `purpose` (e.g. ORG_WALLET_TOPUP credits the org wallet, APP_ACCESS_PURCHASE grants app access). Requires an authenticated user; ORG_WALLET_TOPUP additionally requires the 'manage_billing' org permission. Purposes DONATION and PROPERTY_TOKENS are rejected. Pass `input.idempotencyKey` to make retries safe (a replay returns the first checkout instead of opening a second provider session).
-  """
-  createCheckout(
+    reason: String!
     """
-    Checkout parameters: provider, purpose, target ids, and amount. See CreateCheckoutInput for which fields each purpose requires.
+    Optional caller-supplied key. Replaying the same referenceId returns the original transaction instead of crediting twice.
     """
-    input: CreateCheckoutInput!
-  ): Checkout!
-  """
-  Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout.
-  """
-  capturePaypalCheckout(
-    """
-    PayPal order id returned on the approval redirect (the `token` query parameter). Identifies the approved order to capture.
-    """
-    orderId: String!
-    """
-    Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
-    """
-    idempotencyKey: String
-  ): Checkout!
+    referenceId: String
+  ): WalletTransaction! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured.
   """
@@ -8964,6 +9035,48 @@ type Mutation {
     Id (BigInt) of the saved payment method to remove (see orgPaymentMethods).
     """
     paymentMethodId: BigInt!
+    """
+    Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
+    """
+    idempotencyKey: String
+  ): Boolean!
+  """
+  Creates a Checkout row, opens a hosted payment session with the selected provider, and returns the row with `externalUrl` set — redirect the user there to pay. Status starts PENDING and is reconciled to COMPLETED/FAILED later via provider webhooks (this call does not itself capture funds). The side effect applied on completion depends on `purpose` (e.g. ORG_WALLET_TOPUP credits the org wallet, APP_ACCESS_PURCHASE grants app access). Requires an authenticated user; ORG_WALLET_TOPUP additionally requires the 'manage_billing' org permission. Purposes DONATION and PROPERTY_TOKENS are rejected. Pass `input.idempotencyKey` to make retries safe (a replay returns the first checkout instead of opening a second provider session).
+  """
+  createCheckout(
+    """
+    Checkout parameters: provider, purpose, target ids, and amount. See CreateCheckoutInput for which fields each purpose requires.
+    """
+    input: CreateCheckoutInput!
+  ): Checkout!
+  """
+  Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout.
+  """
+  capturePaypalCheckout(
+    """
+    PayPal order id returned on the approval redirect (the `token` query parameter). Identifies the approved order to capture.
+    """
+    orderId: String!
+    """
+    Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
+    """
+    idempotencyKey: String
+  ): Checkout!
+  """
+  Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage.
+  """
+  setQuota(
+    """
+    The quota rule to create or update: scope ids (orgId/appId/tierId), metric, limitValue, and optional period/actionOnExceed.
+    """
+    input: SetQuotaInput!
+  ): ServiceQuota!
+  """
+  Permanently deletes a quota enforcement rule by id. Returns true if a rule was removed, or false if no quota with that id exists. Destructive and not reversible: once removed, the metric falls back to the next-most-specific rule or the free-tier default. Requires the 'manage_quotas' permission on the same scope (app or org) the quota belongs to, or super admin for global quotas.
+  """
+  deleteQuota(
+    """Id (BigInt as a decimal string) of the quota rule to delete."""
+    quotaId: BigInt!
     """
     Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
     """
@@ -9647,6 +9760,26 @@ type Mutation {
     name: String!
   ): GmAutomationRun! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
+  Arm a one-shot timer: invoke a function once, after a delay. The timer is durable (it survives an API restart) and claimed by exactly one replica, so it fires once. The target function must be autonomousInvocable, because the fire is headless and runs with system authority rather than a player's — which is also why this needs app-admin ('manage_apps'). For player-driven delays, author a timers effect on a function instead so the delay is part of your game logic. Supply dedupeKey to make re-arming replace the pending timer rather than queue another fire.
+  """
+  gameModelScheduleInvoke(
+    """
+    The app, function name, self container, delay in ms, and optional params, session, and dedupe key.
+    """
+    input: ScheduleInvokeInput!
+  ): GmTimer! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Cancel pending timers by id or by dedupe key, returning how many were removed. A timer already claimed for execution cannot be cancelled. Requires app-admin ('manage_apps').
+  """
+  gameModelCancelTimer(
+    """The app (tenant) that owns the timer."""
+    appId: BigInt!
+    """Cancel this specific timer id."""
+    timerId: String
+    """Cancel the pending timer holding this dedupe key."""
+    dedupeKey: String
+  ): Int! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
   Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save). Subject to the app's session creation policy. The caller becomes the creator and a participant. Requires a valid token.
   """
   gameModelCreateSession(
@@ -9773,6 +9906,19 @@ type Mutation {
     name: String!
     """True to enable (and reset the circuit); false to stop."""
     enabled: Boolean!
+  ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Restart a module that was stopped for exceeding a resource limit, without deploying a new version. Deploying a fix clears the stop on its own and is the normal path; use this when the limit itself was wrong or the load is being accepted deliberately. The reason is recorded. Requires the org 'manage_compute' permission.
+  """
+  computeResetBreaker(
+    """The app (tenant) that owns the module."""
+    appId: BigInt!
+    """The module name."""
+    name: String!
+    """
+    Why the module is being restarted despite exceeding its limit. At least 8 characters; kept with the module history.
+    """
+    reason: String!
   ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
   Delete a compute module and (via cascade) its versions, triggers, and lease. Run history is retained for auditing. Returns true when a module was deleted. Requires the org 'manage_compute' permission.
@@ -9988,7 +10134,7 @@ type Mutation {
     chunkZ: Int
   ): GridPurchaseResult!
   """
-  Create a marketplace listing (free mode) for code the caller authors — personally, or org-owned via ownerOrgId (DN-9; requires manage_compute in that org). SIDE EFFECTS: the catalog row is written on cks-management-api with an ownership audit entry and replica-synced back. Publishing never uploads source; versions snapshot artifact hashes only.
+  Create a marketplace listing (free mode) for code the caller authors — personally, or org-owned via ownerOrgId (DN-9; requires manage_compute in that org). SIDE EFFECTS: writes the catalog row with an ownership audit entry. Publishing never uploads source; versions snapshot artifact hashes only.
   """
   publishPlayerCode(
     """App, display metadata, license mode, and optional owning org."""
@@ -10405,39 +10551,6 @@ type Mutation {
     """App/grid scope and player automation UUID to delete."""
     input: PlayerAutomationRefInput!
   ): Boolean!
-  """
-  Arm a one-shot timer: invoke a function once, after a delay. The timer is durable (it survives an API restart) and claimed by exactly one replica, so it fires once. The target function must be autonomousInvocable, because the fire is headless and runs with system authority rather than a player's — which is also why this needs app-admin ('manage_apps'). For player-driven delays, author a timers effect on a function instead so the delay is part of your game logic. Supply dedupeKey to make re-arming replace the pending timer rather than queue another fire.
-  """
-  gameModelScheduleInvoke(
-    """
-    The app, function name, self container, delay in ms, and optional params, session, and dedupe key.
-    """
-    input: ScheduleInvokeInput!
-  ): GmTimer! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
-  """
-  Cancel pending timers by id or by dedupe key, returning how many were removed. A timer already claimed for execution cannot be cancelled. Requires app-admin ('manage_apps').
-  """
-  gameModelCancelTimer(
-    """The app (tenant) that owns the timer."""
-    appId: BigInt!
-    """Cancel this specific timer id."""
-    timerId: String
-    """Cancel the pending timer holding this dedupe key."""
-    dedupeKey: String
-  ): Int! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
-  """
-  Restart a module that was stopped for exceeding a resource limit, without deploying a new version. Deploying a fix clears the stop on its own and is the normal path; use this when the limit itself was wrong or the load is being accepted deliberately. The reason is recorded. Requires the org 'manage_compute' permission.
-  """
-  computeResetBreaker(
-    """The app (tenant) that owns the module."""
-    appId: BigInt!
-    """The module name."""
-    name: String!
-    """
-    Why the module is being restarted despite exceeding its limit. At least 8 characters; kept with the module history.
-    """
-    reason: String!
-  ): WasmModule! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
 }
 
 input UpdateGamertagInput {
@@ -10928,35 +11041,18 @@ input SetAppClientSettingsInput {
   launchUrl: String
 }
 
-input SetQuotaInput {
+"""
+Set or change an app's reserved sustained throughput on the shared environment.
+"""
+input SetAppReservedThroughputInput {
+  """Organization that owns the app."""
+  orgId: BigInt!
+  """App to configure reserved throughput for."""
+  appId: BigInt!
   """
-  Scope the rule to this organization (BigInt as a decimal string). Provide one of orgId/appId/tierId to choose the scope; omit all three for a global (super-admin) rule.
+  Reserved sustained egress in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation (free tier).
   """
-  orgId: BigInt
-  """Scope the rule to this app (BigInt as a decimal string)."""
-  appId: BigInt
-  """Scope the rule to this access tier (BigInt as a decimal string)."""
-  tierId: BigInt
-  """
-  The metered resource key to limit (max 64 characters), e.g. "api_requests".
-  """
-  metric: String!
-  """
-  Maximum allowed amount of the metric per `period`, as a BigInt decimal string.
-  """
-  limitValue: BigInt!
-  """
-  Time window the limit applies over. Optional; defaults to "per_minute" (typical values: "per_minute", "per_hour", "per_day"). Part of the upsert key, so different periods create separate rules.
-  """
-  period: String
-  """
-  What to do when the limit is exceeded. Optional; defaults to "throttle" (typical values: "throttle" to rate-limit, "block" to reject).
-  """
-  actionOnExceed: String
-  """
-  Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
-  """
-  idempotencyKey: String
+  reservedBytesPerSec: BigInt!
 }
 
 input CreateCheckoutInput {
@@ -11002,18 +11098,35 @@ input CreateCheckoutInput {
   idempotencyKey: String
 }
 
-"""
-Set or change an app's reserved sustained throughput on the shared environment.
-"""
-input SetAppReservedThroughputInput {
-  """Organization that owns the app."""
-  orgId: BigInt!
-  """App to configure reserved throughput for."""
-  appId: BigInt!
+input SetQuotaInput {
   """
-  Reserved sustained egress in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation (free tier).
+  Scope the rule to this organization (BigInt as a decimal string). Provide one of orgId/appId/tierId to choose the scope; omit all three for a global (super-admin) rule.
   """
-  reservedBytesPerSec: BigInt!
+  orgId: BigInt
+  """Scope the rule to this app (BigInt as a decimal string)."""
+  appId: BigInt
+  """Scope the rule to this access tier (BigInt as a decimal string)."""
+  tierId: BigInt
+  """
+  The metered resource key to limit (max 64 characters), e.g. "api_requests".
+  """
+  metric: String!
+  """
+  Maximum allowed amount of the metric per `period`, as a BigInt decimal string.
+  """
+  limitValue: BigInt!
+  """
+  Time window the limit applies over. Optional; defaults to "per_minute" (typical values: "per_minute", "per_hour", "per_day"). Part of the upsert key, so different periods create separate rules.
+  """
+  period: String
+  """
+  What to do when the limit is exceeded. Optional; defaults to "throttle" (typical values: "throttle" to rate-limit, "block" to reject).
+  """
+  actionOnExceed: String
+  """
+  Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
+  """
+  idempotencyKey: String
 }
 
 """
@@ -11938,6 +12051,42 @@ input FunctionPermissionEffectInput {
 }
 
 """
+A declarative one-shot timer the function arms TRANSACTIONALLY with its property mutations: "invoke this function again in N ms". The timer survives replica restarts and is claimed by the same dispatcher that runs scheduled automations, so it fires exactly once. Rolling back the invocation arms nothing. The target function must be autonomousInvocable, because a timer fires headlessly with no player in the request.
+"""
+input FunctionTimerInput {
+  """
+  The function to invoke when the timer fires. Must exist and be autonomousInvocable.
+  """
+  functionName: String!
+  """
+  Container reference the delayed invocation runs against, e.g. "self" (default) or "$target_id".
+  """
+  target: String
+  """
+  Expression resolving the delay in milliseconds (int > 0), floored by the app's minTimerDelayMs policy.
+  """
+  delayMsExpression: String!
+  """
+  Optional expression resolving an app-scoped string key. Re-arming the same key replaces the pending timer instead of queueing another fire, so a repeatedly invoked function cannot flood the timer queue.
+  """
+  dedupeKeyExpression: String
+  """
+  Parameters bound into the delayed invocation. Expressions are evaluated at arm time on post-mutation state, so the fired invocation sees the values the arming logic decided.
+  """
+  params: [TimerParamInput!]
+}
+
+"""One named parameter expression bound into a timer invocation."""
+input TimerParamInput {
+  """Parameter name on the timer's target function."""
+  name: String!
+  """
+  Expression evaluated when the timer is armed (not when it fires), in the arming invocation context.
+  """
+  expression: String!
+}
+
+"""
 Bulk-create game-model definitions and optional instances in one transaction (model init/import).
 """
 input SeedGameModelInput {
@@ -12196,13 +12345,13 @@ input UpsertAutomationTriggerInput {
   """
   propertyKey: String
   """
-  Debounce window in ms. player_count_changed uses trailing-edge coalescing (first previous count plus latest current count/revision); existing model events retain leading-edge suppression.
-  """
-  debounceMs: Int
-  """
   property_changed only: which writes to observe — "direct" (gameModelSetProperty), "function" (a mutation applied inside a gameModelInvoke, automation run, or timer fire), or "any" (default). Rejected for other events.
   """
   writeSource: String
+  """
+  Debounce window in ms. player_count_changed uses trailing-edge coalescing (first previous count plus latest current count/revision); existing model events retain leading-edge suppression.
+  """
+  debounceMs: Int
 }
 
 """Set the per-app automation policy (guardrails / platform ceilings)."""
@@ -12227,6 +12376,38 @@ input SetAutomationPolicyInput {
   minTimerDelayMs: Int
   """Max pending (armed but not yet fired) timers the app may hold at once."""
   maxPendingTimers: Int
+}
+
+"""
+Arm a one-shot timer that invokes a function after a delay. The target function must be autonomousInvocable, because the timer fires headlessly with no player in the request.
+"""
+input ScheduleInvokeInput {
+  """The app (tenant)."""
+  appId: BigInt!
+  """
+  The function to invoke when the timer fires. Must be autonomousInvocable.
+  """
+  functionName: String!
+  """
+  The 'self' container the delayed invocation runs against. Must belong to the app, and match the function's bound container type when it has one.
+  """
+  selfContainerId: String!
+  """
+  Delay in milliseconds before the timer fires. Must be at least the app's minTimerDelayMs and at most 30 days.
+  """
+  delayMs: Int!
+  """
+  JSON object of parameters passed to the delayed invocation. Defaults to '{}'.
+  """
+  paramsJson: String
+  """
+  Session for the delayed invocation. Defaults to the container's own session.
+  """
+  sessionId: String
+  """
+  Optional app-scoped key. Re-arming the same key replaces the pending timer instead of adding another, which makes "reset the countdown" a single call.
+  """
+  dedupeKey: String
 }
 
 """Create a runtime session."""
@@ -13780,15 +13961,15 @@ type GenericErrorResponse {
 }
 
 """
-Realtime lifecycle/error event delivered on the udpNotifications subscription when a session cannot be opened or correctly scoped. It is a control frame — it carries no appId, so it is never dropped by the per-app fan-out filter — and it is terminal: the subscription completes immediately after emitting it, so the client must fix the cause and resubscribe. Branch on `code`; use `retryable` to decide whether retrying can succeed. A healthy subscription never emits this type; it yields game-server notifications/responses instead.
+Realtime lifecycle event delivered on the udpNotifications subscription. It is a control frame — it carries no appId, so it is never dropped by the per-app fan-out filter. Branch on `code`; use `retryable` to decide whether retrying can succeed. Most codes report that a session could not be opened or correctly scoped and are TERMINAL: the subscription completes immediately after emitting one, so the client must fix the cause and resubscribe. The exception is SERVER_DRAINING, which arrives mid-stream on a healthy subscription and does NOT end it — see that code below.
 """
 type RealtimeConnectionEvent {
   """
-  Lifecycle status of the session attempt. Currently always "failed" — this event is only emitted when udpNotifications could not establish (or had to tear down) the underlying UDP proxy session.
+  Lifecycle status: "failed" when the session could not be established or had to be torn down, or "draining" for the one advisory case (SERVER_DRAINING) where the stream stays open.
   """
   status: String!
   """
-  Machine-readable failure reason. Branch on this (not on `message`). Known values: AUTH_REQUIRED — no valid bearer game token was presented on the WS connection_init / request; authenticate via the Management API and resubscribe (not retryable as-is). APP_ID_REQUIRED — the subscription was opened without an appId scope; udpNotifications must be app-scoped (game tokens are app-agnostic and one socket is shared across apps), so pass the app you are playing and resubscribe (not retryable as-is). UDP_PROXY_CONNECTION_FAILED — the proxy could not open or keep a UDP socket to the selected game server (transient/infrastructure); back off and resubscribe (retryable). `message` carries the specific underlying detail for this case.
+  Machine-readable failure reason. Branch on this (not on `message`). Known values: AUTH_REQUIRED — no valid bearer game token was presented on the WS connection_init / request; authenticate via the Management API and resubscribe (not retryable as-is). APP_ID_REQUIRED — the subscription was opened without an appId scope; udpNotifications must be app-scoped (game tokens are app-agnostic and one socket is shared across apps), so pass the app you are playing and resubscribe (not retryable as-is). UDP_PROXY_CONNECTION_FAILED — the proxy could not open or keep a UDP socket to the selected game server (transient/infrastructure); back off and resubscribe (retryable). `message` carries the specific underlying detail for this case. SERVER_DRAINING — this API instance is being taken out of service; the stream KEEPS WORKING, but you should re-run discovery (mintAppToken) and reconnect to the instance it returns before this one stops. Only reaches clients connected directly to an instance; clients behind the load balancer are moved for them.
   """
   code: String!
   """
@@ -13799,142 +13980,4 @@ type RealtimeConnectionEvent {
   Whether resubscribing without changing anything may succeed. true for transient failures (e.g. UDP_PROXY_CONNECTION_FAILED) — back off and retry. false for caller errors that must be fixed first (AUTH_REQUIRED needs a fresh/valid game token; APP_ID_REQUIRED needs an appId-scoped subscription).
   """
   retryable: Boolean!
-}
-
-"""
-A pending one-shot timer: a delayed invocation that has been armed but has not fired yet. Timers are removed from this list the moment they are claimed for execution.
-"""
-type GmTimer {
-  """Unique timer id (UUID)."""
-  timerId: String!
-  """The app (tenant)."""
-  appId: BigInt!
-  """Session the delayed invocation runs in, or null if app-global."""
-  sessionId: String
-  """Container the delayed invocation runs against ("self")."""
-  selfContainerId: String!
-  """The function that will be invoked when it fires."""
-  functionName: String!
-  """
-  JSON object of parameters bound at arm time and passed to the invocation.
-  """
-  paramsJson: String!
-  """When the timer becomes due."""
-  fireAt: DateTime!
-  """
-  App-scoped dedupe key, or null. Re-arming the same key replaces this timer instead of adding another.
-  """
-  dedupeKey: String
-  """
-  Cascade depth inherited from whatever armed the timer. The fired invocation runs one deeper, so timer chains are bounded by the app's maxCascadeDepth.
-  """
-  cascadeDepth: Int!
-  """
-  Flow correlation id carried from the arming call, so the eventual fire stays visible in gameModelFlow.
-  """
-  flowId: String
-  """
-  What armed it: function (a timer effect inside an invoke) | client (gameModelScheduleInvoke) | automation.
-  """
-  armedBy: String!
-  """When the timer was armed."""
-  createdAt: DateTime!
-}
-
-"""
-One named parameter expression bound into a timer invocation at arm time.
-"""
-type GmTimerParam {
-  """Parameter name on the timer's target function."""
-  name: String!
-  """The expression (source) evaluated when arming."""
-  expression: String!
-}
-
-"""
-A declarative one-shot timer the function arms transactionally with its mutations: invoke another function after a delay. Fires exactly once, survives replica restarts, and is bounded by the app's automation guardrails.
-"""
-type GmFunctionTimer {
-  """The function invoked when the timer fires."""
-  functionName: String!
-  """
-  Container reference (source) the delayed invocation runs against, e.g. "self".
-  """
-  target: String!
-  """The expression (source) resolving the delay in milliseconds."""
-  delayMsExpression: String!
-  """
-  Optional expression (source) resolving the app-scoped dedupe key; re-arming the same key replaces the pending timer.
-  """
-  dedupeKeyExpression: String
-  """Parameters bound into the delayed invocation."""
-  params: [GmTimerParam!]!
-}
-
-"""
-A declarative one-shot timer the function arms TRANSACTIONALLY with its property mutations: "invoke this function again in N ms". The timer survives replica restarts and is claimed by the same dispatcher that runs scheduled automations, so it fires exactly once. Rolling back the invocation arms nothing. The target function must be autonomousInvocable, because a timer fires headlessly with no player in the request.
-"""
-input FunctionTimerInput {
-  """
-  The function to invoke when the timer fires. Must exist and be autonomousInvocable.
-  """
-  functionName: String!
-  """
-  Container reference the delayed invocation runs against, e.g. "self" (default) or "$target_id".
-  """
-  target: String
-  """
-  Expression resolving the delay in milliseconds (int > 0), floored by the app's minTimerDelayMs policy.
-  """
-  delayMsExpression: String!
-  """
-  Optional expression resolving an app-scoped string key. Re-arming the same key replaces the pending timer instead of queueing another fire, so a repeatedly invoked function cannot flood the timer queue.
-  """
-  dedupeKeyExpression: String
-  """
-  Parameters bound into the delayed invocation. Expressions are evaluated at arm time on post-mutation state, so the fired invocation sees the values the arming logic decided.
-  """
-  params: [TimerParamInput!]
-}
-
-"""One named parameter expression bound into a timer invocation."""
-input TimerParamInput {
-  """Parameter name on the timer's target function."""
-  name: String!
-  """
-  Expression evaluated when the timer is armed (not when it fires), in the arming invocation context.
-  """
-  expression: String!
-}
-
-"""
-Arm a one-shot timer that invokes a function after a delay. The target function must be autonomousInvocable, because the timer fires headlessly with no player in the request.
-"""
-input ScheduleInvokeInput {
-  """The app (tenant)."""
-  appId: BigInt!
-  """
-  The function to invoke when the timer fires. Must be autonomousInvocable.
-  """
-  functionName: String!
-  """
-  The 'self' container the delayed invocation runs against. Must belong to the app, and match the function's bound container type when it has one.
-  """
-  selfContainerId: String!
-  """
-  Delay in milliseconds before the timer fires. Must be at least the app's minTimerDelayMs and at most 30 days.
-  """
-  delayMs: Int!
-  """
-  JSON object of parameters passed to the delayed invocation. Defaults to '{}'.
-  """
-  paramsJson: String
-  """
-  Session for the delayed invocation. Defaults to the container's own session.
-  """
-  sessionId: String
-  """
-  Optional app-scoped key. Re-arming the same key replaces the pending timer instead of adding another, which makes "reset the countdown" a single call.
-  """
-  dedupeKey: String
 }
