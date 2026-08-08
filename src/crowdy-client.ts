@@ -71,6 +71,7 @@ import { CrowdyAgentGraphQLTransport } from './crowdy-agent/graphql-transport.js
 import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { MarketplaceAPI } from './domains/marketplace.js';
 import { PlayerModelAPI } from './domains/playerModel.js';
+import { DiscoveryDomain } from './domains/discovery.js';
 
 export interface CrowdyClientConfig {
   // ----- API endpoint (identity AND gameplay; there is only one) -----
@@ -209,6 +210,12 @@ export class CrowdyClient {
    * app token.
    */
   readonly portal: PortalAPI;
+  /**
+   * Where each app lives. Unauthenticated, and meant to be called BEFORE login against
+   * the shared origin, so the session and the app token are both written in the app's
+   * own datacenter rather than wherever DNS happened to point.
+   */
+  readonly discovery: DiscoveryDomain;
   /** Public platform discovery (shared game-api URL, free app quota). */
   readonly platform: PlatformAPI;
   /** Organizations, members, RBAC roles, and org API tokens (studio admin). */
@@ -369,6 +376,7 @@ export class CrowdyClient {
     this.users = new UsersAPI(this.graphql);
     this.apps = new AppsAPI(this.graphql);
     this.portal = new PortalAPI(this.graphql, this.session, config.pkceStore);
+    this.discovery = new DiscoveryDomain(this.graphql);
     this.platform = new PlatformAPI(this.graphql);
     this.organizations = new OrganizationsAPI(this.graphql);
     this.appAccess = new AppAccessAPI(this.graphql);

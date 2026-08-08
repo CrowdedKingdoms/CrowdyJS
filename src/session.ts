@@ -26,6 +26,31 @@ export class BrowserLocalStorageTokenStore implements TokenStore {
   /** @param key - localStorage key under which the token is stored. */
   constructor(private readonly key = 'crowdyjs:token') {}
 
+  /**
+   * The key an IDENTITY session token belongs under: one per origin, shared by every
+   * game on it.
+   *
+   * WHY THIS EXISTS AS A NAMED CONSTANT. Games were storing their credential under
+   * `'crowdyjs:app:' + import.meta.env.BASE_URL` — the game's own PATH — so two games on
+   * `crowdy.games` had different keys on the SAME origin and could not see each other's
+   * login. What was stored was an app token anyway, which is per-game by definition, so
+   * there was nothing cross-app to share even if the key had matched. A player who
+   * signed in for one game was anonymous to the next and got bounced back to the portal.
+   *
+   * The schema split makes the fix structural rather than a workaround: the identity
+   * session token is now its own object with its own lifetime, so it belongs under one
+   * origin-wide key, while app tokens stay per-game. The storage split mirrors the
+   * database split.
+   *
+   * Deliberately NOT parameterised by BASE_URL. That parameter was the bug.
+   */
+  static readonly SESSION_KEY = 'crowdyjs:session';
+
+  /** The key a game's app-scoped token belongs under. Per game, on purpose. */
+  static appKey(basePath: string): string {
+    return `crowdyjs:app:${basePath}`;
+  }
+
   get(): string | null {
     if (typeof localStorage === 'undefined') return null;
     return localStorage.getItem(this.key);

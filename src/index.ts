@@ -42,7 +42,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '13.9.0';
+export const VERSION = '14.0.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -675,3 +675,5 @@ export {
   CodeAdmissionMode,
   CodeAdmissionSubjectKind,
 } from './generated/graphql.js';
+
+export { DiscoveryDomain, type AppEndpoint } from './domains/discovery.js';

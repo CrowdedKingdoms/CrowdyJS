@@ -716,6 +716,28 @@ type AuthMethodResult {
   hasPassword: Boolean!
 }
 
+"""
+Where one app lives, and therefore which origin a client should talk to before it does anything else. Public: this is the same information the published DNS names already expose.
+"""
+type AppDiscovery {
+  """
+  The app this entry describes, echoed back so a batched result can be matched to its request.
+  """
+  appId: BigInt!
+  """
+  Datacenter code the app is placed in (for example `or`, `va`), or null if the app has no placement yet.
+  """
+  datacenterCode: String
+  """
+  HTTPS GraphQL origin for this app's OWN datacenter. Move here BEFORE authenticating: logging in through the shared origin writes the session on whichever datacenter DNS happened to pick, and the app token then has to be minted across a WAN. Null when the app has no placement, in which case keep using the shared origin.
+  """
+  gameApiUrl: String
+  """
+  The wss:// form of gameApiUrl, for the subscription socket and the binary relay.
+  """
+  gameApiWsUrl: String
+}
+
 type OrgPermission {
   """
   Stable permission key used in role grants (e.g. 'manage_members', 'manage_tokens').
@@ -6719,6 +6741,15 @@ type Query {
   checkAuthMethod(input: CheckAuthMethodInput!): AuthMethodResult!
   """The signed-in user's linked sign-in identities."""
   myIdentities: [UserIdentity!]!
+  """
+  Resolve where one or more apps are placed, WITHOUT authenticating. Call this before login and connect to the returned gameApiUrl, so the session and app token are both written in the app's own datacenter instead of across a WAN. Pass every app a launcher might switch to and cache the result; placement changes rarely and only an operator can change it. An app with no placement comes back with nulls, which means 'keep using the shared origin'.
+  """
+  appDiscovery(
+    """
+    The apps to resolve, as BigInt decimal strings. Unknown or unplaced ids are returned with null endpoints rather than omitted, so a caller can tell "not placed" from "not asked".
+    """
+    appIds: [BigInt!]!
+  ): [AppDiscovery!]!
   """
   Fetches an organization by id (BigInt as string). Requires a valid session token. Returns null if no such organization exists.
   """
