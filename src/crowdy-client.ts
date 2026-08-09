@@ -372,6 +372,33 @@ export class CrowdyClient {
       this.metrics,
     );
 
+    // The redirect handler is installed here rather than passed into the
+    // transport's constructor because it has to move the REALTIME client too, and
+    // that does not exist yet at the point the transport is built.
+    //
+    // Both sides in one step, for the reason spelled out on `onEndpointMove`
+    // above: a client with its HTTP in one datacenter and its subscription in
+    // another looks connected and receives nothing, and here it is worse than the
+    // instance-level version of that split, because the datacenter left behind
+    // holds none of the app's shards and would refuse the subscription too.
+    this.graphql.setWrongDatacenterHandler((move) => {
+      const endpoint =
+        toGraphqlEndpoint(move.gameApiUrl, 'graphql') ?? move.gameApiUrl;
+      if (endpoint === this.graphql.getEndpoint()) {
+        // Already there. Returning false stops the transport retrying, because a
+        // retry to the same instance is refused identically and a handler that
+        // reported success here would loop.
+        return false;
+      }
+      this.graphql.setEndpoint(endpoint);
+      this.realtime.moveToDatacenter({
+        httpUrl: move.gameApiUrl,
+        wsUrl: toGraphqlEndpoint(move.gameApiWsUrl, 'graphql') ?? null,
+        datacenter: move.appDatacenter,
+      });
+      return true;
+    });
+
     this.auth = new AuthAPI(this.graphql, this.session);
     this.users = new UsersAPI(this.graphql);
     this.apps = new AppsAPI(this.graphql);

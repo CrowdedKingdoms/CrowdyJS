@@ -129,6 +129,75 @@ export class CrowdyGraphQLError extends CrowdyError {
 }
 
 /**
+ * Extension code the API uses to say "this app's datacenter is not serving".
+ *
+ * Distinct from {@link WRONG_DATACENTER_CODE}, and the distinction is the whole
+ * point: that one names an endpoint to move to, this one deliberately does not,
+ * because there is nowhere to move to.
+ */
+export const APP_UNAVAILABLE_CODE = 'APP_UNAVAILABLE';
+
+/** Extension code the API uses to say "this app lives somewhere else". */
+export const WRONG_DATACENTER_CODE = 'WRONG_DATACENTER';
+
+/**
+ * The app's own datacenter is not currently serving clients.
+ *
+ * WHAT MAKES THIS DIFFERENT FROM EVERY OTHER ERROR HERE: there is nothing the
+ * client, the SDK, or the player can do about it. A `WRONG_DATACENTER` is fixed
+ * by moving, an `UNAUTHENTICATED` by logging in, a `RATE_LIMITED` by waiting a
+ * measurable amount of time. This one is fixed by an operator, and the honest
+ * thing for an application to do is stop retrying in a loop and say so.
+ *
+ * {@link message} is written by the server to be shown to a player as-is: it says
+ * what is happening, that it is being worked on, and that there is nothing for
+ * them to do. Prefer it over inventing your own wording, because the server knows
+ * things the client does not — whether this is a brief drain or a whole
+ * datacenter — and its phrasing can improve without an SDK release.
+ *
+ * It carries NO endpoint, on purpose. Do not fall back to a cached one: the
+ * cached one is in the datacenter that is down.
+ *
+ * ```ts
+ * try {
+ *   await client.grids.chunk(appId, x, y, z);
+ * } catch (err) {
+ *   if (err instanceof CrowdyAppUnavailableError) {
+ *     showBanner(err.message);   // "This app is temporarily offline..."
+ *     return;                    // do not retry in a tight loop
+ *   }
+ *   throw err;
+ * }
+ * ```
+ */
+export class CrowdyAppUnavailableError extends CrowdyGraphQLError {
+  /** The app the server refused to serve, when it named one. */
+  get appId(): string | undefined {
+    const value = this.extensions?.appId;
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  /**
+   * The datacenter that is not serving. Diagnostic only — do not show a player a
+   * datacenter code, and do not try to reach it.
+   */
+  get appDatacenter(): string | undefined {
+    const value = this.extensions?.appDatacenter;
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  /**
+   * Whether it is worth trying again later. True today for every case the server
+   * raises this for; read it rather than assuming, so a future permanent variant
+   * (an app placed in a datacenter that has been destroyed, say) can say false
+   * without the SDK changing.
+   */
+  get retryable(): boolean {
+    return this.extensions?.retryable !== false;
+  }
+}
+
+/**
  * A network-level failure before any HTTP response was received: DNS failure,
  * TLS error, connection refused, or an aborted `fetch`. Generally retryable
  * with backoff. The original failure is on {@link CrowdyError.cause}.

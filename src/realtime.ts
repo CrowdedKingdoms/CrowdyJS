@@ -5,6 +5,7 @@ import type { SessionStore } from './session.js';
 import type { CrowdyLogger } from './logger.js';
 import { silentLogger } from './logger.js';
 import { CrowdyRealtimeError } from './errors.js';
+import { moveFromErrors } from './datacenter-redirect.js';
 import type { LbCookieStore } from './lb-cookie-store.js';
 import type { RealtimeMetrics } from './metrics.js';
 import { payloadBytesOf } from './metrics.js';
@@ -532,6 +533,13 @@ export class RealtimeClient {
             settled = true;
             dispose();
             if (message.errors?.length) {
+              // Move the connection, then reject. The caller still sees this
+              // mutation fail -- a websocket mutation cannot be transparently
+              // replayed the way an HTTP POST can, because the reply is
+              // correlated to a subscription that is about to be torn down -- but
+              // the NEXT one lands in the right datacenter instead of repeating
+              // the refusal until something gives up.
+              this.applyDatacenterRedirect(message.errors);
               reject(
                 new CrowdyRealtimeError(
                   message.errors[0]?.message ?? 'GraphQL mutation failed',
@@ -809,6 +817,14 @@ export class RealtimeClient {
           const notification = data?.udpNotifications;
           if (notification) this.dispatch(notification);
           if (message.errors?.length) {
+            // A redirect arriving over the subscription is acted on immediately
+            // rather than counted as a failure. The generic path waits for
+            // `rediscoverAfterFailures` consecutive connect failures before it
+            // moves, which is right when the SDK is guessing that something is
+            // wrong -- and wrong here, because the server has just said exactly
+            // what is wrong and exactly where to go. Waiting would cost three
+            // reconnects to a datacenter that has already refused us once.
+            if (this.applyDatacenterRedirect(message.errors)) return;
             this.dispatchError(
               new CrowdyRealtimeError(message.errors[0]?.message ?? 'Subscription error', {
                 code: 'SUBSCRIPTION_ERROR',
@@ -958,6 +974,58 @@ export class RealtimeClient {
    * discovery round trip and no reason to consult the rediscover callback. The
    * binary relay has already refused any target outside this estate.
    */
+  /**
+   * Follow an HTTP redirect that has already happened.
+   *
+   * Called when a GraphQL call was refused with `WRONG_DATACENTER` and the
+   * transport moved itself. The websocket has to follow in the same step or the
+   * session is split across two DATACENTERS rather than merely two instances —
+   * strictly worse than the split this file already guards against, because the
+   * subscription would be talking to a datacenter that holds none of the app's
+   * shards and will refuse it too.
+   *
+   * Idempotent: moving to the URL already in use returns without touching the
+   * connection, so a burst of refused calls produces one move rather than one
+   * reconnect each.
+   */
+  /**
+   * Act on a `WRONG_DATACENTER` carried in a websocket `errors[]`.
+   *
+   * @returns true when the connection was moved, so the caller can skip
+   *   reporting the error as an ordinary failure.
+   */
+  private applyDatacenterRedirect(
+    errors: readonly unknown[] | null | undefined,
+  ): boolean {
+    const move = moveFromErrors(
+      errors as readonly { extensions?: Record<string, unknown> }[],
+    );
+    if (!move) return false;
+    const before = this.wsUrl;
+    this.moveToDatacenter({
+      httpUrl: move.gameApiUrl,
+      wsUrl: move.gameApiWsUrl ?? null,
+      datacenter: move.appDatacenter,
+    });
+    return this.wsUrl !== before;
+  }
+
+  moveToDatacenter(target: {
+    httpUrl: string;
+    wsUrl?: string | null;
+    datacenter?: string;
+  }): void {
+    const wsUrl = target.wsUrl || httpToWebsocketUrl(target.httpUrl);
+    if (!wsUrl) return;
+    this.moveToDirectedEndpoint({
+      httpUrl: target.httpUrl,
+      wsUrl,
+      reason: target.datacenter
+        ? `app is served from '${target.datacenter}'`
+        : 'app is served from another datacenter',
+    });
+  }
+
   private moveToDirectedEndpoint(target: {
     httpUrl: string;
     wsUrl: string;
@@ -1204,6 +1272,26 @@ function notificationKind(typename: string | undefined): string {
  * off before it stops, instead of dropping them and letting them find out.
  */
 export const SERVER_DRAINING_CODE = 'SERVER_DRAINING';
+
+/**
+ * The websocket form of an http(s) URL, keeping its path.
+ *
+ * A fallback only. `WRONG_DATACENTER` names `gameApiWsUrl` alongside
+ * `gameApiUrl`, and the server's answer is the one to prefer — it knows about
+ * ports and paths this cannot see. This exists so a server that someday omits it
+ * degrades to a reasonable guess instead of leaving the websocket in the old
+ * datacenter, which is the one outcome worse than guessing.
+ */
+function httpToWebsocketUrl(httpUrl: string): string | null {
+  const trimmed = httpUrl?.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('wss://') || trimmed.startsWith('ws://')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('https://')) return `wss://${trimmed.slice(8)}`;
+  if (trimmed.startsWith('http://')) return `ws://${trimmed.slice(7)}`;
+  return null;
+}
 
 /** Default relay endpoint: the realtime wsUrl with its path set to /realtime. */
 function deriveBinaryRelayUrl(wsUrl: string): string {

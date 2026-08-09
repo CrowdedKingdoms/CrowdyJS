@@ -13,6 +13,8 @@ import type { SessionStore } from './session.js';
 import type { CrowdyLogger } from './logger.js';
 import { silentLogger } from './logger.js';
 import {
+  APP_UNAVAILABLE_CODE,
+  CrowdyAppUnavailableError,
   CrowdyError,
   CrowdyGraphQLError,
   CrowdyHttpError,
@@ -20,6 +22,7 @@ import {
   CrowdyTimeoutError,
   type CrowdyGraphQLErrorPayload,
 } from './errors.js';
+import { moveFromErrors, type DatacenterMove } from './datacenter-redirect.js';
 import type { LbCookieStore } from './lb-cookie-store.js';
 
 /**
@@ -40,6 +43,20 @@ export interface GraphQLClientConfig {
    * both are provided.
    */
   graphqlEndpoint?: string;
+  /**
+   * Called when the server refuses an operation with `WRONG_DATACENTER`, naming
+   * the endpoint the app actually lives at.
+   *
+   * Return `true` once the client has been moved and the operation is worth
+   * retrying; return `false` to leave the endpoint alone and let the original
+   * error surface. `CrowdyClient` supplies this for you and moves BOTH the HTTP
+   * endpoint and the websocket together — a client with its HTTP on one instance
+   * and its subscription on another gets no realtime traffic at all, which is the
+   * failure the sticky load-balancer cookie was invented to prevent.
+   *
+   * You only need to set this when constructing a bare {@link GraphQLClient}.
+   */
+  onWrongDatacenter?: (move: DatacenterMove) => boolean | Promise<boolean>;
   /**
    * Per-request timeout in **milliseconds**. When it elapses the request is
    * aborted and a {@link CrowdyTimeoutError} is thrown. Defaults to `60000`
@@ -87,6 +104,9 @@ export class GraphQLClient {
   private readonly session: SessionStore;
   private readonly logger: CrowdyLogger;
   private readonly lbCookieStore?: LbCookieStore;
+  private onWrongDatacenter?: (
+    move: DatacenterMove,
+  ) => boolean | Promise<boolean>;
 
   /**
    * @param config - Endpoint, timeout, and logger options; see
@@ -104,6 +124,21 @@ export class GraphQLClient {
     this.session = session;
     this.logger = config.logger ?? silentLogger;
     this.lbCookieStore = config.lbCookieStore;
+    this.onWrongDatacenter = config.onWrongDatacenter;
+  }
+
+  /**
+   * Install the datacenter-redirect handler after construction.
+   *
+   * `CrowdyClient` needs this because the handler has to move the websocket as
+   * well as the HTTP endpoint, and the realtime client is built AFTER the
+   * transport it is given. Passing a half-built client into its own constructor
+   * is the alternative, and it is worse.
+   */
+  setWrongDatacenterHandler(
+    handler: (move: DatacenterMove) => boolean | Promise<boolean>,
+  ): void {
+    this.onWrongDatacenter = handler;
   }
 
   /**
@@ -190,6 +225,53 @@ export class GraphQLClient {
     variables: Record<string, unknown> = {},
     options: { signal?: AbortSignal } = {},
   ): Promise<T> {
+    try {
+      return await this.attempt<T>(query, variables, options);
+    } catch (error) {
+      const move =
+        error instanceof CrowdyGraphQLError
+          ? moveFromErrors(error.graphqlErrors)
+          : null;
+      if (!move || !this.onWrongDatacenter) throw error;
+
+      // ONE retry, and only after the endpoint actually moved.
+      //
+      // Without a retry the redirect is useless: every call would fail once and
+      // the application would have to know to repeat it, which is the SDK's job.
+      // Without the "actually moved" check it is worse than useless -- if the
+      // handler declines, or moves to where we already are, retrying re-sends to
+      // the same instance and is refused identically, forever.
+      //
+      // The retry is not itself retried. A second WRONG_DATACENTER after a
+      // successful move means two datacenters each believe the app is in the
+      // other, which is a placement problem an operator has to see rather than
+      // one a client should smooth over by looping between them.
+      let moved = false;
+      try {
+        moved = (await this.onWrongDatacenter(move)) === true;
+      } catch (hookError) {
+        this.logger.warn?.(
+          'datacenter redirect handler failed; surfacing the original error',
+          hookError,
+        );
+        throw error;
+      }
+      if (!moved) throw error;
+
+      this.logger.info?.(
+        `moved to ${move.appDatacenter ?? 'the app\u2019s datacenter'} at ` +
+          `${move.gameApiUrl} and retrying`,
+      );
+      return await this.attempt<T>(query, variables, options);
+    }
+  }
+
+  /** One HTTP round trip. {@link query} wraps this to handle a redirect. */
+  private async attempt<T>(
+    query: string,
+    variables: Record<string, unknown>,
+    options: { signal?: AbortSignal },
+  ): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
     const token = this.session.getToken();
@@ -221,7 +303,17 @@ export class GraphQLClient {
       const result = await response.json();
 
       if (result.errors) {
-        throw new CrowdyGraphQLError(result.errors as CrowdyGraphQLErrorPayload[]);
+        const errors = result.errors as CrowdyGraphQLErrorPayload[];
+        // A typed subclass rather than a code an application has to remember to
+        // check. `CrowdyAppUnavailableError extends CrowdyGraphQLError`, so every
+        // existing catch keeps working and only code that WANTS to tell "your app
+        // is offline" apart from "you are not allowed" has to change.
+        if (
+          errors.some((e) => e?.extensions?.code === APP_UNAVAILABLE_CODE)
+        ) {
+          throw new CrowdyAppUnavailableError(errors);
+        }
+        throw new CrowdyGraphQLError(errors);
       }
 
       return result.data;
