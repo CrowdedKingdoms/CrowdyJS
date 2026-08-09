@@ -42,6 +42,24 @@ class FakeWorker {
   }
 }
 
+/**
+ * Poll until a condition holds, or fail loudly at the deadline.
+ *
+ * The alternative used here before was a fixed `setTimeout(0)`, which asserts a
+ * particular number of event-loop hops rather than the thing actually wanted. A
+ * deadline that fails is honest about being a timing assumption; a fixed tick
+ * that passes today is a flake waiting for an unrelated change.
+ */
+async function until(condition, { timeoutMs = 2000, label = 'condition' } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out after ${timeoutMs}ms waiting for ${label}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
+
 test('worker transport requests, timeout cancellation, and teardown are bounded', async () => {
   const worker = new FakeWorker();
   const client = new WorkerLanguageClient(worker, { requestTimeoutMs: 30 });
@@ -58,9 +76,15 @@ test('worker transport requests, timeout cancellation, and teardown are bounded'
   assert.deepEqual(failures, ['worker crashed']);
   failureSubscription.dispose();
   client.shutdown();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  // Waited FOR rather than waited OUT. `shutdown()` sends `shutdown`, and only
+  // once that request settles does its `finally` send `exit` -- two promise
+  // chains deep, through vscode-jsonrpc. A single `setTimeout(0)` drains the
+  // microtasks pending at that instant and nothing more, so whether `exit` had
+  // been written depended on how many hops the runtime happened to need. It
+  // passed reliably until an unrelated module joined the import graph and
+  // shifted the timing, which is the way these fail: on somebody else's change.
+  await until(() => worker.sent.some((message) => message.method === 'exit'));
   assert.ok(worker.sent.some((message) => message.method === 'shutdown'));
-  assert.ok(worker.sent.some((message) => message.method === 'exit'));
   assert.equal(worker.terminated, 1);
 
   const timeoutWorker = new FakeWorker();

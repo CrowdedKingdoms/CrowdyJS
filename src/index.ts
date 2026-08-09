@@ -42,7 +42,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '14.0.0';
+export const VERSION = '14.1.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -367,6 +367,8 @@ export type {
 } from './stores/index.js';
 
 export {
+  APP_UNAVAILABLE_CODE,
+  CrowdyAppUnavailableError,
   CrowdyError,
   CrowdyGraphQLError,
   CrowdyHttpError,
@@ -374,7 +376,10 @@ export {
   CrowdyProtocolError,
   CrowdyRealtimeError,
   CrowdyTimeoutError,
+  WRONG_DATACENTER_CODE,
 } from './errors.js';
+export { moveFromError, moveFromErrors } from './datacenter-redirect.js';
+export type { DatacenterMove } from './datacenter-redirect.js';
 export {
   SequenceAllocator,
   decodeBase64,
