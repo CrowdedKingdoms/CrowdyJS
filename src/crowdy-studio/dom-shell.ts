@@ -21,6 +21,10 @@ import {
   type CrowdyStudioReferenceFile,
   type CrowdyStudioTarget,
 } from './models.js';
+import {
+  formatRuntimeFailureForAgentChat,
+  type RuntimeFailureEnvelope,
+} from './runtime-failure.js';
 import { CROWDY_STUDIO_STYLES } from './styles.js';
 
 type PanelName = 'problems' | 'build' | 'logs' | 'runs' | 'invoke';
@@ -99,6 +103,7 @@ export class CrowdyStudioDomShell {
   private readonly invokeExport: HTMLInputElement;
   private readonly invokeParams: HTMLTextAreaElement;
   private readonly invokeResult: HTMLElement;
+  private readonly invokeAgentToolbar: HTMLElement;
   private readonly panelButtons = new Map<PanelName, HTMLButtonElement>();
   private readonly panels = new Map<PanelName, HTMLElement>();
   private readonly railButtons = new Map<StudioPaneId, HTMLButtonElement>();
@@ -109,6 +114,7 @@ export class CrowdyStudioDomShell {
   private explorerForm: ExplorerFormState | null = null;
   private lastState: CrowdyStudioState | null = null;
   private lastPhase = 'IDLE';
+  private lastInvokeErrorKey: string | null = null;
   private disposed = false;
 
   constructor(
@@ -369,9 +375,37 @@ export class CrowdyStudioDomShell {
     this.invokeParams.setAttribute('aria-label', 'Invoke JSON parameters');
     const invokeButton = button('Invoke server export');
     this.invokeResult = document.createElement('pre');
+    this.invokeAgentToolbar = element('div', 'ck-crowdy-studio-problems-toolbar');
+    this.invokeAgentToolbar.hidden = true;
+    if (this.agentShell) {
+      const addAll = button('Add to chat');
+      addAll.setAttribute(
+        'aria-label',
+        'Add Invoke failure to the Crowdy Agent chat composer',
+      );
+      addAll.addEventListener('click', () =>
+        void this.addInvokeFailureToChat('prefill'),
+      );
+      const ask = button('Ask agent to fix');
+      ask.className = 'ck-crowdy-studio-primary';
+      ask.setAttribute(
+        'aria-label',
+        'Send Invoke failure to Crowdy Agent in BUILD mode',
+      );
+      ask.addEventListener('click', () =>
+        void this.run(async () => {
+          await this.addInvokeFailureToChat('ask');
+        }),
+      );
+      this.invokeAgentToolbar.append(addAll, ask);
+    }
     const invokeControls = element('div', 'ck-crowdy-studio-invoke');
     invokeControls.append(this.invokeExport, this.invokeParams, invokeButton);
-    this.invokePanel.append(invokeControls, this.invokeResult);
+    this.invokePanel.append(
+      invokeControls,
+      this.invokeAgentToolbar,
+      this.invokeResult,
+    );
     invokeButton.addEventListener('click', () => {
       void this.run(() =>
         this.controller.invoke(
@@ -408,9 +442,7 @@ export class CrowdyStudioDomShell {
     this.renderBuild(state);
     this.renderRuntimeRows(this.logsPanel, state.logs);
     this.renderRuntimeRows(this.runsPanel, state.runs);
-    this.invokeResult.textContent = state.invokeResult
-      ? formatInvokeResult(state.invokeResult)
-      : '';
+    this.renderInvoke(state);
     this.runtimeStatus.textContent =
       [state.runtime.phase, state.runtime.target, state.runtime.message]
         .filter(Boolean)
@@ -541,6 +573,56 @@ export class CrowdyStudioDomShell {
       this.revealPanel(diagnostics > 0 ? 'problems' : 'build');
     }
     this.lastPhase = phase;
+
+    const invokeError = state.invokeResult?.error;
+    const invokeKey = invokeError
+      ? `${state.invokeResult?.exportName ?? ''}:${invokeError}`
+      : null;
+    if (invokeKey && invokeKey !== this.lastInvokeErrorKey) {
+      this.revealPanel('invoke');
+    }
+    this.lastInvokeErrorKey = invokeKey;
+  }
+
+  private renderInvoke(state: CrowdyStudioState): void {
+    this.invokeResult.textContent = state.invokeResult
+      ? formatInvokeResult(state.invokeResult)
+      : '';
+    const hasFailure = Boolean(
+      state.invokeResult?.error || state.invokeResult?.failure,
+    );
+    this.invokeAgentToolbar.hidden = !hasFailure || !this.agentShell;
+  }
+
+  private async addInvokeFailureToChat(
+    mode: 'prefill' | 'ask',
+  ): Promise<void> {
+    if (!this.agentShell) return;
+    const state = this.lastState ?? this.controller.getState();
+    const invoke = state.invokeResult;
+    if (!invoke?.error && !invoke?.failure) return;
+
+    const failure: RuntimeFailureEnvelope = invoke.failure ?? {
+      code: 'INVOKE_FAILED',
+      summary: invoke.error ?? 'Invoke failed',
+    };
+    const project = state.project;
+    const serverSource =
+      project?.files.find(
+        (file) =>
+          file.target === 'SERVER' &&
+          (file.path === 'src/lib.rs' || file.path === 'lib.rs'),
+      )?.content ?? null;
+    const message = formatRuntimeFailureForAgentChat(failure, {
+      exportName: invoke.exportName ?? this.invokeExport.value,
+      serverSource,
+      projectRevision: project?.revision?.id ?? null,
+    });
+    if (mode === 'prefill') {
+      this.agentShell.prefillComposer(message);
+      return;
+    }
+    await this.agentShell.askWithMessage(message, { mode: 'BUILD' });
   }
 
   // ----- Menus -----------------------------------------------------------
@@ -1129,6 +1211,9 @@ function budgetText(state: CrowdyStudioState): string {
 }
 
 function formatInvokeResult(result: NonNullable<CrowdyStudioState['invokeResult']>): string {
+  if (result.error) {
+    return `Error:\n${result.error}`;
+  }
   return [
     result.resultJson ?? result.resultBase64 ?? '(empty result)',
     result.fuelUsed ? `${result.fuelUsed} fuel` : '',

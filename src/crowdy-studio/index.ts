@@ -72,6 +72,12 @@ export {
   type CrowdyStudioDiagnosticSource,
 } from './diagnostics.js';
 export {
+  formatRuntimeFailureForAgentChat,
+  formatRuntimeFailureDisplay,
+  parseRuntimeFailureFromExtensions,
+  type RuntimeFailureEnvelope,
+} from './runtime-failure.js';
+export {
   isCurrentDiagnosticVersion,
   type MonacoCrowdyStudioEditorOptions,
 } from './monaco-editor.js';

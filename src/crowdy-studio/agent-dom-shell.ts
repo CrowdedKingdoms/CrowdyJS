@@ -280,6 +280,42 @@ export class CrowdyStudioAgentDomShell {
   }
 
   /**
+   * Prefill the composer and reveal the agent dock. Does not send — the human
+   * edits or hits Send. Used by Problems / Invoke "Add to chat".
+   */
+  prefillComposer(content: string): void {
+    this.options.layout?.setVisible('agent', true);
+    const clipped = content.slice(0, this.composer.maxLength);
+    this.composer.value = clipped;
+    this.composer.focus();
+    const caret = clipped.length;
+    this.composer.setSelectionRange(caret, caret);
+  }
+
+  /** Current composer text (for appending into an existing draft). */
+  getComposerValue(): string {
+    return this.composer.value;
+  }
+
+  /**
+   * Reveal the dock, switch mode when needed, and send.
+   */
+  async askWithMessage(
+    content: string,
+    options: { mode?: CrowdyAgentMode } = {},
+  ): Promise<void> {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    this.options.layout?.setVisible('agent', true);
+    const mode = options.mode ?? 'BUILD';
+    if (this.controller.getState().session?.mode !== mode) {
+      await this.controller.setMode(mode);
+    }
+    await this.controller.sendMessage(trimmed);
+    this.composer.value = '';
+  }
+
+  /**
    * Safety-critical auto-reveal: a newly pending exact approval or a Play
    * lease activation opens the dock and the Play disclosure so the human is
    * always shown what needs their decision or is acting on their behalf.
