@@ -93,9 +93,10 @@ export class BrowserSessionPkceStore implements PkceStore {
   }
 }
 
-// Older unified APIs (e.g. current gxca-test) omit discoveryUrl; requesting it 400s.
+// Prod (gxca-prod) AppTokenResponse includes discoveryUrl. gxca-test historically
+// omitted it (requesting it 400s) — this recover branch targets prod.
 const APP_TOKEN_FIELDS =
-  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl launchUrl';
+  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl';
 
 const MintAppTokenDocument = parse(
   `mutation MintAppToken($input: MintAppTokenInput!) { mintAppToken(input: $input) { ${APP_TOKEN_FIELDS} } }`,
