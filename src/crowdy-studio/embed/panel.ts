@@ -33,6 +33,7 @@ import {
 } from './dock.js';
 import { ensureCrowdyStudioEmbedStyles } from './embed-styles.js';
 import type { CrowdyStudioTextHud } from './hud-layer.js';
+import { CrowdyGraphQLError } from '../../errors.js';
 
 const TITLE_ID = 'ck-crowdy-studio-embed-title';
 const DESCRIPTION_ID = 'ck-crowdy-studio-embed-description';
@@ -51,6 +52,12 @@ export interface CrowdyStudioEmbedServices {
   playerWallet?: CrowdyStudioPlayerWallet;
   /** Production agent transport; omission keeps the agent fail-closed/hidden. */
   crowdyStudioAgent?: CrowdyStudioAgentTransportV1;
+  /**
+   * Rotate the app-scoped gameplay token (UDP-safe). Used before Studio mounts
+   * and again on Retry when mount fails with `UNAUTHENTICATED` / expired token.
+   * `CrowdyClient.refreshGameplayToken` satisfies this.
+   */
+  refreshGameplayToken?(): Promise<unknown>;
 }
 
 export interface CrowdyStudioEmbedTargetPermission {
@@ -153,6 +160,8 @@ export class CrowdyStudioEmbed {
   private readonly dock: CrowdyStudioEmbedDock;
   /** Stable across Studio open/close remounts so attach idempotency can correlate. */
   private readonly embedClientInstanceId = createEmbedClientInstanceId();
+  /** Caps UNAUTHENTICATED refresh→remount to one attempt per open/Retry. */
+  private studioAuthRemounts = 0;
 
   constructor(private readonly options: CrowdyStudioEmbedOptions) {
     this.dock = new CrowdyStudioEmbedDock(
@@ -225,6 +234,7 @@ export class CrowdyStudioEmbed {
   private show(context: CrowdyStudioEmbedContext): void {
     ensureCrowdyStudioEmbedStyles();
     this.context = context;
+    this.studioAuthRemounts = 0;
     this.previousFocus =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -433,6 +443,10 @@ export class CrowdyStudioEmbed {
     status.append(spinner, loading);
 
     try {
+      // Fresh bearer before project list / agent create — Retry alone used to
+      // remount with the same expired app token (~30m TTL).
+      await this.refreshGameplayTokenBestEffort();
+      if (generation !== this.mountGeneration || this.root === null) return;
       const handle = await this.mountSdkStudio(mountElement, context);
       if (generation !== this.mountGeneration || this.root === null) {
         handle.destroy();
@@ -445,21 +459,58 @@ export class CrowdyStudioEmbed {
       this.root.dataset.crowdyStudioApi = handle.api;
     } catch (error) {
       if (generation !== this.mountGeneration || this.root === null) return;
+      if (
+        isUnauthenticatedError(error) &&
+        this.studioAuthRemounts < 1
+      ) {
+        this.studioAuthRemounts += 1;
+        const refreshed = await this.refreshGameplayTokenBestEffort();
+        if (
+          refreshed &&
+          generation === this.mountGeneration &&
+          this.root !== null
+        ) {
+          void this.mountStudio();
+          return;
+        }
+      }
       this.options.onAgentUnavailable?.(errorMessage(error));
       status.className = 'ck-crowdy-studio-embed-status is-error';
       status.replaceChildren();
       const title = document.createElement('strong');
       title.textContent = 'Crowdy Studio could not open';
       const message = document.createElement('span');
-      message.textContent =
-        `${errorMessage(error)}. Your grid access is unchanged and no ` +
-        'project data was removed.';
+      message.textContent = isUnauthenticatedError(error)
+        ? `${errorMessage(error)}. Reload this tab or re-enter from ` +
+          'Overworld for a fresh gameplay token. Your grid access is ' +
+          'unchanged and no project data was removed.'
+        : `${errorMessage(error)}. Your grid access is unchanged and no ` +
+          'project data was removed.';
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'ck-crowdy-studio-embed-retry';
       retry.textContent = 'Retry';
-      retry.addEventListener('click', () => void this.mountStudio());
+      retry.addEventListener('click', () => {
+        // Allow one more refresh cycle on explicit Retry.
+        this.studioAuthRemounts = 0;
+        void this.mountStudio();
+      });
       status.append(title, message, retry);
+    }
+  }
+
+  /**
+   * Best-effort UDP-safe token rotation. Returns true when a refresher ran
+   * without throwing; false when omitted or when refresh itself failed.
+   */
+  private async refreshGameplayTokenBestEffort(): Promise<boolean> {
+    const refresh = this.options.client.refreshGameplayToken;
+    if (!refresh) return false;
+    try {
+      await refresh();
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -856,6 +907,18 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** True when Game API rejected the app-scoped gameplay bearer. */
+function isUnauthenticatedError(error: unknown): boolean {
+  if (error instanceof CrowdyGraphQLError && error.code === 'UNAUTHENTICATED') {
+    return true;
+  }
+  const message = errorMessage(error).toLowerCase();
+  return (
+    message.includes('token is invalid or expired') ||
+    message.includes('unauthenticated')
+  );
 }
 
 function createEmbedClientInstanceId(): string {
