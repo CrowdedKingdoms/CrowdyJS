@@ -129,6 +129,8 @@ export class CrowdyStudioAgentController {
   private readonly clientInstanceId: string;
   private pageVisible = true;
   private destroyed = false;
+  private initializePromise: Promise<void> | null = null;
+  private attachTail: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly options: CrowdyStudioAgentControllerOptionsV1) {
     if (!options.sessionId && !options.createSession) {
@@ -170,6 +172,21 @@ export class CrowdyStudioAgentController {
 
   async initialize(): Promise<void> {
     this.ensureAlive();
+    if (
+      this.state.connection === 'CONNECTED' &&
+      this.subscription &&
+      this.state.session
+    ) {
+      return;
+    }
+    if (this.initializePromise) return this.initializePromise;
+    this.initializePromise = this.runInitialize().finally(() => {
+      this.initializePromise = null;
+    });
+    return this.initializePromise;
+  }
+
+  private async runInitialize(): Promise<void> {
     const binding = await this.options.resolveProjectBinding?.();
     let session: CrowdyAgentSessionV1;
     if (this.options.sessionId) {
@@ -199,9 +216,7 @@ export class CrowdyStudioAgentController {
           'BUILD requires the currently selected saved Crowdy Studio project',
         );
       }
-      session = await this.options.transport.createSession(
-        createInput,
-      );
+      session = await this.createSessionOrReuse(createInput);
       this.assertProjectBinding(
         session,
         binding?.projectId,
@@ -210,6 +225,62 @@ export class CrowdyStudioAgentController {
     }
     this.update({ session, lastError: null });
     await this.attach('ATTACHING');
+  }
+
+  private async createSessionOrReuse(
+    createInput: CrowdyAgentCreateSessionInputV1,
+  ): Promise<CrowdyAgentSessionV1> {
+    try {
+      return await this.options.transport.createSession(createInput);
+    } catch (error) {
+      const reused = await this.reuseActiveSessionAfterRateLimit(
+        createInput,
+        error,
+      );
+      if (reused) return reused;
+      throw error;
+    }
+  }
+
+  /**
+   * When createSession hits the per-player active-session cap, reuse a matching
+   * orphan instead of failing closed. Skip PAUSED sessions that already carry a
+   * clientEpoch — re-attaching those fences the old epoch (EPOCH_STALE).
+   */
+  private async reuseActiveSessionAfterRateLimit(
+    createInput: CrowdyAgentCreateSessionInputV1,
+    error: unknown,
+  ): Promise<CrowdyAgentSessionV1 | null> {
+    const agentError = toAgentError(error);
+    if (agentError.code !== 'AGENT_RATE_LIMITED') return null;
+    const page = await this.options.transport.listSessions({
+      appId: createInput.appId,
+      first: 50,
+    });
+    const candidates = page.nodes.filter((session) => {
+      if (session.status === 'CLOSED') return false;
+      if (session.status === 'PAUSED' && session.clientEpoch) return false;
+      if (session.status !== 'ACTIVE' && session.status !== 'PAUSED') {
+        return false;
+      }
+      if (createInput.projectId) {
+        return session.projectId === createInput.projectId;
+      }
+      return !session.projectId;
+    });
+    candidates.sort((left, right) => {
+      if (left.status !== right.status) {
+        return left.status === 'ACTIVE' ? -1 : 1;
+      }
+      if (left.mode === createInput.mode && right.mode !== createInput.mode) {
+        return -1;
+      }
+      if (right.mode === createInput.mode && left.mode !== createInput.mode) {
+        return 1;
+      }
+      return right.updatedAt.localeCompare(left.updatedAt);
+    });
+    return candidates[0] ?? null;
   }
 
   /**
@@ -274,6 +345,7 @@ export class CrowdyStudioAgentController {
 
   async reconnect(): Promise<void> {
     this.ensureAlive();
+    if (this.initializePromise) await this.initializePromise;
     if (!this.state.session) {
       await this.initialize();
       return;
@@ -579,6 +651,14 @@ export class CrowdyStudioAgentController {
   }
 
   private async attach(
+    connection: 'ATTACHING' | 'RECONNECTING',
+  ): Promise<void> {
+    const run = this.attachTail.then(() => this.runAttach(connection));
+    this.attachTail = run.catch(() => undefined);
+    await run;
+  }
+
+  private async runAttach(
     connection: 'ATTACHING' | 'RECONNECTING',
   ): Promise<void> {
     const session = this.requireSession();

@@ -433,6 +433,7 @@ export class CrowdyClient {
     this.crowdyStudioAgent = new CrowdyAgentGraphQLTransport(this.graphql, {
       wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),
+      lbCookieStore,
     });
     this.playerWallet = new PlayerWalletAPI(this.graphql);
     this.marketplace = new MarketplaceAPI(this.graphql);

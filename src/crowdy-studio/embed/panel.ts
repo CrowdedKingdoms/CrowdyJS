@@ -151,6 +151,8 @@ export class CrowdyStudioEmbed {
   private mountGeneration = 0;
   private displayMode: CrowdyStudioEmbedDisplayMode | null = null;
   private readonly dock: CrowdyStudioEmbedDock;
+  /** Stable across Studio open/close remounts so attach idempotency can correlate. */
+  private readonly embedClientInstanceId = createEmbedClientInstanceId();
 
   constructor(private readonly options: CrowdyStudioEmbedOptions) {
     this.dock = new CrowdyStudioEmbedDock(
@@ -497,6 +499,7 @@ export class CrowdyStudioEmbed {
         ? {
             agent: {
               transport: client.crowdyStudioAgent,
+              clientInstanceId: this.embedClientInstanceId,
               createSession: {
                 appId,
                 gridId: context.gridId,
@@ -853,6 +856,11 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function createEmbedClientInstanceId(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `embed-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function stopEventPropagation(event: Event): void {

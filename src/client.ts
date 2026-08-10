@@ -294,7 +294,7 @@ export class GraphQLClient {
       });
 
       clearTimeout(timeoutId);
-      this.lbCookieStore?.ingestSetCookie(response.headers);
+      this.lbCookieStore?.ingestFromResponse(response.headers);
 
       if (!response.ok) {
         const errorText = await response.text();

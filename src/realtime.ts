@@ -1315,8 +1315,11 @@ function isNodeRuntime(): boolean {
 /**
  * Node `ws` does not send browser cookies on upgrade. When a sticky cookie jar
  * is configured, wrap `ws` so `cks_ga` rides on the handshake.
+ *
+ * Exported so agent event subscriptions can share the same sticky upgrade path
+ * as realtime UDP (HTTP attach + WS must land on one game-api).
  */
-function createStickyWebSocketImpl(
+export function createStickyWebSocketImpl(
   lbCookieStore?: LbCookieStore,
 ): unknown | undefined {
   if (!lbCookieStore || !isNodeRuntime()) return undefined;

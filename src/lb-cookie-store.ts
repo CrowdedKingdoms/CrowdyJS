@@ -32,6 +32,34 @@ export class LbCookieStore {
     }
   }
 
+  /**
+   * Ingest sticky affinity from a Vite/proxy expose header (`x-cks-ga`).
+   * Browsers cannot always read `Set-Cookie` on cross-origin fetches; the
+   * same-origin GraphQL proxy mirrors the cookie into this readable header.
+   */
+  ingestExposeHeader(headers: Headers): void {
+    const exposed = headers.get('x-cks-ga')?.trim();
+    if (exposed) this.value = exposed;
+  }
+
+  /** Sync from a non-HttpOnly `cks_ga` in `document.cookie` when available. */
+  syncFromDocumentCookie(): void {
+    if (typeof document === 'undefined') return;
+    const match = document.cookie
+      .split(';')
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${CKS_GA_NAME}=`));
+    if (!match) return;
+    this.value = match.slice(CKS_GA_NAME.length + 1);
+  }
+
+  /** Prefer Set-Cookie, then expose header, then document.cookie. */
+  ingestFromResponse(headers: Headers): void {
+    this.ingestSetCookie(headers);
+    if (!this.value) this.ingestExposeHeader(headers);
+    if (!this.value) this.syncFromDocumentCookie();
+  }
+
   /** @internal test helper */
   getValue(): string | null {
     return this.value;
@@ -68,7 +96,7 @@ export class LbCookieStore {
         credentials: 'include',
         signal,
       });
-      this.ingestSetCookie(response.headers);
+      this.ingestFromResponse(response.headers);
       await response.arrayBuffer().catch(() => undefined);
     } catch (error) {
       if (isAbortError(error) || signal.aborted) {

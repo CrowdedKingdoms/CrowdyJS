@@ -265,13 +265,16 @@ export async function mountCrowdyStudio(
   };
 
   let selectedProjectId = controller.getState().project?.projectId;
+  let agentProjectTrackingEnabled = false;
   const unsubscribe = controller.subscribe((state) => {
     shell.render(state);
     editor?.sync(state);
     const nextProjectId = state.project?.projectId;
     if (nextProjectId !== selectedProjectId) {
       selectedProjectId = nextProjectId;
-      agent?.projectSelectionChanged(nextProjectId);
+      if (agentProjectTrackingEnabled) {
+        agent?.projectSelectionChanged(nextProjectId);
+      }
     }
   });
   const onVisibilityChange = (): void => {
@@ -304,6 +307,8 @@ export async function mountCrowdyStudio(
         console.warn('Crowdy Studio agent could not attach; manual Studio remains available', error);
       });
     }
+    selectedProjectId = controller.getState().project?.projectId;
+    agentProjectTrackingEnabled = Boolean(agent);
   } catch (error) {
     disconnectLayoutObserver();
     document.removeEventListener('visibilitychange', onVisibilityChange);

@@ -6,6 +6,8 @@ import {
   CrowdyGraphQLError,
   type CrowdyGraphQLErrorPayload,
 } from '../errors.js';
+import type { LbCookieStore } from '../lb-cookie-store.js';
+import { createStickyWebSocketImpl } from '../realtime.js';
 import {
   CrowdyStudioAgentAcknowledgeEventsDocument,
   CrowdyStudioAgentApproveToolDocument,
@@ -96,6 +98,11 @@ export interface CrowdyAgentGraphQLTransportOptions {
   readonly wsUrl?: string;
   readonly getToken: () => string | null;
   readonly webSocketImpl?: unknown;
+  /**
+   * Sticky LB cookie jar shared with HTTP GraphQL. Without this, attach can
+   * pin one game-api while the event socket lands on another (EPOCH_STALE).
+   */
+  readonly lbCookieStore?: LbCookieStore;
   /** Deterministic injection seam for generated-document integration tests. */
   readonly subscriptionClientFactory?: () => CrowdyAgentGraphQLSubscriptionClient;
 }
@@ -109,6 +116,11 @@ export class CrowdyAgentGraphQLTransport
 {
   private readonly activeSubscriptions =
     new Set<CrowdyAgentEventSubscriptionV1>();
+  private sharedSubscriptionClient: CrowdyAgentGraphQLSubscriptionClient | null =
+    null;
+  private sharedSubscriptionRefs = 0;
+  private sharedClientPromise: Promise<CrowdyAgentGraphQLSubscriptionClient> | null =
+    null;
 
   constructor(
     private readonly graphql: GraphQLClient,
@@ -475,15 +487,16 @@ export class CrowdyAgentGraphQLTransport
     return mapSession(data.crowdyStudioAgentCloseSession);
   }
 
-  subscribeEvents(
+  async subscribeEvents(
     input: {
       readonly sessionId: string;
       readonly afterSeq: string;
       readonly clientEpoch: string;
     },
     handlers: CrowdyAgentEventSubscriptionHandlersV1,
-  ): CrowdyAgentEventSubscriptionV1 {
-    const client = this.createSubscriptionClient();
+  ): Promise<CrowdyAgentEventSubscriptionV1> {
+    const useFactory = Boolean(this.options.subscriptionClientFactory);
+    const client = await this.ensureSubscriptionClient();
     let closed = false;
     const dispose = client.subscribe(
       {
@@ -519,7 +532,11 @@ export class CrowdyAgentGraphQLTransport
         closed = true;
         this.activeSubscriptions.delete(subscription);
         dispose();
-        void client.dispose();
+        if (useFactory) {
+          void client.dispose();
+        } else {
+          this.releaseSubscriptionClient();
+        }
       },
     };
     this.activeSubscriptions.add(subscription);
@@ -531,28 +548,76 @@ export class CrowdyAgentGraphQLTransport
     for (const subscription of [...this.activeSubscriptions]) {
       subscription.close();
     }
+    this.disposeSharedSubscriptionClient();
   }
 
-  private createSubscriptionClient(): CrowdyAgentGraphQLSubscriptionClient {
+  private async ensureSubscriptionClient(): Promise<CrowdyAgentGraphQLSubscriptionClient> {
     if (this.options.subscriptionClientFactory) {
       return this.options.subscriptionClientFactory();
     }
+    if (this.sharedSubscriptionClient) {
+      this.sharedSubscriptionRefs++;
+      return this.sharedSubscriptionClient;
+    }
+    if (!this.sharedClientPromise) {
+      this.sharedClientPromise = this.createSharedSubscriptionClient().finally(
+        () => {
+          this.sharedClientPromise = null;
+        },
+      );
+    }
+    const client = await this.sharedClientPromise;
+    this.sharedSubscriptionClient = client;
+    this.sharedSubscriptionRefs++;
+    return client;
+  }
+
+  private releaseSubscriptionClient(): void {
+    this.sharedSubscriptionRefs = Math.max(0, this.sharedSubscriptionRefs - 1);
+    if (this.sharedSubscriptionRefs === 0) {
+      this.disposeSharedSubscriptionClient();
+    }
+  }
+
+  private disposeSharedSubscriptionClient(): void {
+    const client = this.sharedSubscriptionClient;
+    this.sharedSubscriptionClient = null;
+    this.sharedSubscriptionRefs = 0;
+    if (client) void client.dispose();
+  }
+
+  private async createSharedSubscriptionClient(): Promise<CrowdyAgentGraphQLSubscriptionClient> {
     if (!this.options.wsUrl) {
       throw new CrowdyAgentError(
         'AGENT_HOST_UNAVAILABLE',
         'Crowdy agent events require a graphql-transport-ws endpoint',
       );
     }
+    const lbCookieStore = this.options.lbCookieStore;
+    if (lbCookieStore && !lbCookieStore.headerValue()) {
+      try {
+        await lbCookieStore.primeFromGraphql({
+          endpoint: this.options.wsUrl,
+          token: this.options.getToken(),
+        });
+      } catch {
+        // Sticky cookie is best-effort; continue without affinity.
+      }
+    }
+    const webSocketImpl =
+      this.options.webSocketImpl ?? createStickyWebSocketImpl(lbCookieStore);
     return createWsClient({
       url: this.options.wsUrl,
-      lazy: false,
+      lazy: true,
       retryAttempts: 0,
-      ...(this.options.webSocketImpl
-        ? { webSocketImpl: this.options.webSocketImpl as never }
-        : {}),
+      ...(webSocketImpl ? { webSocketImpl: webSocketImpl as never } : {}),
       connectionParams: () => {
         const token = this.options.getToken();
-        return token ? { Authorization: `Bearer ${token}` } : {};
+        const params: Record<string, string> = {};
+        if (token) params.Authorization = `Bearer ${token}`;
+        const cookie = lbCookieStore?.headerValue();
+        if (cookie) params.Cookie = cookie;
+        return params;
       },
     });
   }
