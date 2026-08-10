@@ -187,44 +187,51 @@ export class CrowdyStudioAgentController {
   }
 
   private async runInitialize(): Promise<void> {
-    const binding = await this.options.resolveProjectBinding?.();
-    let session: CrowdyAgentSessionV1;
-    if (this.options.sessionId) {
-      session = await this.options.transport.getSession(this.options.sessionId);
-      this.assertProjectBinding(
-        session,
-        binding?.projectId,
-        Boolean(this.options.resolveProjectBinding),
-      );
-    } else {
-      const configured =
-        typeof this.options.createSession === 'function'
-          ? await this.options.createSession()
-          : this.options.createSession!;
-      const createInput: CrowdyAgentCreateSessionInputV1 = {
-        ...configured,
-        ...(this.options.resolveProjectBinding
-          ? binding?.projectId
-            ? { projectId: binding.projectId }
-            : { projectId: undefined }
-          : {}),
-        ...(binding?.gridId ? { gridId: binding.gridId } : {}),
-      };
-      if (createInput.mode === 'BUILD' && !createInput.projectId) {
-        throw new CrowdyAgentError(
-          'AGENT_CONTEXT_CHANGED',
-          'BUILD requires the currently selected saved Crowdy Studio project',
+    try {
+      const binding = await this.options.resolveProjectBinding?.();
+      let session: CrowdyAgentSessionV1;
+      if (this.options.sessionId) {
+        session = await this.options.transport.getSession(this.options.sessionId);
+        this.assertProjectBinding(
+          session,
+          binding?.projectId,
+          Boolean(this.options.resolveProjectBinding),
+        );
+      } else {
+        const configured =
+          typeof this.options.createSession === 'function'
+            ? await this.options.createSession()
+            : this.options.createSession!;
+        const createInput: CrowdyAgentCreateSessionInputV1 = {
+          ...configured,
+          ...(this.options.resolveProjectBinding
+            ? binding?.projectId
+              ? { projectId: binding.projectId }
+              : { projectId: undefined }
+            : {}),
+          ...(binding?.gridId ? { gridId: binding.gridId } : {}),
+        };
+        if (createInput.mode === 'BUILD' && !createInput.projectId) {
+          throw new CrowdyAgentError(
+            'AGENT_CONTEXT_CHANGED',
+            'BUILD requires the currently selected saved Crowdy Studio project',
+          );
+        }
+        session = await this.createSessionOrReuse(createInput);
+        this.assertProjectBinding(
+          session,
+          binding?.projectId,
+          Boolean(this.options.resolveProjectBinding),
         );
       }
-      session = await this.createSessionOrReuse(createInput);
-      this.assertProjectBinding(
-        session,
-        binding?.projectId,
-        Boolean(this.options.resolveProjectBinding),
-      );
+      this.update({ session, lastError: null });
+      await this.attach('ATTACHING');
+    } catch (error) {
+      // Surface AGENT_PERMISSION_DENIED / AGENT_OPERATOR_KILLED / etc. in the
+      // dock status instead of a bare DISCONNECTED with no lastError.
+      this.fail(error);
+      throw error;
     }
-    this.update({ session, lastError: null });
-    await this.attach('ATTACHING');
   }
 
   private async createSessionOrReuse(
@@ -1196,12 +1203,17 @@ export class CrowdyStudioAgentController {
   }
 
   private refreshHeartbeat(immediate = false): void {
+    // Server `sweepExpired` detaches client cursors when last_heartbeat_at is
+    // older than 5s — for every mode, not only PLAY. ASK/BUILD must heartbeat
+    // or AcknowledgeEvents fails with AGENT_CLIENT_EPOCH_STALE ~5–10s after attach.
     const shouldRun =
       !this.destroyed &&
       this.pageVisible &&
       this.state.connection === 'CONNECTED' &&
       this.state.session?.status === 'ACTIVE' &&
-      this.state.session.mode === 'PLAY' &&
+      (this.state.session.mode === 'ASK' ||
+        this.state.session.mode === 'BUILD' ||
+        this.state.session.mode === 'PLAY') &&
       this.state.clientEpoch !== null;
     if (!shouldRun) {
       this.stopHeartbeat();
