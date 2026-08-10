@@ -93,8 +93,9 @@ export class BrowserSessionPkceStore implements PkceStore {
   }
 }
 
+// Older unified APIs (e.g. current gxca-test) omit discoveryUrl; requesting it 400s.
 const APP_TOKEN_FIELDS =
-  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl';
+  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl launchUrl';
 
 const MintAppTokenDocument = parse(
   `mutation MintAppToken($input: MintAppTokenInput!) { mintAppToken(input: $input) { ${APP_TOKEN_FIELDS} } }`,
@@ -229,7 +230,7 @@ export class PortalAPI {
     const data = await this.api.request(MintAppTokenDocument, {
       input: { appId },
     });
-    return data.mintAppToken;
+    return normalizeAppToken(data.mintAppToken);
   }
 
   /**
@@ -262,8 +263,9 @@ export class PortalAPI {
     const data = await this.api.request(ExchangePortalCodeDocument, {
       input: { code, codeVerifier },
     });
-    this.session.setToken(data.exchangePortalCode.token);
-    return data.exchangePortalCode;
+    const token = normalizeAppToken(data.exchangePortalCode);
+    this.session.setToken(token.token);
+    return token;
   }
 
   /**
@@ -273,8 +275,9 @@ export class PortalAPI {
    */
   async refresh(): Promise<AppTokenResponse> {
     const data = await this.api.request(RefreshAppTokenDocument, {});
-    this.session.setToken(data.refreshAppToken.token);
-    return data.refreshAppToken;
+    const token = normalizeAppToken(data.refreshAppToken);
+    this.session.setToken(token.token);
+    return token;
   }
 
   // ----- Consent + connected apps ------------------------------------------
@@ -408,4 +411,12 @@ export class PortalAPI {
 function defaultSearch(): string {
   const loc = (globalThis as { location?: { search?: string } }).location;
   return loc?.search ?? '';
+}
+
+function normalizeAppToken(
+  token: Omit<AppTokenResponse, 'discoveryUrl'> & {
+    discoveryUrl?: string | null;
+  },
+): AppTokenResponse {
+  return { ...token, discoveryUrl: token.discoveryUrl ?? null };
 }
