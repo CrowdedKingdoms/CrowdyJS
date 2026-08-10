@@ -301,12 +301,19 @@ export class CrowdyClient {
 
     this.session = new AuthState(config.tokenStore);
     const lbCookieStore = config.lbCookieStore ?? new LbCookieStore();
+    const initialGraphqlEndpoint =
+      config.graphqlEndpoint ?? toGraphqlEndpoint(config.httpUrl, 'graphql');
+    // Vite/trycloudflare recover stacks use a same-origin relative `/graphql`
+    // proxy under CSP `connect-src 'self'`. Datacenter redirects that swap in
+    // an absolute `https://ck.*.cks-env.com/graphql` are blocked by CSP and
+    // leave gameplay hung mid-boot (BWF "Loading terrain 62%"). Pin relative
+    // endpoints so WRONG_DATACENTER / rediscover / relay moves stay on-proxy.
+    const pinRelativeGraphql = isRelativeGraphqlEndpoint(initialGraphqlEndpoint);
 
     this.graphql = new GraphQLClient(
       {
         httpUrl: config.httpUrl,
-        graphqlEndpoint:
-          config.graphqlEndpoint ?? toGraphqlEndpoint(config.httpUrl, 'graphql'),
+        graphqlEndpoint: initialGraphqlEndpoint,
         timeout: config.timeout,
         logger: config.logger,
         lbCookieStore,
@@ -348,9 +355,15 @@ export class CrowdyClient {
         // reason, and it always applies - it does not depend on the caller
         // having wired re-discovery, because the server supplied the target.
         onEndpointMove: (target: { httpUrl: string }) => {
-          this.graphql.setEndpoint(
-            toGraphqlEndpoint(target.httpUrl, 'graphql') ?? target.httpUrl,
-          );
+          const endpoint =
+            toGraphqlEndpoint(target.httpUrl, 'graphql') ?? target.httpUrl;
+          if (pinRelativeGraphql && !isRelativeGraphqlEndpoint(endpoint)) {
+            config.logger?.warn?.(
+              `Keeping relative GraphQL endpoint; refusing realtime HTTP move to ${endpoint}`,
+            );
+            return;
+          }
+          this.graphql.setEndpoint(endpoint);
         },
         ...(rediscover
           ? {
@@ -358,10 +371,24 @@ export class CrowdyClient {
                 const next = await rediscover(appId);
                 if (!next) return null;
                 if (next.httpUrl) {
-                  this.graphql.setEndpoint(
-                    toGraphqlEndpoint(next.httpUrl, 'graphql') ??
-                      next.httpUrl,
-                  );
+                  const endpoint =
+                    toGraphqlEndpoint(next.httpUrl, 'graphql') ?? next.httpUrl;
+                  if (
+                    pinRelativeGraphql &&
+                    !isRelativeGraphqlEndpoint(endpoint)
+                  ) {
+                    config.logger?.warn?.(
+                      `Keeping relative GraphQL endpoint; refusing rediscover HTTP move to ${endpoint}`,
+                    );
+                    // Keep WS on the relative proxy too when HTTP is pinned.
+                    return {
+                      wsUrl:
+                        toGraphqlEndpoint(config.wsUrl, 'graphql') ??
+                        config.wsEndpoint ??
+                        null,
+                    };
+                  }
+                  this.graphql.setEndpoint(endpoint);
                 }
                 return { wsUrl: toGraphqlEndpoint(next.wsUrl ?? undefined, 'graphql') ?? null };
               },
@@ -389,6 +416,15 @@ export class CrowdyClient {
         // retry to the same instance is refused identically and a handler that
         // reported success here would loop.
         return false;
+      }
+      if (pinRelativeGraphql && !isRelativeGraphqlEndpoint(endpoint)) {
+        // Retry once on the relative proxy without adopting the absolute URL.
+        // The proxy already targets the configured CK API; CSP would block the
+        // absolute gameApiUrl and hang boot after earlier steps swallowed errors.
+        config.logger?.warn?.(
+          `Keeping relative GraphQL endpoint; refusing WRONG_DATACENTER move to ${endpoint}`,
+        );
+        return true;
       }
       this.graphql.setEndpoint(endpoint);
       this.realtime.moveToDatacenter({
@@ -580,4 +616,9 @@ function toGraphqlEndpoint(
   if (!trimmed) return undefined;
   const noSlash = trimmed.replace(/\/$/, '');
   return noSlash.endsWith(`/${suffix}`) ? noSlash : `${noSlash}/${suffix}`;
+}
+
+/** True for same-origin relative GraphQL paths like `/graphql` (Vite proxy mode). */
+function isRelativeGraphqlEndpoint(endpoint: string | undefined): boolean {
+  return !!endpoint?.trim().startsWith('/');
 }
