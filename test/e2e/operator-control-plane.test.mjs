@@ -13,14 +13,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSdk, clientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../helpers.mjs';
+import { loadSdk, entryClientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../helpers.mjs';
 import { provisionOperator, registerUser } from '../provision.mjs';
 
 const skip = skipReasonFor(MANAGEMENT_E2E_ENV);
 
 test('operator: read the platform compute ceilings', { skip, timeout: 60_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const client = createCrowdyClient(clientConfig());
+  const client = createCrowdyClient(entryClientConfig());
   const op = await provisionOperator();
   client.setToken(op.token);
   try {
@@ -34,7 +34,7 @@ test('operator: read the platform compute ceilings', { skip, timeout: 60_000 }, 
 
 test('operator: a non-operator account is forbidden', { skip, timeout: 60_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const client = createCrowdyClient(clientConfig());
+  const client = createCrowdyClient(entryClientConfig());
   const regular = await registerUser(); // fresh account, no operator bit
   client.setToken(regular.token);
   try {

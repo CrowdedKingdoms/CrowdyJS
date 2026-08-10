@@ -13,7 +13,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   loadSdk,
-  clientConfig,
   skipReasonFor,
   FULL_E2E_ENV,
   sleep,
@@ -27,7 +26,7 @@ const NOTIFY_WAIT_MS = numEnv('CROWDY_TEST_NOTIFY_WAIT_MS', 3000);
 
 test('gamer: avatars, host, state, actors, idempotency', { skip, timeout: 90_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const { appId, clients, players } = await provisionClients(createCrowdyClient, clientConfig(), 1);
+  const { appId, clients, players } = await provisionClients(createCrowdyClient, 1);
   const client = clients[0];
   try {
     // Bootstrap.
@@ -93,7 +92,7 @@ test('gamer: avatars, host, state, actors, idempotency', { skip, timeout: 90_000
 
 test('gamer: dual-success spatial model (accept -> async NAK)', { skip, timeout: 90_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const { appId, clients } = await provisionClients(createCrowdyClient, clientConfig(), 1);
+  const { appId, clients } = await provisionClients(createCrowdyClient, 1);
   const client = clients[0];
   const cleanup = [];
   try {

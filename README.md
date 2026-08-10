@@ -719,6 +719,49 @@ For any brand-new server field not yet wrapped, `client.graphql.request(...)`
 always works. (`client.management` was removed in v14 along with the second
 endpoint; `client.graphql` reaches every surface.)
 
+## Maintainers: running the e2e suite
+
+`npm run test:e2e` drives a real deployed stack, and the suites self-skip when
+the environment is not configured, so they are safe to leave in `npm test`.
+
+```bash
+CROWDY_HTTP_URL='https://ck.<tier>.cp.cks-env.com' \
+CROWDY_WS_URL='wss://ck.<tier>.cp.cks-env.com/graphql' \
+CROWDY_OWNER_EMAIL='owner@example.com' \
+CROWDY_TEST_APP_ID='78221653114368' \
+  npm run test:e2e
+```
+
+**`CROWDY_HTTP_URL` is the ENTRY origin, not the gameplay origin.** Point it at
+the shared multivalue name (`ck.<tier>…`), the same one a cold client resolves.
+The harness then does what the SDK is built to do: sign in and mint against the
+entry origin, and build every gameplay client on the `gameApiUrl` /
+`gameApiWsUrl` the mint returns, threading `discoveryUrl` into `realtime` so
+instance loss is recoverable.
+
+Do not point it at a single datacenter to "make the tests pass". That was the
+old behaviour and it hid two things. A suite pinned to one datacenter never
+exercises residency at all, so a placement regression cannot fail it. And a
+suite that ran *gameplay* against the shared origin was testing a configuration
+no client is ever in: the origin resolves to every datacenter's load balancer,
+so consecutive requests from one client can be answered by different instances,
+and because the UDP proxy connection is per-instance a subscription opened on
+one and a mutation sent to the other never meet. That produced failures in tests
+as simple as self-echo, which has a single client and cannot have a placement
+problem.
+
+`test/e2e/app-residency.test.mjs` is the suite that asserts the contract every
+other suite now depends on — that `discovery.apps()` and `mintAppToken` name the
+same datacenter, and that gameplay works against it. On a single-datacenter
+environment its cross-datacenter assertions self-skip and say so, rather than
+passing quietly.
+
+Two endpoint shapes are both correct and are not interchangeable:
+`appDiscovery` answers with the datacenter's load balancer (`ck-<dc>.<zone>`),
+while `mintAppToken` under direct connect hands back one instance
+(`ck-api-<dc>-<n>.<zone>`). They agree on the datacenter, not on the host, which
+is why the mint also returns `discoveryUrl`.
+
 ## Maintainers: schema artifacts and fixtures
 
 CrowdyJS is a standalone public package: a clean clone builds with

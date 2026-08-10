@@ -41,17 +41,10 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function clientConfig() {
-  return {
-    httpUrl: process.env.CROWDY_HTTP_URL,
-    wsUrl: process.env.CROWDY_WS_URL,
-    realtime: { retryAttempts: 4, retryInitialDelayMs: 250, retryMaxDelayMs: 2000, waitTimeoutMs: 5000 },
-  };
-}
 
 /** Provision 2 players, subscribe B with handlers, register both actors in chunk. */
 async function setupPair(createCrowdyClient, handlers, chunk) {
-  const { appId, clients } = await provisionClients(createCrowdyClient, clientConfig(), 2);
+  const { appId, clients } = await provisionClients(createCrowdyClient, 2);
   const [clientA, clientB] = clients;
   const cleanup = [];
   cleanup.push(clientB.udp.subscribe(handlers, appId));

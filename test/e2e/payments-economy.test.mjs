@@ -9,7 +9,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSdk, clientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../helpers.mjs';
+import { loadSdk, entryClientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../helpers.mjs';
 import { provisionOwner } from '../provision.mjs';
 
 const skip = skipReasonFor(MANAGEMENT_E2E_ENV);
@@ -18,7 +18,7 @@ const rid = () => Math.random().toString(36).slice(2, 10);
 
 test('payments: a signed-in user can list their own checkouts', { skip, timeout: 60_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const client = createCrowdyClient(clientConfig());
+  const client = createCrowdyClient(entryClientConfig());
   const owner = await provisionOwner();
   client.setToken(owner.token);
   try {
@@ -31,7 +31,7 @@ test('payments: a signed-in user can list their own checkouts', { skip, timeout:
 
 test('payments: anonymous cannot list checkouts', { skip, timeout: 60_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const anon = createCrowdyClient(clientConfig());
+  const anon = createCrowdyClient(entryClientConfig());
   try {
     await assert.rejects(
       () => anon.payments.mine(),
@@ -48,7 +48,7 @@ test(
   { skip: skip ?? (paymentsEnabled ? undefined : 'set CROWDY_TEST_PAYMENTS=1 (sandbox) to run'), timeout: 60_000 },
   async () => {
     const { createCrowdyClient } = await loadSdk();
-    const client = createCrowdyClient(clientConfig());
+    const client = createCrowdyClient(entryClientConfig());
     const owner = await provisionOwner();
     client.setToken(owner.token);
     try {

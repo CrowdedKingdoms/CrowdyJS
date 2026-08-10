@@ -22,7 +22,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionNewAppWithPlayers, mintAppToken } from '../provision.mjs';
+import { provisionNewAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -48,13 +49,6 @@ const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function clientConfig() {
-  return {
-    httpUrl: process.env.CROWDY_HTTP_URL,
-    wsUrl: process.env.CROWDY_WS_URL,
-    realtime: { retryAttempts: 4, retryInitialDelayMs: 250, retryMaxDelayMs: 2000, waitTimeoutMs: 5000 },
-  };
-}
 
 function randomBase64ActorState(byteCount = 96) {
   const buf = new Uint8Array(byteCount);
@@ -72,12 +66,16 @@ test(
     //    players are registered but NEVER granted access.
     const { appId, players } = await provisionNewAppWithPlayers(2);
 
-    const clientA = createCrowdyClient(clientConfig());
-    const clientB = createCrowdyClient(clientConfig());
+    const accessA = await mintAppAccess(appId, players[0].token);
+    const accessB = await mintAppAccess(appId, players[1].token);
+    const clientA = createCrowdyClient(gameClientConfig(accessA));
+    const clientB = createCrowdyClient(gameClientConfig(accessB));
     // Open-by-default: minting an app token for an ungranted player auto-grants
     // the free default tier (no explicit grantAppAccess) — the rule under test.
-    clientA.setToken(await mintAppToken(appId, players[0].token));
-    clientB.setToken(await mintAppToken(appId, players[1].token));
+    // That mint happened above, because it is also what named the datacenter
+    // these two clients were built in.
+    clientA.setToken(accessA.token);
+    clientB.setToken(accessB.token);
     const cleanup = [];
 
     try {

@@ -25,7 +25,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { provisionNewAppWithPlayers, mintAppToken } from '../provision.mjs';
+import { provisionNewAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -46,13 +47,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chunk = (x, y, z) => ({ x: String(x), y: String(y), z: String(z) });
 const TEST_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
 
-function clientConfig() {
-  return {
-    httpUrl: process.env.CROWDY_HTTP_URL,
-    wsUrl: process.env.CROWDY_WS_URL,
-    realtime: { retryAttempts: 4, retryInitialDelayMs: 250, retryMaxDelayMs: 2000, waitTimeoutMs: 5000 },
-  };
-}
 
 test(
   'a normally-provisioned app can create a grid nested in its world grid; peer overlaps are rejected',
@@ -63,18 +57,20 @@ test(
     // 1. Owner creates a NEW app + one registered player (no explicit grant).
     const { appId, owner, players } = await provisionNewAppWithPlayers(1);
 
-    const player = createCrowdyClient(clientConfig());
     // Gameplay (gameClientBootstrap + UDP) needs an APP-scoped token; the identity
     // session token is rejected. Minting for the open-by-default app auto-grants
     // the free default tier, just like the first-UDP-touch path it stands in for.
-    const playerAppToken = await mintAppToken(appId, players[0].token);
-    player.setToken(playerAppToken);
-    const owner_ = createCrowdyClient(clientConfig());
+    // The mint also names the app's datacenter, which is where both clients go.
+    const playerAccess = await mintAppAccess(appId, players[0].token);
+    const player = createCrowdyClient(gameClientConfig(playerAccess));
+    player.setToken(playerAccess.token);
     // createGrid is a game-api grid op that requires an app-scoped token (a studio
     // admin may mint one for their own app); the identity session token is rejected
-    // (SCOPE_MISSING). Mint the owner an app token for this app.
-    const ownerAppToken = await mintAppToken(appId, owner.token);
-    owner_.setToken(ownerAppToken);
+    // (SCOPE_MISSING). Mint the owner an app token for this app. Grid writes are
+    // app-resident too, so the owner's gameplay client belongs in the same place.
+    const ownerAccess = await mintAppAccess(appId, owner.token);
+    const owner_ = createCrowdyClient(gameClientConfig(ownerAccess));
+    owner_.setToken(ownerAccess.token);
     const cleanup = [];
 
     try {

@@ -11,8 +11,13 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSdk, clientConfig, skipReasonFor } from '../helpers.mjs';
-import { provisionOwner, mintAppToken } from '../provision.mjs';
+import {
+  loadSdk,
+  entryClientConfig,
+  gameClientConfig,
+  skipReasonFor,
+} from '../helpers.mjs';
+import { provisionOwner, mintAppAccess } from '../provision.mjs';
 
 const COMPUTE_E2E_ENV = [
   'CROWDY_HTTP_URL',
@@ -57,8 +62,11 @@ crowdy_compute_sdk::register_module!(init: on_init, tick: on_tick, invoke: on_in
 
 test('compute modules: author -> deploy -> compile -> enable -> invoke -> observe -> delete', { skip, timeout: 240_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const admin = createCrowdyClient(clientConfig());
-  const game = createCrowdyClient(clientConfig());
+  // Admin/management stays on the shared entry origin: orgs, apps and shared-env
+  // publication are not app-resident. The game client cannot be built yet — the
+  // app does not exist, so nothing knows where it lives.
+  const admin = createCrowdyClient(entryClientConfig());
+  let game;
   try {
     // Fresh org + shared app; the creating owner's Owner role carries
     // manage_compute + view_compute_diagnostics.
@@ -69,8 +77,12 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
     const app = await admin.apps.create({ orgId: org.orgId, name: slug, slug });
     await admin.sharedEnvironment.publishApp(app.appId);
 
-    // Game-api calls ride an APP-scoped token.
-    game.setToken(await mintAppToken(app.appId, owner.token));
+    // Game-api calls ride an APP-scoped token, and compute modules are stored
+    // with the app's own shards — so the mint tells us both the credential and
+    // the datacenter, and the game client is built only now that both are known.
+    const access = await mintAppAccess(app.appId, owner.token);
+    game = createCrowdyClient(gameClientConfig(access));
+    game.setToken(access.token);
 
     const moduleName = 'e2e-counter';
     const appId = app.appId;
@@ -156,6 +168,7 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
     assert.equal(remaining.length, 0);
   } finally {
     admin.close();
-    game.close();
+    // `game` is undefined if we failed before the app existed.
+    game?.close();
   }
 });

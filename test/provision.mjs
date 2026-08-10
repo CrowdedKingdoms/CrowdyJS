@@ -16,13 +16,23 @@
  * This matches production: an integrator (studio) owns its app and entitles its
  * own users. The test targets the app the game-api is serving:
  *
- *   CROWDY_HTTP_URL         API root (the SDK appends /graphql)
+ *   CROWDY_HTTP_URL         ENTRY origin — the shared multivalue name. The SDK
+ *                           appends /graphql. Provisioning and token minting go
+ *                           here; GAMEPLAY does not (see below).
  *   CROWDY_OWNER_EMAIL      owner sign-in (owns CROWDY_TEST_APP_ID; passwordless)
  *   CROWDY_TEST_APP_ID      app to test against (default '1')
+ *
+ * PROVISIONING STAYS ON THE ENTRY ORIGIN; GAMEPLAY DOES NOT. Sign-in, grants and
+ * `mintAppToken` all read and write reference tables that every datacenter
+ * holds, so the shared origin is the right place for them — and it is where a
+ * real client is too, before it knows where the app lives. The mint is what
+ * tells it: the response names the app's own datacenter, and every gameplay
+ * client below is built against THAT, never against `CROWDY_HTTP_URL`.
  *
  * No MGMT_DB_* / DB_WRITER_* credentials.
  */
 import { randomBytes } from 'node:crypto';
+import { gameClientConfig } from './helpers.mjs';
 
 const DEFAULT_PERMISSION_KEYS = ['access', 'teleport', 'update_voxel_data', 'use_voice_chat'];
 
@@ -228,17 +238,40 @@ export async function provisionAppWithPlayers(playerCount) {
  * `createCrowdyClient` is passed in so this module never imports the built SDK
  * (tests import it lazily from ../dist).
  */
-export async function provisionClients(createCrowdyClient, config, playerCount) {
+export async function provisionClients(createCrowdyClient, playerCount, overrides = {}) {
+  // The old signature was (createCrowdyClient, config, playerCount) and the
+  // config argument is gone, because a gameplay client's URL is no longer the
+  // caller's to choose — the mint response names it. A caller that still passes
+  // a config object would otherwise loop `playerCount` times over an object and
+  // quietly provision nobody, so refuse it.
+  if (typeof playerCount !== 'number' || !Number.isInteger(playerCount) || playerCount < 1) {
+    throw new TypeError(
+      'provisionClients(createCrowdyClient, playerCount, overrides?) — playerCount must be a ' +
+        `positive integer, got ${JSON.stringify(playerCount)}. The config argument was removed: ` +
+        'gameplay clients are built against the endpoint mintAppAccess returns.',
+    );
+  }
   const { appId: id, tierId, owner, players } = await provisionAppWithPlayers(playerCount);
   // Two-client pattern: gameplay needs an APP-scoped token (the identity SESSION
   // token is rejected by game-api/Buddy with SCOPE_MISSING). Each entitled player
   // mints one for `id` via the portal and the realtime client carries THAT; the
   // session token stays on the player object for management-plane calls.
+  //
+  // The mint also says WHERE to spend the token. Each client is built on the
+  // app's own datacenter, which is what a real client does and what makes these
+  // tests deterministic: the shared entry origin resolves to every datacenter's
+  // load balancer, so two calls from one "client" can be answered by different
+  // instances — and the UDP proxy connection is per-instance, so a subscription
+  // opened on one and a mutation sent to the other never meet.
   const clients = [];
+  let endpoint = null;
   for (const p of players) {
     p.sessionToken = p.token;
-    p.appToken = await mintAppToken(id, p.token);
-    const c = createCrowdyClient(config);
+    const access = await mintAppAccess(id, p.token);
+    p.appToken = access.token;
+    p.endpoint = access;
+    endpoint ??= access;
+    const c = createCrowdyClient(gameClientConfig(access, overrides));
     c.setToken(p.appToken);
     clients.push(c);
   }
@@ -273,23 +306,39 @@ export async function provisionClients(createCrowdyClient, config, playerCount) 
     }),
   );
 
-  return { appId: id, tierId, owner, players, clients };
+  return { appId: id, tierId, owner, players, clients, endpoint };
 }
 
 /**
  * Mint a short-lived **app-scoped** token for `id` using a player's identity
- * SESSION token. Gameplay (game-api + Buddy) requires an app token and rejects
- * the session token with `SCOPE_MISSING`, so every realtime client must carry
- * one. Auto-grant-free: an entitled player (or any player on an open-by-default
- * app) gets the token without an explicit prior grant.
+ * SESSION token, AND learn where that app lives.
+ *
+ * Gameplay (game-api + Buddy) requires an app token and rejects the session
+ * token with `SCOPE_MISSING`, so every realtime client must carry one.
+ * Auto-grant-free: an entitled player (or any player on an open-by-default app)
+ * gets the token without an explicit prior grant.
+ *
+ * WHY THIS RETURNS MORE THAN A TOKEN. The mint response is where the API tells a
+ * client which datacenter the app is resident in — `gameApiUrl` /
+ * `gameApiWsUrl` — and how to find another instance if that one goes away
+ * (`discoveryUrl`). A test that took only `.token` and then talked to the shared
+ * entry origin was exercising a code path the SDK does not ship for. Hand the
+ * whole thing to {@link gameClientConfig}.
+ *
+ * DELIBERATELY NOT CALLED `mintAppToken`. It used to return a bare string, and a
+ * caller that missed this change would have passed an object to `setToken()` and
+ * sent `[object Object]` as a Bearer credential — a 401 twenty frames from the
+ * cause. Renaming turns that into a ReferenceError at import.
  */
-export async function mintAppToken(id, sessionToken) {
+export async function mintAppAccess(id, sessionToken) {
   const data = await gql(
-    `mutation($i: MintAppTokenInput!){ mintAppToken(input:$i){ token } }`,
+    `mutation($i: MintAppTokenInput!){
+       mintAppToken(input:$i){ token gameApiUrl gameApiWsUrl discoveryUrl }
+     }`,
     { i: { appId: id } },
     sessionToken,
   );
-  return data.mintAppToken.token;
+  return data.mintAppToken;
 }
 
 /** The org that owns CROWDY_TEST_APP_ID — the owner's org, used to create new apps. */

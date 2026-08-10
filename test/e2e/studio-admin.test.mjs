@@ -11,7 +11,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSdk, clientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../helpers.mjs';
+import { loadSdk, entryClientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../helpers.mjs';
 import {
   provisionOwner,
   registerUser,
@@ -23,7 +23,7 @@ const rid = () => Math.random().toString(36).slice(2, 10);
 
 async function ownerClient() {
   const { createCrowdyClient } = await loadSdk();
-  const client = createCrowdyClient(clientConfig());
+  const client = createCrowdyClient(entryClientConfig());
   const owner = await provisionOwner();
   client.setToken(owner.token);
   return { client, owner };
@@ -120,8 +120,8 @@ test('studio admin: billing + quotas + usage', { skip, timeout: 60_000 }, async 
 test('studio admin: permission + validation + malicious negatives', { skip, timeout: 60_000 }, async () => {
   const { client: owner } = await ownerClient();
   const { createCrowdyClient } = await loadSdk();
-  const anon = createCrowdyClient(clientConfig());
-  const outsider = createCrowdyClient(clientConfig());
+  const anon = createCrowdyClient(entryClientConfig());
+  const outsider = createCrowdyClient(entryClientConfig());
   try {
     const slug = `e2e-org-${rid()}`;
     const org = await owner.organizations.create({ name: slug, slug });
