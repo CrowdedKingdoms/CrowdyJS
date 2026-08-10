@@ -25,7 +25,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { provisionNewAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import {
+  provisionNewAppWithPlayers,
+  mintAppAccess,
+  archiveAppQuietly,
+} from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
@@ -148,6 +152,11 @@ test(
       try { await player.udp.disconnect(); } catch { /* swallow */ }
       player.close();
       owner_.close();
+      // Archive the app this test created. Without it every run leaves one behind: dev
+      // reached 46 apps with exactly one placement row between them, and the control
+      // plane's app_placement and buddy_postgres_locality reported all of them -- 93 of
+      // dev's 101 findings, burying any app that was genuinely mis-placed.
+      await archiveAppQuietly(owner.token, appId);
     }
   },
 );

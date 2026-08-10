@@ -22,7 +22,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionNewAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import {
+  provisionNewAppWithPlayers,
+  mintAppAccess,
+  archiveAppQuietly,
+} from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
@@ -64,7 +68,9 @@ test(
 
     // 1. Owner creates a NEW app (auto-gets the free open-by-default tier). Two
     //    players are registered but NEVER granted access.
-    const { appId, players } = await provisionNewAppWithPlayers(2);
+    // `owner` is destructured only for the teardown below: archiveApp needs the owner's
+    // session token, and the players deliberately have no rights over the app.
+    const { appId, owner, players } = await provisionNewAppWithPlayers(2);
 
     const accessA = await mintAppAccess(appId, players[0].token);
     const accessB = await mintAppAccess(appId, players[1].token);
@@ -161,6 +167,9 @@ test(
       try { await clientB.udp.disconnect(); } catch { /* swallow */ }
       clientA.close();
       clientB.close();
+      // See the note in new-app-grid-creation: one app per run, never removed, is how dev
+      // came to have 46 of them and 93 findings about them.
+      await archiveAppQuietly(owner.token, appId);
     }
   },
 );
