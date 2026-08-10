@@ -21,7 +21,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients, mintAppToken } from '../provision.mjs';
+import { provisionClients, mintAppAccess } from '../provision.mjs';
+import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -48,24 +49,13 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function clientConfig() {
-  return {
-    httpUrl: process.env.CROWDY_HTTP_URL,
-    wsUrl: process.env.CROWDY_WS_URL,
-    realtime: { retryAttempts: 4, retryInitialDelayMs: 250, retryMaxDelayMs: 2000, waitTimeoutMs: 5000 },
-  };
-}
 
 test(
   'channel message reaches members but not non-members, with no sender echo',
   { skip: skipReason, timeout: 60_000 },
   async () => {
     const { createCrowdyClient } = await import('../../dist/index.js');
-    const { appId, owner, players, clients } = await provisionClients(
-      createCrowdyClient,
-      clientConfig(),
-      3,
-    );
+    const { appId, owner, players, clients } = await provisionClients(createCrowdyClient, 3);
     const [clientA, clientB, clientC] = clients;
     const cleanup = [];
 
@@ -73,8 +63,11 @@ test(
     // Channel CRUD is a game-api surface that targets a concrete appId, so the
     // owner needs an app-scoped token (Overworld token confinement rejects
     // identity session tokens with SCOPE_MISSING).
-    const ownerClient = createCrowdyClient(clientConfig());
-    ownerClient.setToken(await mintAppToken(appId, owner.token));
+    // Channel creation is an app-resident write, so the owner's client goes to
+    // the same datacenter the three player clients were placed in.
+    const ownerAccess = await mintAppAccess(appId, owner.token);
+    const ownerClient = createCrowdyClient(gameClientConfig(ownerAccess));
+    ownerClient.setToken(ownerAccess.token);
 
     let channelId;
     try {

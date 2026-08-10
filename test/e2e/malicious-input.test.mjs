@@ -6,7 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSdk, clientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../helpers.mjs';
+import { loadSdk, entryClientConfig, skipReasonFor, MANAGEMENT_E2E_ENV } from '../helpers.mjs';
 import { registerUser, gqlManagementRaw } from '../provision.mjs';
 
 const skip = skipReasonFor(MANAGEMENT_E2E_ENV);
@@ -14,7 +14,7 @@ const rid = () => Math.random().toString(36).slice(2, 10);
 
 test('auth: a garbage bearer token is rejected as UNAUTHENTICATED', { skip, timeout: 60_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const client = createCrowdyClient(clientConfig());
+  const client = createCrowdyClient(entryClientConfig());
   client.setToken('not-a-real-token.deadbeef');
   try {
     await assert.rejects(
@@ -29,7 +29,7 @@ test('auth: a garbage bearer token is rejected as UNAUTHENTICATED', { skip, time
 
 test('auth: a revoked (logged-out) token no longer authorizes', { skip, timeout: 60_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
-  const client = createCrowdyClient(clientConfig());
+  const client = createCrowdyClient(entryClientConfig());
   const user = await registerUser();
   client.setToken(user.token);
   try {
@@ -51,7 +51,7 @@ test('auth: login-link requests are enumeration-resistant', { skip, timeout: 60_
   // property now lives on requestLoginLink, which must report sent=true whether
   // or not the email maps to an account.
   const { createCrowdyClient } = await loadSdk();
-  const client = createCrowdyClient(clientConfig());
+  const client = createCrowdyClient(entryClientConfig());
   try {
     const unknown = `crowdy-nobody-${rid()}@test.invalid`;
     const res = await client.auth.requestLoginLink({ email: unknown });
@@ -65,7 +65,7 @@ test('auth: a forged session token fails closed (cannot read the current user)',
   // Passwordless: there is no password to get "wrong". The equivalent fail-closed
   // property is that a bogus identity session token cannot read protected data.
   const { createCrowdyClient } = await loadSdk();
-  const client = createCrowdyClient(clientConfig());
+  const client = createCrowdyClient(entryClientConfig());
   client.setToken(`forged-session-${rid()}.deadbeef`);
   try {
     await assert.rejects(

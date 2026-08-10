@@ -24,7 +24,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { provisionAppWithPlayers, mintAppToken } from '../provision.mjs';
+import { provisionAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -48,18 +49,6 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function clientConfig() {
-  return {
-    httpUrl: process.env.CROWDY_HTTP_URL,
-    wsUrl: process.env.CROWDY_WS_URL,
-    realtime: {
-      retryAttempts: 4,
-      retryInitialDelayMs: 250,
-      retryMaxDelayMs: 2000,
-      waitTimeoutMs: 5000,
-    },
-  };
-}
 
 test(
   'sendActorUpdateAndWait resolves with the sender\'s own ActorUpdateNotification (self-echo)',
@@ -70,8 +59,12 @@ test(
     const { appId, players } = await provisionAppWithPlayers(1);
     await sleep(SYNC_WAIT_MS); // let replica-sync mirror access + grid grants
 
-    const client = createCrowdyClient(clientConfig());
-    client.setToken(await mintAppToken(appId, players[0].token));
+    // One client, so there is no fan-out to get wrong — which is exactly why
+    // this test failing against the shared entry origin was the tell that the
+    // problem was the origin and not placement. Build it where the app lives.
+    const access = await mintAppAccess(appId, players[0].token);
+    const client = createCrowdyClient(gameClientConfig(access));
+    client.setToken(access.token);
 
     try {
       // Open the WS subscription so the self-notification can be delivered.

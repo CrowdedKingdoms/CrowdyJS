@@ -28,7 +28,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionAppWithPlayers, mintAppToken } from '../provision.mjs';
+import { provisionAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import { gameClientConfig } from '../helpers.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
 globalThis.WebSocket = WebSocket;
@@ -64,18 +65,6 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function clientConfig() {
-  return {
-    httpUrl: process.env.CROWDY_HTTP_URL,
-    wsUrl: process.env.CROWDY_WS_URL,
-    realtime: {
-      retryAttempts: 4,
-      retryInitialDelayMs: 250,
-      retryMaxDelayMs: 2000,
-      waitTimeoutMs: 5000,
-    },
-  };
-}
 
 test(
   'udpNotifications is fenced by appId and rejects app-agnostic subscriptions',
@@ -91,17 +80,22 @@ test(
     // Gameplay needs APP-scoped tokens. player[0]'s ONE app token (for `appId`) is
     // shared by the three observer clients; an app-scoped token can only subscribe
     // to its own app, so the OTHER_APP_ID subscription is fenced/rejected, not fed.
-    const token = await mintAppToken(appId, players[0].token);
-    const senderToken = await mintAppToken(appId, players[1].token);
+    const access = await mintAppAccess(appId, players[0].token);
+    const senderAccess = await mintAppAccess(appId, players[1].token);
+    const token = access.token;
+    const senderToken = senderAccess.token;
     // An app the observers are NOT scoped to; its subscription is still opened
     // but must not receive `appId`'s spatial traffic.
     const OTHER_APP_ID = String(BigInt(appId) + 7919n);
 
-    const clientApp = createCrowdyClient(clientConfig());
-    const clientOther = createCrowdyClient(clientConfig());
-    const clientNone = createCrowdyClient(clientConfig());
+    // All four clients hold tokens for `appId`, so all four belong in `appId`'s
+    // datacenter — including the ones subscribing under a different appId, since
+    // the fence being tested is on the subscription, not on the placement.
+    const clientApp = createCrowdyClient(gameClientConfig(access));
+    const clientOther = createCrowdyClient(gameClientConfig(access));
+    const clientNone = createCrowdyClient(gameClientConfig(access));
     for (const c of [clientApp, clientOther, clientNone]) c.setToken(token);
-    const clientSender = createCrowdyClient(clientConfig());
+    const clientSender = createCrowdyClient(gameClientConfig(senderAccess));
     clientSender.setToken(senderToken);
 
     const recvApp = [];

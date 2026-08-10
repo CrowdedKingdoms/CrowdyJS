@@ -46,20 +46,13 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function clientConfig() {
-  return {
-    httpUrl: process.env.CROWDY_HTTP_URL,
-    wsUrl: process.env.CROWDY_WS_URL,
-    realtime: { retryAttempts: 4, retryInitialDelayMs: 250, retryMaxDelayMs: 2000, waitTimeoutMs: 5000 },
-  };
-}
 
 test(
   'single-actor message reaches only the target actor',
   { skip: skipReason, timeout: 60_000 },
   async () => {
     const { createCrowdyClient } = await import('../../dist/index.js');
-    const { appId, clients } = await provisionClients(createCrowdyClient, clientConfig(), 3);
+    const { appId, clients } = await provisionClients(createCrowdyClient, 3);
     const [clientA, clientB, clientC] = clients;
     const cleanup = [];
 

@@ -25,7 +25,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionAppWithPlayers, mintAppToken } from '../provision.mjs';
+import { provisionAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import { gameClientConfig } from '../helpers.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
 globalThis.WebSocket = WebSocket;
@@ -62,19 +63,6 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function clientConfig() {
-  return {
-    httpUrl: process.env.CROWDY_HTTP_URL,
-    wsUrl: process.env.CROWDY_WS_URL,
-    realtime: {
-      retryAttempts: 4,
-      retryInitialDelayMs: 250,
-      retryMaxDelayMs: 2000,
-      waitTimeoutMs: 5000,
-    },
-  };
-}
-
 test(
   'two-client actor replication against a deployed env',
   { skip: skipReason, timeout: 60_000 },
@@ -87,12 +75,17 @@ test(
     const { appId, players } = await provisionAppWithPlayers(2);
     await sleep(SYNC_WAIT_MS); // let replica-sync mirror access + grid grants
 
-    const clientA = createCrowdyClient(clientConfig());
-    const clientB = createCrowdyClient(clientConfig());
     // Gameplay requires an app-scoped token; the identity session token is
-    // rejected by game-api/Buddy with SCOPE_MISSING.
-    clientA.setToken(await mintAppToken(appId, players[0].token));
-    clientB.setToken(await mintAppToken(appId, players[1].token));
+    // rejected by game-api/Buddy with SCOPE_MISSING. The mint also names the
+    // datacenter the app is resident in, and both clients are built there —
+    // sending gameplay to the shared entry origin is not something the SDK is
+    // ever used to do, and it puts the two clients on different instances.
+    const accessA = await mintAppAccess(appId, players[0].token);
+    const accessB = await mintAppAccess(appId, players[1].token);
+    const clientA = createCrowdyClient(gameClientConfig(accessA));
+    const clientB = createCrowdyClient(gameClientConfig(accessB));
+    clientA.setToken(accessA.token);
+    clientB.setToken(accessB.token);
     const cleanup = [];
 
     try {
