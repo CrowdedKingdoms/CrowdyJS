@@ -383,3 +383,41 @@ export async function provisionNewAppWithPlayers(playerCount) {
   }
   return { appId: newAppId, orgId, owner, players };
 }
+
+/**
+ * Archive an app this suite created, so a tier does not accumulate one per run.
+ *
+ * WHY THIS IS WORTH DOING AT ALL. dev reached 46 apps, of which exactly ONE (BWF) had a
+ * placement row. The control plane's `app_placement` and `buddy_postgres_locality` checks
+ * each reported every unplaced app, producing 93 of dev's 101 consistency findings — so a
+ * real app placed in the wrong datacenter was indistinguishable from the debris of a test
+ * run. A permanent warning is not a warning.
+ *
+ * ARCHIVE, not delete, because there is no delete: `archiveApp` flips status and keeps the
+ * rows, and hard-deleting an app's distributed Citus data is a separate decision nobody has
+ * taken. The control plane now ignores archived apps in both checks, which is what makes
+ * this call actually reduce the noise rather than just relabel it.
+ *
+ * BEST EFFORT on purpose. A cleanup failure must never fail the test that just passed: the
+ * assertion is about the product, this is about the tier's tidiness, and conflating them
+ * means an unrelated outage in teardown reads as a broken feature. It warns instead, because
+ * silent cleanup failure is how the accumulation happened in the first place.
+ */
+export async function archiveAppQuietly(token, appId) {
+  if (!token || !appId) return false;
+  try {
+    await gql(
+      `mutation($a: BigInt!){ archiveApp(appId: $a){ appId status } }`,
+      { a: String(appId) },
+      token,
+    );
+    return true;
+  } catch (err) {
+    console.warn(
+      `[provision] could not archive e2e app ${appId}: ${err?.message ?? err}. ` +
+        'The tier keeps it, and the control plane will report it as an app with shards ' +
+        'and no placement row until somebody archives it by hand.',
+    );
+    return false;
+  }
+}
