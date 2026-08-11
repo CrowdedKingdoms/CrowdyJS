@@ -71,6 +71,9 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
   // app does not exist, so nothing knows where it lives.
   const admin = createCrowdyClient(entryClientConfig());
   let game;
+  // Hoisted so `finally` can undo an enabled module however far the test got.
+  const moduleName = 'e2e-counter';
+  let appId;
   try {
     // Fresh org + shared app; the creating owner's Owner role carries
     // manage_compute + view_compute_diagnostics.
@@ -96,8 +99,7 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
     game = createCrowdyClient(gameClientConfig(access));
     game.setToken(access.token);
 
-    const moduleName = 'e2e-counter';
-    const appId = app.appId;
+    appId = app.appId;
 
     // Author: new modules start disabled; alwaysOn so it runs without players.
     const mod = await game.compute.upsertModule({
@@ -159,8 +161,28 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
     }
     assert.ok(initRuns.length > 0, 'module load recorded an init run');
 
-    const stats = await game.compute.moduleStats({ appId });
-    assert.ok(stats.totalRuns >= 1, 'stats count the runs');
+    // `computeModuleStats` reads the per-minute usage rollups, which each
+    // instance buffers in memory before writing. So it is NOT readable the
+    // instant an invoke returns, and asserting on it directly is a race this
+    // test lost: it reached here about eight seconds after the invoke, inside
+    // the minute still in progress, and read zero. The run was recorded and the
+    // rollup did arrive — a minute later.
+    //
+    // ck-api publishes the boundary as `computeModuleStats.aggregatedThrough`
+    // and flushes the open minute, which cuts the wait to a few seconds. This
+    // polls rather than reading the boundary field because a released SDK must
+    // keep working against servers that predate it; switch to the boundary once
+    // every tier is past ck-api v1.31.0.
+    const statsDeadline = Date.now() + 90_000;
+    let stats = await game.compute.moduleStats({ appId });
+    while (stats.totalRuns < 1 && Date.now() < statsDeadline) {
+      await new Promise((r) => setTimeout(r, 3_000));
+      stats = await game.compute.moduleStats({ appId });
+    }
+    assert.ok(
+      stats.totalRuns >= 1,
+      `stats count the runs (waited for the usage rollup; totalRuns=${stats.totalRuns})`,
+    );
     assert.ok(stats.byModule.some((m) => m.moduleName === moduleName));
 
     const logs = await game.compute.moduleLogs({ appId, moduleName, limit: 20 });
@@ -179,6 +201,18 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
     const remaining = await game.compute.modules({ appId });
     assert.equal(remaining.length, 0);
   } finally {
+    // An ENABLED module outlives this process: it is `alwaysOn`, so the fleet
+    // keeps ticking it at 2 Hz forever. When the delete above was the last
+    // statement of the happy path only, every failure after `setModuleEnabled`
+    // leaked one — two were still running on dev, from two different failures of
+    // the rollup assertion above. Best-effort, because the app may not exist.
+    try {
+      if (game && appId) {
+        await game.compute.deleteModule({ appId, name: moduleName });
+      }
+    } catch {
+      // Already deleted by the happy path, or never created.
+    }
     admin.close();
     // `game` is undefined if we failed before the app existed.
     game?.close();
