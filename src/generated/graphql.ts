@@ -1131,6 +1131,57 @@ export type AppCodeAdmission = {
   versionRange: Maybe<Scalars['String']['output']>;
 };
 
+/** An app's compute allowance in units per minute, spanning the expression engine and both WASM tiers. Absent when no allowance has been set for the app, in which case the app is measured against the platform reference allowance and is never refused. */
+export type AppComputeBudgetInfo = {
+  __typename?: 'AppComputeBudgetInfo';
+  /** The app the allowance belongs to. */
+  appId: Scalars['BigInt']['output'];
+  /** When false the allowance is observed and recorded and nothing is refused (the ship default). When true, exceeding it refuses further model invokes until the minute rolls. Enforcement additionally requires the fleet kill switch to be in its default position, so a true here can still be observing. */
+  enforce: Scalars['Boolean']['output'];
+  /** Why this number was chosen. Recorded because an allowance with no stated basis is a number the next operator cannot safely change. */
+  note: Maybe<Scalars['String']['output']>;
+  /** Compute units this app may consume per minute. */
+  unitsPerMinute: Scalars['BigInt']['output'];
+  /** When the allowance was last written. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Whether an app is inside its per-minute compute allowance right now, and what would happen if it were not. Reading this does not charge anything. */
+export type AppComputeBudgetStatus = {
+  __typename?: 'AppComputeBudgetStatus';
+  /** The allowance the decision was made against. */
+  allowance: Scalars['BigInt']['output'];
+  /** True when the allowance is the app's own stored one, false when it is the platform reference allowance. The reference allowance can never refuse — it exists so shadow-mode observations have a denominator. */
+  allowanceIsAppOwn: Scalars['Boolean']['output'];
+  /** The app. */
+  appId: Scalars['BigInt']['output'];
+  /** Which engines the units came from. Carried on every decision because a single allowance spans the engines, so a player invoke can be refused for compute modules the developer forgot were ticking — and that is only explainable with the breakdown. */
+  byEngine: Array<EngineComputeUnits>;
+  /** Whether being over the allowance is currently refusing invokes. False while in shadow mode, which is the ship default. */
+  enforced: Scalars['Boolean']['output'];
+  /** Whether the app is over the allowance this minute. */
+  overBudget: Scalars['Boolean']['output'];
+  /** Milliseconds until the minute rolls and the allowance resets. */
+  retryAfterMs: Scalars['Int']['output'];
+  /** Compute units accrued in the current minute, across every engine. Between reconciles this is the serving instance's own view, so it can read low on a multi-instance fleet; it converges within seconds. */
+  unitsUsed: Scalars['BigInt']['output'];
+};
+
+/** What an app consumed, per engine, in ONE unit — the number a developer uses to compare the model engine against compute modules, and the number an operator's per-minute allowance is checked against. Derived from the existing per-minute ledgers (wasm_compute_usage, player_wasm_compute_usage, gm_automation_runs, gm_event_log); there is deliberately no separate rollup table for it. */
+export type AppComputeUsage = {
+  __typename?: 'AppComputeUsage';
+  /** Units per engine, always including engines that contributed nothing, so a zero is distinguishable from an engine the query forgot. */
+  byEngine: Array<EngineComputeUnits>;
+  /** Units divided by the window length. Useful for cost, misleading for safety — compare peakMinuteUnits against an allowance, not this. */
+  meanUnitsPerMinute: Scalars['Float']['output'];
+  /** The highest single minute in the window, summed across engines. This is the number a per-minute allowance refuses on: a mean over an hour hides the minute that would have been refused. */
+  peakMinuteUnits: Scalars['BigInt']['output'];
+  /** Compute units across every engine in the window. */
+  totalUnits: Scalars['BigInt']['output'];
+  /** Length of the window in minutes, as clamped (1 to 1440). */
+  windowMinutes: Scalars['Int']['output'];
+};
+
 /** Where an app runs: none (draft), shared (the shared game-api), or dedicated (a provisioned environment). */
 export enum AppDeploymentTarget {
   /** Runs on a dedicated, org-provisioned environment. */
@@ -2154,6 +2205,8 @@ export type CreateAgentSessionInput = {
 
 /** Input payload for creating a new app. */
 export type CreateAppInput = {
+  /** Datacenter the app will live in, e.g. 'or' or 'va'. Query placeableDatacenters for the accepted codes and whether each can currently hold an app. REQUIRED and permanent: an app is distributed on app_id, so all of its data lives on one node in one datacenter and that is fixed when the id is minted. Creation FAILS if the datacenter is unknown to this deployment or holds no capacity, rather than creating an app that cannot be routed. There is no default — the instance answering this call may be in a different datacenter from the one you want. Moving an app afterwards is an operator action. */
+  datacenter: Scalars['String']['input'];
   /** Optional short plain-text description for listings. */
   description?: InputMaybe<Scalars['String']['input']>;
   /** Optional JSON-encoded marketplace metadata string (see App.metadata). Defaults to an empty object when omitted. */
@@ -3277,6 +3330,16 @@ export enum CrowdyStudioTarget {
   Server = 'SERVER'
 }
 
+/** Whether a datacenter currently has a ck-api instance able to serve clients. Three-valued on purpose: "nothing is serving there" and "the liveness signal could not be read" look identical through a boolean and call for opposite reactions. */
+export enum DatacenterServingStatus {
+  /** The signal was readable and reported no instance able to take a client there. An app placed here would be created and stored correctly, and its players would be told the app is temporarily offline until an instance returns. */
+  NotServing = 'NOT_SERVING',
+  /** At least one instance in that datacenter has heartbeated within the freshness window and is not draining. */
+  Serving = 'SERVING',
+  /** The liveness signal itself could not be read or trusted. Must NOT be presented as an outage: a fleet-wide heartbeat failure once made every datacenter look dead while all of them were fine, and healthy players were told their app was offline. */
+  Unknown = 'UNKNOWN'
+}
+
 /** Approve or reject one exact pending tool call by its displayed argument hash. */
 export type DecideAgentToolInput = {
   /** Exact sha256 hash displayed by APPROVAL_REQUESTED; substitutions and stale contexts fail. */
@@ -3361,6 +3424,15 @@ export type DeployPlayerComputeInput = {
 export type DevLoginInput = {
   /** Email of the account to sign in as (created if absent). */
   email: Scalars['String']['input'];
+};
+
+/** Compute units attributed to one engine over the query window. */
+export type EngineComputeUnits = {
+  __typename?: 'EngineComputeUnits';
+  /** The engine whose meter produced these units. */
+  engine: MeteredComputeEngine;
+  /** Compute units, where one unit is one millisecond of measured execution time. Comparable across engines by construction: both engines measure the same quantity with the same clock (process.hrtime around the app's code), and a WASM engine additionally floors its answer by fuel/22,000,000 to charge work done inside the sandbox between two host calls. Zero when the engine ran nothing. */
+  units: Scalars['BigInt']['output'];
 };
 
 /** Atomically get-or-create a container by an opaque binding key. The key is unique per (appId, typeName, sessionId); concurrent ensures converge on one row. Creation-only fields are ignored when the row already exists. */
@@ -4888,6 +4960,16 @@ export type LoginUserInput = {
   password: Scalars['String']['input'];
 };
 
+/** Which engine's meter produced a quantity of compute units. "expression" is the model expression engine (player invokes, automations and timers); "studio_wasm" is developer-authored compute modules; "player_wasm" is the player compute tier, which has its own tables and its own billed metric. */
+export enum MeteredComputeEngine {
+  /** The model expression engine: gameModelInvoke, automation runs and timer fires. */
+  Expression = 'EXPRESSION',
+  /** Player-authored WASM compute. */
+  PlayerWasm = 'PLAYER_WASM',
+  /** Developer-authored WASM compute modules. */
+  StudioWasm = 'STUDIO_WASM'
+}
+
 /** Input for mintAppToken: directly mint an app-scoped gameplay token for the calling user (native/direct path, no browser redirect). */
 export type MintAppTokenInput = {
   /** Numeric id of the app to mint a confined gameplay token for. Free/open apps are auto-granted access; paid apps require an existing entitlement (else FORBIDDEN). */
@@ -4934,6 +5016,8 @@ export type Mutation = {
   claimGridChunk: ChunkClaimResult;
   /** Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses (ownership arrives only via grid purchase, P4b). The grid must exist and have no current owner; game rules gate who may attempt a claim. */
   claimGridOwnership: GridClaimResult;
+  /** Remove an app's compute allowance, returning it to observation against the platform reference allowance. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
+  clearAppComputeBudget: Scalars['Boolean']['output'];
   /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. */
   completeLoginLink: AuthResponse;
   /** Delete a compute module and (via cascade) its versions, triggers, and lease. Run history is retained for auditing. Returns true when a module was deleted. Requires the org 'manage_compute' permission. */
@@ -4972,7 +5056,7 @@ export type Mutation = {
   createAccessTier: AppAccessTier;
   /** Creates an actor (a player’s presence/instance in an app world) owned by the authenticated user and returns the persisted row (including the server-set `createdAt`). Requires a valid game token. If `input.avatarId` is set it must reference an avatar the caller owns (throws Unauthorized otherwise). `input.uuid` must be the 32-character ASCII actor id used on the UDP wire (NOT a hyphenated RFC-4122 UUID). */
   createActor: Actor;
-  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=DRAFT unless overridden in the input. */
+  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=DRAFT unless overridden in the input. */
   createApp: App;
   /** Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar". */
   createAvatar: Avatar;
@@ -5118,7 +5202,7 @@ export type Mutation = {
   gameModelEnsureContainer: GmEnsureContainerResult;
   /** Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps'). */
   gameModelGrantTierFeature: GmTierFeature;
-  /** Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). Invoke-policy denials are gameplay verdicts, NOT exceptions: they return success=false with errorMessage and log a failure event (observable via gameModelEvents). Scope violations (calling a server-scope function as a non-admin, or an internal function directly) are misconfigurations and throw FORBIDDEN. This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here. */
+  /** Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). Invoke-policy denials are gameplay verdicts, NOT exceptions: they return success=false with errorMessage and log a failure event (observable via gameModelEvents). Scope violations (calling a server-scope function as a non-admin, or an internal function directly) are misconfigurations and throw FORBIDDEN. This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here. RATE LIMITED per player per app, defaulting to 120 invocations per 10 seconds: over the limit the call is refused with extensions.code RATE_LIMITED, extensions.blame 'budget' (the caller's own budget — not a fault in the game's code and not a platform failure) and extensions.retryAfterMs. A client that awaits each response cannot reach the limit, because the per-call ceiling already bounds a serial caller well below it. */
   gameModelInvoke: GmInvokeResult;
   /** Join an existing session as a participant, optionally with a role. Requires a valid token and app access. */
   gameModelJoinSession: GmSessionParticipant;
@@ -5176,7 +5260,7 @@ export type Mutation = {
   login: AuthResponse;
   /** Ends the current session by deleting the game_token that authenticated this request; other devices stay logged in. An identity session logout also cascades to (revokes) every app token it minted. Returns false if no token was resolved. */
   logout: Scalars['Boolean']['output'];
-  /** Ends every active session for the authenticated user (deletes all their game_tokens and records revocations). Requires a valid session token. */
+  /** Ends every active session for the authenticated user: deletes every session token and every app-scoped gameplay token derived from one, so the user is signed out of the platform and of every game they had entered. Takes effect immediately — a deleted token stops authenticating on its next request rather than at its next refresh. Requires a valid session token. */
   logoutAllDevices: Scalars['Boolean']['output'];
   /** Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). Side effect: may create an app_user_access row on the app's free default tier. */
   mintAppToken: AppTokenResponse;
@@ -5246,7 +5330,7 @@ export type Mutation = {
   resetPassword: Scalars['Boolean']['output'];
   /** Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. */
   revokeAppAccess: AppUserAccess;
-  /** Revoke a previously-granted app authorization and immediately revoke the user's live app tokens for it. Requires a SESSION token. */
+  /** Withdraw consent for an app and immediately invalidate every app-scoped token the authenticated user holds for it, whichever session minted them — the tokens stop authenticating on their next request, not at their next refresh. Atomic: if the tokens cannot be invalidated, consent is left in place and this returns an error, so a successful response is the only state in which access has actually been withdrawn. Does NOT sign the user out: their identity session and their tokens for other apps are untouched. Returns false when there was nothing to revoke (no active grant and no live tokens), which makes a repeat call safe. Requires a SESSION token. */
   revokeAppAuthorization: Scalars['Boolean']['output'];
   /** Revoke an active player-code admission. Requires 'manage_compute'. SIDE EFFECTS: audit row + replica sync; game-api drains affected server modules and blocks client artifact fetches on the next admission refresh. */
   revokeAppCodeAdmission: AppCodeAdmission;
@@ -5278,6 +5362,8 @@ export type Mutation = {
   setAppClientSettings: PortalConsentState;
   /** Set an app's player-code censorship mode. Requires 'manage_compute'. SIDE EFFECTS: writes an immutable audit row and replica-syncs the mode to game-api. Switching to ALLOW_LIST is strict: unadmitted code (including self-authored code) drains at the runtime activation gate; deploy/compile remain allowed. */
   setAppCodeAdmissionMode: CodeAdmissionMode;
+  /** Set an app's compute allowance in units per minute, spanning the model expression engine and both WASM tiers. One unit is one millisecond of measured execution time. An over-ceiling value is REFUSED naming the ceiling (6000000 units per minute) rather than accepted and clamped, so the value reported back is always the value in force. Set enforce to true to refuse invokes when the allowance is exceeded; leave it false to record the decision and admit, which is what produces the measurements a threshold should be chosen from. Requires app-admin ('manage_apps'). */
+  setAppComputeBudget: AppComputeBudgetInfo;
   /** Set how a player claim confers grid ownership in this app (D4): SELF_CLAIM, APPROVAL (optionally with a designated approver list), INVITE, or MARKETPLACE_ONLY. Requires 'manage_apps'. SIDE EFFECTS: replica-syncs to game-api, where claimGridOwnership enforces the policy. Changing policy never revokes existing grid_ownership rows. */
   setAppGridClaimPolicy: GridClaimPolicy;
   /** Set the app's marketplace org revenue share in basis points (OQ-3; taken from the post-platform remainder). Requires 'manage_billing'. BWF uses 0. */
@@ -5491,6 +5577,11 @@ export type MutationClaimGridChunkArgs = {
 export type MutationClaimGridOwnershipArgs = {
   appId: Scalars['BigInt']['input'];
   gridId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationClearAppComputeBudgetArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -6410,6 +6501,14 @@ export type MutationSetAppCodeAdmissionModeArgs = {
 };
 
 
+export type MutationSetAppComputeBudgetArgs = {
+  appId: Scalars['BigInt']['input'];
+  enforce?: InputMaybe<Scalars['Boolean']['input']>;
+  note?: InputMaybe<Scalars['String']['input']>;
+  unitsPerMinute: Scalars['Int']['input'];
+};
+
+
 export type MutationSetAppGridClaimPolicyArgs = {
   appId: Scalars['BigInt']['input'];
   approverUserIds?: InputMaybe<Array<Scalars['BigInt']['input']>>;
@@ -7054,6 +7153,34 @@ export enum PaymentProvider {
   /** Stripe Checkout. Hosted card payment session; completion is confirmed via Stripe webhooks. */
   Stripe = 'STRIPE'
 }
+
+/** One datacenter an app can be created in. The `code` is exactly what createApp takes as input.datacenter. */
+export type PlaceableDatacenter = {
+  __typename?: 'PlaceableDatacenter';
+  /** How many shards of the app colocation group this datacenter currently holds. This is the placement odds: createApp mints candidate app ids until one hashes into the requested datacenter, so a datacenter holding half the shards is satisfied in about two attempts. Zero means unplaceable. Always 0 on a deployment that distributes nothing, where the number does not exist and `placeable` is true regardless — read `placeable`, not this, to decide whether a choice is offerable. */
+  appShardCount: Scalars['Int']['output'];
+  /** Datacenter code, e.g. 'or' or 'va'. Pass this verbatim as createApp's input.datacenter; it is compared lowercase. */
+  code: Scalars['String']['output'];
+  /** HTTPS GraphQL origin clients of an app in this datacenter should use. Null only where no topology has been pushed, which on a Citus deployment means the datacenter cannot yet be reached and on a single-node one means there is nothing to route. Informational for a picker: createApp does not need it, and appDiscovery is what a client reads per app. */
+  gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** The wss:// form of gameApiUrl. Null under the same conditions. */
+  gameApiWsUrl: Maybe<Scalars['String']['output']>;
+  /** Whether createApp will accept this datacenter right now. False means it holds no shards of the app colocation group, so no app id can hash into it and creation would fail after exhausting its candidates. Do not offer a false entry as a choice — show it as unavailable, because dropping it hides a half-built datacenter from the only person who would notice. */
+  placeable: Scalars['Boolean']['output'];
+  /** Whether any ck-api instance in this datacenter is currently serving clients. NOT part of whether an app can be PLACED here: placement is about where the data lands and survives a datacenter being down, while this is about whether players could connect today. A datacenter that is placeable but NOT_SERVING will hold the app fine and answer its clients with APP_UNAVAILABLE until an instance comes back, so it is worth warning about and wrong to forbid. UNKNOWN means the liveness signal itself could not be read and must not be shown as an outage — a fleet-wide heartbeat failure once made every datacenter look dead while all of them were fine. */
+  serving: DatacenterServingStatus;
+};
+
+/** The datacenter choices this deployment offers for app creation, plus the two facts a caller needs to interpret an empty list. */
+export type PlaceableDatacenters = {
+  __typename?: 'PlaceableDatacenters';
+  /** Every datacenter this deployment knows how to route to, sorted by code, including any that cannot currently hold an app. EMPTY means the control plane has never pushed a datacenter topology here, in which case createApp refuses every datacenter and the remedy is a change order (pg:upsert_datacenter_topology) rather than a different argument. */
+  datacenters: Array<PlaceableDatacenter>;
+  /** Whether this deployment actually places apps by datacenter. True on any Citus tier: the datacenter is verified at creation and an unknown or empty one is refused. False on a single-node deployment (a developer machine, the CI database), where there is exactly one place an app can be, the argument is still required but cannot be verified, and the single entry returned is a formality. A caller should present a choice when this is true and need not when it is false. */
+  placementEnforced: Scalars['Boolean']['output'];
+  /** The datacenter of the instance that answered this call, or null if it was not told its own. Present so a picker can SAY which datacenter it is talking to; deliberately NOT a default. The published origin is a multivalue record over every datacenter's load balancer, so the instance answering is whichever one DNS picked, and defaulting to it would place apps by exactly the accident createApp's required argument exists to remove. */
+  servedBy: Maybe<Scalars['String']['output']>;
+};
 
 /** Public platform discovery. Clients/SDKs read the shared game-api URL here to route apps deployed to the shared environment. */
 export type PlatformConfig = {
@@ -7887,6 +8014,12 @@ export type Query = {
   appCodeAdmissionQueue: Array<PlayerCodeAdmissionQueueEntry>;
   /** List an app's player-code admission entries, newest first. Requires 'view_compute_diagnostics'. By default returns active entries only; includeRevoked adds audit-visible revoked rows. Admission controls execution, never source visibility. */
   appCodeAdmissions: Array<AppCodeAdmission>;
+  /** An app's stored compute allowance, or null when none has been set — in which case the app is measured against the platform reference allowance and is never refused. Requires app-admin ('manage_apps'). */
+  appComputeBudget: Maybe<AppComputeBudgetInfo>;
+  /** Whether an app is inside its per-minute compute allowance right now, which engines its units came from, and whether exceeding the allowance is currently refusing invokes or only being recorded. Shipped in shadow mode: unless an operator has set an enforcing allowance for this app, overBudget can be true while enforced is false. Requires app-admin ('manage_apps'). */
+  appComputeBudgetStatus: AppComputeBudgetStatus;
+  /** What an app consumed, in compute units, split by engine — the model expression engine, developer compute modules, and player compute — over a window of minutes. ONE unit spans them: a compute unit is one millisecond of measured execution time, which both engines already measure with the same clock, floored per engine by that engine's own work counter where the clock cannot see the work (fuel for WASM). Use peakMinuteUnits, not meanUnitsPerMinute, when comparing against a per-minute allowance. Requires app-admin ('manage_apps'). */
+  appComputeUsage: AppComputeUsage;
   /** Resolve where one or more apps are placed, WITHOUT authenticating. Call this before login and connect to the returned gameApiUrl, so the session and app token are both written in the app's own datacenter instead of across a WAN. Pass every app a launcher might switch to and cache the result; placement changes rarely and only an operator can change it. An app with no placement comes back with nulls, which means 'keep using the shared origin'. */
   appDiscovery: Array<AppDiscovery>;
   /** Lists org members eligible for a manual app access grant (active members of the app's owning org). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Use the returned user ids with grantAppAccess. */
@@ -7953,7 +8086,7 @@ export type Query = {
   computeAppDiagnostics: WasmAppDiagnostics;
   /** Read one compute module by name. Requires the org 'view_compute_diagnostics' permission. */
   computeModule: WasmModule;
-  /** Diagnostic log lines for an app's compute modules, newest first. Phase 1 surfaces failed-run errors; the runtime adds guest log output when modules execute. Requires the org 'view_compute_diagnostics' permission. */
+  /** Diagnostic log lines for an app's compute modules, newest first: failed-run errors from the runtime plus guest ck.log output. Complete across the fleet — each line carries the instance that produced it. Requires the org 'view_compute_diagnostics' permission. */
   computeModuleLogs: Array<WasmModuleLogEntry>;
   /** Read the app's compute policy (platform defaults when unset). Requires the org 'view_compute_diagnostics' permission. */
   computeModulePolicy: WasmModulePolicy;
@@ -8155,6 +8288,8 @@ export type Query = {
   paymentEvents: PaymentEventsPage;
   /** Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected. Relay cursor connection; prefer this over the offset-based paymentEvents. */
   paymentEventsConnection: PaymentEventsConnection;
+  /** The datacenters this deployment can create an app in. Call this before createApp and use a returned `code` as input.datacenter: the argument is REQUIRED and permanent, because an app is distributed on its app_id and all of its data lives in one datacenter for the life of the app. Requires authentication. Offer only entries with placeable=true; an empty list means no datacenter topology has been pushed here and app creation will refuse until it has. Cheap and stable — the answer changes only when the fleet does, and it is served from Citus reference tables on whichever instance answers. */
+  placeableDatacenters: PlaceableDatacenters;
   /** Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required. */
   platformConfig: PlatformConfig;
   /** The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds). */
@@ -8233,6 +8368,10 @@ export type Query = {
   userAppStates: Array<UserAppState>;
   /** Lists the avatars owned by `userId`. Requires a valid game token. Owner-aware: when the caller is NOT the owner, each avatar’s `privateState` is stripped (returned null); `publicState` is always included. State blobs are base64-encoded binary. */
   userAvatars: Array<Avatar>;
+  /** Faults grouped by engine, kind, blame and subject over a window, most frequent first. This is the health question: a count per shape answers 'what is failing and how often', which a single overwritten last_error slot never could — five prod modules read last_error = NULL while holding 4,767 lifetime watchdog terminations between them. Requires the org 'view_compute_diagnostics' permission. */
+  userCodeFaultSummary: Array<UserCodeFaultSummaryEntry>;
+  /** Failures of code this app's users wrote, newest first, across all three engines (model expressions, studio WASM, player WASM). Each row carries what ran, what went wrong, whose problem it is, whether retrying could help, and what the run cost against what it was allowed. Requires the org 'view_compute_diagnostics' permission. */
+  userCodeFaults: Array<UserCodeFaultRecord>;
   /** Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated. */
   usersConnection: UsersConnection;
   /** SUPER-ADMIN ONLY paginated user search; replaces the legacy `users`/`usersByGamertag`/`usersByEmail` queries. `query` is ILIKE-prefix matched against email, gamertag, and disambiguation, plus an exact user_id match. Requires a super-admin bearer game token. */
@@ -8314,6 +8453,22 @@ export type QueryAppCodeAdmissionQueueArgs = {
 export type QueryAppCodeAdmissionsArgs = {
   appId: Scalars['BigInt']['input'];
   includeRevoked?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryAppComputeBudgetArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppComputeBudgetStatusArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppComputeUsageArgs = {
+  appId: Scalars['BigInt']['input'];
+  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -9169,6 +9324,24 @@ export type QueryUserAppStateArgs = {
 
 export type QueryUserAvatarsArgs = {
   userId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryUserCodeFaultSummaryArgs = {
+  appId: Scalars['BigInt']['input'];
+  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryUserCodeFaultsArgs = {
+  appId: Scalars['BigInt']['input'];
+  blame?: InputMaybe<UserCodeFaultBlame>;
+  engine?: InputMaybe<UserCodeFaultEngine>;
+  kind?: InputMaybe<UserCodeFaultKind>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  subject?: InputMaybe<Scalars['String']['input']>;
+  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -10907,6 +11080,105 @@ export enum UserCodeFaultBlame {
   Platform = 'PLATFORM'
 }
 
+/** Which engine ran the code that faulted: the model expression engine, studio WASM compute, or player WASM compute. */
+export enum UserCodeFaultEngine {
+  /** The model expression engine: declarative JSON ASTs bounded by gas and a wall-clock deadline. */
+  Expression = 'EXPRESSION',
+  /** Player WASM compute: the same compiler and sandbox at a lower trust tier, owned by a player. */
+  PlayerWasm = 'PLAYER_WASM',
+  /** Studio WASM compute: Rust compiled by the pinned toolchain and run in a worker-thread sandbox. */
+  StudioWasm = 'STUDIO_WASM'
+}
+
+/** What went wrong, at the granularity an operator would alert on and a developer would fix. One kind per distinguishable remedy: an expression timeout and a watchdog termination are both "ran too long" and are kept apart because one rolls back a transaction and the other kills a worker thread. */
+export enum UserCodeFaultKind {
+  BindingMismatch = 'BINDING_MISMATCH',
+  CallLimitExceeded = 'CALL_LIMIT_EXCEEDED',
+  CircuitOpen = 'CIRCUIT_OPEN',
+  ContractValidationFailed = 'CONTRACT_VALIDATION_FAILED',
+  DbOpsExceeded = 'DB_OPS_EXCEEDED',
+  DisabledByPolicy = 'DISABLED_BY_POLICY',
+  EgressBudgetExceeded = 'EGRESS_BUDGET_EXCEEDED',
+  ExpressionError = 'EXPRESSION_ERROR',
+  ExpressionTimeout = 'EXPRESSION_TIMEOUT',
+  FuelExhausted = 'FUEL_EXHAUSTED',
+  GasExhausted = 'GAS_EXHAUSTED',
+  HostCallFailed = 'HOST_CALL_FAILED',
+  InternalError = 'INTERNAL_ERROR',
+  MemoryExceeded = 'MEMORY_EXCEEDED',
+  ModuleLoadFailed = 'MODULE_LOAD_FAILED',
+  PlatformBusy = 'PLATFORM_BUSY',
+  QuotaExhausted = 'QUOTA_EXHAUSTED',
+  RateLimitExceeded = 'RATE_LIMIT_EXCEEDED',
+  ResponseTooLarge = 'RESPONSE_TOO_LARGE',
+  SandboxPoisoned = 'SANDBOX_POISONED',
+  StateWriteBudgetExceeded = 'STATE_WRITE_BUDGET_EXCEEDED',
+  UnknownHostFunction = 'UNKNOWN_HOST_FUNCTION',
+  WasmTrap = 'WASM_TRAP',
+  WatchdogTerminated = 'WATCHDOG_TERMINATED',
+  WorkerExit = 'WORKER_EXIT'
+}
+
+/** One failure of code a user wrote, from any of the three engines. Replaces three disagreeing surfaces: a bare error string on the invoke path, a run table that recorded failures and not successes, and a last_error slot the next success cleared. */
+export type UserCodeFaultRecord = {
+  __typename?: 'UserCodeFaultRecord';
+  /** The user the work ran on behalf of, when there was one. */
+  actingUserId: Maybe<Scalars['BigInt']['output']>;
+  /** The app (tenant) the fault occurred in. */
+  appId: Scalars['BigInt']['output'];
+  /** Whose problem this is. Stored rather than derived from kind, because the same kind can have a different owner given context — which is what platform saturation reported as an author timeout cost us. */
+  blame: UserCodeFaultBlame;
+  /** The wall-clock budget it was given, in microseconds. Stored beside durationUs rather than as a ratio: 249ms against a 250ms budget and 249ms against a 2000ms budget are different bugs. */
+  budgetUs: Maybe<Scalars['String']['output']>;
+  /** Operator-facing detail, for the developer who owns the app. Never shown to a player. */
+  detail: Maybe<Scalars['String']['output']>;
+  /** Wall-clock microseconds the work consumed before it faulted. */
+  durationUs: Maybe<Scalars['String']['output']>;
+  /** Which engine ran the code. */
+  engine: UserCodeFaultEngine;
+  /** The entry point that started the work: player_invoke, automation, system, tick, invoke, event, init. */
+  entryPoint: Maybe<Scalars['String']['output']>;
+  /** Unique fault id. */
+  faultId: Scalars['String']['output'];
+  /** Correlation id shared with gm_event_log, gm_automation_runs and wasm_module_runs; pass it to gameModelFlow for the whole timeline. */
+  flowId: Maybe<Scalars['String']['output']>;
+  /** The grid, when the faulting code belonged to one (player WASM). */
+  gridId: Maybe<Scalars['BigInt']['output']>;
+  /** Which ck-api instance observed the fault. A fault that only ever appears on one instance is a different bug from one the fleet shares. */
+  instanceId: Maybe<Scalars['String']['output']>;
+  /** What went wrong. */
+  kind: UserCodeFaultKind;
+  /** When the fault was recorded. */
+  occurredAt: Scalars['DateTime']['output'];
+  /** Whether repeating the identical call could succeed with nothing else changing. This is what a game reads to choose between retrying and telling the player it is broken. */
+  retryable: Scalars['Boolean']['output'];
+  /** Mutation steps or host calls completed before the fault. This is what distinguishes "never started" from "died on step nine". */
+  stepsCompleted: Maybe<Scalars['Int']['output']>;
+  /** What ran: the function name for the expression engine, the module name for either WASM engine. */
+  subject: Scalars['String']['output'];
+  /** Budget units granted, in the same units as unitsUsed. */
+  unitsLimit: Maybe<Scalars['String']['output']>;
+  /** Budget units consumed — expression-engine gas or WASM fuel. Named neutrally so a developer using both engines can compare them. */
+  unitsUsed: Maybe<Scalars['String']['output']>;
+};
+
+/** Faults grouped by engine, kind and blame over a window — the shape to alert on, and the answer to "is this us or them". */
+export type UserCodeFaultSummaryEntry = {
+  __typename?: 'UserCodeFaultSummaryEntry';
+  /** Whose problem it is. */
+  blame: UserCodeFaultBlame;
+  /** Which engine. */
+  engine: UserCodeFaultEngine;
+  /** How many faults of this shape in the window. */
+  faults: Scalars['Int']['output'];
+  /** What went wrong. */
+  kind: UserCodeFaultKind;
+  /** The most recent one. */
+  lastAt: Scalars['DateTime']['output'];
+  /** What ran. */
+  subject: Scalars['String']['output'];
+};
+
 export type UserDonationData = {
   __typename?: 'UserDonationData';
   /** ISO currency code for the total, e.g. "usd". */
@@ -11310,7 +11582,7 @@ export type WasmModule = {
   description: Maybe<Scalars['String']['output']>;
   /** Whether the module may run. New modules start disabled; enable after a successful compile. */
   enabled: Scalars['Boolean']['output'];
-  /** Last error recorded for this module. */
+  /** The single most recent error string, overwritten by each new failure and CLEARED by the next success — so a module that fails intermittently reports null between failures. Do not read this as a health signal: use userCodeFaultSummary, which keeps every fault with its kind and blame. Kept for the "what went wrong just now" case it is genuinely good at. */
   lastError: Maybe<Scalars['String']['output']>;
   /** Unique module id (UUID). */
   moduleId: Scalars['String']['output'];
@@ -11323,6 +11595,8 @@ export type WasmModule = {
 /** A diagnostic log line for a compute module. Phase 1 surfaces failed-run errors; the Phase 2 runtime adds guest ck.log output. */
 export type WasmModuleLogEntry = {
   __typename?: 'WasmModuleLogEntry';
+  /** Which ck-api instance produced the line. Null for runtime error lines, which are read back from the run table rather than attributed to an instance. Present on guest ck.log lines, which used to be served from the answering replica's memory and so silently excluded every other instance's output. */
+  instanceId: Maybe<Scalars['String']['output']>;
   /** Log level: debug | info | warn | error. */
   level: Scalars['String']['output'];
   /** The log message. */
@@ -11372,7 +11646,7 @@ export type WasmModulePolicy = {
   statePersistMinIntervalMs: Scalars['Int']['output'];
 };
 
-/** One recorded compute execution (init / tick batch / event / invoke): timing, fuel, host-call counts, outcome. Written by the runtime (Phase 2); empty until modules execute. */
+/** One recorded compute execution: timing, fuel, host-call counts, outcome. NOT a sample of all executions — a successful tick is deliberately not recorded here, because ticks are high-frequency and aggregate into per-minute usage instead, so this table holds every failure plus demand-driven runs plus the reload that follows a terminated worker. Counting rows here to get a success rate gives roughly 50% against a true 0.1-1.6%; computeModuleStats and computeAppDiagnostics read the per-minute rollups for that. Use this for what happened on an individual run and for flow correlation. */
 export type WasmModuleRun = {
   __typename?: 'WasmModuleRun';
   /** The app (tenant). */
@@ -11751,6 +12025,11 @@ export type MyAppsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type MyAppsQuery = { __typename?: 'Query', myApps: Array<{ __typename?: 'App', appId: string, orgId: string, name: string, slug: string | null, description: string | null, visibility: AppVisibility, status: AppStatus, metadata: string | null, splitMode: boolean, gameApiUrl: string | null, createdAt: string, updatedAt: string, org: { __typename?: 'Organization', orgId: string, slug: string, name: string } | null }> };
+
+export type PlaceableDatacentersQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PlaceableDatacentersQuery = { __typename?: 'Query', placeableDatacenters: { __typename?: 'PlaceableDatacenters', placementEnforced: boolean, servedBy: string | null, datacenters: Array<{ __typename?: 'PlaceableDatacenter', code: string, placeable: boolean, serving: DatacenterServingStatus, appShardCount: number, gameApiUrl: string | null, gameApiWsUrl: string | null }> } };
 
 export type SetAppVisibilityMutationVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -14718,6 +14997,7 @@ export const CreateAppDocument = {"kind":"Document","definitions":[{"kind":"Oper
 export const MarketplaceAppsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceApps"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AppMarketplaceFilterInput"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"apps"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"limit"}},{"kind":"Field","name":{"kind":"Name","value":"offset"}}]}}]}}]}}]} as unknown as DocumentNode<MarketplaceAppsQuery, MarketplaceAppsQueryVariables>;
 export const AppsConnectionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppsConnection"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AppMarketplaceFilterInput"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appsConnection"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}},{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}},{"kind":"Field","name":{"kind":"Name","value":"startCursor"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"totalCount"}}]}}]}}]} as unknown as DocumentNode<AppsConnectionQuery, AppsConnectionQueryVariables>;
 export const MyAppsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyApps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myApps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"splitMode"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"org"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<MyAppsQuery, MyAppsQueryVariables>;
+export const PlaceableDatacentersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlaceableDatacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"placeableDatacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"placementEnforced"}},{"kind":"Field","name":{"kind":"Name","value":"servedBy"}},{"kind":"Field","name":{"kind":"Name","value":"datacenters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"placeable"}},{"kind":"Field","name":{"kind":"Name","value":"serving"}},{"kind":"Field","name":{"kind":"Name","value":"appShardCount"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiUrl"}},{"kind":"Field","name":{"kind":"Name","value":"gameApiWsUrl"}}]}}]}}]}}]} as unknown as DocumentNode<PlaceableDatacentersQuery, PlaceableDatacentersQueryVariables>;
 export const SetAppVisibilityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAppVisibility"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"visibility"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AppVisibility"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAppVisibility"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"visibility"},"value":{"kind":"Variable","name":{"kind":"Name","value":"visibility"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SetAppVisibilityMutation, SetAppVisibilityMutationVariables>;
 export const UpdateAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAppInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateApp"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAppMutation, UpdateAppMutationVariables>;
 export const LogoutDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"Logout"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"logout"}}]}}]} as unknown as DocumentNode<LogoutMutation, LogoutMutationVariables>;

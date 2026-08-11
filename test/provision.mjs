@@ -348,15 +348,77 @@ export async function ownerOrgId(token) {
 }
 
 /**
+ * The first datacenter this deployment can actually place an app in.
+ *
+ * WHY A SUITE HAS TO ASK RATHER THAN NAME ONE. `createApp` takes a required, permanent
+ * `datacenter`, and the accepted codes are a property of the DEPLOYMENT: prod has `or`
+ * and `va`, dev has its own, and a developer's single-node database has neither. A
+ * hard-coded code would pass wherever it was written and fail everywhere else, which is
+ * the same shape of bug as the hard-coded endpoints this suite already learned not to
+ * carry.
+ *
+ * FIRST PLACEABLE, NOT FIRST. An entry with `placeable: false` holds no shards, so no app
+ * id can hash into it and creation there fails after 64 candidates — a slow, confusing
+ * 503 in the middle of a test run.
+ *
+ * Deliberately NOT falling back to a guess when there is nothing: an empty list means the
+ * control plane has not pushed a topology, and every app-creating test in this suite is
+ * about to fail for that one reason. Saying it once, here, beats each of them reporting
+ * its own symptom.
+ */
+export function firstPlaceable(answer, where) {
+  const choice = (answer?.datacenters ?? []).find((d) => d.placeable);
+  if (!choice) {
+    const known = (answer?.datacenters ?? []).map((d) => d.code).join(', ');
+    throw new Error(
+      `${where}: this deployment can place an app in no datacenter` +
+        (known ? ` (it knows ${known}, none placeable)` : ' (it knows none)') +
+        '. createApp requires one, so no app-creating test can run. The control plane ' +
+        'pushes this with pg:upsert_datacenter_topology.',
+    );
+  }
+  return choice.code;
+}
+
+/** {@link firstPlaceable} over the raw endpoint, for callers with a token and no SDK client. */
+export async function placeableDatacenter(token) {
+  const data = await gql(
+    `query{ placeableDatacenters{ datacenters{ code placeable } } }`,
+    {},
+    token,
+  );
+  return firstPlaceable(data.placeableDatacenters, 'placeableDatacenter');
+}
+
+/** {@link firstPlaceable} over an SDK client, which is how the e2e suites hold a session. */
+export async function sdkPlaceableDatacenter(client) {
+  return firstPlaceable(
+    await client.apps.placeableDatacenters(),
+    'client.apps.placeableDatacenters',
+  );
+}
+
+/**
  * Create a brand-new app under `orgId`. Per the management API, createApp also
  * provisions the app's free, **open-by-default** "Default" access tier with full
  * runtime permissions — the business rule under test: any authenticated player
  * gains access automatically (no explicit grantAppAccess) when they connect.
+ *
+ * The datacenter is RESOLVED rather than passed or defaulted: it is required, permanent,
+ * and deployment-specific. See {@link firstPlaceable}.
  */
 export async function createNewApp(token, orgId, label = rid()) {
+  const datacenter = await placeableDatacenter(token);
   const data = await gql(
     `mutation($i: CreateAppInput!){ createApp(input: $i){ appId orgId } }`,
-    { i: { orgId, name: `e2e-newapp-${label}`, slug: `e2e-newapp-${label}` } },
+    {
+      i: {
+        orgId,
+        name: `e2e-newapp-${label}`,
+        slug: `e2e-newapp-${label}`,
+        datacenter,
+      },
+    },
     token,
   );
   return data.createApp.appId;
