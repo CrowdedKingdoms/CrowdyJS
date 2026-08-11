@@ -118,6 +118,11 @@ export async function kitInvoke<T = unknown>(
           functionName: input.functionName,
           success: false,
           returnValueJson: null,
+          // Synthesised locally from a THROWN verdict, so there is no server
+          // attribution to carry. Null rather than a guessed blame: `playerFaultOf`
+          // reads null as "not a question about whose code failed", which is exactly
+          // right for a scope violation caught on the way in.
+          fault: null,
           errorMessage: error.message,
           mutationsApplied: [],
         },

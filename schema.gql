@@ -738,6 +738,128 @@ type AppDiscovery {
   gameApiWsUrl: String
 }
 
+"""
+Live status and load/telemetry for one UDP game server (Buddy) in the fleet. Returned by serverWithLeastClients (which picks a low-load ReadyForClients server). Throughput metrics are per-second samples from the last reporting window and are null until first reported.
+"""
+type ServerStatus {
+  """
+  Unique id of this game-server row in the fleet registry (the Buddy instance uuid).
+  """
+  serverId: ID!
+  """
+  IPv4 address native clients send spatial UDP datagrams to (paired with clientPort). Preferred over ip6 for inter-host UDP in current deployments.
+  """
+  ip4: String!
+  """
+  IPv6 address of the UDP game server. Global IPv6 between hosts can be unroutable in some deployments, so native clients generally use ip4 + clientPort.
+  """
+  ip6: String!
+  """
+  UDP port that native clients send spatial datagrams to (typically 9091). Browser clients do not use this directly — they reach the server through the UDP proxy / udpNotifications.
+  """
+  clientPort: Int!
+  """
+  Current lifecycle state of this server (see ServerState). Only ReadyForClients servers accept new clients.
+  """
+  status: ServerState!
+  """
+  Number of peer (server-to-server P2P) connections this server currently holds.
+  """
+  peers: Int!
+  """
+  Number of game clients currently connected to this server. serverWithLeastClients balances on this DIVIDED BY routerThreads, not on the raw count, so that a server with four fan-out workers takes roughly four times the clients of a server with one.
+  """
+  clients: Int!
+  """
+  True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself.
+  """
+  drainRequested: Boolean!
+  """
+  Peak CPU utilization percentage (0-100) observed in the last reporting window. Null until reported.
+  """
+  cpuPeakPct: Float
+  """
+  CPU cores available to this server. Reported by the server itself; null on a build that predates capacity reporting. Informational — client balancing divides by routerThreads, not by cores.
+  """
+  cpuCount: Int
+  """
+  Independent fan-out workers (RouterWorkers) on this server, which is how much of it there is for the purpose of placing a client. serverWithLeastClients divides the client count by this value. Null on a build that predates capacity reporting, and treated as 1, which balances every server equally as before.
+  """
+  routerThreads: Int
+  """
+  Messages per second received from clients in the last reporting window. Null until reported.
+  """
+  clientRecvMsgsPerSec: Float
+  """
+  Bytes per second received from clients in the last reporting window. Null until reported.
+  """
+  clientRecvBytesPerSec: Float
+  """
+  Messages per second sent to clients in the last reporting window. Null until reported.
+  """
+  clientSendMsgsPerSec: Float
+  """
+  Bytes per second sent to clients in the last reporting window. Null until reported.
+  """
+  clientSendBytesPerSec: Float
+  """
+  Messages per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerRecvMsgsPerSec: Float
+  """
+  Bytes per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerRecvBytesPerSec: Float
+  """
+  Messages per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerSendMsgsPerSec: Float
+  """
+  Bytes per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerSendBytesPerSec: Float
+  """
+  Per-second rate of individually-addressed (single-actor) messages sent to clients in the last window, as opposed to spatial fan-out. Null until reported.
+  """
+  clientSendIndividualMsgsPerSec: Float
+  """
+  When this status row was last updated (server heartbeat). Use to judge how fresh the metrics/state are.
+  """
+  updatedAt: DateTime!
+  """When this server was first registered in the fleet."""
+  createdAt: DateTime!
+}
+
+"""
+Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers.
+"""
+enum ServerState {
+  """
+  The server is booting and not yet accepting clients. Do not route new connections here; wait for ReadyForClients.
+  """
+  Starting
+  """
+  The server is healthy and accepting clients. This is the only state safe to route new connections to.
+  """
+  ReadyForClients
+  """
+  The server is draining and shutting down: existing sessions may continue briefly but no new clients should be routed here.
+  """
+  Stopping
+  """
+  The server is down or unreachable (failed health checks). Do not route any traffic here.
+  """
+  Offline
+  """
+  Soft resource overload (a CPU core or system memory has been high for several seconds). Existing sessions continue, but the server is excluded from serverWithLeastClients so no new clients are routed here until it recovers.
+  """
+  NearCapacity
+  """
+  Hard resource overload. Like NearCapacity (excluded from new-client selection), and the server is also actively shedding clients: it sends each affected client a reconnect command and drops their session after a short grace period so they migrate to another server.
+  """
+  Full
+}
+
 type OrgPermission {
   """
   Stable permission key used in role grants (e.g. 'manage_members', 'manage_tokens').
@@ -964,120 +1086,6 @@ enum CodeAdmissionSubjectKind {
   CODE
   AUTHOR
   ORG
-}
-
-"""
-Live status and load/telemetry for one UDP game server (Buddy) in the fleet. Returned by serverWithLeastClients (which picks a low-load ReadyForClients server). Throughput metrics are per-second samples from the last reporting window and are null until first reported.
-"""
-type ServerStatus {
-  """
-  Unique id of this game-server row in the fleet registry (the Buddy instance uuid).
-  """
-  serverId: ID!
-  """
-  IPv4 address native clients send spatial UDP datagrams to (paired with clientPort). Preferred over ip6 for inter-host UDP in current deployments.
-  """
-  ip4: String!
-  """
-  IPv6 address of the UDP game server. Global IPv6 between hosts can be unroutable in some deployments, so native clients generally use ip4 + clientPort.
-  """
-  ip6: String!
-  """
-  UDP port that native clients send spatial datagrams to (typically 9091). Browser clients do not use this directly — they reach the server through the UDP proxy / udpNotifications.
-  """
-  clientPort: Int!
-  """
-  Current lifecycle state of this server (see ServerState). Only ReadyForClients servers accept new clients.
-  """
-  status: ServerState!
-  """
-  Number of peer (server-to-server P2P) connections this server currently holds.
-  """
-  peers: Int!
-  """
-  Number of game clients currently connected to this server. serverWithLeastClients uses this to balance load across the fleet.
-  """
-  clients: Int!
-  """
-  True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself.
-  """
-  drainRequested: Boolean!
-  """
-  Peak CPU utilization percentage (0-100) observed in the last reporting window. Null until reported.
-  """
-  cpuPeakPct: Float
-  """
-  Messages per second received from clients in the last reporting window. Null until reported.
-  """
-  clientRecvMsgsPerSec: Float
-  """
-  Bytes per second received from clients in the last reporting window. Null until reported.
-  """
-  clientRecvBytesPerSec: Float
-  """
-  Messages per second sent to clients in the last reporting window. Null until reported.
-  """
-  clientSendMsgsPerSec: Float
-  """
-  Bytes per second sent to clients in the last reporting window. Null until reported.
-  """
-  clientSendBytesPerSec: Float
-  """
-  Messages per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerRecvMsgsPerSec: Float
-  """
-  Bytes per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerRecvBytesPerSec: Float
-  """
-  Messages per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerSendMsgsPerSec: Float
-  """
-  Bytes per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerSendBytesPerSec: Float
-  """
-  Per-second rate of individually-addressed (single-actor) messages sent to clients in the last window, as opposed to spatial fan-out. Null until reported.
-  """
-  clientSendIndividualMsgsPerSec: Float
-  """
-  When this status row was last updated (server heartbeat). Use to judge how fresh the metrics/state are.
-  """
-  updatedAt: DateTime!
-  """When this server was first registered in the fleet."""
-  createdAt: DateTime!
-}
-
-"""
-Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers.
-"""
-enum ServerState {
-  """
-  The server is booting and not yet accepting clients. Do not route new connections here; wait for ReadyForClients.
-  """
-  Starting
-  """
-  The server is healthy and accepting clients. This is the only state safe to route new connections to.
-  """
-  ReadyForClients
-  """
-  The server is draining and shutting down: existing sessions may continue briefly but no new clients should be routed here.
-  """
-  Stopping
-  """
-  The server is down or unreachable (failed health checks). Do not route any traffic here.
-  """
-  Offline
-  """
-  Soft resource overload (a CPU core or system memory has been high for several seconds). Existing sessions continue, but the server is excluded from serverWithLeastClients so no new clients are routed here until it recovers.
-  """
-  NearCapacity
-  """
-  Hard resource overload. Like NearCapacity (excluded from new-client selection), and the server is also actively shedding clients: it sends each affected client a reconnect command and drops their session after a short grace period so they migrate to another server.
-  """
-  Full
 }
 
 """
@@ -5441,6 +5449,86 @@ type GmTimer {
 }
 
 """
+Why an invocation failed, in the only vocabulary a player may be shown: a stable code, whose problem it is, and whether repeating the identical call could succeed. It carries no message, no engine name and no internal detail by design — blame attribution is the platform's job and presentation is the game's.
+"""
+type PlayerFaultInfo {
+  """A stable, enumerated reason. Branch on this rather than on any text."""
+  code: PlayerFaultCode!
+  """
+  Whose problem this is. The one question a game cannot answer for itself.
+  """
+  blame: UserCodeFaultBlame!
+  """
+  True when repeating the identical call could succeed with nothing else changing. About the caller's options, not about how long a fix takes: an open breaker is retryable because it closes itself, while a spent plan allowance is not.
+  """
+  retryable: Boolean!
+}
+
+"""
+What a player-facing surface may be told about a failure that came from code the platform did not write. Deliberately coarser than the internal fault taxonomy: it says what a player can act on and never names an engine, a module, a function or a limit. The full detail is in the developer surfaces (gameModelEvents, computeModuleRuns, userCodeFaults).
+"""
+enum PlayerFaultCode {
+  """The app's own code failed while running."""
+  USER_CODE_ERROR
+  """The app's own code ran past the time it is allowed."""
+  USER_CODE_TOO_SLOW
+  """
+  The app's own code exceeded a per-call resource ceiling (gas, fuel, memory, depth, database operations, response size).
+  """
+  USER_CODE_LIMIT_EXCEEDED
+  """
+  The platform could not start the work in time. The app's code never ran. Retrying is correct.
+  """
+  PLATFORM_BUSY
+  """A platform failure. Retrying is reasonable."""
+  PLATFORM_ERROR
+  """
+  A per-minute allowance for this app is spent; it returns on the next window.
+  """
+  BUDGET_EXCEEDED
+  """
+  This caller is asking too often. `retryAfterMs` is carried in error extensions when it is known.
+  """
+  RATE_LIMITED
+  """A metered allowance is spent and does not return on its own."""
+  QUOTA_EXHAUSTED
+  """A breaker is open or an operator switch is off for this subject."""
+  TEMPORARILY_DISABLED
+  """The arguments did not satisfy the function's contract."""
+  INVALID_REQUEST
+  """An invoke policy or permission refused this caller."""
+  NOT_ALLOWED
+  """The named function, module or export does not exist for this app."""
+  NOT_FOUND
+  """No valid credential was presented."""
+  UNAUTHENTICATED
+  """
+  This app is served from another datacenter. The error extensions carry `gameApiUrl`; move there and retry.
+  """
+  WRONG_DATACENTER
+  """
+  The app's datacenter has no instance able to serve clients. No endpoint is named, on purpose — there is nowhere to send the client.
+  """
+  APP_UNAVAILABLE
+}
+
+"""
+Whose problem a failure is. The platform attributes blame; the game decides what to render. PLATFORM means ours and a retry is reasonable; AUTHOR means the app's own code and the same call will fail the same way; BUDGET means an allowance is spent and nothing is broken.
+"""
+enum UserCodeFaultBlame {
+  """Ours. The app's code is not at fault — it may not have run at all."""
+  PLATFORM
+  """
+  The app's own code or configuration. Repeating the call gets the same answer.
+  """
+  AUTHOR
+  """
+  A metered allowance for this app or caller is spent. Nothing is broken.
+  """
+  BUDGET
+}
+
+"""
 A studio-defined container type: the schema for a kind of runtime entity (like a class).
 """
 type GmContainerType {
@@ -5775,9 +5863,13 @@ type GmInvokeResult {
   """The property writes that were applied (empty if none / on failure)."""
   mutationsApplied: [GmMutationApplied!]!
   """
-  Error message when success is false (e.g. authority denied or evaluation error).
+  Why the invocation failed, when it did: a stable code, whose problem it is, and whether retrying could help. Null when success is true. This is the field to branch on — it is the platform's blame attribution, and rendering is the game's decision.
   """
-  errorMessage: String
+  fault: PlayerFaultInfo
+  """
+  A platform-authored sentence matching `fault`, safe to show a player. It carries no engine detail on purpose (decision D4): the failing expression, the timeout and the gas figures are in gameModelEvents and the fault record, where a developer reads them and a player does not.
+  """
+  errorMessage: String @deprecated(reason: "Read `fault` instead and choose your own wording. This field no longer carries the engine's error text and will be removed once no client depends on it.")
 }
 
 """An audit-log entry recording one function invocation and its outcome."""

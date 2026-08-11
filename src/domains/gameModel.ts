@@ -252,7 +252,15 @@ import {
  *   selfContainerId,
  *   paramsJson: JSON.stringify({ amount: 10 }),
  * });
- * if (!result.success) console.warn(result.errorMessage); // authority/eval failures don't throw
+ * // Authority and evaluation failures do NOT throw — they come back in band, because
+ * // the result still carries an event id and any writes that did apply.
+ * const fault = playerFaultOf(result);
+ * if (fault) {
+ *   // `fault.blame` is the platform's attribution: AUTHOR (this app's code), PLATFORM
+ *   // (ours) or BUDGET (an allowance). Choose your own wording — the server no longer
+ *   // sends engine text, deliberately.
+ *   if (fault.retryable) scheduleRetry();
+ * }
  * ```
  */
 /** One container-change push from {@link GameModelAPI.containerChanged}. */

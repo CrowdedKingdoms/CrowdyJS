@@ -20,6 +20,7 @@ import {
   CrowdyHttpError,
   CrowdyNetworkError,
   CrowdyTimeoutError,
+  CrowdyUserCodeFaultError,
   type CrowdyGraphQLErrorPayload,
 } from './errors.js';
 import { moveFromErrors, type DatacenterMove } from './datacenter-redirect.js';
@@ -312,6 +313,14 @@ export class GraphQLClient {
           errors.some((e) => e?.extensions?.code === APP_UNAVAILABLE_CODE)
         ) {
           throw new CrowdyAppUnavailableError(errors);
+        }
+        // `blame` is present only on a fault the platform has attributed — a failure
+        // inside app-authored code, or a refusal on the way into it. Detecting the
+        // ATTRIBUTION rather than a list of codes is deliberate: the server can add a
+        // code without this line, and every existing catch keeps working because the
+        // subclass still extends CrowdyGraphQLError.
+        if (errors.some((e) => typeof e?.extensions?.blame === 'string')) {
+          throw new CrowdyUserCodeFaultError(errors);
         }
         throw new CrowdyGraphQLError(errors);
       }
