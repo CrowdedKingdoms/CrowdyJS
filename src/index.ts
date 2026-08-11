@@ -376,7 +376,14 @@ export {
   CrowdyProtocolError,
   CrowdyRealtimeError,
   CrowdyTimeoutError,
+  CrowdyUserCodeFaultError,
+  playerFaultOf,
   WRONG_DATACENTER_CODE,
+} from './errors.js';
+export type {
+  CrowdyFaultBlame,
+  CrowdyFaultCode,
+  CrowdyPlayerFault,
 } from './errors.js';
 export { moveFromError, moveFromErrors } from './datacenter-redirect.js';
 export type { DatacenterMove } from './datacenter-redirect.js';

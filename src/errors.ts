@@ -198,6 +198,167 @@ export class CrowdyAppUnavailableError extends CrowdyGraphQLError {
 }
 
 /**
+ * Whose problem a failure is, as the platform attributes it.
+ *
+ * The one question a game cannot answer for itself: from inside a client there is no way
+ * to tell "your function is too slow" from "we were busy and never ran it" from "this app
+ * is out of budget", and until the server started saying so, all three arrived as the
+ * same sentence. Presentation is still yours — this says only whose fault it was.
+ */
+export type CrowdyFaultBlame = 'PLATFORM' | 'AUTHOR' | 'BUDGET';
+
+/**
+ * The stable reason a call into app-authored code failed.
+ *
+ * Deliberately coarse. It never names an engine, a module, a function or a limit,
+ * because those are the app developer's business and not the player's — the developer
+ * reads the full detail in the Crowdy console. Treat it as an open union: the server may
+ * add a code, and a client that switches on it should have a default branch.
+ */
+export type CrowdyFaultCode =
+  | 'USER_CODE_ERROR'
+  | 'USER_CODE_TOO_SLOW'
+  | 'USER_CODE_LIMIT_EXCEEDED'
+  | 'PLATFORM_BUSY'
+  | 'PLATFORM_ERROR'
+  | 'BUDGET_EXCEEDED'
+  | 'RATE_LIMITED'
+  | 'QUOTA_EXHAUSTED'
+  | 'TEMPORARILY_DISABLED'
+  | 'INVALID_REQUEST'
+  | 'NOT_ALLOWED'
+  | 'NOT_FOUND'
+  | 'UNAUTHENTICATED'
+  | 'WRONG_DATACENTER'
+  | 'APP_UNAVAILABLE'
+  | (string & {});
+
+/** What the platform says about a failure, in the only vocabulary a player is shown. */
+export interface CrowdyPlayerFault {
+  /** A stable, enumerated reason. Branch on this, never on a message. */
+  code: CrowdyFaultCode;
+  /** Whose problem it is. */
+  blame: CrowdyFaultBlame;
+  /** Whether repeating the identical call could succeed with nothing else changing. */
+  retryable: boolean;
+}
+
+/**
+ * A call into code the platform did not write failed, and the platform has said whose
+ * fault it was.
+ *
+ * WHY THIS EXISTS RATHER THAN A MESSAGE. Until 2026-08-11 a failure inside an app's own
+ * function reached the client as the server's internal text — `Evaluation timed out` was
+ * returned to players of every app for four days while the real cause was a platform
+ * query taking 1.2 seconds. A game rendering that string told its players their own game
+ * was broken, on the platform's behalf, in the platform's words. Nothing on the wire
+ * distinguished the three cases, so no game could have done better.
+ *
+ * Now the server attributes blame and the game decides what to render. Nothing in
+ * {@link message} is written by the app's code or by an engine; it is a platform-authored
+ * sentence, safe to show as-is, and you are expected to replace it with your own.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await client.compute.invoke({ appId, moduleName: 'combat', exportName: 'hit' });
+ * } catch (err) {
+ *   const fault = playerFaultOf(err);
+ *   if (!fault) throw err;
+ *   if (fault.blame === 'PLATFORM' && fault.retryable) return retryLater();
+ *   if (fault.blame === 'BUDGET') return showBanner('The arena is busy — one moment.');
+ *   return showBanner('That move did not work.');   // AUTHOR: our bug, our wording
+ * }
+ * ```
+ */
+export class CrowdyUserCodeFaultError extends CrowdyGraphQLError {
+  /** The platform's attribution: `{ code, blame, retryable }`. */
+  get fault(): CrowdyPlayerFault {
+    const extensions = this.extensions ?? {};
+    return {
+      code: (extensions.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
+      blame: (extensions.blame as CrowdyFaultBlame) ?? 'PLATFORM',
+      // Absent means "we did not say", and the safe reading of that is the one that does
+      // not send a client into a loop.
+      retryable: extensions.retryable === true,
+    };
+  }
+
+  /** Whose problem this is. Shorthand for `fault.blame`. */
+  get blame(): CrowdyFaultBlame {
+    return this.fault.blame;
+  }
+
+  /** Whether repeating the identical call could succeed. Shorthand for `fault.retryable`. */
+  get retryable(): boolean {
+    return this.fault.retryable;
+  }
+}
+
+/** Extensions carry `blame` only for a fault the platform has attributed. */
+function faultFromExtensions(
+  extensions: Record<string, unknown> | undefined,
+): CrowdyPlayerFault | null {
+  if (!extensions || typeof extensions.blame !== 'string') return null;
+  return {
+    code: (extensions.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
+    blame: extensions.blame as CrowdyFaultBlame,
+    retryable: extensions.retryable === true,
+  };
+}
+
+/**
+ * Read the platform's attribution from EITHER carrier, so a game branches once.
+ *
+ * There are two, and the split is the server's rather than a wart of this SDK.
+ * `computeInvoke` and `playerComputeInvoke` FAIL — they throw, and the fault arrives in
+ * the GraphQL error's extensions. `gameModelInvoke` RETURNS — a denial or an evaluation
+ * failure is a gameplay verdict that still carries an event id and any writes that did
+ * apply, so it comes back as `success: false` with a `fault` field. Forcing either into
+ * the other's shape would lose something real, so this function accepts both and gives
+ * you one thing to switch on.
+ *
+ * Returns `null` when there is no fault: a successful result, or an error that is not an
+ * attributed one (a network drop, a timeout, an ordinary validation error elsewhere in
+ * the API). `null` means "this is not a question about whose code failed" — keep
+ * handling it the way you already do.
+ *
+ * @example
+ * ```ts
+ * const result = await client.gameModel.invoke({ appId, functionName, selfContainerId });
+ * const fault = playerFaultOf(result);
+ * if (fault?.retryable) scheduleRetry();
+ * ```
+ */
+export function playerFaultOf(value: unknown): CrowdyPlayerFault | null {
+  if (!value || typeof value !== 'object') return null;
+
+  if (value instanceof CrowdyGraphQLError) {
+    return faultFromExtensions(value.extensions);
+  }
+
+  // The in-band carrier: an invoke result that reports its own failure.
+  const result = value as {
+    success?: unknown;
+    fault?: { code?: unknown; blame?: unknown; retryable?: unknown } | null;
+  };
+  const fault = result.fault;
+  if (fault && typeof fault.blame === 'string') {
+    return {
+      code: (fault.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
+      blame: fault.blame as CrowdyFaultBlame,
+      retryable: fault.retryable === true,
+    };
+  }
+
+  // A raw GraphQL error payload, e.g. one entry pulled out of `graphqlErrors`.
+  const payload = value as CrowdyGraphQLErrorPayload;
+  if (payload.extensions) return faultFromExtensions(payload.extensions);
+
+  return null;
+}
+
+/**
  * A network-level failure before any HTTP response was received: DNS failure,
  * TLS error, connection refused, or an aborted `fetch`. Generally retryable
  * with backoff. The original failure is on {@link CrowdyError.cause}.
