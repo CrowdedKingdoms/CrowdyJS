@@ -17,7 +17,11 @@ import {
   gameClientConfig,
   skipReasonFor,
 } from '../helpers.mjs';
-import { provisionOwner, mintAppAccess } from '../provision.mjs';
+import {
+  provisionOwner,
+  mintAppAccess,
+  sdkPlaceableDatacenter,
+} from '../provision.mjs';
 
 const COMPUTE_E2E_ENV = [
   'CROWDY_HTTP_URL',
@@ -74,7 +78,15 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
     admin.setToken(owner.token);
     const slug = `e2e-compute-${rid()}`;
     const org = await admin.organizations.create({ name: slug, slug });
-    const app = await admin.apps.create({ orgId: org.orgId, name: slug, slug });
+    // Asked for, not named: createApp's datacenter is required and permanent, and which
+    // codes exist is a property of the deployment this suite happens to be pointed at.
+    const datacenter = await sdkPlaceableDatacenter(admin);
+    const app = await admin.apps.create({
+      orgId: org.orgId,
+      name: slug,
+      slug,
+      datacenter,
+    });
     await admin.sharedEnvironment.publishApp(app.appId);
 
     // Game-api calls ride an APP-scoped token, and compute modules are stored

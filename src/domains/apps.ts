@@ -15,6 +15,7 @@ import {
   SetAppCodeAdmissionModeDocument,
   AdmitAppCodeDocument,
   RevokeAppCodeAdmissionDocument,
+  PlaceableDatacentersDocument,
   type AppQuery,
   type AppQueryVariables,
   type AppBySlugQuery,
@@ -34,6 +35,7 @@ import {
   type SetAppCodeAdmissionModeMutation,
   type AdmitAppCodeMutation,
   type RevokeAppCodeAdmissionMutation,
+  type PlaceableDatacentersQuery,
   type AppCodeAdmissionsQueryVariables,
   type CreateAppInput,
   type UpdateAppInput,
@@ -329,14 +331,48 @@ export class AppsAPI {
   }
 
   /**
+   * The datacenters this deployment can create an app in.
+   *
+   * Call this before {@link create}. `datacenter` is required and permanent: an
+   * app is distributed on its app id, so everything it stores lives in one
+   * datacenter for the life of the app, and there is no default that could be
+   * right — the instance answering a call on the shared origin is whichever one
+   * DNS picked.
+   *
+   * Offer only entries with `placeable === true`. A datacenter that is known and
+   * unplaceable holds no capacity for a new app, and {@link create} will refuse
+   * it. An entry that is placeable and reports `serving: 'NOT_SERVING'` will hold
+   * the app fine; its players cannot connect until an instance is back.
+   *
+   * An EMPTY `datacenters` list means no topology has been pushed to this
+   * deployment and app creation is unavailable — an operator problem, not a
+   * caller one. `placementEnforced: false` is a single-node deployment (a
+   * developer machine), where the one entry returned is a formality.
+   *
+   * @returns The choices, plus `placementEnforced` and `servedBy`.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` without a session.
+   */
+  async placeableDatacenters(): Promise<
+    PlaceableDatacentersQuery['placeableDatacenters']
+  > {
+    const data = await this.api.request(PlaceableDatacentersDocument, {});
+    return data.placeableDatacenters;
+  }
+
+  /**
    * Create a new app under an organization. Requires the `manage_apps` org
    * permission. The new app auto-provisions an open-by-default access tier.
    *
-   * @param input - {@link CreateAppInput}: `orgId`, `name`, `slug`, optional
-   *   `description`/`visibility`/`metadata`.
+   * @param input - {@link CreateAppInput}: `orgId`, `name`, `slug`,
+   *   `datacenter`, optional `description`/`visibility`/`metadata`.
+   *   `datacenter` is REQUIRED and permanent — read the accepted codes from
+   *   {@link placeableDatacenters} rather than hard-coding one, since they are a
+   *   property of the deployment.
    * @returns The created {@link App}.
    * @throws {CrowdyGraphQLError} `FORBIDDEN`/`SCOPE_MISSING` without
-   *   `manage_apps`, or `BAD_USER_INPUT` (e.g. duplicate slug).
+   *   `manage_apps`, or `BAD_USER_INPUT` (e.g. duplicate slug, or a datacenter
+   *   this deployment cannot place an app in — the message names the ones it
+   *   can).
    */
   async create(
     input: CreateAppInput,

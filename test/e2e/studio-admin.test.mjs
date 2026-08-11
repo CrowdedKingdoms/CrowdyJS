@@ -16,6 +16,7 @@ import {
   provisionOwner,
   registerUser,
   gqlManagementRaw,
+  sdkPlaceableDatacenter,
 } from '../provision.mjs';
 
 const skip = skipReasonFor(MANAGEMENT_E2E_ENV);
@@ -29,10 +30,17 @@ async function ownerClient() {
   return { client, owner };
 }
 
-/** Create an app under an org via the SDK (client.apps.create). */
+/**
+ * Create an app under an org via the SDK (client.apps.create).
+ *
+ * The datacenter is asked for rather than named. It is a required, permanent argument
+ * whose accepted values are a property of the deployment under test, so a literal here
+ * would pass on whichever tier it was written against and fail on every other one.
+ */
 async function createApp(client, orgId) {
   const slug = `e2e-admin-${rid()}`;
-  const app = await client.apps.create({ orgId, name: slug, slug });
+  const datacenter = await sdkPlaceableDatacenter(client);
+  const app = await client.apps.create({ orgId, name: slug, slug, datacenter });
   return app.appId;
 }
 

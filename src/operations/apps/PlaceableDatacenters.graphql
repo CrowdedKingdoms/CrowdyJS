@@ -1,0 +1,14 @@
+query PlaceableDatacenters {
+  placeableDatacenters {
+    placementEnforced
+    servedBy
+    datacenters {
+      code
+      placeable
+      serving
+      appShardCount
+      gameApiUrl
+      gameApiWsUrl
+    }
+  }
+}
