@@ -102,7 +102,6 @@ jobs:
       # be reached (which means "unknown") — the old `2>/dev/null || true` collapsed
       # the two, and an outage read as "nothing published yet".
       - name: Read published versions from the registry
-        id: registry
         env:
           NAME: ${{ steps.pkg.outputs.name }}
         run: |
@@ -118,7 +117,12 @@ jobs:
             exit 1
           fi
           printf '%s' "$raw" > "$RUNNER_TEMP/registry-versions.json"
-          echo "count=$(node -e 'const v=require("fs").readFileSync(process.argv[1],"utf8").trim()||"[]";const p=JSON.parse(v);console.log(Array.isArray(p)?p.length:1)' "$RUNNER_TEMP/registry-versions.json")" >> "$GITHUB_OUTPUT"
+          node -e '
+            const raw = require("fs").readFileSync(process.argv[1], "utf8").trim() || "[]";
+            const parsed = JSON.parse(raw);
+            const versions = Array.isArray(parsed) ? parsed : [parsed];
+            console.log(`registry knows ${versions.length} version(s); newest: ${versions.at(-1)}`);
+          ' "$RUNNER_TEMP/registry-versions.json"
 
       - name: Resolve the version and dist-tag to publish
         id: resolve
