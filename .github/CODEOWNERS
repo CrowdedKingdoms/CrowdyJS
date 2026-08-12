@@ -1,0 +1,15 @@
+# Review ownership for the release path.
+#
+# GitHub consults this file ONLY when evaluating pull request reviews, so on its own
+# it blocks nothing. What enforces it is the org ruleset on this branch, which
+# requires a pull request and a code owner's approval. Direct pushes to this branch
+# are refused by that same rule.
+#
+# It is read from the branch a PR TARGETS, which is why this file exists separately
+# on test and on prod rather than only on the default branch.
+#
+# Ordinary changes need no approval (the rule asks for zero). Only the paths below
+# require one, so day-to-day work on this branch is unaffected.
+
+/.github/ @michaelmarshall
+/scripts/ci/ @michaelmarshall
