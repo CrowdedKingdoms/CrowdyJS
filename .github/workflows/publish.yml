@@ -1,14 +1,31 @@
 name: Publish to npm
 
-# Triggers on every push to main, but only proceeds with `npm publish`
-# when the version field in package.json is not yet on the npm registry.
-# This means: bump the version in package.json -> commit -> push to main
-# and the new version is published. No tags or GitHub Releases required.
+run-name: publish ${{ github.ref_name }}
+
+# Releases are cut by ENVIRONMENT-PREFIXED tags on the three long-lived branches:
+# `dev/v14.2.0`, `test/v14.2.0`, `prod/v14.2.0`. The tier is the tag PREFIX, and the
+# `guard` job refuses a tag whose commit is not contained in the branch it names.
+#
+# npm accepts a version string exactly once, so the same X.Y.Z cannot be published
+# three times. Each tier gets its own artifact and its own dist-tag:
+#
+#   dev/v14.2.0  -> 14.2.0-dev.N   @dev
+#   test/v14.2.0 -> 14.2.0-test.N  @test
+#   prod/v14.2.0 -> 14.2.0         @latest
+#
+# N is the next free ordinal for that exact base version, read from the registry.
+# See scripts/ci/resolve-npm-publish-version.mjs for why it is not github.run_number.
+#
+# workflow_dispatch is kept as the re-run path, and must be dispatched against a
+# `<tier>/vX.Y.Z` TAG ref: there is no tier without one, and the gate says so rather
+# than guessing. A re-run of a prod tag is a no-op because the version is already
+# published; a re-run of a dev/test tag deliberately mints the next ordinal.
 on:
   push:
-    branches: [main]
-    paths:
-      - 'package.json'
+    tags:
+      - 'dev/v*.*.*'
+      - 'test/v*.*.*'
+      - 'prod/v*.*.*'
   workflow_dispatch:
 
 # Don't allow two publish runs to race against each other.
@@ -17,7 +34,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # THE GATE. Runs first, and nothing is built or published until it passes.
+  guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tier: ${{ steps.gate.outputs.tier }}
+      version: ${{ steps.gate.outputs.version }}
+    steps:
+      # fetch-depth: 0 and persisted credentials are BOTH required: the gate runs
+      # `git fetch origin` and a merge-base containment check against the tier branch.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: gate
+        run: scripts/ci/resolve-release-tier.sh
+
   publish:
+    needs: guard
     runs-on: ubuntu-latest
 
     permissions:
@@ -39,26 +74,84 @@ jobs:
       - name: Update npm
         run: npm install -g npm@latest
 
-      - name: Read package metadata
+      # The tag and package.json must agree. They are two independent records of the
+      # same fact, edited at different times by different hands, and when they
+      # disagree every downstream step still succeeds — you simply get an artifact
+      # under a version nobody asked for. Refuse instead.
+      - name: Read package metadata and check it against the tag
         id: pkg
+        env:
+          TAG_VERSION: ${{ needs.guard.outputs.version }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           version=$(node -p "require('./package.json').version")
           name=$(node -p "require('./package.json').name")
+          tagged=${TAG_VERSION#v}
+          if [ "$version" != "$tagged" ]; then
+            echo "::error::tag '$TAG_NAME' names version $tagged but package.json says $version. Bump package.json to $tagged (npm version --no-git-tag-version $tagged) and re-tag that commit."
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "Detected $name@$version"
+          echo "Detected $name@$version from tag $TAG_NAME"
 
-      - name: Check whether this version is already published
-        id: check
+      # Ask the registry what exists, and DO NOT treat an unanswered question as an
+      # answer. `npm view` exits non-zero both when the package has never been
+      # published (E404, which means "no versions") and when the registry could not
+      # be reached (which means "unknown") — the old `2>/dev/null || true` collapsed
+      # the two, and an outage read as "nothing published yet".
+      - name: Read published versions from the registry
+        id: registry
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
         run: |
-          name='${{ steps.pkg.outputs.name }}'
-          version='${{ steps.pkg.outputs.version }}'
-          published=$(npm view "$name@$version" version 2>/dev/null || true)
-          if [ -n "$published" ]; then
-            echo "::notice::$name@$version already exists on npm. Skipping publish."
+          set -euo pipefail
+          if raw=$(npm view "$NAME" versions --json 2>"$RUNNER_TEMP/npm-view.err"); then
+            :
+          elif grep -qE 'E404|is not in this registry' "$RUNNER_TEMP/npm-view.err"; then
+            echo "::notice::$NAME has never been published; starting the series."
+            raw='[]'
+          else
+            cat "$RUNNER_TEMP/npm-view.err" >&2
+            echo "::error::could not read $NAME from the npm registry, and an unreadable registry is not the same as an empty one. Refusing to guess the next version."
+            exit 1
+          fi
+          printf '%s' "$raw" > "$RUNNER_TEMP/registry-versions.json"
+          echo "count=$(node -e 'const v=require("fs").readFileSync(process.argv[1],"utf8").trim()||"[]";const p=JSON.parse(v);console.log(Array.isArray(p)?p.length:1)' "$RUNNER_TEMP/registry-versions.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the version and dist-tag to publish
+        id: resolve
+        env:
+          TIER: ${{ needs.guard.outputs.tier }}
+          TAG_VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/resolve-npm-publish-version.mjs "$TIER" "$TAG_VERSION" \
+            < "$RUNNER_TEMP/registry-versions.json"
+
+      # A re-run must not be an error. The dev/test ordinals are free by construction
+      # (the resolver picked the next unused one), so this only ever fires for a prod
+      # re-run — and it asks about the EXACT version being published, so it cannot
+      # skip a publish that has not happened.
+      - name: Check whether that version is already published
+        id: check
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          PUBLISH_VERSION: ${{ steps.resolve.outputs.publish_version }}
+        run: |
+          set -euo pipefail
+          if node -e '
+            const fs = require("fs");
+            const raw = fs.readFileSync(process.argv[1], "utf8").trim() || "[]";
+            const parsed = JSON.parse(raw);
+            const versions = Array.isArray(parsed) ? parsed : [parsed];
+            process.exit(versions.includes(process.argv[2]) ? 0 : 1);
+          ' "$RUNNER_TEMP/registry-versions.json" "$PUBLISH_VERSION"; then
+            echo "::notice::$NAME@$PUBLISH_VERSION already exists on npm. Skipping publish."
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::$name@$version is not yet on npm. Will publish."
+            echo "::notice::$NAME@$PUBLISH_VERSION is not yet on npm. Will publish."
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -66,10 +159,44 @@ jobs:
         if: steps.check.outputs.should_publish == 'true'
         run: npm ci
 
+      # Set the version BEFORE building: the `version` lifecycle script writes it into
+      # src/index.ts, so a build that ran first would ship a bundle whose exported
+      # VERSION disagrees with the package it is published as.
+      - name: Set the publish version
+        if: steps.check.outputs.should_publish == 'true'
+        env:
+          PUBLISH_VERSION: ${{ steps.resolve.outputs.publish_version }}
+        run: npm version "$PUBLISH_VERSION" --no-git-tag-version --allow-same-version
+
       - name: Build
         if: steps.check.outputs.should_publish == 'true'
         run: npm run build
 
       - name: Publish to npm
         if: steps.check.outputs.should_publish == 'true'
-        run: npm publish --provenance --access public
+        env:
+          DIST_TAG: ${{ steps.resolve.outputs.dist_tag }}
+        run: npm publish --provenance --access public --tag "$DIST_TAG"
+
+      - name: Summary
+        if: always()
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          TAG_NAME: ${{ github.ref_name }}
+          TIER: ${{ needs.guard.outputs.tier }}
+          PUBLISH_VERSION: ${{ steps.resolve.outputs.publish_version }}
+          DIST_TAG: ${{ steps.resolve.outputs.dist_tag }}
+          PUBLISHED: ${{ steps.check.outputs.should_publish }}
+        run: |
+          {
+            echo "### $TAG_NAME"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| tier | \`${TIER:-unresolved}\` |"
+            echo "| npm version | \`${PUBLISH_VERSION:-unresolved}\` |"
+            echo "| dist-tag | \`${DIST_TAG:-unresolved}\` |"
+            echo "| action | $([ "${PUBLISHED:-}" = 'true' ] && echo 'published' || echo 'no-op (already on the registry)') |"
+            echo
+            echo "\`npm install ${NAME:-@crowdedkingdoms/crowdyjs}@${DIST_TAG:-latest}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

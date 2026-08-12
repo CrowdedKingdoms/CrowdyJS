@@ -5,9 +5,13 @@ name: Test
 # coverage. The live e2e suites (test/e2e/**) auto-skip without a configured
 # stack (CROWDY_* env), so they aren't run here; point them at a deployed env or
 # the local smoke stack to execute them.
+#
+# Runs on EVERY branch push, not just the canonical ones. A branch with no PR open
+# used to run nothing here while still being one merge away from a release tag, so
+# the first time its tests ran was the release.
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
 

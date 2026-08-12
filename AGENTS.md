@@ -248,14 +248,32 @@ for the management surface alone, `/schema/crowdyjs.graphql`).
 
 ## Working in this repo
 
-- Pull the latest `main` (this repo's canonical branch) before creating a
-  feature branch; commit with descriptive messages.
-- **Publishing**: no git tags needed — bump the version (`npm version
-  patch|minor|major`) on your branch and merge to `main`; the `publish`
-  workflow auto-publishes `@crowdedkingdoms/crowdyjs@<version>` to npm
-  (Trusted Publishing) when `main` carries a version npm doesn't have.
-  Consumers (Crowdy-Games, external games) pick it up by bumping their npm
-  dependency range and redeploying.
+- This repo has three long-lived branches — **`dev`**, **`test`**, **`prod`**
+  (`prod` is the default branch); `main` is frozen history. Pull the latest
+  branch you are targeting (usually `dev`) before creating a feature branch;
+  commit with descriptive messages. Every branch push runs the test workflow.
+- **Publishing is triggered by an environment-prefixed tag**, never by a merge.
+  Bump the version (`npm version patch|minor|major`, which also syncs the
+  exported `VERSION`), merge to the tier branch, then tag `<tier>/vX.Y.Z` —
+  `dev/v14.2.0`, `test/v14.2.0`, `prod/v14.2.0`. The tag's commit must be
+  contained in the branch the tag names or the run fails
+  (`scripts/ci/resolve-release-tier.sh`), and the tag's version must equal
+  `package.json`'s version or the run fails.
+- **What each tier publishes.** npm accepts a version string exactly once, so
+  the same X.Y.Z cannot be published three times. Each tier gets its own
+  artifact and dist-tag, published with provenance via Trusted Publishing:
+
+  | tag | npm version | dist-tag | install |
+  |---|---|---|---|
+  | `dev/v14.2.0` | `14.2.0-dev.N` | `dev` | `npm i @crowdedkingdoms/crowdyjs@dev` |
+  | `test/v14.2.0` | `14.2.0-test.N` | `test` | `npm i @crowdedkingdoms/crowdyjs@test` |
+  | `prod/v14.2.0` | `14.2.0` | `latest` | `npm i @crowdedkingdoms/crowdyjs` |
+
+  `N` is the next free ordinal for that base version, read from the registry
+  (`scripts/ci/resolve-npm-publish-version.mjs`). `-dev.N` is a semver
+  PRE-release, so it sorts below `14.2.0` and a consumer on a caret range will
+  never resolve to one by accident. Consumers (Crowdy-Games, external games)
+  pick up a release by bumping their npm dependency range and redeploying.
 - Never hand-edit `src/generated/graphql.ts`. When the public GraphQL surface
   changes: `npm run schema:sync:*` → `npm run codegen` → commit `schema.gql`
   and `src/generated/graphql.ts` together.
