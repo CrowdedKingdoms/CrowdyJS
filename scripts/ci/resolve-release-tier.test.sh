@@ -16,9 +16,13 @@ SCRIPT="$HERE/resolve-release-tier.sh"
 PASS=0
 FAIL=0
 
-# The script writes to $GITHUB_OUTPUT when set. Unset it so a test run inside Actions does not
-# append to the real output file and set a `tier` the caller never asked for.
-unset GITHUB_OUTPUT
+# THIS TEST MUST NOT READ THE ENVIRONMENT IT RUNS IN. Every one of these variables is an input
+# the script falls back to, so leaving them set makes the result depend on where the test ran:
+# inside Actions the empty-ref case picked up the runner's own GITHUB_REF and was refused as
+# "is a branch, not a tag" -- still a refusal, still a green-looking `ok` had the message not
+# been checked, and 13/1 instead of 14/0. GITHUB_OUTPUT was already unset here against exactly
+# this hazard; the other two were the half nobody extended it to.
+unset GITHUB_OUTPUT GITHUB_REF GITHUB_SHA
 
 ok() { PASS=$((PASS + 1)); echo "  ok   $1"; }
 no() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
@@ -139,6 +143,29 @@ git fetch --quiet origin
 
 expect_accept "after merge to prod, same commit tagged prod/ -> accepted" \
   "refs/tags/prod/v1.2.3" "$DEV_ONLY" prod v1.2.3
+
+# PRECEDENCE. These two exist because the defect they catch was invisible without them: the
+# empty-ref case above passed everywhere, for the right reason locally and the wrong reason on
+# a runner, where it silently read the runner's own GITHUB_REF. An explicit argument must win
+# over the ambient environment, and an explicitly empty argument must STAY empty rather than
+# falling through to it -- which is why the script reads `${1-...}` and not `${1:-...}`.
+echo
+echo "argument vs environment:"
+
+GITHUB_REF="refs/tags/prod/v9.9.9" GITHUB_SHA="$BASE" \
+  expect_refusal "explicitly empty ref is not filled in from GITHUB_REF" \
+    "" "$BASE" "no tag ref given"
+
+# The no-argument path is the one CI actually uses, so it needs a case of its own; without it
+# a fix to the above could break the real caller and every test would still pass.
+out=$(GITHUB_REF="refs/tags/dev/v3.2.1" GITHUB_SHA="$DEV_ONLY" "$SCRIPT" 2>&1)
+if [ $? -ne 0 ]; then
+  no "no arguments falls back to the environment (the CI path): expected acceptance, got: $out"
+elif ! grep -qx "tier=dev" <<<"$out" || ! grep -qx "version=v3.2.1" <<<"$out"; then
+  no "no arguments falls back to the environment (the CI path): wrong result: $out"
+else
+  ok "no arguments falls back to GITHUB_REF / GITHUB_SHA (the CI path)"
+fi
 
 echo
 echo "$PASS passed, $FAIL failed"

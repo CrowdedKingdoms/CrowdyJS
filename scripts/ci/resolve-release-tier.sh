@@ -33,8 +33,13 @@
 # `tier=<t>` / `version=<v>` on stdout so the script is usable outside Actions.
 set -euo pipefail
 
-REF=${1:-${GITHUB_REF:-}}
-SHA=${2:-${GITHUB_SHA:-}}
+# `${1-...}` and not `${1:-...}`: an argument explicitly passed as the empty string means an
+# EMPTY ref and must be refused as one, rather than silently falling through to the
+# environment. The `:-` form conflates "no argument" with "an argument that is empty", which
+# made the empty-ref case unreproducible inside Actions -- there it read the runner's own
+# GITHUB_REF and was refused for the wrong reason.
+REF=${1-${GITHUB_REF:-}}
+SHA=${2-${GITHUB_SHA:-}}
 REMOTE=${RELEASE_TIER_REMOTE:-origin}
 
 die() {
