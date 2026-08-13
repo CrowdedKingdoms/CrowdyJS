@@ -17,7 +17,7 @@ import {
  * counters are returned as string counters because they can exceed the 32-bit
  * Int range. `BigInt` ids are decimal strings.
  *
- * As of the unified galaxy API the per-environment rollups
+ * As of the v13 unified API the per-environment rollups
  * (environmentSummary/orgByEnvironment/environmentByApp) were retired with
  * dedicated customer environments — usage is org/app-scoped.
  *

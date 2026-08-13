@@ -95,7 +95,7 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.billing, 'billing', ['walletBalance', 'walletTransactions', 'appBudget', 'setAppBudget']);
   assertMethods(client.payments, 'payments', ['create', 'mine', 'all']);
   assertMethods(client.quotas, 'quotas', ['forOrg', 'forApp', 'effective', 'set', 'remove']);
-  // Dedicated environments retired with the unified galaxy API (v13).
+  // Dedicated environments retired with the v13 unified API.
   assert.equal('environments' in client, false, 'client.environments was removed in v13');
   assertMethods(client.usage, 'usage', ['appGraphqlOperations', 'appSummary', 'playerPulse']);
   assertMethods(client.sharedEnvironment, 'sharedEnvironment', ['plans', 'freeAppQuota', 'appRuntimeState', 'publishApp', 'setSpendCaps', 'setAutoBilling']);
