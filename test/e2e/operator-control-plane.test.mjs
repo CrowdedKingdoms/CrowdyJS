@@ -1,7 +1,7 @@
 /**
  * Operator (platform-policy) user-story e2e.
  *
- * As of v13 (unified galaxy API) `client.operator` is reduced to the platform
+ * As of v13 (unified API) `client.operator` is reduced to the platform
  * compute ceilings — infrastructure operations (environments, change orders,
  * secrets, releases, audit) moved to the separate infra-control-plane service
  * with its own auth. This suite exercises the surviving read plus the key

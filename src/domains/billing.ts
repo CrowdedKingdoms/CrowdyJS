@@ -139,7 +139,7 @@ export class BillingAPI {
     return data.walletTransactionsConnection;
   }
 
-  // NOTE (unified galaxy API): the per-environment capacity billing-tier
+  // NOTE (v13 unified API): the per-environment capacity billing-tier
   // catalogs (buddyTiers/graphqlTiers/postgresTiers) were retired with
   // dedicated customer environments.
 }

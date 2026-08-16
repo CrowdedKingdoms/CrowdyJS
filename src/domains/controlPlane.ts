@@ -10,7 +10,7 @@ import {
 /**
  * Operator (platform-policy) surface — exposed as `client.operator`.
  *
- * As of the unified galaxy API this surface is reduced to the platform-wide
+ * As of the v13 unified API this surface is reduced to the platform-wide
  * compute ceilings: dedicated customer environments were retired, and the
  * infrastructure control plane (environments, change orders, secrets, release
  * management, audit) moved to the separate infra-control-plane service with
