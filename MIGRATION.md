@@ -42,11 +42,13 @@ line and you are done.
 An app lives in a single datacenter, and those fields name it. The identity
 client can stay on the shared origin.
 
-# CrowdyJS v13 — unified galaxy API (breaking)
+# CrowdyJS v13 — unified API (breaking)
 
-The platform merged the Management API and Game API into ONE server on the
-shared galaxy database. v13 resyncs the committed schema from the unified SDL
-and removes the surfaces the platform retired:
+The platform merged the Management API and Game API into ONE server. v13
+landed on the galaxy database; **gameplay has since moved to PostgreSQL +
+Citus** via `cks-game-api` (galaxy is not the game DB). v13 resyncs the
+committed schema from the unified SDL and removes the surfaces the platform
+retired:
 
 - **`client.environments` (and `client.admin.environments`) removed.**
   Dedicated customer environments no longer exist; every app runs on the
