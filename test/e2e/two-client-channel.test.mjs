@@ -161,3 +161,112 @@ test(
     }
   },
 );
+
+test(
+  'read-only member is refused and a sender still reaches them',
+  { skip: skipReason, timeout: 60_000 },
+  async () => {
+    const { createCrowdyClient } = await import('../../dist/index.js');
+    const { appId, owner, players, clients } = await provisionClients(createCrowdyClient, 2);
+    const [clientA, clientB] = clients;
+    const cleanup = [];
+
+    const ownerAccess = await mintAppAccess(appId, owner.token);
+    const ownerClient = createCrowdyClient(gameClientConfig(ownerAccess));
+    ownerClient.setToken(ownerAccess.token);
+
+    let channelId;
+    try {
+      const channel = await ownerClient.channels.create({
+        appId,
+        name: `e2e-ro-${Date.now()}`,
+        membershipPolicy: 'invite',
+        membersCanSend: false,
+      });
+      channelId = channel.groupId;
+      assert.ok(channelId, 'createChannel returned a groupId');
+
+      await ownerClient.channels.addMember(channelId, players[0].userId);
+      await ownerClient.channels.addMember(channelId, players[1].userId);
+
+      const senderRole = await ownerClient.channels.createRole({
+        groupId: channelId,
+        roleName: `sender-${Date.now()}`,
+        permissions: ['send_messages'],
+      });
+      await ownerClient.channels.setMemberRoles({
+        groupId: channelId,
+        userId: players[0].userId,
+        roleIds: [senderRole.groupRoleId],
+      });
+
+      const receivedByB = { channel: [], errors: [] };
+      const receivedByA = { channel: [], errors: [] };
+      cleanup.push(clientB.udp.subscribe({
+        channelMessage: (n) => receivedByB.channel.push(n),
+        genericError: (e) => receivedByB.errors.push(e),
+      }, appId));
+      cleanup.push(clientA.udp.subscribe({
+        channelMessage: (n) => receivedByA.channel.push(n),
+        genericError: (e) => receivedByA.errors.push(e),
+      }, appId));
+
+      const registerAll = async () => {
+        for (const [client, uuid] of [
+          [clientA, TEST_UUID_A], [clientB, TEST_UUID_B],
+        ]) {
+          await client.udp.sendActorUpdate({
+            appId, chunk: CHUNK, distance: 8, uuid, state: 'AA==', sequenceNumber: 1,
+          });
+        }
+      };
+      await registerAll();
+      await sleep(SESSION_WAIT_MS);
+      await registerAll();
+      await sleep(1000);
+
+      const deniedText = `ro-deny-${Date.now()}`;
+      const deniedB64 = Buffer.from(deniedText).toString('base64');
+      await clientB.udp.sendChannelMessage({
+        channelId,
+        uuid: TEST_UUID_B,
+        payload: deniedB64,
+        sequenceNumber: 2,
+      });
+      await sleep(NOTIFY_WAIT_MS);
+
+      const leakedToA = receivedByA.channel.find((n) => n.payload === deniedB64);
+      assert.ok(!leakedToA, 'read-only B must not deliver a channel message to A');
+      const unauthorized = receivedByB.errors.find((e) => {
+        const code = String(e?.code ?? e?.extensions?.code ?? e?.message ?? '');
+        return /UNAUTHOR/i.test(code);
+      });
+      assert.ok(
+        unauthorized || receivedByB.errors.length > 0,
+        `read-only B should get UNAUTHORIZED (or any genericError). errors=${JSON.stringify(receivedByB.errors)}`,
+      );
+
+      const okText = `ro-ok-${Date.now()}`;
+      const okB64 = Buffer.from(okText).toString('base64');
+      const sent = await clientA.udp.sendChannelMessage({
+        channelId,
+        uuid: TEST_UUID_A,
+        payload: okB64,
+        sequenceNumber: 3,
+      });
+      assert.ok(sent, 'sender A sendChannelMessage returned truthy');
+      await sleep(NOTIFY_WAIT_MS);
+
+      const matchB = receivedByB.channel.find((n) => n.payload === okB64);
+      assert.ok(matchB, 'member B should still receive from a sender');
+    } finally {
+      for (const unsub of cleanup) { try { unsub(); } catch { /* swallow */ } }
+      if (channelId) { try { await ownerClient.channels.remove(channelId); } catch { /* swallow */ } }
+      ownerClient.close();
+      for (const c of clients) {
+        try { await c.udp.disconnect(); } catch { /* swallow */ }
+        c.close();
+      }
+    }
+  },
+);
