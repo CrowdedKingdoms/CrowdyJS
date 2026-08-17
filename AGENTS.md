@@ -4,10 +4,10 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package (verified 2026-08-12 on npm):** `main` / `package.json` are
-**14.1.0**. Both **14.0.0** and **14.1.0** are published; `latest` is 14.1.0.
-The next release is **14.2.0** (`prod/v14.2.0` publishes the bare number;
-`dev/` and `test/` tags publish `14.2.0-dev.N` / `14.2.0-test.N`).
+**Current package:** `package.json` is **14.2.0**. npm `latest` is still
+**14.1.0** until `prod/v14.2.0`. `dev/v14.2.0` / `test/v14.2.0` publish
+`14.2.0-dev.N` / `14.2.0-test.N`. `GameClientBootstrap` selects `gameApiUrl`,
+`gameApiWsUrl`, and `discoveryUrl`.
 
 Read [README.md](README.md) first. [MIGRATION.md](MIGRATION.md) covers breaking
 changes. This file is the game-concept → API map the README does not repeat.
