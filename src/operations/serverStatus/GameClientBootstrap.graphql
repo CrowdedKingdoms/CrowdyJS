@@ -1,6 +1,9 @@
 query GameClientBootstrap($appId: BigInt!) {
   gameClientBootstrap(appId: $appId) {
     appId
+    gameApiUrl
+    gameApiWsUrl
+    discoveryUrl
     realtimeProtocol
     subscriptionName
     maxReplicationDistance
