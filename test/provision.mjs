@@ -4,10 +4,9 @@
  * CrowdyJS is a public client SDK, so its tests must set themselves up the way a
  * real integrator would: through the API, never the database.
  *
- * An app **owner** (an org admin who owns the target app) signs in (passwordless
- * dev bypass), ensures the app has an access tier holding every runtime
- * permission, then creates players (devLogin create-on-first-use) and grants
- * each one access to the app. Granting access also auto-grants the user full grid
+ * An app **owner** (an org admin who owns the target app) signs in with email +
+ * password, ensures the app has an access tier holding every runtime permission,
+ * then registers players and grants each one access to the app. Granting access also auto-grants the user full grid
  * permissions on the app's open-by-default world grid, so after a grant the
  * player's spatial traffic is authorized end to end with zero direct DB writes.
  * (This used to cross a management -> game-api replica-sync; since the two became
@@ -19,7 +18,9 @@
  *   CROWDY_HTTP_URL         ENTRY origin — the shared multivalue name. The SDK
  *                           appends /graphql. Provisioning and token minting go
  *                           here; GAMEPLAY does not (see below).
- *   CROWDY_OWNER_EMAIL      owner sign-in (owns CROWDY_TEST_APP_ID; passwordless)
+ *   CROWDY_OWNER_EMAIL      owner sign-in (owns CROWDY_TEST_APP_ID)
+ *   CROWDY_OWNER_PASSWORD   the owner's password; required since the dev bypass
+ *                           was removed
  *   CROWDY_TEST_APP_ID      app to test against (default '1')
  *
  * PROVISIONING STAYS ON THE ENTRY ORIGIN; GAMEPLAY DOES NOT. Sign-in, grants and
@@ -36,7 +37,7 @@ import { gameClientConfig } from './helpers.mjs';
 
 const DEFAULT_PERMISSION_KEYS = ['access', 'teleport', 'update_voxel_data', 'use_voice_chat'];
 
-export const OWNER_ENV = ['CROWDY_HTTP_URL', 'CROWDY_OWNER_EMAIL'];
+export const OWNER_ENV = ['CROWDY_HTTP_URL', 'CROWDY_OWNER_EMAIL', 'CROWDY_OWNER_PASSWORD'];
 
 export function ownerEnvReady() {
   return OWNER_ENV.every((k) => !!process.env[k]);
@@ -95,36 +96,94 @@ export async function gqlManagementRaw(query, variables, token) {
 }
 
 /**
- * Passwordless dev-bypass sign-in via the management API; returns the identity
- * AuthResponse projection. The account is created on first use, so a never-seen
- * email yields a brand-new user. Requires the server to have DEV_AUTH_BYPASS
- * enabled (dev/test/builder); throws FORBIDDEN otherwise.
+ * Passwords for e2e accounts.
+ *
+ * These used to be `devLogin`, which needed no credential at all. With the
+ * bypass gone every account needs one, and the two kinds of account here need
+ * it for opposite reasons:
+ *
+ *   a FRESH player  is created by this file, so it invents the password and
+ *                   keeps it in memory for the length of the run
+ *   the OWNER       already exists and is not ours to create, so its password
+ *                   has to be supplied
+ *
+ * `Aa1!` prefix: the server enforces only a minimum length today, and a
+ * generated password that would also satisfy a future complexity rule costs
+ * nothing now.
  */
-async function devLogin(email) {
-  const data = await gql(
-    `mutation DevLogin($i: DevLoginInput!) {
-       devLogin(input: $i) { token gameTokenId user { userId email } }
-     }`,
-    { i: { email } },
-  );
-  const r = data.devLogin;
-  return { email: r.user.email ?? email, token: r.token, gameTokenId: r.gameTokenId, userId: r.user.userId };
+function generatePassword() {
+  return `Aa1!e2e-${rid()}${rid()}`;
 }
 
-/** Register (create-on-first-use) a fresh player through the public management API. */
+function requiredPassword(varName) {
+  const v = process.env[varName]?.trim();
+  if (!v) {
+    throw new Error(
+      `${varName} is not set. The dev-login bypass these tests used to sign in ` +
+        `with has been removed from every tier, so an existing account now needs ` +
+        `its password. Export it; do not pass it as an argument.`,
+    );
+  }
+  return v;
+}
+
+/** Create a brand-new account and return its session. */
+async function registerAccount(email, password) {
+  const data = await gql(
+    `mutation Register($i: RegisterUserInput!) {
+       register(registerUserInput: $i) { token gameTokenId user { userId email } }
+     }`,
+    { i: { email, password } },
+  );
+  const r = data.register;
+  return {
+    email: r.user.email ?? email,
+    password,
+    token: r.token,
+    gameTokenId: r.gameTokenId,
+    userId: r.user.userId,
+  };
+}
+
+/** Sign an existing account in. */
+async function passwordLogin(email, password) {
+  const data = await gql(
+    `mutation Login($i: LoginUserInput!) {
+       login(loginUserInput: $i) { token gameTokenId user { userId email } }
+     }`,
+    { i: { email, password } },
+  );
+  const r = data.login;
+  return {
+    email: r.user.email ?? email,
+    password,
+    token: r.token,
+    gameTokenId: r.gameTokenId,
+    userId: r.user.userId,
+  };
+}
+
+/**
+ * A fresh player through the public API. The address has never been seen, so
+ * `register` returns a session immediately — an address that already exists
+ * would NOT, which is why these are always newly generated.
+ */
 export async function registerUser(overrides = {}) {
   const email = overrides.email ?? `crowdy-e2e-${rid()}@test.invalid`;
-  return devLogin(email);
+  return registerAccount(email, overrides.password ?? generatePassword());
 }
 
-/** Sign in (passwordless dev bypass) as `email`; returns `{ token, userId }`. */
-export async function loginAs(email) {
-  const { token, userId } = await devLogin(email);
+/** Sign in as `email` with a supplied password; returns `{ token, userId }`. */
+export async function loginAs(email, password) {
+  const { token, userId } = await passwordLogin(email, password);
   return { token, userId };
 }
 
 async function loginOwner() {
-  return loginAs(process.env.CROWDY_OWNER_EMAIL);
+  return loginAs(
+    process.env.CROWDY_OWNER_EMAIL,
+    requiredPassword('CROWDY_OWNER_PASSWORD'),
+  );
 }
 
 /** Log in as the configured app owner; returns `{ token, userId }`. */
@@ -135,21 +194,30 @@ export async function provisionOwner() {
   return loginOwner();
 }
 
-/** Env for the operator/super-admin persona used by control-plane e2e. */
-export const OPERATOR_ENV = ['CROWDY_OPERATOR_EMAIL'];
+/**
+ * Env for the operator/super-admin persona used by control-plane e2e.
+ *
+ * The password joins the email as a REQUIRED pair rather than an optional
+ * extra: with an email and no password the suite would silently fall through to
+ * the owner and test a weaker persona than it names.
+ */
+export const OPERATOR_ENV = ['CROWDY_OPERATOR_EMAIL', 'CROWDY_OPERATOR_PASSWORD'];
 
 export function operatorEnvReady() {
   return OPERATOR_ENV.every((k) => !!process.env[k]);
 }
 
 /**
- * Sign in as the operator/super-admin persona (passwordless dev bypass). Uses
- * CROWDY_OPERATOR_EMAIL when set; otherwise falls back to the owner
+ * Sign in as the operator/super-admin persona. Uses CROWDY_OPERATOR_EMAIL and
+ * CROWDY_OPERATOR_PASSWORD when both are set; otherwise falls back to the owner
  * (in the local smoke stack the seeded owner is also a super-admin/operator).
  */
 export async function provisionOperator() {
   if (operatorEnvReady()) {
-    return loginAs(process.env.CROWDY_OPERATOR_EMAIL);
+    return loginAs(
+      process.env.CROWDY_OPERATOR_EMAIL,
+      process.env.CROWDY_OPERATOR_PASSWORD,
+    );
   }
   return provisionOwner();
 }
