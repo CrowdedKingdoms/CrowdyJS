@@ -7,11 +7,13 @@
  * `client.state`, `client.serverStatus`, `client.udp`) are surfaces of the same
  * API. `managementUrl` was removed in v14 — see MIGRATION.md.
  *
- * Authentication is **passwordless** (as of v8): sign in with an emailed magic
- * link, a federated social provider, or — in dev — the dev bypass. The returned
- * identity session token is stored on the shared `AuthState` automatically.
- * Gameplay uses app-scoped tokens minted via `client.portal` (see the two-client
- * pattern in the README).
+ * Sign in with email + password, an emailed magic link, or a federated social
+ * provider. The returned identity session token is stored on the shared
+ * `AuthState` automatically. Gameplay uses app-scoped tokens minted via
+ * `client.portal` (see the two-client pattern in the README).
+ *
+ * The dev bypass is **gone** — removed from every tier, not merely disabled — so
+ * an automated client signs in with a password like any other client.
  *
  * Usage:
  *
@@ -22,10 +24,14 @@
  *     wsUrl:   'wss://api.crowdedkingdoms.com/graphql',
  *   });
  *
- *   // passwordless sign-in (magic link): emails a one-time link
+ *   // email + password
+ *   const { user } = await client.auth.login({ email, password });
+ *
+ *   // or passwordless (magic link): emails a one-time link
  *   await client.auth.requestLoginLink({ email });
  *   // ...user clicks the link; the landing page calls:
- *   const { user } = await client.auth.completeLoginLink(tokenFromUrl);
+ *   await client.auth.completeLoginLink(tokenFromUrl);
+ *
  *   const me = await client.users.me();
  *
  * As of v6 the SDK wraps the **full** public API surface, namespaced
@@ -42,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '14.2.0';
+export const VERSION = '15.0.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -434,6 +440,8 @@ export { UdpErrorCode } from './types.js';
 // -----------------------------------------------------------------------------
 export {
   AuthAPI,
+  isAlreadyRegisteredError,
+  isPasswordUnconfirmedError,
   type AuthResponse,
   type AuthUser,
   type UserIdentity,

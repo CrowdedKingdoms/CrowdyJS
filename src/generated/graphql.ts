@@ -1577,6 +1577,23 @@ export type BatchActorLookupInput = {
   uuids: Array<Scalars['String']['input']>;
 };
 
+/** An organization whose wallet is not debited and whose apps are not denied for funds. Usage is still metered; waived amounts are in org_billing_waivers. */
+export type BillingExemptOrgType = {
+  __typename?: 'BillingExemptOrgType';
+  /** Organization name. */
+  name: Scalars['String']['output'];
+  /** Organization id (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Why the exemption exists. Required when setting it true. */
+  reason: Scalars['String']['output'];
+  /** When the exemption was last set true. */
+  setAt: Scalars['DateTime']['output'];
+  /** Operator user_id who last set the exemption true. */
+  setBy: Maybe<Scalars['BigInt']['output']>;
+  /** Organization slug. */
+  slug: Scalars['String']['output'];
+};
+
 /** Live (most recent heartbeat) Buddy UDP throughput rates. */
 export type BuddyLiveRates = {
   __typename?: 'BuddyLiveRates';
@@ -2507,6 +2524,76 @@ export enum CrowdyStudioAgentApprovalStatus {
   Revoked = 'REVOKED'
 }
 
+/** One allowed Agentic Studio mode that cannot perform the work the mode exists for, because the tool or risk-class allowlist excludes every tool that would do it. This is a capability shortfall, not a permission failure: the policy really is enabled and the mode really is allowed, so no disable reason code describes it. */
+export type CrowdyStudioAgentCapabilityGap = {
+  __typename?: 'CrowdyStudioAgentCapabilityGap';
+  /** Stable code. NO_TOOLS: the tool allowlist is empty, so the agent can only talk. NO_WRITE_RISK: tools are allowed but every risk class that would let this mode change something is not, so BUILD can read and cannot build, and PLAY can observe and cannot act. */
+  code: Scalars['String']['output'];
+  /** Safe operator-facing explanation naming the missing risk classes. Never includes provider bodies or secrets. */
+  detail: Scalars['String']['output'];
+  /** The allowed mode that has nothing useful to call. */
+  mode: CrowdyStudioAgentMode;
+};
+
+/** The answering ck-api instance's Agentic Studio capability: the models it carries with their pinned prices, the implemented tool registry with risk classes, and the full mode and risk-class value sets a policy may draw from. This is deployed configuration, not stored policy — a platform policy naming anything absent here is accepted and then runs nothing. */
+export type CrowdyStudioAgentCatalog = {
+  __typename?: 'CrowdyStudioAgentCatalog';
+  /** The answering instance's datacenter (CK_DATACENTER), or null. */
+  datacenterCode: Maybe<Scalars['String']['output']>;
+  /** Default model id, or null when the agent is disabled here. */
+  defaultModelId: Maybe<Scalars['String']['output']>;
+  /** Whether CROWDY_STUDIO_AGENT_ENABLED is set on this instance. False means every list below is empty and no policy can make the agent run here. */
+  instanceEnabled: Scalars['Boolean']['output'];
+  /** Which process answered (CKS_RUNTIME_SERVER_ID or hostname), because this is a per-instance answer. */
+  instanceId: Maybe<Scalars['String']['output']>;
+  /** Models this instance carries, sorted by id. Empty when the agent is disabled here. */
+  models: Array<CrowdyStudioAgentCatalogModel>;
+  /** Every mode value a policy allowlist may contain. */
+  modes: Array<CrowdyStudioAgentMode>;
+  /** Platform policy contract version the instance enforces. */
+  platformPolicyVersion: Scalars['String']['output'];
+  /** Provider the instance would route to: 'openrouter', or 'fake' outside production. */
+  provider: Scalars['String']['output'];
+  /** Digest over the whole compiled-in tool registry. Two instances reporting different digests are running different tool sets. */
+  registryDigest: Scalars['String']['output'];
+  /** Every risk-class value a policy allowlist may contain. */
+  riskClasses: Array<CrowdyStudioAgentRiskClass>;
+  /** Implemented tools, sorted by logical name. Present whether or not the agent is enabled, because the registry is compiled in. */
+  tools: Array<CrowdyStudioAgentCatalogTool>;
+};
+
+/** One model the answering ck-api instance carries, with the pinned price it will meter against. */
+export type CrowdyStudioAgentCatalogModel = {
+  __typename?: 'CrowdyStudioAgentCatalogModel';
+  /** Pinned input price in micro-USD per million tokens. */
+  inputMicrosPerMillion: Scalars['Int']['output'];
+  /** Whether this is the instance's default model (CROWDY_STUDIO_AGENT_DEFAULT_MODEL). */
+  isDefault: Scalars['Boolean']['output'];
+  /** Exact provider model id, as a policy would name it. */
+  modelId: Scalars['String']['output'];
+  /** Pinned output price in micro-USD per million tokens. */
+  outputMicrosPerMillion: Scalars['Int']['output'];
+  /** Whether the instance would accept a run on this model: it is in the instance allowlist and has a positive pinned price in both directions. A zero price is only reachable with the non-production fake provider, which cannot reserve cost. */
+  selectable: Scalars['Boolean']['output'];
+};
+
+/** One implemented crowdy.agent-tools/1 tool, named exactly as a policy allowlist must name it. */
+export type CrowdyStudioAgentCatalogTool = {
+  __typename?: 'CrowdyStudioAgentCatalogTool';
+  /** Whether every call needs exact human approval regardless of policy. */
+  approvalRequired: Scalars['Boolean']['output'];
+  /** Trusted boundary that runs it: SERVER or BROWSER. */
+  executor: CrowdyStudioAgentToolExecutor;
+  /** Modes the tool is available in. */
+  modes: Array<CrowdyStudioAgentMode>;
+  /** Logical dotted tool name. This is the string an allowedToolNames entry must equal. */
+  name: Scalars['String']['output'];
+  /** Server-classified risk. Allowing the class is necessary but not sufficient: an approval-gated tool still requires exact human approval. */
+  riskClass: CrowdyStudioAgentRiskClass;
+  /** What the tool does, from its canonical descriptor. */
+  summary: Scalars['String']['output'];
+};
+
 /** Typed union of ordered, replayable version 1 session facts. Delivery is at-least-once; seq and eventId support deduplication. */
 export type CrowdyStudioAgentEvent = AgentApprovalEvent | AgentBudgetEvent | AgentCheckpointEvent | AgentLeaseEvent | AgentLifecycleEvent | AgentMessageEvent | AgentRunEvent | AgentToolEvent;
 
@@ -2681,14 +2768,16 @@ export type CrowdyStudioAgentPolicy = {
   allowedModelIds: Array<Scalars['String']['output']>;
   /** Human-selectable modes allowed by this layer/intersection. */
   allowedModes: Array<CrowdyStudioAgentMode>;
-  /** Allowed tool risk classes. Required approval classes remain approval-gated even when listed. */
+  /** Allowed tool risk classes. Required approval classes remain approval-gated even when listed. Empty follows the same rule as allowedToolNames: deny-all on PLATFORM, inherit-the-platform on APP. An EFFECTIVE policy can never be enabled with an empty list, because crowdy.studio-agent-policy/1 requires a non-empty risk intersection; that case reports AGENT_SCOPE_DENIED. */
   allowedRiskClasses: Array<CrowdyStudioAgentRiskClass>;
-  /** Exact crowdy.agent-tools/1 logical tool names allowed by this layer/intersection. Empty denies all tools. */
+  /** Exact crowdy.agent-tools/1 logical tool names allowed by this layer/intersection. Empty means opposite things at the two layers: on PLATFORM it denies every tool, because the platform layer is the ceiling; on APP it expresses no narrowing, so EFFECTIVE inherits the platform list unchanged. An app therefore cannot reach a tool the platform has not published, and an operator who later adds one widens every app that names none. */
   allowedToolNames: Array<Scalars['String']['output']>;
   /** App id for APP/EFFECTIVE policy; null for platform policy. */
   appId: Maybe<Scalars['BigInt']['output']>;
   /** App revision used by an EFFECTIVE projection; zero means missing app policy. */
   appRevision: Scalars['BigInt']['output'];
+  /** Allowed modes that cannot do what the mode is for, derived from this layer's own tool and risk allowlists. Read this on the EFFECTIVE projection: an empty list is the only thing that entitles a caller to report an unblocked chain, because "enabled with a null disableReasonCode" is true of a dock whose BUILD mode has no tool it may call. On PLATFORM and APP it describes that layer in isolation and is not a claim about the intersection. */
+  capabilityGaps: Array<CrowdyStudioAgentCapabilityGap>;
   /** Policy row creation time or projection time. */
   createdAt: Scalars['DateTime']['output'];
   /** Safe operator/app reason text; never includes provider bodies or secrets. */
@@ -3418,12 +3507,6 @@ export type DeployPlayerComputeInput = {
   target: PlayerComputeTarget;
   /** Optional server tick rate in Hz. Omit for invoke/event-only modules or CLIENT artifacts. Clamped by the effective player/app policy. */
   tickHz?: InputMaybe<Scalars['Float']['input']>;
-};
-
-/** Dev-only bypass sign-in (active only when DEV_AUTH_BYPASS is enabled; never in production). */
-export type DevLoginInput = {
-  /** Email of the account to sign in as (created if absent). */
-  email: Scalars['String']['input'];
 };
 
 /** Compute units attributed to one engine over the query window. */
@@ -4194,6 +4277,42 @@ export type GmFunction = {
   warnings: Array<Scalars['String']['output']>;
 };
 
+/** The player-invoke breaker's mode and thresholds on the answering instance, with this app's circuits. The mode decides whether any of it refuses anything. */
+export type GmFunctionBreakerStatus = {
+  __typename?: 'GmFunctionBreakerStatus';
+  /** Circuits for this app, non-closed first, then by consecutive failures. Only functions that have failed at least once appear. */
+  circuits: Array<GmFunctionCircuit>;
+  /** How long an open circuit waits before admitting one probe, in milliseconds. */
+  cooldownMs: Scalars['Int']['output'];
+  /** Consecutive failed player invokes of one function before its circuit opens. */
+  failureThreshold: Scalars['Int']['output'];
+  /** 'shadow' (default: the state machine runs in full, every call is admitted, and shadowRefusals counts what enforcement would have refused), 'enforce' (the same state machine, refusing), or 'off' (no state, no measurement). Read from GM_FUNCTION_BREAKER_MODE on the instance that answered. */
+  mode: Scalars['String']['output'];
+};
+
+/** One model function's circuit on the player-invoke path. Rows are created lazily on a function's first failure, so a function absent from this list has never failed. */
+export type GmFunctionCircuit = {
+  __typename?: 'GmFunctionCircuit';
+  /** App the function belongs to. */
+  appId: Scalars['BigInt']['output'];
+  /** 'closed', 'open', or 'half_open'. In shadow mode an open circuit refuses nothing: read it as 'this function has been failing', not 'players are being blocked'. */
+  circuitState: Scalars['String']['output'];
+  /** Failed player invokes with no success in between. One success resets it to zero, which is what makes the threshold mean a broken function rather than a busy one. */
+  consecutiveFailures: Scalars['Int']['output'];
+  /** When an open circuit next admits one probe, and the window that probe holds. Null when closed. */
+  cooldownUntil: Maybe<Scalars['DateTime']['output']>;
+  /** Function name as a player invokes it, matching gm_function_defs.name. A renamed function starts with a clean circuit. */
+  functionName: Scalars['String']['output'];
+  /** When the circuit last opened. Null if it never has. */
+  openedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Player invokes admitted in shadow mode that enforcement WOULD have refused. This is the measurement: it answers what switching enforcement on would have cost players. Never incremented in enforce mode, where those calls are refused instead. */
+  shadowRefusals: Scalars['BigInt']['output'];
+  /** Lifetime openings. A function that opens once a week and one that opens every minute are different problems, and circuitState cannot tell them apart. */
+  totalOpens: Scalars['BigInt']['output'];
+  /** When the circuit row last changed. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
 /** One declared write a function performs: set `property` on `target` to `expression`. */
 export type GmFunctionMutation = {
   __typename?: 'GmFunctionMutation';
@@ -4550,7 +4669,7 @@ export type GraphQlServer = {
   memoryUsagePct: Maybe<Scalars['Float']['output']>;
   /** Cloud provider instance id of the underlying host, if known. */
   providerInstanceId: Maybe<Scalars['String']['output']>;
-  /** Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-2.gxca.prod.cp.cks-env.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you. */
+  /** Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.v7.cks-env.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you. */
   publicHostname: Maybe<Scalars['String']['output']>;
   /** Public IPv4 address clients use to reach this server, if assigned. */
   publicIp4: Maybe<Scalars['String']['output']>;
@@ -5048,9 +5167,9 @@ export type Mutation = {
   consentGridClientMod: Scalars['Boolean']['output'];
   /** Operator only (is_operator). Patches the platform compute ceilings: omitted fields stay unchanged, an explicit null clears that override (game-api falls back to env/default), a value (> 0) sets it. SIDE EFFECTS: fans a replica notify out to every game-api so the new ceilings clamp computeSetPolicy within ~30 seconds without a restart, and writes an audit entry. Lowering a ceiling does not shrink already-stored per-app policies; it rejects future computeSetPolicy values above the new ceiling. Returns the updated ceilings row. */
   cpSetComputePlatformCeilings: CpComputePlatformCeilings;
-  /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment, sanitized audit event, and transactional Game API policy notify. Runtime preemption depends on Game API pulling and enforcing the fresh envelope; releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment and a sanitized audit event. NOTHING IS PUSHED TO GAME API: preemption takes effect when its runtime next pulls this app's crowdy.studio-agent-policy/1 replica, which is within about a minute for an app already holding one and not at all for an app that does not until a permitted caller asks. Releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   cpSetCrowdyStudioAgentAppKill: CrowdyStudioAgentPolicy;
-  /** Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, revision increments, a sanitized append-only audit event is written, and transactional replica notifications fan out to every app with Agentic Studio policy. Runtime enforcement changes only when Game API pulls and validates the fresh crowdy.studio-agent-policy/1 envelope; Game API must fail closed if it is missing, malformed, or stale. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  /** Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, the revision increments, and a sanitized append-only audit event is written. NOTHING IS FANNED OUT TO APPS: Game API pulls crowdy.studio-agent-policy/1 per app, so a platform change reaches an app that already holds a replica within about a minute (refreshAfter is two thirds of a 60s validity) and reaches an app with no replica only when a permitted caller next asks about it. Game API must fail closed if the envelope is missing, malformed, or stale. Narrowing the platform lists narrows every app immediately on its next read, including apps that expressed no narrowing of their own. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   cpSetCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
   /** Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user. */
   createAccessTier: AppAccessTier;
@@ -5166,8 +5285,6 @@ export type Mutation = {
   deleteTeamRole: Scalars['Boolean']['output'];
   /** DESTRUCTIVE: deletes the authenticated user’s per-app state row for `appId` and returns the deleted row. Requires a valid game token; acts only on the caller’s own state. Throws NotFound when no row exists. */
   deleteUserAppState: UserAppState;
-  /** DEV ONLY bypass sign-in: returns a session for the given email without email/social verification. Active only when DEV_AUTH_BYPASS is enabled; throws (FORBIDDEN) otherwise. Never enabled in production. */
-  devLogin: AuthResponse;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
@@ -5342,6 +5459,8 @@ export type Mutation = {
   revokeOrgToken: Scalars['Boolean']['output'];
   /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
+  /** OPERATOR ONLY. Runs the shared-usage billing tick once. It still bills only the last CLOSED clock hour — it will not charge an open hour. Use this to prove a closed-hour debit without waiting for the ~60s cron. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier. */
+  runSharedUsageBillingTick: Scalars['Boolean']['output'];
   /** Send an actor (player/NPC) state update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — it does NOT confirm the world applied the update. There is NO separate per-request success response: the game server fans the update out to every client in the target chunk INCLUDING the sender, so you observe your own applied update as an ActorUpdateNotification carrying the same sequenceNumber (ActorUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Subscribe to udpNotifications before sending so the self-notification/error is not missed. */
   sendActorUpdate: Scalars['Boolean']['output'];
   /** Send a spatial voice/audio packet, fanned out to nearby actors as a ClientAudioNotification. Requires a bearer game token; voice may additionally be gated by a runtime/grid permission for the region — if the caller lacks it the game server responds asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT that it was delivered; the sender receives no echo, only errors (GenericErrorResponse, correlated by sequenceNumber) on udpNotifications. sequenceNumber is correlation only, not an idempotency key. */
@@ -5376,11 +5495,13 @@ export type Mutation = {
   setAppVisibility: App;
   /** Enables or disables off-session auto-billing for an org and updates its thresholds. When enabled and the wallet falls to lowWaterThresholdCents, the saved payment method is charged rechargeAmountCents (requires setupSharedPaymentMethod first). Pass limitCents=null for no per-period cap. Requires the 'manage_billing' org permission. */
   setAutoBilling: OrgAutoBilling;
+  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed. */
+  setBillingRate: SetRateCardResult;
   /** Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately. */
   setChannelMemberRoles: GroupMember;
   /** Set who may create channels in an app and the default membership policy for new channels. Requires app-admin ('manage_apps'). Affects future channel creation only, not existing channels. */
   setChannelPolicy: AppGroupPolicy;
-  /** Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. Model/tool/mode/risk lists are intersected with platform allowlists and every numeric/retention value is clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision, appends a sanitized audit event, and transactionally notifies Game API to pull crowdy.studio-agent-policy/1. Runtime enforcement changes only after Game API obtains and validates the fresh replica. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  /** Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. A model/tool/mode/risk list naming anything outside the platform allowlist is REFUSED with AGENT_POLICY_INVALID quoting the platform's current list, rather than silently reduced; a list you do send is stored exactly as sent and can only narrow, and omitting it entirely means 'no narrowing', which inherits the platform's list live on every read. Numeric and retention values are still clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision and appends a sanitized audit event. NOTHING IS PUSHED TO GAME API: its runtime pulls crowdy.studio-agent-policy/1, obtaining a replica the first time a permitted caller asks about an app that has none, and re-pulling an existing replica once it passes refreshAfter (two thirds of its 60s validity). A change therefore reaches enforcement within about a minute for an app already in use, and not at all until someone asks for one that is not. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   setCrowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
   /** Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). */
   setEarlyAccessOverride: User;
@@ -5390,6 +5511,8 @@ export type Mutation = {
   setListingPricing: Scalars['Boolean']['output'];
   /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
   setOperator: User;
+  /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
+  setOrgBillingExempt: BillingExemptOrgType;
   /** Super admin only. Used to freeze/unfreeze orgs platform-wide. SIDE EFFECT: sets organizations.status, which gates the org's platform access. */
   setOrgStatus: Organization;
   /** Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method. */
@@ -5973,11 +6096,6 @@ export type MutationDeleteUserAppStateArgs = {
 };
 
 
-export type MutationDevLoginArgs = {
-  input: DevLoginInput;
-};
-
-
 export type MutationExchangePortalCodeArgs = {
   input: ExchangePortalCodeInput;
 };
@@ -6551,6 +6669,11 @@ export type MutationSetAutoBillingArgs = {
 };
 
 
+export type MutationSetBillingRateArgs = {
+  input: SetRateCardInput;
+};
+
+
 export type MutationSetChannelMemberRolesArgs = {
   input: SetMemberRolesInput;
 };
@@ -6585,6 +6708,13 @@ export type MutationSetListingPricingArgs = {
 export type MutationSetOperatorArgs = {
   userId: Scalars['BigInt']['input'];
   value: Scalars['Boolean']['input'];
+};
+
+
+export type MutationSetOrgBillingExemptArgs = {
+  exempt: Scalars['Boolean']['input'];
+  orgId: Scalars['BigInt']['input'];
+  reason: Scalars['String']['input'];
 };
 
 
@@ -7582,7 +7712,7 @@ export enum PlayerFaultCode {
   PlatformError = 'PLATFORM_ERROR',
   /** A metered allowance is spent and does not return on its own. */
   QuotaExhausted = 'QUOTA_EXHAUSTED',
-  /** This caller is asking too often. `retryAfterMs` is carried in error extensions when it is known. */
+  /** This caller is asking too often. It arrives ONLY as a thrown error, never in band on a result, and `extensions.retryAfterMs` carries the wait. That number is the milliseconds REMAINING in the current fixed window at the moment the refusal was built, not a fixed backoff, so a second refusal inside the same window carries a smaller number: treat it as a deadline from receipt and do not reuse a cached one. */
   RateLimited = 'RATE_LIMITED',
   /** A breaker is open or an operator switch is off for this subject. */
   TemporarilyDisabled = 'TEMPORARILY_DISABLED',
@@ -7598,7 +7728,11 @@ export enum PlayerFaultCode {
   WrongDatacenter = 'WRONG_DATACENTER'
 }
 
-/** Why an invocation failed, in the only vocabulary a player may be shown: a stable code, whose problem it is, and whether repeating the identical call could succeed. It carries no message, no engine name and no internal detail by design — blame attribution is the platform's job and presentation is the game's. */
+/**
+ * Why an invocation failed, in the only vocabulary a player may be shown: a stable code, whose problem it is, and whether repeating the identical call could succeed. It carries no message, no engine name and no internal detail by design — blame attribution is the platform's job and presentation is the game's.
+ *
+ * IT CARRIES NO TIMING, AND NOTHING THAT NEEDS TIMING ARRIVES HERE. A refusal that can tell you how long to wait — `RATE_LIMITED` above all — is THROWN, with `extensions.retryAfterMs`, and never returned in band on a result. So `retryable: true` here means "try again", not "try again after N milliseconds", and a client with nothing but this object is right to use its own backoff. `expression-fault.classifier.spec.ts` holds that split rather than leaving it to how the code happens to be arranged.
+ */
 export type PlayerFaultInfo = {
   __typename?: 'PlayerFaultInfo';
   /** Whose problem this is. The one question a game cannot answer for itself. */
@@ -7754,7 +7888,7 @@ export type PlayerWalletTransaction = {
   referenceId: Maybe<Scalars['String']['output']>;
   /** Transaction id. */
   transactionId: Scalars['BigInt']['output'];
-  /** One of 'topup', 'usage_debit', 'auto_recharge', 'refund', 'adjustment'. */
+  /** What produced this entry. The complete set of values this API writes: "topup" (credit from a completed checkout, positive), "auto_recharge" (off-session automatic recharge, positive), "payout_credit" (marketplace seller payout, positive), "refund" (marketplace refund returned to the buyer, positive), "usage_debit" (hourly player-compute metered charge for one closed clock hour, negative), "purchase" (marketplace purchase, negative), "adjustment" (operator or dispute-clawback correction, signed). */
   transactionType: Scalars['String']['output'];
   /** The owning player user id. */
   userId: Scalars['BigInt']['output'];
@@ -8054,7 +8188,7 @@ export type Query = {
   appsConnection: AppsConnection;
   /** All apps belonging to an organization, identified by the org's slug, regardless of visibility or status (includes drafts and archived). Requires authentication; intended for org dashboards. Ordered newest-first. Returns an empty list for an unknown slug. */
   appsForOrg: Array<App>;
-  /** The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart. The dev mock provider only appears when the dev bypass is enabled. */
+  /** The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart. */
   availableLoginProviders: Array<Scalars['String']['output']>;
   /** Fetches a single avatar by id. Requires a valid game token. Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null). Throws NotFound if the id does not exist. State blobs are base64-encoded binary. */
   avatar: Avatar;
@@ -8064,6 +8198,10 @@ export type Query = {
   avatarAppStates: Array<AppAvatarState>;
   /** Bulk-fetches actors by a list of 32-character ASCII uuids in one round-trip. Requires a valid game token. PUBLIC-STATE ONLY: `privateState` is stripped (null) for every result regardless of ownership. Unknown uuids are silently omitted. Use this to resolve many actors at once; use `actor` for a single owner-scoped fetch. */
   batchLookupActors: Array<Actor>;
+  /** OPERATOR ONLY. Every organization currently marked billing_exempt. An exemption nobody can enumerate is an exemption that outlives its reason. */
+  billingExemptOrgs: Array<BillingExemptOrgType>;
+  /** OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price and hourly free allowance. SHARED is organization usage billed to the org wallet as "shared_usage"; PLAYER is player compute billed to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only. */
+  billingRateCard: Array<RateCardEntryType>;
   /** Fetch one channel by id. Errors if the id is not a channel. */
   channel: Group;
   /** List the members of a channel (the subscriber set, including pending requests), each with their status and roles. */
@@ -8104,11 +8242,13 @@ export type Query = {
   computeTemplates: Array<ComputeTemplateInfo>;
   /** Operator only (is_operator). The stored platform ceilings for the per-app WASM compute policy (the knobs computeSetPolicy clamps against). Null fields mean no operator override: game-api uses its COMPUTE_PLATFORM_MAX_* env var, then the code default. Read-only. */
   cpComputePlatformCeilings: CpComputePlatformCeilings;
+  /** Operator only (is_operator or is_super_admin). What the ANSWERING ck-api instance carries for Agentic Studio: allowlisted models with their pinned micro-USD prices, the implemented crowdy.agent-tools/1 tools with risk classes, and the complete mode and risk-class value sets a policy may draw from. It is deployed configuration read from that one process, not stored policy and not a fleet-wide claim, so it reports which instance and datacenter answered. A platform policy may name a model or tool absent here: the write succeeds, the value is stored and echoed back, and no run can use it. */
+  cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog;
   /** Operator only (is_operator or is_super_admin). Read the platform Agentic Studio enablement, global emergency kill, model/tool/mode/risk allowlists, budget ceilings, retention/privacy policy, pilot funding seam, timestamps, and revision. No provider credential or request body is stored or returned. */
   cpCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
   /** Return every effective TURN, SESSION, and PLAYER_DAY request/token/reasoning/cost/tool-round/wall-clock/tool-call/compile dimension with reserved, consumed, and non-negative remaining values. The pilot is platform-funded and this owner/app query never debits a wallet. */
   crowdyStudioAgentBudget: AgentBudget;
-  /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, exact model/tool/mode/risk intersections, minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
+  /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, the resolved model/tool/mode/risk lists (models and modes are the platform/app intersection; a tool or risk list the app left empty is inherited from the platform whole, because empty at a layer that can only narrow means no narrowing), minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
   crowdyStudioAgentEffectivePolicy: CrowdyStudioAgentPolicy;
   /** Replay ordered durable typed events with seq greater than afterSeq. Requires the app-scoped owner and use_studio_agent. Use this query to fill subscription gaps; results are ascending, at-least-once safe, default 100, maximum 200. */
   crowdyStudioAgentHistory: AgentEventConnection;
@@ -8172,6 +8312,8 @@ export type Query = {
   gameModelFlow: GmFlowTimeline;
   /** Fetch one studio-defined function by name. Requires app-admin ('manage_apps'). */
   gameModelFunction: GmFunction;
+  /** State of the per-function circuit breaker on the player-invoke path (gameModelInvoke) for one app, plus the mode and thresholds the answering instance is running. In the default 'shadow' mode nothing is refused and shadowRefusals counts what enforcement would have refused, so an open circuit means the function has been failing rather than that players are being blocked. A function that has never failed has no row and is absent. Requires the org 'view_compute_diagnostics' permission. */
+  gameModelFunctionCircuits: GmFunctionBreakerStatus;
   /** List studio-defined functions for an app, optionally filtered to those attached to a container type. Requires app-admin ('manage_apps'). */
   gameModelFunctions: Array<GmFunction>;
   /** Read the app's game-model runtime policy (session creation policy + default participant role). Requires app-admin ('manage_apps'). */
@@ -8344,7 +8486,7 @@ export type Query = {
   quotasForOrg: Array<ServiceQuota>;
   /** Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index. */
   runtimePermissions: Array<Scalars['String']['output']>;
-  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, preferring one co-located with the datacenter that holds the data for this app (all rows for one app live in a single datacenter) and falling back to any healthy server if none is. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
+  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). If that datacenter has no healthy Buddy this REFUSES with NO_LOCAL_BUDDY rather than returning one elsewhere: every gameplay write for the session would otherwise cross datacenters, which is invisible because each write still succeeds. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
   serverWithLeastClients: ServerStatus;
   /** @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only. */
   sharedEnvPlans: Array<SharedEnvPlan>;
@@ -8596,6 +8738,11 @@ export type QueryAvatarAppStatesArgs = {
 
 export type QueryBatchLookupActorsArgs = {
   input: BatchActorLookupInput;
+};
+
+
+export type QueryBillingRateCardArgs = {
+  scope: RateScope;
 };
 
 
@@ -8915,6 +9062,13 @@ export type QueryGameModelFlowArgs = {
 export type QueryGameModelFunctionArgs = {
   appId: Scalars['BigInt']['input'];
   name: Scalars['String']['input'];
+};
+
+
+export type QueryGameModelFunctionCircuitsArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -9399,6 +9553,48 @@ export type QueryWalletTransactionsConnectionArgs = {
   orgId: Scalars['BigInt']['input'];
 };
 
+/** One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged. */
+export type RateCardEntryType = {
+  __typename?: 'RateCardEntryType';
+  /** ISO currency code. USD today. */
+  currency: Scalars['String']['output'];
+  /** Operator note on the seed row; null when unset. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit. */
+  freePerHour: Maybe<Scalars['BigInt']['output']>;
+  /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app), and player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance. */
+  freePerMonth: Maybe<Scalars['BigInt']['output']>;
+  /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates. */
+  metric: Scalars['String']['output'];
+  /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged. */
+  priceCents: Scalars['Float']['output'];
+  /** Which card this row is on. */
+  scope: RateScope;
+  /** Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity. */
+  unitLabel: Scalars['String']['output'];
+  /** How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 15 with unitQuantity 1073741824 is 15 cents per GiB. */
+  unitQuantity: Scalars['BigInt']['output'];
+};
+
+/** One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards. */
+export type RateChangeType = {
+  __typename?: 'RateChangeType';
+  /** One of "priceCents", "unitLabel", "unitQuantity", "freePerHour" or "freePerMonth". */
+  field: Scalars['String']['output'];
+  metric: Scalars['String']['output'];
+  /** The value before this call, as a decimal string. "none" when there was no allowance row. */
+  previous: Scalars['String']['output'];
+  scope: RateScope;
+  /** The value after this call, as a decimal string. */
+  updated: Scalars['String']['output'];
+};
+
+/** Which rate card. SHARED prices organization metered usage for shared-environment apps (billed hourly to the org wallet as "shared_usage"). PLAYER prices player compute (billed hourly to the player wallet as "usage_debit"). */
+export enum RateScope {
+  Player = 'PLAYER',
+  Shared = 'SHARED'
+}
+
 /** Realtime lifecycle event delivered on the udpNotifications subscription. It is a control frame — it carries no appId, so it is never dropped by the per-app fan-out filter. Branch on `code`; use `retryable` to decide whether retrying can succeed. Most codes report that a session could not be opened or correctly scoped and are TERMINAL: the subscription completes immediately after emitting one, so the client must fix the cause and resubscribe. The exception is SERVER_DRAINING, which arrives mid-stream on a healthy subscription and does NOT end it — see that code below. */
 export type RealtimeConnectionEvent = {
   __typename?: 'RealtimeConnectionEvent';
@@ -9447,8 +9643,6 @@ export type RequestLoginLinkInput = {
 /** Result of requesting a magic link. */
 export type RequestLoginLinkResult = {
   __typename?: 'RequestLoginLinkResult';
-  /** DEV ONLY: when DEV_AUTH_BYPASS is enabled (so no email is delivered), the one-time token to pass to completeLoginLink. Always null in production. */
-  devToken: Maybe<Scalars['String']['output']>;
   /** Always true (does not reveal whether the email exists). */
   sent: Scalars['Boolean']['output'];
 };
@@ -10120,13 +10314,13 @@ export type SetContainerPropertyInput = {
 
 /** Patch an app's Agentic Studio policy. Requires manage_compute. Omitted fields stay unchanged; all supplied authority and limits are clamped to platform policy. */
 export type SetCrowdyStudioAgentAppPolicyInput = {
-  /** Replacement exact model allowlist (max 64). App values are intersected with the platform allowlist. */
+  /** Replacement exact model allowlist (max 64). On an APP patch every id must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list; values are never silently dropped. On the PLATFORM patch this list IS the ceiling. Empty denies all models at either layer. */
   allowedModelIds?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** Replacement mode allowlist; app values are intersected with platform modes. */
+  /** Replacement mode allowlist. On an APP patch every mode must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list. Empty denies every mode at either layer; there is no inherit-on-empty for modes. */
   allowedModes?: InputMaybe<Array<CrowdyStudioAgentMode>>;
-  /** Replacement risk-class allowlist; app values are intersected with platform classes. */
+  /** Replacement risk-class allowlist. On an APP patch every class must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. On the PLATFORM patch this list is the ceiling and empty denies every class. */
   allowedRiskClasses?: InputMaybe<Array<CrowdyStudioAgentRiskClass>>;
-  /** Replacement exact logical tool-name allowlist (max 256). App values are intersected with platform tools. */
+  /** Replacement exact logical tool-name allowlist (max 256). On an APP patch every name must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. Sending an empty array on an APP patch clears a narrowing and is therefore also "no narrowing", not "deny all". On the PLATFORM patch this list is the ceiling and empty denies every tool. */
   allowedToolNames?: InputMaybe<Array<Scalars['String']['input']>>;
   /** App whose policy is changed. */
   appId: Scalars['BigInt']['input'];
@@ -10168,13 +10362,13 @@ export type SetCrowdyStudioAgentOperatorAppKillInput = {
 
 /** Operator-only platform policy patch. Omitted values stay unchanged; hard v1 privacy and retention maxima still apply. */
 export type SetCrowdyStudioAgentPlatformPolicyInput = {
-  /** Replacement exact model allowlist (max 64). App values are intersected with the platform allowlist. */
+  /** Replacement exact model allowlist (max 64). On an APP patch every id must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list; values are never silently dropped. On the PLATFORM patch this list IS the ceiling. Empty denies all models at either layer. */
   allowedModelIds?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** Replacement mode allowlist; app values are intersected with platform modes. */
+  /** Replacement mode allowlist. On an APP patch every mode must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list. Empty denies every mode at either layer; there is no inherit-on-empty for modes. */
   allowedModes?: InputMaybe<Array<CrowdyStudioAgentMode>>;
-  /** Replacement risk-class allowlist; app values are intersected with platform classes. */
+  /** Replacement risk-class allowlist. On an APP patch every class must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. On the PLATFORM patch this list is the ceiling and empty denies every class. */
   allowedRiskClasses?: InputMaybe<Array<CrowdyStudioAgentRiskClass>>;
-  /** Replacement exact logical tool-name allowlist (max 256). App values are intersected with platform tools. */
+  /** Replacement exact logical tool-name allowlist (max 256). On an APP patch every name must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. Sending an empty array on an APP patch clears a narrowing and is therefore also "no narrowing", not "deny all". On the PLATFORM patch this list is the ceiling and empty denies every tool. */
   allowedToolNames?: InputMaybe<Array<Scalars['String']['input']>>;
   /** Enable or disable this policy layer. */
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
@@ -10346,6 +10540,36 @@ export type SetQuotaInput = {
   period?: InputMaybe<Scalars['String']['input']>;
   /** Scope the rule to this access tier (BigInt as a decimal string). */
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+export type SetRateCardInput = {
+  /** Required when a unit change also changes the money. Restating 15c per GiB as 1.396984c per 100 MB is the same price and needs nothing; changing 20c per 100 MB to 20c per GiB-month is a 7841x cut and must be stated deliberately. The mutation refuses rather than guessing which one you meant. */
+  acknowledgeRepricing?: InputMaybe<Scalars['Boolean']['input']>;
+  /** New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged. */
+  freePerHour?: InputMaybe<Scalars['BigInt']['input']>;
+  /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. */
+  freePerMonth?: InputMaybe<Scalars['BigInt']['input']>;
+  /** The metered dimension to reprice. Refused unless the platform actually meters it: a rate for an unmetered metric bills nobody while appearing configured. */
+  metric: Scalars['String']['input'];
+  /** New price in cents per unitQuantity raw units. Must be >= 0; 0 means meter but do not charge. Omit to leave the price unchanged. Fractional values are accepted (the column is NUMERIC(20,6)). */
+  priceCents?: InputMaybe<Scalars['Float']['input']>;
+  /** Why this price is changing. Required: a rate change with no stated reason is not auditable after the fact. Recorded in the operator log with the before and after values. */
+  reason: Scalars['String']['input'];
+  /** Which card to edit. */
+  scope: RateScope;
+  /** New human unit this price is quoted in, e.g. "GiB" or "GiB-mo". Must be supplied together with unitQuantity: a label on its own restates the rate card while the arithmetic keeps the old divisor. Omit both to leave the unit unchanged. */
+  unitLabel?: InputMaybe<Scalars['String']['input']>;
+  /** New number of raw metric units one priceCents charge covers, as a BigInt decimal string. Must be > 0 and supplied together with unitLabel. Needed because every rate seed is ON CONFLICT DO NOTHING, so a unit corrected in the declaration never reaches a tier that is already installed. */
+  unitQuantity?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** The result of setting a rate: the new row and what moved. */
+export type SetRateCardResult = {
+  __typename?: 'SetRateCardResult';
+  /** One entry per field that changed. Never empty: a call that would change nothing is refused rather than reported as a successful no-op. */
+  changes: Array<RateChangeType>;
+  /** The dimension as it now stands. */
+  entry: RateCardEntryType;
 };
 
 /** Set or clear the current-turn user of a session. */
@@ -11466,7 +11690,7 @@ export type WalletTransaction = {
   referenceId: Maybe<Scalars['String']['output']>;
   /** Unique transaction id (BigInt as a decimal string). */
   transactionId: Scalars['BigInt']['output'];
-  /** What produced this transaction. Known values: "topup" (wallet credit from a checkout/top-up), "usage" (per-app usage charge, negative), "shared_usage" (shared-environment usage charge, negative), "reserved_throughput" (monthly/prorated reserved egress capacity, negative), "environment_usage" (hourly environment cost, negative), "auto_recharge" (automatic wallet recharge), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "admin_credit" (operator credit applied without a payment provider). Other caller-supplied deposit types are possible. */
+  /** What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved egress capacity, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced. */
   transactionType: Scalars['String']['output'];
   /** Wallet this transaction belongs to (BigInt as a decimal string). */
   walletId: Scalars['BigInt']['output'];
@@ -11539,6 +11763,8 @@ export type WasmComputeStat = {
 /** Aggregate compute activity for an app over a recent window: throughput, failure rate, fuel, egress, and a per-module breakdown. */
 export type WasmComputeStats = {
   __typename?: 'WasmComputeStats';
+  /** The instant through which these totals are complete. Activity is counted from per-minute usage rollups that each instance buffers in memory and writes every few seconds, so entry calls made after this instant are NOT included yet. Read it before concluding anything from a zero: `totalRuns: 0` with an `aggregatedThrough` a few seconds in the past means "nothing aggregated yet", not "nothing ran". Poll until `aggregatedThrough` is later than the run you are looking for. */
+  aggregatedThrough: Scalars['DateTime']['output'];
   /** Average run duration in microseconds. */
   avgDurationUs: Scalars['Int']['output'];
   /** Per-module breakdown. */
@@ -11551,7 +11777,7 @@ export type WasmComputeStats = {
   totalEgressMsgs: Scalars['BigInt']['output'];
   /** Total fuel consumed in the window. */
   totalFuelUsed: Scalars['BigInt']['output'];
-  /** Total runs in the window. */
+  /** Total entry calls (ticks + invocations) in the window, complete through `aggregatedThrough`. */
   totalRuns: Scalars['Int']['output'];
   /** The window size in minutes. */
   windowMinutes: Scalars['Int']['output'];
