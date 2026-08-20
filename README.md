@@ -725,8 +725,8 @@ endpoint; `client.graphql` reaches every surface.)
 the environment is not configured, so they are safe to leave in `npm test`.
 
 ```bash
-CROWDY_HTTP_URL='https://ck.<tier>.cp.cks-env.com' \
-CROWDY_WS_URL='wss://ck.<tier>.cp.cks-env.com/graphql' \
+CROWDY_HTTP_URL='https://ck.<tier>.v7.cks-env.com' \
+CROWDY_WS_URL='wss://ck.<tier>.v7.cks-env.com/graphql' \
 CROWDY_OWNER_EMAIL='owner@example.com' \
 CROWDY_TEST_APP_ID='78221653114368' \
   npm run test:e2e
