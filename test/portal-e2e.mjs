@@ -40,7 +40,7 @@ const code = (j) => j?.errors?.[0]?.extensions?.code ?? null;
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 const Q = {
-  devLogin: `mutation($i: DevLoginInput!){ devLogin(input:$i){ token gameTokenId user { userId } } }`,
+  register: `mutation($i: RegisterUserInput!){ register(registerUserInput:$i){ token gameTokenId user { userId } } }`,
   mint: `mutation($i: MintAppTokenInput!){ mintAppToken(input:$i){ token gameTokenId appId expiresAt gameApiUrl } }`,
   createCode: `mutation($i: CreatePortalAuthorizationCodeInput!){ createPortalAuthorizationCode(input:$i){ code redirectUri expiresAt } }`,
   exchange: `mutation($i: ExchangePortalCodeInput!){ exchangePortalCode(input:$i){ token gameTokenId appId } }`,
@@ -52,11 +52,17 @@ const Q = {
 
 async function main() {
   const email = `portal-e2e-${Date.now()}@example.com`;
-  // 1. devLogin (passwordless dev bypass) -> identity session token; creates the account on first use
-  const reg = await gql(API, Q.devLogin, { i: { email } });
-  const session = reg.data?.devLogin?.token;
-  const userId = reg.data?.devLogin?.user?.userId;
-  log(!!session && !!userId, '1. devLogin returns an identity session token', JSON.stringify(reg.errors ?? ''));
+  // 1. register a brand-new account -> identity session token.
+  //
+  // A NEW address is required, not merely convenient: `register` returns a
+  // session only for an address it is creating. One that already exists gets the
+  // password attached pending email confirmation and NO token, so reusing an
+  // address here would fail with a message about confirming an inbox.
+  const password = `Aa1!portal-${Date.now()}`;
+  const reg = await gql(API, Q.register, { i: { email, password } });
+  const session = reg.data?.register?.token;
+  const userId = reg.data?.register?.user?.userId;
+  log(!!session && !!userId, '1. register returns an identity session token', JSON.stringify(reg.errors ?? ''));
 
   // 2. mint app tokens for two apps (auto-grant free)
   const a1 = (await gql(API, Q.mint, { i: { appId: APP_A } }, session)).data?.mintAppToken;

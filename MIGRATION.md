@@ -1,3 +1,55 @@
+# CrowdyJS v15 — the dev auth bypass is gone (breaking)
+
+`client.auth.devLogin()` is **removed**, and so is the `devToken` field on
+`requestLoginLink`. Neither is deprecated or disabled — the server-side feature
+they called is deleted from every tier, so a wrapper for it could only produce a
+GraphQL validation error.
+
+**Why it went.** `devLogin` returned an identity session for any email address
+with no proof of ownership whatsoever. It was gated on a server flag the control
+plane derived as `tier !== 'prod'`, so it was live on dev and test, and if the
+address happened to belong to a super admin then so did the session. `devToken`
+was the same hole in a smaller shape: it put the emailed one-time magic-link
+token in the response body, readable by any unauthenticated caller who knew an
+address.
+
+**What replaces them: `login` and `register`, which are new here and are not new
+to the server.** Email + password has been first-class in the API throughout;
+only this SDK claimed the product was passwordless, and that gap is what pushed
+automated clients onto the bypass in the first place.
+
+```diff
+-await client.auth.devLogin('player@example.com');
++await client.auth.login({ email: 'player@example.com', password });
++// or, for an address that has never been seen:
++await client.auth.register({ email: 'player@example.com', password });
+```
+
+```diff
+ const link = await client.auth.requestLoginLink({ email });
+-if (link.devToken) await client.auth.completeLoginLink(link.devToken);
++// The token arrives only by email now. An automated caller should register an
++// account it holds the password to instead of reading one out of the response.
+```
+
+**Also new:** `client.auth.checkAuthMethod(email)` for email-first adaptive
+login, and two error predicates, because these two conditions are **not**
+distinguishable by GraphQL error code:
+
+- `isAlreadyRegisteredError(e)` — `register` refused because the address already
+  has an account. The server raises a `ConflictException` and it arrives as
+  `INTERNAL_SERVER_ERROR`, so a caller keying on `CONFLICT` matches nothing.
+- `isPasswordUnconfirmedError(e)` — `login` refused because the password is real
+  but unconfirmed on an account with another verified sign-in method. The remedy
+  is the emailed link, not a different password.
+
+**One behaviour worth knowing before you write a retry loop:** `register` returns
+a session only for an address it is **creating**. An address that already has an
+account gets the password attached *pending email confirmation* and no token.
+Registering and signing in are therefore not interchangeable.
+
+---
+
 # CrowdyJS v14 — one endpoint (breaking)
 
 v13 made the two GraphQL origins optional-but-supported. v14 removes the second
@@ -489,11 +541,12 @@ your sign-in flow to one of:
   await client.auth.socialLoginComplete({ provider: 'google', code, state });
   ```
 - **Dev bypass (development only):** `await client.auth.devLogin(email)` — works only
-  when the server has `DEV_AUTH_BYPASS` enabled.
+  when the server has `DEV_AUTH_BYPASS` enabled. **Removed in 15.0.0 — see below.**
 
 **Removed:** `client.auth.login`, `register`, `confirmEmail`, `requestPasswordReset`,
 `resetPassword`, `resendConfirmationEmail`, `changePassword` (and the
 `LoginUserInput` / `RegisterUserInput` / `ResetPasswordInput` types).
+**`login` and `register` came back in 15.0.0**; the rest did not.
 
 **New:** `requestLoginLink`, `completeLoginLink`, `socialLoginStart`,
 `socialLoginComplete`, `devLogin`, `availableLoginProviders`, `myIdentities`,

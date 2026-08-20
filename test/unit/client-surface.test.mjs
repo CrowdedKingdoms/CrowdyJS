@@ -120,14 +120,22 @@ test('client exposes the full management + game sub-client surface', async () =>
     'revokeCodeAdmission',
   ]);
 
-  // Passwordless auth surface (v8): no password login/register.
+  // Auth surface: email+password alongside magic link and social.
+  //
+  // This list asserted the OPPOSITE until 2026-08-20 -- that `login` and
+  // `register` were absent -- which was the SDK's passwordless claim written
+  // down as a check. The server has had both throughout; only the SDK pretended
+  // otherwise, and the gap is what sent automated clients to the dev bypass.
   assertMethods(client.auth, 'auth', [
+    'login', 'register', 'checkAuthMethod',
     'requestLoginLink', 'completeLoginLink', 'socialLoginStart',
-    'socialLoginComplete', 'devLogin', 'availableLoginProviders',
+    'socialLoginComplete', 'availableLoginProviders',
     'myIdentities', 'linkIdentity', 'unlinkIdentity', 'logout',
     'logoutAllDevices', 'setToken', 'getToken',
   ]);
-  for (const removed of ['login', 'register', 'changePassword', 'resetPassword']) {
+  // The bypass is removed from the SERVER, so a wrapper for it could only ever
+  // produce a validation error naming a field that does not exist.
+  for (const removed of ['devLogin', 'changePassword', 'resetPassword']) {
     assert.equal(client.auth[removed], undefined, `auth.${removed} should be removed`);
   }
 
