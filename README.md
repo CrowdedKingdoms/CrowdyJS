@@ -49,18 +49,20 @@ const client = createCrowdyClient({
   },
 });
 
-// Restore a previous session if there is one, otherwise sign in (passwordless).
+// Restore a previous session if there is one, otherwise sign in.
 await client.session.restore();
 if (!client.session.getToken()) {
-  // Magic link: email a one-time link, then complete with the token from it.
+  // Email + password:
+  await client.auth.login({ email: 'player@example.com', password });
+  // ...or create the account: client.auth.register({ email, password })
+  // Or magic link: email a one-time link, then complete with the token from it.
   await client.auth.requestLoginLink({ email: 'player@example.com', redirectUri });
   await client.auth.completeLoginLink(tokenFromLink);
   // Or social/OIDC: socialLoginStart('google', redirectUri) -> socialLoginComplete({ provider, code, state })
-  // Or dev/test only (server has DEV_AUTH_BYPASS): client.auth.devLogin('player@example.com')
 }
 
-// Passwordless sign-in returns an identity SESSION token (rejected for gameplay);
-// the account is created on first sign-in. Identity reads run on it:
+// Every sign-in returns an identity SESSION token (rejected for gameplay).
+// Identity reads run on it:
 const me = await client.users.me();
 console.log(me.email);
 ```
