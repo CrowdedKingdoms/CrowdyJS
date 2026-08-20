@@ -30,7 +30,7 @@ not a running service; gameplay data lives in **PostgreSQL + Citus** via
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
   depend on sibling repos at build time.
 - `test/e2e` — live suites; they skip without `CROWDY_*`. Point
-  `CROWDY_HTTP_URL` at the **shared entry origin** (`ck.<tier>.cp.cks-env.com`),
+  `CROWDY_HTTP_URL` at the **shared entry origin** (`ck.<tier>.v7.cks-env.com`),
   not a single datacenter.
 
 ## Core mental model: one endpoint, two tokens, two clients
