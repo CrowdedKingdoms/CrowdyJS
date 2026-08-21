@@ -64,17 +64,56 @@ export interface UserIdentity {
 }
 
 /**
+ * The `extensions.code` of the first GraphQL error, if there is one.
+ *
+ * Every predicate below asks the CODE first and the wording second, and the
+ * order is not a style choice. ck-api v1.60.0 fixed a mapping defect that made
+ * these codes unusable: `@nestjs/apollo` translates four HTTP statuses and
+ * collapses the rest, so a 409 arrived as `INTERNAL_SERVER_ERROR` and both of
+ * `changePassword`'s refusals arrived as `UNAUTHENTICATED` — the same code an
+ * expired session produces. The wording fallback is therefore not legacy
+ * clutter: a tier that has not deployed v1.60.0 still answers the old way, and
+ * a game pinning this SDK exactly may meet either. Delete it when no tier
+ * predates v1.60.0, and not before.
+ */
+/**
+ * `extensions.code` off anything error-shaped, whether it is a
+ * {@link CrowdyGraphQLError}, one raw GraphQL error entry, or the `code` getter
+ * the former lifts to the top level — all three reach a caller here, depending
+ * on whether the error was rethrown or destructured on the way.
+ */
+function codeOf(error: unknown): string | undefined {
+  const shape = error as
+    | { extensions?: { code?: unknown }; code?: unknown }
+    | null
+    | undefined;
+  if (typeof shape?.extensions?.code === 'string') return shape.extensions.code;
+  return typeof shape?.code === 'string' ? shape.code : undefined;
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
  * `register` refused because the address already has an account.
  *
- * Matched on WORDING rather than on an error code, which looks fragile and is
- * the only thing that works: the server raises a Nest `ConflictException` and it
- * arrives over GraphQL as `INTERNAL_SERVER_ERROR` — verified against a live
- * tier — so a caller keying on `CONFLICT` matches nothing and treats a routine
- * "this account exists" as a server fault.
+ * `EMAIL_ALREADY_REGISTERED` from v1.60.0. Before that it arrived as
+ * `INTERNAL_SERVER_ERROR`, so a caller keying on the code matched nothing and
+ * treated a routine "this account exists" as a server fault; the wording branch
+ * is what still works against those tiers.
+ *
+ * Note what this does NOT accept: a bare `CONFLICT`. From v1.60.0 that is the
+ * code a generic 409 carries, and a generic code cannot identify a specific
+ * condition — a predicate that accepted it would report any future conflict in
+ * this mutation as "already registered". Only a code minted for this outcome
+ * will do.
  */
 export function isAlreadyRegisteredError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /account with this email already exists/i.test(message);
+  return (
+    codeOf(error) === 'EMAIL_ALREADY_REGISTERED' ||
+    /account with this email already exists/i.test(messageOf(error))
+  );
 }
 
 /**
@@ -98,15 +137,16 @@ export function isPasswordUnconfirmedError(error: unknown): boolean {
  * the check that stops a stolen session from silently locking the owner out.
  * So a caller must route to `changePassword` rather than retrying.
  *
- * Matched on WORDING, like {@link isAlreadyRegisteredError} and for the same
- * reason. The schema says this "throws CONFLICT"; it does not reach a client
- * that way. Probed against a live tier on 2026-08-21: the server raises a Nest
- * `ConflictException` and it arrives as `INTERNAL_SERVER_ERROR`, so a caller
- * keying on `CONFLICT` matches nothing.
+ * `PASSWORD_ALREADY_SET` from ck-api v1.60.0. Before that the schema said this
+ * "throws CONFLICT" and it reached clients as `INTERNAL_SERVER_ERROR`, so the
+ * message was the only thing to match — which is why the wording branch is
+ * still here.
  */
 export function isPasswordAlreadySetError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /this account already has a password/i.test(message);
+  return (
+    codeOf(error) === 'PASSWORD_ALREADY_SET' ||
+    /this account already has a password/i.test(messageOf(error))
+  );
 }
 
 /**
@@ -114,27 +154,34 @@ export function isPasswordAlreadySetError(error: unknown): boolean {
  * magic-link or social-only account. The remedy is {@link setInitialPassword}
  * while signed in, or {@link requestPasswordReset}.
  *
- * Distinct from {@link isInvalidCurrentPasswordError}, and the distinction is
- * the point: both arrive as `UNAUTHENTICATED`, which is ALSO what an expired
- * session looks like. A caller keying on the code alone signs the user out
- * when they have merely typed the wrong current password, or offers them a
- * password field on an account that has none.
+ * `PASSWORD_NOT_SET` from ck-api v1.60.0. Before that this and
+ * {@link isInvalidCurrentPasswordError} both arrived as `UNAUTHENTICATED`,
+ * which is ALSO what an expired session looks like — so a caller keying on the
+ * code signed the user out when they had merely typed the wrong current
+ * password, or offered a password field on an account that has none. That is
+ * the defect the new codes exist to remove, and the wording branch is what
+ * still separates them on a tier that has not deployed it.
  */
 export function isNoPasswordSetError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /no password is set on this account/i.test(message);
+  return (
+    codeOf(error) === 'PASSWORD_NOT_SET' ||
+    /no password is set on this account/i.test(messageOf(error))
+  );
 }
 
 /**
  * {@link changePassword} refused because the current password is wrong. The
  * remedy is to ask again — the session is fine.
  *
- * See {@link isNoPasswordSetError} for why this needs telling apart from the
- * other `UNAUTHENTICATED` outcomes rather than being read off the error code.
+ * `INVALID_CURRENT_PASSWORD` (HTTP 403) from ck-api v1.60.0. See
+ * {@link isNoPasswordSetError} for what it used to be and why the wording
+ * branch stays.
  */
 export function isInvalidCurrentPasswordError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /invalid current password/i.test(message);
+  return (
+    codeOf(error) === 'INVALID_CURRENT_PASSWORD' ||
+    /invalid current password/i.test(messageOf(error))
+  );
 }
 
 const AUTH_RESPONSE_FIELDS = 'token gameTokenId user { userId email gamertag }';

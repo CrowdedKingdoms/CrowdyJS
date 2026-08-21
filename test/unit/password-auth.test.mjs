@@ -216,11 +216,15 @@ test('the three password-management refusals are told apart by wording, not by c
   } = await import('../../dist/index.js');
 
   // Every string below was read off a LIVE tier on 2026-08-21, not out of the
-  // server source: setInitialPassword's refusal is a Nest ConflictException and
-  // arrives as INTERNAL_SERVER_ERROR despite the schema saying "throws
-  // CONFLICT", and both changePassword refusals arrive as UNAUTHENTICATED --
-  // which is also what an expired session looks like. That is why these match
-  // on wording; the code cannot separate any of them.
+  // server source. At that point setInitialPassword's refusal arrived as
+  // INTERNAL_SERVER_ERROR despite the schema saying "throws CONFLICT", and both
+  // changePassword refusals arrived as UNAUTHENTICATED -- which is also what an
+  // expired session looks like, so a client reading the code signed the user
+  // out over a typo. ck-api v1.60.0 gives each one its own code (see the test
+  // below), and the WORDING PATH IS KEPT because a game pins this SDK exactly
+  // and may be talking to a tier that has not deployed it yet. Deleting this
+  // test after the fleet catches up would be deleting the only thing that keeps
+  // an older tier working.
   const alreadySet = new Error(
     'This account already has a password. Use changePassword to change it, or ' +
       'the password reset flow if you have forgotten it.',
@@ -264,6 +268,51 @@ test('the three password-management refusals are told apart by wording, not by c
   // the outcome whose remedy is signing in again.
   const expired = new Error('Unauthorized');
   for (const [, detector] of detectors) assert.ok(!detector(expired));
+});
+
+test('the same three refusals are told apart by CODE on a v1.60.0 tier', async () => {
+  const {
+    isPasswordAlreadySetError,
+    isNoPasswordSetError,
+    isInvalidCurrentPasswordError,
+    isAlreadyRegisteredError,
+  } = await import('../../dist/index.js');
+
+  // The durable half. ck-api v1.60.0 gives each refusal its own extensions.code,
+  // so the predicates no longer depend on an English sentence -- but they still
+  // accept one, which is what lets a single published build talk to both. The
+  // messages here are deliberately WRONG for the case, to prove the code alone
+  // decided: matching on wording would fail every assertion in this test.
+  const withCode = (code) => {
+    const e = new Error('a message that matches nothing');
+    e.extensions = { code };
+    return e;
+  };
+
+  assert.ok(isPasswordAlreadySetError(withCode('PASSWORD_ALREADY_SET')));
+  assert.ok(isNoPasswordSetError(withCode('PASSWORD_NOT_SET')));
+  assert.ok(isInvalidCurrentPasswordError(withCode('INVALID_CURRENT_PASSWORD')));
+  assert.ok(isAlreadyRegisteredError(withCode('EMAIL_ALREADY_REGISTERED')));
+
+  // A `code` property rather than `extensions.code`: CrowdyGraphQLError lifts it,
+  // and a caller inspecting a rethrown error sees that shape.
+  const lifted = new Error('nothing matches this either');
+  lifted.code = 'PASSWORD_ALREADY_SET';
+  assert.ok(isPasswordAlreadySetError(lifted));
+
+  // And the codes do not bleed: UNAUTHENTICATED now means only that the session
+  // is gone, which is the one outcome whose remedy is signing in again.
+  for (const detector of [
+    isPasswordAlreadySetError,
+    isNoPasswordSetError,
+    isInvalidCurrentPasswordError,
+    isAlreadyRegisteredError,
+  ]) {
+    assert.ok(!detector(withCode('UNAUTHENTICATED')));
+    assert.ok(!detector(withCode('INTERNAL_SERVER_ERROR')));
+  }
+  assert.ok(!isNoPasswordSetError(withCode('PASSWORD_ALREADY_SET')));
+  assert.ok(!isPasswordAlreadySetError(withCode('PASSWORD_NOT_SET')));
 });
 
 test('checkAuthMethod asks without revealing whether the account exists', async () => {
