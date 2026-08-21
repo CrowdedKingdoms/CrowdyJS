@@ -18,15 +18,27 @@ import { LogoutAllDevicesDocument, LogoutDocument } from '../generated/graphql.j
  * `register` have been first-class in the API throughout, and the C++ load
  * tester has used them all along. Only this SDK pretended otherwise, and the
  * gap sent integrators to the dev bypass — which no longer exists on any tier.
+ * The same gap ran one method deeper until 2026-08-21: password MANAGEMENT
+ * (reset, change, and adding a first password) was served by the API and
+ * wrapped here by nothing, so a game shipping this SDK had no first-class way
+ * to let a player set or change a password.
  *
  * Part of the management surface.
  *
  * **Public (no session):** {@link register}, {@link login},
  * {@link requestLoginLink}, {@link completeLoginLink}, {@link socialLoginStart},
  * {@link socialLoginComplete}, {@link availableLoginProviders},
- * {@link checkAuthMethod}. **Require a session:** {@link logout},
- * {@link logoutAllDevices}, {@link myIdentities}, {@link linkIdentity},
- * {@link unlinkIdentity}.
+ * {@link checkAuthMethod}, {@link requestPasswordReset}, {@link resetPassword}.
+ * **Require a session:** {@link logout}, {@link logoutAllDevices},
+ * {@link myIdentities}, {@link linkIdentity}, {@link unlinkIdentity},
+ * {@link changePassword}, {@link setInitialPassword}.
+ *
+ * **Which password method:** the four are distinguished by what the caller has
+ * already proven, not by what they want to do. Signed in with a password →
+ * {@link changePassword}. Signed in with none → {@link setInitialPassword}.
+ * Not signed in, or signed in and cannot remember it →
+ * {@link requestPasswordReset} then {@link resetPassword}.
+ * {@link checkAuthMethod} answers `hasPassword` for an address before sign-in.
  */
 export interface AuthUser {
   userId: string;
@@ -74,6 +86,55 @@ export function isAlreadyRegisteredError(error: unknown): boolean {
 export function isPasswordUnconfirmedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /confirm your email to enable password sign-in/i.test(message);
+}
+
+/**
+ * {@link setInitialPassword} refused because the account already has a
+ * password. The remedy is {@link changePassword}, which verifies the current
+ * one.
+ *
+ * The refusal is deliberate and load-bearing: without it, `setInitialPassword`
+ * would be `changePassword` with the current-password check deleted, which is
+ * the check that stops a stolen session from silently locking the owner out.
+ * So a caller must route to `changePassword` rather than retrying.
+ *
+ * Matched on WORDING, like {@link isAlreadyRegisteredError} and for the same
+ * reason. The schema says this "throws CONFLICT"; it does not reach a client
+ * that way. Probed against a live tier on 2026-08-21: the server raises a Nest
+ * `ConflictException` and it arrives as `INTERNAL_SERVER_ERROR`, so a caller
+ * keying on `CONFLICT` matches nothing.
+ */
+export function isPasswordAlreadySetError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /this account already has a password/i.test(message);
+}
+
+/**
+ * {@link changePassword} refused because there is no password to change — a
+ * magic-link or social-only account. The remedy is {@link setInitialPassword}
+ * while signed in, or {@link requestPasswordReset}.
+ *
+ * Distinct from {@link isInvalidCurrentPasswordError}, and the distinction is
+ * the point: both arrive as `UNAUTHENTICATED`, which is ALSO what an expired
+ * session looks like. A caller keying on the code alone signs the user out
+ * when they have merely typed the wrong current password, or offers them a
+ * password field on an account that has none.
+ */
+export function isNoPasswordSetError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no password is set on this account/i.test(message);
+}
+
+/**
+ * {@link changePassword} refused because the current password is wrong. The
+ * remedy is to ask again — the session is fine.
+ *
+ * See {@link isNoPasswordSetError} for why this needs telling apart from the
+ * other `UNAUTHENTICATED` outcomes rather than being read off the error code.
+ */
+export function isInvalidCurrentPasswordError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /invalid current password/i.test(message);
 }
 
 const AUTH_RESPONSE_FIELDS = 'token gameTokenId user { userId email gamertag }';
@@ -130,6 +191,40 @@ const RegisterDocument = parse(
   { register: AuthResponse },
   { registerUserInput: { email: string; password: string; gamertag?: string } }
 >;
+
+// PASSWORD MANAGEMENT. Four mutations, and they are four rather than one or two
+// on purpose: each is defined by what the CALLER has already proven, and
+// collapsing any pair would delete the proof.
+//
+//   requestPasswordReset / resetPassword  proof = the emailed token
+//   changePassword                        proof = the current password
+//   setInitialPassword                    proof = the session, and there is no
+//                                                 password to verify
+//
+// `changePassword` takes its two arguments FLAT rather than in an input object,
+// and `resetPassword` takes `resetPasswordInput` rather than `input`. Both are
+// the server's spelling; see the note above `LoginDocument`.
+const RequestPasswordResetDocument = parse(
+  `mutation RequestPasswordReset($email: String!) { requestPasswordReset(email: $email) }`,
+) as TypedDocumentNode<{ requestPasswordReset: boolean }, { email: string }>;
+
+const ResetPasswordDocument = parse(
+  `mutation ResetPassword($resetPasswordInput: ResetPasswordInput!) { resetPassword(resetPasswordInput: $resetPasswordInput) }`,
+) as TypedDocumentNode<
+  { resetPassword: boolean },
+  { resetPasswordInput: { token: string; newPassword: string } }
+>;
+
+const ChangePasswordDocument = parse(
+  `mutation ChangePassword($currentPassword: String!, $newPassword: String!) { changePassword(currentPassword: $currentPassword, newPassword: $newPassword) }`,
+) as TypedDocumentNode<
+  { changePassword: boolean },
+  { currentPassword: string; newPassword: string }
+>;
+
+const SetInitialPasswordDocument = parse(
+  `mutation SetInitialPassword($newPassword: String!) { setInitialPassword(newPassword: $newPassword) }`,
+) as TypedDocumentNode<{ setInitialPassword: boolean }, { newPassword: string }>;
 
 const CheckAuthMethodDocument = parse(
   `query CheckAuthMethod($input: CheckAuthMethodInput!) { checkAuthMethod(input: $input) { hasPassword } }`,
@@ -273,6 +368,106 @@ export class AuthAPI {
       input: { email },
     });
     return data.checkAuthMethod;
+  }
+
+  /**
+   * Email a password-reset link to the address. Public.
+   *
+   * Always resolves `true` whether or not the address has an account, so it
+   * cannot be used to enumerate users — which also means a `true` here is not
+   * evidence an email was sent.
+   *
+   * This is the ownership-proven way to add a password to an account that has
+   * none, and the only one for a user who is not signed in. A user who IS
+   * signed in should use {@link setInitialPassword} instead and skip the inbox.
+   */
+  async requestPasswordReset(email: string): Promise<boolean> {
+    const data = await this.graphql.request(RequestPasswordResetDocument, {
+      email,
+    });
+    return data.requestPasswordReset;
+  }
+
+  /**
+   * Complete a password reset with the token from the emailed link. Public —
+   * the token is the authorization.
+   *
+   * Throws if the token is invalid or expired. **Existing sessions are not
+   * revoked**, so a reset does not by itself evict anyone already signed in;
+   * follow it with {@link logoutAllDevices} if that is what you want.
+   */
+  async resetPassword(input: {
+    token: string;
+    newPassword: string;
+  }): Promise<boolean> {
+    const data = await this.graphql.request(ResetPasswordDocument, {
+      resetPasswordInput: input,
+    });
+    return data.resetPassword;
+  }
+
+  /**
+   * Change the signed-in user's password, verifying the current one. Requires a
+   * session.
+   *
+   * **This is not the method for an account that has no password** — a
+   * magic-link or social-only account, which cannot supply a current one. That
+   * is {@link setInitialPassword}, and the two are kept apart deliberately:
+   * the current-password check here is what stops a stolen session from
+   * changing a credential the owner still knows.
+   *
+   * Three outcomes need telling apart and the error CODE cannot do it, because
+   * a wrong current password, an account with no password, and an expired
+   * session all arrive as `UNAUTHENTICATED`:
+   * {@link isInvalidCurrentPasswordError} (ask again),
+   * {@link isNoPasswordSetError} (send them to `setInitialPassword`), and
+   * neither (the session is gone — sign in again).
+   *
+   * **Existing sessions are not revoked.**
+   */
+  async changePassword(input: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<boolean> {
+    const data = await this.graphql.request(ChangePasswordDocument, input);
+    return data.changePassword;
+  }
+
+  /**
+   * Add a password to the signed-in account when it does not have one yet.
+   * Requires a session.
+   *
+   * For an account created by magic link or a social provider, which until this
+   * existed had no in-product route to password sign-in at all — the only door
+   * was {@link requestPasswordReset}, an email round trip to add a credential to
+   * an account you are already signed in to. The session is the proof of account
+   * control, so **the password works immediately**: there is no confirmation
+   * email to wait for, and the password identity is written verified (an
+   * unverified one would be refused by {@link login} while another verified
+   * method exists, which is a dead end that looks like success).
+   *
+   * **Refuses when a password already exists** — {@link isPasswordAlreadySetError}
+   * detects it — rather than replacing it. Without that refusal this would be
+   * {@link changePassword} with the current-password check deleted. Route to
+   * `changePassword`, or to `requestPasswordReset` if the user has forgotten it.
+   *
+   * **A security notification is emailed to the account address** whenever this
+   * succeeds. That is the mitigation, and it is deliberately a notification
+   * rather than a refusal: a stolen session can already attach durable
+   * attacker-controlled access via {@link linkIdentity}, so refusing here would
+   * remove the legitimate user's only door without closing the class. Do not
+   * suppress or reword that email's role when you describe this to a user —
+   * "we have emailed you about this change" is part of the feature. The
+   * notification is best-effort on the server, so a `true` return is not proof
+   * the email was delivered.
+   *
+   * **Existing sessions are not revoked.**
+   */
+  async setInitialPassword(newPassword: string): Promise<boolean> {
+    const data = await this.graphql.request(SetInitialPasswordDocument, {
+      newPassword,
+    });
+    return data.setInitialPassword;
   }
 
   /** The signed-in user's linked sign-in identities. Requires a session. */

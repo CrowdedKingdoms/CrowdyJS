@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '15.0.0';
+export const VERSION = '15.1.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -442,6 +442,9 @@ export {
   AuthAPI,
   isAlreadyRegisteredError,
   isPasswordUnconfirmedError,
+  isPasswordAlreadySetError,
+  isNoPasswordSetError,
+  isInvalidCurrentPasswordError,
   type AuthResponse,
   type AuthUser,
   type UserIdentity,

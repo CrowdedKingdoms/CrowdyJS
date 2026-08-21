@@ -1,3 +1,59 @@
+# CrowdyJS v15.1 — password management (additive)
+
+**Nothing breaks.** Four mutations the API has served all along are now wrapped,
+so a game shipping this SDK has a first-class way to let a player set or change
+a password:
+
+| Method | Requires | For |
+|---|---|---|
+| `auth.requestPasswordReset(email)` | nothing | "I forgot my password" |
+| `auth.resetPassword({ token, newPassword })` | the emailed token | completing that |
+| `auth.changePassword({ currentPassword, newPassword })` | a session **and** the current password | an ordinary change |
+| `auth.setInitialPassword(newPassword)` | a session, and the account must have **no** password | adding a first password |
+
+**Why four and not one.** Each is defined by what the caller has already
+*proven* — an emailed token, the current password, or the session — and
+collapsing any pair deletes the proof. In particular `setInitialPassword` is not
+`changePassword` with the check removed: it **refuses** when a password already
+exists, and that refusal is what stops a stolen session from replacing a
+credential the owner still knows. Route on the refusal instead of retrying.
+
+**`setInitialPassword` emails a security notification to the account address**
+on success, and that is deliberately the mitigation rather than a refusal: a
+stolen session can already attach durable attacker-controlled access through
+`linkIdentity`, so refusing here would close nothing and would leave the
+legitimate user of a magic-link or social-only account with no door at all. If
+you build UI for this, tell the user the email is coming.
+
+**Three new error predicates, for the same reason the v15.0 pair exists —
+the GraphQL error code cannot separate these:**
+
+- `isPasswordAlreadySetError(e)` — `setInitialPassword` refused; use
+  `changePassword`. The schema says it "throws CONFLICT"; it reaches a client as
+  `INTERNAL_SERVER_ERROR`, like `isAlreadyRegisteredError`.
+- `isNoPasswordSetError(e)` — `changePassword` refused because there is none;
+  use `setInitialPassword`.
+- `isInvalidCurrentPasswordError(e)` — the current password is wrong; ask again.
+
+The last two both arrive as `UNAUTHENTICATED`, which is **also** what an expired
+session looks like. A caller keying on the code signs the user out over a typo.
+
+```ts
+try {
+  await client.auth.setInitialPassword(pw);
+} catch (e) {
+  if (isPasswordAlreadySetError(e)) {
+    // They have one already — ask for it rather than replacing it blind.
+    await client.auth.changePassword({ currentPassword: current, newPassword: pw });
+  } else throw e;
+}
+```
+
+`resetPassword` and `changePassword` do **not** revoke existing sessions. Follow
+either with `auth.logoutAllDevices()` if that is the intent.
+
+---
+
 # CrowdyJS v15 — the dev auth bypass is gone (breaking)
 
 `client.auth.devLogin()` is **removed**, and so is the `devToken` field on

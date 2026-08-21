@@ -4,12 +4,14 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.0.0**, and npm `latest` is
-**15.0.0**. `dev/vX.Y.Z` / `test/vX.Y.Z` publish `X.Y.Z-dev.N` / `X.Y.Z-test.N`
-to the `@dev` / `@test` dist-tags; only a `prod/` tag moves `latest`. Consumers
-pin the EXACT prerelease for their tier — never a caret, which cannot match a
-prerelease at all. `GameClientBootstrap` selects `gameApiUrl`, `gameApiWsUrl`
-and `discoveryUrl`.
+**Current package:** `package.json` is **15.1.0** and **nothing is published at
+that number yet** — npm `latest` is still 15.0.0 until a `prod/v15.1.0` tag is
+pushed, so the two figures disagreeing is the normal state between a merge and a
+release rather than a mistake. `dev/vX.Y.Z` / `test/vX.Y.Z` publish
+`X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
+tag moves `latest`. Consumers pin the EXACT prerelease for their tier — never a
+caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
+`gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
 
 **15.0.0 IS A BREAKING MAJOR, AND THIS FILE DESCRIBED THE PREVIOUS ONE FOR A
 DAY.** It **removed `devLogin`** and added **`auth.login` / `auth.register`**.
@@ -19,6 +21,17 @@ written anywhere in this repo or in `cks-docs`, it is stale; the published SDK
 pages were the last to be corrected. [MIGRATION.md](MIGRATION.md) is the
 accurate account. Do not quote a version out of this paragraph:
 `npm view @crowdedkingdoms/crowdyjs version`.
+
+**15.1.0 finished that job one method deeper.** `login` and `register` were
+wrapped and password MANAGEMENT was not, so the SDK could get a player a session
+and then had no way to let them set or change the password behind it —
+`requestPasswordReset`, `resetPassword`, `changePassword` and
+`setInitialPassword` were all served by the API and wrapped by nothing, and the
+surface test asserted two of them were absent. All four are wrapped now. They
+are four rather than one because each is defined by what the caller has
+**proven** (an emailed token, the current password, or the session);
+`setInitialPassword` refusing an account that already has a password is the
+load-bearing part, not an inconvenience.
 
 Read [README.md](README.md) first. [MIGRATION.md](MIGRATION.md) covers breaking
 changes. This file is the game-concept → API map the README does not repeat.

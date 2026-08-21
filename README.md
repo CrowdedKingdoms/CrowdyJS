@@ -179,7 +179,7 @@ lifecycle to preserve.
 
 | Sub-client | What it does |
 |---|---|
-| `client.auth` | Sign-in: `login` / `register` (email + password), magic link, social/OIDC. Log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). **No dev bypass** — `devLogin` was removed in 15.0.0 and `DEV_AUTH_BYPASS` is gone from every tier. |
+| `client.auth` | Sign-in: `login` / `register` (email + password), magic link, social/OIDC. Passwords: `requestPasswordReset` / `resetPassword`, `changePassword`, and `setInitialPassword` for an account created by magic link or a social provider (added in 15.1.0). Log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). **No dev bypass** — `devLogin` was removed in 15.0.0 and `DEV_AUTH_BYPASS` is gone from every tier. |
 | `client.users` | `me`, `updateGamertag`, profile reads. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
