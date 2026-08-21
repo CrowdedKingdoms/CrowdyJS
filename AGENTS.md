@@ -94,8 +94,8 @@ schema — not a second source repo), `/schema/crowdyjs.graphql`.
 ## Working in this repo
 
 GitHub default branch is **`prod`** (verified 2026-08-13). Long-lived trunks
-are **`dev`**, **`test`**, **`prod`**. Work lands on `dev`. `main` still
-exists and is not the default.
+are **`dev`**, **`test`**, **`prod`**, and nothing else. Work lands on `dev`.
+`main` was deleted on the remote in every repo on 2026-08-21.
 
 Publishing is an environment-prefixed tag (`dev/v15.0.0`, `test/v15.0.0`,
 `prod/v15.0.0`); npm accepts a version once, so only `prod/` publishes the
