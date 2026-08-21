@@ -4,10 +4,21 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **14.2.0**. npm `latest` is still
-**14.1.0** until `prod/v14.2.0`. `dev/v14.2.0` / `test/v14.2.0` publish
-`14.2.0-dev.N` / `14.2.0-test.N`. `GameClientBootstrap` selects `gameApiUrl`,
-`gameApiWsUrl`, and `discoveryUrl`.
+**Current package:** `package.json` is **15.0.0**, and npm `latest` is
+**15.0.0**. `dev/vX.Y.Z` / `test/vX.Y.Z` publish `X.Y.Z-dev.N` / `X.Y.Z-test.N`
+to the `@dev` / `@test` dist-tags; only a `prod/` tag moves `latest`. Consumers
+pin the EXACT prerelease for their tier — never a caret, which cannot match a
+prerelease at all. `GameClientBootstrap` selects `gameApiUrl`, `gameApiWsUrl`
+and `discoveryUrl`.
+
+**15.0.0 IS A BREAKING MAJOR, AND THIS FILE DESCRIBED THE PREVIOUS ONE FOR A
+DAY.** It **removed `devLogin`** and added **`auth.login` / `auth.register`**.
+The SDK is **not passwordless**, and "dev bypass" is not a sign-in route on any
+tier — `DEV_AUTH_BYPASS` is gone from all three. If you find either phrase still
+written anywhere in this repo or in `cks-docs`, it is stale; the published SDK
+pages were the last to be corrected. [MIGRATION.md](MIGRATION.md) is the
+accurate account. Do not quote a version out of this paragraph:
+`npm view @crowdedkingdoms/crowdyjs version`.
 
 Read [README.md](README.md) first. [MIGRATION.md](MIGRATION.md) covers breaking
 changes. This file is the game-concept → API map the README does not repeat.
@@ -35,7 +46,8 @@ not a running service; gameplay data lives in **PostgreSQL + Citus** via
 
 ## Core mental model: one endpoint, two tokens, two clients
 
-1. Passwordless sign-in yields an **identity session token** — account, studio
+1. Sign-in (`auth.login` / `auth.register`, magic link, or social/OIDC) yields an
+   **identity session token** — account, studio
    admin, minting. Rejected for gameplay.
 2. Gameplay needs a short-lived **app-scoped token** per game
    (`portal.mintAppToken` or the PKCE portal flow).
