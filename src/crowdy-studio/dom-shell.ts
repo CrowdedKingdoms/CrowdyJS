@@ -8,6 +8,10 @@ import {
   type CrowdyStudioAgentDomShellOptions,
 } from './agent-dom-shell.js';
 import {
+  CrowdyStudioDshDomShell,
+  type CrowdyStudioDshController,
+} from './dsh/index.js';
+import {
   StudioLayoutController,
   studioPaneSizeRange,
   type StudioLayoutState,
@@ -104,6 +108,7 @@ export class CrowdyStudioDomShell {
   private readonly railButtons = new Map<StudioPaneId, HTMLButtonElement>();
   private readonly splitters = new Map<StudioPaneId, PaneSplitterHandle>();
   private readonly agentShell: CrowdyStudioAgentDomShell | null;
+  private readonly dshShell: CrowdyStudioDshDomShell | null;
   private readonly unsubscribeLayout: () => void;
   private activePanel: PanelName = 'problems';
   private explorerForm: ExplorerFormState | null = null;
@@ -116,6 +121,7 @@ export class CrowdyStudioDomShell {
     private readonly controller: CrowdyStudioController,
     agentController?: CrowdyStudioAgentController,
     agentOptions: CrowdyStudioAgentDomShellOptions = {},
+    dshController?: CrowdyStudioDshController,
   ) {
     const style = document.createElement('style');
     style.textContent = CROWDY_STUDIO_STYLES;
@@ -298,6 +304,33 @@ export class CrowdyStudioDomShell {
       this.agentShell = null;
     }
 
+    // ----- DeepSeek Harness dock (parallel, DEV) --------------------------
+    if (dshController) {
+      rail.append(
+        this.railButton(
+          'dsh',
+          'Harness',
+          'Show or hide the DeepSeek Harness chat dock',
+        ),
+      );
+      this.workspace.append(
+        this.paneSplitter(
+          'dsh',
+          'vertical',
+          'after',
+          'Resize the Harness dock',
+        ),
+      );
+      this.dshShell = new CrowdyStudioDshDomShell(
+        this.workspace,
+        dshController,
+        { layout: this.layout },
+      );
+      this.root.dataset.dsh = 'true';
+    } else {
+      this.dshShell = null;
+    }
+
     // ----- Wiring ---------------------------------------------------------
     this.newForm.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -432,6 +465,7 @@ export class CrowdyStudioDomShell {
     this.saveMenu.dispose();
     this.runMenu.dispose();
     this.agentShell?.dispose();
+    this.dshShell?.dispose();
     this.root.remove();
   }
 
@@ -468,7 +502,7 @@ export class CrowdyStudioDomShell {
     if (!width) return;
     const overlaying: StudioPaneId[] = [];
     if (width <= 900) overlaying.push('settings');
-    if (width <= 760) overlaying.push('agent');
+    if (width <= 760) overlaying.push('agent', 'dsh');
     if (width <= 620) overlaying.push('explorer');
     if (!overlaying.includes(opened)) return;
     for (const pane of overlaying) {
@@ -502,8 +536,15 @@ export class CrowdyStudioDomShell {
       settings: this.settings,
       bottom: this.bottom,
       agent: this.agentShell?.root ?? null,
+      dsh: this.dshShell?.root ?? null,
     };
-    for (const pane of ['explorer', 'settings', 'bottom', 'agent'] as const) {
+    for (const pane of [
+      'explorer',
+      'settings',
+      'bottom',
+      'agent',
+      'dsh',
+    ] as const) {
       const paneElement = paneElements[pane];
       const visible = state.visible[pane] && paneElement !== null;
       if (paneElement) {

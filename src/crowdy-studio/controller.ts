@@ -885,6 +885,25 @@ export class CrowdyStudioController {
     );
   }
 
+  /**
+   * Re-read the open project and install it as an agent revision. Server-executed
+   * write tools report only a revision id and content hashes, so the bodies have
+   * to come back over the project provider before the editor can show them.
+   * Returns false when the durable revision already matches what is open.
+   */
+  async adoptAgentRevision(
+    synchronization: Omit<CrowdyStudioProjectSynchronization, 'source'> = {},
+  ): Promise<boolean> {
+    const current = this.requireProject();
+    const project = await this.options.projectProvider.getProject({
+      ...this.scope(),
+      projectId: current.projectId,
+    });
+    if (project.revision.id === this.requireProject().revision.id) return false;
+    this.synchronizeProject(project, { source: 'AGENT', ...synchronization });
+    return true;
+  }
+
   async restoreCheckpoint(
     checkpointId: string,
     approvalGrant: string,

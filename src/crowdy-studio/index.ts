@@ -23,6 +23,7 @@ export {
   mountCrowdyStudio,
   type CrowdyStudioHandle,
   type MountCrowdyStudioAgentOptions,
+  type MountCrowdyStudioDshOptions,
   type MountCrowdyStudioOptions,
 } from './mount.js';
 export {
@@ -107,6 +108,7 @@ export {
   CrowdyStudioAgentDomShell,
   type CrowdyStudioAgentDomShellOptions,
 } from './agent-dom-shell.js';
+export * from './dsh/index.js';
 export {
   STUDIO_LAYOUT_STORAGE_KEY,
   STUDIO_PANE_IDS,

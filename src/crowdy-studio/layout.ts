@@ -1,11 +1,11 @@
 /**
  * User-directed Crowdy Studio layout state: which panes are visible and how
  * large they are. The editor is the only always-visible surface; the explorer,
- * project settings, agent dock, and bottom panel are toggled by the person
- * using the Studio and their choices persist locally.
+ * project settings, agent dock, Harness dock, and bottom panel are toggled by
+ * the person using the Studio and their choices persist locally.
  */
 
-export type StudioPaneId = 'explorer' | 'settings' | 'agent' | 'bottom';
+export type StudioPaneId = 'explorer' | 'settings' | 'agent' | 'dsh' | 'bottom';
 
 export interface StudioPaneSizeRange {
   readonly min: number;
@@ -34,6 +34,7 @@ export const STUDIO_PANE_IDS: readonly StudioPaneId[] = [
   'explorer',
   'settings',
   'agent',
+  'dsh',
   'bottom',
 ];
 
@@ -41,6 +42,7 @@ const DEFAULT_VISIBLE: Readonly<Record<StudioPaneId, boolean>> = {
   explorer: true,
   settings: false,
   agent: false,
+  dsh: false,
   bottom: false,
 };
 
@@ -48,6 +50,7 @@ const DEFAULT_SIZES: Readonly<Record<StudioPaneId, number>> = {
   explorer: 230,
   settings: 280,
   agent: 340,
+  dsh: 340,
   bottom: 180,
 };
 
@@ -55,6 +58,7 @@ const SIZE_RANGES: Readonly<Record<StudioPaneId, StudioPaneSizeRange>> = {
   explorer: { min: 160, max: 480 },
   settings: { min: 220, max: 480 },
   agent: { min: 280, max: 620 },
+  dsh: { min: 280, max: 620 },
   bottom: { min: 96, max: 480 },
 };
 

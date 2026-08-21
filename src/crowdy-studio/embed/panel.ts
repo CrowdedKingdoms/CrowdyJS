@@ -15,6 +15,10 @@ import type {
   CrowdyStudioAgentTransportV1,
 } from '../../crowdy-agent/index.js';
 import type {
+  CrowdyStudioDshController,
+  CrowdyStudioDshTransport,
+} from '../dsh/index.js';
+import type {
   AgentControlLeaseManager,
   AgentControlLeaseManagerOptionsV1,
   PlayerHostAdapterV1,
@@ -51,6 +55,11 @@ export interface CrowdyStudioEmbedServices {
   playerWallet?: CrowdyStudioPlayerWallet;
   /** Production agent transport; omission keeps the agent fail-closed/hidden. */
   crowdyStudioAgent?: CrowdyStudioAgentTransportV1;
+  /**
+   * DEV-only DeepSeek Harness dock transport. Omission keeps the Harness rail
+   * button hidden; the Crowdy Agent dock is unaffected.
+   */
+  crowdyStudioDsh?: CrowdyStudioDshTransport;
 }
 
 export interface CrowdyStudioEmbedTargetPermission {
@@ -67,6 +76,7 @@ export interface CrowdyStudioEmbedHandle {
   readonly api: 'crowdy-studio';
   readonly controller: CrowdyStudioController;
   readonly agent: CrowdyStudioAgentController | null;
+  readonly dsh: CrowdyStudioDshController | null;
   readonly controlLeaseManager: AgentControlLeaseManager | null;
   destroy(): void;
 }
@@ -511,6 +521,14 @@ export class CrowdyStudioEmbed {
             },
           }
         : {}),
+      ...(client.crowdyStudioDsh
+        ? {
+            dsh: {
+              transport: client.crowdyStudioDsh,
+              appId,
+            },
+          }
+        : {}),
       ...this.options.runtimeOverrides,
     });
     element.dataset.crowdyStudioApi = 'project-first';
@@ -519,6 +537,7 @@ export class CrowdyStudioEmbed {
       api: 'crowdy-studio',
       controller: handle.controller,
       agent: handle.agent,
+      dsh: handle.dsh,
       controlLeaseManager: handle.controlLeaseManager,
       destroy: () => {
         if (destroyed) return;

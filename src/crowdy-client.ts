@@ -68,6 +68,7 @@ import { ComputeAPI } from './domains/compute.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 import { CrowdyAgentGraphQLTransport } from './crowdy-agent/graphql-transport.js';
+import { CrowdyStudioDshGraphQLTransport } from './crowdy-studio/dsh/graphql-transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { MarketplaceAPI } from './domains/marketplace.js';
 import { PlayerModelAPI } from './domains/playerModel.js';
@@ -83,6 +84,14 @@ export interface CrowdyClientConfig {
   graphqlEndpoint?: string;
   /** WS endpoint. Defaults to `${wsUrl}/graphql`. */
   wsEndpoint?: string;
+  /**
+   * Optional separate GraphQL endpoint for the DEV-only DeepSeek Harness dock
+   * (`crowdyStudioDsh*`). Use this when gameplay talks to a remote tier API
+   * that does not serve those fields, and a local game-api does
+   * (e.g. Vite `/graphql-dsh` → `127.0.0.1:3001/graphql`). Shares the same
+   * Bearer token as the main client. Datacenter moves do not retarget this.
+   */
+  dshGraphqlEndpoint?: string;
 
   // ----- Common -----
   /** Per-request HTTP timeout in milliseconds. */
@@ -270,6 +279,8 @@ export class CrowdyClient {
   readonly crowdyStudio: CrowdyStudioAPI;
   /** Durable typed Agentic Crowdy Studio GraphQL transport. */
   readonly crowdyStudioAgent: CrowdyAgentGraphQLTransport;
+  /** DEV-only parallel DeepSeek Harness Studio dock transport. */
+  readonly crowdyStudioDsh: CrowdyStudioDshGraphQLTransport;
 
   /** P4a marketplace (free mode): store, installs, consent, claim flows. */
   readonly marketplace: MarketplaceAPI;
@@ -434,6 +445,19 @@ export class CrowdyClient {
       wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),
     });
+    const dshEndpoint = config.dshGraphqlEndpoint?.trim();
+    this.crowdyStudioDsh = new CrowdyStudioDshGraphQLTransport(
+      dshEndpoint
+        ? new GraphQLClient(
+            {
+              graphqlEndpoint: resolveDshGraphqlEndpoint(dshEndpoint),
+              timeout: config.timeout,
+              logger: config.logger,
+            },
+            this.session,
+          )
+        : this.graphql,
+    );
     this.playerWallet = new PlayerWalletAPI(this.graphql);
     this.marketplace = new MarketplaceAPI(this.graphql);
     this.playerModel = new PlayerModelAPI(this.graphql);
@@ -579,4 +603,11 @@ function toGraphqlEndpoint(
   if (!trimmed) return undefined;
   const noSlash = trimmed.replace(/\/$/, '');
   return noSlash.endsWith(`/${suffix}`) ? noSlash : `${noSlash}/${suffix}`;
+}
+
+/** Same-origin Vite paths stay as-is; absolute URLs get `/graphql` if needed. */
+function resolveDshGraphqlEndpoint(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/')) return trimmed;
+  return toGraphqlEndpoint(trimmed, 'graphql') ?? trimmed;
 }

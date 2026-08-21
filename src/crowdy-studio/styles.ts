@@ -122,10 +122,29 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-agent-approval>div{display:flex;gap:6px}
 .ck-crowdy-studio-agent-composer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
 .ck-crowdy-studio-agent-composer textarea{min-height:62px;resize:vertical;background:#0f172a;color:var(--ck-text);border:1px solid var(--ck-line);padding:7px}
+
+/* Parallel DeepSeek Harness dock */
+.ck-crowdy-studio-dsh-dock{flex:none;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0;padding:10px;border-left:1px solid var(--ck-line);background:#0a1628;overflow:auto}
+.ck-crowdy-studio-dsh-dock header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ck-crowdy-studio-dsh-dock h2{margin:0;font-size:13px}
+.ck-crowdy-studio-dsh-status{color:var(--ck-muted);font-size:12px;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-crowdy-studio-dsh-status[data-error=true]{color:#fca5a5}
+.ck-crowdy-studio-dsh-toolbar{display:flex;gap:6px}
+.ck-crowdy-studio-dsh-sessions{display:flex;flex-wrap:wrap;gap:5px}
+.ck-crowdy-studio-dsh-session[data-active=true]{border-color:var(--ck-accent);color:#bae6fd}
+.ck-crowdy-studio-dsh-messages{display:flex;flex-direction:column;gap:6px;flex:1;min-height:120px;overflow:auto}
+.ck-crowdy-studio-dsh-message{padding:7px;border:1px solid var(--ck-line);border-radius:5px;background:var(--ck-panel)}
+.ck-crowdy-studio-dsh-message[data-role=USER]{border-color:#0e7490}
+.ck-crowdy-studio-dsh-message[data-role=ASSISTANT]{border-color:#1d4ed8}
+.ck-crowdy-studio-dsh-message p{margin:3px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.ck-crowdy-studio-dsh-empty{color:var(--ck-muted);margin:0;padding:4px 0}
+.ck-crowdy-studio-dsh-composer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.ck-crowdy-studio-dsh-composer textarea{min-height:62px;resize:vertical;background:#0f172a;color:var(--ck-text);border:1px solid var(--ck-line);padding:7px}
+
 .ck-crowdy-studio :focus-visible{outline:2px solid var(--ck-accent);outline-offset:2px}
 
 /* Narrow widths: side panes become overlays so the editor keeps priority. */
 @container(max-width:900px){.ck-crowdy-studio-settings{position:absolute;right:0;top:0;bottom:0;z-index:20;max-width:85%;border-left:1px solid var(--ck-line);box-shadow:-8px 0 24px rgba(2,6,23,.55)}.ck-crowdy-studio-splitter[data-orientation=vertical]{display:none}}
-@container(max-width:760px){.ck-crowdy-studio-agent-dock{position:absolute;right:0;top:0;bottom:0;z-index:22;max-width:92%;box-shadow:-8px 0 24px rgba(2,6,23,.55)}}
+@container(max-width:760px){.ck-crowdy-studio-agent-dock,.ck-crowdy-studio-dsh-dock{position:absolute;right:0;top:0;bottom:0;z-index:22;max-width:92%;box-shadow:-8px 0 24px rgba(2,6,23,.55)}}
 @container(max-width:620px){.ck-crowdy-studio-explorer{position:absolute;left:34px;top:0;bottom:0;z-index:21;max-width:85%;border-right:1px solid var(--ck-line);box-shadow:8px 0 24px rgba(2,6,23,.55)}}
 `;

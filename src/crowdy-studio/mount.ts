@@ -18,6 +18,10 @@ import {
   type PlayerHostAdapterV1,
 } from '../player-host/index.js';
 import { CrowdyStudioDomShell } from './dom-shell.js';
+import {
+  CrowdyStudioDshController,
+  type CrowdyStudioDshTransport,
+} from './dsh/index.js';
 import type {
   CrowdyStudioEditorAdapter,
   CrowdyStudioEditorCallbacks,
@@ -34,6 +38,17 @@ export interface MountCrowdyStudioOptions
     MonacoCrowdyStudioEditorOptions {
   /** Optional durable Agentic Crowdy Studio vertical slice. */
   agent?: MountCrowdyStudioAgentOptions;
+  /**
+   * Optional parallel DeepSeek Harness chat dock (DEV). Independent of
+   * {@link agent}; uses the same open Crowdy Studio project.
+   */
+  dsh?: MountCrowdyStudioDshOptions;
+}
+
+export interface MountCrowdyStudioDshOptions {
+  transport: CrowdyStudioDshTransport;
+  appId: string;
+  autoInitialize?: boolean;
 }
 
 export interface MountCrowdyStudioAgentOptions
@@ -58,6 +73,7 @@ export interface MountCrowdyStudioAgentOptions
 export interface CrowdyStudioHandle {
   controller: CrowdyStudioController;
   agent: CrowdyStudioAgentController | null;
+  dsh: CrowdyStudioDshController | null;
   controlLeaseManager: AgentControlLeaseManager | null;
   editorMode: CrowdyStudioEditorMode;
   destroy(): void;
@@ -107,6 +123,7 @@ export async function mountCrowdyStudio(
 
   const controller = new CrowdyStudioController(options);
   let agent: CrowdyStudioAgentController | null = null;
+  let dsh: CrowdyStudioDshController | null = null;
   let controlLeaseManager: AgentControlLeaseManager | null = null;
   if (options.agent) {
     const registry =
@@ -206,17 +223,30 @@ export async function mountCrowdyStudio(
       },
     });
   }
-  const shell = new CrowdyStudioDomShell(host, controller, agent ?? undefined, {
-    getPlayLeaseContext: () => {
-      const capabilities = controlLeaseManager?.snapshot().capabilities;
-      return capabilities
-        ? {
-            controlledEntityId: capabilities.controlledEntityId,
-            hostCapabilityRevision: capabilities.revision,
-          }
-        : null;
+  if (options.dsh) {
+    dsh = new CrowdyStudioDshController({
+      transport: options.dsh.transport,
+      appId: options.dsh.appId,
+      resolveProjectId: () => controller.getState().project?.projectId,
+    });
+  }
+  const shell = new CrowdyStudioDomShell(
+    host,
+    controller,
+    agent ?? undefined,
+    {
+      getPlayLeaseContext: () => {
+        const capabilities = controlLeaseManager?.snapshot().capabilities;
+        return capabilities
+          ? {
+              controlledEntityId: capabilities.controlledEntityId,
+              hostCapabilityRevision: capabilities.revision,
+            }
+          : null;
+      },
     },
-  });
+    dsh ?? undefined,
+  );
   const unsubscribeHumanEdit = controller.onHumanEdit(() =>
     agent?.preemptForHumanEdit(),
   );
@@ -272,8 +302,27 @@ export async function mountCrowdyStudio(
     if (nextProjectId !== selectedProjectId) {
       selectedProjectId = nextProjectId;
       agent?.projectSelectionChanged(nextProjectId);
+      // Re-list harness sessions for the newly selected project.
+      if (dsh && nextProjectId) {
+        void dsh.initialize().catch(() => undefined);
+      }
     }
   });
+  // After a harness turn finishes, pull the project so Monaco sees file writes.
+  let dshWasBusy = false;
+  const unsubscribeDshBusy = dsh
+    ? dsh.subscribe((state) => {
+        if (dshWasBusy && !state.busy && controller.getState().project) {
+          void controller.adoptAgentRevision().catch((error) => {
+            console.warn(
+              'Crowdy Studio could not adopt a Harness project revision',
+              error,
+            );
+          });
+        }
+        dshWasBusy = state.busy;
+      })
+    : () => {};
   const onVisibilityChange = (): void => {
     const visible = document.visibilityState !== 'hidden';
     controller.setPageVisible(visible);
@@ -304,15 +353,25 @@ export async function mountCrowdyStudio(
         console.warn('Crowdy Studio agent could not attach; manual Studio remains available', error);
       });
     }
+    if (dsh && options.dsh?.autoInitialize !== false) {
+      await dsh.initialize().catch((error) => {
+        console.warn(
+          'Crowdy Studio Harness dock could not attach; Crowdy Agent remains available',
+          error,
+        );
+      });
+    }
   } catch (error) {
     disconnectLayoutObserver();
     document.removeEventListener('visibilitychange', onVisibilityChange);
     unsubscribe();
+    unsubscribeDshBusy();
     const failedEditor = editor as CrowdyStudioEditorAdapter | null;
     failedEditor?.dispose();
     shell.dispose();
     unsubscribeHumanEdit();
     agent?.destroy();
+    dsh?.destroy();
     controller.destroy();
     throw error;
   }
@@ -320,6 +379,7 @@ export async function mountCrowdyStudio(
   return {
     controller,
     agent,
+    dsh,
     controlLeaseManager,
     get editorMode() {
       return editor?.mode ?? 'textarea';
@@ -330,12 +390,15 @@ export async function mountCrowdyStudio(
       disconnectLayoutObserver();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       unsubscribe();
+      unsubscribeDshBusy();
       editor?.dispose();
       editor = null;
       shell.dispose();
       unsubscribeHumanEdit();
       agent?.destroy();
       agent = null;
+      dsh?.destroy();
+      dsh = null;
       controller.destroy();
     },
   };
