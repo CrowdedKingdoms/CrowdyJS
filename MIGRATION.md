@@ -25,18 +25,27 @@ stolen session can already attach durable attacker-controlled access through
 legitimate user of a magic-link or social-only account with no door at all. If
 you build UI for this, tell the user the email is coming.
 
-**Three new error predicates, for the same reason the v15.0 pair exists —
-the GraphQL error code cannot separate these:**
+**Three new error predicates**, because the three refusals need different
+handling and a caller should not have to work out which is which:
 
 - `isPasswordAlreadySetError(e)` — `setInitialPassword` refused; use
-  `changePassword`. The schema says it "throws CONFLICT"; it reaches a client as
-  `INTERNAL_SERVER_ERROR`, like `isAlreadyRegisteredError`.
+  `changePassword`.
 - `isNoPasswordSetError(e)` — `changePassword` refused because there is none;
   use `setInitialPassword`.
 - `isInvalidCurrentPasswordError(e)` — the current password is wrong; ask again.
 
-The last two both arrive as `UNAUTHENTICATED`, which is **also** what an expired
-session looks like. A caller keying on the code signs the user out over a typo.
+**Use these rather than reading `extensions.code` yourself, and the reason is
+worth knowing.** Each refusal has its own code — `PASSWORD_ALREADY_SET`,
+`PASSWORD_NOT_SET`, `INVALID_CURRENT_PASSWORD` — only from **ck-api v1.60.0**.
+Before that release the first two shared `UNAUTHENTICATED` with a genuinely
+expired session and the third arrived as `INTERNAL_SERVER_ERROR`, so a caller
+keying on the code signed the user out over a typo. Each predicate accepts the
+new code **and** the older wording, so one pinned build works against a tier on
+either side of that line. `isAlreadyRegisteredError` gained the same treatment
+(`EMAIL_ALREADY_REGISTERED`).
+
+None of the three means the session is gone. Sign a user out on
+`UNAUTHENTICATED`, which from v1.60.0 says only that.
 
 ```ts
 try {
@@ -93,8 +102,9 @@ login, and two error predicates, because these two conditions are **not**
 distinguishable by GraphQL error code:
 
 - `isAlreadyRegisteredError(e)` — `register` refused because the address already
-  has an account. The server raises a `ConflictException` and it arrives as
-  `INTERNAL_SERVER_ERROR`, so a caller keying on `CONFLICT` matches nothing.
+  has an account. It carries `EMAIL_ALREADY_REGISTERED` from ck-api v1.60.0;
+  before that it arrived as `INTERNAL_SERVER_ERROR`, so a caller keying on
+  `CONFLICT` matched nothing. The predicate accepts both.
 - `isPasswordUnconfirmedError(e)` — `login` refused because the password is real
   but unconfirmed on an account with another verified sign-in method. The remedy
   is the emailed link, not a different password.
