@@ -523,8 +523,16 @@ validation error; every other sub-client is unaffected.
 
 # CrowdyJS v8 — Passwordless & federated sign-in (BREAKING)
 
-**Crowded Kingdoms is passwordless.** Email + password login is removed. Update
-your sign-in flow to one of:
+> **SUPERSEDED BY 15.0.0 — do not follow this section as current product.**
+> Email + password sign-in came BACK in 15.0.0: `auth.login` and
+> `auth.register` exist, and the `devLogin` bypass was removed from every tier
+> on 2026-08-20. What is still true from v8 is that magic link and social
+> sign-in are supported; what is false is that they are the ONLY options.
+> This section is kept as the record of the v8 break. See the 15.0.0 notes at
+> the top of this file.
+
+**At v8, Crowded Kingdoms was passwordless.** Email + password login was removed
+in that version. The v8 migration was to one of:
 
 - **Magic link (email):**
   ```ts

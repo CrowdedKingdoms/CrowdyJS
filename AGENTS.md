@@ -97,9 +97,11 @@ GitHub default branch is **`prod`** (verified 2026-08-13). Long-lived trunks
 are **`dev`**, **`test`**, **`prod`**. Work lands on `dev`. `main` still
 exists and is not the default.
 
-Publishing is an environment-prefixed tag (`dev/v14.2.0`, `test/v14.2.0`,
-`prod/v14.2.0`); npm accepts a version once, so only `prod/` publishes the
-bare `14.2.0` under `latest`. The tag's commit must be contained in the
+Publishing is an environment-prefixed tag (`dev/v15.0.0`, `test/v15.0.0`,
+`prod/v15.0.0`); npm accepts a version once, so only `prod/` publishes the
+bare `15.0.0` under `latest`. The examples use the CURRENT major deliberately:
+written with 14.x they invited a copy that cannot resolve, since a caret never
+matches a prerelease. The tag's commit must be contained in the
 branch it names (`scripts/ci/resolve-release-tier.sh`).
 
 Never hand-edit `src/generated/graphql.ts`. `npm install && npm run build`
