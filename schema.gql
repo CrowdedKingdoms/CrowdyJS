@@ -186,13 +186,13 @@ type User {
 }
 
 """
-A federated / passwordless sign-in identity linked to a user account (a social provider, an emailed magic link, or the dev bypass).
+A sign-in identity linked to a user account: a social provider, an emailed magic link, or a password.
 """
 type UserIdentity {
   identityId: ID!
   userId: ID!
   """
-  The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'dev' (dev bypass).
+  The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'password'. 'dev' is a RETIRED value that appears on identities created before the dev sign-in bypass was removed; it cannot be created and cannot be signed in with.
   """
   provider: String!
   """
@@ -710,6 +710,108 @@ type AuthMethodResult {
   True when the account exists and has a password hash; false otherwise (including unknown emails).
   """
   hasPassword: Boolean!
+}
+
+"""
+One recorded SES event for an address: the `send` this API wrote when it handed the message to SES, or a `delivery` / `bounce` / `complaint` / `delivery_delay` that arrived back on the SNS webhook.
+"""
+type EmailEventRecord {
+  """Recipient address the event concerns."""
+  email: String!
+  """
+  SES message id. Present on the `send` row this API writes and on the feedback events SES publishes for it, which is what lets one send be matched to its own delivery rather than a previous run's.
+  """
+  messageId: String
+  """
+  send | delivery | bounce | complaint | delivery_delay. Lower-case, as stored.
+  """
+  eventType: String!
+  """
+  Event detail where SES supplies one: `Permanent/General` for a bounce, the complaint feedback type for a complaint.
+  """
+  eventSubtype: String
+  """When the row was written (ISO 8601)."""
+  createdAt: String!
+}
+
+"""
+An address's stored deliverability record. Absent (null) until SES reports something about the address.
+"""
+type EmailStatusRecord {
+  email: String!
+  """valid | bounced | complained."""
+  status: String!
+  """Permanent | Transient | Undetermined, from SES."""
+  bounceType: String
+  bounceSubType: String
+  complaintType: String
+  messageId: String
+  lastEventType: String
+  lastEventAt: String
+  deliveryAttempts: Int
+  """
+  True once SES has reported a permanent bounce or a complaint. This is what stops the address being sent to again.
+  """
+  isPermanentFailure: Boolean
+}
+
+"""
+Everything this API knows about whether an address can be emailed, and why.
+"""
+type EmailDeliverability {
+  email: String!
+  """
+  Whether a send to this address would be attempted right now. False for a permanent bounce, a complaint, or a transient bounce inside its 24-hour cool-off.
+  """
+  sendable: Boolean!
+  """
+  Whether this address is refused before SES is consulted at all, because its domain is in EMAIL_SUPPRESS_DOMAINS.
+  """
+  suppressedDomain: Boolean!
+  """
+  Null means SES has never reported anything about this address, which is treated as sendable.
+  """
+  status: EmailStatusRecord
+  """Most recent events first."""
+  events: [EmailEventRecord!]!
+}
+
+"""
+How this API instance is configured to send mail. Read it before concluding that a missing email is a bug: an instance with sendingEnabled=false composes every message and hands none of them to SES.
+"""
+type EmailDeliveryConfig {
+  """SEND_EMAILS. False means nothing reaches SES from this instance."""
+  sendingEnabled: Boolean!
+  """The From address (EMAIL_FROM)."""
+  fromAddress: String!
+  """
+  SES_CONFIGURATION_SET. Null or empty means sends carry no configuration set, so SES publishes NO delivery or bounce events for them and this tier learns nothing about its own mail.
+  """
+  configurationSet: String
+  """AWS_REGION used for SES."""
+  region: String!
+  """
+  Domain suffixes refused before SES is consulted (EMAIL_SUPPRESS_DOMAINS).
+  """
+  suppressedDomains: [String!]!
+}
+
+"""Result of an operator test send."""
+type SendTestEmailResult {
+  """
+  Whether the send was attempted AND accepted. False means refused (suppressed domain, or a prior permanent bounce) or that SES rejected it.
+  """
+  sent: Boolean!
+  """
+  The SES message id when a message was actually handed to SES. Null when sending is disabled on this instance, which is reported as sent=true by the same rule the product flows use, so READ THIS FIELD to tell a real send from a simulated one.
+  """
+  messageId: String
+  """
+  True when SEND_EMAILS is off and the message was logged rather than sent. sent=true with simulated=true means nothing left the building.
+  """
+  simulated: Boolean!
+  """Why a send was refused, when it was."""
+  refusedReason: String
 }
 
 """
@@ -5732,6 +5834,10 @@ type GmContainerType {
   defaultPropertyVisibility: String!
   """JSON object of developer metadata."""
   metadataJson: String!
+  """
+  Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
+  """
+  bindPolicyJson: String
 }
 
 """A typed property (field) defined on a container type."""
@@ -7385,6 +7491,19 @@ type Query {
   """The signed-in user's linked sign-in identities."""
   myIdentities: [UserIdentity!]!
   """
+  Operator only (is_operator). How THIS API instance is configured to send mail: whether sending is on, the From address, the SES configuration set, the region and the suppressed domains. Answers 'why did no email arrive' without an SSH session, and reports the instance that served the query rather than the fleet.
+  """
+  emailDeliveryConfig: EmailDeliveryConfig! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Everything this API knows about whether an address can be emailed: its stored status, whether its domain is suppressed, and the recent SES events for it (the `send` written when the message was handed to SES, and the `delivery` / `bounce` / `complaint` that came back on the SNS webhook).
+  """
+  emailDeliverability(
+    """Address to look up. Matched exactly."""
+    email: String!
+    """How many recent events to return, newest first."""
+    eventLimit: Int = 20
+  ): EmailDeliverability! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
   Resolve where one or more apps are placed, WITHOUT authenticating. Call this before login and connect to the returned gameApiUrl, so the session and app token are both written in the app's own datacenter instead of across a WAN. Pass every app a launcher might switch to and cache the result; placement changes rarely and only an operator can change it. An app with no placement comes back with nulls, which means 'keep using the shared origin'.
   """
   appDiscovery(
@@ -7979,7 +8098,7 @@ type Query {
     orgId: BigInt!
   ): PlayerPulse! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
-  Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). If that datacenter has no healthy Buddy this REFUSES with NO_LOCAL_BUDDY rather than returning one elsewhere: every gameplay write for the session would otherwise cross datacenters, which is invisible because each write still succeeds. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this.
+  Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this.
   """
   serverWithLeastClients: ServerStatus!
   """
@@ -9459,6 +9578,13 @@ type Mutation {
     newPassword: String!
   ): Boolean!
   """
+  Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Throws CONFLICT if a password is already set (use changePassword, which verifies the current one). A security notification is emailed to the account address. Existing sessions are not revoked.
+  """
+  setInitialPassword(
+    """The password to set (min 8 characters)."""
+    newPassword: String!
+  ): Boolean!
+  """
   Link an additional federated identity (from a socialLoginStart callback) to the signed-in account. Requires a session token; throws if the identity is already linked to another account.
   """
   linkIdentity(input: LinkIdentityInput!): UserIdentity!
@@ -9477,6 +9603,22 @@ type Mutation {
   Ends every active session for the authenticated user: deletes every session token and every app-scoped gameplay token derived from one, so the user is signed out of the platform and of every game they had entered. Takes effect immediately — a deleted token stops authenticating on its next request rather than at its next refresh. Requires a valid session token.
   """
   logoutAllDevices: Boolean!
+  """
+  Operator only (is_operator). Sends a plain test message to one address and returns the SES message id. SIDE EFFECTS: a real outbound email billed to the shared SES identity, and a `send` row in email_events. Prefer the AWS mailbox simulator (success@ / bounce@ / complaint@simulator.amazonses.com), which exercises the whole path without touching a real inbox or a real reputation. `sent: true` with `simulated: true` means SEND_EMAILS is off and nothing left the building -- read both fields.
+  """
+  sendTestEmail(
+    """Recipient. The mailbox simulator is preferred."""
+    to: String!
+    """Optional subject; a dated default is used when omitted."""
+    subject: String
+  ): SendTestEmailResult! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Deletes the stored deliverability rows for one address (email_status and email_events) and returns how many rows went. Exists so a verification run is not reading the previous run's events, and so an address suppressed by a bounce that has since been fixed can be given another chance. Returns 0 when there was nothing stored.
+  """
+  forgetEmailDeliverability(
+    """Address to clear. Matched exactly."""
+    email: String!
+  ): Int! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token.
   """
@@ -10597,7 +10739,7 @@ type Mutation {
     input: CreateContainerInput!
   ): GmContainer!
   """
-  Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules), so a caller who may not instantiate the type errors only in the not-exists case. NOTE: bindingKey is client-supplied and not yet policy-governed; shared world objects should use admin-instantiable types so only app admins can create the keyed row. Requires a valid token.
+  Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules) AND by the type's bindPolicy, so a caller who may not instantiate the type, or may not claim keys for it, errors only in the not-exists case. bindingKey is client-supplied, so on a member- or owner-instantiable type ANY entitled player may create the keyed row and becomes its owner — which inverts every owner_of_self invoke policy on that type. Set the container type's bindPolicy (e.g. {"type":"is_host"}), or use an admin-instantiable type, for any object more than one player shares. Requires a valid token.
   """
   gameModelEnsureContainer(
     """
@@ -12742,6 +12884,10 @@ input UpsertContainerTypeInput {
   defaultPropertyVisibility: String
   """JSON object of metadata."""
   metadataJson: String
+  """
+  Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
+  """
+  bindPolicyJson: String
 }
 
 """Create or update a typed property on a container type."""
@@ -12960,6 +13106,10 @@ input SeedContainerTypeInput {
   defaultPropertyVisibility: String
   """JSON object of metadata."""
   metadataJson: String
+  """
+  Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
+  """
+  bindPolicyJson: String
 }
 
 """A property definition to create as part of a seed."""
