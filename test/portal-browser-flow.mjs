@@ -6,9 +6,23 @@
 //
 // Run: API=https://api.<host> GAME=https://<app-datacenter-host> APP_A=1 node test/portal-browser-flow.mjs
 // GAME defaults to API: the two differ only when the app is placed in another datacenter.
+//
+// API IS REQUIRED AND HAS NO DEFAULT. It defaulted to
+// `https://api.dev.crowdedkingdoms.com` from before the tier root moved, a host
+// that answers 503 -- so running this without API produced a wall of network
+// failures attributed to the SDK. A default that names a dead host is worse than
+// no default: it makes a missing prerequisite look like a broken product
+// (wrapper field note 68). Derive it rather than typing one:
+//
+//   . cks-michael-root/scripts/tier-facts.sh && tier_client_graphql dev
 import { createCrowdyClient } from '../dist/index.js';
 
-const API = process.env.API ?? 'https://api.dev.crowdedkingdoms.com';
+const API = process.env.API;
+if (!API) {
+  console.error('portal-browser-flow: API is required and has no default.');
+  console.error('  API=$(. path/to/cks-michael-root/scripts/tier-facts.sh && tier_client_graphql dev) node test/portal-browser-flow.mjs');
+  process.exit(2);
+}
 const GAME = process.env.GAME ?? API;
 const APP_A = process.env.APP_A ?? '1';
 let pass = 0, fail = 0;
