@@ -120,22 +120,40 @@ test('client exposes the full management + game sub-client surface', async () =>
     'revokeCodeAdmission',
   ]);
 
-  // Auth surface: email+password alongside magic link and social.
+  // Auth surface: email+password alongside magic link and social, and the four
+  // password-management mutations.
   //
-  // This list asserted the OPPOSITE until 2026-08-20 -- that `login` and
-  // `register` were absent -- which was the SDK's passwordless claim written
-  // down as a check. The server has had both throughout; only the SDK pretended
-  // otherwise, and the gap is what sent automated clients to the dev bypass.
+  // THIS LIST HAS NOW ASSERTED THE OPPOSITE TWICE, and the second time it was
+  // the same mistake with a narrower blast radius. Until 2026-08-20 it asserted
+  // `login` and `register` were ABSENT -- the SDK's passwordless claim written
+  // down as a check -- and the gap is what sent automated clients to the dev
+  // bypass. Adding those two left `changePassword` and `resetPassword` in the
+  // removed list below, under a comment about the bypass being deleted from the
+  // server. That comment was true of `devLogin` and false of the other two: the
+  // API has served all four password mutations throughout, and `resetPassword`
+  // was never part of any bypass. So the SDK went on having no way for a player
+  // to set or change a password, with a passing test saying that was intended.
+  //
+  // The lesson is not "check the schema" -- whoever wrote this had the schema.
+  // It is that a name in an ABSENT list needs its own reason, because a list
+  // shares one comment and the reason only has to be true of the first entry.
   assertMethods(client.auth, 'auth', [
     'login', 'register', 'checkAuthMethod',
     'requestLoginLink', 'completeLoginLink', 'socialLoginStart',
     'socialLoginComplete', 'availableLoginProviders',
+    'requestPasswordReset', 'resetPassword', 'changePassword',
+    'setInitialPassword',
     'myIdentities', 'linkIdentity', 'unlinkIdentity', 'logout',
     'logoutAllDevices', 'setToken', 'getToken',
   ]);
-  // The bypass is removed from the SERVER, so a wrapper for it could only ever
-  // produce a validation error naming a field that does not exist.
-  for (const removed of ['devLogin', 'changePassword', 'resetPassword']) {
+  // ONE name, and its reason is specific to it: `devLogin` is removed from the
+  // SERVER on every tier, so a wrapper could only ever produce a validation
+  // error naming a field that does not exist. Do not add a name here without
+  // saying which of those two things is true of it -- that the API does not
+  // have the field, or that the SDK deliberately declines to expose one it has.
+  // The second needs an argument, because an SDK's missing convenience becomes
+  // a security decision: `devLogin` got used because nothing else was offered.
+  for (const removed of ['devLogin']) {
     assert.equal(client.auth[removed], undefined, `auth.${removed} should be removed`);
   }
 

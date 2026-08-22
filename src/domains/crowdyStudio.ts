@@ -140,10 +140,19 @@ export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
         fromProjectDto(data.crowdyStudioProjectSave, input.gridId),
       );
     } catch (error) {
+      // THE CODE IS `CROWDY_STUDIO_REVISION_CONFLICT`, not `CONFLICT`. This
+      // asked for `CONFLICT` and could therefore never match, so a real remote
+      // conflict never became a `CrowdyStudioRevisionConflictError` and the
+      // editor's "the remote moved" recovery — refetch, then offer to keep your
+      // version — was unreachable from the server side. The SDL description is
+      // where it came from: it said "returns CONFLICT with
+      // CROWDY_STUDIO_REVISION_CONFLICT", which reads as a code plus a detail
+      // and is one code with a long name. `crowdy-agent/graphql-transport.ts`
+      // had it right all along, in this same package.
       if (
         error instanceof CrowdyGraphQLError &&
-        error.code === 'CONFLICT' &&
-        error.message.includes('CROWDY_STUDIO_REVISION_CONFLICT')
+        (error.code === 'CROWDY_STUDIO_REVISION_CONFLICT' ||
+          error.message.includes('CROWDY_STUDIO_REVISION_CONFLICT'))
       ) {
         let remoteProject: CrowdyStudioProject | undefined;
         try {

@@ -26,5 +26,14 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      # `src/generated/graphql.ts` is committed output, and `build` does not run
+      # codegen -- so a hand-edit, or a `schema.gql` synced without a regenerate,
+      # was previously invisible here and shipped. This is the in-repo half of the
+      # question and it is hermetic: codegen reads the COMMITTED schema.gql, so it
+      # needs no network and no sibling checkout. The other half -- whether
+      # schema.gql still matches the SDL a tier publishes -- is `schema:sync`,
+      # which does need the network and therefore stays an operator step.
+      - name: Committed GraphQL types match the committed schema
+        run: npm run check:schema
       - name: Build + unit tests + coverage
         run: npm run coverage
