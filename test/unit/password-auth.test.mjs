@@ -315,6 +315,29 @@ test('the same three refusals are told apart by CODE on a v1.60.0 tier', async (
   assert.ok(!isPasswordAlreadySetError(withCode('PASSWORD_NOT_SET')));
 });
 
+test('the unconfirmed-password refusal has no code, and must not borrow UNAUTHENTICATED', async () => {
+  const { isPasswordUnconfirmedError } = await import('../../dist/index.js');
+
+  // The fifth refusal is the one v1.60.0 did NOT give a code, so it still
+  // arrives as UNAUTHENTICATED alongside an expired session. Both halves are
+  // assertions about that: the wording must still be recognised, and the code
+  // must never be enough. If ck-api ever gives it a code, the second assertion
+  // is what will notice -- and the remedies point in opposite directions, so
+  // getting it wrong sends the user to an inbox instead of a sign-in form.
+  assert.ok(
+    isPasswordUnconfirmedError(
+      new Error('Confirm your email to enable password sign-in for this account.'),
+    ),
+  );
+
+  const expiredSession = new Error('Token is invalid or expired.');
+  expiredSession.extensions = { code: 'UNAUTHENTICATED' };
+  assert.ok(
+    !isPasswordUnconfirmedError(expiredSession),
+    'an expired session must not be reported as an unconfirmed password',
+  );
+});
+
 test('checkAuthMethod asks without revealing whether the account exists', async () => {
   const client = await makeClient();
   const { calls, restore } = stubFetch({ data: { checkAuthMethod: { hasPassword: true } } });

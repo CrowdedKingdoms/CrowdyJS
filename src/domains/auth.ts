@@ -121,6 +121,14 @@ export function isAlreadyRegisteredError(error: unknown): boolean {
  * account that has another verified sign-in method. The remedy is the emailed
  * confirmation link, not a different password — so this must not be reported to
  * the user as "wrong password".
+ *
+ * **The one refusal here with no code of its own, and the only wording-only
+ * predicate left.** ck-api v1.60.0 gave the other four a dedicated
+ * `extensions.code`; this one is still a plain `UnauthorizedException`, so it
+ * arrives as `UNAUTHENTICATED` — the same code as an expired session, whose
+ * remedy (sign in again) is the opposite of this one's. The message is
+ * therefore the only discriminator, and the absence of a `codeOf` branch below
+ * is deliberate rather than an oversight: there is no code to read.
  */
 export function isPasswordUnconfirmedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
