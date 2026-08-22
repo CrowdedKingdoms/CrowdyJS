@@ -4,10 +4,34 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **14.2.0**. npm `latest` is still
-**14.1.0** until `prod/v14.2.0`. `dev/v14.2.0` / `test/v14.2.0` publish
-`14.2.0-dev.N` / `14.2.0-test.N`. `GameClientBootstrap` selects `gameApiUrl`,
-`gameApiWsUrl`, and `discoveryUrl`.
+**Current package:** `package.json` is **15.1.0** and **nothing is published at
+that number yet** — npm `latest` is still 15.0.0 until a `prod/v15.1.0` tag is
+pushed, so the two figures disagreeing is the normal state between a merge and a
+release rather than a mistake. `dev/vX.Y.Z` / `test/vX.Y.Z` publish
+`X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
+tag moves `latest`. Consumers pin the EXACT prerelease for their tier — never a
+caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
+`gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
+
+**15.0.0 IS A BREAKING MAJOR, AND THIS FILE DESCRIBED THE PREVIOUS ONE FOR A
+DAY.** It **removed `devLogin`** and added **`auth.login` / `auth.register`**.
+The SDK is **not passwordless**, and "dev bypass" is not a sign-in route on any
+tier — `DEV_AUTH_BYPASS` is gone from all three. If you find either phrase still
+written anywhere in this repo or in `cks-docs`, it is stale; the published SDK
+pages were the last to be corrected. [MIGRATION.md](MIGRATION.md) is the
+accurate account. Do not quote a version out of this paragraph:
+`npm view @crowdedkingdoms/crowdyjs version`.
+
+**15.1.0 finished that job one method deeper.** `login` and `register` were
+wrapped and password MANAGEMENT was not, so the SDK could get a player a session
+and then had no way to let them set or change the password behind it —
+`requestPasswordReset`, `resetPassword`, `changePassword` and
+`setInitialPassword` were all served by the API and wrapped by nothing, and the
+surface test asserted two of them were absent. All four are wrapped now. They
+are four rather than one because each is defined by what the caller has
+**proven** (an emailed token, the current password, or the session);
+`setInitialPassword` refusing an account that already has a password is the
+load-bearing part, not an inconvenience.
 
 Read [README.md](README.md) first. [MIGRATION.md](MIGRATION.md) covers breaking
 changes. This file is the game-concept → API map the README does not repeat.
@@ -35,7 +59,8 @@ not a running service; gameplay data lives in **PostgreSQL + Citus** via
 
 ## Core mental model: one endpoint, two tokens, two clients
 
-1. Passwordless sign-in yields an **identity session token** — account, studio
+1. Sign-in (`auth.login` / `auth.register`, magic link, or social/OIDC) yields an
+   **identity session token** — account, studio
    admin, minting. Rejected for gameplay.
 2. Gameplay needs a short-lived **app-scoped token** per game
    (`portal.mintAppToken` or the PKCE portal flow).
@@ -82,12 +107,14 @@ schema — not a second source repo), `/schema/crowdyjs.graphql`.
 ## Working in this repo
 
 GitHub default branch is **`prod`** (verified 2026-08-13). Long-lived trunks
-are **`dev`**, **`test`**, **`prod`**. Work lands on `dev`. `main` still
-exists and is not the default.
+are **`dev`**, **`test`**, **`prod`**, and nothing else. Work lands on `dev`.
+`main` was deleted on the remote in every repo on 2026-08-21.
 
-Publishing is an environment-prefixed tag (`dev/v14.2.0`, `test/v14.2.0`,
-`prod/v14.2.0`); npm accepts a version once, so only `prod/` publishes the
-bare `14.2.0` under `latest`. The tag's commit must be contained in the
+Publishing is an environment-prefixed tag (`dev/v15.0.0`, `test/v15.0.0`,
+`prod/v15.0.0`); npm accepts a version once, so only `prod/` publishes the
+bare `15.0.0` under `latest`. The examples use the CURRENT major deliberately:
+written with 14.x they invited a copy that cannot resolve, since a caret never
+matches a prerelease. The tag's commit must be contained in the
 branch it names (`scripts/ci/resolve-release-tier.sh`).
 
 Never hand-edit `src/generated/graphql.ts`. `npm install && npm run build`

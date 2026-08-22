@@ -3509,6 +3509,68 @@ export type DeployPlayerComputeInput = {
   tickHz?: InputMaybe<Scalars['Float']['input']>;
 };
 
+/** Everything this API knows about whether an address can be emailed, and why. */
+export type EmailDeliverability = {
+  __typename?: 'EmailDeliverability';
+  email: Scalars['String']['output'];
+  /** Most recent events first. */
+  events: Array<EmailEventRecord>;
+  /** Whether a send to this address would be attempted right now. False for a permanent bounce, a complaint, or a transient bounce inside its 24-hour cool-off. */
+  sendable: Scalars['Boolean']['output'];
+  /** Null means SES has never reported anything about this address, which is treated as sendable. */
+  status: Maybe<EmailStatusRecord>;
+  /** Whether this address is refused before SES is consulted at all, because its domain is in EMAIL_SUPPRESS_DOMAINS. */
+  suppressedDomain: Scalars['Boolean']['output'];
+};
+
+/** How this API instance is configured to send mail. Read it before concluding that a missing email is a bug: an instance with sendingEnabled=false composes every message and hands none of them to SES. */
+export type EmailDeliveryConfig = {
+  __typename?: 'EmailDeliveryConfig';
+  /** SES_CONFIGURATION_SET. Null or empty means sends carry no configuration set, so SES publishes NO delivery or bounce events for them and this tier learns nothing about its own mail. */
+  configurationSet: Maybe<Scalars['String']['output']>;
+  /** The From address (EMAIL_FROM). */
+  fromAddress: Scalars['String']['output'];
+  /** AWS_REGION used for SES. */
+  region: Scalars['String']['output'];
+  /** SEND_EMAILS. False means nothing reaches SES from this instance. */
+  sendingEnabled: Scalars['Boolean']['output'];
+  /** Domain suffixes refused before SES is consulted (EMAIL_SUPPRESS_DOMAINS). */
+  suppressedDomains: Array<Scalars['String']['output']>;
+};
+
+/** One recorded SES event for an address: the `send` this API wrote when it handed the message to SES, or a `delivery` / `bounce` / `complaint` / `delivery_delay` that arrived back on the SNS webhook. */
+export type EmailEventRecord = {
+  __typename?: 'EmailEventRecord';
+  /** When the row was written (ISO 8601). */
+  createdAt: Scalars['String']['output'];
+  /** Recipient address the event concerns. */
+  email: Scalars['String']['output'];
+  /** Event detail where SES supplies one: `Permanent/General` for a bounce, the complaint feedback type for a complaint. */
+  eventSubtype: Maybe<Scalars['String']['output']>;
+  /** send | delivery | bounce | complaint | delivery_delay. Lower-case, as stored. */
+  eventType: Scalars['String']['output'];
+  /** SES message id. Present on the `send` row this API writes and on the feedback events SES publishes for it, which is what lets one send be matched to its own delivery rather than a previous run's. */
+  messageId: Maybe<Scalars['String']['output']>;
+};
+
+/** An address's stored deliverability record. Absent (null) until SES reports something about the address. */
+export type EmailStatusRecord = {
+  __typename?: 'EmailStatusRecord';
+  bounceSubType: Maybe<Scalars['String']['output']>;
+  /** Permanent | Transient | Undetermined, from SES. */
+  bounceType: Maybe<Scalars['String']['output']>;
+  complaintType: Maybe<Scalars['String']['output']>;
+  deliveryAttempts: Maybe<Scalars['Int']['output']>;
+  email: Scalars['String']['output'];
+  /** True once SES has reported a permanent bounce or a complaint. This is what stops the address being sent to again. */
+  isPermanentFailure: Maybe<Scalars['Boolean']['output']>;
+  lastEventAt: Maybe<Scalars['String']['output']>;
+  lastEventType: Maybe<Scalars['String']['output']>;
+  messageId: Maybe<Scalars['String']['output']>;
+  /** valid | bounced | complained. */
+  status: Scalars['String']['output'];
+};
+
 /** Compute units attributed to one engine over the query window. */
 export type EngineComputeUnits = {
   __typename?: 'EngineComputeUnits';
@@ -4145,6 +4207,8 @@ export type GmContainerType = {
   __typename?: 'GmContainerType';
   /** The app (tenant) that owns the type. */
   appId: Scalars['BigInt']['output'];
+  /** Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner. */
+  bindPolicyJson: Maybe<Scalars['String']['output']>;
   /** Default visibility for this type's properties: public | owner | hidden. */
   defaultPropertyVisibility: Scalars['String']['output'];
   /** Optional description of the type. */
@@ -5291,6 +5355,8 @@ export type Mutation = {
   exchangePortalCode: AppTokenResponse;
   /** ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). */
   forceLogoutUser: Scalars['Boolean']['output'];
+  /** Operator only (is_operator). Deletes the stored deliverability rows for one address (email_status and email_events) and returns how many rows went. Exists so a verification run is not reading the previous run's events, and so an address suppressed by a bounce that has since been fixed can be given another chance. Returns 0 when there was nothing stored. */
+  forgetEmailDeliverability: Scalars['Int']['output'];
   /** Create a directed relationship edge between two containers (the game model is a graph), with a relationship type and optional weight. Requires a valid token. */
   gameModelAddEdge: GmEdge;
   /** Cancel pending timers by id or by dedupe key, returning how many were removed. A timer already claimed for execution cannot be cancelled. Requires app-admin ('manage_apps'). */
@@ -5315,7 +5381,7 @@ export type Mutation = {
   gameModelDeleteFunction: Scalars['Boolean']['output'];
   /** Delete a property definition from a container type. Does not remove instance property values already stored on containers. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a definition was deleted. */
   gameModelDeletePropertyDef: Scalars['Boolean']['output'];
-  /** Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules), so a caller who may not instantiate the type errors only in the not-exists case. NOTE: bindingKey is client-supplied and not yet policy-governed; shared world objects should use admin-instantiable types so only app admins can create the keyed row. Requires a valid token. */
+  /** Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules) AND by the type's bindPolicy, so a caller who may not instantiate the type, or may not claim keys for it, errors only in the not-exists case. bindingKey is client-supplied, so on a member- or owner-instantiable type ANY entitled player may create the keyed row and becomes its owner — which inverts every owner_of_self invoke policy on that type. Set the container type's bindPolicy (e.g. {"type":"is_host"}), or use an admin-instantiable type, for any object more than one player shares. Requires a valid token. */
   gameModelEnsureContainer: GmEnsureContainerResult;
   /** Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps'). */
   gameModelGrantTierFeature: GmTierFeature;
@@ -5471,6 +5537,8 @@ export type Mutation = {
   sendClientEvent: Scalars['Boolean']['output'];
   /** Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (NOT broadcast to nearby actors). The sender must know the destination actor’s current chunk. Requires a bearer game token; opens a UDP proxy session automatically if none exists. The target receives a SingleActorMessageNotification on udpNotifications; the sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendSingleActorMessage: Scalars['Boolean']['output'];
+  /** Operator only (is_operator). Sends a plain test message to one address and returns the SES message id. SIDE EFFECTS: a real outbound email billed to the shared SES identity, and a `send` row in email_events. Prefer the AWS mailbox simulator (success@ / bounce@ / complaint@simulator.amazonses.com), which exercises the whole path without touching a real inbox or a real reputation. `sent: true` with `simulated: true` means SEND_EMAILS is off and nothing left the building -- read both fields. */
+  sendTestEmail: SendTestEmailResult;
   /** Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendTextPacket: Scalars['Boolean']['output'];
   /** Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
@@ -5507,6 +5575,8 @@ export type Mutation = {
   setEarlyAccessOverride: User;
   /** Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid. */
   setGridPermissionLimits: GridPermissionLimits;
+  /** Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Throws CONFLICT if a password is already set (use changePassword, which verifies the current one). A security notification is emailed to the account address. Existing sessions are not revoked. */
+  setInitialPassword: Scalars['Boolean']['output'];
   /** Set (author-only) the acquisition mode and pricing for a code listing. Non-free modes require completed seller onboarding. Curation can reject a listing but never reprice it (07 §1.2). */
   setListingPricing: Scalars['Boolean']['output'];
   /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
@@ -6106,6 +6176,11 @@ export type MutationForceLogoutUserArgs = {
 };
 
 
+export type MutationForgetEmailDeliverabilityArgs = {
+  email: Scalars['String']['input'];
+};
+
+
 export type MutationGameModelAddEdgeArgs = {
   input: AddEdgeInput;
 };
@@ -6590,6 +6665,12 @@ export type MutationSendSingleActorMessageArgs = {
 };
 
 
+export type MutationSendTestEmailArgs = {
+  subject?: InputMaybe<Scalars['String']['input']>;
+  to: Scalars['String']['input'];
+};
+
+
 export type MutationSendTextPacketArgs = {
   input: ClientTextPacketInput;
 };
@@ -6697,6 +6778,11 @@ export type MutationSetEarlyAccessOverrideArgs = {
 
 export type MutationSetGridPermissionLimitsArgs = {
   input: SetGridPermissionLimitsInput;
+};
+
+
+export type MutationSetInitialPasswordArgs = {
+  newPassword: Scalars['String']['input'];
 };
 
 
@@ -8272,6 +8358,10 @@ export type Query = {
   crowdyStudioProjects: Array<CrowdyStudioProject>;
   /** Resolves the single most-specific quota that applies to the given (tierId, appId, orgId, metric) by walking tier -> app -> org -> free-tier defaults and returning the first match; its limitValue/period describe the enforced limit. Returns null if no matching rule and no free-tier default exist for the metric. Requires the 'view_usage' permission on the most-specific scope provided: tierId or appId -> 'view_usage' on the (owning) app; orgId -> 'view_usage' on the org. A metric-only query (no scope ids) resolves the platform free-tier default and only requires an authenticated user. */
   effectiveQuota: Maybe<ServiceQuota>;
+  /** Operator only (is_operator). Everything this API knows about whether an address can be emailed: its stored status, whether its domain is suppressed, and the recent SES events for it (the `send` written when the message was handed to SES, and the `delivery` / `bounce` / `complaint` that came back on the SNS webhook). */
+  emailDeliverability: EmailDeliverability;
+  /** Operator only (is_operator). How THIS API instance is configured to send mail: whether sending is on, the From address, the SES configuration set, the region and the suppressed domains. Answers 'why did no email arrive' without an SSH session, and reports the instance that served the query rather than the fleet. */
+  emailDeliveryConfig: EmailDeliveryConfig;
   /** Reports whether a free-play window is active now, a human-readable schedule description, and the ISO-8601 start of the next window. PUBLIC: no authentication required. Takes no arguments; computed from server config and the current clock. */
   freePlayWindowInfo: FreePlayWindowInfo;
   /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
@@ -8486,7 +8576,7 @@ export type Query = {
   quotasForOrg: Array<ServiceQuota>;
   /** Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index. */
   runtimePermissions: Array<Scalars['String']['output']>;
-  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). If that datacenter has no healthy Buddy this REFUSES with NO_LOCAL_BUDDY rather than returning one elsewhere: every gameplay write for the session would otherwise cross datacenters, which is invisible because each write still succeeds. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
+  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
   serverWithLeastClients: ServerStatus;
   /** @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only. */
   sharedEnvPlans: Array<SharedEnvPlan>;
@@ -8938,6 +9028,12 @@ export type QueryEffectiveQuotaArgs = {
   metric: Scalars['String']['input'];
   orgId?: InputMaybe<Scalars['BigInt']['input']>;
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryEmailDeliverabilityArgs = {
+  email: Scalars['String']['input'];
+  eventLimit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -9886,6 +9982,8 @@ export type SeedContainerInput = {
 
 /** A container type to create as part of a seed. */
 export type SeedContainerTypeInput = {
+  /** Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner. */
+  bindPolicyJson?: InputMaybe<Scalars['String']['input']>;
   /** public | owner | hidden default for this type's properties. */
   defaultPropertyVisibility?: InputMaybe<Scalars['String']['input']>;
   /** Optional description of the type. */
@@ -10053,6 +10151,19 @@ export type SendAgentMessageInput = {
   idempotencyKey: Scalars['String']['input'];
   /** Owner/app active session UUID. */
   sessionId: Scalars['String']['input'];
+};
+
+/** Result of an operator test send. */
+export type SendTestEmailResult = {
+  __typename?: 'SendTestEmailResult';
+  /** The SES message id when a message was actually handed to SES. Null when sending is disabled on this instance, which is reported as sent=true by the same rule the product flows use, so READ THIS FIELD to tell a real send from a simulated one. */
+  messageId: Maybe<Scalars['String']['output']>;
+  /** Why a send was refused, when it was. */
+  refusedReason: Maybe<Scalars['String']['output']>;
+  /** Whether the send was attempted AND accepted. False means refused (suppressed domain, or a prior permanent bounce) or that SES rejected it. */
+  sent: Scalars['Boolean']['output'];
+  /** True when SEND_EMAILS is off and the message was logged rather than sent. sent=true with simulated=true means nothing left the building. */
+  simulated: Scalars['Boolean']['output'];
 };
 
 /** Notification received when the server sends a custom event. Received via the udpNotifications subscription. */
@@ -11145,6 +11256,8 @@ export type UpsertComputeTriggerInput = {
 export type UpsertContainerTypeInput = {
   /** The app (tenant) that owns the type. */
   appId: Scalars['BigInt']['input'];
+  /** Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner. */
+  bindPolicyJson?: InputMaybe<Scalars['String']['input']>;
   /** public | owner | hidden default for this type's properties. */
   defaultPropertyVisibility?: InputMaybe<Scalars['String']['input']>;
   /** Optional description of the type. */
@@ -11420,7 +11533,7 @@ export type UserEdge = {
   node: User;
 };
 
-/** A federated / passwordless sign-in identity linked to a user account (a social provider, an emailed magic link, or the dev bypass). */
+/** A sign-in identity linked to a user account: a social provider, an emailed magic link, or a password. */
 export type UserIdentity = {
   __typename?: 'UserIdentity';
   createdAt: Scalars['DateTime']['output'];
@@ -11428,7 +11541,7 @@ export type UserIdentity = {
   emailVerified: Scalars['Boolean']['output'];
   identityId: Scalars['ID']['output'];
   lastLoginAt: Maybe<Scalars['DateTime']['output']>;
-  /** The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'dev' (dev bypass). */
+  /** The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'password'. 'dev' is a RETIRED value that appears on identities created before the dev sign-in bypass was removed; it cannot be created and cannot be signed in with. */
   provider: Scalars['String']['output'];
   /** The provider's stable subject id ('sub'). For 'email'/'dev' this is the lowercased email. */
   subject: Scalars['String']['output'];
