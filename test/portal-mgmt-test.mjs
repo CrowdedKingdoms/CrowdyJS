@@ -2,12 +2,27 @@
 // Validates mint / PKCE exchange / refresh / capability-confinement / expiry /
 // logout-cascade.
 //
-// Run: API=https://api.dev.crowdedkingdoms.com TEST_DB_CONN="host=... dbname=... user=postgres sslmode=require" \
+// Run: API=<tier origin> TEST_DB_CONN="host=... dbname=... user=postgres sslmode=require" \
 //      PGPASSWORD=... node test/portal-mgmt-test.mjs
+//
+// API IS REQUIRED AND HAS NO DEFAULT, and this line is why: it read
+// `process.env.API ?? 'https://api.dev.crowdedkingdoms.com'`, a host retired
+// before the tier root moved and now answering 503. Every request failed and the
+// failures looked like the API rather than like an unset variable. Derive it:
+//
+//   . cks-michael-root/scripts/tier-facts.sh && tier_client_graphql dev
+//
+// (that helper returns the /graphql URL; this file appends its own, so pass the
+// ORIGIN -- e.g. ${url%/graphql}.)
 import { createHash, randomBytes } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
-const API = (process.env.API ?? 'https://api.dev.crowdedkingdoms.com') + '/graphql';
+if (!process.env.API) {
+  console.error('portal-mgmt-test: API is required and has no default (it used to name a host that answers 503).');
+  console.error('  API=https://<tier client origin> node test/portal-mgmt-test.mjs');
+  process.exit(2);
+}
+const API = process.env.API + '/graphql';
 const APP_A = process.env.APP_A ?? '1';
 const CONN = process.env.TEST_DB_CONN; // optional; enables the expiry test
 let pass = 0, fail = 0;
