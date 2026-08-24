@@ -4,10 +4,19 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.1.0** and **nothing is published at
-that number yet** — npm `latest` is still 15.0.0 until a `prod/v15.1.0` tag is
-pushed, so the two figures disagreeing is the normal state between a merge and a
-release rather than a mistake. `dev/vX.Y.Z` / `test/vX.Y.Z` publish
+**Current package:** `package.json` is **15.1.0** and **15.1.0 is published** —
+`latest`, `@dev` and `@test` all moved to it on 2026-08-22. This paragraph said
+"nothing is published at that number yet" for a day afterwards, which is the
+version-in-prose hazard: `package.json` and the registry disagreeing IS the
+normal state between a merge and a release, and a page cannot tell you which
+state you are in. Ask: `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**No consumer has adopted 15.1.0**, and none needs to — all nine Crowdy-Games
+projects are still on the 15.0.0 line and CrowdyCPP's parity pin is 15.0.0.
+Nothing downstream does password management, which is what 15.1.0 adds. That is
+a deliberate state, not lag.
+
+`dev/vX.Y.Z` / `test/vX.Y.Z` publish
 `X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
 tag moves `latest`. Consumers pin the EXACT prerelease for their tier — never a
 caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
@@ -109,6 +118,13 @@ schema — not a second source repo), `/schema/crowdyjs.graphql`.
 GitHub default branch is **`prod`** (verified 2026-08-13). Long-lived trunks
 are **`dev`**, **`test`**, **`prod`**, and nothing else. Work lands on `dev`.
 `main` was deleted on the remote in every repo on 2026-08-21.
+
+**You cannot push to any of the three.** A branch policy applied on 2026-08-22
+requires a pull request everywhere, for every identity including the admin's.
+Push a branch, open the PR and merge it yourself — no approval is required on
+`dev` or `test`. `prod` needs an admin to perform the merge, and a PR touching
+`/.github/` or `/scripts/` needs the code owner. `GH013: Repository rule
+violations found` is the rule working, not a credential problem.
 
 Publishing is an environment-prefixed tag (`dev/v15.0.0`, `test/v15.0.0`,
 `prod/v15.0.0`); npm accepts a version once, so only `prod/` publishes the

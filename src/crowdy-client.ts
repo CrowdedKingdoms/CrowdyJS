@@ -23,6 +23,10 @@
 
 import { AuthState } from './auth-state.js';
 import { GraphQLClient } from './client.js';
+import {
+  CROWDY_DEFAULT_HTTP_ORIGIN,
+  CROWDY_DEFAULT_WS_ORIGIN,
+} from './default-origin.js';
 import { LbCookieStore } from './lb-cookie-store.js';
 import { createBootstrapRediscover } from './bootstrap-rediscover.js';
 import { RealtimeMetrics } from './metrics.js';
@@ -75,9 +79,18 @@ import { DiscoveryDomain } from './domains/discovery.js';
 
 export interface CrowdyClientConfig {
   // ----- API endpoint (identity AND gameplay; there is only one) -----
-  /** HTTP root (e.g. `https://api.crowdedkingdoms.com`). */
+  /**
+   * HTTP root. Defaults to {@link CROWDY_DEFAULT_HTTP_ORIGIN}, the public CK API
+   * origin for the tier this build of the SDK was published for — `@dev`,
+   * `@test` and `latest` each carry their own. Pass it explicitly to point at
+   * another tier, at a per-app datacenter endpoint, or at a local server.
+   *
+   * The example this line used to give was `https://api.crowdedkingdoms.com`,
+   * which is NXDOMAIN and has been for a long time. That is why the default is
+   * generated from the tier table rather than written by hand.
+   */
   httpUrl?: string;
-  /** WS root. */
+  /** WS root. Defaults to {@link CROWDY_DEFAULT_WS_ORIGIN}. */
   wsUrl?: string;
   /** GraphQL endpoint. Defaults to `${httpUrl}/graphql`. */
   graphqlEndpoint?: string;
@@ -302,11 +315,39 @@ export class CrowdyClient {
     this.session = new AuthState(config.tokenStore);
     const lbCookieStore = config.lbCookieStore ?? new LbCookieStore();
 
+    // THE DEFAULT IS ALL-OR-NOTHING, AND THAT RULE IS LOAD-BEARING.
+    //
+    // It applies only to a client that configured NO origin at all. A caller who
+    // supplied any of the four gets exactly what they supplied and nothing
+    // invented around it, because the alternative is worse than having no
+    // default: `createCrowdyClient({ httpUrl: 'https://my-host' })` would get
+    // HTTP on their host and the WEBSOCKET on the tier default, splitting one
+    // session across two origins while looking connected. `gameModel` and
+    // `crowdyStudioAgent` refuse a missing wsUrl loudly today and must go on
+    // doing so — a refusal replaced by a silent wrong answer is a bad trade even
+    // when the wrong answer is a live host.
+    //
+    // Resolved ONCE here so every sub-client below agrees. Applied per-transport
+    // it reached two of five: `gameModel` and `crowdyStudioAgent` were handed
+    // `undefined` while the two transports had an answer, and a default that
+    // reaches some members of a set and not others is a third configuration
+    // nothing was designed for.
+    const configuredAnOrigin = Boolean(
+      config.httpUrl?.trim() ||
+        config.wsUrl?.trim() ||
+        config.graphqlEndpoint?.trim() ||
+        config.wsEndpoint?.trim(),
+    );
+    const httpUrl = configuredAnOrigin
+      ? config.httpUrl
+      : CROWDY_DEFAULT_HTTP_ORIGIN;
+    const wsUrl = configuredAnOrigin ? config.wsUrl : CROWDY_DEFAULT_WS_ORIGIN;
+
     this.graphql = new GraphQLClient(
       {
-        httpUrl: config.httpUrl,
+        httpUrl,
         graphqlEndpoint:
-          config.graphqlEndpoint ?? toGraphqlEndpoint(config.httpUrl, 'graphql'),
+          config.graphqlEndpoint ?? toGraphqlEndpoint(httpUrl, 'graphql'),
         timeout: config.timeout,
         logger: config.logger,
         lbCookieStore,
@@ -335,7 +376,7 @@ export class CrowdyClient {
     this.realtime = new SubscriptionManager(
       {
         wsEndpoint:
-          config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
+          config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
         logger: config.logger,
         lbCookieStore,
         ...realtimeConfig,
@@ -424,14 +465,14 @@ export class CrowdyClient {
     this.teams = new TeamsAPI(this.graphql);
     this.udp = new UdpAPI(this.graphql, this.realtime, this.metrics);
     this.gameModel = new GameModelAPI(this.graphql, {
-      wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
+      wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),
     });
     this.compute = new ComputeAPI(this.graphql);
     this.playerCompute = new PlayerComputeAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
     this.crowdyStudioAgent = new CrowdyAgentGraphQLTransport(this.graphql, {
-      wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(config.wsUrl, 'graphql'),
+      wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),
     });
     this.playerWallet = new PlayerWalletAPI(this.graphql);

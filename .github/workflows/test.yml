@@ -35,5 +35,13 @@ jobs:
       # which does need the network and therefore stays an operator step.
       - name: Committed GraphQL types match the committed schema
         run: npm run check:schema
+      - name: Content policy gate refuses what it must
+        run: npm run check:content-policy:self-test
       - name: Build + unit tests + coverage
         run: npm run coverage
+      # Runs AFTER the build on purpose. `dist/` is gitignored and is the only
+      # thing npm ships, so it is both the highest-value part of the corpus and
+      # invisible until something builds it -- which is how a private-repo name
+      # reached 69 published versions with nothing objecting.
+      - name: No private-repo references in the published artifact
+        run: npm run check:content-policy
