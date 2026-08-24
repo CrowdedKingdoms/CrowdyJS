@@ -8,12 +8,9 @@
 // API IS REQUIRED AND HAS NO DEFAULT, and this line is why: it read
 // `process.env.API ?? 'https://api.dev.crowdedkingdoms.com'`, a host retired
 // before the tier root moved and now answering 503. Every request failed and the
-// failures looked like the API rather than like an unset variable. Derive it:
-//
-//   . cks-michael-root/scripts/tier-facts.sh && tier_client_graphql dev
-//
-// (that helper returns the /graphql URL; this file appends its own, so pass the
-// ORIGIN -- e.g. ${url%/graphql}.)
+// failures looked like the API rather than like an unset variable. Derive it
+// from your environment's own tier facts rather than typing one, and pass the
+// ORIGIN rather than the /graphql URL -- this file appends its own path.
 import { createHash, randomBytes } from 'node:crypto';
 import { execSync } from 'node:child_process';
 

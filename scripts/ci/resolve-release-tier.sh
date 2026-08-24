@@ -3,7 +3,7 @@
 # commit is not contained in that tier's branch.
 #
 # Tags are `dev/v1.2.3`, `test/v1.2.3`, `prod/v1.2.3`. The tier is the prefix, and it is the
-# prefix rather than a suffix for reasons recorded in cks-project-root/docs/BRANCH-STRATEGY.md:
+# prefix rather than a suffix for three reasons:
 # `v1.2.3-test` is a semver PRE-release and sorts BELOW `v1.2.3`, which would invert
 # createCpDeployment's "refuses an older version" guard; `v1.2.3+test` is illegal in a Docker
 # tag; and a GitHub tag filter's `*` does not match `/`, so `tags: ['v*.*.*']` cannot
