@@ -62,11 +62,18 @@ test('an UNCONFIGURED client dials the default origin', async () => {
 });
 
 /**
+ * WHY THIS CASE EXISTS, and it was found by sabotaging the other three.
+ *
  * The HTTP assertion above is satisfied by EITHER layer — `CrowdyClient`'s
- * resolution or `GraphQLClient`'s own last-resort — so deleting the former
- * leaves it passing. Measured, by deleting it: three of three still green. This
- * case is the one that can only be satisfied by `CrowdyClient`, because
- * `gameModel` has no fallback of its own and refuses a missing `wsUrl` outright.
+ * resolution or `GraphQLClient`'s own last-resort — so deleting the former left
+ * all four green. Measured, not reasoned about. That is defence in depth rather
+ * than an untested path (both layers produce the same URL), but it does mean the
+ * HTTP case cannot tell you WHICH layer answered.
+ *
+ * This case can only be satisfied by `CrowdyClient`, because `gameModel` has no
+ * fallback of its own and refuses a missing `wsUrl` outright. Deleting the WS
+ * resolution turns it red; deleting the all-or-nothing guard turns the case
+ * below red. Three sabotages, and the two that change behaviour are both caught.
  */
 test('an UNCONFIGURED client resolves the WS default for the sub-clients too', async () => {
   const sdk = await loadSdk();

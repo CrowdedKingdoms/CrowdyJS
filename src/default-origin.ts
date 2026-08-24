@@ -1,8 +1,8 @@
 /**
- * GENERATED — do not edit. `scripts/sync-client-origins.mjs --write --tier dev`
- * in the cks-michael-root wrapper writes this file, and
- * `scripts/check-sdk-default-origin.mjs` refuses it when it names the wrong tier
- * or a host the tier table does not declare.
+ * GENERATED — do not edit. The operator tooling's
+ * `sync-client-origins.mjs --write --tier dev` writes this file, and
+ * `check-sdk-default-origin.mjs` refuses it when it names the wrong tier or a
+ * host that declaration does not carry. Regenerate; never hand-edit.
  *
  * THE DEFAULT IS LOAD-BEARING DURING A ROLLOUT, which is the opposite of how a
  * default is usually thought about: while the branches are mid-migration this is
@@ -10,7 +10,7 @@
  * than no default at all. Every fallback this SDK ever removed named a host that
  * was already dead. A generated file plus a gate is what makes this one different.
  *
- * Source: cp-tiers.json tiers.dev.clientOriginHost (mirror of CK_CLIENT_ORIGIN_HOST_BY_TIER in dns-tier.ts)
+ * Source: the operator's per-tier public CK API origin declaration, tier 'dev'
  */
 
 /** The tier this build of the SDK is published for. */
