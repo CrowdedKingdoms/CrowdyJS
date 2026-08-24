@@ -6,9 +6,21 @@
 //
 // Run: API=https://api.<host> GAME=https://<app-datacenter-host> APP_A=1 node test/portal-browser-flow.mjs
 // GAME defaults to API: the two differ only when the app is placed in another datacenter.
+//
+// API IS REQUIRED AND HAS NO DEFAULT. It defaulted to
+// `https://api.dev.crowdedkingdoms.com` from before the tier root moved, a host
+// that answers 503 -- so running this without API produced a wall of network
+// failures attributed to the SDK. A default that names a dead host is worse than
+// no default: it makes a missing prerequisite look like a broken product.
+// Derive it from your environment's own tier facts rather than typing one.
 import { createCrowdyClient } from '../dist/index.js';
 
-const API = process.env.API ?? 'https://api.dev.crowdedkingdoms.com';
+const API = process.env.API;
+if (!API) {
+  console.error('portal-browser-flow: API is required and has no default.');
+  console.error('  API=<your tier GraphQL endpoint> node test/portal-browser-flow.mjs');
+  process.exit(2);
+}
 const GAME = process.env.GAME ?? API;
 const APP_A = process.env.APP_A ?? '1';
 let pass = 0, fail = 0;
@@ -25,9 +37,12 @@ async function main() {
   const gamePkce = memPkceStore();
   const game = createCrowdyClient({ httpUrl: GAME, wsUrl: GAME.replace(/^http/, 'ws'), tokenStore: memTokenStore(), pkceStore: gamePkce });
 
-  await overworld.auth.devLogin(`portal-browser-${Date.now()}@test.invalid`);
+  await overworld.auth.register({
+    email: `portal-browser-${Date.now()}@test.invalid`,
+    password: `Aa1!portal-browser-${Date.now()}`,
+  });
   const sessionTok = overworld.getToken();
-  log(!!sessionTok, '1. overworld signed in via devLogin (identity session token held on overworld origin)');
+  log(!!sessionTok, '1. overworld signed in via register (identity session token held on overworld origin)');
 
   // Game origin step 1: beginEntry -> build the Overworld authorize URL (verifier kept locally).
   const authorizeUrl = await game.portal.beginEntry({ appId: APP_A, authorizeUrl: `${API}/authorize`, redirectUri: 'https://game.example/callback' });

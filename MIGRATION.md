@@ -1,3 +1,121 @@
+# CrowdyJS v15.1 — password management (additive)
+
+**Nothing breaks.** Four mutations the API has served all along are now wrapped,
+so a game shipping this SDK has a first-class way to let a player set or change
+a password:
+
+| Method | Requires | For |
+|---|---|---|
+| `auth.requestPasswordReset(email)` | nothing | "I forgot my password" |
+| `auth.resetPassword({ token, newPassword })` | the emailed token | completing that |
+| `auth.changePassword({ currentPassword, newPassword })` | a session **and** the current password | an ordinary change |
+| `auth.setInitialPassword(newPassword)` | a session, and the account must have **no** password | adding a first password |
+
+**Why four and not one.** Each is defined by what the caller has already
+*proven* — an emailed token, the current password, or the session — and
+collapsing any pair deletes the proof. In particular `setInitialPassword` is not
+`changePassword` with the check removed: it **refuses** when a password already
+exists, and that refusal is what stops a stolen session from replacing a
+credential the owner still knows. Route on the refusal instead of retrying.
+
+**`setInitialPassword` emails a security notification to the account address**
+on success, and that is deliberately the mitigation rather than a refusal: a
+stolen session can already attach durable attacker-controlled access through
+`linkIdentity`, so refusing here would close nothing and would leave the
+legitimate user of a magic-link or social-only account with no door at all. If
+you build UI for this, tell the user the email is coming.
+
+**Three new error predicates**, because the three refusals need different
+handling and a caller should not have to work out which is which:
+
+- `isPasswordAlreadySetError(e)` — `setInitialPassword` refused; use
+  `changePassword`.
+- `isNoPasswordSetError(e)` — `changePassword` refused because there is none;
+  use `setInitialPassword`.
+- `isInvalidCurrentPasswordError(e)` — the current password is wrong; ask again.
+
+**Use these rather than reading `extensions.code` yourself, and the reason is
+worth knowing.** Each refusal has its own code — `PASSWORD_ALREADY_SET`,
+`PASSWORD_NOT_SET`, `INVALID_CURRENT_PASSWORD` — only from **ck-api v1.60.0**.
+Before that release the first two shared `UNAUTHENTICATED` with a genuinely
+expired session and the third arrived as `INTERNAL_SERVER_ERROR`, so a caller
+keying on the code signed the user out over a typo. Each predicate accepts the
+new code **and** the older wording, so one pinned build works against a tier on
+either side of that line. `isAlreadyRegisteredError` gained the same treatment
+(`EMAIL_ALREADY_REGISTERED`).
+
+None of the three means the session is gone. Sign a user out on
+`UNAUTHENTICATED`, which from v1.60.0 says only that.
+
+```ts
+try {
+  await client.auth.setInitialPassword(pw);
+} catch (e) {
+  if (isPasswordAlreadySetError(e)) {
+    // They have one already — ask for it rather than replacing it blind.
+    await client.auth.changePassword({ currentPassword: current, newPassword: pw });
+  } else throw e;
+}
+```
+
+`resetPassword` and `changePassword` do **not** revoke existing sessions. Follow
+either with `auth.logoutAllDevices()` if that is the intent.
+
+---
+
+# CrowdyJS v15 — the dev auth bypass is gone (breaking)
+
+`client.auth.devLogin()` is **removed**, and so is the `devToken` field on
+`requestLoginLink`. Neither is deprecated or disabled — the server-side feature
+they called is deleted from every tier, so a wrapper for it could only produce a
+GraphQL validation error.
+
+**Why it went.** `devLogin` returned an identity session for any email address
+with no proof of ownership whatsoever. It was gated on a server flag the control
+plane derived as `tier !== 'prod'`, so it was live on dev and test, and if the
+address happened to belong to a super admin then so did the session. `devToken`
+was the same hole in a smaller shape: it put the emailed one-time magic-link
+token in the response body, readable by any unauthenticated caller who knew an
+address.
+
+**What replaces them: `login` and `register`, which are new here and are not new
+to the server.** Email + password has been first-class in the API throughout;
+only this SDK claimed the product was passwordless, and that gap is what pushed
+automated clients onto the bypass in the first place.
+
+```diff
+-await client.auth.devLogin('player@example.com');
++await client.auth.login({ email: 'player@example.com', password });
++// or, for an address that has never been seen:
++await client.auth.register({ email: 'player@example.com', password });
+```
+
+```diff
+ const link = await client.auth.requestLoginLink({ email });
+-if (link.devToken) await client.auth.completeLoginLink(link.devToken);
++// The token arrives only by email now. An automated caller should register an
++// account it holds the password to instead of reading one out of the response.
+```
+
+**Also new:** `client.auth.checkAuthMethod(email)` for email-first adaptive
+login, and two error predicates, because these two conditions are **not**
+distinguishable by GraphQL error code:
+
+- `isAlreadyRegisteredError(e)` — `register` refused because the address already
+  has an account. It carries `EMAIL_ALREADY_REGISTERED` from ck-api v1.60.0;
+  before that it arrived as `INTERNAL_SERVER_ERROR`, so a caller keying on
+  `CONFLICT` matched nothing. The predicate accepts both.
+- `isPasswordUnconfirmedError(e)` — `login` refused because the password is real
+  but unconfirmed on an account with another verified sign-in method. The remedy
+  is the emailed link, not a different password.
+
+**One behaviour worth knowing before you write a retry loop:** `register` returns
+a session only for an address it is **creating**. An address that already has an
+account gets the password attached *pending email confirmation* and no token.
+Registering and signing in are therefore not interchangeable.
+
+---
+
 # CrowdyJS v14 — one endpoint (breaking)
 
 v13 made the two GraphQL origins optional-but-supported. v14 removes the second
@@ -471,8 +589,16 @@ validation error; every other sub-client is unaffected.
 
 # CrowdyJS v8 — Passwordless & federated sign-in (BREAKING)
 
-**Crowded Kingdoms is passwordless.** Email + password login is removed. Update
-your sign-in flow to one of:
+> **SUPERSEDED BY 15.0.0 — do not follow this section as current product.**
+> Email + password sign-in came BACK in 15.0.0: `auth.login` and
+> `auth.register` exist, and the `devLogin` bypass was removed from every tier
+> on 2026-08-20. What is still true from v8 is that magic link and social
+> sign-in are supported; what is false is that they are the ONLY options.
+> This section is kept as the record of the v8 break. See the 15.0.0 notes at
+> the top of this file.
+
+**At v8, Crowded Kingdoms was passwordless.** Email + password login was removed
+in that version. The v8 migration was to one of:
 
 - **Magic link (email):**
   ```ts
@@ -489,11 +615,12 @@ your sign-in flow to one of:
   await client.auth.socialLoginComplete({ provider: 'google', code, state });
   ```
 - **Dev bypass (development only):** `await client.auth.devLogin(email)` — works only
-  when the server has `DEV_AUTH_BYPASS` enabled.
+  when the server has `DEV_AUTH_BYPASS` enabled. **Removed in 15.0.0 — see below.**
 
 **Removed:** `client.auth.login`, `register`, `confirmEmail`, `requestPasswordReset`,
 `resetPassword`, `resendConfirmationEmail`, `changePassword` (and the
 `LoginUserInput` / `RegisterUserInput` / `ResetPasswordInput` types).
+**`login` and `register` came back in 15.0.0**; the rest did not.
 
 **New:** `requestLoginLink`, `completeLoginLink`, `socialLoginStart`,
 `socialLoginComplete`, `devLogin`, `availableLoginProviders`, `myIdentities`,

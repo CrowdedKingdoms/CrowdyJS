@@ -1,7 +1,7 @@
 # CrowdyJS
 
 The official browser-first TypeScript SDK for **Crowded Kingdoms**. CrowdyJS
-gives you typed clients for the whole platform: passwordless identity and
+gives you typed clients for the whole platform: identity and
 studio administration (the Management surface), world data and the abstract
 game model (the Game surface), and the UDP proxy realtime stream — all over
 one unified GraphQL API.
@@ -49,18 +49,20 @@ const client = createCrowdyClient({
   },
 });
 
-// Restore a previous session if there is one, otherwise sign in (passwordless).
+// Restore a previous session if there is one, otherwise sign in.
 await client.session.restore();
 if (!client.session.getToken()) {
-  // Magic link: email a one-time link, then complete with the token from it.
+  // Email + password:
+  await client.auth.login({ email: 'player@example.com', password });
+  // ...or create the account: client.auth.register({ email, password })
+  // Or magic link: email a one-time link, then complete with the token from it.
   await client.auth.requestLoginLink({ email: 'player@example.com', redirectUri });
   await client.auth.completeLoginLink(tokenFromLink);
   // Or social/OIDC: socialLoginStart('google', redirectUri) -> socialLoginComplete({ provider, code, state })
-  // Or dev/test only (server has DEV_AUTH_BYPASS): client.auth.devLogin('player@example.com')
 }
 
-// Passwordless sign-in returns an identity SESSION token (rejected for gameplay);
-// the account is created on first sign-in. Identity reads run on it:
+// Every sign-in returns an identity SESSION token (rejected for gameplay).
+// Identity reads run on it:
 const me = await client.users.me();
 console.log(me.email);
 ```
@@ -74,7 +76,7 @@ app and drive the world/UDP surface from a per-game client — see
 
 ## Authentication: session token vs app-scoped tokens
 
-Passwordless sign-in returns an **identity session token** good for account,
+Sign-in returns an **identity session token** good for account,
 studio admin and token minting, and **rejected for gameplay**. Each game is
 entered with a short-lived **app-scoped token** confined to that one app, so a
 game stack never receives the player's full session.
@@ -89,7 +91,8 @@ const overworld = createCrowdyClient({
   httpUrl: apiUrl,
   tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:session'),
 });
-// Passwordless sign-in (magic link, social/OIDC, or dev bypass) yields the session token.
+// Sign-in (email + password via auth.login / auth.register, magic link, or social/OIDC)
+// yields the session token. There is no dev bypass: devLogin was removed in 15.0.0.
 await overworld.auth.requestLoginLink({ email, redirectUri });
 await overworld.auth.completeLoginLink(tokenFromLink);
 
@@ -137,7 +140,7 @@ Notes:
   restoring auth from a non-default storage).
 
 Deeper reading: [Portals & app-scoped tokens](https://docs.crowdedkingdoms.com/management-api/portals-and-app-tokens)
-and [Sign in (passwordless)](https://docs.crowdedkingdoms.com/management-api/authentication).
+and [Sign in](https://docs.crowdedkingdoms.com/management-api/authentication).
 
 ### Token refresh during gameplay
 
@@ -154,7 +157,7 @@ lifecycle to preserve.
 
 ## Game-loop lifecycle
 
-1. Sign in (passwordless) on the identity client with `client.auth`, or
+1. Sign in on the identity client with `client.auth` (`login` / `register`), or
    restore a stored session with `client.session.restore()`. This yields the
    **session token**, which gameplay rejects.
 2. Mint an **app-scoped token** for the app (`identity.portal.mintAppToken(appId)`,
@@ -176,7 +179,7 @@ lifecycle to preserve.
 
 | Sub-client | What it does |
 |---|---|
-| `client.auth` | Passwordless sign-in (magic link, social/OIDC, dev bypass), log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). |
+| `client.auth` | Sign-in: `login` / `register` (email + password), magic link, social/OIDC. Passwords: `requestPasswordReset` / `resetPassword`, `changePassword`, and `setInitialPassword` for an account created by magic link or a social provider (added in 15.1.0). Log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). **No dev bypass** — `devLogin` was removed in 15.0.0 and `DEV_AUTH_BYPASS` is gone from every tier. |
 | `client.users` | `me`, `updateGamertag`, profile reads. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
@@ -725,8 +728,8 @@ endpoint; `client.graphql` reaches every surface.)
 the environment is not configured, so they are safe to leave in `npm test`.
 
 ```bash
-CROWDY_HTTP_URL='https://ck.<tier>.cp.cks-env.com' \
-CROWDY_WS_URL='wss://ck.<tier>.cp.cks-env.com/graphql' \
+CROWDY_HTTP_URL='https://ck.<tier>.v7.cks-env.com' \
+CROWDY_WS_URL='wss://ck.<tier>.v7.cks-env.com/graphql' \
 CROWDY_OWNER_EMAIL='owner@example.com' \
 CROWDY_TEST_APP_ID='78221653114368' \
   npm run test:e2e

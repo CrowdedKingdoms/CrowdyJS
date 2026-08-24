@@ -2,12 +2,24 @@
 // Validates mint / PKCE exchange / refresh / capability-confinement / expiry /
 // logout-cascade.
 //
-// Run: API=https://api.dev.crowdedkingdoms.com TEST_DB_CONN="host=... dbname=... user=postgres sslmode=require" \
+// Run: API=<tier origin> TEST_DB_CONN="host=... dbname=... user=postgres sslmode=require" \
 //      PGPASSWORD=... node test/portal-mgmt-test.mjs
+//
+// API IS REQUIRED AND HAS NO DEFAULT, and this line is why: it read
+// `process.env.API ?? 'https://api.dev.crowdedkingdoms.com'`, a host retired
+// before the tier root moved and now answering 503. Every request failed and the
+// failures looked like the API rather than like an unset variable. Derive it
+// from your environment's own tier facts rather than typing one, and pass the
+// ORIGIN rather than the /graphql URL -- this file appends its own path.
 import { createHash, randomBytes } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
-const API = (process.env.API ?? 'https://api.dev.crowdedkingdoms.com') + '/graphql';
+if (!process.env.API) {
+  console.error('portal-mgmt-test: API is required and has no default (it used to name a host that answers 503).');
+  console.error('  API=https://<tier client origin> node test/portal-mgmt-test.mjs');
+  process.exit(2);
+}
+const API = process.env.API + '/graphql';
 const APP_A = process.env.APP_A ?? '1';
 const CONN = process.env.TEST_DB_CONN; // optional; enables the expiry test
 let pass = 0, fail = 0;
@@ -19,7 +31,7 @@ async function gql(q, v, t) {
 const code = (j) => j?.errors?.[0]?.extensions?.code ?? null;
 const b64url = (b) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const Q = {
-  devLogin: `mutation($i: DevLoginInput!){ devLogin(input:$i){ token gameTokenId user { userId } } }`,
+  register: `mutation($i: RegisterUserInput!){ register(registerUserInput:$i){ token gameTokenId user { userId } } }`,
   mint: `mutation($i: MintAppTokenInput!){ mintAppToken(input:$i){ token gameTokenId appId expiresAt gameApiUrl } }`,
   createCode: `mutation($i: CreatePortalAuthorizationCodeInput!){ createPortalAuthorizationCode(input:$i){ code redirectUri expiresAt } }`,
   exchange: `mutation($i: ExchangePortalCodeInput!){ exchangePortalCode(input:$i){ token appId } }`,
@@ -29,9 +41,10 @@ const Q = {
 };
 async function main() {
   const email = `portal-mgmt-${Date.now()}@test.invalid`;
-  const reg = await gql(Q.devLogin, { i: { email } });
-  const session = reg.data?.devLogin?.token, userId = reg.data?.devLogin?.user?.userId;
-  log(!!session, '1. devLogin -> identity session token', JSON.stringify(reg.errors ?? ''));
+  const password = `Aa1!portal-mgmt-${Date.now()}`;
+  const reg = await gql(Q.register, { i: { email, password } });
+  const session = reg.data?.register?.token, userId = reg.data?.register?.user?.userId;
+  log(!!session, '1. register -> identity session token', JSON.stringify(reg.errors ?? ''));
 
   const a1 = (await gql(Q.mint, { i: { appId: APP_A } }, session)).data?.mintAppToken;
   log(a1?.appId === APP_A && !!a1?.token && !!a1?.expiresAt, '2. mintAppToken auto-grants free app + returns app token w/ expiry', JSON.stringify(a1 ?? ''));

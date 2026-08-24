@@ -186,13 +186,13 @@ type User {
 }
 
 """
-A federated / passwordless sign-in identity linked to a user account (a social provider, an emailed magic link, or the dev bypass).
+A sign-in identity linked to a user account: a social provider, an emailed magic link, or a password.
 """
 type UserIdentity {
   identityId: ID!
   userId: ID!
   """
-  The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'dev' (dev bypass).
+  The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'password'. 'dev' is a RETIRED value that appears on identities created before the dev sign-in bypass was removed; it cannot be created and cannot be signed in with.
   """
   provider: String!
   """
@@ -700,10 +700,6 @@ type SocialLoginStart {
 type RequestLoginLinkResult {
   """Always true (does not reveal whether the email exists)."""
   sent: Boolean!
-  """
-  DEV ONLY: when DEV_AUTH_BYPASS is enabled (so no email is delivered), the one-time token to pass to completeLoginLink. Always null in production.
-  """
-  devToken: String
 }
 
 """
@@ -714,6 +710,108 @@ type AuthMethodResult {
   True when the account exists and has a password hash; false otherwise (including unknown emails).
   """
   hasPassword: Boolean!
+}
+
+"""
+One recorded SES event for an address: the `send` this API wrote when it handed the message to SES, or a `delivery` / `bounce` / `complaint` / `delivery_delay` that arrived back on the SNS webhook.
+"""
+type EmailEventRecord {
+  """Recipient address the event concerns."""
+  email: String!
+  """
+  SES message id. Present on the `send` row this API writes and on the feedback events SES publishes for it, which is what lets one send be matched to its own delivery rather than a previous run's.
+  """
+  messageId: String
+  """
+  send | delivery | bounce | complaint | delivery_delay. Lower-case, as stored.
+  """
+  eventType: String!
+  """
+  Event detail where SES supplies one: `Permanent/General` for a bounce, the complaint feedback type for a complaint.
+  """
+  eventSubtype: String
+  """When the row was written (ISO 8601)."""
+  createdAt: String!
+}
+
+"""
+An address's stored deliverability record. Absent (null) until SES reports something about the address.
+"""
+type EmailStatusRecord {
+  email: String!
+  """valid | bounced | complained."""
+  status: String!
+  """Permanent | Transient | Undetermined, from SES."""
+  bounceType: String
+  bounceSubType: String
+  complaintType: String
+  messageId: String
+  lastEventType: String
+  lastEventAt: String
+  deliveryAttempts: Int
+  """
+  True once SES has reported a permanent bounce or a complaint. This is what stops the address being sent to again.
+  """
+  isPermanentFailure: Boolean
+}
+
+"""
+Everything this API knows about whether an address can be emailed, and why.
+"""
+type EmailDeliverability {
+  email: String!
+  """
+  Whether a send to this address would be attempted right now. False for a permanent bounce, a complaint, or a transient bounce inside its 24-hour cool-off.
+  """
+  sendable: Boolean!
+  """
+  Whether this address is refused before SES is consulted at all, because its domain is in EMAIL_SUPPRESS_DOMAINS.
+  """
+  suppressedDomain: Boolean!
+  """
+  Null means SES has never reported anything about this address, which is treated as sendable.
+  """
+  status: EmailStatusRecord
+  """Most recent events first."""
+  events: [EmailEventRecord!]!
+}
+
+"""
+How this API instance is configured to send mail. Read it before concluding that a missing email is a bug: an instance with sendingEnabled=false composes every message and hands none of them to SES.
+"""
+type EmailDeliveryConfig {
+  """SEND_EMAILS. False means nothing reaches SES from this instance."""
+  sendingEnabled: Boolean!
+  """The From address (EMAIL_FROM)."""
+  fromAddress: String!
+  """
+  SES_CONFIGURATION_SET. Null or empty means sends carry no configuration set, so SES publishes NO delivery or bounce events for them and this tier learns nothing about its own mail.
+  """
+  configurationSet: String
+  """AWS_REGION used for SES."""
+  region: String!
+  """
+  Domain suffixes refused before SES is consulted (EMAIL_SUPPRESS_DOMAINS).
+  """
+  suppressedDomains: [String!]!
+}
+
+"""Result of an operator test send."""
+type SendTestEmailResult {
+  """
+  Whether the send was attempted AND accepted. False means refused (suppressed domain, or a prior permanent bounce) or that SES rejected it.
+  """
+  sent: Boolean!
+  """
+  The SES message id when a message was actually handed to SES. Null when sending is disabled on this instance, which is reported as sent=true by the same rule the product flows use, so READ THIS FIELD to tell a real send from a simulated one.
+  """
+  messageId: String
+  """
+  True when SEND_EMAILS is off and the message was logged rather than sent. sent=true with simulated=true means nothing left the building.
+  """
+  simulated: Boolean!
+  """Why a send was refused, when it was."""
+  refusedReason: String
 }
 
 """
@@ -1273,7 +1371,7 @@ type WalletTransaction {
   """
   balanceAfter: BigInt!
   """
-  What produced this transaction. Known values: "topup" (wallet credit from a checkout/top-up), "usage" (per-app usage charge, negative), "shared_usage" (shared-environment usage charge, negative), "reserved_throughput" (monthly/prorated reserved egress capacity, negative), "environment_usage" (hourly environment cost, negative), "auto_recharge" (automatic wallet recharge), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "admin_credit" (operator credit applied without a payment provider). Other caller-supplied deposit types are possible.
+  What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved egress capacity, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced.
   """
   transactionType: String!
   """
@@ -1315,6 +1413,96 @@ type AppBudget {
   createdAt: DateTime!
   """When the budget was last updated (ISO-8601 UTC timestamp)."""
   updatedAt: DateTime!
+}
+
+"""
+One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged.
+"""
+type RateCardEntryType {
+  """Which card this row is on."""
+  scope: RateScope!
+  """
+  The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates.
+  """
+  metric: String!
+  """
+  Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity.
+  """
+  unitLabel: String!
+  """
+  How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 15 with unitQuantity 1073741824 is 15 cents per GiB.
+  """
+  unitQuantity: BigInt!
+  """
+  Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged.
+  """
+  priceCents: Float!
+  """ISO currency code. USD today."""
+  currency: String!
+  """
+  Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit.
+  """
+  freePerHour: BigInt
+  """
+  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app), and player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance.
+  """
+  freePerMonth: BigInt
+  """Operator note on the seed row; null when unset."""
+  description: String
+}
+
+"""
+Which rate card. SHARED prices organization metered usage for shared-environment apps (billed hourly to the org wallet as "shared_usage"). PLAYER prices player compute (billed hourly to the player wallet as "usage_debit").
+"""
+enum RateScope {
+  SHARED
+  PLAYER
+}
+
+"""
+One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards.
+"""
+type RateChangeType {
+  scope: RateScope!
+  metric: String!
+  """
+  One of "priceCents", "unitLabel", "unitQuantity", "freePerHour" or "freePerMonth".
+  """
+  field: String!
+  """
+  The value before this call, as a decimal string. "none" when there was no allowance row.
+  """
+  previous: String!
+  """The value after this call, as a decimal string."""
+  updated: String!
+}
+
+"""The result of setting a rate: the new row and what moved."""
+type SetRateCardResult {
+  """The dimension as it now stands."""
+  entry: RateCardEntryType!
+  """
+  One entry per field that changed. Never empty: a call that would change nothing is refused rather than reported as a successful no-op.
+  """
+  changes: [RateChangeType!]!
+}
+
+"""
+An organization whose wallet is not debited and whose apps are not denied for funds. Usage is still metered; waived amounts are in org_billing_waivers.
+"""
+type BillingExemptOrgType {
+  """Organization id (BigInt as a decimal string)."""
+  orgId: BigInt!
+  """Organization name."""
+  name: String!
+  """Organization slug."""
+  slug: String!
+  """Why the exemption exists. Required when setting it true."""
+  reason: String!
+  """When the exemption was last set true."""
+  setAt: DateTime!
+  """Operator user_id who last set the exemption true."""
+  setBy: BigInt
 }
 
 type Checkout {
@@ -1856,7 +2044,7 @@ type PlayerWalletTransaction {
   """Balance after this entry."""
   balanceAfter: BigInt!
   """
-  One of 'topup', 'usage_debit', 'auto_recharge', 'refund', 'adjustment'.
+  What produced this entry. The complete set of values this API writes: "topup" (credit from a completed checkout, positive), "auto_recharge" (off-session automatic recharge, positive), "payout_credit" (marketplace seller payout, positive), "refund" (marketplace refund returned to the buyer, positive), "usage_debit" (hourly player-compute metered charge for one closed clock hour, negative), "purchase" (marketplace purchase, negative), "adjustment" (operator or dispute-clawback correction, signed).
   """
   transactionType: String!
   """Human description."""
@@ -3731,6 +3919,22 @@ type CrowdyStudioAgentFundingPolicy {
 }
 
 """
+One allowed Agentic Studio mode that cannot perform the work the mode exists for, because the tool or risk-class allowlist excludes every tool that would do it. This is a capability shortfall, not a permission failure: the policy really is enabled and the mode really is allowed, so no disable reason code describes it.
+"""
+type CrowdyStudioAgentCapabilityGap {
+  """The allowed mode that has nothing useful to call."""
+  mode: CrowdyStudioAgentMode!
+  """
+  Stable code. NO_TOOLS: the tool allowlist is empty, so the agent can only talk. NO_WRITE_RISK: tools are allowed but every risk class that would let this mode change something is not, so BUILD can read and cannot build, and PLAY can observe and cannot act.
+  """
+  code: String!
+  """
+  Safe operator-facing explanation naming the missing risk classes. Never includes provider bodies or secrets.
+  """
+  detail: String!
+}
+
+"""
 Management's Agentic Crowdy Studio policy publication. EFFECTIVE values are the fail-closed platform/app intersection; an app can never widen platform models, tools, modes, risks, budgets, retention, or privacy. Game API runtime enforcement still requires a fresh validated replica.
 """
 type CrowdyStudioAgentPolicy {
@@ -3763,15 +3967,19 @@ type CrowdyStudioAgentPolicy {
   """
   allowedModelIds: [String!]!
   """
-  Exact crowdy.agent-tools/1 logical tool names allowed by this layer/intersection. Empty denies all tools.
+  Exact crowdy.agent-tools/1 logical tool names allowed by this layer/intersection. Empty means opposite things at the two layers: on PLATFORM it denies every tool, because the platform layer is the ceiling; on APP it expresses no narrowing, so EFFECTIVE inherits the platform list unchanged. An app therefore cannot reach a tool the platform has not published, and an operator who later adds one widens every app that names none.
   """
   allowedToolNames: [String!]!
   """Human-selectable modes allowed by this layer/intersection."""
   allowedModes: [CrowdyStudioAgentMode!]!
   """
-  Allowed tool risk classes. Required approval classes remain approval-gated even when listed.
+  Allowed tool risk classes. Required approval classes remain approval-gated even when listed. Empty follows the same rule as allowedToolNames: deny-all on PLATFORM, inherit-the-platform on APP. An EFFECTIVE policy can never be enabled with an empty list, because crowdy.studio-agent-policy/1 requires a non-empty risk intersection; that case reports AGENT_SCOPE_DENIED.
   """
   allowedRiskClasses: [CrowdyStudioAgentRiskClass!]!
+  """
+  Allowed modes that cannot do what the mode is for, derived from this layer's own tool and risk allowlists. Read this on the EFFECTIVE projection: an empty list is the only thing that entitles a caller to report an unblocked chain, because "enabled with a null disableReasonCode" is true of a dock whose BUILD mode has no tool it may call. On PLATFORM and APP it describes that layer in isolation and is not a claim about the intersection.
+  """
+  capabilityGaps: [CrowdyStudioAgentCapabilityGap!]!
   """Per-turn hard limits."""
   turnLimits: CrowdyStudioAgentTurnLimits!
   """Per-session hard limits."""
@@ -4239,7 +4447,7 @@ type GraphQLServer {
   """
   ip6: String
   """
-  UUID of the runtime/Buddy (cks-udp-api) instance this API server is paired with, if any.
+  UUID of the Buddy realtime runtime instance this API server is paired with, if any.
   """
   runtimeServerId: String
   """Cloud provider instance id of the underlying host, if known."""
@@ -4251,7 +4459,7 @@ type GraphQLServer {
   """TCP port the GraphQL/HTTP API listens on (default 4000)."""
   apiPort: Int!
   """
-  Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-2.gxca.prod.cp.cks-env.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you.
+  Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.v7.cks-env.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you.
   """
   publicHostname: String
   """
@@ -4299,7 +4507,7 @@ type ServerVersionInfo {
 }
 
 """
-The elected host user of a game (app). Election is deterministic across all cks-game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy (cks-udp-api); liveness (updated_at) is owned by game-api's actorHeartbeat mutation.
+The elected host user of a game (app). Election is deterministic across all game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy, the realtime runtime; liveness (updated_at) is owned by game-api's actorHeartbeat mutation.
 """
 type GameHost {
   """
@@ -5100,7 +5308,13 @@ Aggregate compute activity for an app over a recent window: throughput, failure 
 type WasmComputeStats {
   """The window size in minutes."""
   windowMinutes: Int!
-  """Total runs in the window."""
+  """
+  The instant through which these totals are complete. Activity is counted from per-minute usage rollups that each instance buffers in memory and writes every few seconds, so entry calls made after this instant are NOT included yet. Read it before concluding anything from a zero: `totalRuns: 0` with an `aggregatedThrough` a few seconds in the past means "nothing aggregated yet", not "nothing ran". Poll until `aggregatedThrough` is later than the run you are looking for.
+  """
+  aggregatedThrough: DateTime!
+  """
+  Total entry calls (ticks + invocations) in the window, complete through `aggregatedThrough`.
+  """
   totalRuns: Int!
   """Failed runs in the window."""
   failedRuns: Int!
@@ -5520,6 +5734,8 @@ type GmTimer {
 
 """
 Why an invocation failed, in the only vocabulary a player may be shown: a stable code, whose problem it is, and whether repeating the identical call could succeed. It carries no message, no engine name and no internal detail by design — blame attribution is the platform's job and presentation is the game's.
+
+IT CARRIES NO TIMING, AND NOTHING THAT NEEDS TIMING ARRIVES HERE. A refusal that can tell you how long to wait — `RATE_LIMITED` above all — is THROWN, with `extensions.retryAfterMs`, and never returned in band on a result. So `retryable: true` here means "try again", not "try again after N milliseconds", and a client with nothing but this object is right to use its own backoff. `expression-fault.classifier.spec.ts` holds that split rather than leaving it to how the code happens to be arranged.
 """
 type PlayerFaultInfo {
   """A stable, enumerated reason. Branch on this rather than on any text."""
@@ -5557,7 +5773,7 @@ enum PlayerFaultCode {
   """
   BUDGET_EXCEEDED
   """
-  This caller is asking too often. `retryAfterMs` is carried in error extensions when it is known.
+  This caller is asking too often. It arrives ONLY as a thrown error, never in band on a result, and `extensions.retryAfterMs` carries the wait. That number is the milliseconds REMAINING in the current fixed window at the moment the refusal was built, not a fixed backoff, so a second refusal inside the same window carries a smaller number: treat it as a deadline from receipt and do not reuse a cached one.
   """
   RATE_LIMITED
   """A metered allowance is spent and does not return on its own."""
@@ -5618,6 +5834,10 @@ type GmContainerType {
   defaultPropertyVisibility: String!
   """JSON object of developer metadata."""
   metadataJson: String!
+  """
+  Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
+  """
+  bindPolicyJson: String
 }
 
 """A typed property (field) defined on a container type."""
@@ -6713,6 +6933,88 @@ enum CrowdyStudioCommonStatus {
 }
 
 """
+One model the answering ck-api instance carries, with the pinned price it will meter against.
+"""
+type CrowdyStudioAgentCatalogModel {
+  """Exact provider model id, as a policy would name it."""
+  modelId: String!
+  """
+  Whether this is the instance's default model (CROWDY_STUDIO_AGENT_DEFAULT_MODEL).
+  """
+  isDefault: Boolean!
+  """
+  Whether the instance would accept a run on this model: it is in the instance allowlist and has a positive pinned price in both directions. A zero price is only reachable with the non-production fake provider, which cannot reserve cost.
+  """
+  selectable: Boolean!
+  """Pinned input price in micro-USD per million tokens."""
+  inputMicrosPerMillion: Int!
+  """Pinned output price in micro-USD per million tokens."""
+  outputMicrosPerMillion: Int!
+}
+
+"""
+One implemented crowdy.agent-tools/1 tool, named exactly as a policy allowlist must name it.
+"""
+type CrowdyStudioAgentCatalogTool {
+  """
+  Logical dotted tool name. This is the string an allowedToolNames entry must equal.
+  """
+  name: String!
+  """What the tool does, from its canonical descriptor."""
+  summary: String!
+  """Trusted boundary that runs it: SERVER or BROWSER."""
+  executor: CrowdyStudioAgentToolExecutor!
+  """Modes the tool is available in."""
+  modes: [CrowdyStudioAgentMode!]!
+  """
+  Server-classified risk. Allowing the class is necessary but not sufficient: an approval-gated tool still requires exact human approval.
+  """
+  riskClass: CrowdyStudioAgentRiskClass!
+  """Whether every call needs exact human approval regardless of policy."""
+  approvalRequired: Boolean!
+}
+
+"""
+The answering ck-api instance's Agentic Studio capability: the models it carries with their pinned prices, the implemented tool registry with risk classes, and the full mode and risk-class value sets a policy may draw from. This is deployed configuration, not stored policy — a platform policy naming anything absent here is accepted and then runs nothing.
+"""
+type CrowdyStudioAgentCatalog {
+  """
+  Whether CROWDY_STUDIO_AGENT_ENABLED is set on this instance. False means every list below is empty and no policy can make the agent run here.
+  """
+  instanceEnabled: Boolean!
+  """
+  Which process answered (CKS_RUNTIME_SERVER_ID or hostname), because this is a per-instance answer.
+  """
+  instanceId: String
+  """The answering instance's datacenter (CK_DATACENTER), or null."""
+  datacenterCode: String
+  """
+  Provider the instance would route to: 'openrouter', or 'fake' outside production.
+  """
+  provider: String!
+  """Platform policy contract version the instance enforces."""
+  platformPolicyVersion: String!
+  """Default model id, or null when the agent is disabled here."""
+  defaultModelId: String
+  """
+  Digest over the whole compiled-in tool registry. Two instances reporting different digests are running different tool sets.
+  """
+  registryDigest: String!
+  """Every mode value a policy allowlist may contain."""
+  modes: [CrowdyStudioAgentMode!]!
+  """Every risk-class value a policy allowlist may contain."""
+  riskClasses: [CrowdyStudioAgentRiskClass!]!
+  """
+  Models this instance carries, sorted by id. Empty when the agent is disabled here.
+  """
+  models: [CrowdyStudioAgentCatalogModel!]!
+  """
+  Implemented tools, sorted by logical name. Present whether or not the agent is enabled, because the registry is compiled in.
+  """
+  tools: [CrowdyStudioAgentCatalogTool!]!
+}
+
+"""
 A flexible player-owned model container confined to exactly one app, grid, and current owner.
 """
 type PlayerModelContainer {
@@ -6913,6 +7215,64 @@ type UserCodeFaultSummaryEntry {
   faults: Int!
   """The most recent one."""
   lastAt: DateTime!
+}
+
+"""
+One model function's circuit on the player-invoke path. Rows are created lazily on a function's first failure, so a function absent from this list has never failed.
+"""
+type GmFunctionCircuit {
+  """App the function belongs to."""
+  appId: BigInt!
+  """
+  Function name as a player invokes it, matching gm_function_defs.name. A renamed function starts with a clean circuit.
+  """
+  functionName: String!
+  """
+  'closed', 'open', or 'half_open'. In shadow mode an open circuit refuses nothing: read it as 'this function has been failing', not 'players are being blocked'.
+  """
+  circuitState: String!
+  """
+  Failed player invokes with no success in between. One success resets it to zero, which is what makes the threshold mean a broken function rather than a busy one.
+  """
+  consecutiveFailures: Int!
+  """
+  When an open circuit next admits one probe, and the window that probe holds. Null when closed.
+  """
+  cooldownUntil: DateTime
+  """When the circuit last opened. Null if it never has."""
+  openedAt: DateTime
+  """
+  Lifetime openings. A function that opens once a week and one that opens every minute are different problems, and circuitState cannot tell them apart.
+  """
+  totalOpens: BigInt!
+  """
+  Player invokes admitted in shadow mode that enforcement WOULD have refused. This is the measurement: it answers what switching enforcement on would have cost players. Never incremented in enforce mode, where those calls are refused instead.
+  """
+  shadowRefusals: BigInt!
+  """When the circuit row last changed."""
+  updatedAt: DateTime!
+}
+
+"""
+The player-invoke breaker's mode and thresholds on the answering instance, with this app's circuits. The mode decides whether any of it refuses anything.
+"""
+type GmFunctionBreakerStatus {
+  """
+  'shadow' (default: the state machine runs in full, every call is admitted, and shadowRefusals counts what enforcement would have refused), 'enforce' (the same state machine, refusing), or 'off' (no state, no measurement). Read from GM_FUNCTION_BREAKER_MODE on the instance that answered.
+  """
+  mode: String!
+  """
+  Consecutive failed player invokes of one function before its circuit opens.
+  """
+  failureThreshold: Int!
+  """
+  How long an open circuit waits before admitting one probe, in milliseconds.
+  """
+  cooldownMs: Int!
+  """
+  Circuits for this app, non-closed first, then by consecutive failures. Only functions that have failed at least once appear.
+  """
+  circuits: [GmFunctionCircuit!]!
 }
 
 """
@@ -7121,7 +7481,7 @@ type Query {
     appId: BigInt!
   ): [AppGrantMemberCandidate!]! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
-  The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart. The dev mock provider only appears when the dev bypass is enabled.
+  The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart.
   """
   availableLoginProviders: [String!]!
   """
@@ -7130,6 +7490,19 @@ type Query {
   checkAuthMethod(input: CheckAuthMethodInput!): AuthMethodResult!
   """The signed-in user's linked sign-in identities."""
   myIdentities: [UserIdentity!]!
+  """
+  Operator only (is_operator). How THIS API instance is configured to send mail: whether sending is on, the From address, the SES configuration set, the region and the suppressed domains. Answers 'why did no email arrive' without an SSH session, and reports the instance that served the query rather than the fleet.
+  """
+  emailDeliveryConfig: EmailDeliveryConfig! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Everything this API knows about whether an address can be emailed: its stored status, whether its domain is suppressed, and the recent SES events for it (the `send` written when the message was handed to SES, and the `delivery` / `bounce` / `complaint` that came back on the SNS webhook).
+  """
+  emailDeliverability(
+    """Address to look up. Matched exactly."""
+    email: String!
+    """How many recent events to return, newest first."""
+    eventLimit: Int = 20
+  ): EmailDeliverability! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Resolve where one or more apps are placed, WITHOUT authenticating. Call this before login and connect to the returned gameApiUrl, so the session and app token are both written in the app's own datacenter instead of across a WAN. Pass every app a launcher might switch to and cache the result; placement changes rarely and only an operator can change it. An app with no placement comes back with nulls, which means 'keep using the shared origin'.
   """
@@ -7342,6 +7715,17 @@ type Query {
     """
     orgId: BigInt!
   ): [AppBudget!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
+  """
+  OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price and hourly free allowance. SHARED is organization usage billed to the org wallet as "shared_usage"; PLAYER is player compute billed to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only.
+  """
+  billingRateCard(
+    """Which card to read."""
+    scope: RateScope!
+  ): [RateCardEntryType!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR ONLY. Every organization currently marked billing_exempt. An exemption nobody can enumerate is an exemption that outlives its reason.
+  """
+  billingExemptOrgs: [BillingExemptOrgType!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required.
   """
@@ -7622,7 +8006,7 @@ type Query {
     appId: BigInt!
   ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, exact model/tool/mode/risk intersections, minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent.
+  Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, the resolved model/tool/mode/risk lists (models and modes are the platform/app intersection; a tool or risk list the app left empty is inherited from the platform whole, because empty at a layer that can only narrow means no narrowing), minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent.
   """
   crowdyStudioAgentEffectivePolicy(
     """App whose effective policy intersection to read."""
@@ -7714,7 +8098,7 @@ type Query {
     orgId: BigInt!
   ): PlayerPulse! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
   """
-  Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, preferring one co-located with the datacenter that holds the data for this app (all rows for one app live in a single datacenter) and falling back to any healthy server if none is. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this.
+  Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this.
   """
   serverWithLeastClients: ServerStatus!
   """
@@ -7730,7 +8114,7 @@ type Query {
   """
   versionInfo: ServerVersionInfo!
   """
-  Returns the single elected host user for an app (game). Deterministic across all cks-game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1.
+  Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1.
   """
   gameHost(
     """
@@ -7982,6 +8366,17 @@ type Query {
     """Look-back window in minutes (default 60, max 1440)."""
     windowMinutes: Int = 60
   ): [UserCodeFaultSummaryEntry!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  State of the per-function circuit breaker on the player-invoke path (gameModelInvoke) for one app, plus the mode and thresholds the answering instance is running. In the default 'shadow' mode nothing is refused and shadowRefusals counts what enforcement would have refused, so an open circuit means the function has been failing rather than that players are being blocked. A function that has never failed has no row and is absent. Requires the org 'view_compute_diagnostics' permission.
+  """
+  gameModelFunctionCircuits(
+    """The app whose function circuits to read."""
+    appId: BigInt!
+    """Only the circuit for this exact function name."""
+    name: String
+    """Max circuits to return (default 100, max 200)."""
+    limit: Int
+  ): GmFunctionBreakerStatus! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
   List all container types defined for an app. Requires app-admin ('manage_apps').
   """
@@ -8627,6 +9022,10 @@ type Query {
     sessionId: String!
   ): AgentBudget! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "app token scope")
   """
+  Operator only (is_operator or is_super_admin). What the ANSWERING ck-api instance carries for Agentic Studio: allowlisted models with their pinned micro-USD prices, the implemented crowdy.agent-tools/1 tools with risk classes, and the complete mode and risk-class value sets a policy may draw from. It is deployed configuration read from that one process, not stored policy and not a fleet-wide claim, so it reports which instance and datacenter answered. A platform policy may name a model or tool absent here: the write succeeds, the value is stored and echoed back, and no run can use it.
+  """
+  cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
   List flexible player-model containers owned by the caller in one currently owned grid. Requires an app-scoped token and current grid ownership; never returns app-wide or foreign-owner rows.
   """
   playerModelContainers(
@@ -9124,10 +9523,6 @@ type Mutation {
   """
   socialLoginComplete(input: SocialLoginCompleteInput!): AuthResponse!
   """
-  DEV ONLY bypass sign-in: returns a session for the given email without email/social verification. Active only when DEV_AUTH_BYPASS is enabled; throws (FORBIDDEN) otherwise. Never enabled in production.
-  """
-  devLogin(input: DevLoginInput!): AuthResponse!
-  """
   Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed.
   """
   login(
@@ -9183,6 +9578,13 @@ type Mutation {
     newPassword: String!
   ): Boolean!
   """
+  Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Throws CONFLICT if a password is already set (use changePassword, which verifies the current one). A security notification is emailed to the account address. Existing sessions are not revoked.
+  """
+  setInitialPassword(
+    """The password to set (min 8 characters)."""
+    newPassword: String!
+  ): Boolean!
+  """
   Link an additional federated identity (from a socialLoginStart callback) to the signed-in account. Requires a session token; throws if the identity is already linked to another account.
   """
   linkIdentity(input: LinkIdentityInput!): UserIdentity!
@@ -9201,6 +9603,22 @@ type Mutation {
   Ends every active session for the authenticated user: deletes every session token and every app-scoped gameplay token derived from one, so the user is signed out of the platform and of every game they had entered. Takes effect immediately — a deleted token stops authenticating on its next request rather than at its next refresh. Requires a valid session token.
   """
   logoutAllDevices: Boolean!
+  """
+  Operator only (is_operator). Sends a plain test message to one address and returns the SES message id. SIDE EFFECTS: a real outbound email billed to the shared SES identity, and a `send` row in email_events. Prefer the AWS mailbox simulator (success@ / bounce@ / complaint@simulator.amazonses.com), which exercises the whole path without touching a real inbox or a real reputation. `sent: true` with `simulated: true` means SEND_EMAILS is off and nothing left the building -- read both fields.
+  """
+  sendTestEmail(
+    """Recipient. The mailbox simulator is preferred."""
+    to: String!
+    """Optional subject; a dated default is used when omitted."""
+    subject: String
+  ): SendTestEmailResult! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only (is_operator). Deletes the stored deliverability rows for one address (email_status and email_events) and returns how many rows went. Exists so a verification run is not reading the previous run's events, and so an address suppressed by a bounce that has since been fixed can be given another chance. Returns 0 when there was nothing stored.
+  """
+  forgetEmailDeliverability(
+    """Address to clear. Matched exactly."""
+    email: String!
+  ): Int! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token.
   """
@@ -9420,6 +9838,32 @@ type Mutation {
     """
     referenceId: String
   ): WalletTransaction! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR ONLY. Runs the shared-usage billing tick once. It still bills only the last CLOSED clock hour — it will not charge an open hour. Use this to prove a closed-hour debit without waiting for the ~60s cron. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier.
+  """
+  runSharedUsageBillingTick: Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed.
+  """
+  setBillingRate(
+    """Which dimension to reprice, the new price and/or allowance, and why."""
+    input: SetRateCardInput!
+  ): SetRateCardResult! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick.
+  """
+  setOrgBillingExempt(
+    """Organization to exempt or un-exempt."""
+    orgId: BigInt!
+    """
+    true to skip org charges and money-driven denials; false to restore them.
+    """
+    exempt: Boolean!
+    """
+    Why the exemption is being set or cleared. Required (non-empty after trim) when exempt is true.
+    """
+    reason: String!
+  ): BillingExemptOrgType! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured.
   """
@@ -9729,14 +10173,14 @@ type Mutation {
     input: CreateGridListingInput!
   ): GridListing! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
-  Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. Model/tool/mode/risk lists are intersected with platform allowlists and every numeric/retention value is clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision, appends a sanitized audit event, and transactionally notifies Game API to pull crowdy.studio-agent-policy/1. Runtime enforcement changes only after Game API obtains and validates the fresh replica. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
+  Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. A model/tool/mode/risk list naming anything outside the platform allowlist is REFUSED with AGENT_POLICY_INVALID quoting the platform's current list, rather than silently reduced; a list you do send is stored exactly as sent and can only narrow, and omitting it entirely means 'no narrowing', which inherits the platform's list live on every read. Numeric and retention values are still clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision and appends a sanitized audit event. NOTHING IS PUSHED TO GAME API: its runtime pulls crowdy.studio-agent-policy/1, obtaining a replica the first time a permitted caller asks about an app that has none, and re-pulling an existing replica once it passes refreshAfter (two thirds of its 60s validity). A change therefore reaches enforcement within about a minute for an app already in use, and not at all until someone asks for one that is not. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
   """
   setCrowdyStudioAgentPolicy(
     """App policy patch, expected revision, and required idempotency key."""
     input: SetCrowdyStudioAgentAppPolicyInput!
   ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
   """
-  Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, revision increments, a sanitized append-only audit event is written, and transactional replica notifications fan out to every app with Agentic Studio policy. Runtime enforcement changes only when Game API pulls and validates the fresh crowdy.studio-agent-policy/1 envelope; Game API must fail closed if it is missing, malformed, or stale. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
+  Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, the revision increments, and a sanitized append-only audit event is written. NOTHING IS FANNED OUT TO APPS: Game API pulls crowdy.studio-agent-policy/1 per app, so a platform change reaches an app that already holds a replica within about a minute (refreshAfter is two thirds of a 60s validity) and reaches an app with no replica only when a permitted caller next asks about it. Game API must fail closed if the envelope is missing, malformed, or stale. Narrowing the platform lists narrows every app immediately on its next read, including apps that expressed no narrowing of their own. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
   """
   cpSetCrowdyStudioAgentPlatformPolicy(
     """
@@ -9745,7 +10189,7 @@ type Mutation {
     input: SetCrowdyStudioAgentPlatformPolicyInput!
   ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment, sanitized audit event, and transactional Game API policy notify. Runtime preemption depends on Game API pulling and enforcing the fresh envelope; releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
+  Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment and a sanitized audit event. NOTHING IS PUSHED TO GAME API: preemption takes effect when its runtime next pulls this app's crowdy.studio-agent-policy/1 replica, which is within about a minute for an app already holding one and not at all for an app that does not until a permitted caller asks. Releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
   """
   cpSetCrowdyStudioAgentAppKill(
     """
@@ -10295,7 +10739,7 @@ type Mutation {
     input: CreateContainerInput!
   ): GmContainer!
   """
-  Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules), so a caller who may not instantiate the type errors only in the not-exists case. NOTE: bindingKey is client-supplied and not yet policy-governed; shared world objects should use admin-instantiable types so only app admins can create the keyed row. Requires a valid token.
+  Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules) AND by the type's bindPolicy, so a caller who may not instantiate the type, or may not claim keys for it, errors only in the not-exists case. bindingKey is client-supplied, so on a member- or owner-instantiable type ANY entitled player may create the keyed row and becomes its owner — which inverts every owner_of_self invoke policy on that type. Set the container type's bindPolicy (e.g. {"type":"is_host"}), or use an admin-instantiable type, for any object more than one player shares. Requires a valid token.
   """
   gameModelEnsureContainer(
     """
@@ -11322,14 +11766,6 @@ input SocialLoginCompleteInput {
   state: String!
 }
 
-"""
-Dev-only bypass sign-in (active only when DEV_AUTH_BYPASS is enabled; never in production).
-"""
-input DevLoginInput {
-  """Email of the account to sign in as (created if absent)."""
-  email: String!
-}
-
 input LoginUserInput {
   """Account email address."""
   email: String!
@@ -11550,6 +11986,43 @@ input SetAppClientSettingsInput {
   launchUrl: String
 }
 
+input SetRateCardInput {
+  """Which card to edit."""
+  scope: RateScope!
+  """
+  The metered dimension to reprice. Refused unless the platform actually meters it: a rate for an unmetered metric bills nobody while appearing configured.
+  """
+  metric: String!
+  """
+  New price in cents per unitQuantity raw units. Must be >= 0; 0 means meter but do not charge. Omit to leave the price unchanged. Fractional values are accepted (the column is NUMERIC(20,6)).
+  """
+  priceCents: Float
+  """
+  New human unit this price is quoted in, e.g. "GiB" or "GiB-mo". Must be supplied together with unitQuantity: a label on its own restates the rate card while the arithmetic keeps the old divisor. Omit both to leave the unit unchanged.
+  """
+  unitLabel: String
+  """
+  New number of raw metric units one priceCents charge covers, as a BigInt decimal string. Must be > 0 and supplied together with unitLabel. Needed because every rate seed is ON CONFLICT DO NOTHING, so a unit corrected in the declaration never reaches a tier that is already installed.
+  """
+  unitQuantity: BigInt
+  """
+  Required when a unit change also changes the money. Restating 15c per GiB as 1.396984c per 100 MB is the same price and needs nothing; changing 20c per 100 MB to 20c per GiB-month is a 7841x cut and must be stated deliberately. The mutation refuses rather than guessing which one you meant.
+  """
+  acknowledgeRepricing: Boolean
+  """
+  New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged.
+  """
+  freePerHour: BigInt
+  """
+  New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged.
+  """
+  freePerMonth: BigInt
+  """
+  Why this price is changing. Required: a rate change with no stated reason is not auditable after the fact. Recorded in the operator log with the before and after values.
+  """
+  reason: String!
+}
+
 """
 Set or change an app's reserved sustained throughput on the shared environment.
 """
@@ -11736,19 +12209,19 @@ input SetCrowdyStudioAgentAppPolicyInput {
   """Set or clear this layer kill switch. Kill always wins over enablement."""
   killSwitch: Boolean
   """
-  Replacement exact model allowlist (max 64). App values are intersected with the platform allowlist.
+  Replacement exact model allowlist (max 64). On an APP patch every id must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list; values are never silently dropped. On the PLATFORM patch this list IS the ceiling. Empty denies all models at either layer.
   """
   allowedModelIds: [String!]
   """
-  Replacement exact logical tool-name allowlist (max 256). App values are intersected with platform tools.
+  Replacement exact logical tool-name allowlist (max 256). On an APP patch every name must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. Sending an empty array on an APP patch clears a narrowing and is therefore also "no narrowing", not "deny all". On the PLATFORM patch this list is the ceiling and empty denies every tool.
   """
   allowedToolNames: [String!]
   """
-  Replacement mode allowlist; app values are intersected with platform modes.
+  Replacement mode allowlist. On an APP patch every mode must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list. Empty denies every mode at either layer; there is no inherit-on-empty for modes.
   """
   allowedModes: [CrowdyStudioAgentMode!]
   """
-  Replacement risk-class allowlist; app values are intersected with platform classes.
+  Replacement risk-class allowlist. On an APP patch every class must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. On the PLATFORM patch this list is the ceiling and empty denies every class.
   """
   allowedRiskClasses: [CrowdyStudioAgentRiskClass!]
   """Optional per-turn limit patch."""
@@ -11886,19 +12359,19 @@ input SetCrowdyStudioAgentPlatformPolicyInput {
   """Set or clear this layer kill switch. Kill always wins over enablement."""
   killSwitch: Boolean
   """
-  Replacement exact model allowlist (max 64). App values are intersected with the platform allowlist.
+  Replacement exact model allowlist (max 64). On an APP patch every id must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list; values are never silently dropped. On the PLATFORM patch this list IS the ceiling. Empty denies all models at either layer.
   """
   allowedModelIds: [String!]
   """
-  Replacement exact logical tool-name allowlist (max 256). App values are intersected with platform tools.
+  Replacement exact logical tool-name allowlist (max 256). On an APP patch every name must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. Sending an empty array on an APP patch clears a narrowing and is therefore also "no narrowing", not "deny all". On the PLATFORM patch this list is the ceiling and empty denies every tool.
   """
   allowedToolNames: [String!]
   """
-  Replacement mode allowlist; app values are intersected with platform modes.
+  Replacement mode allowlist. On an APP patch every mode must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list. Empty denies every mode at either layer; there is no inherit-on-empty for modes.
   """
   allowedModes: [CrowdyStudioAgentMode!]
   """
-  Replacement risk-class allowlist; app values are intersected with platform classes.
+  Replacement risk-class allowlist. On an APP patch every class must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. On the PLATFORM patch this list is the ceiling and empty denies every class.
   """
   allowedRiskClasses: [CrowdyStudioAgentRiskClass!]
   """Optional per-turn limit patch."""
@@ -12411,6 +12884,10 @@ input UpsertContainerTypeInput {
   defaultPropertyVisibility: String
   """JSON object of metadata."""
   metadataJson: String
+  """
+  Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
+  """
+  bindPolicyJson: String
 }
 
 """Create or update a typed property on a container type."""
@@ -12629,6 +13106,10 @@ input SeedContainerTypeInput {
   defaultPropertyVisibility: String
   """JSON object of metadata."""
   metadataJson: String
+  """
+  Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
+  """
+  bindPolicyJson: String
 }
 
 """A property definition to create as part of a seed."""
