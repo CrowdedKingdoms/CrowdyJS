@@ -25,6 +25,7 @@ import {
 } from './errors.js';
 import { moveFromErrors, type DatacenterMove } from './datacenter-redirect.js';
 import type { LbCookieStore } from './lb-cookie-store.js';
+import { CROWDY_DEFAULT_HTTP_ORIGIN } from './default-origin.js';
 
 /**
  * Configuration for {@link GraphQLClient}, the low-level HTTP transport. You
@@ -36,7 +37,8 @@ export interface GraphQLClientConfig {
    * Absolute base URL of the GraphQL HTTP service (e.g.
    * `https://game.example.com/graphql`). Used when {@link graphqlEndpoint} is
    * not set. When both are omitted the client falls back to
-   * `http://localhost:3000/graphql`.
+   * {@link CROWDY_DEFAULT_HTTP_ORIGIN} — the public CK API origin for the tier
+   * this build was published for.
    */
   httpUrl?: string;
   /**
@@ -117,10 +119,16 @@ export class GraphQLClient {
    *   HTTP auth always tracks the active session.
    */
   constructor(config: GraphQLClientConfig = {}, session: SessionStore) {
+    // The last resort is the tier's PUBLIC origin, not localhost. Until
+    // 2026-08-23 it was `http://localhost:3000/graphql`, which is the shape
+    // field note 68 is about: an unconfigured consumer got a plausible answer
+    // (connection refused against their own machine) rather than a useful one,
+    // and the misconfiguration read as "my server is down". The literal lives in
+    // the generated `default-origin.ts` and nowhere else.
     this.graphqlEndpoint =
       config.graphqlEndpoint ||
       config.httpUrl ||
-      'http://localhost:3000/graphql';
+      `${CROWDY_DEFAULT_HTTP_ORIGIN}/graphql`;
     this.timeout = config.timeout || 60000;
     this.session = session;
     this.logger = config.logger ?? silentLogger;
