@@ -11,16 +11,14 @@
 // `https://api.dev.crowdedkingdoms.com` from before the tier root moved, a host
 // that answers 503 -- so running this without API produced a wall of network
 // failures attributed to the SDK. A default that names a dead host is worse than
-// no default: it makes a missing prerequisite look like a broken product
-// (wrapper field note 68). Derive it rather than typing one:
-//
-//   . cks-michael-root/scripts/tier-facts.sh && tier_client_graphql dev
+// no default: it makes a missing prerequisite look like a broken product.
+// Derive it from your environment's own tier facts rather than typing one.
 import { createCrowdyClient } from '../dist/index.js';
 
 const API = process.env.API;
 if (!API) {
   console.error('portal-browser-flow: API is required and has no default.');
-  console.error('  API=$(. path/to/cks-michael-root/scripts/tier-facts.sh && tier_client_graphql dev) node test/portal-browser-flow.mjs');
+  console.error('  API=<your tier GraphQL endpoint> node test/portal-browser-flow.mjs');
   process.exit(2);
 }
 const GAME = process.env.GAME ?? API;

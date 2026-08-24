@@ -176,6 +176,16 @@ jobs:
         if: steps.check.outputs.should_publish == 'true'
         run: npm run build
 
+      # The last point at which a leak can still be stopped, and the only one that
+      # sees what is actually about to be uploaded: `dist/` is gitignored, is the
+      # whole of what `files` ships, and did not exist before the step above. A
+      # private-repo name rode dist/generated/graphql.d.ts into all 69 published
+      # versions; nothing between the decorator that produced it and the registry
+      # was looking.
+      - name: No private-repo references in what is about to be published
+        if: steps.check.outputs.should_publish == 'true'
+        run: npm run check:content-policy
+
       - name: Publish to npm
         if: steps.check.outputs.should_publish == 'true'
         env:

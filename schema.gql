@@ -4447,7 +4447,7 @@ type GraphQLServer {
   """
   ip6: String
   """
-  UUID of the runtime/Buddy (cks-udp-api) instance this API server is paired with, if any.
+  UUID of the Buddy realtime runtime instance this API server is paired with, if any.
   """
   runtimeServerId: String
   """Cloud provider instance id of the underlying host, if known."""
@@ -4507,7 +4507,7 @@ type ServerVersionInfo {
 }
 
 """
-The elected host user of a game (app). Election is deterministic across all cks-game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy (cks-udp-api); liveness (updated_at) is owned by game-api's actorHeartbeat mutation.
+The elected host user of a game (app). Election is deterministic across all game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy, the realtime runtime; liveness (updated_at) is owned by game-api's actorHeartbeat mutation.
 """
 type GameHost {
   """
@@ -8114,7 +8114,7 @@ type Query {
   """
   versionInfo: ServerVersionInfo!
   """
-  Returns the single elected host user for an app (game). Deterministic across all cks-game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1.
+  Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1.
   """
   gameHost(
     """
