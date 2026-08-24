@@ -1,5 +1,23 @@
 # udpNotifications Subscription: No Notifications Delivered
 
+> **HISTORICAL BUG REPORT — DO NOT RUN THE COMMANDS BELOW AS WRITTEN.** Every
+> hostname on this page is `dev-webapi.crowdedkingdoms.com`, which is dead: it
+> still resolves, to the legacy us-east-2 ALB, and answers **HTTP 503** from a
+> load balancer with no targets (measured 2026-08-22). A 503 reads as a transient
+> outage, so pasting the reproduction below gets you a failure that looks like the
+> product rather than a failure that looks like a wrong address — which is the
+> whole reason this banner is worth more than deleting the page.
+>
+> The live equivalent is the tier's single client origin, derived rather than
+> typed. From the privileged wrapper checkout:
+>
+> ```bash
+> . scripts/tier-facts.sh && tier_client_graphql dev   # dev | test | prod
+> ```
+>
+> The account names below are also historical, and `asdfasdf` is not a password
+> that exists on any tier today.
+
 ## Problem
 
 The `udpNotifications` subscription is accepted by the server (no errors), and `sendActorUpdate` mutations return `true`, but the subscription never receives any `next` messages. Zero notifications are delivered to WebSocket subscribers.

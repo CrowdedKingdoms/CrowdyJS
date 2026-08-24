@@ -3757,7 +3757,7 @@ export type GameClientBootstrap = {
   versionInfo: ServerVersionInfo;
 };
 
-/** The elected host user of a game (app). Election is deterministic across all cks-game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy (cks-udp-api); liveness (updated_at) is owned by game-api's actorHeartbeat mutation. */
+/** The elected host user of a game (app). Election is deterministic across all game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy, the realtime runtime; liveness (updated_at) is owned by game-api's actorHeartbeat mutation. */
 export type GameHost = {
   __typename?: 'GameHost';
   /** How many actors the host user currently owns in this app (always >= 1 when this object is returned). */
@@ -4739,7 +4739,7 @@ export type GraphQlServer = {
   publicIp4: Maybe<Scalars['String']['output']>;
   /** Public IPv6 address clients use to reach this server, if assigned. */
   publicIp6: Maybe<Scalars['String']['output']>;
-  /** UUID of the runtime/Buddy (cks-udp-api) instance this API server is paired with, if any. */
+  /** UUID of the Buddy realtime runtime instance this API server is paired with, if any. */
   runtimeServerId: Maybe<Scalars['String']['output']>;
   /** Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients. */
   status: ServerState;
@@ -8366,7 +8366,7 @@ export type Query = {
   freePlayWindowInfo: FreePlayWindowInfo;
   /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
   gameClientBootstrap: GameClientBootstrap;
-  /** Returns the single elected host user for an app (game). Deterministic across all cks-game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
+  /** Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
   gameHost: Maybe<GameHost>;
   /** Read the best-known app-scoped number of active gameplay sessions across fresh non-Offline Buddy servers. This counts sessions, not actors or distinct users. FRESH is a complete fleet total; PARTIAL is only the supported-Buddy subset; UNAVAILABLE has no fresh observation. Partial/unavailable samples never create count-change revisions. Requires an app-scoped token for this exact app. */
   gameModelActivePlayerCount: GameModelActivePlayerCountSnapshot;

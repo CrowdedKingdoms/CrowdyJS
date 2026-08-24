@@ -15,6 +15,7 @@ import {
 } from './generated/graphql.js';
 import { BinaryRelayTransport } from './binary-relay.js';
 import type { RelaySignContext } from './binary-wire.js';
+import { CROWDY_DEFAULT_WS_ORIGIN } from './default-origin.js';
 
 /**
  * Lifecycle state of the realtime WebSocket connection, as reported by
@@ -170,7 +171,8 @@ export interface RealtimeConfig {
   /**
    * WebSocket URL of the game-api GraphQL endpoint (e.g.
    * `wss://game.example.com/graphql`). Used when {@link wsEndpoint} is not set;
-   * falls back to `ws://localhost:3000/graphql` when both are omitted.
+   * falls back to {@link CROWDY_DEFAULT_WS_ORIGIN} — the public CK API origin
+   * for the tier this build was published for — when both are omitted.
    */
   wsUrl?: string;
   /** Alias for {@link wsUrl}; used only when {@link wsUrl} is not provided. */
@@ -344,7 +346,11 @@ export class RealtimeClient {
     private readonly session: SessionStore,
     private readonly metrics?: RealtimeMetrics,
   ) {
-    this.wsUrl = config.wsUrl || config.wsEndpoint || 'ws://localhost:3000/graphql';
+    // The tier's public origin, not localhost — see the note in client.ts.
+    this.wsUrl =
+      config.wsUrl ||
+      config.wsEndpoint ||
+      `${CROWDY_DEFAULT_WS_ORIGIN}/graphql`;
     this.rediscover = config.rediscover;
     this.rediscoverAfterFailures = config.rediscoverAfterFailures ?? 3;
     this.onEndpointMove = config.onEndpointMove;
