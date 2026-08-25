@@ -2,6 +2,11 @@ import {
   normalizeCrowdyStudioPath,
   type CrowdyStudioTarget,
 } from './models.js';
+import {
+  extractEnclosingRustBlock,
+  type ExtractedRustBlock,
+} from './rust-block-extract.js';
+import { formatApiDocCards, matchApiDocCards } from './api-doc-cards.js';
 
 export type CrowdyStudioDiagnosticSeverity = 'error' | 'warning' | 'info' | 'hint';
 export type CrowdyStudioDiagnosticSource = 'rustc' | 'local-advisory';
@@ -105,6 +110,266 @@ export function parseRustcDiagnostics(
     seen.add(key);
     return true;
   });
+}
+
+const DEFAULT_AGENT_CHAT_INTRO =
+  'Fix these Crowdy Studio Problems. Use read/write/edit on the project files. After each write the human will Test draft. Do not add crates to clear unresolved imports; rewrite to crowdy::api::* only (SERVER: crowdy::api::voxel_set for world writes).';
+
+const DEFAULT_SINGLE_PROBLEM_INTRO =
+  'Fix ONLY this one Crowdy Studio problem. Do not mention or anticipate other compile errors — one edit, one diagnostic.';
+
+const SINGLE_PROBLEM_WORKFLOW =
+  'You must edit this file in this turn (read, then write or edit). If BEGIN_SOURCE is present, that is the editor buffer. After the write, the human will Test draft. If compile still fails, use the Problems list — do not add crates; rewrite to crowdy::api::* only.';
+
+const SERVER_CLOSED_WORLD_REMINDER =
+  'SERVER closed-world: world block writes use crowdy::api::voxel_set((cx,cy,cz), (vx,vy,vz), block_i32, None) (4-arg horse pattern) — not voxel_set::set_block, string block names, or invented SDK paths.';
+
+const PARSE_ERROR_NOTE =
+  'Note: parse error — unmatched delimiters need surrounding source. The attached window (or full file if small) is the editor buffer; patch this file only.';
+
+/** ±N lines around the rustc caret when the file is too large to send whole. */
+export const DIAGNOSTIC_SOURCE_WINDOW_RADIUS = 40;
+const SMALL_FILE_MAX_LINES = 120;
+const SMALL_FILE_MAX_CHARS = 8_192;
+const PARSE_ERROR_MAX_LINES = 250;
+const PARSE_ERROR_MAX_CHARS = 16_384;
+const MAX_SNIPPET_LINE_CHARS = 240;
+
+export interface FormatDiagnosticsOptions {
+  intro?: string;
+  maxChars?: number;
+  /** Per-row Add / Fix with AI: one focused diagnostic with structured fields. */
+  singleProblem?: boolean;
+  /** Current file source for BEGIN_SOURCE / block extraction (single-problem). */
+  fileContent?: string | null;
+  /** sha256:… of the extracted block when available. */
+  blockContentHash?: string | null;
+  /** Full-file content hash when known. */
+  fileContentHash?: string | null;
+}
+
+export interface DiagnosticSourceSnippet {
+  kind: 'file' | 'window';
+  startLine: number;
+  endLine: number;
+  caretLine: number;
+  text: string;
+}
+
+/** rustc parse failures where a brace-balanced block is usually missing. */
+export function isParseStyleDiagnosticMessage(message: string): boolean {
+  return /unclosed delimiter|unexpected closing delimiter|mismatched closing delimiter|this file contains an unclosed|expected one of/iu.test(
+    message,
+  );
+}
+
+/**
+ * Numbered source for Fix with AI: whole file when small, else ±40 lines.
+ * Parse-style rustc messages get a slightly larger "small file" budget so
+ * CLIENT lib.rs-sized buffers are sent intact.
+ */
+export function extractDiagnosticSourceSnippet(
+  source: string,
+  line: number,
+  options: { parseStyle?: boolean } = {},
+): DiagnosticSourceSnippet | null {
+  if (!source) return null;
+  const normalized = source.replace(/\r\n?/gu, '\n');
+  const lines = normalized.split('\n');
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+  if (lines.length === 0) return null;
+
+  const caretLine = Math.max(1, Math.min(Math.trunc(line) || 1, lines.length));
+  const maxLines = options.parseStyle ? PARSE_ERROR_MAX_LINES : SMALL_FILE_MAX_LINES;
+  const maxChars = options.parseStyle ? PARSE_ERROR_MAX_CHARS : SMALL_FILE_MAX_CHARS;
+  const fits = lines.length <= maxLines && normalized.length <= maxChars;
+
+  const startLine = fits
+    ? 1
+    : Math.max(1, caretLine - DIAGNOSTIC_SOURCE_WINDOW_RADIUS);
+  const endLine = fits
+    ? lines.length
+    : Math.min(lines.length, caretLine + DIAGNOSTIC_SOURCE_WINDOW_RADIUS);
+  const width = String(endLine).length;
+  const text = lines
+    .slice(startLine - 1, endLine)
+    .map((raw, index) => {
+      const n = startLine + index;
+      const mark = n === caretLine ? '>' : ' ';
+      const clipped =
+        raw.length > MAX_SNIPPET_LINE_CHARS
+          ? `${raw.slice(0, MAX_SNIPPET_LINE_CHARS)}…`
+          : raw;
+      return `${mark}${String(n).padStart(width, ' ')} | ${clipped}`;
+    })
+    .join('\n');
+
+  return {
+    kind: fits ? 'file' : 'window',
+    startLine,
+    endLine,
+    caretLine,
+    text,
+  };
+}
+
+/**
+ * True when composer text is a project-write request. ASK mode has no
+ * mutating tools, so the dock must switch to BUILD before Send.
+ */
+export function agentChatRequiresBuildMode(content: string): boolean {
+  return (
+    content.includes('Fix ONLY this one Crowdy Studio problem') ||
+    content.includes('one patch, one diagnostic') ||
+    content.includes('one edit, one diagnostic') ||
+    content.includes('workspace.file.patch')
+  );
+}
+
+/**
+ * Format Problems-panel diagnostics into a bounded chat composer message.
+ * Shared by Add to chat / Fix with AI on Harness and Crowdy Agent.
+ */
+export function formatDiagnosticsForAgentChat(
+  diagnostics: readonly CrowdyStudioDiagnostic[],
+  options: FormatDiagnosticsOptions = {},
+): string {
+  const maxChars = options.maxChars ?? 32_768;
+  if (options.singleProblem && diagnostics.length === 1) {
+    return formatSingleDiagnosticForAgentChat(diagnostics[0], options).slice(
+      0,
+      maxChars,
+    );
+  }
+  const intro = options.intro ?? DEFAULT_AGENT_CHAT_INTRO;
+  if (diagnostics.length === 0) {
+    return intro.slice(0, maxChars);
+  }
+  const lines = diagnostics.map((diagnostic) => {
+    const code = diagnostic.code ? `[${diagnostic.code}] ` : '';
+    return `- ${diagnostic.source} ${diagnostic.severity} ${diagnostic.target.toLowerCase()}/${diagnostic.path}:${diagnostic.line}:${diagnostic.column} ${code}${diagnostic.message}`;
+  });
+  const header = `${intro}\n\nProblems (${diagnostics.length}):\n`;
+  let body = '';
+  for (const line of lines) {
+    const next = body ? `${body}\n${line}` : line;
+    if (header.length + next.length > maxChars) {
+      const remaining = Math.max(0, maxChars - header.length - body.length - 20);
+      if (remaining > 8 && !body) {
+        body = `${line.slice(0, remaining)}…`;
+      } else if (body) {
+        body = `${body}\n…`;
+      }
+      break;
+    }
+    body = next;
+  }
+  return `${header}${body}`.slice(0, maxChars);
+}
+
+function formatSingleDiagnosticForAgentChat(
+  diagnostic: CrowdyStudioDiagnostic,
+  options: FormatDiagnosticsOptions = {},
+): string {
+  const intro = options.intro ?? DEFAULT_SINGLE_PROBLEM_INTRO;
+  const location = `${diagnostic.target.toLowerCase()}/${diagnostic.path}:${diagnostic.line}:${diagnostic.column}`;
+  const code = diagnostic.code ? diagnostic.code : undefined;
+  const spanEndLine = diagnostic.endLine ?? diagnostic.line;
+  const spanEndColumn = diagnostic.endColumn ?? diagnostic.column;
+  const hasSpan =
+    diagnostic.endLine !== undefined ||
+    diagnostic.endColumn !== undefined ||
+    spanEndLine !== diagnostic.line ||
+    spanEndColumn !== diagnostic.column;
+
+  let block: ExtractedRustBlock | null = null;
+  if (typeof options.fileContent === 'string' && options.fileContent.length > 0) {
+    block = extractEnclosingRustBlock(
+      options.fileContent,
+      diagnostic.line,
+      diagnostic.column,
+    );
+  }
+
+  const cards = matchApiDocCards({
+    message: diagnostic.message,
+    code: diagnostic.code,
+    path: diagnostic.path,
+    target: diagnostic.target,
+    blockText: block?.text ?? null,
+  });
+
+  const parseStyle = isParseStyleDiagnosticMessage(diagnostic.message);
+  const snippet =
+    typeof options.fileContent === 'string' && options.fileContent.length > 0
+      ? extractDiagnosticSourceSnippet(options.fileContent, diagnostic.line, {
+          parseStyle,
+        })
+      : null;
+
+  const sections = [
+    intro,
+    '',
+    `Target: ${diagnostic.target}`,
+    `Path: ${diagnostic.path}`,
+    `Location: ${diagnostic.line}:${diagnostic.column}`,
+    `File: ${location}`,
+    ...(hasSpan
+      ? [
+          `Span: ${diagnostic.line}:${diagnostic.column}–${spanEndLine}:${spanEndColumn}`,
+        ]
+      : []),
+    `Source: ${diagnostic.source}`,
+    `Severity: ${diagnostic.severity}${code ? ` (${code})` : ''}`,
+    `Message: ${diagnostic.message}`,
+    ...(parseStyle ? ['', PARSE_ERROR_NOTE] : []),
+    '',
+    SINGLE_PROBLEM_WORKFLOW,
+  ];
+
+  if (snippet) {
+    const hashBits = options.fileContentHash
+      ? ` expectedContentHash=${options.fileContentHash}`
+      : '';
+    sections.push(
+      '',
+      `BEGIN_SOURCE path=${diagnostic.target}/${diagnostic.path} startLine=${snippet.startLine} endLine=${snippet.endLine} kind=${snippet.kind} caretLine=${snippet.caretLine}${hashBits}`,
+      snippet.text,
+      'END_SOURCE',
+    );
+  } else {
+    sections.push(
+      '',
+      `Source snippet unavailable — read ${diagnostic.target}/${diagnostic.path} before editing.`,
+    );
+  }
+
+  if (block?.kind === 'brace') {
+    const hashBits = [
+      options.blockContentHash
+        ? ` expectedBlockHash=${options.blockContentHash}`
+        : '',
+      options.fileContentHash
+        ? ` expectedContentHash=${options.fileContentHash}`
+        : '',
+    ].join('');
+    sections.push(
+      '',
+      `BEGIN_BLOCK path=${diagnostic.target}/${diagnostic.path} startLine=${block.startLine} endLine=${block.endLine} spanStart=${block.spanStart} spanEnd=${block.spanEnd} kind=${block.kind}${hashBits}`,
+      block.text,
+      'END_BLOCK',
+    );
+  }
+
+  if (cards.length > 0) {
+    sections.push('', formatApiDocCards(cards));
+  }
+
+  if (diagnostic.target === 'SERVER') {
+    sections.push('', SERVER_CLOSED_WORLD_REMINDER);
+  }
+
+  return sections.join('\n');
 }
 
 function parseJsonDiagnostic(

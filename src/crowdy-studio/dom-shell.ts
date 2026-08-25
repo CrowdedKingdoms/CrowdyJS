@@ -26,6 +26,15 @@ import {
   type CrowdyStudioTarget,
 } from './models.js';
 import { CROWDY_STUDIO_STYLES } from './styles.js';
+import {
+  formatDiagnosticsForAgentChat,
+  type CrowdyStudioDiagnostic,
+} from './diagnostics.js';
+import {
+  formatRuntimeFailureForAgentChat,
+  type RuntimeFailureEnvelope,
+} from './runtime-failure.js';
+import { extractEnclosingRustBlock, sha256DigestHex } from './rust-block-extract.js';
 
 type PanelName = 'problems' | 'build' | 'logs' | 'runs' | 'invoke';
 
@@ -103,6 +112,7 @@ export class CrowdyStudioDomShell {
   private readonly invokeExport: HTMLInputElement;
   private readonly invokeParams: HTMLTextAreaElement;
   private readonly invokeResult: HTMLElement;
+  private readonly invokeAgentToolbar: HTMLElement;
   private readonly panelButtons = new Map<PanelName, HTMLButtonElement>();
   private readonly panels = new Map<PanelName, HTMLElement>();
   private readonly railButtons = new Map<StudioPaneId, HTMLButtonElement>();
@@ -114,6 +124,7 @@ export class CrowdyStudioDomShell {
   private explorerForm: ExplorerFormState | null = null;
   private lastState: CrowdyStudioState | null = null;
   private lastPhase = 'IDLE';
+  private lastInvokeErrorKey: string | null = null;
   private disposed = false;
 
   constructor(
@@ -402,9 +413,35 @@ export class CrowdyStudioDomShell {
     this.invokeParams.setAttribute('aria-label', 'Invoke JSON parameters');
     const invokeButton = button('Invoke server export');
     this.invokeResult = document.createElement('pre');
+    this.invokeAgentToolbar = element('div', 'ck-crowdy-studio-problems-toolbar');
+    this.invokeAgentToolbar.hidden = true;
+    const addInvoke = button('Add to chat');
+    addInvoke.setAttribute(
+      'aria-label',
+      'Add this invoke failure to the Harness chat composer',
+    );
+    addInvoke.addEventListener('click', () => {
+      void this.addInvokeFailureToChat('prefill');
+    });
+    const askInvoke = button('Ask agent to fix');
+    askInvoke.className = 'ck-crowdy-studio-primary';
+    askInvoke.setAttribute(
+      'aria-label',
+      'Send this invoke failure to Harness',
+    );
+    askInvoke.addEventListener('click', () => {
+      void this.run(async () => {
+        await this.addInvokeFailureToChat('ask');
+      });
+    });
+    this.invokeAgentToolbar.append(addInvoke, askInvoke);
     const invokeControls = element('div', 'ck-crowdy-studio-invoke');
     invokeControls.append(this.invokeExport, this.invokeParams, invokeButton);
-    this.invokePanel.append(invokeControls, this.invokeResult);
+    this.invokePanel.append(
+      invokeControls,
+      this.invokeAgentToolbar,
+      this.invokeResult,
+    );
     invokeButton.addEventListener('click', () => {
       void this.run(() =>
         this.controller.invoke(
@@ -441,9 +478,7 @@ export class CrowdyStudioDomShell {
     this.renderBuild(state);
     this.renderRuntimeRows(this.logsPanel, state.logs);
     this.renderRuntimeRows(this.runsPanel, state.runs);
-    this.invokeResult.textContent = state.invokeResult
-      ? formatInvokeResult(state.invokeResult)
-      : '';
+    this.renderInvoke(state);
     this.runtimeStatus.textContent =
       [state.runtime.phase, state.runtime.target, state.runtime.message]
         .filter(Boolean)
@@ -582,6 +617,68 @@ export class CrowdyStudioDomShell {
       this.revealPanel(diagnostics > 0 ? 'problems' : 'build');
     }
     this.lastPhase = phase;
+
+    const invokeError = state.invokeResult?.error;
+    const invokeKey = invokeError
+      ? `${state.invokeResult?.exportName ?? ''}:${invokeError}`
+      : null;
+    if (invokeKey && invokeKey !== this.lastInvokeErrorKey) {
+      this.revealPanel('invoke');
+    }
+    this.lastInvokeErrorKey = invokeKey;
+  }
+
+  private renderInvoke(state: CrowdyStudioState): void {
+    this.invokeResult.textContent = state.invokeResult
+      ? formatInvokeResult(state.invokeResult)
+      : '';
+    const hasFailure = Boolean(
+      state.invokeResult?.error || state.invokeResult?.failure,
+    );
+    this.invokeAgentToolbar.hidden = !hasFailure || !this.chatTarget();
+  }
+
+  private chatTarget():
+    | CrowdyStudioDshDomShell
+    | CrowdyStudioAgentDomShell
+    | null {
+    return this.dshShell ?? this.agentShell;
+  }
+
+  private chatDockName(): string {
+    return this.dshShell ? 'Harness' : 'Crowdy Agent';
+  }
+
+  private async addInvokeFailureToChat(
+    mode: 'prefill' | 'ask',
+  ): Promise<void> {
+    const target = this.chatTarget();
+    if (!target) return;
+    const state = this.lastState ?? this.controller.getState();
+    const invoke = state.invokeResult;
+    if (!invoke?.error && !invoke?.failure) return;
+
+    const failure: RuntimeFailureEnvelope = invoke.failure ?? {
+      code: 'INVOKE_FAILED',
+      summary: invoke.error ?? 'Invoke failed',
+    };
+    const project = state.project;
+    const serverSource =
+      project?.files.find(
+        (file) =>
+          file.target === 'SERVER' &&
+          (file.path === 'src/lib.rs' || file.path === 'lib.rs'),
+      )?.content ?? null;
+    const message = formatRuntimeFailureForAgentChat(failure, {
+      exportName: invoke.exportName ?? this.invokeExport.value,
+      serverSource,
+      projectRevision: project?.revision?.id ?? null,
+    });
+    if (mode === 'prefill') {
+      target.prefillComposer(message);
+      return;
+    }
+    await target.askWithMessage(message);
   }
 
   // ----- Menus -----------------------------------------------------------
@@ -1104,9 +1201,36 @@ export class CrowdyStudioDomShell {
       this.problemsPanel.append(empty('No problems.'));
       return;
     }
+    const chat = this.chatTarget();
+    if (chat) {
+      const toolbar = element('div', 'ck-crowdy-studio-problems-toolbar');
+      const addAll = button('Add to chat');
+      addAll.setAttribute(
+        'aria-label',
+        `Add all Problems to the ${this.chatDockName()} chat composer`,
+      );
+      addAll.addEventListener('click', () =>
+        chat.prefillComposer(formatDiagnosticsForAgentChat(diagnostics)),
+      );
+      const ask = button('Ask agent to fix');
+      ask.className = 'ck-crowdy-studio-primary';
+      ask.setAttribute(
+        'aria-label',
+        `Send all Problems to ${this.chatDockName()}`,
+      );
+      ask.addEventListener('click', () =>
+        void this.run(async () => {
+          await chat.askWithMessage(formatDiagnosticsForAgentChat(diagnostics));
+        }),
+      );
+      toolbar.append(addAll, ask);
+      this.problemsPanel.append(toolbar);
+    }
     for (const diagnostic of diagnostics) {
-      const row = element('button', 'ck-crowdy-studio-problem');
-      row.dataset.source = diagnostic.source;
+      const row = element('div', 'ck-crowdy-studio-problem-row');
+      const open = element('button', 'ck-crowdy-studio-problem');
+      open.dataset.source = diagnostic.source;
+      open.type = 'button';
       const source = document.createElement('span');
       source.textContent =
         diagnostic.source === 'rustc' ? 'rustc' : 'advisory';
@@ -1114,16 +1238,95 @@ export class CrowdyStudioDomShell {
       location.textContent = `${diagnostic.target.toLowerCase()}/${diagnostic.path}:${diagnostic.line}:${diagnostic.column}`;
       const message = document.createElement('span');
       message.textContent = diagnostic.message;
-      row.append(source, location, message);
-      row.addEventListener('click', () =>
+      open.append(source, location, message);
+      open.addEventListener('click', () =>
         this.controller.openFile({
           source: 'PROJECT',
           target: diagnostic.target,
           path: diagnostic.path,
         }),
       );
+      row.append(open);
+      if (chat) {
+        const add = button('Add');
+        add.className = 'ck-crowdy-studio-problem-add';
+        add.setAttribute(
+          'aria-label',
+          `Add problem ${location.textContent} to ${this.chatDockName()} chat`,
+        );
+        add.addEventListener('click', (event) => {
+          event.stopPropagation();
+          void this.addDiagnosticToChat(diagnostic);
+        });
+        if (diagnostic.source === 'rustc') {
+          const fix = button('Fix with AI');
+          fix.className = 'ck-crowdy-studio-primary ck-crowdy-studio-problem-fix';
+          fix.setAttribute(
+            'aria-label',
+            `Ask ${this.chatDockName()} to fix ${location.textContent}`,
+          );
+          fix.addEventListener('click', (event) => {
+            event.stopPropagation();
+            void this.run(async () => {
+              await this.fixDiagnosticWithAi(diagnostic);
+            });
+          });
+          row.append(add, fix);
+        } else {
+          row.append(add);
+        }
+      }
       this.problemsPanel.append(row);
     }
+  }
+
+  private async diagnosticChatSeed(
+    diagnostic: CrowdyStudioDiagnostic,
+  ): Promise<string> {
+    const project = this.controller.getState().project;
+    const file = project?.files.find(
+      (entry) =>
+        entry.target === diagnostic.target && entry.path === diagnostic.path,
+    );
+    const fileContent = file?.content ?? null;
+    let blockContentHash: string | null = null;
+    let fileContentHash: string | null = null;
+    if (fileContent) {
+      fileContentHash = await sha256DigestHex(fileContent);
+      const block = extractEnclosingRustBlock(
+        fileContent,
+        diagnostic.line,
+        diagnostic.column,
+      );
+      if (block) blockContentHash = await sha256DigestHex(block.text);
+    }
+    return formatDiagnosticsForAgentChat([diagnostic], {
+      singleProblem: true,
+      fileContent,
+      blockContentHash,
+      fileContentHash,
+    });
+  }
+
+  private async addDiagnosticToChat(
+    diagnostic: CrowdyStudioDiagnostic,
+  ): Promise<void> {
+    const chat = this.chatTarget();
+    if (!chat) return;
+    const existing = chat.getComposerValue();
+    const snippet = await this.diagnosticChatSeed(diagnostic);
+    const combined = existing.trim()
+      ? `${existing.trimEnd()}\n\n${snippet}`
+      : snippet;
+    chat.prefillComposer(combined);
+  }
+
+  private async fixDiagnosticWithAi(
+    diagnostic: CrowdyStudioDiagnostic,
+  ): Promise<void> {
+    const chat = this.chatTarget();
+    if (!chat) return;
+    await chat.askWithMessage(await this.diagnosticChatSeed(diagnostic));
   }
 
   private renderBuild(state: CrowdyStudioState): void {
@@ -1170,6 +1373,14 @@ function budgetText(state: CrowdyStudioState): string {
 }
 
 function formatInvokeResult(result: NonNullable<CrowdyStudioState['invokeResult']>): string {
+  if (result.error) {
+    return [
+      result.error,
+      result.exportName ? `export ${result.exportName}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
   return [
     result.resultJson ?? result.resultBase64 ?? '(empty result)',
     result.fuelUsed ? `${result.fuelUsed} fuel` : '',

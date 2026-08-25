@@ -7,6 +7,13 @@ import assert from 'node:assert/strict';
 
 const {
   CrowdyStudioDshController,
+  mergePendingUser,
+  turnSettledAfter,
+  dshMessageLooksLikeMutation,
+  dshShouldShowWorking,
+  dshTurnInProgress,
+  dshWorkingLabel,
+  pickLastDshSession,
 } = await import('../../dist/crowdy-studio/dsh/controller.js');
 
 function session(overrides = {}) {
@@ -20,10 +27,19 @@ function session(overrides = {}) {
   };
 }
 
+function userMessage(text, seq = 1) {
+  return { seq, role: 'USER', kind: 'user', title: null, text };
+}
+
 class FakeTransport {
   sessions = [];
   messages = new Map();
   prompts = [];
+  holdHistory = false;
+  historyWaiters = [];
+  /** When true, sendMessage records the prompt but does not append history yet. */
+  deferCommit = false;
+  deferred = [];
 
   async listSessions() {
     return [...this.sessions];
@@ -42,27 +58,61 @@ class FakeTransport {
 
   async sendMessage(input) {
     this.prompts.push(input.content);
-    const existing = this.messages.get(input.sessionId) ?? [];
-    const nextSeq = (existing.at(-1)?.seq ?? 0) + 1;
-    existing.push({ seq: nextSeq, role: 'USER', text: input.content });
-    existing.push({
-      seq: nextSeq + 1,
-      role: 'ASSISTANT',
-      text: `echo:${input.content}`,
-    });
-    this.messages.set(input.sessionId, existing);
     const found = this.sessions.find((item) => item.sessionId === input.sessionId);
     assert.ok(found);
+    if (this.deferCommit) {
+      this.deferred.push(input);
+      return found;
+    }
+    this.commitPrompt(input.sessionId, input.content);
     return found;
   }
 
+  commitPrompt(sessionId, content) {
+    const existing = this.messages.get(sessionId) ?? [];
+    const nextSeq = (existing.at(-1)?.seq ?? 6) + 1;
+    existing.push(userMessage(content, nextSeq));
+    existing.push({
+      seq: nextSeq + 8,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: `echo:${content}`,
+    });
+    existing.push({
+      seq: nextSeq + 9,
+      role: 'SYSTEM',
+      kind: 'turn-end',
+      title: null,
+      text: 'Done.',
+    });
+    this.messages.set(sessionId, existing);
+  }
+
+  commitDeferred() {
+    for (const input of this.deferred) {
+      this.commitPrompt(input.sessionId, input.content);
+    }
+    this.deferred.length = 0;
+    this.deferCommit = false;
+  }
+
   async history(input) {
+    if (this.holdHistory) {
+      await new Promise((resolve) => this.historyWaiters.push(resolve));
+    }
     const found = this.sessions.find((item) => item.sessionId === input.sessionId);
     assert.ok(found);
     return {
       session: found,
       messages: [...(this.messages.get(input.sessionId) ?? [])],
     };
+  }
+
+  releaseHistory() {
+    this.holdHistory = false;
+    for (const resolve of this.historyWaiters) resolve();
+    this.historyWaiters.length = 0;
   }
 }
 
@@ -85,12 +135,429 @@ test('creates a session for the open project and exchanges a message', async () 
 
   await controller.sendMessage('hello harness');
   const messages = controller.getState().messages;
-  assert.equal(messages.some((m) => m.role === 'USER' && m.text === 'hello harness'), true);
+  assert.equal(messages.some((m) => m.kind === 'user' && m.text === 'hello harness'), true);
   assert.equal(
-    messages.some((m) => m.role === 'ASSISTANT' && m.text === 'echo:hello harness'),
+    messages.some((m) => m.kind === 'assistant' && m.text === 'echo:hello harness'),
     true,
   );
   assert.deepEqual(transport.prompts, ['hello harness']);
+  controller.destroy();
+});
+
+test('keeps the optimistic user bubble while history is still empty', async () => {
+  const transport = new FakeTransport();
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+  });
+  await controller.initialize();
+  await controller.createSession();
+  transport.holdHistory = true;
+
+  const pending = controller.sendMessage('generate a house');
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const state = controller.getState();
+  assert.equal(state.busy, true);
+  assert.equal(
+    state.messages.some((m) => m.kind === 'user' && m.text === 'generate a house'),
+    true,
+  );
+
+  transport.releaseHistory();
+  await pending;
+  assert.equal(controller.getState().busy, false);
+  controller.destroy();
+});
+
+test('mergePendingUser does not duplicate once history contains the prompt', () => {
+  const pending = userMessage('generate a house', 1);
+  const history = [userMessage('generate a house', 7)];
+  assert.deepEqual(mergePendingUser(history, pending), history);
+  assert.equal(mergePendingUser([], pending).length, 1);
+});
+
+test('turnSettledAfter ignores prior tool errors until this prompt is answered', () => {
+  const prior = [
+    userMessage('What is the script currently capable of?', 1),
+    {
+      seq: 2,
+      role: 'SYSTEM',
+      kind: 'error',
+      title: 'Error',
+      text: 'cannot read "/home/ubuntu/crowdy-mount": not a regular file',
+    },
+  ];
+  assert.equal(turnSettledAfter(prior, 'Fix ONLY this one Crowdy Studio problem'), false);
+  const landed = [
+    ...prior,
+    userMessage('Fix ONLY this one Crowdy Studio problem', 10),
+  ];
+  assert.equal(turnSettledAfter(landed, 'Fix ONLY this one Crowdy Studio problem'), false);
+  const midTurn = [
+    ...landed,
+    {
+      seq: 11,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: 'I will patch client/src/lib.rs',
+    },
+  ];
+  assert.equal(
+    turnSettledAfter(midTurn, 'Fix ONLY this one Crowdy Studio problem'),
+    false,
+  );
+  const done = [
+    ...midTurn,
+    { seq: 12, role: 'SYSTEM', kind: 'turn-end', title: null, text: 'Done.' },
+  ];
+  assert.equal(turnSettledAfter(done, 'Fix ONLY this one Crowdy Studio problem'), true);
+  const asked = [
+    ...landed,
+    {
+      seq: 11,
+      role: 'SYSTEM',
+      kind: 'question',
+      title: 'How should I handle the missing host calls?',
+      text: '{}',
+    },
+  ];
+  assert.equal(
+    turnSettledAfter(asked, 'Fix ONLY this one Crowdy Studio problem'),
+    true,
+  );
+  const dumped = [
+    ...landed,
+    {
+      seq: 11,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: JSON.stringify({
+        questions: [
+          {
+            header: 'crowdy::api item',
+            options: [{ label: 'present (Recommended)' }],
+          },
+        ],
+      }),
+    },
+  ];
+  assert.equal(
+    turnSettledAfter(dumped, 'Fix ONLY this one Crowdy Studio problem'),
+    true,
+  );
+});
+
+test('working strip stays up after a dumped question if later tools arrive', () => {
+  const messages = [
+    userMessage('Fix ONLY this one Crowdy Studio problem', 10),
+    {
+      seq: 11,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: JSON.stringify({
+        questions: [
+          { header: 'crowdy::api item', options: [{ label: 'present' }] },
+        ],
+      }),
+    },
+    {
+      seq: 12,
+      role: 'SYSTEM',
+      kind: 'tool',
+      title: 'Read /home/ubuntu/crowdy-mount/client/src/lib.rs',
+      text: '',
+    },
+    {
+      seq: 13,
+      role: 'SYSTEM',
+      kind: 'tool',
+      title: 'Result',
+      text: '',
+    },
+  ];
+  assert.equal(dshTurnInProgress(messages), false);
+  assert.equal(dshShouldShowWorking(messages, false), true);
+  assert.equal(
+    dshWorkingLabel(messages),
+    'Read /home/ubuntu/crowdy-mount/client/src/lib.rs',
+  );
+});
+
+test('dshTurnInProgress stays true through tool cards until turn-end', () => {
+  const mid = [
+    userMessage('Fix ONLY this one Crowdy Studio problem', 10),
+    {
+      seq: 11,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: 'Let me read the server source.',
+    },
+    {
+      seq: 12,
+      role: 'SYSTEM',
+      kind: 'tool',
+      title: 'Read server/src/lib.rs',
+      text: '',
+    },
+    {
+      seq: 13,
+      role: 'SYSTEM',
+      kind: 'tool',
+      title: 'Result',
+      text: 'ok',
+    },
+  ];
+  assert.equal(dshTurnInProgress(mid), true);
+  assert.equal(dshWorkingLabel(mid), 'Read server/src/lib.rs');
+  mid.push({
+    seq: 14,
+    role: 'SYSTEM',
+    kind: 'turn-end',
+    title: null,
+    text: 'Done.',
+  });
+  assert.equal(dshTurnInProgress(mid), false);
+});
+
+test('restored mid-turn history turns busy back on', async () => {
+  const transport = new FakeTransport();
+  const existing = session({ sessionId: 'sess-live', title: 'Fix ONLY this one Crow' });
+  transport.sessions = [existing];
+  transport.messages.set(existing.sessionId, [
+    userMessage('Fix ONLY this one Crowdy Studio problem', 10),
+    {
+      seq: 11,
+      role: 'SYSTEM',
+      kind: 'tool',
+      title: 'Glob **/*',
+      text: '',
+    },
+    {
+      seq: 12,
+      role: 'SYSTEM',
+      kind: 'tool',
+      title: 'Result',
+      text: 'client/src/lib.rs',
+    },
+  ]);
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+    sessionMemory: {
+      get: () => existing.sessionId,
+      set: () => {},
+    },
+  });
+  await controller.initialize();
+  assert.equal(controller.getState().busy, true);
+  assert.equal(dshWorkingLabel(controller.getState().messages), 'Glob **/*');
+  controller.destroy();
+});
+
+test('keeps busy after the first assistant sentence until turn-end', async () => {
+  const transport = new FakeTransport();
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+  });
+  await controller.initialize();
+  await controller.createSession();
+  transport.commitPrompt = function commitPrompt(sessionId, content) {
+    const existing = this.messages.get(sessionId) ?? [];
+    existing.push(userMessage(content, 10));
+    existing.push({
+      seq: 11,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: 'Looking around.',
+    });
+    this.messages.set(sessionId, existing);
+  };
+
+  const pending = controller.sendMessage('disco skin');
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(controller.getState().busy, true);
+  const sessionId = controller.getState().activeSessionId;
+  transport.messages.get(sessionId).push({
+    seq: 12,
+    role: 'SYSTEM',
+    kind: 'turn-end',
+    title: null,
+    text: 'Done.',
+  });
+  await pending;
+  assert.equal(controller.getState().busy, false);
+  controller.destroy();
+});
+
+test('keeps a follow-up prompt visible while prior history still looks settled', async () => {
+  const transport = new FakeTransport();
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+  });
+  await controller.initialize();
+  await controller.createSession();
+  const sessionId = controller.getState().activeSessionId;
+  transport.messages.set(sessionId, [
+    userMessage('What is the script currently capable of?', 1),
+    {
+      seq: 2,
+      role: 'SYSTEM',
+      kind: 'error',
+      title: 'Error',
+      text: 'cannot read "/home/ubuntu/crowdy-mount": not a regular file',
+    },
+  ]);
+  await controller.selectSession(sessionId);
+
+  transport.deferCommit = true;
+  const pending = controller.sendMessage('Fix these Crowdy Studio Problems.');
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  const mid = controller.getState();
+  assert.equal(mid.busy, true);
+  assert.equal(
+    mid.messages.some((m) => m.kind === 'user' && m.text === 'Fix these Crowdy Studio Problems.'),
+    true,
+  );
+
+  transport.commitDeferred();
+  await pending;
+  assert.equal(controller.getState().busy, false);
+  assert.equal(
+    controller.getState().messages.some(
+      (m) => m.kind === 'user' && m.text === 'Fix these Crowdy Studio Problems.',
+    ),
+    true,
+  );
+  controller.destroy();
+});
+
+test('dshMessageLooksLikeMutation recognizes stock write and edit cards', () => {
+  assert.equal(
+    dshMessageLooksLikeMutation({
+      seq: 3,
+      role: 'SYSTEM',
+      kind: 'tool',
+      title: 'Write',
+      text: '/home/ubuntu/crowdy-mount/client/src/lib.rs',
+    }),
+    true,
+  );
+  assert.equal(
+    dshMessageLooksLikeMutation({
+      seq: 4,
+      role: 'SYSTEM',
+      kind: 'tool',
+      title: 'Read',
+      text: '/home/ubuntu/crowdy-mount/client/src/lib.rs',
+    }),
+    false,
+  );
+});
+
+test('pickLastDshSession prefers the remembered id then the newest listed', () => {
+  const older = session({ sessionId: 'sess-old', title: 'Older' });
+  const newer = session({ sessionId: 'sess-new', title: 'Newer' });
+  assert.equal(pickLastDshSession([newer, older])?.sessionId, 'sess-new');
+  assert.equal(
+    pickLastDshSession([newer, older], 'sess-old')?.sessionId,
+    'sess-old',
+  );
+  assert.equal(pickLastDshSession([], 'sess-old'), null);
+});
+
+test('initialize reopens the last Harness session and loads its history', async () => {
+  const transport = new FakeTransport();
+  const remembered = session({
+    sessionId: 'sess-remembered',
+    title: 'House chat',
+    updatedAt: '2026-08-21T12:00:00Z',
+  });
+  const newerEmpty = session({
+    sessionId: 'sess-new',
+    title: 'Untitled',
+    updatedAt: '2026-08-21T13:00:00Z',
+  });
+  transport.sessions = [newerEmpty, remembered];
+  transport.messages.set(remembered.sessionId, [
+    userMessage('generate a house', 1),
+    {
+      seq: 2,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: 'I will write client/src/lib.rs',
+    },
+  ]);
+  const memory = new Map([
+    ['ck-crowdy-studio-dsh-session:2:proj-1', remembered.sessionId],
+  ]);
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+    sessionMemory: {
+      get: (key) => memory.get(key) ?? null,
+      set: (key, value) => {
+        memory.set(key, value);
+      },
+    },
+  });
+
+  await controller.initialize();
+  assert.equal(controller.getState().connection, 'ready');
+  assert.equal(controller.getState().activeSessionId, remembered.sessionId);
+  assert.equal(
+    controller.getState().messages.some(
+      (message) => message.kind === 'user' && message.text === 'generate a house',
+    ),
+    true,
+  );
+  controller.destroy();
+});
+
+test('initialize attaches the newest listed Harness session when none is remembered', async () => {
+  const transport = new FakeTransport();
+  const older = session({ sessionId: 'sess-old', title: 'Older' });
+  const newer = session({ sessionId: 'sess-new', title: 'Newer' });
+  transport.sessions = [newer, older];
+  transport.messages.set(newer.sessionId, [
+    userMessage('continue this chat', 1),
+  ]);
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+    sessionMemory: {
+      get: () => null,
+      set: () => {},
+    },
+  });
+
+  await controller.initialize();
+  assert.equal(controller.getState().activeSessionId, newer.sessionId);
+  assert.equal(
+    controller.getState().messages.some(
+      (message) => message.text === 'continue this chat',
+    ),
+    true,
+  );
   controller.destroy();
 });
 

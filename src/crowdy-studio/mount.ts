@@ -20,6 +20,7 @@ import {
 import { CrowdyStudioDomShell } from './dom-shell.js';
 import {
   CrowdyStudioDshController,
+  dshMessageLooksLikeMutation,
   type CrowdyStudioDshTransport,
 } from './dsh/index.js';
 import type {
@@ -308,20 +309,8 @@ export async function mountCrowdyStudio(
       }
     }
   });
-  // After a harness turn finishes, pull the project so Monaco sees file writes.
-  let dshWasBusy = false;
   const unsubscribeDshBusy = dsh
-    ? dsh.subscribe((state) => {
-        if (dshWasBusy && !state.busy && controller.getState().project) {
-          void controller.adoptAgentRevision().catch((error) => {
-            console.warn(
-              'Crowdy Studio could not adopt a Harness project revision',
-              error,
-            );
-          });
-        }
-        dshWasBusy = state.busy;
-      })
+    ? bindDshProjectPull(dsh, controller)
     : () => {};
   const onVisibilityChange = (): void => {
     const visible = document.visibilityState !== 'hidden';
@@ -401,6 +390,59 @@ export async function mountCrowdyStudio(
       dsh = null;
       controller.destroy();
     },
+  };
+}
+
+/**
+ * Keep Monaco on the durable project while Harness write/edit tools run.
+ * Polls during a busy turn, pulls immediately on a mutation card, and pulls
+ * once more when the turn goes idle.
+ */
+function bindDshProjectPull(
+  dsh: CrowdyStudioDshController,
+  controller: CrowdyStudioController,
+): () => void {
+  let busy = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let lastMutationSig = '';
+
+  const pull = (): void => {
+    void controller.pullRemoteAgentRevision().catch((error) => {
+      console.warn(
+        'Crowdy Studio could not adopt a Harness project revision',
+        error,
+      );
+    });
+  };
+
+  const stop = (): void => {
+    if (timer) clearInterval(timer);
+    timer = null;
+  };
+
+  const unsubscribe = dsh.subscribe((state) => {
+    const mutationSig = state.messages
+      .filter(dshMessageLooksLikeMutation)
+      .map((message) => `${message.seq}:${message.title ?? ''}`)
+      .join('|');
+    if (mutationSig && mutationSig !== lastMutationSig) {
+      lastMutationSig = mutationSig;
+      pull();
+    }
+    if (state.busy && !busy) {
+      pull();
+      timer = setInterval(pull, 1_500);
+    }
+    if (!state.busy && busy) {
+      stop();
+      pull();
+    }
+    busy = state.busy;
+  });
+
+  return () => {
+    stop();
+    unsubscribe();
   };
 }
 

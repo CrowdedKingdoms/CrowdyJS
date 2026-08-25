@@ -11,6 +11,12 @@ import {
 } from '../crowdy-agent/schema.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
 import {
+  formatRuntimeFailureDisplay,
+  parseRuntimeFailureFromExtensions,
+  type RuntimeFailureEnvelope,
+} from './runtime-failure.js';
+import { CrowdyGraphQLError } from '../errors.js';
+import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
   normalizeCrowdyStudioPath,
@@ -127,6 +133,12 @@ export interface CrowdyStudioInvokeResult {
   resultJson?: string | null;
   fuelUsed?: string;
   durationUs?: number;
+  /** Set when playerComputeInvoke throws (GraphQL or transport failure). */
+  error?: string;
+  /** Structured failure from GraphQL extensions.runtimeFailure when present. */
+  failure?: RuntimeFailureEnvelope;
+  /** Export name used for this invoke (for chat handoff). */
+  exportName?: string;
 }
 
 export interface CrowdyStudioState {
@@ -904,6 +916,19 @@ export class CrowdyStudioController {
     return true;
   }
 
+  /**
+   * Pull a newer durable revision (Harness write/edit) into the open editor.
+   * No-ops while the human has unsaved edits or an unresolved conflict so we
+   * never clobber the buffer or spam conflict state during a turn.
+   */
+  async pullRemoteAgentRevision(): Promise<'skipped' | 'unchanged' | 'adopted'> {
+    if (!this.state.project) return 'skipped';
+    if (this.persistedGeneration !== this.editGeneration) return 'skipped';
+    if (this.state.saveState === 'CONFLICT') return 'skipped';
+    const adopted = await this.adoptAgentRevision();
+    return adopted ? 'adopted' : 'unchanged';
+  }
+
   async restoreCheckpoint(
     checkpointId: string,
     approvalGrant: string,
@@ -1323,15 +1348,31 @@ export class CrowdyStudioController {
     if (!projectTargets(project.kind).includes('SERVER')) {
       throw new Error('Invoke requires a SERVER target');
     }
-    const result = await this.options.playerCompute.invoke({
-      ...this.scope(),
-      moduleName: moduleNameFor(project, 'SERVER'),
-      exportName: exportName.trim() || 'invoke',
-      paramsJson: paramsJson?.trim() || null,
-    });
-    this.checkAgentOperation(agentOperation);
-    this.update({ invokeResult: result });
-    return result;
+    const resolvedExport = exportName.trim() || 'invoke';
+    try {
+      const result = await this.options.playerCompute.invoke({
+        ...this.scope(),
+        moduleName: moduleNameFor(project, 'SERVER'),
+        exportName: resolvedExport,
+        paramsJson: paramsJson?.trim() || null,
+      });
+      this.checkAgentOperation(agentOperation);
+      const invokeResult: CrowdyStudioInvokeResult = {
+        ...result,
+        exportName: resolvedExport,
+      };
+      this.update({ invokeResult });
+      return invokeResult;
+    } catch (error) {
+      const { error: errorText, failure } = formatInvokeErrorParts(error);
+      const invokeResult: CrowdyStudioInvokeResult = {
+        error: errorText,
+        failure,
+        exportName: resolvedExport,
+      };
+      this.update({ invokeResult });
+      return invokeResult;
+    }
   }
 
   setSurfaceVisible(surface: CrowdyStudioPolledSurface, visible: boolean): void {
@@ -1874,6 +1915,52 @@ function fileRefExists(
       ? file.id === ref.referenceId
       : file.target === ref.target && file.path === ref.path,
   );
+}
+
+function formatInvokeErrorParts(error: unknown): {
+  error: string;
+  failure?: RuntimeFailureEnvelope;
+} {
+  if (error instanceof CrowdyGraphQLError) {
+    const failure = parseRuntimeFailureFromExtensions(error.extensions);
+    const remediation =
+      typeof error.extensions?.remediation === 'string'
+        ? error.extensions.remediation
+        : undefined;
+    if (failure) {
+      return {
+        error: formatRuntimeFailureDisplay(failure, remediation),
+        failure: {
+          ...failure,
+          ...(remediation && !failure.remediation ? { remediation } : {}),
+        },
+      };
+    }
+
+    const code = typeof error.code === 'string' ? error.code : undefined;
+    const message = error.message;
+
+    let line: string;
+    if (code && code.length > 0) {
+      if (message === code || message.startsWith(`${code}:`)) {
+        line = message;
+      } else if (
+        code === 'INTERNAL_SERVER_ERROR' &&
+        message.startsWith('PLAYER_MODULE_')
+      ) {
+        line = message;
+      } else {
+        line = `${code}: ${message}`;
+      }
+    } else {
+      line = message;
+    }
+
+    return {
+      error: remediation ? `${line}\n${remediation}` : line,
+    };
+  }
+  return { error: errorMessage(error) };
 }
 
 function errorMessage(error: unknown): string {

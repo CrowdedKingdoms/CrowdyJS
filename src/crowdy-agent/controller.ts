@@ -24,6 +24,12 @@ import type {
   CrowdyAgentEventSubscriptionV1,
   CrowdyStudioAgentTransportV1,
 } from './transport.js';
+import {
+  agentSessionMemoryKey,
+  browserSessionMemory,
+  pickResumableAgentSession,
+  type StudioSessionMemory,
+} from './session-resume.js';
 
 export type CrowdyStudioAgentConnectionState =
   | 'DISCONNECTED'
@@ -77,6 +83,8 @@ export interface CrowdyStudioAgentControllerOptionsV1 {
   readonly onLeaseChanged?: (lease: CrowdyAgentLeaseV1) => void;
   readonly createIdempotencyKey?: (operation: string) => string;
   readonly historyPageSize?: number;
+  /** Remember the last attached session so Studio remount can reopen it. */
+  readonly sessionMemory?: StudioSessionMemory;
   readonly maxRetainedEvents?: number;
   readonly autoReconnect?: boolean;
   readonly reconnectDelayMs?: number;
@@ -180,28 +188,7 @@ export class CrowdyStudioAgentController {
         Boolean(this.options.resolveProjectBinding),
       );
     } else {
-      const configured =
-        typeof this.options.createSession === 'function'
-          ? await this.options.createSession()
-          : this.options.createSession!;
-      const createInput: CrowdyAgentCreateSessionInputV1 = {
-        ...configured,
-        ...(this.options.resolveProjectBinding
-          ? binding?.projectId
-            ? { projectId: binding.projectId }
-            : { projectId: undefined }
-          : {}),
-        ...(binding?.gridId ? { gridId: binding.gridId } : {}),
-      };
-      if (createInput.mode === 'BUILD' && !createInput.projectId) {
-        throw new CrowdyAgentError(
-          'AGENT_CONTEXT_CHANGED',
-          'BUILD requires the currently selected saved Crowdy Studio project',
-        );
-      }
-      session = await this.options.transport.createSession(
-        createInput,
-      );
+      session = await this.resolveOrCreateSession(binding);
       this.assertProjectBinding(
         session,
         binding?.projectId,
@@ -209,6 +196,7 @@ export class CrowdyStudioAgentController {
       );
     }
     this.update({ session, lastError: null });
+    this.rememberSession(session);
     await this.attach('ATTACHING');
   }
 
@@ -1300,6 +1288,88 @@ export class CrowdyStudioAgentController {
       toolDescriptors: descriptorSet.tools,
       budget,
     };
+  }
+
+  private async resolveOrCreateSession(
+    binding:
+      | { readonly projectId?: string; readonly gridId?: string }
+      | undefined,
+  ): Promise<CrowdyAgentSessionV1> {
+    const configured =
+      typeof this.options.createSession === 'function'
+        ? await this.options.createSession()
+        : this.options.createSession!;
+    const createInput: CrowdyAgentCreateSessionInputV1 = {
+      ...configured,
+      ...(this.options.resolveProjectBinding
+        ? binding?.projectId
+          ? { projectId: binding.projectId }
+          : { projectId: undefined }
+        : {}),
+      ...(binding?.gridId ? { gridId: binding.gridId } : {}),
+    };
+    if (createInput.mode === 'BUILD' && !createInput.projectId) {
+      throw new CrowdyAgentError(
+        'AGENT_CONTEXT_CHANGED',
+        'BUILD requires the currently selected saved Crowdy Studio project',
+      );
+    }
+    const existing = await this.findResumableSession(createInput);
+    if (existing) return existing;
+    return this.options.transport.createSession(createInput);
+  }
+
+  private async findResumableSession(
+    createInput: CrowdyAgentCreateSessionInputV1,
+  ): Promise<CrowdyAgentSessionV1 | null> {
+    try {
+      const listed = await this.options.transport.listSessions({
+        appId: createInput.appId,
+        first: 40,
+      });
+      const picked = pickResumableAgentSession(listed.nodes, {
+        projectId: createInput.projectId,
+        gridId: createInput.gridId,
+        preferredSessionId: this.readRememberedSession(
+          createInput.appId,
+          createInput.projectId,
+        ),
+      });
+      if (!picked) return null;
+      const session = await this.options.transport.getSession(picked.sessionId);
+      if (session.status === 'CLOSED' || session.status === 'REVOKED') {
+        return null;
+      }
+      return session;
+    } catch {
+      return null;
+    }
+  }
+
+  private sessionMemory(): StudioSessionMemory | null {
+    return this.options.sessionMemory ?? browserSessionMemory();
+  }
+
+  private readRememberedSession(
+    appId: string,
+    projectId?: string,
+  ): string | null {
+    try {
+      return this.sessionMemory()?.get(agentSessionMemoryKey(appId, projectId)) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private rememberSession(session: CrowdyAgentSessionV1): void {
+    try {
+      this.sessionMemory()?.set(
+        agentSessionMemoryKey(session.appId, session.projectId),
+        session.sessionId,
+      );
+    } catch {
+      // Private mode / missing storage must not block attach.
+    }
   }
 
   private assertProjectBinding(

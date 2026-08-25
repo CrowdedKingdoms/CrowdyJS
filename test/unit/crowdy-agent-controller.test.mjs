@@ -476,6 +476,12 @@ test('session creation derives the saved selected project and project switches f
   } = await import('../../dist/crowdy-agent/index.js');
   const transport = fakeTransport(registry);
   let createInput;
+  transport.listSessions = async () => ({
+    edges: [],
+    pageInfo: { hasNextPage: false },
+    nodes: [],
+    hasNextPage: false,
+  });
   transport.createSession = async (input) => {
     createInput = structuredClone(input);
     return {
@@ -722,4 +728,103 @@ test('lease revocation aborts browser handlers and rejects late results', async 
   assert.equal(didStart, true);
   assert.equal(wasAborted, true);
   assert.equal(resultCount, 0);
+});
+
+test('reopening Studio attaches the last project session instead of creating another', async () => {
+  const {
+    CROWDY_AGENT_TOOL_REGISTRY_V1: registry,
+    CrowdyStudioAgentController,
+    pickResumableAgentSession,
+  } = await import('../../dist/crowdy-agent/index.js');
+
+  const empty = {
+    ...session(registry.registryDigest),
+    sessionId: 'session-empty',
+    lastEventSeq: '2',
+    createdAt: '2026-08-21T19:00:00Z',
+    updatedAt: '2026-08-21T19:00:00Z',
+  };
+  const chat = {
+    ...session(registry.registryDigest),
+    sessionId: 'session-chat',
+    lastEventSeq: '24',
+    createdAt: '2026-08-21T18:00:00Z',
+    updatedAt: '2026-08-21T18:30:00Z',
+  };
+  const otherProject = {
+    ...session(registry.registryDigest),
+    sessionId: 'session-other',
+    projectId: 'project-2',
+    lastEventSeq: '40',
+    updatedAt: '2026-08-21T20:00:00Z',
+  };
+
+  assert.equal(
+    pickResumableAgentSession([empty, chat, otherProject], {
+      projectId: 'project-1',
+      gridId: 'grid-1',
+    })?.sessionId,
+    'session-chat',
+  );
+  assert.equal(
+    pickResumableAgentSession([empty, chat], {
+      projectId: 'project-1',
+      preferredSessionId: 'session-empty',
+    })?.sessionId,
+    'session-empty',
+  );
+
+  const transport = fakeTransport(registry);
+  let created = 0;
+  transport.listSessions = async () => ({
+    edges: [
+      { cursor: 'empty', node: structuredClone(empty) },
+      { cursor: 'chat', node: structuredClone(chat) },
+    ],
+    pageInfo: { hasNextPage: false },
+    nodes: [structuredClone(empty), structuredClone(chat)],
+    hasNextPage: false,
+  });
+  transport.getSession = async (sessionId) =>
+    structuredClone(sessionId === 'session-empty' ? empty : chat);
+  transport.attachClient = async () => ({
+    session: {
+      ...structuredClone(chat),
+      currentClientEpoch: '1',
+      clientEpoch: '1',
+    },
+    clientEpoch: '1',
+    replayAfterSeq: '0',
+  });
+  transport.createSession = async () => {
+    created += 1;
+    return structuredClone(chat);
+  };
+  const memory = new Map();
+  const controller = new CrowdyStudioAgentController({
+    transport,
+    createSession: {
+      appId: 'app-1',
+      mode: 'ASK',
+      idempotencyKey: 'should-not-create',
+    },
+    resolveProjectBinding: async () => ({
+      projectId: 'project-1',
+      gridId: 'grid-1',
+    }),
+    sessionMemory: {
+      get: (key) => memory.get(key) ?? null,
+      set: (key, value) => {
+        memory.set(key, value);
+      },
+    },
+  });
+  await controller.initialize();
+  assert.equal(created, 0);
+  assert.equal(controller.getState().session.sessionId, 'session-chat');
+  assert.equal(
+    [...memory.values()].includes('session-chat'),
+    true,
+  );
+  controller.destroy();
 });

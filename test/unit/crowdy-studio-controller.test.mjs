@@ -119,6 +119,9 @@ function providerFor(initial = project()) {
       current.updatedAt = current.revision.savedAt;
       return structuredClone(current);
     },
+    replace(next) {
+      current = structuredClone(next);
+    },
     async savePersonalLibraryFile(input) {
       librarySaves.push(structuredClone(input));
       return {
@@ -638,5 +641,64 @@ test('usage, wallet, logs, runs, and invoke feed the monitoring surfaces', async
       paramsJson: '{"x":1}',
     },
   ]);
+  controller.destroy();
+});
+
+test('pullRemoteAgentRevision installs a newer durable revision into the editor', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const controller = new CrowdyStudioController(
+    options(provider, playerCompute(), { autosaveMs: 10_000 }),
+  );
+  await controller.initialize();
+  assert.equal(controller.getState().project.revision.id, 'r1');
+
+  const next = structuredClone(controller.getState().project);
+  next.revision = { id: 'r9', savedAt: '2026-08-21T00:00:00Z' };
+  next.files = next.files.map((file) =>
+    file.target === 'CLIENT' && file.path === 'src/lib.rs'
+      ? { ...file, content: 'fn client() { crowdy::api::draw_box(); }' }
+      : file,
+  );
+  provider.replace(next);
+
+  assert.equal(await controller.pullRemoteAgentRevision(), 'adopted');
+  assert.equal(controller.getState().project.revision.id, 'r9');
+  assert.equal(
+    controller.getState().project.files.find(
+      (file) => file.target === 'CLIENT' && file.path === 'src/lib.rs',
+    ).content,
+    'fn client() { crowdy::api::draw_box(); }',
+  );
+  assert.equal(controller.getState().saveState, 'SAVED');
+  assert.equal(await controller.pullRemoteAgentRevision(), 'unchanged');
+  controller.destroy();
+});
+
+test('pullRemoteAgentRevision skips while the human has unsaved edits', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const controller = new CrowdyStudioController(
+    options(provider, playerCompute(), { autosaveMs: 10_000 }),
+  );
+  await controller.initialize();
+  controller.updateFile('CLIENT', 'src/lib.rs', 'fn dirty() {}');
+
+  const next = structuredClone(await provider.getProject());
+  next.revision = { id: 'r9', savedAt: '2026-08-21T00:00:00Z' };
+  next.files = next.files.map((file) =>
+    file.target === 'CLIENT' && file.path === 'src/lib.rs'
+      ? { ...file, content: 'fn from_agent() {}' }
+      : file,
+  );
+  provider.replace(next);
+
+  assert.equal(await controller.pullRemoteAgentRevision(), 'skipped');
+  assert.equal(
+    controller.getState().project.files.find(
+      (file) => file.target === 'CLIENT' && file.path === 'src/lib.rs',
+    ).content,
+    'fn dirty() {}',
+  );
   controller.destroy();
 });

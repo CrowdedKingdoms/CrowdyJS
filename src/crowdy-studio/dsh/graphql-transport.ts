@@ -8,6 +8,7 @@
 import type { GraphQLClient } from '../../client.js';
 import type {
   CrowdyStudioDshMessage,
+  CrowdyStudioDshMessageKind,
   CrowdyStudioDshSessionSummary,
   CrowdyStudioDshTransport,
 } from './controller.js';
@@ -45,11 +46,19 @@ const SEND_MESSAGE = `
   }
 `;
 
+const CANCEL = `
+  mutation CrowdyStudioDshCancel($input: CancelCrowdyStudioDshSessionInput!) {
+    crowdyStudioDshCancel(input: $input) {
+      ${SESSION_FIELDS}
+    }
+  }
+`;
+
 const HISTORY = `
   query CrowdyStudioDshHistory($sessionId: String!, $maxMessages: Float) {
     crowdyStudioDshHistory(sessionId: $sessionId, maxMessages: $maxMessages) {
       session { ${SESSION_FIELDS} }
-      messages { seq role text }
+      messages { seq role kind title text }
     }
   }
 `;
@@ -71,18 +80,45 @@ function mapSession(raw: {
   };
 }
 
+const KINDS: readonly CrowdyStudioDshMessageKind[] = [
+  'user',
+  'assistant',
+  'tool',
+  'todo',
+  'thinking',
+  'system',
+  'turn-end',
+  'error',
+  'question',
+];
+
 function mapMessage(raw: {
   seq: number;
   role: string;
+  kind?: string | null;
+  title?: string | null;
   text: string;
 }): CrowdyStudioDshMessage {
   const role = raw.role.toUpperCase();
+  const mappedRole =
+    role === 'USER' || role === 'ASSISTANT' || role === 'SYSTEM'
+      ? role
+      : 'UNKNOWN';
+  const kindRaw = (raw.kind ?? '').toLowerCase();
+  const kind = KINDS.includes(kindRaw as CrowdyStudioDshMessageKind)
+    ? (kindRaw as CrowdyStudioDshMessageKind)
+    : mappedRole === 'USER'
+      ? 'user'
+      : mappedRole === 'ASSISTANT'
+        ? 'assistant'
+        : mappedRole === 'SYSTEM'
+          ? 'system'
+          : 'system';
   return {
     seq: raw.seq,
-    role:
-      role === 'USER' || role === 'ASSISTANT' || role === 'SYSTEM'
-        ? role
-        : 'UNKNOWN',
+    role: mappedRole,
+    kind,
+    title: raw.title ?? null,
     text: raw.text,
   };
 }
@@ -137,6 +173,17 @@ export class CrowdyStudioDshGraphQLTransport
       },
     });
     return mapSession(data.crowdyStudioDshSendMessage);
+  }
+
+  async cancel(input: {
+    sessionId: string;
+  }): Promise<CrowdyStudioDshSessionSummary> {
+    const data = await this.graphql.query<{
+      crowdyStudioDshCancel: Parameters<typeof mapSession>[0];
+    }>(CANCEL, {
+      input: { sessionId: input.sessionId },
+    });
+    return mapSession(data.crowdyStudioDshCancel);
   }
 
   async history(input: {

@@ -67,11 +67,31 @@ export {
   type CrowdyStudioNewProjectOptions,
 } from './starter-projects.js';
 export {
+  agentChatRequiresBuildMode,
+  extractDiagnosticSourceSnippet,
+  formatDiagnosticsForAgentChat,
+  isParseStyleDiagnosticMessage,
   parseRustcDiagnostics,
+  DIAGNOSTIC_SOURCE_WINDOW_RADIUS,
   type CrowdyStudioDiagnostic,
   type CrowdyStudioDiagnosticSeverity,
   type CrowdyStudioDiagnosticSource,
+  type DiagnosticSourceSnippet,
+  type FormatDiagnosticsOptions,
 } from './diagnostics.js';
+export {
+  formatRuntimeFailureForAgentChat,
+  formatRuntimeFailureDisplay,
+  parseRuntimeFailureFromExtensions,
+  type RuntimeFailureCause,
+  type RuntimeFailureEnvelope,
+} from './runtime-failure.js';
+export {
+  extractEnclosingRustBlock,
+  sha256DigestHex,
+  sha256DigestHexSync,
+  type ExtractedRustBlock,
+} from './rust-block-extract.js';
 export {
   isCurrentDiagnosticVersion,
   type MonacoCrowdyStudioEditorOptions,
