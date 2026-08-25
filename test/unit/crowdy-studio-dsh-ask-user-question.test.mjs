@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const {
+  decodeAskUserQuestionMessage,
+  encodeAskUserQuestionMessage,
+  formatAskUserQuestionBatchReply,
+  formatAskUserQuestionStructuredAnswers,
   looksLikeAskUserQuestion,
   parseAskUserQuestions,
 } = await import('../../dist/crowdy-studio/dsh/ask-user-question.js');
@@ -55,4 +59,46 @@ test('accepts prompt as the question text', () => {
   );
   assert.ok(questions);
   assert.equal(questions[0].question, 'Which host call?');
+});
+
+test('batches every question with its answer into one user reply', () => {
+  const questions = parseAskUserQuestions(
+    JSON.stringify({
+      questions: [
+        {
+          id: 'where',
+          question: 'Where were you expecting the effect?',
+          options: [{ label: 'On the voxel world' }, { label: 'On a HUD overlay' }],
+        },
+        {
+          id: 'next',
+          question: 'How would you like me to proceed?',
+          options: [{ label: 'Make it visible in the world (Recommended)' }],
+        },
+      ],
+    }),
+  );
+  assert.ok(questions);
+  const reply = formatAskUserQuestionBatchReply([
+    { question: questions[0], option: questions[0].options[0] },
+    { question: questions[1], option: questions[1].options[0] },
+  ]);
+  assert.equal(
+    reply,
+    'Where were you expecting the effect?\nOn the voxel world\n\nHow would you like me to proceed?\nMake it visible in the world (Recommended)',
+  );
+  const structured = formatAskUserQuestionStructuredAnswers([
+    { question: questions[0], option: questions[0].options[0] },
+    { question: questions[1], option: questions[1].options[0] },
+  ]);
+  assert.deepEqual(structured, {
+    answers: [
+      { id: 'where', selected: ['On the voxel world'] },
+      { id: 'next', selected: ['Make it visible in the world (Recommended)'] },
+    ],
+  });
+  const encoded = encodeAskUserQuestionMessage(reply, structured);
+  const decoded = decodeAskUserQuestionMessage(encoded);
+  assert.equal(decoded.display, reply);
+  assert.deepEqual(decoded.answers, structured.answers);
 });

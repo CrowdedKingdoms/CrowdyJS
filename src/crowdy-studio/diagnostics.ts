@@ -112,17 +112,20 @@ export function parseRustcDiagnostics(
   });
 }
 
+const HOST_FS_REMINDER =
+  'Never read `/home`, `/home/ubuntu`, or any host OS path — those are not the Studio project (a read of `/home/ubuntu` is correctly blocked). Use the Target/Path in this seed: CLIENT `src/lib.rs` is `client/src/lib.rs`; SERVER `src/lib.rs` is `server/src/lib.rs`.';
+
 const DEFAULT_AGENT_CHAT_INTRO =
-  'Fix these Crowdy Studio Problems. Use read/write/edit on the project files. After each write the human will Test draft. Do not add crates to clear unresolved imports; rewrite to crowdy::api::* only (SERVER: crowdy::api::voxel_set for world writes).';
+  'Fix these Crowdy Studio Problems. Use read/write/edit on the project files (`client/` and `server/` under the Studio mount). Never read `/home` or `/home/ubuntu`. After each write the human will Test draft. Do not add crates. Use only functions in the harness SDK index (`sdk_lookup`); if none match, remove the call rather than inventing a name.';
 
 const DEFAULT_SINGLE_PROBLEM_INTRO =
   'Fix ONLY this one Crowdy Studio problem. Do not mention or anticipate other compile errors — one edit, one diagnostic.';
 
 const SINGLE_PROBLEM_WORKFLOW =
-  'You must edit this file in this turn (read, then write or edit). If BEGIN_SOURCE is present, that is the editor buffer. After the write, the human will Test draft. If compile still fails, use the Problems list — do not add crates; rewrite to crowdy::api::* only.';
+  `Read this file, then write or edit it — or remove an invented call if no SDK function matches. ${HOST_FS_REMINDER} If BEGIN_SOURCE is present, that is the editor buffer. After the write, the human will Test draft. If rustc says cannot find function X, call sdk_lookup with X before guessing. Do not add crates.`;
 
 const SERVER_CLOSED_WORLD_REMINDER =
-  'SERVER closed-world: world block writes use crowdy::api::voxel_set((cx,cy,cz), (vx,vy,vz), block_i32, None) (4-arg horse pattern) — not voxel_set::set_block, string block names, or invented SDK paths.';
+  'SERVER world writes: crowdy::api::voxel_set((cx,cy,cz), (vx,vy,vz), block_i32, None) — 4-arg. Confirm any other name with sdk_lookup; do not invent paths like voxel_set::set_block or crowdy::spawn.';
 
 const PARSE_ERROR_NOTE =
   'Note: parse error — unmatched delimiters need surrounding source. The attached window (or full file if small) is the editor buffer; patch this file only.';

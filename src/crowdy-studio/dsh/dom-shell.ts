@@ -8,10 +8,15 @@ import {
 import type { StudioLayoutController } from '../layout.js';
 import {
   ASK_USER_CUSTOM_OPTION,
-  formatAskUserQuestionReply,
   looksLikeAskUserQuestion,
   parseAskUserQuestions,
+  type AskUserQuestion,
 } from './ask-user-question.js';
+import {
+  AskUserQuestionWizard,
+  questionWizardFromSelectValue,
+} from './question-wizard.js';
+import { dshTranscriptRenderKey } from './transcript-key.js';
 import { fillMarkdown } from './markdown.js';
 
 export interface CrowdyStudioDshDomShellOptions {
@@ -228,7 +233,7 @@ export class CrowdyStudioDshDomShell {
       this.sessionSelect.append(option);
     }
 
-    const transcriptKey = transcriptRenderKey(state);
+    const transcriptKey = dshTranscriptRenderKey(state);
     if (transcriptKey !== this.lastTranscriptKey) {
       const pinnedToBottom =
         this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight <
@@ -374,10 +379,9 @@ function renderQuestion(
 
   const heading = document.createElement('header');
   heading.className = 'ck-crowdy-studio-dsh-question-kicker';
-  heading.textContent = questions.length > 1 ? 'Questions' : 'Question';
   card.append(heading);
 
-  const items =
+  const items: AskUserQuestion[] =
     questions.length > 0
       ? questions
       : [
@@ -388,23 +392,110 @@ function renderQuestion(
           },
         ];
 
+  if (message.answeredText) {
+    return renderAnsweredQuestion(card, heading, items, message.answeredText);
+  }
+
+  const wizard = new AskUserQuestionWizard(items);
+  const prompts: HTMLElement[] = [];
+
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'ck-crowdy-studio-dsh-question-back';
+  back.textContent = 'Back';
+
+  const submit = document.createElement('button');
+  submit.type = 'button';
+  submit.className = 'ck-crowdy-studio-dsh-question-submit';
+  submit.disabled = true;
+
+  const syncStep = (): void => {
+    const view = wizard.view;
+    heading.textContent = view.heading;
+    prompts.forEach((prompt, index) => {
+      prompt.hidden = index !== view.step;
+    });
+    back.hidden = !view.backVisible;
+    submit.textContent = view.submitLabel;
+    submit.disabled = !view.submitEnabled;
+  };
+
   for (const question of items) {
-    card.append(renderQuestionPrompt(question, options));
+    const prompt = renderQuestionPrompt(question, {
+      onChange: (value, customText) => {
+        questionWizardFromSelectValue(wizard, value, customText);
+        syncStep();
+      },
+      onSubmit: () => submit.click(),
+    });
+    prompts.push(prompt.element);
+    card.append(prompt.element);
+  }
+
+  back.addEventListener('click', () => {
+    wizard.back();
+    syncStep();
+  });
+
+  submit.addEventListener('click', () => {
+    if (submit.disabled) return;
+    const payload = wizard.continue();
+    syncStep();
+    if (payload) options.onAnswer(payload);
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'ck-crowdy-studio-dsh-question-actions';
+  actions.append(back, submit);
+  card.append(actions);
+  syncStep();
+  return card;
+}
+
+function renderAnsweredQuestion(
+  card: HTMLElement,
+  heading: HTMLElement,
+  questions: AskUserQuestion[],
+  answeredText: string,
+): HTMLElement {
+  card.dataset.answered = 'true';
+  heading.textContent = 'Answers';
+  const pairs = answeredText.split(/\n\n+/).map((block) => {
+    const [question = '', ...rest] = block.split('\n');
+    return { question: question.trim(), answer: rest.join('\n').trim() };
+  });
+  questions.forEach((question, index) => {
+    const pair =
+      pairs.find((item) => item.question === question.question) ?? pairs[index];
+    const block = document.createElement('div');
+    block.className = 'ck-crowdy-studio-dsh-question-block';
+    const prompt = document.createElement('p');
+    prompt.className = 'ck-crowdy-studio-dsh-question-prompt';
+    prompt.textContent = question.question;
+    const answer = document.createElement('p');
+    answer.className = 'ck-crowdy-studio-dsh-question-answer';
+    answer.textContent = pair?.answer || answeredText;
+    block.append(prompt, answer);
+    card.append(block);
+  });
+  if (questions.length === 0) {
+    const body = document.createElement('p');
+    body.className = 'ck-crowdy-studio-dsh-question-answer';
+    body.textContent = answeredText;
+    card.append(body);
   }
   return card;
 }
 
 function renderQuestionPrompt(
-  question: {
-    id: string;
-    question: string;
-    options: Array<{ label: string; description: string }>;
-  },
+  question: AskUserQuestion,
   options: {
-    busy: boolean;
-    onAnswer: (text: string) => void;
+    onChange: (value: string, customText: string) => void;
+    onSubmit: () => void;
   },
-): HTMLElement {
+): {
+  element: HTMLElement;
+} {
   const block = document.createElement('div');
   block.className = 'ck-crowdy-studio-dsh-question-block';
 
@@ -441,58 +532,21 @@ function renderQuestionPrompt(
   custom.hidden = true;
   custom.disabled = false;
 
-  const submit = document.createElement('button');
-  submit.type = 'button';
-  submit.className = 'ck-crowdy-studio-dsh-question-submit';
-  submit.textContent = 'Continue';
-  submit.disabled = true;
-
-  const syncSubmit = (): void => {
-    const usingCustom = select.value === ASK_USER_CUSTOM_OPTION;
-    custom.hidden = !usingCustom;
-    submit.disabled =
-      !select.value || (usingCustom && !custom.value.trim());
+  const syncPrompt = (): void => {
+    custom.hidden = select.value !== ASK_USER_CUSTOM_OPTION;
+    options.onChange(select.value, custom.value);
   };
-  select.addEventListener('change', syncSubmit);
-  custom.addEventListener('input', syncSubmit);
+  select.addEventListener('change', syncPrompt);
+  custom.addEventListener('input', syncPrompt);
   custom.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      submit.click();
+      options.onSubmit();
     }
   });
-  submit.addEventListener('click', () => {
-    if (submit.disabled) return;
-    const usingCustom = select.value === ASK_USER_CUSTOM_OPTION;
-    const picked =
-      !usingCustom && select.value !== ''
-        ? (question.options[Number(select.value)] ?? null)
-        : null;
-    const reply = formatAskUserQuestionReply({
-      question,
-      option: picked,
-      customText: usingCustom ? custom.value : '',
-    });
-    if (!reply) return;
-    options.onAnswer(reply);
-  });
 
-  block.append(prompt, select, custom, submit);
-  return block;
-}
-
-function transcriptRenderKey(state: CrowdyStudioDshState): string {
-  return JSON.stringify({
-    busy: state.busy,
-    sessionId: state.activeSessionId,
-    empty: state.messages.length === 0,
-    messages: state.messages.map((message) => [
-      message.seq,
-      message.kind,
-      message.title,
-      message.text,
-    ]),
-  });
+  block.append(prompt, select, custom);
+  return { element: block };
 }
 
 function renderWorking(label: string): HTMLElement {

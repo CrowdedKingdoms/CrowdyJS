@@ -179,12 +179,18 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-dsh-question{display:grid;gap:10px;border:1px solid #eab308;border-radius:12px;background:#422006;padding:10px 12px;color:#fde68a}
 .ck-crowdy-studio-dsh-question-kicker{margin:0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#facc15}
 .ck-crowdy-studio-dsh-question-block{display:grid;gap:8px}
+.ck-crowdy-studio-dsh-question-block[hidden]{display:none}
+.ck-crowdy-studio-dsh-question-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .ck-crowdy-studio-dsh-question-prompt{margin:0;color:#fff7ed;font-size:13px;line-height:1.5;white-space:pre-wrap}
+.ck-crowdy-studio-dsh-question-answer{margin:0;color:#fde68a;font-size:13px;font-weight:650;line-height:1.45;white-space:pre-wrap}
+.ck-crowdy-studio-dsh-question[data-answered="true"]{border-color:#ca8a04}
 .ck-crowdy-studio-dsh-question-select{width:100%;border:1px solid #ca8a04;border-radius:8px;background:#1c1917;color:#fffbeb;padding:8px 10px;font-size:13px}
 .ck-crowdy-studio-dsh-question-custom{width:100%;min-height:52px;resize:vertical;border:1px solid #ca8a04;border-radius:8px;background:#1c1917;color:#fffbeb;padding:8px 10px;font:inherit;font-size:13px;line-height:1.45}
 .ck-crowdy-studio-dsh-question-custom:focus,.ck-crowdy-studio-dsh-question-select:focus{outline:2px solid #facc15;outline-offset:1px}
 .ck-crowdy-studio-dsh-question-submit{justify-self:start;border:0;border-radius:999px;background:#eab308;color:#1c1917;font-weight:650;font-size:12px;padding:6px 12px;cursor:pointer}
 .ck-crowdy-studio-dsh-question-submit:disabled{opacity:.4;cursor:default}
+.ck-crowdy-studio-dsh-question-back{border:1px solid #ca8a04;border-radius:999px;background:transparent;color:#fde68a;font-weight:650;font-size:12px;padding:6px 12px;cursor:pointer}
+.ck-crowdy-studio-dsh-question-back[hidden]{display:none}
 .ck-crowdy-studio-dsh-live{display:flex;align-items:center;gap:6px;min-width:0;flex:1;max-width:42%;min-height:22px;padding:2px 8px;border-radius:999px;background:#1e1b4b;color:#c7d2fe;font-size:11px;font-weight:650}
 .ck-crowdy-studio-dsh-live[hidden]{display:none}
 .ck-crowdy-studio-dsh-working{display:flex;align-items:center;gap:10px;flex:none;min-height:36px;padding:8px 12px;border-top:1px solid var(--dsh-line);background:#12131a;color:var(--dsh-brand);font-size:12px;font-weight:600}

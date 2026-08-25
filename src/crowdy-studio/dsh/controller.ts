@@ -5,7 +5,13 @@
  * backend (game-api → local dsh web host).
  */
 
-import { looksLikeAskUserQuestion } from './ask-user-question.js';
+import {
+  decodeAskUserQuestionMessage,
+  looksLikeAskUserQuestion,
+} from './ask-user-question.js';
+import { pinAskUserAnswers } from './pin-answers.js';
+
+export { pinAskUserAnswers } from './pin-answers.js';
 
 export type CrowdyStudioDshConnectionStatus =
   | 'idle'
@@ -38,6 +44,8 @@ export interface CrowdyStudioDshMessage {
   kind: CrowdyStudioDshMessageKind;
   title: string | null;
   text: string;
+  /** Submitted Q+A pinned to this question card. */
+  answeredText?: string;
 }
 
 export interface CrowdyStudioDshState {
@@ -88,6 +96,12 @@ export interface CrowdyStudioDshControllerOptions {
   /** Called each time a session is created or a message is sent, so the dock always targets the open project. */
   resolveProjectId: () => string | null | undefined;
   pollIntervalMs?: number;
+  /**
+   * After the last card is a finished assistant reply and history has not
+   * grown for this long, drop Writing. DSH often omits `turn/end`.
+   * Mid-turn tool cards arriving sooner keep the badge up.
+   */
+  quietSettleMs?: number;
   /** Remember the last Harness session so Studio remount can reopen it. */
   sessionMemory?: CrowdyStudioDshSessionMemory;
 }
@@ -109,6 +123,10 @@ export class CrowdyStudioDshController {
   private disposed = false;
   private waitGeneration = 0;
   private pendingUser: CrowdyStudioDshMessage | null = null;
+  /** True only while this tab is waiting on a prompt it sent. Restore/poll must not inherit it. */
+  private waitingForTurn = false;
+  private historyKey = '';
+  private historyQuietSince = 0;
 
   constructor(private readonly options: CrowdyStudioDshControllerOptions) {}
 
@@ -164,6 +182,7 @@ export class CrowdyStudioDshController {
   async selectSession(sessionId: string): Promise<void> {
     this.patch({ activeSessionId: sessionId, lastError: null });
     this.pendingUser = null;
+    this.waitingForTurn = false;
     try {
       const history = await this.options.transport.history({ sessionId });
       this.applyHistory(history);
@@ -177,8 +196,11 @@ export class CrowdyStudioDshController {
   }
 
   async sendMessage(content: string): Promise<void> {
-    const text = content.trim();
-    if (!text) return;
+    const encoded = content.trim();
+    if (!encoded) return;
+    const decoded = decodeAskUserQuestionMessage(encoded);
+    const text = decoded.display.trim() || encoded;
+    const waitingOnQuestion = decoded.answers !== null;
     let sessionId = this.state.activeSessionId;
     if (!sessionId) {
       await this.createSession();
@@ -194,6 +216,7 @@ export class CrowdyStudioDshController {
       text,
     };
     this.pendingUser = optimistic;
+    this.waitingForTurn = true;
     const generation = ++this.waitGeneration;
     this.patch({
       messages: mergePendingUser(this.state.messages, optimistic),
@@ -204,18 +227,25 @@ export class CrowdyStudioDshController {
     try {
       await this.options.transport.sendMessage({
         sessionId,
-        content: text,
+        content: encoded,
         idempotencyKey: `dsh-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       });
       // Wait for THIS prompt to land, then for its reply. A prior turn that
       // already has tool errors must not look "settled" and drop the bubble.
-      await this.waitForAssistant(sessionId, generation, text);
+      await this.waitForAssistant(sessionId, generation, text, waitingOnQuestion);
     } catch (error) {
+      this.waitingForTurn = false;
+      this.pendingUser = null;
       this.patch({
         lastError: error instanceof Error ? error.message : String(error),
+        busy: false,
       });
     } finally {
-      if (this.waitGeneration === generation && this.turnHasSettled(text)) {
+      if (
+        this.waitGeneration === generation &&
+        (this.turnHasSettled(text) || !this.waitingForTurn)
+      ) {
+        this.waitingForTurn = false;
         this.patch({ busy: false });
       }
     }
@@ -226,6 +256,7 @@ export class CrowdyStudioDshController {
     const cancel = this.options.transport.cancel;
     if (!sessionId || !cancel) return;
     const generation = ++this.waitGeneration;
+    this.waitingForTurn = false;
     try {
       await cancel({ sessionId });
       const history = await this.options.transport.history({ sessionId });
@@ -302,20 +333,48 @@ export class CrowdyStudioDshController {
     }
   }
 
+  private async readHistory(sessionId: string): Promise<{
+    session: CrowdyStudioDshSessionSummary;
+    messages: CrowdyStudioDshMessage[];
+  }> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await this.options.transport.history({ sessionId });
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/Network error|Failed to fetch|Failed to load|ECONNREFUSED|ECONNRESET/i.test(message)) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(String(lastError ?? 'Harness history failed'));
+  }
+
   private async waitForAssistant(
     sessionId: string,
     generation: number,
     sentText: string,
+    waitingOnQuestion = false,
   ): Promise<void> {
     const warnAt = Date.now() + 120_000;
     let warned = false;
     while (!this.disposed) {
       if (this.waitGeneration !== generation) return;
-      const history = await this.options.transport.history({ sessionId });
+      const history = await this.readHistory(sessionId);
       if (this.waitGeneration !== generation) return;
       this.applyHistory(history);
-      if (turnSettledAfter(history.messages, sentText)) {
+      if (
+        turnSettledAfter(history.messages, sentText) ||
+        (waitingOnQuestion && dshQuestionTurnContinued(history.messages)) ||
+        !this.waitingForTurn
+      ) {
         this.pendingUser = null;
+        this.waitingForTurn = false;
         return;
       }
       if (!warned && Date.now() >= warnAt) {
@@ -360,12 +419,35 @@ export class CrowdyStudioDshController {
     ) {
       this.pendingUser = null;
     }
+    const key = dshHistoryFingerprint(messages);
+    const now = Date.now();
+    if (key !== this.historyKey) {
+      this.historyKey = key;
+      this.historyQuietSince = now;
+    }
+    const quietMs = now - this.historyQuietSince;
+    const quietLimit = this.options.quietSettleMs ?? 2_500;
+    if (
+      this.waitingForTurn &&
+      !this.pendingUser &&
+      dshLastCardIsFinishedAssistant(messages) &&
+      quietMs >= quietLimit
+    ) {
+      this.waitingForTurn = false;
+    }
     const awaiting = this.pendingUser?.text ?? lastUserText(messages);
     const settled = awaiting ? turnSettledAfter(messages, awaiting) : true;
+    // A finished assistant reply is not a live turn. After refresh, DSH may
+    // have no turn/end (host restarted) even though nothing is generating.
+    const busy = Boolean(this.pendingUser)
+      ? true
+      : this.waitingForTurn
+        ? !settled
+        : dshTranscriptLooksActive(messages);
     this.patch({
       messages,
       sessions: this.upsertSession(history.session),
-      busy: Boolean(this.pendingUser) || (awaiting ? !settled : false),
+      busy,
     });
   }
 
@@ -447,15 +529,17 @@ export function mergePendingUser(
   messages: CrowdyStudioDshMessage[],
   pending: CrowdyStudioDshMessage | null,
 ): CrowdyStudioDshMessage[] {
-  if (!pending) return messages;
+  if (!pending) return pinAskUserAnswers(messages);
   if (
     messages.some(
-      (message) => message.kind === 'user' && message.text === pending.text,
+      (message) =>
+        (message.kind === 'user' && message.text === pending.text) ||
+        message.answeredText === pending.text,
     )
   ) {
-    return messages;
+    return pinAskUserAnswers(messages);
   }
-  return [...messages, pending];
+  return pinAskUserAnswers([...messages, pending]);
 }
 
 /** True when the latest human prompt has no terminal reply yet. */
@@ -473,8 +557,9 @@ export function dshTurnInProgress(
 }
 
 /**
- * Working-strip visibility. Uses the latest card, so an earlier dumped
- * question JSON does not hide the dots while later Read/Grep cards arrive.
+ * Working-strip visibility. A completed assistant bubble is idle unless this
+ * tab is still waiting (`busy`). Tool/thinking cards can still light the
+ * strip after a dumped question JSON, so later Read/Grep is visible.
  */
 export function dshShouldShowWorking(
   messages: readonly CrowdyStudioDshMessage[],
@@ -485,18 +570,52 @@ export function dshShouldShowWorking(
   if (!last) return false;
   if (last.kind === 'question') return false;
   if (last.kind === 'user') return false;
+  if (last.kind === 'assistant') return false;
   if (last.kind === 'system' && last.text === 'Stopped.') return false;
   if (last.kind === 'error' && last.title === 'Add an OpenRouter API key') {
     return false;
   }
-  if (last.kind === 'assistant' && looksLikeAskUserQuestion(last)) return false;
   return (
     last.kind === 'tool' ||
     last.kind === 'thinking' ||
-    last.kind === 'assistant' ||
     last.kind === 'todo' ||
     last.kind === 'error'
   );
+}
+
+export function dshHistoryFingerprint(
+  messages: readonly CrowdyStudioDshMessage[],
+): string {
+  return messages
+    .map((message) =>
+      [
+        message.seq,
+        message.kind,
+        message.title ?? '',
+        message.text,
+        message.answeredText ?? '',
+      ].join('\u0001'),
+    )
+    .join('\u0002');
+}
+
+export function dshLastCardIsFinishedAssistant(
+  messages: readonly CrowdyStudioDshMessage[],
+): boolean {
+  const last = lastVisibleMessage(messages);
+  if (!last || last.kind !== 'assistant') return false;
+  return !looksLikeAskUserQuestion(last);
+}
+
+/** True when the latest visible card looks like an in-flight tool step. */
+export function dshTranscriptLooksActive(
+  messages: readonly CrowdyStudioDshMessage[],
+): boolean {
+  const last = lastVisibleMessage(messages);
+  if (!last) return false;
+  if (last.kind === 'thinking' || last.kind === 'todo') return true;
+  if (last.kind === 'tool') return true;
+  return false;
 }
 
 function lastVisibleMessage(
@@ -534,13 +653,43 @@ function isIdleToolTitle(title: string): boolean {
   );
 }
 
+/** True once the agent moved on after an ask_user_question card. */
+export function dshQuestionTurnContinued(
+  messages: readonly CrowdyStudioDshMessage[],
+): boolean {
+  let lastQuestionSeq = -1;
+  for (const message of messages) {
+    if (message.kind === 'question' || looksLikeAskUserQuestion(message)) {
+      lastQuestionSeq = message.seq;
+    }
+  }
+  if (lastQuestionSeq < 0) return false;
+  return messages.some((message) => {
+    if (message.seq <= lastQuestionSeq) return false;
+    if (message.kind === 'question' || looksLikeAskUserQuestion(message)) {
+      return false;
+    }
+    return (
+      message.kind === 'assistant' ||
+      message.kind === 'tool' ||
+      message.kind === 'thinking' ||
+      message.kind === 'todo' ||
+      message.kind === 'turn-end' ||
+      message.kind === 'user'
+    );
+  });
+}
+
 export function turnSettledAfter(
   messages: CrowdyStudioDshMessage[],
   sentText: string,
 ): boolean {
   let lastUserSeq = -1;
   for (const message of messages) {
-    if (message.kind === 'user' && message.text === sentText) {
+    if (
+      (message.kind === 'user' && message.text === sentText) ||
+      message.answeredText === sentText
+    ) {
       lastUserSeq = message.seq;
     }
   }

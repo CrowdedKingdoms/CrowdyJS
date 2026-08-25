@@ -74,6 +74,105 @@ export function formatAskUserQuestionReply(input: {
   return '';
 }
 
+export const ASK_USER_ANSWERS_PREFIX = 'CK_DSH_ANSWERS:';
+
+export interface AskUserQuestionStructuredAnswer {
+  id: string;
+  selected: string[];
+  custom?: string;
+}
+
+/** Wire answers `ctx.userQuestions` / `/api/respond` expect. */
+export function formatAskUserQuestionStructuredAnswers(
+  answers: Array<{
+    question: AskUserQuestion;
+    option?: AskUserQuestionOption | null;
+    customText?: string;
+  }>,
+): { answers: AskUserQuestionStructuredAnswer[] } {
+  return {
+    answers: answers.map((input) => {
+      const custom = input.customText?.trim() ?? '';
+      if (custom) {
+        return { id: input.question.id, selected: [], custom };
+      }
+      const label = input.option?.label.trim() ?? '';
+      return { id: input.question.id, selected: label ? [label] : [] };
+    }),
+  };
+}
+
+/** Encode display text plus structured answers for the game-api DSH bridge. */
+export function encodeAskUserQuestionMessage(
+  display: string,
+  structured: { answers: AskUserQuestionStructuredAnswer[] },
+): string {
+  return `${ASK_USER_ANSWERS_PREFIX}${JSON.stringify(structured)}\n\n${display.trim()}`;
+}
+
+export function decodeAskUserQuestionMessage(content: string): {
+  display: string;
+  answers: AskUserQuestionStructuredAnswer[] | null;
+} {
+  const trimmed = content.trim();
+  if (trimmed.startsWith(ASK_USER_ANSWERS_PREFIX)) {
+    const rest = trimmed.slice(ASK_USER_ANSWERS_PREFIX.length);
+    const split = rest.indexOf('\n');
+    const jsonPart = (split === -1 ? rest : rest.slice(0, split)).trim();
+    const display = (split === -1 ? '' : rest.slice(split + 1)).trim();
+    const answers = parseStructuredAnswers(jsonPart);
+    return { display: display || content, answers };
+  }
+  return { display: trimmed, answers: parseStructuredAnswers(trimmed) };
+}
+
+function parseStructuredAnswers(
+  raw: string,
+): AskUserQuestionStructuredAnswer[] | null {
+  try {
+    const parsed = JSON.parse(raw) as { answers?: unknown };
+    if (!Array.isArray(parsed.answers) || parsed.answers.length === 0) {
+      return null;
+    }
+    const answers: AskUserQuestionStructuredAnswer[] = [];
+    for (const item of parsed.answers) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const record = item as Record<string, unknown>;
+      const id = String(record.id ?? '').trim();
+      const selected = Array.isArray(record.selected)
+        ? record.selected.map((value) => String(value).trim()).filter(Boolean)
+        : [];
+      const custom =
+        typeof record.custom === 'string' && record.custom.trim()
+          ? record.custom.trim()
+          : undefined;
+      if (!id || (selected.length === 0 && !custom)) continue;
+      answers.push(custom ? { id, selected, custom } : { id, selected });
+    }
+    return answers.length > 0 ? answers : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One user message for every answered prompt on a question card. */
+export function formatAskUserQuestionBatchReply(
+  answers: Array<{
+    question: AskUserQuestion;
+    option?: AskUserQuestionOption | null;
+    customText?: string;
+  }>,
+): string {
+  return answers
+    .map((input) => {
+      const answer = formatAskUserQuestionReply(input);
+      if (!answer) return '';
+      return `${input.question.question}\n${answer}`;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 export function looksLikeAskUserQuestion(message: {
   kind?: string | null;
   title?: string | null;

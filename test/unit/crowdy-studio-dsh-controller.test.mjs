@@ -9,8 +9,10 @@ const {
   CrowdyStudioDshController,
   mergePendingUser,
   turnSettledAfter,
+  dshQuestionTurnContinued,
   dshMessageLooksLikeMutation,
   dshShouldShowWorking,
+  dshTranscriptLooksActive,
   dshTurnInProgress,
   dshWorkingLabel,
   pickLastDshSession,
@@ -251,6 +253,41 @@ test('turnSettledAfter ignores prior tool errors until this prompt is answered',
   );
 });
 
+test('dshQuestionTurnContinued waits until the agent leaves the question card', () => {
+  const question = {
+    seq: 11,
+    role: 'SYSTEM',
+    kind: 'question',
+    title: 'How should the disco skin become visible?',
+    text: '{"questions":[]}',
+  };
+  assert.equal(dshQuestionTurnContinued([question]), false);
+  assert.equal(
+    dshQuestionTurnContinued([
+      question,
+      { seq: 20, role: 'ASSISTANT', kind: 'assistant', title: null, text: 'Painting the floor.' },
+    ]),
+    true,
+  );
+});
+
+test('finished assistant reply is idle unless this tab is waiting', () => {
+  const messages = [
+    userMessage('Fix ONLY this one Crowdy Studio problem', 10),
+    {
+      seq: 11,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: 'Go ahead and Test draft.',
+    },
+  ];
+  assert.equal(dshTranscriptLooksActive(messages), false);
+  assert.equal(dshShouldShowWorking(messages, false), false);
+  assert.equal(dshShouldShowWorking(messages, true), true);
+  assert.equal(dshWorkingLabel(messages), 'Writing');
+});
+
 test('working strip stays up after a dumped question if later tools arrive', () => {
   const messages = [
     userMessage('Fix ONLY this one Crowdy Studio problem', 10),
@@ -359,6 +396,90 @@ test('restored mid-turn history turns busy back on', async () => {
   await controller.initialize();
   assert.equal(controller.getState().busy, true);
   assert.equal(dshWorkingLabel(controller.getState().messages), 'Glob **/*');
+  controller.destroy();
+});
+
+test('restored finished assistant reply is not busy Writing', async () => {
+  const transport = new FakeTransport();
+  const existing = session({ sessionId: 'sess-done', title: 'Fix ONLY this one Crow' });
+  transport.sessions = [existing];
+  transport.messages.set(existing.sessionId, [
+    userMessage('Fix ONLY this one Crowdy Studio problem', 10),
+    {
+      seq: 11,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: 'Go ahead and Test draft — if Problems still flags this line I will swap it.',
+    },
+  ]);
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+    sessionMemory: {
+      get: () => existing.sessionId,
+      set: () => {},
+    },
+  });
+  await controller.initialize();
+  const state = controller.getState();
+  assert.equal(state.busy, false);
+  assert.equal(dshShouldShowWorking(state.messages, state.busy), false);
+  controller.destroy();
+});
+
+test('sendMessage network failure clears Writing', async () => {
+  const transport = new FakeTransport();
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+  });
+  await controller.initialize();
+  await controller.createSession();
+  transport.sendMessage = async () => {
+    throw new Error('Network error: TypeError: Failed to fetch');
+  };
+  await controller.sendMessage('keep going');
+  const state = controller.getState();
+  assert.equal(state.busy, false);
+  assert.match(state.lastError ?? '', /Failed to fetch/);
+  assert.equal(dshShouldShowWorking(state.messages, state.busy), false);
+  controller.destroy();
+});
+
+test('quiet finished assistant reply drops Writing without turn-end', async () => {
+  const transport = new FakeTransport();
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+    quietSettleMs: 40,
+  });
+  await controller.initialize();
+  await controller.createSession();
+  transport.commitPrompt = function commitPrompt(sessionId, content) {
+    const existing = this.messages.get(sessionId) ?? [];
+    existing.push(userMessage(content, 10));
+    existing.push({
+      seq: 11,
+      role: 'ASSISTANT',
+      kind: 'assistant',
+      title: null,
+      text: 'Go ahead and Test draft.',
+    });
+    this.messages.set(sessionId, existing);
+  };
+  await controller.sendMessage('fix the client');
+  assert.equal(controller.getState().busy, false);
+  assert.equal(
+    dshShouldShowWorking(controller.getState().messages, controller.getState().busy),
+    false,
+  );
   controller.destroy();
 });
 

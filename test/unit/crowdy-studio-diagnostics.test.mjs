@@ -130,6 +130,10 @@ test('formatDiagnosticsForAgentChat singleProblem omits SERVER reminder for CLIE
   assert.match(text, /Target: CLIENT/);
   assert.match(text, /Path: src\/tick\.rs/);
   assert.match(text, /File: client\/src\/tick\.rs:4:1/);
+  assert.match(text, /Never read `\/home`, `\/home\/ubuntu`/);
+  assert.match(text, /CLIENT `src\/lib\.rs` is `client\/src\/lib\.rs`/);
+  assert.match(text, /sdk_lookup/);
+  assert.doesNotMatch(text, /rewrite to crowdy::api::\*/);
   assert.doesNotMatch(text, /voxel_set/);
 });
 
