@@ -63,8 +63,13 @@ not a running service; gameplay data lives in **PostgreSQL + Citus** via
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
   depend on sibling repos at build time.
 - `test/e2e` — live suites; they skip without `CROWDY_*`. Point
-  `CROWDY_HTTP_URL` at the **shared entry origin** (`ck.<tier>.v7.cks-env.com`),
-  not a single datacenter.
+  `CROWDY_HTTP_URL` at the **tier's public origin** — the same value
+  `CROWDY_DEFAULT_HTTP_ORIGIN` in `src/default-origin.ts` carries, e.g.
+  `https://ck.dev.crowdedkingdoms.com` — and not at a single datacenter.
+  This used to say `ck.<tier>.v7.cks-env.com`, the FLEET root. That was the same
+  host on every tier until dev's root moved on 2026-08-25, and it was never the
+  name a client is supposed to hold: an SDK test that dials an origin no
+  customer is given proves the wrong thing works.
 
 ## Core mental model: one endpoint, two tokens, two clients
 
