@@ -20,7 +20,8 @@ export function dshTranscriptRenderKey(state: {
       message.seq,
       message.kind,
       message.title,
-      message.text,
+      message.text.length,
+      message.text.slice(0, 80),
       message.answeredText ?? '',
     ]),
   });

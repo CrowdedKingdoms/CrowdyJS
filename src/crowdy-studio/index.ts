@@ -1,4 +1,12 @@
 export {
+  CrowdyStudioClientLogBuffer,
+  bindClientLogShipper,
+  formatClientLogTail,
+  type CrowdyStudioClientLogLine,
+  type CrowdyStudioClientLogTarget,
+  type CrowdyStudioClientLogTransport,
+} from './client-logs.js';
+export {
   CrowdyStudioController,
   type CrowdyStudioControllerOptions,
   type CrowdyStudioBroker,

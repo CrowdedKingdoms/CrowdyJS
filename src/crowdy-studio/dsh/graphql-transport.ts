@@ -63,6 +63,14 @@ const HISTORY = `
   }
 `;
 
+const APPEND_CLIENT_LOGS = `
+  mutation CrowdyStudioDshAppendClientLogs($input: AppendCrowdyStudioDshClientLogsInput!) {
+    crowdyStudioDshAppendClientLogs(input: $input) {
+      text
+    }
+  }
+`;
+
 function mapSession(raw: {
   sessionId: string;
   appId: string | number;
@@ -207,5 +215,28 @@ export class CrowdyStudioDshGraphQLTransport
       session: mapSession(history.session),
       messages: (history.messages ?? []).map(mapMessage),
     };
+  }
+
+  async appendClientLogs(input: {
+    projectId: string;
+    lines: ReadonlyArray<{
+      at: string;
+      level: number;
+      message: string;
+      target: string;
+    }>;
+  }): Promise<void> {
+    if (!input.projectId.trim() || input.lines.length === 0) return;
+    await this.graphql.query(APPEND_CLIENT_LOGS, {
+      input: {
+        projectId: input.projectId,
+        lines: input.lines.map((line) => ({
+          at: line.at,
+          level: line.level,
+          message: line.message,
+          target: line.target === 'SERVER' ? 'SERVER' : 'CLIENT',
+        })),
+      },
+    });
   }
 }

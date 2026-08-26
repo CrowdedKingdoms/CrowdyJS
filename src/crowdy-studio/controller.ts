@@ -9,6 +9,10 @@ import {
   digestCanonicalJson,
   sha256Digest,
 } from '../crowdy-agent/schema.js';
+import {
+  CrowdyStudioClientLogBuffer,
+  type CrowdyStudioClientLogLine,
+} from './client-logs.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
 import {
   formatRuntimeFailureDisplay,
@@ -162,6 +166,8 @@ export interface CrowdyStudioState {
   usage: CrowdyStudioUsageSnapshot | null;
   wallet: CrowdyStudioWalletSnapshot | null;
   invokeResult: CrowdyStudioInvokeResult | null;
+  /** Last Test draft `crowdy::log` lines from the CLIENT worker. */
+  clientLogs: readonly CrowdyStudioClientLogLine[];
 }
 
 export type CrowdyStudioPlayerCompute = Pick<
@@ -218,6 +224,8 @@ export interface CrowdyStudioControllerOptions {
   brokerFactory?: (options: PlayerCodeBrokerOptions) => CrowdyStudioBroker;
   isOnline?: () => boolean;
   onStateChange?: (state: CrowdyStudioState) => void;
+  /** Fired for each captured `crowdy::log` line during Test draft. */
+  onClientLog?: (line: CrowdyStudioClientLogLine) => void;
 }
 
 export interface CrowdyStudioStopResult {
@@ -260,6 +268,7 @@ export class CrowdyStudioController {
     usage: null,
     wallet: null,
     invokeResult: null,
+    clientLogs: [],
   };
   private readonly listeners = new Set<(state: CrowdyStudioState) => void>();
   private readonly humanEditListeners = new Set<() => void>();
@@ -279,6 +288,7 @@ export class CrowdyStudioController {
   >();
   private pageVisible = true;
   private destroyed = false;
+  private readonly clientLogBuffer = new CrowdyStudioClientLogBuffer();
 
   constructor(private readonly options: CrowdyStudioControllerOptions) {
     if (options.onStateChange) this.listeners.add(options.onStateChange);
@@ -503,7 +513,9 @@ export class CrowdyStudioController {
       runs: [],
       logs: [],
       invokeResult: null,
+      clientLogs: [],
     });
+    this.clientLogBuffer.clear();
     this.restartVisibleSurfacePolling();
   }
 
@@ -1023,10 +1035,12 @@ export class CrowdyStudioController {
     const targets = plan ? [...plan.targets] : projectTargets(project.kind);
     const operation = ++this.operationGeneration;
     this.stopSurfacePolling();
+    this.clientLogBuffer.clear();
     this.update({
       runtime: { phase: draft ? 'TESTING_DRAFT' : 'DEPLOYING_LIVE' },
       buildOutput: '',
       authoritativeDiagnostics: [],
+      clientLogs: [],
     });
     try {
       if (targets.length === 1) {
@@ -1274,6 +1288,7 @@ export class CrowdyStudioController {
       artifactHash: artifact.artifactHash,
       fuelPerDispatch: artifact.fuelPerDispatch,
       onPresentation: this.options.onPresentation,
+      onLog: (level, message) => this.captureClientLog(level, message),
       tickIntervalMs: this.options.clientTickIntervalMs ?? 1_000,
     };
     const broker =
@@ -1709,6 +1724,19 @@ export class CrowdyStudioController {
 
   private setRuntime(phase: CrowdyStudioPhase, message: string): void {
     this.update({ runtime: { phase, message } });
+  }
+
+  private captureClientLog(level: number, message: string): void {
+    this.clientLogBuffer.append({
+      at: new Date().toISOString(),
+      level,
+      message,
+      target: 'CLIENT',
+    });
+    const stored = this.clientLogBuffer.tail(1).slice(-1)[0];
+    if (!stored) return;
+    this.update({ clientLogs: this.clientLogBuffer.tail() });
+    this.options.onClientLog?.(stored);
   }
 
   private update(patch: Partial<CrowdyStudioState>): void {

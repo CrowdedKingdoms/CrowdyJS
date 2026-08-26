@@ -81,6 +81,16 @@ export interface CrowdyStudioDshTransport {
     session: CrowdyStudioDshSessionSummary;
     messages: CrowdyStudioDshMessage[];
   }>;
+  /** Post captured Test draft `crowdy::log` lines to the sidecar ring. */
+  appendClientLogs?(input: {
+    projectId: string;
+    lines: ReadonlyArray<{
+      at: string;
+      level: number;
+      message: string;
+      target: string;
+    }>;
+  }): Promise<void>;
 }
 
 export type CrowdyStudioDshListener = (state: CrowdyStudioDshState) => void;
@@ -377,6 +387,25 @@ export class CrowdyStudioDshController {
         this.waitingForTurn = false;
         return;
       }
+      // Ask Anything while a mux question is open only queues inbox text.
+      // That line never becomes a user card, so this wait would spin forever
+      // and keep the dock pinned on Writing at the top of the transcript.
+      if (
+        !waitingOnQuestion &&
+        dshHasUnansweredQuestion(history.messages) &&
+        !history.messages.some(
+          (message) => message.kind === 'user' && message.text === sentText,
+        )
+      ) {
+        this.pendingUser = null;
+        this.waitingForTurn = false;
+        this.patch({
+          lastError:
+            'Answer the yellow question card. Ask Anything waits until that is submitted.',
+          busy: false,
+        });
+        return;
+      }
       if (!warned && Date.now() >= warnAt) {
         warned = true;
         this.patch({
@@ -401,7 +430,11 @@ export class CrowdyStudioDshController {
           if (this.disposed) return;
           this.applyHistory(history);
         })
-        .catch(() => undefined);
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!/Unknown DSH session/i.test(message)) return;
+          void this.recoverMissingSession(sessionId, message);
+        });
     }, interval);
   }
 
@@ -449,6 +482,27 @@ export class CrowdyStudioDshController {
       sessions: this.upsertSession(history.session),
       busy,
     });
+  }
+
+  private async recoverMissingSession(
+    sessionId: string,
+    message: string,
+  ): Promise<void> {
+    if (this.disposed || this.state.activeSessionId !== sessionId) return;
+    this.pendingUser = null;
+    this.waitingForTurn = false;
+    this.patch({
+      lastError: message,
+      activeSessionId: null,
+      messages: [],
+      busy: false,
+    });
+    try {
+      await this.refreshSessions();
+      await this.restoreLastSession();
+    } catch {
+      // Keep the Unknown-session banner; New starts a mapped session.
+    }
   }
 
   private turnHasSettled(sentText: string): boolean {
@@ -605,6 +659,17 @@ export function dshLastCardIsFinishedAssistant(
   const last = lastVisibleMessage(messages);
   if (!last || last.kind !== 'assistant') return false;
   return !looksLikeAskUserQuestion(last);
+}
+
+/** True when Harness is blocked on an unanswered ask_user_question card. */
+export function dshHasUnansweredQuestion(
+  messages: readonly CrowdyStudioDshMessage[],
+): boolean {
+  return messages.some(
+    (message) =>
+      !message.answeredText &&
+      (message.kind === 'question' || looksLikeAskUserQuestion(message)),
+  );
 }
 
 /** True when the latest visible card looks like an in-flight tool step. */

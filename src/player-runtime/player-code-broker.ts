@@ -56,6 +56,8 @@ export interface PlayerCodeBrokerOptions {
   onHostCall: (call: PlayerCodeHostCall) => Promise<unknown>;
   /** Optional sink for HUD/overlay presentation the mod emits (BWF wires this). */
   onPresentation?: (presentation: PlayerCodePresentation) => void;
+  /** Optional sink for `crowdy::log` lines the glue worker already decoded. */
+  onLog?: (level: number, message: string) => void;
   /** Called when the local circuit breaker trips (repeated traps / rate abuse). */
   onCircuitOpen?: (reason: string) => void;
   workerFactory?: (url: string | URL) => PlayerCodeWorkerLike;
@@ -310,6 +312,12 @@ export class PlayerCodeBroker {
         this.consecutiveTraps = 0;
         this.hardTimeouts = 0;
       }
+      return;
+    }
+    if (raw.type === 'log') {
+      const message = typeof raw.message === 'string' ? raw.message : '';
+      const level = typeof raw.level === 'number' ? raw.level : 2;
+      if (message.trim()) this.options.onLog?.(level, message);
       return;
     }
     if (raw.type !== 'hostcall') return;

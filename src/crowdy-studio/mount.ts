@@ -2,6 +2,7 @@ import {
   CrowdyStudioController,
   type CrowdyStudioControllerOptions,
 } from './controller.js';
+import { bindClientLogShipper } from './client-logs.js';
 import {
   CROWDY_AGENT_TOOL_REGISTRY_V1,
   CrowdyAgentBrowserToolDispatcher,
@@ -122,7 +123,16 @@ export async function mountCrowdyStudio(
     throw new Error('mountCrowdyStudio requires a DOM document');
   }
 
-  const controller = new CrowdyStudioController(options);
+  let controller: CrowdyStudioController;
+  const clientLogShipper = bindClientLogShipper(
+    () => controller.getState().project?.projectId,
+    options.dsh?.transport,
+    options.onClientLog,
+  );
+  controller = new CrowdyStudioController({
+    ...options,
+    onClientLog: clientLogShipper.onClientLog,
+  });
   let agent: CrowdyStudioAgentController | null = null;
   let dsh: CrowdyStudioDshController | null = null;
   let controlLeaseManager: AgentControlLeaseManager | null = null;
@@ -359,6 +369,7 @@ export async function mountCrowdyStudio(
     failedEditor?.dispose();
     shell.dispose();
     unsubscribeHumanEdit();
+    clientLogShipper.dispose();
     agent?.destroy();
     dsh?.destroy();
     controller.destroy();
@@ -384,6 +395,7 @@ export async function mountCrowdyStudio(
       editor = null;
       shell.dispose();
       unsubscribeHumanEdit();
+      clientLogShipper.dispose();
       agent?.destroy();
       agent = null;
       dsh?.destroy();

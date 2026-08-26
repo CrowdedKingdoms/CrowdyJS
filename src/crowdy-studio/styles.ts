@@ -193,6 +193,8 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-dsh-question-back[hidden]{display:none}
 .ck-crowdy-studio-dsh-live{display:flex;align-items:center;gap:6px;min-width:0;flex:1;max-width:42%;min-height:22px;padding:2px 8px;border-radius:999px;background:#1e1b4b;color:#c7d2fe;font-size:11px;font-weight:650}
 .ck-crowdy-studio-dsh-live[hidden]{display:none}
+.ck-crowdy-studio-dsh-question-jump{flex:none;margin:0 12px 8px;border:1px solid #eab308;border-radius:10px;background:#422006;color:#fde68a;font-weight:650;font-size:12px;line-height:1.4;padding:8px 10px;cursor:pointer;text-align:left}
+.ck-crowdy-studio-dsh-question-jump[hidden]{display:none}
 .ck-crowdy-studio-dsh-working{display:flex;align-items:center;gap:10px;flex:none;min-height:36px;padding:8px 12px;border-top:1px solid var(--dsh-line);background:#12131a;color:var(--dsh-brand);font-size:12px;font-weight:600}
 .ck-crowdy-studio-dsh-working[hidden]{display:none}
 .ck-crowdy-studio-dsh-working-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c7d2fe}

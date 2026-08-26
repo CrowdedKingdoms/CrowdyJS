@@ -1,4 +1,5 @@
 import {
+  dshHasUnansweredQuestion,
   dshShouldShowWorking,
   dshWorkingLabel,
   type CrowdyStudioDshController,
@@ -37,6 +38,7 @@ export class CrowdyStudioDshDomShell {
   private readonly live: HTMLElement;
   private readonly liveLabelEl: HTMLElement;
   private readonly errorBanner: HTMLElement;
+  private readonly questionJump: HTMLButtonElement;
   private readonly composer: HTMLTextAreaElement;
   private readonly send: HTMLButtonElement;
   private readonly stop: HTMLButtonElement;
@@ -109,6 +111,16 @@ export class CrowdyStudioDshDomShell {
     this.errorBanner.className = 'ck-crowdy-studio-dsh-error';
     this.errorBanner.hidden = true;
 
+    this.questionJump = button('Question waiting — scroll to answer');
+    this.questionJump.className = 'ck-crowdy-studio-dsh-question-jump';
+    this.questionJump.hidden = true;
+    this.questionJump.addEventListener('click', () => {
+      const card = this.transcript.querySelector('[data-kind="question"]');
+      if (card instanceof HTMLElement) {
+        card.scrollIntoView({ block: 'center', inline: 'nearest' });
+      }
+    });
+
     const form = document.createElement('form');
     form.className = 'ck-crowdy-studio-dsh-composer';
     this.composer = document.createElement('textarea');
@@ -153,6 +165,7 @@ export class CrowdyStudioDshDomShell {
     this.root.append(
       header,
       this.transcript,
+      this.questionJump,
       this.working,
       this.errorBanner,
       form,
@@ -276,12 +289,32 @@ export class CrowdyStudioDshDomShell {
             }),
           );
         }
-        if (pinnedToBottom) {
+        const unanswered = dshHasUnansweredQuestion(state.messages);
+        // Follow the live turn. After Submit, an answered question card must
+        // not yank the viewport back to mid-transcript while tools keep going.
+        if (pinnedToBottom || unanswered || state.busy) {
           this.transcript.scrollTop = this.transcript.scrollHeight;
         } else {
           this.transcript.scrollTop = scrollTop;
         }
+        if (unanswered) {
+          const questionCard = this.transcript.querySelector(
+            '[data-kind="question"]:not([data-answered="true"])',
+          );
+          if (questionCard instanceof HTMLElement) {
+            questionCard.scrollIntoView({ block: 'center', inline: 'nearest' });
+          }
+        }
       }
+    }
+
+    const unanswered = lastUnansweredQuestion(state.messages);
+    this.questionJump.hidden = unanswered === null;
+    if (unanswered) {
+      const title = unanswered.title?.trim();
+      this.questionJump.textContent = title
+        ? `Question: ${title}`
+        : 'Question waiting — scroll to answer';
     }
 
     this.errorBanner.hidden = !state.lastError;
@@ -357,6 +390,19 @@ function renderMessage(
   }
   row.append(bubble);
   return row;
+}
+
+function lastUnansweredQuestion(
+  messages: readonly CrowdyStudioDshMessage[],
+): CrowdyStudioDshMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message || message.answeredText) continue;
+    if (message.kind === 'question' || looksLikeAskUserQuestion(message)) {
+      return message;
+    }
+  }
+  return null;
 }
 
 function questionsFromMessage(message: CrowdyStudioDshMessage) {

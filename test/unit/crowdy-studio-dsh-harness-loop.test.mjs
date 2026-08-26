@@ -23,6 +23,7 @@ const { dshTranscriptRenderKey } = await import(
 );
 const {
   CrowdyStudioDshController,
+  dshHasUnansweredQuestion,
   dshQuestionTurnContinued,
   dshShouldShowWorking,
 } = await import('../../dist/crowdy-studio/dsh/controller.js');
@@ -307,15 +308,12 @@ test('controller shows the Q+A bubble and waits; the wire keeps structured answe
   const mid = controller.getState();
   assert.equal(mid.busy, true);
   assert.equal(transport.prompts[0], payload);
+  const questionCard = mid.messages.find((message) => message.kind === 'question');
+  assert.ok(questionCard?.answeredText?.includes('Paint a disco floor (Recommended)'));
+  assert.ok(questionCard?.answeredText?.includes('On my builder grid'));
   assert.equal(
-    mid.messages.some(
-      (message) =>
-        message.kind === 'user' &&
-        message.text.includes('Paint a disco floor (Recommended)') &&
-        message.text.includes('On my builder grid') &&
-        !message.text.startsWith('CK_DSH_ANSWERS:'),
-    ),
-    true,
+    mid.messages.some((message) => message.kind === 'user'),
+    false,
   );
 
   const history = transport.messages.get(sessionId);
@@ -328,6 +326,37 @@ test('controller shows the Q+A bubble and waits; the wire keeps structured answe
   });
   await pending;
   assert.equal(controller.getState().busy, false);
+  controller.destroy();
+});
+
+test('Ask Anything behind an open question stops Writing instead of spinning', async () => {
+  const transport = new RecordingTransport();
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+    quietSettleMs: 10_000,
+  });
+  await controller.initialize();
+  await controller.createSession();
+  const sessionId = controller.getState().activeSessionId;
+  transport.messages.set(sessionId, [
+    {
+      seq: 11,
+      role: 'SYSTEM',
+      kind: 'question',
+      title: "Which module's draft did you test?",
+      text: JSON.stringify(discoCard),
+    },
+  ]);
+  transport.deferCommit = true;
+
+  await controller.sendMessage('I typed this in Ask Anything');
+  const state = controller.getState();
+  assert.equal(dshHasUnansweredQuestion(state.messages), true);
+  assert.equal(state.busy, false);
+  assert.match(state.lastError ?? '', /yellow question card/i);
   controller.destroy();
 });
 
