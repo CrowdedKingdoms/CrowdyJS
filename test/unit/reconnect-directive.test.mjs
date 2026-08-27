@@ -15,8 +15,8 @@ import { isSameEstate } from '../../dist/binary-relay.js';
 test('accepts a sibling instance in the same estate', () => {
   assert.equal(
     isSameEstate(
-      'wss://ck-api-1.pgc.prod.cp.cks-env.com/realtime',
-      'wss://ck-api-4.pgc.prod.cp.cks-env.com',
+      'wss://ck-api-or-1.prod.crowdedkingdoms.com/realtime',
+      'wss://ck-api-or-4.prod.crowdedkingdoms.com',
     ),
     true,
   );
@@ -25,8 +25,8 @@ test('accepts a sibling instance in the same estate', () => {
 test('accepts the shared load balancer', () => {
   assert.equal(
     isSameEstate(
-      'wss://ck-api-1.pgc.prod.cp.cks-env.com/realtime',
-      'wss://ck.prod.cp.cks-env.com',
+      'wss://ck-api-or-1.prod.crowdedkingdoms.com/realtime',
+      'wss://ck.prod.crowdedkingdoms.com',
     ),
     true,
   );
@@ -42,7 +42,7 @@ test('accepts the identical origin', () => {
 test('refuses an origin outside the estate', () => {
   assert.equal(
     isSameEstate(
-      'wss://ck-api-1.pgc.prod.cp.cks-env.com/realtime',
+      'wss://ck-api-or-1.prod.crowdedkingdoms.com/realtime',
       'wss://evil.example.com',
     ),
     false,
@@ -50,11 +50,11 @@ test('refuses an origin outside the estate', () => {
 });
 
 test('refuses a lookalike that only shares a prefix', () => {
-  // cks-env.com.evil.com must not pass as cks-env.com.
+  // crowdedkingdoms.com.evil.com must not pass as crowdedkingdoms.com.
   assert.equal(
     isSameEstate(
-      'wss://ck.prod.cp.cks-env.com/realtime',
-      'wss://ck.prod.cp.cks-env.com.evil.com',
+      'wss://ck.prod.crowdedkingdoms.com/realtime',
+      'wss://ck.prod.crowdedkingdoms.com.evil.com',
     ),
     false,
   );

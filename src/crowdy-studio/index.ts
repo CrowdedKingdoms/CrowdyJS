@@ -72,6 +72,19 @@ export {
   type CrowdyStudioDiagnosticSource,
 } from './diagnostics.js';
 export {
+  MODEL_LINT_QUERY,
+  modelLintDiagnostics,
+  modelLintSubjectPath,
+  type CrowdyModelLintFinding,
+  type CrowdyModelLintResult,
+} from './model-lint.js';
+export {
+  CrowdyModelLintLog,
+  MODEL_REFUSAL_CODES,
+  modelRefusalFrom,
+  type CrowdyModelRefusal,
+} from './model-lint-log.js';
+export {
   isCurrentDiagnosticVersion,
   type MonacoCrowdyStudioEditorOptions,
 } from './monaco-editor.js';
