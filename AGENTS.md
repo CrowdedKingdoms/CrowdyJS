@@ -95,6 +95,31 @@ not a running service; gameplay data lives in **PostgreSQL + Citus** via
   — which is exactly the evidence that argues "it must be the server". With all
   five set, both tiers pass 33 with 1 skip.
 
+  **ON A COLD-STARTED TIER THE OWNER AND THE OPERATOR ARE THE SAME ACCOUNT.** The
+  org-admin secret survives a rebuild but names an account the dropped database
+  took with it, so `infra-cp/<tier>/org-admin/*` will not authenticate until it is
+  re-provisioned. Point both pairs at `infra-cp/<tier>/admin/ck-operator` and use
+  an app that account owns. Prod after its 2026-08-27 rebuild: **38 pass, 1 skip.**
+
+  **THE ONE SKIP IS `payments: ORG_WALLET_TOPUP checkout`, AND ON PROD IT MUST
+  STAY SKIPPED.** It is gated behind `CROWDY_TEST_PAYMENTS=1` and is sandbox-only.
+  Prod's `paypalEnv` is `live`, so setting that variable there moves real money. A
+  skip normally deserves the same scrutiny as a failure; this is the case where the
+  skip is the correct answer, which is why it says so in its own name.
+
+- **`src/default-origin.ts` IS GENERATED PER BRANCH — NEVER HAND-EDIT IT.**
+  `dev` carries the dev origin, `test` test's, `prod` prod's. Regenerate with
+  `infra-control-plane/scripts/ops/sync-client-origins.mjs --write --tier <tier>`;
+  `check-sdk-default-origin.mjs` refuses a file naming the wrong tier.
+
+  **EVERY MERGE RESOLVES THIS FILE SILENTLY AND CAN GO EITHER WAY.** A back-merge
+  from prod put `tier = 'prod'` on `dev`, and both promotions in the 2026-08-27
+  cycle carried the source branch's origin onto the destination with **no
+  conflict**. The published artifact was fine throughout — the BRANCH had drifted
+  from what it had published. After any merge between branches, regenerate for the
+  DESTINATION tier and run the gate. The SDK pins in `Crowdy-Games` are the same
+  hazard for the same reason: git has no idea these files are per-branch.
+
 ## Core mental model: one endpoint, two tokens, two clients
 
 1. Sign-in (`auth.login` / `auth.register`, magic link, or social/OIDC) yields an
