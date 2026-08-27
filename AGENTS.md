@@ -63,8 +63,37 @@ not a running service; gameplay data lives in **PostgreSQL + Citus** via
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
   depend on sibling repos at build time.
 - `test/e2e` — live suites; they skip without `CROWDY_*`. Point
-  `CROWDY_HTTP_URL` at the **shared entry origin** (`ck.<tier>.v7.cks-env.com`),
-  not a single datacenter.
+  `CROWDY_HTTP_URL` at the **tier's public origin** — the same value
+  `CROWDY_DEFAULT_HTTP_ORIGIN` in `src/default-origin.ts` carries, e.g.
+  `https://ck.dev.crowdedkingdoms.com` — and not at a single datacenter.
+  This used to say `ck.<tier>.v7.cks-env.com`, the FLEET root. That was the same
+  host on every tier until dev's root moved on 2026-08-25, and it was never the
+  name a client is supposed to hold: an SDK test that dials an origin no
+  customer is given proves the wrong thing works.
+
+  **`CROWDY_HTTP_URL` ALONE IS NOT ENOUGH AGAINST A TIER, and the suite does not
+  say so — it fails as if the server were broken.** Five things are required, and
+  three of them have defaults or fallbacks that are right for the local smoke
+  stack and wrong for every deployed tier:
+
+  | variable | against a tier |
+  |---|---|
+  | `CROWDY_HTTP_URL` | `https://ck.<tier>.crowdedkingdoms.com` |
+  | `CROWDY_OWNER_EMAIL` / `_PASSWORD` | `infra-cp/<tier>/org-admin/crowdedkingdomstudios` |
+  | `CROWDY_OPERATOR_EMAIL` / `_PASSWORD` | `infra-cp/<tier>/admin/ck-operator` |
+  | `CROWDY_TEST_APP_ID` | a real app id — **never leave this unset** |
+
+  plus the app's Studio-agent policy, which a rebuilt tier leaves fail-closed:
+  `infra-control-plane/scripts/ops/enable-studio-agent.sh --tier <tier> --app-id <id>`.
+
+  WHY THE TABLE IS WORTH THE SPACE. `CROWDY_TEST_APP_ID` defaults to `'1'`, and no
+  deployed tier has an app numbered 1 — ids are Snowflake53 and sixteen digits
+  long. Unset, the suite asks about an app nobody owns, and the answer is
+  `Missing app permission 'manage_access_tiers'`, which reads as a broken
+  permission model rather than a missing variable. On 2026-08-26 that presented as
+  19 of 34 failing on dev and 21 on test, and survived a from-scratch tier rebuild
+  — which is exactly the evidence that argues "it must be the server". With all
+  five set, both tiers pass 33 with 1 skip.
 
 ## Core mental model: one endpoint, two tokens, two clients
 

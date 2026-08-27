@@ -17,10 +17,10 @@
 export const CROWDY_DEFAULT_TIER = 'prod';
 
 /** The public CK API origin for that tier. */
-export const CROWDY_DEFAULT_HTTP_ORIGIN = 'https://ck.crowdedkingdoms.com';
+export const CROWDY_DEFAULT_HTTP_ORIGIN = 'https://ck.prod.crowdedkingdoms.com';
 
 /** The same host over WebSocket. A scheme is composed; a hostname is looked up. */
-export const CROWDY_DEFAULT_WS_ORIGIN = 'wss://ck.crowdedkingdoms.com';
+export const CROWDY_DEFAULT_WS_ORIGIN = 'wss://ck.prod.crowdedkingdoms.com';
 
 /** The bare hostname, for callers that need to compare rather than dial. */
-export const CROWDY_DEFAULT_HOST = 'ck.crowdedkingdoms.com';
+export const CROWDY_DEFAULT_HOST = 'ck.prod.crowdedkingdoms.com';
