@@ -184,7 +184,7 @@ retired:
   (`buddyTiers`, `graphqlTiers`, `postgresTiers`) are gone; wallets, budgets
   and transactions stay.
 - **Endpoints**: `managementUrl` and `httpUrl` may now be the SAME origin
-  (e.g. `https://ck.test.cks-env.com`); configuring both remains supported
+  (e.g. `https://ck.test.crowdedkingdoms.com`); configuring both remains supported
   and the two-token model (session vs app-scoped) is unchanged.
 
 Everything game-client (auth, users, world/UDP, stores, kit, game model,
