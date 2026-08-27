@@ -4733,7 +4733,7 @@ export type GraphQlServer = {
   memoryUsagePct: Maybe<Scalars['Float']['output']>;
   /** Cloud provider instance id of the underlying host, if known. */
   providerInstanceId: Maybe<Scalars['String']['output']>;
-  /** Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.v7.cks-env.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you. */
+  /** Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.crowdedkingdoms.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you. */
   publicHostname: Maybe<Scalars['String']['output']>;
   /** Public IPv4 address clients use to reach this server, if assigned. */
   publicIp4: Maybe<Scalars['String']['output']>;
