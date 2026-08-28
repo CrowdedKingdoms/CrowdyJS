@@ -156,3 +156,48 @@ test('a logger with no warn method is not a crash', () => {
   const log = new CrowdyModelLintLog();
   assert.equal(log.record({ code: 'OBJECT_QUARANTINED', message: 'q' }), true);
 });
+
+test('a quarantine is recognised on gameModelInvoke, where the code is USER_CODE_ERROR', () => {
+  // THE PATH THAT MATTERS MOST AND WAS MISSED. gameModelInvoke is a user-code boundary, so
+  // the server rebuilds the error from a { code, blame, retryable } triple: the code
+  // becomes USER_CODE_ERROR while the quarantine fields survive. Keying only on
+  // OBJECT_QUARANTINED therefore missed the refusal on the single path a player takes.
+  const refusal = modelRefusalFrom({
+    message: 'This action could not be completed.',
+    extensions: {
+      code: 'USER_CODE_ERROR',
+      blame: 'AUTHOR',
+      retryable: false,
+      quarantinedKind: 'function',
+      quarantinedName: 'probe_notify',
+      quarantineReason: 'notification_channel_foreign: targets another app',
+    },
+  });
+
+  assert.ok(refusal, 'a quarantine on the invoke path must still be recognised');
+  assert.equal(refusal.subject, 'probe_notify');
+  assert.equal(refusal.quarantine.kind, 'function');
+  assert.match(refusal.quarantine.reason, /notification_channel_foreign/);
+});
+
+test('the quarantine reason is first-class, not buried in detail', () => {
+  const refusal = modelRefusalFrom({
+    message: 'quarantined',
+    extensions: {
+      code: 'OBJECT_QUARANTINED',
+      quarantinedName: 'enemy_ai',
+      quarantineReason: 'timer_target_not_autonomous: whatever',
+    },
+  });
+  // `reason` is the only actionable field; reaching it through an untyped bag is how a
+  // developer ends up guessing which of their lint errors did it.
+  assert.equal(refusal.quarantine.reason, 'timer_target_not_autonomous: whatever');
+});
+
+test('an ordinary user-code error is not mistaken for a quarantine', () => {
+  const refusal = modelRefusalFrom({
+    message: 'This action could not be completed.',
+    extensions: { code: 'USER_CODE_ERROR', blame: 'AUTHOR', retryable: false },
+  });
+  assert.equal(refusal, null);
+});

@@ -1,0 +1,22 @@
+# The studio lint query. It lived as an inline template literal in
+# src/crowdy-studio/model-lint.ts, which meant `check:schema` could never validate it:
+# codegen only sees operation documents, so the one query in this SDK that asks the server
+# "is this app's model coherent" was itself unchecked against the schema. It is a document
+# now, and MODEL_LINT_QUERY prints from the generated node so the two cannot drift.
+query CrowdyModelLint($appId: BigInt!) {
+  gameModelLint(appId: $appId) {
+    appId
+    errorCount
+    warningCount
+    clean
+    findings {
+      code
+      severity
+      subjectKind
+      subject
+      message
+      remedy
+      count
+    }
+  }
+}
