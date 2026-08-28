@@ -17,17 +17,25 @@ notifications, the two `NOTIFICATION_CHANNEL_*` lint codes,
 `GmAppDiagnostics`), the `kit/notifications.ts` builders, and a `quarantine`
 field on `CrowdyModelRefusal`. **15.2.0** was the release before it.
 
-**Consumer adoption is behind on purpose.** The nine Crowdy-Games projects are
-still on the 15.0.0 line; nothing downstream does password management (15.1.0)
-or authors model notifications from the SDK (15.3.0). CrowdyCPP's parity pin
-tracks this repo and is on **15.3.0** — read it from
-`CrowdyCPP/package.json`'s `crowdyjsParityTarget` rather than from here.
+**Do not hardcode consumer SDK pins here — they rot.** Ask
+`npm view @crowdedkingdoms/crowdyjs dist-tags` for what npm serves, and in
+Crowdy-Games use `scripts/ci/check-sdk-pins.mjs` /
+`grep '"@crowdedkingdoms/crowdyjs"' */package.json` for what each game actually
+pins. CrowdyCPP's parity pin is `crowdyjsParityTarget` in
+`CrowdyCPP/package.json` — read it there, not from this page.
 
 `dev/vX.Y.Z` / `test/vX.Y.Z` publish
 `X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
 tag moves `latest`. Consumers pin the EXACT prerelease for their tier — never a
 caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
 `gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
+
+**TIER ALIGNMENT (hard rule for consumers).** A consumer branch may only
+reference CrowdyJS artifacts from the **same** tier: Crowdy-Games / CrowdyCPP
+`dev` → `@dev` / the `dev/` tag’s commit; `test` → `@test`; `prod` → `latest`.
+Publishing `prod/vX.Y.Z` does **not** authorize bumping Games-`dev` or
+CPP-`dev` to that plain version — those ladders promote separately
+(`test`↔`test`, `prod`↔`prod`).
 
 **15.0.0 IS A BREAKING MAJOR, AND THIS FILE DESCRIBED THE PREVIOUS ONE FOR A
 DAY.** It **removed `devLogin`** and added **`auth.login` / `auth.register`**.
@@ -53,9 +61,9 @@ Read [README.md](README.md) first. [MIGRATION.md](MIGRATION.md) covers breaking
 changes. This file is the game-concept → API map the README does not repeat.
 
 There is **one origin**. `managementUrl` / `client.management` were removed in
-v14. The `cks-management-api` GitHub repo still exists (unarchived) but is
-not a running service; gameplay data lives in **PostgreSQL + Citus** via
-`cks-game-api`, not galaxy.
+v14. The `cks-management-api` GitHub repo still exists (**archived**) but is
+not a running service and is not a schema source; gameplay data lives in
+**PostgreSQL + Citus** via `cks-game-api`, not galaxy.
 
 ## Repo orientation
 
