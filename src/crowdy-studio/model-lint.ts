@@ -1,3 +1,5 @@
+import { print } from 'graphql';
+import { CrowdyModelLintDocument } from '../generated/graphql.js';
 import type {
   CrowdyStudioDiagnostic,
   CrowdyStudioDiagnosticSeverity,
@@ -46,17 +48,16 @@ export interface CrowdyModelLintResult {
   clean: boolean;
 }
 
-export const MODEL_LINT_QUERY = `
-  query CrowdyModelLint($appId: BigInt!) {
-    gameModelLint(appId: $appId) {
-      appId
-      errorCount
-      warningCount
-      clean
-      findings { code severity subjectKind subject message remedy count }
-    }
-  }
-`;
+/**
+ * The lint query, printed from the generated document rather than written here.
+ *
+ * IT USED TO BE A TEMPLATE LITERAL, and that made it the one query in this SDK that
+ * `check:schema` could not validate: codegen only sees operation documents, so the query
+ * asking "is this app's model coherent" was itself unchecked against the schema it targets.
+ * `gameModelLint` was not even present in the committed SDL. Printing from
+ * `CrowdyModelLintDocument` means the string and the validated document cannot disagree.
+ */
+export const MODEL_LINT_QUERY = print(CrowdyModelLintDocument);
 
 function severityOf(
   finding: CrowdyModelLintFinding,

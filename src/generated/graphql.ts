@@ -3895,6 +3895,10 @@ export type GmAppDiagnostics = {
   failedEvents24h: Scalars['Int']['output'];
   /** Defined functions. */
   functionCount: Scalars['Int']['output'];
+  /** Model-driven notifications emitted in the last 24h, across every function and automation. */
+  notificationsEmitted24h: Scalars['Int']['output'];
+  /** Of those, how many reached nobody: the target channel had no members in this app. Emission is best-effort and cannot fail your function, so this is the only place an undeliverable notification is visible — a non-zero count here beside a healthy run history is the signature of a notification aimed at a channel this app does not own. Check gameModelLint for NOTIFICATION_CHANNEL_FOREIGN, which names the function. Note this does NOT mean delivery is broken: it counts datagrams that were sent to every server successfully and had no recipient. */
+  notificationsUndeliverable24h: Scalars['Int']['output'];
   /** Property rows in the app. */
   propertyCount: Scalars['Int']['output'];
   /** Sessions in the app. */
@@ -4337,7 +4341,7 @@ export type GmFunction = {
   returnType: Maybe<Scalars['String']['output']>;
   /** Declarative one-shot timers armed atomically with the function's mutations. */
   timers: Array<GmFunctionTimer>;
-  /** Non-fatal static-analysis warnings from the last upload. */
+  /** Non-fatal static-analysis warnings, recomputed for this read rather than remembered from the upload. That matters because they are cross-object: a call to a function written later stops being a warning once that function exists, and starts being one again if it is deleted. For the structured form, with a code and a severity per finding, use gameModelLint. */
   warnings: Array<Scalars['String']['output']>;
 };
 
@@ -4467,6 +4471,87 @@ export type GmInvokeResult = {
   /** True if the invocation succeeded; false if it was rejected or errored. */
   success: Scalars['Boolean']['output'];
 };
+
+/** What is wrong, at the granularity a developer would fix. One code per distinguishable remedy: a missing `fn:` target and a missing timer target are both an unresolved name and are kept apart because the second one arms successfully and fails minutes later somewhere else. */
+export enum GmLintCode {
+  /** The app holds containers and declares no types at all — the shape an app takes when it is recreated or moved between organizations, because containers are made on demand by the client and schema is not carried with them. */
+  AppHasNoContainerTypes = 'APP_HAS_NO_CONTAINER_TYPES',
+  /** An automation trigger's filter cannot match, so it will never dispatch. */
+  AutomationTriggerUnmatchable = 'AUTOMATION_TRIGGER_UNMATCHABLE',
+  /** A container names a type this app has not defined. The client cannot bind it, and the only symptom is "no container bound for entity" in the game's own log. */
+  ContainerTypeUndefined = 'CONTAINER_TYPE_UNDEFINED',
+  /** A `fn:` call names a function this app does not define. */
+  FunctionNotDefined = 'FUNCTION_NOT_DEFINED',
+  /** A stored function definition no longer compiles, so it is inert. Only possible for a row written before a validation the compiler enforces now; re-upsert it. */
+  FunctionUncompilable = 'FUNCTION_UNCOMPILABLE',
+  /** A grid builtin was given a mode or axis literal outside its allowed set. */
+  GridLiteralInvalid = 'GRID_LITERAL_INVALID',
+  /** A channel notification names a channel that belongs to a different app. Membership is scoped to the app, so the datagram reaches nobody no matter how healthy delivery is — the shape a model takes when it is copied out of the app it was authored against. Repoint it, or name the channel with `channel_name` so it cannot go stale again. */
+  NotificationChannelForeign = 'NOTIFICATION_CHANNEL_FOREIGN',
+  /** A channel notification names a channel id, or a channel name, that this app does not have. A warning rather than an error because the channel may simply not exist yet. */
+  NotificationChannelUnknown = 'NOTIFICATION_CHANNEL_UNKNOWN',
+  /** An expression references a `$param` the function does not declare. */
+  ParamNotDeclared = 'PARAM_NOT_DECLARED',
+  /** A permission-key literal is not in the runtime_permissions catalog. */
+  PermissionKeyUnknown = 'PERMISSION_KEY_UNKNOWN',
+  /** `self.<key>` is not in the property definitions for the function's container type. */
+  PropertyNotDeclared = 'PROPERTY_NOT_DECLARED',
+  /** A timer's target function does not exist. */
+  TimerTargetMissing = 'TIMER_TARGET_MISSING',
+  /** A timer's target exists but is not autonomousInvocable, so the timer arms and then fails when it fires. */
+  TimerTargetNotAutonomous = 'TIMER_TARGET_NOT_AUTONOMOUS'
+}
+
+/** One problem with one object in the game model, recomputed at read time rather than remembered from a write. */
+export type GmLintFindingType = {
+  __typename?: 'GmLintFindingType';
+  /** What is wrong. */
+  code: GmLintCode;
+  /** How many objects this row stands for, when one finding summarises many (for example a type missing under 40 containers). */
+  count: Maybe<Scalars['Int']['output']>;
+  /** What is wrong, in a sentence. */
+  message: Scalars['String']['output'];
+  /** What to do about it. */
+  remedy: Maybe<Scalars['String']['output']>;
+  /** ERROR is provably broken and gate-eligible; WARNING is reported only. */
+  severity: GmLintSeverity;
+  /** The object's own name — a function name, a container type name — not a rendered label. Group and deduplicate on (code, subject). */
+  subject: Scalars['String']['output'];
+  /** What kind of object this is about. */
+  subjectKind: GmLintSubjectKind;
+};
+
+/** Whether an app's game model hangs together. Every check is recomputed on demand: a stored warning goes stale the moment an unrelated object changes, which is the failure this replaces. */
+export type GmLintResult = {
+  __typename?: 'GmLintResult';
+  /** The app that was linted. */
+  appId: Scalars['BigInt']['output'];
+  /** True when there are no ERROR findings. WARNING findings do not make an app unclean, because most of them are a normal mid-edit state. */
+  clean: Scalars['Boolean']['output'];
+  /** How many findings have severity ERROR. */
+  errorCount: Scalars['Int']['output'];
+  /** Findings, errors first, then by code and subject. */
+  findings: Array<GmLintFindingType>;
+  /** How many findings have severity WARNING. */
+  warningCount: Scalars['Int']['output'];
+};
+
+/** How much a finding is worth doing something about. Only ERROR is ever eligible to gate anything; WARNING is reported and never enforced, because ordinary authoring is transiently inconsistent and a gate that fought it would be worse than the problem. */
+export enum GmLintSeverity {
+  /** Provably broken. No reading of the app makes this fine, and the platform can say so without knowing your intent. */
+  Error = 'ERROR',
+  /** Suspicious and frequently correct anyway — most often because you are mid-edit and the other half is not written yet. */
+  Warning = 'WARNING'
+}
+
+/** What kind of object a finding is about, so results can be grouped without parsing `subject`. */
+export enum GmLintSubjectKind {
+  App = 'APP',
+  Automation = 'AUTOMATION',
+  Container = 'CONTAINER',
+  ContainerType = 'CONTAINER_TYPE',
+  Function = 'FUNCTION'
+}
 
 /** One property write applied during a function invocation (with before/after values). */
 export type GmMutationApplied = {
@@ -5191,7 +5276,7 @@ export type Mutation = {
   cancelSharedSubscription: AppSharedSubscription;
   /** Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout. */
   capturePaypalCheckout: Checkout;
-  /** Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success; throws if the current password is wrong. Existing sessions are not revoked. */
+  /** Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success. Refuses with extensions.code INVALID_CURRENT_PASSWORD (403) when the current password is wrong, and PASSWORD_NOT_SET (409) when the account has no password to change — use setInitialPassword for that, which needs only the session. NEITHER of those means the session is invalid, and neither is UNAUTHENTICATED: both were until v1.60.0, so a client that signs the user out on UNAUTHENTICATED was signing them out over a typo. Existing sessions are not revoked. */
   changePassword: Scalars['Boolean']['output'];
   /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
   claimFreeAppAccess: AppUserAccess;
@@ -5317,7 +5402,7 @@ export type Mutation = {
   crowdyStudioProjectSave: CrowdyStudioProject;
   /** Apply a batch of project-file upserts and deletes in one transaction under one expected project revision. Requires an app-scoped token and exact project ownership. No partial writes survive path, manifest, independent 8-file/64-KiB-file/256-KiB-target caps, aggregate storage, or revision failures. */
   crowdyStudioProjectSaveFiles: CrowdyStudioProject;
-  /** Optimistically save selected private project metadata and increment its monotonic revision. Requires an app-scoped token and exact project ownership. A stale expectedRevision returns CONFLICT; grid affinity remains an authoring hint and never bypasses player-compute deployment checks. */
+  /** Optimistically save selected private project metadata and increment its monotonic revision. Requires an app-scoped token and exact project ownership. A stale expectedRevision is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409) — that exact string, not CONFLICT, which is what an earlier wording of this sentence implied and what one SDK consequently matched on; grid affinity remains an authoring hint and never bypasses player-compute deployment checks. */
   crowdyStudioProjectSaveMetadata: CrowdyStudioProject;
   /** Archive or restore a private project without deleting any source or provenance, using optimistic revision control. Requires an app-scoped token and exact owner match. Archived projects remain readable by their owner but are read-only until restored. */
   crowdyStudioProjectSetArchived: CrowdyStudioProject;
@@ -5483,8 +5568,10 @@ export type Mutation = {
   refreshAppToken: AppTokenResponse;
   /** Request a refund of a paid acquisition (P4b). Allowed only within the refund window and before meaningful use (first install/fetch voids it), capped per buyer; a successful refund credits the wallet, reverses the ledger split, claws back the seller balance, revokes the acquisition, and drains installs. Returns cents refunded. */
   refundPlayerCodeAcquisition: Scalars['Int']['output'];
-  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email (e.g. created via magic link/social), the password is attached pending email confirmation and no session is returned (throws CONFLICT). Public. */
+  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email (e.g. created via magic link/social), the password is attached pending email confirmation and no session is returned, refused with extensions.code EMAIL_ALREADY_REGISTERED (409). It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public. */
   register: AuthResponse;
+  /** OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired. */
+  reinstateOrganization: OrgRetirementType;
   /** Release a one-chunk grid previously created through claimGridChunk. Requires an ordinary app-scoped player token and the caller must still be its current user owner. Refuses foreign grids, studio/marketplace grids, and grids assigned through legacy claimGridOwnership. Atomically removes active install attachments, self-claim ownership, direct/effective ACL rows, and the grid so its chunk can be claimed again. Player modules on the grid are deleted by the grid cascade. */
   releaseClaimedGrid: ReleaseClaimedGridResult;
   /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
@@ -5511,6 +5598,8 @@ export type Mutation = {
   resendConfirmationEmail: Scalars['Boolean']['output'];
   /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call). Existing sessions are not revoked. */
   resetPassword: Scalars['Boolean']['output'];
+  /** OPERATOR ONLY. Retires an organization: sets organizations.status to 'retired', stamps deleted_at, archives its apps, and writes a tombstone to org_retirements. RETIREMENT IS A STATE, NOT A DELETION — no wallet_transactions, org_billing_waivers, app_shared_usage_charges or other ledger row is altered or removed, so an auditor can still reconstruct exactly what this organization spent, with the same joins as before, indefinitely. There is no purge and no retention window, by decision rather than by omission: org ledger rows are retained forever (operator decision, 2026-08-21), so retirement is only ever a state. A retired organization's remaining wallet balance is FROZEN indefinitely by the same decision — held, not refunded and not forfeited — and the amount is recorded on the tombstone. AFTER RETIREMENT the org's API tokens stop authenticating, its members lose every org permission (super admins excepted, so this is reversible), and it is excluded from the caller's organization list — but it is still readable by id and slug, because a retired org that answers like a missing one is worse than one that says what it is. Refuses unless expectedSlug matches the org named by orgId, and refuses an organization holding money unless acknowledgeFrozenBalance is passed. Reverse it with reinstateOrganization. */
+  retireOrganization: OrgRetirementType;
   /** Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. */
   revokeAppAccess: AppUserAccess;
   /** Withdraw consent for an app and immediately invalidate every app-scoped token the authenticated user holds for it, whichever session minted them — the tokens stop authenticating on their next request, not at their next refresh. Atomic: if the tokens cannot be invalidated, consent is left in place and this returns an error, so a successful response is the only state in which access has actually been withdrawn. Does NOT sign the user out: their identity session and their tokens for other apps are untouched. Returns false when there was nothing to revoke (no active grant and no live tokens), which makes a repeat call safe. Requires a SESSION token. */
@@ -5575,7 +5664,7 @@ export type Mutation = {
   setEarlyAccessOverride: User;
   /** Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid. */
   setGridPermissionLimits: GridPermissionLimits;
-  /** Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Throws CONFLICT if a password is already set (use changePassword, which verifies the current one). A security notification is emailed to the account address. Existing sessions are not revoked. */
+  /** Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Refuses with extensions.code PASSWORD_ALREADY_SET (409) when a password is already set — use changePassword, which verifies the current one, or the reset flow if it is forgotten. (Before v1.60.0 that refusal reached clients as INTERNAL_SERVER_ERROR while this description said CONFLICT, so a client could only recognise it by the message text.) A security notification is emailed to the account address. Existing sessions are not revoked. */
   setInitialPassword: Scalars['Boolean']['output'];
   /** Set (author-only) the acquisition mode and pricing for a code listing. Non-free modes require completed seller onboarding. Curation can reject a listing but never reprice it (07 §1.2). */
   setListingPricing: Scalars['Boolean']['output'];
@@ -5583,7 +5672,7 @@ export type Mutation = {
   setOperator: User;
   /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
   setOrgBillingExempt: BillingExemptOrgType;
-  /** Super admin only. Used to freeze/unfreeze orgs platform-wide. SIDE EFFECT: sets organizations.status, which gates the org's platform access. */
+  /** Super admin only. Used to freeze/unfreeze orgs platform-wide. SIDE EFFECT: sets organizations.status. What that gates today is narrower than it sounds: a non-'active' status stops the org's API TOKENS from authenticating, but it does not remove its members' permissions, so a frozen org's signed-in members can still act. Refuses 'retired' in either direction — retirement is retireOrganization, which writes a tombstone. */
   setOrgStatus: Organization;
   /** Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method. */
   setPlayerAutoBilling: PlayerAutoBilling;
@@ -6533,6 +6622,11 @@ export type MutationRegisterArgs = {
 };
 
 
+export type MutationReinstateOrganizationArgs = {
+  input: ReinstateOrganizationInput;
+};
+
+
 export type MutationReleaseClaimedGridArgs = {
   appId: Scalars['BigInt']['input'];
   gridId: Scalars['BigInt']['input'];
@@ -6598,6 +6692,11 @@ export type MutationResendConfirmationEmailArgs = {
 
 export type MutationResetPasswordArgs = {
   resetPasswordInput: ResetPasswordInput;
+};
+
+
+export type MutationRetireOrganizationArgs = {
+  input: RetireOrganizationInput;
 };
 
 
@@ -7161,6 +7260,39 @@ export type OrgPermission = {
   permissionKey: Scalars['ID']['output'];
 };
 
+/** A record of one organization retirement. Retirement is a STATE, not a deletion: every ledger row the organization ever wrote is still present and still references it, so what the org spent stays reconstructable with the same joins as before. This row says who retired it, why, and what it was holding at the time. */
+export type OrgRetirementType = {
+  __typename?: 'OrgRetirementType';
+  /** How many of the org apps were archived by the retirement. Apps already archived are not counted and are not touched. */
+  appsArchived: Scalars['Int']['output'];
+  /** Wallet balance in cents at the moment of retirement. This money is FROZEN indefinitely, not refunded and not forfeited — the operator decided that on 2026-08-21. It is recorded here rather than only in the wallet so that every organization holding frozen money is enumerable from one table if the policy is ever revisited. */
+  balanceCentsAtRetirement: Scalars['BigInt']['output'];
+  /** True when the caller had to pass acknowledgeFrozenBalance because the org held money, which is frozen indefinitely rather than refunded or forfeited. */
+  frozenBalanceAcknowledged: Scalars['Boolean']['output'];
+  /** The retired organization (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['output'];
+  /** The organization name. */
+  orgName: Scalars['String']['output'];
+  /** The organization slug as it stood when it was retired. */
+  orgSlug: Scalars['String']['output'];
+  /** Why the organization was retired. */
+  reason: Scalars['String']['output'];
+  /** When the retirement was reversed, or null while it is in force. */
+  reinstatedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Operator user_id who reinstated the organization. */
+  reinstatedByUserId: Maybe<Scalars['BigInt']['output']>;
+  /** Why the organization was reinstated. */
+  reinstatedReason: Maybe<Scalars['String']['output']>;
+  /** When it was retired. */
+  retiredAt: Scalars['DateTime']['output'];
+  /** Operator user_id who retired it. */
+  retiredByUserId: Scalars['BigInt']['output'];
+  /** Retirement record id (BigInt as a decimal string). */
+  retirementId: Scalars['BigInt']['output'];
+  /** How many org wallet_transactions rows existed at retirement. All of them are still there — this number is the claim that the ledger survived, stated at the moment it would have been easiest to lose. */
+  walletTxnCountAtRetirement: Scalars['BigInt']['output'];
+};
+
 export type OrgRole = {
   __typename?: 'OrgRole';
   /** When the role was created. */
@@ -7288,7 +7420,7 @@ export type Organization = {
   ownerUserId: Scalars['BigInt']['output'];
   /** Unique URL-safe slug (lowercase letters, numbers, and dashes). */
   slug: Scalars['String']['output'];
-  /** Lifecycle status, e.g. 'active' or 'frozen'. Set platform-wide via setOrgStatus. */
+  /** Lifecycle status: 'active', 'frozen' (setOrgStatus) or 'retired' (retireOrganization). A retired organization still resolves by id and slug — it is a state, not a deletion, and its whole ledger is intact — but it grants its members no permissions, its API tokens no longer authenticate, and it is omitted from myOrganizations. */
   status: Scalars['String']['output'];
   /** When the organization was last updated. */
   updatedAt: Scalars['DateTime']['output'];
@@ -8406,6 +8538,8 @@ export type Query = {
   gameModelFunctionCircuits: GmFunctionBreakerStatus;
   /** List studio-defined functions for an app, optionally filtered to those attached to a container type. Requires app-admin ('manage_apps'). */
   gameModelFunctions: Array<GmFunction>;
+  /** Whether an app's game model hangs together: containers whose type does not exist, functions calling functions that are not defined, timers targeting something that cannot be invoked autonomously, unmatchable automation triggers, and stored definitions that no longer compile. Every check is recomputed on demand — a stored warning goes stale the moment an unrelated object changes, which is exactly how an app can look healthy while being unable to bind anything. ERROR findings are provably broken; WARNING findings are frequently just a mid-edit state. Requires app-admin ('manage_apps'). */
+  gameModelLint: GmLintResult;
   /** Read the app's game-model runtime policy (session creation policy + default participant role). Requires app-admin ('manage_apps'). */
   gameModelPolicy: GmAppPolicy;
   /** List the property definitions for a container type. Requires app-admin ('manage_apps'). */
@@ -8574,6 +8708,8 @@ export type Query = {
   quotasForApp: Array<ServiceQuota>;
   /** Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission. */
   quotasForOrg: Array<ServiceQuota>;
+  /** OPERATOR ONLY. Every organization currently retired, newest first. A retirement nobody can enumerate is indistinguishable from an organization that was quietly lost. */
+  retiredOrganizations: Array<OrgRetirementType>;
   /** Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index. */
   runtimePermissions: Array<Scalars['String']['output']>;
   /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
@@ -9174,6 +9310,11 @@ export type QueryGameModelFunctionsArgs = {
 };
 
 
+export type QueryGameModelLintArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryGameModelPolicyArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -9713,6 +9854,14 @@ export type RegisterUserInput = {
   password: Scalars['String']['input'];
 };
 
+/** Which retired organization to put back, and why. */
+export type ReinstateOrganizationInput = {
+  /** Organization to reinstate (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['input'];
+  /** Why the retirement is being reversed. Required and stored. */
+  reason: Scalars['String']['input'];
+};
+
 /** Result of releasing a grid created by the caller through claimGridChunk. The ownership, direct/effective ACL, and grid have been removed atomically, making its chunk claimable again. */
 export type ReleaseClaimedGridResult = {
   __typename?: 'ReleaseClaimedGridResult';
@@ -9748,6 +9897,20 @@ export type ResetPasswordInput = {
   newPassword: Scalars['String']['input'];
   /** Password-reset token from the emailed reset link. */
   token: Scalars['String']['input'];
+};
+
+/** Which organization to retire, proof that you mean that one, and why. */
+export type RetireOrganizationInput = {
+  /** Required when the organization holds a non-zero wallet balance. Retirement FREEZES that balance indefinitely: the money is held, deliberately, and is neither refunded nor forfeited. That is settled policy (operator decision, 2026-08-21), not a placeholder for one. The amount is recorded on the tombstone so every organization it applies to stays enumerable if the policy is ever revisited. Refusing by default rather than omitting the case is deliberate — an unreachable dangerous path guarantees the danger and removes the fix. */
+  acknowledgeFrozenBalance?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Required when the organization is a tier's DURABLE PROBE ORGANIZATION — the `<family>-<tier>` org scripts/probe-org.sh reuses on every run. Retiring one frees nothing: the slug stays taken, organizationBySlug keeps returning it, and the next probe run fails on a bare permission denial days later, so the cost lands on somebody else. The refusal names the family and tells you that reinstateOrganization is the way back. */
+  acknowledgeProbeInfrastructure?: InputMaybe<Scalars['Boolean']['input']>;
+  /** The slug the organization must currently have. Refused if it does not match, which is what stops a mistyped or copy-pasted id from retiring a paying customer. There is no bulk form of this mutation for the same reason. */
+  expectedSlug: Scalars['String']['input'];
+  /** Organization to retire (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['input'];
+  /** Why this organization is being retired. Required and stored on the tombstone. */
+  reason: Scalars['String']['input'];
 };
 
 /** Immediately revoke one visible lease. */
@@ -9879,7 +10042,7 @@ export type SaveCrowdyStudioProjectInput = {
   deletes?: InputMaybe<Array<CrowdyStudioProjectFileDeleteInput>>;
   /** New private description, explicit null to clear, or omit to preserve. */
   description?: InputMaybe<Scalars['String']['input']>;
-  /** Current project revision. A stale value returns CONFLICT with CROWDY_STUDIO_REVISION_CONFLICT and applies no metadata or file writes. */
+  /** Current project revision. A stale value is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409) — that exact code, not CONFLICT — and applies no metadata or file writes. */
   expectedRevision: Scalars['BigInt']['input'];
   /** New optional grid affinity, explicit null to clear, or omit to preserve. Affinity never grants deploy authority. */
   gridId?: InputMaybe<Scalars['BigInt']['input']>;
@@ -9909,7 +10072,7 @@ export type SaveCrowdyStudioProjectMetadataInput = {
   clientModuleName?: InputMaybe<Scalars['String']['input']>;
   /** New private description, explicit null to clear, or omit to preserve. */
   description?: InputMaybe<Scalars['String']['input']>;
-  /** Current project revision. A stale value returns CONFLICT with CROWDY_STUDIO_REVISION_CONFLICT. */
+  /** Current project revision. A stale value is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409); branch on that exact code, not on CONFLICT. */
   expectedRevision: Scalars['BigInt']['input'];
   /** New optional grid affinity, explicit null to clear, or omit to preserve. Affinity never grants deploy authority. */
   gridId?: InputMaybe<Scalars['BigInt']['input']>;
@@ -11444,6 +11607,7 @@ export enum UserCodeFaultKind {
   InternalError = 'INTERNAL_ERROR',
   MemoryExceeded = 'MEMORY_EXCEEDED',
   ModuleLoadFailed = 'MODULE_LOAD_FAILED',
+  NotificationUndeliverable = 'NOTIFICATION_UNDELIVERABLE',
   PlatformBusy = 'PLATFORM_BUSY',
   QuotaExhausted = 'QUOTA_EXHAUSTED',
   RateLimitExceeded = 'RATE_LIMIT_EXCEEDED',
@@ -13424,7 +13588,7 @@ export type GameModelAppDiagnosticsQueryVariables = Exact<{
 }>;
 
 
-export type GameModelAppDiagnosticsQuery = { __typename?: 'Query', gameModelAppDiagnostics: { __typename?: 'GmAppDiagnostics', appId: string, containerCount: number, propertyCount: number, edgeCount: number, sessionCount: number, functionCount: number, automationCount: number, eventCount: number, events24h: number, failedEvents24h: number, automationEvents24h: number, topFunctions: Array<{ __typename?: 'GmTopFunction', functionName: string, invocations: number, failures: number }> } };
+export type GameModelAppDiagnosticsQuery = { __typename?: 'Query', gameModelAppDiagnostics: { __typename?: 'GmAppDiagnostics', appId: string, containerCount: number, propertyCount: number, edgeCount: number, sessionCount: number, functionCount: number, automationCount: number, eventCount: number, events24h: number, failedEvents24h: number, automationEvents24h: number, notificationsEmitted24h: number, notificationsUndeliverable24h: number, topFunctions: Array<{ __typename?: 'GmTopFunction', functionName: string, invocations: number, failures: number }> } };
 
 export type GmTimerFieldsFragment = { __typename?: 'GmTimer', timerId: string, appId: string, sessionId: string | null, selfContainerId: string, functionName: string, paramsJson: string, fireAt: string, dedupeKey: string | null, cascadeDepth: number, flowId: string | null, armedBy: string, createdAt: string };
 
@@ -13452,6 +13616,13 @@ export type GameModelTimersQueryVariables = Exact<{
 
 
 export type GameModelTimersQuery = { __typename?: 'Query', gameModelTimers: Array<{ __typename?: 'GmTimer', timerId: string, appId: string, sessionId: string | null, selfContainerId: string, functionName: string, paramsJson: string, fireAt: string, dedupeKey: string | null, cascadeDepth: number, flowId: string | null, armedBy: string, createdAt: string }> };
+
+export type CrowdyModelLintQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type CrowdyModelLintQuery = { __typename?: 'Query', gameModelLint: { __typename?: 'GmLintResult', appId: string, errorCount: number, warningCount: number, clean: boolean, findings: Array<{ __typename?: 'GmLintFindingType', code: GmLintCode, severity: GmLintSeverity, subjectKind: GmLintSubjectKind, subject: string, message: string, remedy: string | null, count: number | null }> } };
 
 export type GameModelActivePlayerCountQueryVariables = Exact<{
   appId: Scalars['BigInt']['input'];
@@ -15461,10 +15632,11 @@ export const GameModelAutomationTriggersDocument = {"kind":"Document","definitio
 export const GameModelAutomationPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelAutomationPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAutomationPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmAutomationPolicyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationPolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomationPolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxAutomations"}},{"kind":"Field","name":{"kind":"Name","value":"minIntervalMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxFanout"}},{"kind":"Field","name":{"kind":"Name","value":"maxCascadeDepth"}},{"kind":"Field","name":{"kind":"Name","value":"globalRunsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"minTimerDelayMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxPendingTimers"}}]}}]} as unknown as DocumentNode<GameModelAutomationPolicyQuery, GameModelAutomationPolicyQueryVariables>;
 export const GameModelAutomationRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelAutomationRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"automationName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"success"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAutomationRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"automationName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"automationName"}}},{"kind":"Argument","name":{"kind":"Name","value":"success"},"value":{"kind":"Variable","name":{"kind":"Name","value":"success"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmAutomationRunFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomationRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"automationName"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"triggerId"}},{"kind":"Field","name":{"kind":"Name","value":"parentRunId"}},{"kind":"Field","name":{"kind":"Name","value":"cascadeDepth"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"targets"}},{"kind":"Field","name":{"kind":"Name","value":"invocations"}},{"kind":"Field","name":{"kind":"Name","value":"mutations"}},{"kind":"Field","name":{"kind":"Name","value":"fnCalls"}},{"kind":"Field","name":{"kind":"Name","value":"gasUsed"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"circuitAction"}},{"kind":"Field","name":{"kind":"Name","value":"computeUnits"}}]}}]} as unknown as DocumentNode<GameModelAutomationRunsQuery, GameModelAutomationRunsQueryVariables>;
 export const GameModelAutomationStatsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelAutomationStats"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"windowMinutes"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAutomationStats"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"windowMinutes"},"value":{"kind":"Variable","name":{"kind":"Name","value":"windowMinutes"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"windowMinutes"}},{"kind":"Field","name":{"kind":"Name","value":"totalRuns"}},{"kind":"Field","name":{"kind":"Name","value":"failedRuns"}},{"kind":"Field","name":{"kind":"Name","value":"failureRatePct"}},{"kind":"Field","name":{"kind":"Name","value":"runsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"totalInvocations"}},{"kind":"Field","name":{"kind":"Name","value":"totalMutations"}},{"kind":"Field","name":{"kind":"Name","value":"totalComputeUnits"}},{"kind":"Field","name":{"kind":"Name","value":"avgDurationUs"}},{"kind":"Field","name":{"kind":"Name","value":"byAutomation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationName"}},{"kind":"Field","name":{"kind":"Name","value":"runs"}},{"kind":"Field","name":{"kind":"Name","value":"failures"}},{"kind":"Field","name":{"kind":"Name","value":"invocations"}},{"kind":"Field","name":{"kind":"Name","value":"computeUnits"}},{"kind":"Field","name":{"kind":"Name","value":"avgDurationUs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}}]}}]}}]}}]} as unknown as DocumentNode<GameModelAutomationStatsQuery, GameModelAutomationStatsQueryVariables>;
-export const GameModelAppDiagnosticsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelAppDiagnostics"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAppDiagnostics"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"containerCount"}},{"kind":"Field","name":{"kind":"Name","value":"propertyCount"}},{"kind":"Field","name":{"kind":"Name","value":"edgeCount"}},{"kind":"Field","name":{"kind":"Name","value":"sessionCount"}},{"kind":"Field","name":{"kind":"Name","value":"functionCount"}},{"kind":"Field","name":{"kind":"Name","value":"automationCount"}},{"kind":"Field","name":{"kind":"Name","value":"eventCount"}},{"kind":"Field","name":{"kind":"Name","value":"events24h"}},{"kind":"Field","name":{"kind":"Name","value":"failedEvents24h"}},{"kind":"Field","name":{"kind":"Name","value":"automationEvents24h"}},{"kind":"Field","name":{"kind":"Name","value":"topFunctions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"invocations"}},{"kind":"Field","name":{"kind":"Name","value":"failures"}}]}}]}}]}}]} as unknown as DocumentNode<GameModelAppDiagnosticsQuery, GameModelAppDiagnosticsQueryVariables>;
+export const GameModelAppDiagnosticsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelAppDiagnostics"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelAppDiagnostics"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"containerCount"}},{"kind":"Field","name":{"kind":"Name","value":"propertyCount"}},{"kind":"Field","name":{"kind":"Name","value":"edgeCount"}},{"kind":"Field","name":{"kind":"Name","value":"sessionCount"}},{"kind":"Field","name":{"kind":"Name","value":"functionCount"}},{"kind":"Field","name":{"kind":"Name","value":"automationCount"}},{"kind":"Field","name":{"kind":"Name","value":"eventCount"}},{"kind":"Field","name":{"kind":"Name","value":"events24h"}},{"kind":"Field","name":{"kind":"Name","value":"failedEvents24h"}},{"kind":"Field","name":{"kind":"Name","value":"automationEvents24h"}},{"kind":"Field","name":{"kind":"Name","value":"notificationsEmitted24h"}},{"kind":"Field","name":{"kind":"Name","value":"notificationsUndeliverable24h"}},{"kind":"Field","name":{"kind":"Name","value":"topFunctions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"invocations"}},{"kind":"Field","name":{"kind":"Name","value":"failures"}}]}}]}}]}}]} as unknown as DocumentNode<GameModelAppDiagnosticsQuery, GameModelAppDiagnosticsQueryVariables>;
 export const GameModelScheduleInvokeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelScheduleInvoke"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ScheduleInvokeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelScheduleInvoke"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmTimerFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmTimerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmTimer"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"timerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"selfContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"paramsJson"}},{"kind":"Field","name":{"kind":"Name","value":"fireAt"}},{"kind":"Field","name":{"kind":"Name","value":"dedupeKey"}},{"kind":"Field","name":{"kind":"Name","value":"cascadeDepth"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"armedBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<GameModelScheduleInvokeMutation, GameModelScheduleInvokeMutationVariables>;
 export const GameModelCancelTimerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelCancelTimer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"timerId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"dedupeKey"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelCancelTimer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"timerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"timerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"dedupeKey"},"value":{"kind":"Variable","name":{"kind":"Name","value":"dedupeKey"}}}]}]}}]} as unknown as DocumentNode<GameModelCancelTimerMutation, GameModelCancelTimerMutationVariables>;
 export const GameModelTimersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelTimers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelTimers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"sessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sessionId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmTimerFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmTimerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmTimer"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"timerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"selfContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"paramsJson"}},{"kind":"Field","name":{"kind":"Name","value":"fireAt"}},{"kind":"Field","name":{"kind":"Name","value":"dedupeKey"}},{"kind":"Field","name":{"kind":"Name","value":"cascadeDepth"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"armedBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<GameModelTimersQuery, GameModelTimersQueryVariables>;
+export const CrowdyModelLintDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CrowdyModelLint"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelLint"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"errorCount"}},{"kind":"Field","name":{"kind":"Name","value":"warningCount"}},{"kind":"Field","name":{"kind":"Name","value":"clean"}},{"kind":"Field","name":{"kind":"Name","value":"findings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"severity"}},{"kind":"Field","name":{"kind":"Name","value":"subjectKind"}},{"kind":"Field","name":{"kind":"Name","value":"subject"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"remedy"}},{"kind":"Field","name":{"kind":"Name","value":"count"}}]}}]}}]}}]} as unknown as DocumentNode<CrowdyModelLintQuery, CrowdyModelLintQueryVariables>;
 export const GameModelActivePlayerCountDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameModelActivePlayerCount"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelActivePlayerCount"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"activePlayerCount"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"observedAt"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}}]}}]}}]} as unknown as DocumentNode<GameModelActivePlayerCountQuery, GameModelActivePlayerCountQueryVariables>;
 export const GameModelActivePlayerCountChangedDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"GameModelActivePlayerCountChanged"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelActivePlayerCountChanged"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"previousCount"}},{"kind":"Field","name":{"kind":"Name","value":"currentCount"}},{"kind":"Field","name":{"kind":"Name","value":"delta"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"observedAt"}}]}}]}}]} as unknown as DocumentNode<GameModelActivePlayerCountChangedSubscription, GameModelActivePlayerCountChangedSubscriptionVariables>;
 export const GameModelCreateSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GameModelCreateSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateSessionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameModelCreateSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GmSessionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmSessionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmSession"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTurnUserId"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}}]}}]} as unknown as DocumentNode<GameModelCreateSessionMutation, GameModelCreateSessionMutationVariables>;
