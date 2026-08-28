@@ -364,7 +364,7 @@ type Organization {
   """user_id of the organization owner (BigInt as string)."""
   ownerUserId: BigInt!
   """
-  Lifecycle status, e.g. 'active' or 'frozen'. Set platform-wide via setOrgStatus.
+  Lifecycle status: 'active', 'frozen' (setOrgStatus) or 'retired' (retireOrganization). A retired organization still resolves by id and slug — it is a state, not a deletion, and its whole ledger is intact — but it grants its members no permissions, its API tokens no longer authenticate, and it is omitted from myOrganizations.
   """
   status: String!
   """When the organization was created."""
@@ -1051,6 +1051,48 @@ type OrgTokenWithSecret {
   expiresAt: DateTime
   """When the token was created."""
   createdAt: DateTime!
+}
+
+"""
+A record of one organization retirement. Retirement is a STATE, not a deletion: every ledger row the organization ever wrote is still present and still references it, so what the org spent stays reconstructable with the same joins as before. This row says who retired it, why, and what it was holding at the time.
+"""
+type OrgRetirementType {
+  """Retirement record id (BigInt as a decimal string)."""
+  retirementId: BigInt!
+  """The retired organization (BigInt as a decimal string)."""
+  orgId: BigInt!
+  """The organization slug as it stood when it was retired."""
+  orgSlug: String!
+  """The organization name."""
+  orgName: String!
+  """Why the organization was retired."""
+  reason: String!
+  """Operator user_id who retired it."""
+  retiredByUserId: BigInt!
+  """When it was retired."""
+  retiredAt: DateTime!
+  """
+  Wallet balance in cents at the moment of retirement. This money is FROZEN indefinitely, not refunded and not forfeited — the operator decided that on 2026-08-21. It is recorded here rather than only in the wallet so that every organization holding frozen money is enumerable from one table if the policy is ever revisited.
+  """
+  balanceCentsAtRetirement: BigInt!
+  """
+  How many org wallet_transactions rows existed at retirement. All of them are still there — this number is the claim that the ledger survived, stated at the moment it would have been easiest to lose.
+  """
+  walletTxnCountAtRetirement: BigInt!
+  """
+  How many of the org apps were archived by the retirement. Apps already archived are not counted and are not touched.
+  """
+  appsArchived: Int!
+  """
+  True when the caller had to pass acknowledgeFrozenBalance because the org held money, which is frozen indefinitely rather than refunded or forfeited.
+  """
+  frozenBalanceAcknowledged: Boolean!
+  """When the retirement was reversed, or null while it is in force."""
+  reinstatedAt: DateTime
+  """Operator user_id who reinstated the organization."""
+  reinstatedByUserId: BigInt
+  """Why the organization was reinstated."""
+  reinstatedReason: String
 }
 
 """
@@ -5401,6 +5443,123 @@ type ComputeTemplateInfo {
 }
 
 """
+One problem with one object in the game model, recomputed at read time rather than remembered from a write.
+"""
+type GmLintFindingType {
+  """What is wrong."""
+  code: GmLintCode!
+  """ERROR is provably broken and gate-eligible; WARNING is reported only."""
+  severity: GmLintSeverity!
+  """What kind of object this is about."""
+  subjectKind: GmLintSubjectKind!
+  """
+  The object's own name — a function name, a container type name — not a rendered label. Group and deduplicate on (code, subject).
+  """
+  subject: String!
+  """What is wrong, in a sentence."""
+  message: String!
+  """What to do about it."""
+  remedy: String
+  """
+  How many objects this row stands for, when one finding summarises many (for example a type missing under 40 containers).
+  """
+  count: Int
+}
+
+"""
+What is wrong, at the granularity a developer would fix. One code per distinguishable remedy: a missing `fn:` target and a missing timer target are both an unresolved name and are kept apart because the second one arms successfully and fails minutes later somewhere else.
+"""
+enum GmLintCode {
+  """
+  A container names a type this app has not defined. The client cannot bind it, and the only symptom is "no container bound for entity" in the game's own log.
+  """
+  CONTAINER_TYPE_UNDEFINED
+  """
+  The app holds containers and declares no types at all — the shape an app takes when it is recreated or moved between organizations, because containers are made on demand by the client and schema is not carried with them.
+  """
+  APP_HAS_NO_CONTAINER_TYPES
+  """A `fn:` call names a function this app does not define."""
+  FUNCTION_NOT_DEFINED
+  """
+  `self.<key>` is not in the property definitions for the function's container type.
+  """
+  PROPERTY_NOT_DECLARED
+  """An expression references a `$param` the function does not declare."""
+  PARAM_NOT_DECLARED
+  """A timer's target function does not exist."""
+  TIMER_TARGET_MISSING
+  """
+  A timer's target exists but is not autonomousInvocable, so the timer arms and then fails when it fires.
+  """
+  TIMER_TARGET_NOT_AUTONOMOUS
+  """A permission-key literal is not in the runtime_permissions catalog."""
+  PERMISSION_KEY_UNKNOWN
+  """
+  A grid builtin was given a mode or axis literal outside its allowed set.
+  """
+  GRID_LITERAL_INVALID
+  """
+  An automation trigger's filter cannot match, so it will never dispatch.
+  """
+  AUTOMATION_TRIGGER_UNMATCHABLE
+  """
+  A channel notification names a channel that belongs to a different app. Membership is scoped to the app, so the datagram reaches nobody no matter how healthy delivery is — the shape a model takes when it is copied out of the app it was authored against. Repoint it, or name the channel with `channel_name` so it cannot go stale again.
+  """
+  NOTIFICATION_CHANNEL_FOREIGN
+  """
+  A channel notification names a channel id, or a channel name, that this app does not have. A warning rather than an error because the channel may simply not exist yet.
+  """
+  NOTIFICATION_CHANNEL_UNKNOWN
+  """
+  A stored function definition no longer compiles, so it is inert. Only possible for a row written before a validation the compiler enforces now; re-upsert it.
+  """
+  FUNCTION_UNCOMPILABLE
+}
+
+"""
+How much a finding is worth doing something about. Only ERROR is ever eligible to gate anything; WARNING is reported and never enforced, because ordinary authoring is transiently inconsistent and a gate that fought it would be worse than the problem.
+"""
+enum GmLintSeverity {
+  """
+  Provably broken. No reading of the app makes this fine, and the platform can say so without knowing your intent.
+  """
+  ERROR
+  """
+  Suspicious and frequently correct anyway — most often because you are mid-edit and the other half is not written yet.
+  """
+  WARNING
+}
+
+"""
+What kind of object a finding is about, so results can be grouped without parsing `subject`.
+"""
+enum GmLintSubjectKind {
+  APP
+  CONTAINER_TYPE
+  CONTAINER
+  FUNCTION
+  AUTOMATION
+}
+
+"""
+Whether an app's game model hangs together. Every check is recomputed on demand: a stored warning goes stale the moment an unrelated object changes, which is the failure this replaces.
+"""
+type GmLintResult {
+  """The app that was linted."""
+  appId: BigInt!
+  """Findings, errors first, then by code and subject."""
+  findings: [GmLintFindingType!]!
+  """How many findings have severity ERROR."""
+  errorCount: Int!
+  """How many findings have severity WARNING."""
+  warningCount: Int!
+  """
+  True when there are no ERROR findings. WARNING findings do not make an app unclean, because most of them are a normal mid-edit state.
+  """
+  clean: Boolean!
+}
+
+"""
 An autonomous process (automation / NPC): a server-driven entry-point function bound to a trigger (schedule or model activity) plus a safety budget and circuit-breaker state.
 """
 type GmAutomation {
@@ -5662,6 +5821,14 @@ type GmAppDiagnostics {
   failedEvents24h: Int!
   """Automation-driven invocations in the last 24h."""
   automationEvents24h: Int!
+  """
+  Model-driven notifications emitted in the last 24h, across every function and automation.
+  """
+  notificationsEmitted24h: Int!
+  """
+  Of those, how many reached nobody: the target channel had no members in this app. Emission is best-effort and cannot fail your function, so this is the only place an undeliverable notification is visible — a non-zero count here beside a healthy run history is the signature of a notification aimed at a channel this app does not own. Check gameModelLint for NOTIFICATION_CHANNEL_FOREIGN, which names the function. Note this does NOT mean delivery is broken: it counts datagrams that were sent to every server successfully and had no recipient.
+  """
+  notificationsUndeliverable24h: Int!
   """Most-invoked functions in the last 24h."""
   topFunctions: [GmTopFunction!]!
 }
@@ -6004,7 +6171,9 @@ type GmFunction {
   Declarative one-shot timers armed atomically with the function's mutations.
   """
   timers: [GmFunctionTimer!]!
-  """Non-fatal static-analysis warnings from the last upload."""
+  """
+  Non-fatal static-analysis warnings, recomputed for this read rather than remembered from the upload. That matters because they are cross-object: a call to a function written later stops being a warning once that function exists, and starts being one again if it is deleted. For the structured form, with a code and a severity per finding, use gameModelLint.
+  """
   warnings: [String!]!
 }
 
@@ -7197,6 +7366,7 @@ enum UserCodeFaultKind {
   PLATFORM_BUSY
   CIRCUIT_OPEN
   DISABLED_BY_POLICY
+  NOTIFICATION_UNDELIVERABLE
 }
 
 """
@@ -7568,6 +7738,10 @@ type Query {
     """Organization id (BigInt as string)."""
     orgId: BigInt!
   ): [OrgToken!]! @requiresPermission(scope: "org", permission: "manage_tokens", scopeArg: "orgId")
+  """
+  OPERATOR ONLY. Every organization currently retired, newest first. A retirement nobody can enumerate is indistinguishable from an organization that was quietly lost.
+  """
+  retiredOrganizations: [OrgRetirementType!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Public marketplace listing of apps. PUBLIC: no authentication required. Returns ONLY apps with visibility=PUBLIC AND status=LIVE (drafts, unlisted, private, and archived apps are never returned). Use myApps or appsForOrg for caller-visible or org-scoped apps. Results are ordered newest-first and paginated via pageInfo.
   """
@@ -8519,6 +8693,13 @@ type Query {
     """The app (tenant) to diagnose."""
     appId: BigInt!
   ): GmAppDiagnostics! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  Whether an app's game model hangs together: containers whose type does not exist, functions calling functions that are not defined, timers targeting something that cannot be invoked autonomously, unmatchable automation triggers, and stored definitions that no longer compile. Every check is recomputed on demand — a stored warning goes stale the moment an unrelated object changes, which is exactly how an app can look healthy while being unable to bind anything. ERROR findings are provably broken; WARNING findings are frequently just a mid-edit state. Requires app-admin ('manage_apps').
+  """
+  gameModelLint(
+    """The app (tenant) to lint."""
+    appId: BigInt!
+  ): GmLintResult! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Diagnostics surface: stitch one flow correlation id into a single cross-engine timeline — the model events (gm event log), automation runs, and compute module runs that share the flowId minted at the entry edge (player gameModelInvoke / automation run / computeInvoke) and propagated across model_invoke, the event bus, and emit_compute_event. Each array is ordered by time ascending; an unknown flowId returns three empty arrays. Answers "what happened to this kill's reward" in one query instead of three hand-joined ones. Requires app-admin ('manage_apps').
   """
@@ -9532,7 +9713,7 @@ type Mutation {
     loginUserInput: LoginUserInput!
   ): AuthResponse!
   """
-  Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email (e.g. created via magic link/social), the password is attached pending email confirmation and no session is returned (throws CONFLICT). Public.
+  Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email (e.g. created via magic link/social), the password is attached pending email confirmation and no session is returned, refused with extensions.code EMAIL_ALREADY_REGISTERED (409). It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public.
   """
   register(
     """
@@ -9569,7 +9750,7 @@ type Mutation {
     email: String!
   ): Boolean!
   """
-  Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success; throws if the current password is wrong. Existing sessions are not revoked.
+  Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success. Refuses with extensions.code INVALID_CURRENT_PASSWORD (403) when the current password is wrong, and PASSWORD_NOT_SET (409) when the account has no password to change — use setInitialPassword for that, which needs only the session. NEITHER of those means the session is invalid, and neither is UNAUTHENTICATED: both were until v1.60.0, so a client that signs the user out on UNAUTHENTICATED was signing them out over a typo. Existing sessions are not revoked.
   """
   changePassword(
     """The user's current password, for verification."""
@@ -9578,7 +9759,7 @@ type Mutation {
     newPassword: String!
   ): Boolean!
   """
-  Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Throws CONFLICT if a password is already set (use changePassword, which verifies the current one). A security notification is emailed to the account address. Existing sessions are not revoked.
+  Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Refuses with extensions.code PASSWORD_ALREADY_SET (409) when a password is already set — use changePassword, which verifies the current one, or the reset flow if it is forgotten. (Before v1.60.0 that refusal reached clients as INTERNAL_SERVER_ERROR while this description said CONFLICT, so a client could only recognise it by the message text.) A security notification is emailed to the account address. Existing sessions are not revoked.
   """
   setInitialPassword(
     """The password to set (min 8 characters)."""
@@ -9624,14 +9805,28 @@ type Mutation {
   """
   createOrganization(input: CreateOrganizationInput!): Organization!
   """
-  Super admin only. Used to freeze/unfreeze orgs platform-wide. SIDE EFFECT: sets organizations.status, which gates the org's platform access.
+  Super admin only. Used to freeze/unfreeze orgs platform-wide. SIDE EFFECT: sets organizations.status. What that gates today is narrower than it sounds: a non-'active' status stops the org's API TOKENS from authenticating, but it does not remove its members' permissions, so a frozen org's signed-in members can still act. Refuses 'retired' in either direction — retirement is retireOrganization, which writes a tombstone.
   """
   setOrgStatus(
     """Organization id (BigInt as string)."""
     orgId: BigInt!
-    """New status, e.g. 'active' or 'frozen'."""
+    """New status, e.g. 'active' or 'frozen'. 'retired' is refused here."""
     status: String!
   ): Organization! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  """
+  OPERATOR ONLY. Retires an organization: sets organizations.status to 'retired', stamps deleted_at, archives its apps, and writes a tombstone to org_retirements. RETIREMENT IS A STATE, NOT A DELETION — no wallet_transactions, org_billing_waivers, app_shared_usage_charges or other ledger row is altered or removed, so an auditor can still reconstruct exactly what this organization spent, with the same joins as before, indefinitely. There is no purge and no retention window, by decision rather than by omission: org ledger rows are retained forever (operator decision, 2026-08-21), so retirement is only ever a state. A retired organization's remaining wallet balance is FROZEN indefinitely by the same decision — held, not refunded and not forfeited — and the amount is recorded on the tombstone. AFTER RETIREMENT the org's API tokens stop authenticating, its members lose every org permission (super admins excepted, so this is reversible), and it is excluded from the caller's organization list — but it is still readable by id and slug, because a retired org that answers like a missing one is worse than one that says what it is. Refuses unless expectedSlug matches the org named by orgId, and refuses an organization holding money unless acknowledgeFrozenBalance is passed. Reverse it with reinstateOrganization.
+  """
+  retireOrganization(
+    """Which organization, proof you mean it, and why."""
+    input: RetireOrganizationInput!
+  ): OrgRetirementType! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired.
+  """
+  reinstateOrganization(
+    """Which organization to put back, and why."""
+    input: ReinstateOrganizationInput!
+  ): OrgRetirementType! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Mints a new org API token and returns the plaintext token exactly once - save it, since subsequent queries only show metadata. Requires the 'manage_tokens' permission on the target org (super admins bypass).
   """
@@ -11255,7 +11450,7 @@ type Mutation {
     input: CreateCrowdyStudioProjectInput!
   ): CrowdyStudioProject!
   """
-  Optimistically save selected private project metadata and increment its monotonic revision. Requires an app-scoped token and exact project ownership. A stale expectedRevision returns CONFLICT; grid affinity remains an authoring hint and never bypasses player-compute deployment checks.
+  Optimistically save selected private project metadata and increment its monotonic revision. Requires an app-scoped token and exact project ownership. A stale expectedRevision is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409) — that exact string, not CONFLICT, which is what an earlier wording of this sentence implied and what one SDK consequently matched on; grid affinity remains an authoring hint and never bypasses player-compute deployment checks.
   """
   crowdyStudioProjectSaveMetadata(
     """
@@ -11805,6 +12000,36 @@ input CreateOrganizationInput {
   Unique URL slug; lowercase letters, numbers, and dashes only (1-128 characters).
   """
   slug: String!
+}
+
+"""Which organization to retire, proof that you mean that one, and why."""
+input RetireOrganizationInput {
+  """Organization to retire (BigInt as a decimal string)."""
+  orgId: BigInt!
+  """
+  The slug the organization must currently have. Refused if it does not match, which is what stops a mistyped or copy-pasted id from retiring a paying customer. There is no bulk form of this mutation for the same reason.
+  """
+  expectedSlug: String!
+  """
+  Why this organization is being retired. Required and stored on the tombstone.
+  """
+  reason: String!
+  """
+  Required when the organization holds a non-zero wallet balance. Retirement FREEZES that balance indefinitely: the money is held, deliberately, and is neither refunded nor forfeited. That is settled policy (operator decision, 2026-08-21), not a placeholder for one. The amount is recorded on the tombstone so every organization it applies to stays enumerable if the policy is ever revisited. Refusing by default rather than omitting the case is deliberate — an unreachable dangerous path guarantees the danger and removes the fix.
+  """
+  acknowledgeFrozenBalance: Boolean
+  """
+  Required when the organization is a tier's DURABLE PROBE ORGANIZATION — the `<family>-<tier>` org scripts/probe-org.sh reuses on every run. Retiring one frees nothing: the slug stays taken, organizationBySlug keeps returning it, and the next probe run fails on a bare permission denial days later, so the cost lands on somebody else. The refusal names the family and tells you that reinstateOrganization is the way back.
+  """
+  acknowledgeProbeInfrastructure: Boolean
+}
+
+"""Which retired organization to put back, and why."""
+input ReinstateOrganizationInput {
+  """Organization to reinstate (BigInt as a decimal string)."""
+  orgId: BigInt!
+  """Why the retirement is being reversed. Required and stored."""
+  reason: String!
 }
 
 input CreateOrgTokenInput {
@@ -13984,7 +14209,7 @@ input SaveCrowdyStudioProjectMetadataInput {
   """Project UUID to update."""
   projectId: String!
   """
-  Current project revision. A stale value returns CONFLICT with CROWDY_STUDIO_REVISION_CONFLICT.
+  Current project revision. A stale value is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409); branch on that exact code, not on CONFLICT.
   """
   expectedRevision: BigInt!
   """
@@ -14020,7 +14245,7 @@ input SaveCrowdyStudioProjectInput {
   """Project UUID to update."""
   projectId: String!
   """
-  Current project revision. A stale value returns CONFLICT with CROWDY_STUDIO_REVISION_CONFLICT and applies no metadata or file writes.
+  Current project revision. A stale value is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409) — that exact code, not CONFLICT — and applies no metadata or file writes.
   """
   expectedRevision: BigInt!
   """

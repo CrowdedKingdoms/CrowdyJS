@@ -293,3 +293,8 @@ export {
   type KitInvokeResult,
   type RawInvokeResult,
 } from './shared.js';
+export {
+  sessionChannelNotification,
+  namedChannelNotification,
+  channelIdNotification,
+} from './notifications.js';
