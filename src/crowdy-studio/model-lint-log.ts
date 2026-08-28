@@ -31,6 +31,15 @@ export interface CrowdyModelRefusal {
   message: string;
   /** The object the refusal is about, for deduplication and for the developer. */
   subject?: string;
+  /**
+   * For a quarantine: the lint finding that caused it, and what kind of object it is.
+   *
+   * FIRST-CLASS BECAUSE `reason` IS THE ONLY ACTIONABLE FIELD. Before these existed the
+   * server's `quarantineReason` was reachable only by digging through the untyped `detail`
+   * bag, so a developer was told their function is quarantined and left to guess which of
+   * their lint errors did it. `subject` says which object; this says what to fix.
+   */
+  quarantine?: { kind?: string; reason: string };
   /** Anything else the server named in `extensions`, for the developer to read. */
   detail?: Record<string, unknown>;
 }
@@ -51,7 +60,20 @@ export function modelRefusalFrom(error: unknown): CrowdyModelRefusal | null {
     .extensions;
   if (!extensions) return null;
   const code = extensions.code;
-  if (typeof code !== 'string' || !MODEL_REFUSAL_CODES.has(code)) return null;
+  // A QUARANTINE ON `gameModelInvoke` DOES NOT ARRIVE AS `OBJECT_QUARANTINED`. That entry
+  // point is a user-code boundary, so the server rebuilds the error from a
+  // { code, blame, retryable } triple and the code becomes USER_CODE_ERROR — while the
+  // quarantine fields survive. Recognising the code alone therefore misses the refusal on
+  // the single path a player takes, which is where it matters most, so the presence of
+  // `quarantineReason` is treated as identifying too.
+  const quarantineReason =
+    typeof extensions.quarantineReason === 'string'
+      ? extensions.quarantineReason
+      : undefined;
+  const isRefusal =
+    (typeof code === 'string' && MODEL_REFUSAL_CODES.has(code)) ||
+    quarantineReason !== undefined;
+  if (!isRefusal) return null;
 
   const subject =
     typeof extensions.typeName === 'string'
@@ -61,9 +83,19 @@ export function modelRefusalFrom(error: unknown): CrowdyModelRefusal | null {
         : undefined;
 
   return {
-    code,
+    code: typeof code === 'string' ? code : 'OBJECT_QUARANTINED',
     message: String((error as { message?: unknown }).message ?? code),
     ...(subject ? { subject } : {}),
+    ...(quarantineReason
+      ? {
+          quarantine: {
+            ...(typeof extensions.quarantinedKind === 'string'
+              ? { kind: extensions.quarantinedKind }
+              : {}),
+            reason: quarantineReason,
+          },
+        }
+      : {}),
     detail: extensions,
   };
 }
