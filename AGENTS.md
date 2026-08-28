@@ -4,23 +4,38 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.1.0** and **15.1.0 is published** —
-`latest`, `@dev` and `@test` all moved to it on 2026-08-22. This paragraph said
-"nothing is published at that number yet" for a day afterwards, which is the
-version-in-prose hazard: `package.json` and the registry disagreeing IS the
-normal state between a merge and a release, and a page cannot tell you which
-state you are in. Ask: `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+**Current package:** `package.json` is **15.3.0**. Whether that is *published* is
+not answerable from this page, and the paragraph this replaces proved it: it read
+"nothing is published at that number yet" for a day after 15.1.0 shipped.
+`package.json` and the registry disagreeing IS the normal state between a merge
+and a release, and prose cannot tell you which state you are in. Ask:
+`npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**No consumer has adopted 15.1.0**, and none needs to — all nine Crowdy-Games
-projects are still on the 15.0.0 line and CrowdyCPP's parity pin is 15.0.0.
-Nothing downstream does password management, which is what 15.1.0 adds. That is
-a deliberate state, not lag.
+**15.3.0 adds** the ck-api v1.67 surface (`channel_name` on channel
+notifications, the two `NOTIFICATION_CHANNEL_*` lint codes,
+`NOTIFICATION_UNDELIVERABLE`, the two notification counters on
+`GmAppDiagnostics`), the `kit/notifications.ts` builders, and a `quarantine`
+field on `CrowdyModelRefusal`. **15.2.0** was the release before it.
+
+**Do not hardcode consumer SDK pins here — they rot.** Ask
+`npm view @crowdedkingdoms/crowdyjs dist-tags` for what npm serves, and in
+Crowdy-Games use `scripts/ci/check-sdk-pins.mjs` /
+`grep '"@crowdedkingdoms/crowdyjs"' */package.json` for what each game actually
+pins. CrowdyCPP's parity pin is `crowdyjsParityTarget` in
+`CrowdyCPP/package.json` — read it there, not from this page.
 
 `dev/vX.Y.Z` / `test/vX.Y.Z` publish
 `X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
 tag moves `latest`. Consumers pin the EXACT prerelease for their tier — never a
 caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
 `gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
+
+**TIER ALIGNMENT (hard rule for consumers).** A consumer branch may only
+reference CrowdyJS artifacts from the **same** tier: Crowdy-Games / CrowdyCPP
+`dev` → `@dev` / the `dev/` tag’s commit; `test` → `@test`; `prod` → `latest`.
+Publishing `prod/vX.Y.Z` does **not** authorize bumping Games-`dev` or
+CPP-`dev` to that plain version — those ladders promote separately
+(`test`↔`test`, `prod`↔`prod`).
 
 **15.0.0 IS A BREAKING MAJOR, AND THIS FILE DESCRIBED THE PREVIOUS ONE FOR A
 DAY.** It **removed `devLogin`** and added **`auth.login` / `auth.register`**.
@@ -46,9 +61,9 @@ Read [README.md](README.md) first. [MIGRATION.md](MIGRATION.md) covers breaking
 changes. This file is the game-concept → API map the README does not repeat.
 
 There is **one origin**. `managementUrl` / `client.management` were removed in
-v14. The `cks-management-api` GitHub repo still exists (unarchived) but is
-not a running service; gameplay data lives in **PostgreSQL + Citus** via
-`cks-game-api`, not galaxy.
+v14. The `cks-management-api` GitHub repo still exists (**archived**) but is
+not a running service and is not a schema source; gameplay data lives in
+**PostgreSQL + Citus** via `cks-game-api`, not galaxy.
 
 ## Repo orientation
 
