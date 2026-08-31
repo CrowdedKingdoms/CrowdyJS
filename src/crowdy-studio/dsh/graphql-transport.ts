@@ -9,6 +9,7 @@ import type { GraphQLClient } from '../../client.js';
 import type {
   CrowdyStudioDshMessage,
   CrowdyStudioDshMessageKind,
+  CrowdyStudioDshModel,
   CrowdyStudioDshSessionSummary,
   CrowdyStudioDshTransport,
 } from './controller.js';
@@ -63,9 +64,37 @@ const HISTORY = `
   }
 `;
 
+const GET_MODEL = `
+  query CrowdyStudioDshModel {
+    crowdyStudioDshModel {
+      provider
+      model
+      options { id name }
+    }
+  }
+`;
+
+const SET_MODEL = `
+  mutation CrowdyStudioDshSetModel($input: SetCrowdyStudioDshModelInput!) {
+    crowdyStudioDshSetModel(input: $input) {
+      provider
+      model
+      options { id name }
+    }
+  }
+`;
+
 const APPEND_CLIENT_LOGS = `
   mutation CrowdyStudioDshAppendClientLogs($input: AppendCrowdyStudioDshClientLogsInput!) {
     crowdyStudioDshAppendClientLogs(input: $input) {
+      text
+    }
+  }
+`;
+
+const UPDATE_GAME_CONTEXT = `
+  mutation CrowdyStudioDshUpdateGameContext($input: UpdateCrowdyStudioDshGameContextInput!) {
+    crowdyStudioDshUpdateGameContext(input: $input) {
       text
     }
   }
@@ -217,6 +246,32 @@ export class CrowdyStudioDshGraphQLTransport
     };
   }
 
+  async getModel(): Promise<CrowdyStudioDshModel> {
+    const data = await this.graphql.query<{
+      crowdyStudioDshModel: {
+        model: string;
+        options: Array<{ id: string; name: string }>;
+      };
+    }>(GET_MODEL);
+    return {
+      modelId: data.crowdyStudioDshModel.model,
+      options: data.crowdyStudioDshModel.options ?? [],
+    };
+  }
+
+  async setModel(input: { modelId: string }): Promise<CrowdyStudioDshModel> {
+    const data = await this.graphql.query<{
+      crowdyStudioDshSetModel: {
+        model: string;
+        options: Array<{ id: string; name: string }>;
+      };
+    }>(SET_MODEL, { input: { model: input.modelId } });
+    return {
+      modelId: data.crowdyStudioDshSetModel.model,
+      options: data.crowdyStudioDshSetModel.options ?? [],
+    };
+  }
+
   async appendClientLogs(input: {
     projectId: string;
     lines: ReadonlyArray<{
@@ -236,6 +291,30 @@ export class CrowdyStudioDshGraphQLTransport
           message: line.message,
           target: line.target === 'SERVER' ? 'SERVER' : 'CLIENT',
         })),
+      },
+    });
+  }
+
+  async updateGameContext(input: {
+    projectId: string;
+    currentChunk: { x: number; y: number; z: number };
+    playerPosition?: { x: number; y: number; z: number } | null;
+    gridId?: string | null;
+    gridBounds?: {
+      lowChunk: { x: number; y: number; z: number };
+      highChunk: { x: number; y: number; z: number };
+    } | null;
+    blockCatalog?: ReadonlyArray<{ id: number; name: string }> | null;
+  }): Promise<void> {
+    if (!input.projectId.trim()) return;
+    await this.graphql.query(UPDATE_GAME_CONTEXT, {
+      input: {
+        projectId: input.projectId,
+        currentChunk: input.currentChunk,
+        ...(input.playerPosition ? { playerPosition: input.playerPosition } : {}),
+        ...(input.gridId ? { gridId: input.gridId } : {}),
+        ...(input.gridBounds ? { gridBounds: input.gridBounds } : {}),
+        ...(input.blockCatalog?.length ? { blockCatalog: [...input.blockCatalog] } : {}),
       },
     });
   }

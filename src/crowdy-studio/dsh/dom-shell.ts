@@ -32,6 +32,7 @@ export class CrowdyStudioDshDomShell {
   readonly root: HTMLElement;
   private readonly connection: HTMLElement;
   private readonly sessionSelect: HTMLSelectElement;
+  private readonly modelSelect: HTMLSelectElement;
   private readonly transcript: HTMLElement;
   private readonly working: HTMLElement;
   private readonly workingLabelEl: HTMLElement;
@@ -78,6 +79,15 @@ export class CrowdyStudioDshDomShell {
       void this.run(() => this.controller.createSession());
       options.layout?.setVisible('dsh', true);
     });
+    this.modelSelect = document.createElement('select');
+    this.modelSelect.className = 'ck-crowdy-studio-dsh-model-select';
+    this.modelSelect.setAttribute('aria-label', 'Harness model');
+    this.modelSelect.hidden = true;
+    this.modelSelect.addEventListener('change', () => {
+      const modelId = this.modelSelect.value;
+      if (!modelId) return;
+      void this.run(() => this.controller.setModel(modelId));
+    });
     this.sessionSelect = document.createElement('select');
     this.sessionSelect.className = 'ck-crowdy-studio-dsh-session-select';
     this.sessionSelect.setAttribute('aria-label', 'Harness session');
@@ -93,7 +103,13 @@ export class CrowdyStudioDshDomShell {
     this.liveLabelEl = this.live.querySelector(
       '.ck-crowdy-studio-dsh-working-label',
     ) as HTMLElement;
-    header.append(brand, this.sessionSelect, this.live, this.newSession);
+    header.append(
+      brand,
+      this.modelSelect,
+      this.sessionSelect,
+      this.live,
+      this.newSession,
+    );
 
     this.transcript = document.createElement('div');
     this.transcript.className = 'ck-crowdy-studio-dsh-transcript';
@@ -115,10 +131,16 @@ export class CrowdyStudioDshDomShell {
     this.questionJump.className = 'ck-crowdy-studio-dsh-question-jump';
     this.questionJump.hidden = true;
     this.questionJump.addEventListener('click', () => {
-      const card = this.transcript.querySelector('[data-kind="question"]');
+      const card = this.transcript.querySelector(
+        '[data-kind="question"]:not([data-answered="true"])',
+      );
       if (card instanceof HTMLElement) {
         card.scrollIntoView({ block: 'center', inline: 'nearest' });
+        this.syncQuestionJump();
       }
+    });
+    this.transcript.addEventListener('scroll', () => this.syncQuestionJump(), {
+      passive: true,
     });
 
     const form = document.createElement('form');
@@ -236,6 +258,17 @@ export class CrowdyStudioDshDomShell {
     this.working.setAttribute('aria-label', liveLabel);
     this.live.setAttribute('aria-label', liveLabel);
 
+    this.modelSelect.replaceChildren();
+    this.modelSelect.hidden = state.modelOptions.length === 0;
+    this.modelSelect.disabled = working;
+    for (const option of state.modelOptions) {
+      const item = document.createElement('option');
+      item.value = option.id;
+      item.textContent = option.name;
+      item.selected = option.id === state.modelId;
+      this.modelSelect.append(item);
+    }
+
     this.sessionSelect.replaceChildren();
     this.sessionSelect.hidden = state.sessions.length === 0;
     for (const session of state.sessions) {
@@ -308,14 +341,7 @@ export class CrowdyStudioDshDomShell {
       }
     }
 
-    const unanswered = lastUnansweredQuestion(state.messages);
-    this.questionJump.hidden = unanswered === null;
-    if (unanswered) {
-      const title = unanswered.title?.trim();
-      this.questionJump.textContent = title
-        ? `Question: ${title}`
-        : 'Question waiting — scroll to answer';
-    }
+    this.syncQuestionJump();
 
     this.errorBanner.hidden = !state.lastError;
     this.errorBanner.textContent = state.lastError ?? '';
@@ -325,6 +351,26 @@ export class CrowdyStudioDshDomShell {
     this.newSession.disabled = blocked;
     this.stop.hidden = !working;
     this.composer.disabled = blocked;
+  }
+
+  /**
+   * The jump chip used to dump the whole question title above Ask anything,
+   * so a long ask_user_question appeared twice. Keep a one-line chip, and
+   * only when the yellow card is scrolled off the transcript.
+   */
+  private syncQuestionJump(): void {
+    const card = this.transcript.querySelector(
+      '[data-kind="question"]:not([data-answered="true"])',
+    );
+    if (!(card instanceof HTMLElement)) {
+      this.questionJump.hidden = true;
+      return;
+    }
+    this.questionJump.textContent = 'Question waiting — scroll to answer';
+    const root = this.transcript.getBoundingClientRect();
+    const box = card.getBoundingClientRect();
+    const visible = box.bottom > root.top + 8 && box.top < root.bottom - 8;
+    this.questionJump.hidden = visible;
   }
 
   private async run(action: () => Promise<void>): Promise<void> {
@@ -390,19 +436,6 @@ function renderMessage(
   }
   row.append(bubble);
   return row;
-}
-
-function lastUnansweredQuestion(
-  messages: readonly CrowdyStudioDshMessage[],
-): CrowdyStudioDshMessage | null {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (!message || message.answeredText) continue;
-    if (message.kind === 'question' || looksLikeAskUserQuestion(message)) {
-      return message;
-    }
-  }
-  return null;
 }
 
 function questionsFromMessage(message: CrowdyStudioDshMessage) {

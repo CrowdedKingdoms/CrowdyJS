@@ -42,6 +42,22 @@ class FakeTransport {
   /** When true, sendMessage records the prompt but does not append history yet. */
   deferCommit = false;
   deferred = [];
+  model = {
+    modelId: 'deepseek/deepseek-v4-flash',
+    options: [
+      { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+      { id: 'z-ai/glm-5.3-flash', name: 'GLM 5.3 Flash' },
+    ],
+  };
+
+  async getModel() {
+    return this.model;
+  }
+
+  async setModel(input) {
+    this.model = { ...this.model, modelId: input.modelId };
+    return this.model;
+  }
 
   async listSessions() {
     return [...this.sessions];
@@ -679,6 +695,23 @@ test('initialize attaches the newest listed Harness session when none is remembe
     ),
     true,
   );
+  controller.destroy();
+});
+
+test('loads and switches the OpenRouter Harness model', async () => {
+  const transport = new FakeTransport();
+  const controller = new CrowdyStudioDshController({
+    transport,
+    appId: '2',
+    resolveProjectId: () => 'proj-1',
+    pollIntervalMs: 60_000,
+  });
+  await controller.initialize();
+  assert.equal(controller.getState().modelId, 'deepseek/deepseek-v4-flash');
+  assert.equal(controller.getState().modelOptions.length, 2);
+  await controller.setModel('z-ai/glm-5.3-flash');
+  assert.equal(controller.getState().modelId, 'z-ai/glm-5.3-flash');
+  assert.equal(transport.model.modelId, 'z-ai/glm-5.3-flash');
   controller.destroy();
 });
 

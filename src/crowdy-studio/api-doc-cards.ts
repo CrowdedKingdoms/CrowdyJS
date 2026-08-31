@@ -62,10 +62,32 @@ export const SPAWN_CARD: ApiDocCard = {
   notes: 'Durable world writes go through crowdy::api::voxel_set only.',
 };
 
+export const INVOKE_PARAMS_CARD: ApiDocCard = {
+  id: 'invoke_params',
+  matchers: [/\bon_invoke\b/i, /\binvoke_params\b/i, /\bparams\.chunk\b/i],
+  signature:
+    'fn on_invoke(payload: &[u8]) -> Vec<u8>  // UTF-8 JSON {export, params, callerUserId, gridId}',
+  canonicalCall:
+    'let env: serde_json::Value = serde_json::from_slice(payload).unwrap_or_default();\n' +
+    'let params = env.get("params").cloned().unwrap_or(env);\n' +
+    'let chunk = params.get("chunk").and_then(|v| v.as_array())\n' +
+    '    .or_else(|| parse chunk_x / chunk_y / chunk_z);\n' +
+    '// fallback: current chunk from game_context, never (0,0,0) and never first 24 bytes',
+  wrongShapes: [
+    'String::from_utf8_lossy(payload) as a raw command string',
+    'first 24 little-endian i64 bytes as chunk coords',
+    'hardcoded DISCO_CHUNK / (0,0,0) when the player is elsewhere',
+  ],
+  notes:
+    'Studio Invoke sends a JSON envelope. Parse params.chunk or chunk_x/y/z. ' +
+    'If params omit a chunk, use the live current chunk from game_context.',
+};
+
 export const API_DOC_CARDS: readonly ApiDocCard[] = [
   VOXEL_SET_CARD,
   GLAM_CARD,
   SPAWN_CARD,
+  INVOKE_PARAMS_CARD,
 ];
 
 export function formatApiDocCard(card: ApiDocCard): string {

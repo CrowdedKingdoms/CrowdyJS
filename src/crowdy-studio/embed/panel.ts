@@ -2,6 +2,7 @@ import {
   mountCrowdyStudio,
   type MountCrowdyStudioOptions,
 } from '../mount.js';
+import type { CrowdyStudioGameContextSnapshot } from '../game-context.js';
 import type {
   CrowdyStudioController,
   CrowdyStudioPlayerCompute,
@@ -140,6 +141,8 @@ export interface CrowdyStudioEmbedContext {
   onPresentation?(presentation: PlayerCodePresentation): void;
   /** Game Play adapter; with `client.crowdyStudioAgent` enables the agent. */
   playerHost?: PlayerHostAdapterV1;
+  /** Live player chunk / grid / catalog for the Harness `game_context` tool. */
+  getGameContext?: () => CrowdyStudioGameContextSnapshot | null | undefined;
 }
 
 /**
@@ -526,6 +529,7 @@ export class CrowdyStudioEmbed {
             dsh: {
               transport: client.crowdyStudioDsh,
               appId,
+              getGameContext: context.getGameContext,
             },
           }
         : {}),

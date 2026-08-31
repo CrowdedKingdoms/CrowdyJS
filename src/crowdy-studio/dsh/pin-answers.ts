@@ -81,3 +81,43 @@ export function pinAskUserAnswers<T extends PinnableDshMessage>(
   });
   return pinned;
 }
+
+function sameQuestionCard(
+  left: PinnableDshMessage,
+  right: PinnableDshMessage,
+): boolean {
+  if (left.seq === right.seq) return true;
+  if (left.title && right.title && left.title === right.title) return true;
+  const leftQuestions = parseAskUserQuestions(left.text) ?? [];
+  const rightQuestions = parseAskUserQuestions(right.text) ?? [];
+  if (leftQuestions.length === 0 || leftQuestions.length !== rightQuestions.length) {
+    return false;
+  }
+  return leftQuestions.every(
+    (question, index) => question.question === rightQuestions[index]?.question,
+  );
+}
+
+/**
+ * Respond answers are not DSH user/message events. After Submit, the next
+ * history poll has the yellow card and later tools, but no Q+A line — keep
+ * the pin from the previous transcript so the card does not reset.
+ */
+export function retainPinnedAnswers<T extends PinnableDshMessage>(
+  incoming: readonly T[],
+  previous: readonly T[] = [],
+): T[] {
+  const pins = previous.filter(
+    (message) => isQuestionCard(message) && Boolean(message.answeredText?.trim()),
+  );
+  if (pins.length === 0) return [...incoming];
+  return incoming.map((message) => {
+    if (!isQuestionCard(message) || message.answeredText?.trim()) return message;
+    const match =
+      pins.find((pin) => pin.seq === message.seq) ??
+      pins.find((pin) => sameQuestionCard(pin, message));
+    return match?.answeredText
+      ? { ...message, answeredText: match.answeredText }
+      : message;
+  });
+}

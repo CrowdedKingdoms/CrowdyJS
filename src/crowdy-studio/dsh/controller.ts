@@ -9,9 +9,9 @@ import {
   decodeAskUserQuestionMessage,
   looksLikeAskUserQuestion,
 } from './ask-user-question.js';
-import { pinAskUserAnswers } from './pin-answers.js';
+import { pinAskUserAnswers, retainPinnedAnswers } from './pin-answers.js';
 
-export { pinAskUserAnswers } from './pin-answers.js';
+export { pinAskUserAnswers, retainPinnedAnswers } from './pin-answers.js';
 
 export type CrowdyStudioDshConnectionStatus =
   | 'idle'
@@ -38,6 +38,16 @@ export interface CrowdyStudioDshSessionSummary {
   updatedAt: string;
 }
 
+export interface CrowdyStudioDshModelOption {
+  id: string;
+  name: string;
+}
+
+export interface CrowdyStudioDshModel {
+  modelId: string;
+  options: CrowdyStudioDshModelOption[];
+}
+
 export interface CrowdyStudioDshMessage {
   seq: number;
   role: 'USER' | 'ASSISTANT' | 'SYSTEM' | 'UNKNOWN';
@@ -56,6 +66,8 @@ export interface CrowdyStudioDshState {
   messages: CrowdyStudioDshMessage[];
   busy: boolean;
   lastError: string | null;
+  modelId: string | null;
+  modelOptions: CrowdyStudioDshModelOption[];
 }
 
 export interface CrowdyStudioDshTransport {
@@ -91,6 +103,20 @@ export interface CrowdyStudioDshTransport {
       target: string;
     }>;
   }): Promise<void>;
+  /** Post the live player chunk / grid / block catalog for `game_context`. */
+  updateGameContext?(input: {
+    projectId: string;
+    currentChunk: { x: number; y: number; z: number };
+    playerPosition?: { x: number; y: number; z: number } | null;
+    gridId?: string | null;
+    gridBounds?: {
+      lowChunk: { x: number; y: number; z: number };
+      highChunk: { x: number; y: number; z: number };
+    } | null;
+    blockCatalog?: ReadonlyArray<{ id: number; name: string }> | null;
+  }): Promise<void>;
+  getModel?(): Promise<CrowdyStudioDshModel>;
+  setModel?(input: { modelId: string }): Promise<CrowdyStudioDshModel>;
 }
 
 export type CrowdyStudioDshListener = (state: CrowdyStudioDshState) => void;
@@ -114,6 +140,8 @@ export interface CrowdyStudioDshControllerOptions {
   quietSettleMs?: number;
   /** Remember the last Harness session so Studio remount can reopen it. */
   sessionMemory?: CrowdyStudioDshSessionMemory;
+  /** Called immediately before a user message is sent to the harness. */
+  beforeSend?: () => void | Promise<void>;
 }
 
 const emptyState = (): CrowdyStudioDshState => ({
@@ -124,6 +152,8 @@ const emptyState = (): CrowdyStudioDshState => ({
   messages: [],
   busy: false,
   lastError: null,
+  modelId: null,
+  modelOptions: [],
 });
 
 export class CrowdyStudioDshController {
@@ -154,6 +184,7 @@ export class CrowdyStudioDshController {
     this.patch({ connection: 'connecting', lastError: null });
     try {
       await this.refreshSessions();
+      await this.refreshModel();
       await this.restoreLastSession();
       this.patch({ connection: 'ready' });
       this.startPolling();
@@ -229,12 +260,17 @@ export class CrowdyStudioDshController {
     this.waitingForTurn = true;
     const generation = ++this.waitGeneration;
     this.patch({
-      messages: mergePendingUser(this.state.messages, optimistic),
+      messages: mergePendingUser(
+        this.state.messages,
+        optimistic,
+        this.state.messages,
+      ),
       busy: true,
       lastError: null,
     });
 
     try {
+      await this.options.beforeSend?.();
       await this.options.transport.sendMessage({
         sessionId,
         content: encoded,
@@ -258,6 +294,28 @@ export class CrowdyStudioDshController {
         this.waitingForTurn = false;
         this.patch({ busy: false });
       }
+    }
+  }
+
+  async setModel(modelId: string): Promise<void> {
+    if (
+      typeof this.options.transport.setModel !== 'function' ||
+      !modelId ||
+      modelId === this.state.modelId
+    ) {
+      return;
+    }
+    try {
+      const next = await this.options.transport.setModel({ modelId });
+      this.patch({
+        modelId: next.modelId,
+        modelOptions: next.options,
+        lastError: null,
+      });
+    } catch (error) {
+      this.patch({
+        lastError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -287,6 +345,21 @@ export class CrowdyStudioDshController {
     if (this.pollTimer) clearInterval(this.pollTimer);
     this.pollTimer = null;
     this.listeners.clear();
+  }
+
+  private async refreshModel(): Promise<void> {
+    if (typeof this.options.transport.getModel !== 'function') return;
+    try {
+      const model = await this.options.transport.getModel();
+      this.patch({
+        modelId: model.modelId,
+        modelOptions: model.options,
+      });
+    } catch (error) {
+      this.patch({
+        lastError: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async refreshSessions(): Promise<void> {
@@ -442,7 +515,11 @@ export class CrowdyStudioDshController {
     session: CrowdyStudioDshSessionSummary;
     messages: CrowdyStudioDshMessage[];
   }): void {
-    const messages = mergePendingUser(history.messages, this.pendingUser);
+    const messages = mergePendingUser(
+      history.messages,
+      this.pendingUser,
+      this.state.messages,
+    );
     if (
       this.pendingUser &&
       history.messages.some(
@@ -582,18 +659,18 @@ export function dshMessageLooksLikeMutation(
 export function mergePendingUser(
   messages: CrowdyStudioDshMessage[],
   pending: CrowdyStudioDshMessage | null,
+  previous: readonly CrowdyStudioDshMessage[] = [],
 ): CrowdyStudioDshMessage[] {
-  if (!pending) return pinAskUserAnswers(messages);
-  if (
-    messages.some(
-      (message) =>
-        (message.kind === 'user' && message.text === pending.text) ||
-        message.answeredText === pending.text,
-    )
-  ) {
-    return pinAskUserAnswers(messages);
-  }
-  return pinAskUserAnswers([...messages, pending]);
+  const next = !pending
+    ? pinAskUserAnswers(messages)
+    : messages.some(
+          (message) =>
+            (message.kind === 'user' && message.text === pending.text) ||
+            message.answeredText === pending.text,
+        )
+      ? pinAskUserAnswers(messages)
+      : pinAskUserAnswers([...messages, pending]);
+  return retainPinnedAnswers(next, previous);
 }
 
 /** True when the latest human prompt has no terminal reply yet. */

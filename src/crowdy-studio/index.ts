@@ -7,6 +7,14 @@ export {
   type CrowdyStudioClientLogTransport,
 } from './client-logs.js';
 export {
+  bindGameContextShipper,
+  type CrowdyStudioGameContextBlock,
+  type CrowdyStudioGameContextBounds,
+  type CrowdyStudioGameContextSnapshot,
+  type CrowdyStudioGameContextTransport,
+  type CrowdyStudioGameContextVec3,
+} from './game-context.js';
+export {
   CrowdyStudioController,
   type CrowdyStudioControllerOptions,
   type CrowdyStudioBroker,

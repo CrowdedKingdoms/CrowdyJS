@@ -4,6 +4,10 @@ import {
 } from './controller.js';
 import { bindClientLogShipper } from './client-logs.js';
 import {
+  bindGameContextShipper,
+  type CrowdyStudioGameContextSnapshot,
+} from './game-context.js';
+import {
   CROWDY_AGENT_TOOL_REGISTRY_V1,
   CrowdyAgentBrowserToolDispatcher,
   CrowdyAgentToolRegistry,
@@ -51,6 +55,8 @@ export interface MountCrowdyStudioDshOptions {
   transport: CrowdyStudioDshTransport;
   appId: string;
   autoInitialize?: boolean;
+  /** Live player chunk / grid / catalog. Polled and posted to the sidecar. */
+  getGameContext?: () => CrowdyStudioGameContextSnapshot | null | undefined;
 }
 
 export interface MountCrowdyStudioAgentOptions
@@ -128,6 +134,11 @@ export async function mountCrowdyStudio(
     () => controller.getState().project?.projectId,
     options.dsh?.transport,
     options.onClientLog,
+  );
+  const gameContextShipper = bindGameContextShipper(
+    () => controller.getState().project?.projectId,
+    options.dsh?.transport,
+    options.dsh?.getGameContext,
   );
   controller = new CrowdyStudioController({
     ...options,
@@ -239,6 +250,7 @@ export async function mountCrowdyStudio(
       transport: options.dsh.transport,
       appId: options.dsh.appId,
       resolveProjectId: () => controller.getState().project?.projectId,
+      beforeSend: () => gameContextShipper.publish(),
     });
   }
   const shell = new CrowdyStudioDomShell(
@@ -317,6 +329,7 @@ export async function mountCrowdyStudio(
       if (dsh && nextProjectId) {
         void dsh.initialize().catch(() => undefined);
       }
+      gameContextShipper.publish();
     }
   });
   const unsubscribeDshBusy = dsh
@@ -360,6 +373,7 @@ export async function mountCrowdyStudio(
         );
       });
     }
+    gameContextShipper.publish();
   } catch (error) {
     disconnectLayoutObserver();
     document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -370,6 +384,7 @@ export async function mountCrowdyStudio(
     shell.dispose();
     unsubscribeHumanEdit();
     clientLogShipper.dispose();
+    gameContextShipper.dispose();
     agent?.destroy();
     dsh?.destroy();
     controller.destroy();
@@ -396,6 +411,7 @@ export async function mountCrowdyStudio(
       shell.dispose();
       unsubscribeHumanEdit();
       clientLogShipper.dispose();
+      gameContextShipper.dispose();
       agent?.destroy();
       agent = null;
       dsh?.destroy();

@@ -19,6 +19,11 @@ import {
 } from './layout.js';
 import { createPaneSplitter, type PaneSplitterHandle } from './splitter.js';
 import {
+  explainInvokeFundsNeeded,
+  formatWalletNeedsFundsLabel,
+  playerComputeNeedsFunds,
+} from './funds-needed.js';
+import {
   projectTargets,
   type CrowdyStudioFileRef,
   type CrowdyStudioProjectKind,
@@ -485,6 +490,11 @@ export class CrowdyStudioDomShell {
         .join(' · ') || 'IDLE';
     this.runtimeStatus.dataset.phase = state.runtime.phase;
     this.budgetStatus.textContent = budgetText(state);
+    const needsFunds = playerComputeNeedsFunds(state);
+    this.budgetStatus.dataset.fundsNeeded = needsFunds ? 'true' : 'false';
+    this.budgetStatus.title = needsFunds
+      ? 'Player compute wallet is empty. Top up to run Test draft and Invoke.'
+      : '';
     this.autoRevealFailures(state);
   }
 
@@ -630,8 +640,13 @@ export class CrowdyStudioDomShell {
 
   private renderInvoke(state: CrowdyStudioState): void {
     this.invokeResult.textContent = state.invokeResult
-      ? formatInvokeResult(state.invokeResult)
+      ? formatInvokeResult(state)
       : '';
+    this.invokeResult.dataset.fundsNeeded =
+      state.invokeResult?.error &&
+      explainInvokeFundsNeeded(state.invokeResult.error, state)
+        ? 'true'
+        : 'false';
     const hasFailure = Boolean(
       state.invokeResult?.error || state.invokeResult?.failure,
     );
@@ -1367,15 +1382,20 @@ function budgetText(state: CrowdyStudioState): string {
     ? `units ${state.usage.hourUnitsUsed}/${state.usage.unitsPerHour ?? '∞'} · compiles ${state.usage.compilesThisHour}/${state.usage.maxCompilesPerHour}`
     : '';
   const wallet = state.wallet
-    ? `wallet ${state.wallet.balanceCents} ${state.wallet.currency}`
+    ? playerComputeNeedsFunds(state)
+      ? formatWalletNeedsFundsLabel(state.wallet)
+      : `wallet ${state.wallet.balanceCents} ${state.wallet.currency}`
     : '';
   return [usage, wallet].filter(Boolean).join(' · ');
 }
 
-function formatInvokeResult(result: NonNullable<CrowdyStudioState['invokeResult']>): string {
+function formatInvokeResult(state: CrowdyStudioState): string {
+  const result = state.invokeResult;
+  if (!result) return '';
   if (result.error) {
+    const funds = explainInvokeFundsNeeded(result.error, state);
     return [
-      result.error,
+      funds ?? result.error,
       result.exportName ? `export ${result.exportName}` : '',
     ]
       .filter(Boolean)

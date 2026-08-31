@@ -85,11 +85,13 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-problem[data-source=local-advisory]{color:#fde68a}
 .ck-crowdy-studio-invoke{display:grid;grid-template-columns:180px 1fr auto;gap:6px}
 .ck-crowdy-studio-invoke textarea{min-height:70px;background:#0f172a;color:var(--ck-text);border:1px solid var(--ck-line)}
+.ck-crowdy-studio-panel pre[data-funds-needed=true]{color:#fde68a;white-space:pre-wrap}
 .ck-crowdy-studio-empty{color:var(--ck-muted);padding:8px}
 
 /* Status bar */
 .ck-crowdy-studio-statusbar{display:flex;align-items:center;gap:14px;padding:3px 10px;border-top:1px solid var(--ck-line);background:#0b1220;font-size:12px;min-height:24px}
 .ck-crowdy-studio-status{color:var(--ck-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-crowdy-studio-status[data-funds-needed=true]{color:#fbbf24;font-weight:600}
 .ck-crowdy-studio-statusbar-runtime{background:transparent;border:0;padding:1px 4px;border-radius:3px}
 .ck-crowdy-studio-statusbar-runtime:hover{color:var(--ck-text)}
 .ck-crowdy-studio-statusbar-runtime[data-phase=RUNNING]{color:#86efac}
@@ -132,7 +134,8 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-dsh-header{display:flex;align-items:center;gap:8px;padding:10px 12px 8px;border-bottom:1px solid var(--dsh-line)}
 .ck-crowdy-studio-dsh-brand{display:flex;align-items:center;gap:8px;flex:none}
 .ck-crowdy-studio-dsh-dock h2{margin:0;font-size:13px;letter-spacing:.08em;font-weight:600}
-.ck-crowdy-studio-dsh-session-select{flex:1;min-width:0;background:var(--dsh-layer);color:var(--dsh-text);border:1px solid var(--dsh-line);border-radius:8px;padding:4px 8px}
+.ck-crowdy-studio-dsh-session-select,.ck-crowdy-studio-dsh-model-select{flex:1;min-width:0;background:var(--dsh-layer);color:var(--dsh-text);border:1px solid var(--dsh-line);border-radius:8px;padding:4px 8px}
+.ck-crowdy-studio-dsh-model-select{flex:0 1 11.5rem;max-width:11.5rem}
 .ck-crowdy-studio-dsh-connection{width:8px;height:8px;border-radius:50%;background:#61666b;flex:none;position:relative}
 .ck-crowdy-studio-dsh-connection[data-connection=ready]{background:#22c55e}
 .ck-crowdy-studio-dsh-connection[data-connection=connecting]{background:#fbbf24}
