@@ -4,6 +4,7 @@ import {
   type PlayerCodeGridBounds,
 } from '../player-runtime/player-code-broker.js';
 import type { PlayerComputeAPI } from '../domains/playerCompute.js';
+import type { MeshArtifactsAPI } from '../domains/meshArtifacts.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
 import {
   digestCanonicalJson,
@@ -150,6 +151,9 @@ export interface CrowdyStudioState {
   usage: CrowdyStudioUsageSnapshot | null;
   wallet: CrowdyStudioWalletSnapshot | null;
   invokeResult: CrowdyStudioInvokeResult | null;
+  /** glTF meshes uploaded to this Studio project (hash + name, no bytes). */
+  meshArtifacts: readonly CrowdyStudioMeshArtifact[];
+  meshArtifactMessage?: string;
 }
 
 export type CrowdyStudioPlayerCompute = Pick<
@@ -167,6 +171,18 @@ export type CrowdyStudioPlayerCompute = Pick<
 
 export type CrowdyStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
 
+export type CrowdyStudioMeshArtifacts = Pick<
+  MeshArtifactsAPI,
+  'upload' | 'list'
+>;
+
+export interface CrowdyStudioMeshArtifact {
+  artifactHash: string;
+  name: string;
+  sizeBytes: number;
+  contentType: string;
+}
+
 export interface CrowdyStudioBroker {
   start(bytes: ArrayBuffer): Promise<void>;
   stop(): void;
@@ -176,6 +192,7 @@ export interface CrowdyStudioControllerOptions {
   projectProvider: CrowdyStudioProjectProvider;
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
+  meshArtifacts?: CrowdyStudioMeshArtifacts;
   appId: string;
   gridId: string;
   initialProjectId?: string;
@@ -248,6 +265,7 @@ export class CrowdyStudioController {
     usage: null,
     wallet: null,
     invokeResult: null,
+    meshArtifacts: [],
   };
   private readonly listeners = new Set<(state: CrowdyStudioState) => void>();
   private readonly humanEditListeners = new Set<() => void>();
@@ -342,6 +360,10 @@ export class CrowdyStudioController {
         ? permission.canWrite
         : permission.canRun
       : true;
+  }
+
+  hasMeshArtifacts(): boolean {
+    return Boolean(this.options.meshArtifacts);
   }
 
   /** Credential-free context projection used by exact browser agent tools. */
@@ -491,8 +513,11 @@ export class CrowdyStudioController {
       runs: [],
       logs: [],
       invokeResult: null,
+      meshArtifacts: [],
+      meshArtifactMessage: undefined,
     });
     this.restartVisibleSurfacePolling();
+    void this.refreshMeshArtifacts();
   }
 
   openFile(ref: CrowdyStudioFileRef): void {
@@ -513,6 +538,58 @@ export class CrowdyStudioController {
         ? openFiles.at(-1) ?? null
         : this.state.activeFile;
     this.update({ openFiles, activeFile });
+  }
+
+  async refreshMeshArtifacts(): Promise<void> {
+    const api = this.options.meshArtifacts;
+    const project = this.state.project;
+    if (!api || !project) {
+      this.update({ meshArtifacts: [], meshArtifactMessage: undefined });
+      return;
+    }
+    try {
+      const rows = await api.list({
+        appId: this.options.appId,
+        gridId: this.options.gridId,
+        projectId: project.projectId,
+      });
+      this.update({
+        meshArtifacts: rows.map((row) => ({
+          artifactHash: row.artifactHash,
+          name: row.name,
+          sizeBytes: row.sizeBytes,
+          contentType: row.contentType,
+        })),
+        meshArtifactMessage: undefined,
+      });
+    } catch (error) {
+      this.update({
+        meshArtifactMessage:
+          error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async uploadMeshArtifact(name: string, bytes: ArrayBuffer): Promise<void> {
+    const api = this.options.meshArtifacts;
+    const project = this.requireProject();
+    if (!api) {
+      throw new Error('Mesh artifact upload is not available on this client');
+    }
+    const binary = new Uint8Array(bytes);
+    let encoded = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < binary.length; i += chunk) {
+      encoded += String.fromCharCode(...binary.subarray(i, i + chunk));
+    }
+    await api.upload({
+      appId: this.options.appId,
+      gridId: this.options.gridId,
+      projectId: project.projectId,
+      name,
+      artifactBase64: btoa(encoded),
+    });
+    await this.refreshMeshArtifacts();
   }
 
   fileContent(ref: CrowdyStudioFileRef): string {
