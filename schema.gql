@@ -1158,9 +1158,17 @@ type App {
   """
   deploymentTarget: String!
   """
-  Reserved sustained egress in bytes/s for shared apps. 0 = free tier; >0 bypasses the ~1 MB/s rate limit and incurs a monthly reservation fee.
+  Reserved realtime (UDP) capacity in bytes/s for shared apps. Superseded by reservedUdpBytesPerSec.
   """
-  reservedEgressBytesPerSec: BigInt!
+  reservedEgressBytesPerSec: BigInt! @deprecated(reason: "Renamed 2026-09-01 when reservations split by traffic type. Use reservedUdpBytesPerSec; this returns the same value for one release.")
+  """
+  Reserved realtime (UDP) capacity in bytes/s. Guarantees a minimum the platform provisions for you; it is not a limit on what you may send. Billed monthly whether or not used. 0 = none.
+  """
+  reservedUdpBytesPerSec: BigInt!
+  """
+  Reserved API request rate in GraphQL operations/sec. Guarantees a minimum the platform provisions for you; it is not a limit on how many requests you may make. Billed monthly whether or not used. 0 = none.
+  """
+  reservedGraphqlOpsPerSec: BigInt!
   """
   Shared-environment runtime gate, mirrored to the game DB and enforced by game-api + Buddy: "active", "grace", "denied", or "suspended".
   """
@@ -1472,7 +1480,7 @@ type RateCardEntryType {
   """
   unitLabel: String!
   """
-  How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 15 with unitQuantity 1073741824 is 15 cents per GiB.
+  How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 19 with unitQuantity 1073741824 is 19 cents per GiB.
   """
   unitQuantity: BigInt!
   """
@@ -1499,6 +1507,66 @@ Which rate card. SHARED prices organization metered usage for shared-environment
 enum RateScope {
   SHARED
   PLAYER
+}
+
+"""
+One Crowdy Studio agent model price, in micro-USD per million tokens. Only an ACTIVE row with a model_id ever prices a run.
+"""
+type AgentRateCardEntryType {
+  """Stable code for this card row, unique across the table."""
+  code: String!
+  """
+  Provider model this prices, matched against the resolved model at ingest. Null is only legal on a non-ACTIVE row.
+  """
+  modelId: String
+  """ISO currency code. USD today."""
+  currency: String!
+  """
+  DRAFT, ACTIVE or RETIRED. Only ACTIVE, inside its effective window, prices a run; an uncarded model is left unbilled rather than charged at cost.
+  """
+  status: String!
+  """Micro-USD per million uncached prompt tokens."""
+  inputMicroUsdPerMillion: BigInt!
+  """Micro-USD per million completion tokens."""
+  outputMicroUsdPerMillion: BigInt!
+  """Micro-USD per million reasoning tokens."""
+  reasoningMicroUsdPerMillion: BigInt!
+  """Micro-USD per million cached prompt tokens."""
+  cachedInputMicroUsdPerMillion: BigInt!
+}
+
+"""
+One priced dimension of the public rate card: its rate and its free allowances. A dimension with a price of 0 is metered but not charged.
+"""
+type PublicRateCardEntryType {
+  """Which card this row is on."""
+  scope: RateScope!
+  """
+  The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". This is the key your usage is aggregated under, so it is what to match a bill line against.
+  """
+  metric: String!
+  """
+  Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity.
+  """
+  unitLabel: String!
+  """
+  How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 19 with unitQuantity 1073741824 is 19 cents per GiB. priceCents and unitQuantity are two halves of one price and mean nothing apart.
+  """
+  unitQuantity: BigInt!
+  """
+  Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted. 0 means metered but not charged.
+  """
+  priceCents: Float!
+  """ISO currency code. USD today."""
+  currency: String!
+  """
+  Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit.
+  """
+  freePerHour: BigInt
+  """
+  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app). Null when this dimension has no monthly allowance.
+  """
+  freePerMonth: BigInt
 }
 
 """
@@ -5099,6 +5167,68 @@ type GroupMembership {
 }
 
 """
+A point-in-time app-scoped count of active gameplay sessions. This counts sessions, not actors or distinct users; one user with multiple active sessions contributes multiple players. Status states whether the fleet-wide count is complete.
+"""
+type GameModelActivePlayerCountSnapshot {
+  """The app whose active gameplay sessions were counted."""
+  appId: BigInt!
+  """
+  Active gameplay sessions currently reported for the app. For PARTIAL this is the best-known sum from supported fresh Buddies; for UNAVAILABLE it is zero because no live report can be observed. Check status before treating it as a complete fleet total.
+  """
+  activePlayerCount: Int!
+  """
+  Whether activePlayerCount is complete (FRESH), a supported-Buddy subset (PARTIAL), or unavailable because no Buddy heartbeat is fresh (UNAVAILABLE).
+  """
+  status: GameModelPlayerCountStatus!
+  """
+  Latest heartbeat time represented by this observation, or null when no fresh Buddy is available.
+  """
+  observedAt: DateTime
+  """
+  Durable monotonic revision of complete count changes. Zero means the app is untracked or has not changed after its silent baseline. Partial and unavailable observations never advance it.
+  """
+  revision: BigInt!
+}
+
+"""
+Completeness of an app-scoped active gameplay-session count across the fresh Buddy fleet.
+"""
+enum GameModelPlayerCountStatus {
+  """
+  At least one non-Offline Buddy heartbeat is fresh and every fresh Buddy supports version 1 app-scoped counts. The count is complete.
+  """
+  FRESH
+  """
+  At least one non-Offline Buddy heartbeat is fresh, but one or more fresh Buddies do not support app-scoped counts. The count is only the best-known supported-Buddy sum and does not advance change revisions.
+  """
+  PARTIAL
+  """
+  No non-Offline Buddy heartbeat is fresh enough to observe. The count is unavailable and does not advance change revisions.
+  """
+  UNAVAILABLE
+}
+
+"""
+One durable transition between complete app-scoped active gameplay-session counts. Delivery is cross-replica but best-effort; deduplicate by revision and requery gameModelActivePlayerCount after reconnect or a revision gap.
+"""
+type GameModelActivePlayerCountChange {
+  """The app whose complete active-session count changed."""
+  appId: BigInt!
+  """Last complete active gameplay-session count before this transition."""
+  previousCount: Int!
+  """New complete active gameplay-session count after this transition."""
+  currentCount: Int!
+  """Signed change: currentCount minus previousCount."""
+  delta: Int!
+  """
+  Durable monotonic app revision for this transition. Use it to deduplicate and detect gaps.
+  """
+  revision: BigInt!
+  """Latest fresh Buddy heartbeat represented by the new count."""
+  observedAt: DateTime!
+}
+
+"""
 A WASM compute module: developer-authored Rust compiled to sandboxed WASM on game-api instances. Holds metadata, the deployed version pointer, and circuit-breaker state; source lives in versions.
 """
 type WasmModule {
@@ -5115,9 +5245,9 @@ type WasmModule {
   """
   enabled: Boolean!
   """
-  Whether the module runs without active players (world simulation). Policy-gated.
+  RETIRED. Always false. Modules run only while their app has a player present.
   """
-  alwaysOn: Boolean!
+  alwaysOn: Boolean! @deprecated(reason: "Retired 2026-09-01: nothing runs for an app with no player in it, so this is always false. Stop selecting it.")
   """The deployed version id (UUID). Null until first deploy."""
   currentVersionId: String
   """Circuit-breaker state: closed | open | half_open."""
@@ -6499,68 +6629,6 @@ type GameModelEventsConnection {
   totalCount: Int
 }
 
-"""
-A point-in-time app-scoped count of active gameplay sessions. This counts sessions, not actors or distinct users; one user with multiple active sessions contributes multiple players. Status states whether the fleet-wide count is complete.
-"""
-type GameModelActivePlayerCountSnapshot {
-  """The app whose active gameplay sessions were counted."""
-  appId: BigInt!
-  """
-  Active gameplay sessions currently reported for the app. For PARTIAL this is the best-known sum from supported fresh Buddies; for UNAVAILABLE it is zero because no live report can be observed. Check status before treating it as a complete fleet total.
-  """
-  activePlayerCount: Int!
-  """
-  Whether activePlayerCount is complete (FRESH), a supported-Buddy subset (PARTIAL), or unavailable because no Buddy heartbeat is fresh (UNAVAILABLE).
-  """
-  status: GameModelPlayerCountStatus!
-  """
-  Latest heartbeat time represented by this observation, or null when no fresh Buddy is available.
-  """
-  observedAt: DateTime
-  """
-  Durable monotonic revision of complete count changes. Zero means the app is untracked or has not changed after its silent baseline. Partial and unavailable observations never advance it.
-  """
-  revision: BigInt!
-}
-
-"""
-Completeness of an app-scoped active gameplay-session count across the fresh Buddy fleet.
-"""
-enum GameModelPlayerCountStatus {
-  """
-  At least one non-Offline Buddy heartbeat is fresh and every fresh Buddy supports version 1 app-scoped counts. The count is complete.
-  """
-  FRESH
-  """
-  At least one non-Offline Buddy heartbeat is fresh, but one or more fresh Buddies do not support app-scoped counts. The count is only the best-known supported-Buddy sum and does not advance change revisions.
-  """
-  PARTIAL
-  """
-  No non-Offline Buddy heartbeat is fresh enough to observe. The count is unavailable and does not advance change revisions.
-  """
-  UNAVAILABLE
-}
-
-"""
-One durable transition between complete app-scoped active gameplay-session counts. Delivery is cross-replica but best-effort; deduplicate by revision and requery gameModelActivePlayerCount after reconnect or a revision gap.
-"""
-type GameModelActivePlayerCountChange {
-  """The app whose complete active-session count changed."""
-  appId: BigInt!
-  """Last complete active gameplay-session count before this transition."""
-  previousCount: Int!
-  """New complete active gameplay-session count after this transition."""
-  currentCount: Int!
-  """Signed change: currentCount minus previousCount."""
-  delta: Int!
-  """
-  Durable monotonic app revision for this transition. Use it to deduplicate and detect gaps.
-  """
-  revision: BigInt!
-  """Latest fresh Buddy heartbeat represented by the new count."""
-  observedAt: DateTime!
-}
-
 """Compute units attributed to one engine over the query window."""
 type EngineComputeUnits {
   """The engine whose meter produced these units."""
@@ -7890,12 +7958,23 @@ type Query {
     orgId: BigInt!
   ): [AppBudget!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
-  OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price and hourly free allowance. SHARED is organization usage billed to the org wallet as "shared_usage"; PLAYER is player compute billed to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only.
+  PUBLIC: no authentication required. The metered rate card for a scope — every priced dimension with its unit, price, and free allowances. SHARED is organization usage billed to the org wallet; PLAYER is player compute billed to the player wallet. A dimension priced at 0 is metered but not charged. These are the rates in effect right now on this tier, which is what API ToS 4.1 undertakes to make available. Read-only.
+  """
+  meteredRateCard(
+    """Which card to read."""
+    scope: RateScope!
+  ): [PublicRateCardEntryType!]!
+  """
+  OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price and hourly free allowance. SHARED is organization usage billed to the org wallet as "shared_usage"; PLAYER is player compute billed to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only. Customers read the same rates through `meteredRateCard`, which is public and omits the operator note.
   """
   billingRateCard(
     """Which card to read."""
     scope: RateScope!
   ): [RateCardEntryType!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR ONLY. The Crowdy Studio agent price list: every model card with its four per-million token prices and its lifecycle status. Separate from billingRateCard because agent pricing is per model rather than per metered dimension. Read-only.
+  """
+  agentRateCards: [AgentRateCardEntryType!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   OPERATOR ONLY. Every organization currently marked billing_exempt. An exemption nobody can enumerate is an exemption that outlives its reason.
   """
@@ -9885,12 +9964,16 @@ type Mutation {
   """
   createOrgRole(input: CreateOrgRoleInput!): OrgRole! @requiresPermission(scope: "org", permission: "manage_members", scopeArg: "input.orgId")
   """
-  Updates a role's name, description, and/or permission set. Requires the 'manage_members' permission on the role's org (super admins bypass). If input.permissions is provided it replaces the entire set (empty array clears all); omit to leave permissions unchanged.
+  Updates a role's name, description, and/or permission set. Requires the 'manage_members' permission on the role's org (super admins bypass). If input.permissions is provided it replaces the entire set (empty array clears all); omit to leave permissions unchanged. Throws FORBIDDEN when input.permissions is given for a SYSTEM role (such as the org's built-in 'admin'): system roles have a fixed permission set, so create a custom role and assign that instead. Name and description remain editable on a system role.
   """
   updateOrgRole(
     """Role id (org_role_id as a BigInt string)."""
     orgRoleId: BigInt!
     input: UpdateOrgRoleInput!
+    """
+    Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
+    """
+    idempotencyKey: String
   ): OrgRole!
   """
   Deletes an organization role. Requires the 'manage_members' permission on the role's org (super admins bypass). DESTRUCTIVE: removes the role and unassigns it from all members. Returns false if the role does not exist.
@@ -10094,7 +10177,7 @@ type Mutation {
     idempotencyKey: String
   ): AppSharedSubscription!
   """
-  Reserve sustained egress throughput for a shared app (bypasses the ~1 MB/s free-tier rate limit). Billed at $3/MB/s/month from the org wallet; upgrades are prorated for the current month. Requires 'manage_billing' on the app's org.
+  Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Note that the ~1 MB/s free-tier shaping is lifted by funding a wallet, not by reserving. Requires 'manage_billing' on the app's org.
   """
   setAppReservedThroughput(
     """Org, app, and desired reserved throughput in bytes/s."""
@@ -12231,7 +12314,7 @@ input SetRateCardInput {
   """
   unitQuantity: BigInt
   """
-  Required when a unit change also changes the money. Restating 15c per GiB as 1.396984c per 100 MB is the same price and needs nothing; changing 20c per 100 MB to 20c per GiB-month is a 7841x cut and must be stated deliberately. The mutation refuses rather than guessing which one you meant.
+  Required when a unit change also changes the money. Restating 19c per GiB as 1.769513c per 100 MB is the same price and needs nothing; changing 20c per 100 MB to 20c per GiB-month is a 7841x cut and must be stated deliberately. The mutation refuses rather than guessing which one you meant.
   """
   acknowledgeRepricing: Boolean
   """
@@ -13766,7 +13849,7 @@ input UpsertComputeModuleInput {
   """Optional description."""
   description: String
   """
-  Run without active players (world simulation). Policy-gated; defaults to false.
+  RETIRED. Modules run only while their app has a player present. Accepted as false or omitted; true is refused.
   """
   alwaysOn: Boolean
 }

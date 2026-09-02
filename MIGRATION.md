@@ -1,3 +1,88 @@
+# CrowdyJS v15.4 — nothing runs for an app with no player in it
+
+**One removal, one addition, and a change in what the platform does that no SDK
+version can shield you from.** Read the third part even if you change no code.
+
+## `alwaysOn` is gone
+
+`compute.upsertModule({ alwaysOn: true })` is now **refused** by the platform with
+`BAD_REQUEST`. The field is deprecated server-side, always reads `false`, and has
+been dropped from the module fragment this SDK selects, so `modules()` and
+`upsertModule()` no longer return it.
+
+If you passed it, delete the argument. If you read it, delete the read — it told
+you nothing after 2026-09-01 and told you something false before you upgraded.
+
+## Modules and scheduled work now require a player
+
+This is the part that is not about the SDK. A compute module ticks **only while
+its app has at least one player connected**, anywhere in the fleet, and stops
+when the last one leaves. Scheduled automations (`schedule` triggers, cron and
+interval alike) and `gm_timers` behave the same way:
+
+- **Automations** that come due while the app is empty are **skipped silently**
+  and rescheduled from the moment a player returns. Missed runs are never made
+  up.
+- **Timers** whose deadline passes while the app is empty **wait** and fire on
+  return. They are late, not lost.
+- **`event` and `manual` triggers are unaffected** — something already asked.
+- **Synchronous `compute.invoke` is unaffected** — it is a request, not a tick.
+
+**What to change in your game.** Make scheduled work idempotent in *elapsed
+time* rather than assuming a cadence:
+
+```ts
+// Fragile: stalls while nobody is playing, and resumes as if no time passed.
+crop.growth += 1;
+
+// Correct: right whenever anybody next looks at it.
+const elapsedMs = now - crop.lastTick;
+crop.growth += elapsedMs / MS_PER_GROWTH_STEP;
+crop.lastTick = now;
+```
+
+Store expiries as **timestamps**, not as remaining-tick counters, so a status
+effect that should have lapsed while the world was empty is treated as lapsed
+instead of resuming with time left on it. The `worldsim` and `combat` blueprints'
+docs previously said their automations "run with no client online"; that was true
+and is not, and both have been corrected.
+
+A world that genuinely must advance while empty should compute the elapsed time
+on its first tick after a player returns. That is cheaper than ticking an empty
+world and gives the same answer.
+
+## Reservations split, and mean something different
+
+`sharedEnvironment.setReservedThroughput()` is **new** — the mutation existed all
+along and this SDK never wrapped it.
+
+`App.reservedEgressBytesPerSec` is deprecated in favour of
+`app.reservedUdpBytesPerSec`, joined by a second dimension,
+`app.reservedGraphqlOpsPerSec`. Reserving one does not reserve the other. Both
+are now selected by the `App` query.
+
+Three things a reservation is **not**, all of which it either was or appeared to
+be before:
+
+1. **Not a ceiling.** It obliges the platform to keep that much capacity
+   provisioned for you and does not cap what you may send. Traffic above the
+   reserved rate is metered, not refused.
+2. **Not a data allowance.** The monthly fee buys capacity, not volume, and is
+   charged *in addition to* metered usage. Reserving 5 MB/s does not make the
+   first 5 MB/s free.
+3. **Not the way to lift the free-tier cap.** Unfunded free apps are shaped at
+   roughly 1 MB/s. Funding the org wallet or enabling auto-billing lifts that;
+   reserving does not. Until 2026-09-01 a reservation did double duty as a
+   rate-limit bypass, which is why the old schema descriptions said so.
+
+## Also
+
+The schema is resynced against the platform, which corrects a stale worked
+example in the rate-card field docs: the illustrative price now reads 19c per
+GiB, matching the shipped card rather than the pre-reprice figure.
+
+---
+
 # CrowdyJS v15.1 — password management (additive)
 
 **Nothing breaks.** Four mutations the API has served all along are now wrapped,
