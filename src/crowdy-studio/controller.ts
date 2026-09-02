@@ -1078,6 +1078,7 @@ export class CrowdyStudioController {
           await this.enableServer(compiled.name, operation);
         } else {
           await this.runClient(compiled, operation);
+          await this.enableClient(compiled.name, operation);
         }
       } else {
         // Compile the client first so a client failure never publishes a new
@@ -1125,6 +1126,7 @@ export class CrowdyStudioController {
         this.checkOperation(operation);
         await this.enableServer(server.name, operation);
         await this.runClient(client, operation);
+        await this.enableClient(client.name, operation);
       }
       this.update({
         runtime: {
@@ -1209,7 +1211,7 @@ export class CrowdyStudioController {
     });
     this.checkOperation(operation);
 
-    const limit = this.options.compilePollLimit ?? 60;
+    const limit = this.options.compilePollLimit ?? 180;
     const pollMs = this.options.compilePollMs ?? 1_500;
     for (let attempt = 0; attempt < limit; attempt++) {
       const versions = await this.options.playerCompute.versions({
@@ -1279,6 +1281,23 @@ export class CrowdyStudioController {
     this.checkOperation(operation);
   }
 
+  private async enableClient(name: string, operation: number): Promise<void> {
+    if (!this.canTarget('CLIENT', 'run')) {
+      throw new Error(
+        `${name} compiled successfully, but run_client_code is unavailable on this grid`,
+      );
+    }
+    this.update({
+      runtime: { phase: 'ENABLING', target: 'CLIENT', message: `Publishing ${name}` },
+    });
+    await this.options.playerCompute.setEnabled({
+      ...this.scope(),
+      name,
+      enabled: true,
+    });
+    this.checkOperation(operation);
+  }
+
   private async runClient(
     compiled: CompiledTarget,
     operation: number,
@@ -1337,6 +1356,15 @@ export class CrowdyStudioController {
         failures.push(`Client: ${errorMessage(error)}`);
       } finally {
         this.broker = null;
+      }
+      try {
+        await this.options.playerCompute.setEnabled({
+          ...this.scope(),
+          name: moduleNameFor(project, 'CLIENT'),
+          enabled: false,
+        });
+      } catch (error) {
+        failures.push(`Client publish: ${errorMessage(error)}`);
       }
     }
 
