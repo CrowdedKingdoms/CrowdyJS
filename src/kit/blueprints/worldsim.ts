@@ -99,9 +99,16 @@ export function worldsimNames(typePrefix = ''): WorldsimNames {
 /**
  * Blueprint for **world simulation**: day/night + weather (`WorldState`
  * singleton), regenerating `ResourceNode`s, growing `Crop`s / production
- * jobs, and `WaveSpawner` counters — all driven by interval automations that
- * run with **no client online** (the automations simulation tier: seconds,
- * never per-frame).
+ * jobs, and `WaveSpawner` counters — all driven by interval automations on the
+ * automations simulation tier (seconds, never per-frame).
+ *
+ * **These automations run only while the app has a player in it.** Since
+ * 2026-09-01 scheduled work for an empty app is skipped and rescheduled from the
+ * moment a player returns; missed runs are never made up. Design the tick to be
+ * IDEMPOTENT IN ELAPSED TIME rather than to assume a fixed cadence: read the
+ * clock, advance the world by however long it has been, and write the result. A
+ * crop that grows by one step per tick will stall while nobody is playing; one
+ * that grows by `now - lastTick` will be correct whenever anybody looks at it.
  *
  * The world clock emits a **spatial notification** at the world anchor chunk
  * each tick, so nearby clients update the sky push-style instead of polling;

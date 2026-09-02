@@ -154,7 +154,7 @@ not a running service and is not a schema source; gameplay data lives in
 | Client-side bookkeeping | `createWorldSession` from `@crowdedkingdoms/crowdyjs/stores` |
 | Persistent terrain | `chunks.*` (durable) + `udp.sendVoxelUpdate` (realtime) |
 | Server-side rules (inventory, stats, NPCs) | `gameModel` containers / properties / functions with invoke policies — **admin-seeded before play** |
-| World life with no client online | `gameModel` automations (`autonomousInvocable` functions) |
+| World life between requests | `gameModel` automations (`autonomousInvocable` functions) — see the presence rule below |
 | Ready-made genre mappings | `kit(appId)` blueprints + runtime helpers |
 | Client-side simulation authority | `host.heartbeat` + `is_host` invoke policy |
 | Voice / chat / guilds | `udp.sendAudioPacket`; `udp.sendTextPacket`; `channels.*`; `teams.*` |
@@ -169,6 +169,19 @@ Everything realtime is addressed to a **chunk** and fanned out within
 studio-admin token (`manage_apps`) before players can invoke it — `kit.deploy`
 or `gameModel.seed`. Host election is informational unless you put `is_host`
 on the invoke policy.
+
+**Nothing runs for an app with no player in it** (platform change 2026-09-01).
+Compute modules tick only while the app has at least one player connected
+somewhere in the fleet, and `alwaysOn` is retired — `computeUpsertModule` refuses
+`true`. Scheduled work (cron and interval automations, `gm_timers`) that comes due
+while an app is empty is skipped silently and rescheduled from the moment a player
+returns; missed runs are never made up.
+
+This row used to read "world life with no client online", which was true and is
+not. Write automations so they are **idempotent in elapsed time**: advance the
+world by `now - lastTick` rather than by one fixed step per tick, and store
+expiries as timestamps rather than as remaining-tick counters. A blueprint that
+assumes a cadence will silently stall while nobody is playing.
 
 Blocks with Friends (crowdy.games, source not public) is the complete
 consumer of these surfaces: World Stores + kit blueprints + a hand-authored
