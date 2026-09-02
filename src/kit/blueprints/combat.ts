@@ -83,7 +83,13 @@ export function combatNames(typePrefix = ''): CombatNames {
  * tier): `Combatant` containers (hp / attack / defense / alive), an `attack`
  * function whose damage formula and death flip run entirely server-side,
  * status effects as `StatusEffect` containers ticked by an interval
- * automation (damage-over-time with no client online), and respawn/revive.
+ * automation (damage-over-time between requests), and respawn/revive.
+ *
+ * The effect tick runs only while the app has a player in it (2026-09-01), which
+ * for combat is usually what you want: nothing is fighting in an empty world.
+ * Store an expiry timestamp on each effect rather than a remaining-ticks counter,
+ * so an effect that should have lapsed while the app was empty is treated as
+ * lapsed on the next tick instead of resuming with time left on it.
  *
  * The effect tick uses the selector **join** pattern: each combatant carries
  * a unique `combat_key`, effects record a `target_key`, and the automation's
