@@ -64,7 +64,9 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
     "check:content-policy": "node scripts/check-content-policy.mjs",
-    "check:content-policy:self-test": "node scripts/check-content-policy.mjs --self-test"
+    "check:content-policy:self-test": "node scripts/check-content-policy.mjs --self-test",
+    "check:default-origin": "node scripts/check-default-origin.mjs",
+    "check:default-origin:self-test": "node scripts/check-default-origin.mjs --self-test"
   },
   "publishConfig": {
     "access": "public"
