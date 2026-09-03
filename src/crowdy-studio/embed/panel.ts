@@ -7,6 +7,7 @@ import type {
   CrowdyStudioPlayerCompute,
   CrowdyStudioPlayerWallet,
 } from '../controller.js';
+import type { MeshArtifactsAPI } from '../../domains/meshArtifacts.js';
 import type { CrowdyStudioProjectProvider } from '../models.js';
 import type {
   CrowdyAgentMode,
@@ -49,6 +50,7 @@ export interface CrowdyStudioEmbedServices {
   crowdyStudio: CrowdyStudioProjectProvider;
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
+  meshArtifacts?: Pick<MeshArtifactsAPI, 'upload' | 'list'>;
   /** Production agent transport; omission keeps the agent fail-closed/hidden. */
   crowdyStudioAgent?: CrowdyStudioAgentTransportV1;
 }
@@ -105,6 +107,11 @@ export interface CrowdyStudioEmbedOptions {
   onAgentMounted?(handle: CrowdyStudioEmbedHandle): void;
   onAgentUnavailable?(message: string): void;
   onAgentUnmounted?(): void;
+  /**
+   * CLIENT WASM tick cadence. Defaults to the controller's 1000ms. Games that
+   * animate `grid_skin_set` paint from `on_tick` should pass ~150–250ms.
+   */
+  clientTickIntervalMs?: number;
   /** Called after the panel closes for any reason (Escape, key, close()). */
   onClosed?(): void;
   dockStorage?: CrowdyStudioEmbedDockStorage | null;
@@ -486,6 +493,7 @@ export class CrowdyStudioEmbed {
       projectProvider: client.crowdyStudio,
       playerCompute: client.playerCompute,
       playerWallet: client.playerWallet,
+      meshArtifacts: client.meshArtifacts,
       appId,
       gridId: context.gridId,
       grid: context.grid,
@@ -493,6 +501,7 @@ export class CrowdyStudioEmbed {
       targetPermissions: context.targetPermissions,
       onHostCall: context.onHostCall,
       onPresentation,
+      clientTickIntervalMs: this.options.clientTickIntervalMs,
       ...(client.crowdyStudioAgent && context.playerHost
         ? {
             agent: {
