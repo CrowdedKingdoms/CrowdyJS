@@ -50,6 +50,20 @@ jobs:
           fetch-depth: 0
       - id: gate
         run: scripts/ci/resolve-release-tier.sh
+      # The gate above proves the tagged COMMIT belongs to the tier the tag names. It says
+      # nothing about what the commit CONTAINS, and that gap is not hypothetical: 15.4.0 was
+      # tagged dev/v15.4.0 and test/v15.4.0 over a tree whose generated default still declared
+      # `prod`, so npm served `15.4.0-dev.1` and `15.4.0-test.1` pointing at
+      # production. Consumers of @dev and @test dialled the wrong environment, and because a
+      # published version is immutable it took 15.4.1 to fix.
+      #
+      # Judged against the tier the TAG names rather than the branch, which is the stricter of
+      # the two and the thing that was missing. Runs in `guard`, so a refusal happens before
+      # anything is built and long before anything is uploaded.
+      - name: The default origin names the tier this tag releases
+        env:
+          CROWDY_ORIGIN_TIER: ${{ steps.gate.outputs.tier }}
+        run: node scripts/check-default-origin.mjs
 
   publish:
     needs: guard
@@ -191,6 +205,56 @@ jobs:
         env:
           DIST_TAG: ${{ steps.resolve.outputs.dist_tag }}
         run: npm publish --provenance --access public --tag "$DIST_TAG"
+
+      # Ask the REGISTRY what it now serves, rather than trusting what we uploaded.
+      #
+      # This is defence in depth and not the primary catch -- the guard job already refuses a
+      # tag whose tree names the wrong tier, earlier and more cheaply. What it covers is the
+      # residue the guard structurally cannot see: a packaging or version step that rewrites
+      # the file after the guard ran, or a dist-tag moved by hand later. It is also exactly the
+      # `npm pack` read used to diagnose 15.4.0 by hand, so having it in CI means nobody has to
+      # think of doing it.
+      #
+      # A pack of the dist-tag, deliberately, not of the local tree: the local tree is what we
+      # believe and the dist-tag is what a consumer will actually resolve.
+      - name: What the registry now serves declares this tag's tier
+        if: steps.check.outputs.should_publish == 'true'
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          DIST_TAG: ${{ steps.resolve.outputs.dist_tag }}
+          TIER: ${{ needs.guard.outputs.tier }}
+          PUBLISH_VERSION: ${{ steps.resolve.outputs.publish_version }}
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          # npm can serve a just-published version a moment late; retry rather than either
+          # failing a good release or sleeping a fixed guess.
+          for attempt in 1 2 3 4 5; do
+            if (cd "$work" && npm pack "$NAME@$DIST_TAG" >/dev/null 2>&1); then break; fi
+            echo "  registry not serving $NAME@$DIST_TAG yet (attempt $attempt); waiting"
+            sleep 10
+          done
+          tarball=$(find "$work" -name '*.tgz' -print -quit)
+          if [ -z "$tarball" ]; then
+            echo "::error::published $PUBLISH_VERSION but could not fetch $NAME@$DIST_TAG back from the registry to verify it. An unverifiable publish is not a verified one."
+            exit 1
+          fi
+          tar -xzf "$tarball" -C "$work"
+          origin="$work/package/dist/default-origin.js"
+          [ -f "$origin" ] || { echo "::error::the published tarball has no dist/default-origin.js, so the default it ships cannot be checked"; exit 1; }
+          got_ver=$(node -p "require('$work/package/package.json').version")
+          got_tier=$(sed -n "s/.*CROWDY_DEFAULT_TIER *= *'\([a-z]*\)'.*/\1/p" "$origin" | head -1)
+          got_host=$(sed -n "s/.*CROWDY_DEFAULT_HOST *= *'\([^']*\)'.*/\1/p" "$origin" | head -1)
+          echo "  $NAME@$DIST_TAG -> $got_ver, declaring tier '$got_tier' (host $got_host)"
+          if [ "$got_ver" != "$PUBLISH_VERSION" ]; then
+            echo "::error::'$DIST_TAG' serves $got_ver but this run published $PUBLISH_VERSION. The dist-tag does not point at what was just published."
+            exit 1
+          fi
+          if [ "$got_tier" != "$TIER" ]; then
+            echo "::error::'$DIST_TAG' now serves an artifact declaring tier '$got_tier' and this tag releases '$TIER'. Consumers of that dist-tag will dial the wrong environment, and a published version is IMMUTABLE -- publish a corrected patch, as 15.4.1 did for 15.4.0."
+            exit 1
+          fi
+          echo "  verified against the registry: what a consumer resolves declares '$TIER'"
 
       - name: Summary
         if: always()
