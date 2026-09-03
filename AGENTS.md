@@ -144,17 +144,39 @@ not a running service and is not a schema source; gameplay data lives in
   fix that; only `15.4.1` did. Do not read branch drift as harmless — a release
   cut during the drift window ships it.
 
-  **THE PROMOTION THAT DOES NOT CONFLICT IS THE DANGEROUS ONE**, and the pattern
-  is mechanical rather than random. `dev` → `test` conflicts, because both sides
-  changed the file. Resolving that writes a commit on `test` touching it, so at
-  `test` → `prod` the destination has no competing edit and git takes the source
-  side by fast logic, reporting success. On 2026-09-02 this hit CrowdyJS and
-  CrowdyCPP on the same day, in the same release, both silently, both times
-  putting `tier = 'test'` on `prod` — the tier where it costs the most, since
-  `latest` is what an unconfigured production consumer resolves. Both were caught
-  only by re-reading the file after a merge that reported no conflict. So: **read
-  this file after every promotion, and treat a clean merge here as more
-  suspicious than a conflicting one.**
+  **THE PROMOTION THAT DOES NOT CONFLICT IS THE DANGEROUS ONE.** On 2026-09-02
+  this hit CrowdyJS and CrowdyCPP on the same day, in the same release, both
+  silently, both times putting `tier = 'test'` on `prod` — the tier where it costs
+  the most, since `latest` is what an unconfigured production consumer resolves.
+  Both were caught only by re-reading the file after a merge that reported no
+  conflict.
+
+  **The mechanism, measured in a scratch repository rather than reasoned about,
+  because the reasoning here was wrong for a day.** This paragraph used to say the
+  carry happens because resolving the `dev` → `test` conflict leaves `test` as the
+  only side that touched the file. That is not it, and a lab reproduction says so:
+  a promotion rewrites this file silently whenever **the merge base already holds
+  the DESTINATION's value and the destination has not re-committed it while the
+  source has.** One side changed, so git resolves it trivially and reports
+  success. The wrong explanation mattered because it implied the risk lives at one
+  particular rung; it does not.
+
+  That measurement also killed the tidier-looking fix, twice over. **A
+  `.gitattributes` merge driver cannot help.** Git never consults a merge driver
+  for a one-sided change, and one-sided *is* the dangerous case — the driver
+  logged zero invocations while the carry happened. And `.gitattributes` can
+  *name* a driver but cannot ship it: `merge.<name>.driver` is local config, so a
+  fresh clone reads it as unset and git falls back to its default silently. A CI
+  runner has no driver at all.
+
+  So it has to be an assertion, and now it is one. `npm run check:default-origin`
+  runs on every push and pull request, judging the PR **base** so a promotion is
+  refused before the merge rather than after; the same check runs in
+  `publish.yml`'s `guard` against the tier the **tag** names, before anything is
+  built; and after `npm publish` the workflow packs the dist-tag back down and
+  reads what the registry actually serves. Reading the file by hand after a
+  promotion is still a good habit, but it is no longer the only thing standing
+  between a promotion and a wrong-tier release.
 
   One footgun in the generator itself: `sync-client-origins.mjs --write --tier X`
   writes **both** SDK working trees, CrowdyJS and CrowdyCPP, with no regard for

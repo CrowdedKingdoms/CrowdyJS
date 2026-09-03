@@ -37,6 +37,20 @@ jobs:
         run: npm run check:schema
       - name: Content policy gate refuses what it must
         run: npm run check:content-policy:self-test
+      # The generated default origin must name the tier this ref publishes for.
+      # Hermetic, like check:schema above: it compares the file to the REF, so it needs
+      # neither the operator's tier table nor a sibling checkout. The cross-repo gate that
+      # owns the host half runs from preflight-all.sh and therefore not here, which left a
+      # window between a promotion merge and the next preflight -- and 15.4.0 was tagged
+      # inside it, publishing a prod origin to @dev and @test.
+      #
+      # On a pull request this judges the BASE, so a dev -> test promotion is checked against
+      # test's rule before the merge rather than after. That matters more than it looks: a
+      # promotion can rewrite this file with NO conflict, so nothing else announces it.
+      - name: Default-origin gate refuses what it must
+        run: npm run check:default-origin:self-test
+      - name: The default origin names the tier this ref publishes for
+        run: npm run check:default-origin
       - name: Build + unit tests + coverage
         run: npm run coverage
       # Runs AFTER the build on purpose. `dist/` is gitignored and is the only
