@@ -130,10 +130,37 @@ not a running service and is not a schema source; gameplay data lives in
   **EVERY MERGE RESOLVES THIS FILE SILENTLY AND CAN GO EITHER WAY.** A back-merge
   from prod put `tier = 'prod'` on `dev`, and both promotions in the 2026-08-27
   cycle carried the source branch's origin onto the destination with **no
-  conflict**. The published artifact was fine throughout — the BRANCH had drifted
-  from what it had published. After any merge between branches, regenerate for the
+  conflict**. After any merge between branches, regenerate for the
   DESTINATION tier and run the gate. The SDK pins in `Crowdy-Games` are the same
   hazard for the same reason: git has no idea these files are per-branch.
+
+  **AND IT DOES REACH THE REGISTRY — THIS PARAGRAPH USED TO SAY OTHERWISE.** It
+  read "the published artifact was fine throughout; the BRANCH had drifted from
+  what it had published," which held for 2026-08-27 and then stopped being the
+  general rule. `15.4.0` was tagged while `dev` and `test` still carried prod's
+  origin, so `@dev` and `@test` **published** artifacts declaring
+  `ck.prod.crowdedkingdoms.com`, and every consumer of either tag that built a
+  client with no explicit origin dialled production. Fixing the branches did not
+  fix that; only `15.4.1` did. Do not read branch drift as harmless — a release
+  cut during the drift window ships it.
+
+  **THE PROMOTION THAT DOES NOT CONFLICT IS THE DANGEROUS ONE**, and the pattern
+  is mechanical rather than random. `dev` → `test` conflicts, because both sides
+  changed the file. Resolving that writes a commit on `test` touching it, so at
+  `test` → `prod` the destination has no competing edit and git takes the source
+  side by fast logic, reporting success. On 2026-09-02 this hit CrowdyJS and
+  CrowdyCPP on the same day, in the same release, both silently, both times
+  putting `tier = 'test'` on `prod` — the tier where it costs the most, since
+  `latest` is what an unconfigured production consumer resolves. Both were caught
+  only by re-reading the file after a merge that reported no conflict. So: **read
+  this file after every promotion, and treat a clean merge here as more
+  suspicious than a conflicting one.**
+
+  One footgun in the generator itself: `sync-client-origins.mjs --write --tier X`
+  writes **both** SDK working trees, CrowdyJS and CrowdyCPP, with no regard for
+  which branch either one has checked out. Regenerating CrowdyJS for `test` will
+  happily stamp `test` onto a CrowdyCPP checkout sitting on `dev`. Check
+  `git status` in the sibling too, and revert what you did not mean to change.
 
 ## Core mental model: one endpoint, two tokens, two clients
 
