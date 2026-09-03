@@ -723,57 +723,54 @@ export class CrowdyStudioDomShell {
     this.explorer.append(
       this.referenceSection('Personal library', state.personalLibraryFiles),
       this.referenceSection('Common files', state.commonFiles),
+      this.gitForgeSection(state),
     );
-    if (this.controller.hasMeshArtifacts()) {
-      this.explorer.append(this.meshArtifactSection(state));
-    }
     restoreExplorerFocus(this.explorer, focused);
   }
 
-  private meshArtifactSection(state: CrowdyStudioState): HTMLElement {
+  private gitForgeSection(state: CrowdyStudioState): HTMLElement {
     const section = element('section', 'ck-crowdy-studio-section');
     const header = element('div', 'ck-crowdy-studio-section-header');
     const title = document.createElement('span');
-    title.textContent = 'Mesh artifacts';
-    const upload = button('Upload');
-    upload.setAttribute('aria-label', 'Upload glTF mesh');
-    const canWrite = this.controller.canTarget('CLIENT', 'write');
-    upload.disabled = !state.project || !canWrite;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.glb,.gltf,model/gltf-binary,model/gltf+json';
-    input.hidden = true;
-    upload.addEventListener('click', () => {
-      if (!upload.disabled) input.click();
-    });
-    input.addEventListener('change', () => {
-      const file = input.files?.[0];
-      input.value = '';
-      if (!file) return;
+    title.textContent = 'Git forge (spike)';
+    header.append(title);
+    section.append(header);
+
+    const base = this.controller.gitForgeDefaultBaseUrl();
+    if (!base) {
+      section.append(
+        empty('Set gitForgeDefaultBaseUrl to bind a mirrored repo.'),
+      );
+      return section;
+    }
+
+    if (state.gitForgeBinding) {
+      const bound = document.createElement('p');
+      bound.textContent = `${state.gitForgeBinding.slug} @ ${state.gitForgeBinding.baseUrl}`;
+      const clear = button('Clear binding');
+      clear.addEventListener('click', () => {
+        this.controller.clearGitForgeBinding();
+      });
+      section.append(bound, clear);
+      return section;
+    }
+
+    const slugInput = document.createElement('input');
+    slugInput.type = 'text';
+    slugInput.placeholder = 'owner/repo@main';
+    slugInput.className = 'ck-crowdy-studio-input';
+    const tokenInput = document.createElement('input');
+    tokenInput.type = 'password';
+    tokenInput.placeholder = 'read token (optional)';
+    tokenInput.className = 'ck-crowdy-studio-input';
+    const bind = button('Bind');
+    bind.addEventListener('click', () => {
       void this.run(async () => {
-        const bytes = await file.arrayBuffer();
-        await this.controller.uploadMeshArtifact(file.name, bytes);
+        this.controller.bindGitForge(slugInput.value, tokenInput.value);
       });
     });
-    header.append(title, upload, input);
-    section.append(header);
-    if (state.meshArtifactMessage) {
-      section.append(empty(state.meshArtifactMessage));
-    } else if (state.meshArtifacts.length === 0) {
-      section.append(
-        empty('Upload a .glb (max 512 KiB). CLIENT registers it by hash, not bytes.'),
-      );
-    } else {
-      for (const mesh of state.meshArtifacts) {
-        const row = element('div', 'ck-crowdy-studio-file');
-        const label = document.createElement('span');
-        const kib = Math.max(1, Math.round(mesh.sizeBytes / 1024));
-        label.textContent = `${mesh.name} · ${kib} KiB · ${mesh.artifactHash.slice(0, 12)}…`;
-        label.title = mesh.artifactHash;
-        row.append(label);
-        section.append(row);
-      }
-    }
+    section.append(slugInput, tokenInput, bind);
+    section.append(empty(`Deploy SERVER target reads Rust from ${base}.`));
     return section;
   }
 

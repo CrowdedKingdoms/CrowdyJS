@@ -511,10 +511,6 @@ export {
   type WaitForCompileOptions,
 } from './domains/compute.js';
 export { PlayerComputeAPI } from './domains/playerCompute.js';
-export {
-  MeshArtifactsAPI,
-  type PlayerMeshArtifactMeta,
-} from './domains/meshArtifacts.js';
 export { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 export { PlayerWalletAPI } from './domains/playerWallet.js';
 export { MarketplaceAPI } from './domains/marketplace.js';

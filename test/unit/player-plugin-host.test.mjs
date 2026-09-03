@@ -167,4 +167,11 @@ test('assertPluginHostArgs exports from the SDK', async () => {
       artifactHash: 'a'.repeat(64),
     }),
   );
+  assert.doesNotThrow(() =>
+    assertPluginHostArgs('mesh_asset_register', {
+      id: 'box',
+      kind: 'gltf',
+      url: 'https://forge.example.com/lfs/box.glb',
+    }),
+  );
 });

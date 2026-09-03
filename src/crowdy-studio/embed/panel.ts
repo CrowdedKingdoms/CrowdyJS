@@ -7,7 +7,6 @@ import type {
   CrowdyStudioPlayerCompute,
   CrowdyStudioPlayerWallet,
 } from '../controller.js';
-import type { MeshArtifactsAPI } from '../../domains/meshArtifacts.js';
 import type { CrowdyStudioProjectProvider } from '../models.js';
 import type {
   CrowdyAgentMode,
@@ -50,7 +49,6 @@ export interface CrowdyStudioEmbedServices {
   crowdyStudio: CrowdyStudioProjectProvider;
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
-  meshArtifacts?: Pick<MeshArtifactsAPI, 'upload' | 'list'>;
   /** Production agent transport; omission keeps the agent fail-closed/hidden. */
   crowdyStudioAgent?: CrowdyStudioAgentTransportV1;
 }
@@ -117,6 +115,8 @@ export interface CrowdyStudioEmbedOptions {
   dockStorage?: CrowdyStudioEmbedDockStorage | null;
   /** Browser-regression-only fault/config injection; never set by a game. */
   runtimeOverrides?: Partial<MountCrowdyStudioOptions>;
+  /** Spike: default Forgejo origin for git-backed SERVER deploy. */
+  gitForgeDefaultBaseUrl?: string;
 }
 
 /** Per-open context: the grid the player is editing and its capabilities. */
@@ -493,7 +493,6 @@ export class CrowdyStudioEmbed {
       projectProvider: client.crowdyStudio,
       playerCompute: client.playerCompute,
       playerWallet: client.playerWallet,
-      meshArtifacts: client.meshArtifacts,
       appId,
       gridId: context.gridId,
       grid: context.grid,
@@ -502,6 +501,9 @@ export class CrowdyStudioEmbed {
       onHostCall: context.onHostCall,
       onPresentation,
       clientTickIntervalMs: this.options.clientTickIntervalMs,
+      ...(this.options.gitForgeDefaultBaseUrl
+        ? { gitForgeDefaultBaseUrl: this.options.gitForgeDefaultBaseUrl }
+        : {}),
       ...(client.crowdyStudioAgent && context.playerHost
         ? {
             agent: {

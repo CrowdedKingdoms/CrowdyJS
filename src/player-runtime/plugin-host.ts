@@ -230,8 +230,19 @@ function assertMeshRegister(args: Record<string, unknown>): void {
   }
   if (kind === 'gltf') {
     const hash = args.artifactHash;
-    if (typeof hash !== 'string' || !/^[a-fA-F0-9]{64}$/.test(hash)) {
-      throw new Error('mesh_asset_register artifactHash must be a 64-char hex SHA-256');
+    const url = args.url;
+    const path = args.path;
+    const hasHash =
+      typeof hash === 'string' && /^[a-fA-F0-9]{64}$/.test(hash);
+    const hasUrl = typeof url === 'string' && isHttpUrl(url);
+    const hasPath = typeof path === 'string' && path.length > 0 && path.length <= 512;
+    if (!hasHash && !hasUrl && !hasPath) {
+      throw new Error(
+        'mesh_asset_register gltf requires artifactHash, url, or path',
+      );
+    }
+    if (hasUrl && !isHttpUrl(url)) {
+      throw new Error('mesh_asset_register url must be http(s)');
     }
   }
   if (args.primitive != null && !isPlainObject(args.primitive)) {
@@ -267,6 +278,15 @@ function assertMechanicsEmit(args: Record<string, unknown>): void {
   }
   if (args.payload != null && !isPlainObject(args.payload)) {
     throw new Error('mechanics_emit payload must be an object');
+  }
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
   }
 }
 

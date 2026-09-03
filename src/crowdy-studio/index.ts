@@ -14,13 +14,19 @@ export {
   type CrowdyStudioRuntimeSyncState,
   type CrowdyStudioPlayerCompute,
   type CrowdyStudioPlayerWallet,
-  type CrowdyStudioMeshArtifact,
-  type CrowdyStudioMeshArtifacts,
   type CrowdyStudioState,
   type CrowdyStudioStopResult,
   type CrowdyStudioUsageSnapshot,
   type CrowdyStudioWalletSnapshot,
 } from './controller.js';
+export {
+  getGitForgeBinding,
+  setGitForgeBinding,
+  parseGitSlug,
+  GitForgeClient,
+  type GitForgeBinding,
+  type GitTreeEntry,
+} from './git-forge/index.js';
 export {
   mountCrowdyStudio,
   type CrowdyStudioHandle,

@@ -70,7 +70,6 @@ import { UdpAPI } from './domains/udp.js';
 import { GameModelAPI } from './domains/gameModel.js';
 import { ComputeAPI } from './domains/compute.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
-import { MeshArtifactsAPI } from './domains/meshArtifacts.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 import { CrowdyAgentGraphQLTransport } from './crowdy-agent/graphql-transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
@@ -280,8 +279,6 @@ export class CrowdyClient {
   readonly compute: ComputeAPI;
   /** Player-authored Rust/WASM bound to player-owned grids. */
   readonly playerCompute: PlayerComputeAPI;
-  /** Player-uploaded glTF meshes stored by SHA-256 on an owned grid. */
-  readonly meshArtifacts: MeshArtifactsAPI;
   /** Crowdy Studio cloud projects, libraries, and common source files. */
   readonly crowdyStudio: CrowdyStudioAPI;
   /** Durable typed Agentic Crowdy Studio GraphQL transport. */
@@ -473,7 +470,6 @@ export class CrowdyClient {
     });
     this.compute = new ComputeAPI(this.graphql);
     this.playerCompute = new PlayerComputeAPI(this.graphql);
-    this.meshArtifacts = new MeshArtifactsAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
     this.crowdyStudioAgent = new CrowdyAgentGraphQLTransport(this.graphql, {
       wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),

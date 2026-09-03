@@ -4,7 +4,6 @@ import {
   type PlayerCodeGridBounds,
 } from '../player-runtime/player-code-broker.js';
 import type { PlayerComputeAPI } from '../domains/playerCompute.js';
-import type { MeshArtifactsAPI } from '../domains/meshArtifacts.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
 import {
   digestCanonicalJson,
@@ -38,6 +37,12 @@ import {
   createCrowdyStudioStarterProject,
   type CrowdyStudioNewProjectOptions,
 } from './starter-projects.js';
+import {
+  getGitForgeBinding,
+  setGitForgeBinding,
+  type GitForgeBinding,
+} from './git-forge/index.js';
+import { GitForgeClient } from './git-forge/client.js';
 
 export type CrowdyStudioPhase =
   | 'IDLE'
@@ -151,9 +156,8 @@ export interface CrowdyStudioState {
   usage: CrowdyStudioUsageSnapshot | null;
   wallet: CrowdyStudioWalletSnapshot | null;
   invokeResult: CrowdyStudioInvokeResult | null;
-  /** glTF meshes uploaded to this Studio project (hash + name, no bytes). */
-  meshArtifacts: readonly CrowdyStudioMeshArtifact[];
-  meshArtifactMessage?: string;
+  /** Spike: client-held git repo binding for this project. */
+  gitForgeBinding: GitForgeBinding | null;
 }
 
 export type CrowdyStudioPlayerCompute = Pick<
@@ -171,18 +175,6 @@ export type CrowdyStudioPlayerCompute = Pick<
 
 export type CrowdyStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
 
-export type CrowdyStudioMeshArtifacts = Pick<
-  MeshArtifactsAPI,
-  'upload' | 'list'
->;
-
-export interface CrowdyStudioMeshArtifact {
-  artifactHash: string;
-  name: string;
-  sizeBytes: number;
-  contentType: string;
-}
-
 export interface CrowdyStudioBroker {
   start(bytes: ArrayBuffer): Promise<void>;
   stop(): void;
@@ -192,7 +184,6 @@ export interface CrowdyStudioControllerOptions {
   projectProvider: CrowdyStudioProjectProvider;
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
-  meshArtifacts?: CrowdyStudioMeshArtifacts;
   appId: string;
   gridId: string;
   initialProjectId?: string;
@@ -223,6 +214,8 @@ export interface CrowdyStudioControllerOptions {
   brokerFactory?: (options: PlayerCodeBrokerOptions) => CrowdyStudioBroker;
   isOnline?: () => boolean;
   onStateChange?: (state: CrowdyStudioState) => void;
+  /** Default Forgejo origin for the git-binding UI (spike). */
+  gitForgeDefaultBaseUrl?: string;
 }
 
 export interface CrowdyStudioStopResult {
@@ -265,7 +258,7 @@ export class CrowdyStudioController {
     usage: null,
     wallet: null,
     invokeResult: null,
-    meshArtifacts: [],
+    gitForgeBinding: null,
   };
   private readonly listeners = new Set<(state: CrowdyStudioState) => void>();
   private readonly humanEditListeners = new Set<() => void>();
@@ -360,10 +353,6 @@ export class CrowdyStudioController {
         ? permission.canWrite
         : permission.canRun
       : true;
-  }
-
-  hasMeshArtifacts(): boolean {
-    return Boolean(this.options.meshArtifacts);
   }
 
   /** Credential-free context projection used by exact browser agent tools. */
@@ -513,11 +502,36 @@ export class CrowdyStudioController {
       runs: [],
       logs: [],
       invokeResult: null,
-      meshArtifacts: [],
-      meshArtifactMessage: undefined,
+      gitForgeBinding: getGitForgeBinding(clone.projectId),
     });
     this.restartVisibleSurfacePolling();
-    void this.refreshMeshArtifacts();
+  }
+
+  bindGitForge(slug: string, token?: string): void {
+    const project = this.requireProject();
+    const baseUrl =
+      this.options.gitForgeDefaultBaseUrl?.replace(/\/+$/, '') ?? '';
+    if (!baseUrl) {
+      throw new Error('Git forge base URL is not configured');
+    }
+    const binding: GitForgeBinding = {
+      baseUrl,
+      slug: slug.trim(),
+      ...(token?.trim() ? { token: token.trim() } : {}),
+    };
+    setGitForgeBinding(project.projectId, binding);
+    this.update({ gitForgeBinding: binding });
+  }
+
+  clearGitForgeBinding(): void {
+    const project = this.state.project;
+    if (!project) return;
+    setGitForgeBinding(project.projectId, null);
+    this.update({ gitForgeBinding: null });
+  }
+
+  gitForgeDefaultBaseUrl(): string {
+    return this.options.gitForgeDefaultBaseUrl ?? '';
   }
 
   openFile(ref: CrowdyStudioFileRef): void {
@@ -538,58 +552,6 @@ export class CrowdyStudioController {
         ? openFiles.at(-1) ?? null
         : this.state.activeFile;
     this.update({ openFiles, activeFile });
-  }
-
-  async refreshMeshArtifacts(): Promise<void> {
-    const api = this.options.meshArtifacts;
-    const project = this.state.project;
-    if (!api || !project) {
-      this.update({ meshArtifacts: [], meshArtifactMessage: undefined });
-      return;
-    }
-    try {
-      const rows = await api.list({
-        appId: this.options.appId,
-        gridId: this.options.gridId,
-        projectId: project.projectId,
-      });
-      this.update({
-        meshArtifacts: rows.map((row) => ({
-          artifactHash: row.artifactHash,
-          name: row.name,
-          sizeBytes: row.sizeBytes,
-          contentType: row.contentType,
-        })),
-        meshArtifactMessage: undefined,
-      });
-    } catch (error) {
-      this.update({
-        meshArtifactMessage:
-          error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  async uploadMeshArtifact(name: string, bytes: ArrayBuffer): Promise<void> {
-    const api = this.options.meshArtifacts;
-    const project = this.requireProject();
-    if (!api) {
-      throw new Error('Mesh artifact upload is not available on this client');
-    }
-    const binary = new Uint8Array(bytes);
-    let encoded = '';
-    const chunk = 0x8000;
-    for (let i = 0; i < binary.length; i += chunk) {
-      encoded += String.fromCharCode(...binary.subarray(i, i + chunk));
-    }
-    await api.upload({
-      appId: this.options.appId,
-      gridId: this.options.gridId,
-      projectId: project.projectId,
-      name,
-      artifactBase64: btoa(encoded),
-    });
-    await this.refreshMeshArtifacts();
   }
 
   fileContent(ref: CrowdyStudioFileRef): string {
@@ -1185,7 +1147,9 @@ export class CrowdyStudioController {
     }
     const name = moduleNameFor(project, target);
     const files = project.files.filter((file) => file.target === target);
-    if (files.length === 0) throw new Error(`${target} has no project files`);
+    if (files.length === 0 && !this.state.gitForgeBinding) {
+      throw new Error(`${target} has no project files`);
+    }
     this.update({
       runtime: {
         phase: 'COMPILING',
@@ -1194,11 +1158,24 @@ export class CrowdyStudioController {
       },
     });
 
-    // This is the sole project→legacy wire conversion. Project state, provider
-    // contracts, editors, and templates all use typed files.
-    const sourceFilesJson = JSON.stringify(
-      Object.fromEntries(files.map((file) => [file.path, file.content])),
-    );
+    let sourceFilesJson: string;
+    const gitBinding = this.state.gitForgeBinding;
+    if (gitBinding && target === 'SERVER') {
+      const client = new GitForgeClient(gitBinding);
+      const sources = await client.collectRustSources();
+      sourceFilesJson = JSON.stringify(sources);
+    } else if (gitBinding && target === 'CLIENT') {
+      // CLIENT spike: still use project files until git layout includes client assets.
+      if (files.length === 0) throw new Error(`${target} has no project files`);
+      sourceFilesJson = JSON.stringify(
+        Object.fromEntries(files.map((file) => [file.path, file.content])),
+      );
+    } else {
+      if (files.length === 0) throw new Error(`${target} has no project files`);
+      sourceFilesJson = JSON.stringify(
+        Object.fromEntries(files.map((file) => [file.path, file.content])),
+      );
+    }
     const deployed = await this.options.playerCompute.deploy({
       ...this.scope(),
       name,
