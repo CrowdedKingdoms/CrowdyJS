@@ -153,7 +153,13 @@ retained; if the new proxy connect fails, the fresh token remains stored —
 surface the error and retry `game.udp.connect()` instead of rotating again.
 
 `game.portal.refresh()` remains available for clients with no active UDP
-lifecycle to preserve.
+lifecycle to preserve. A **native (direct-UDP) client** should pass the server it
+is connected to — `game.portal.refresh({ ip4, clientPort })`, the pair
+`serverWithLeastClients` handed it — so the Game API (v1.83.7+) authorizes the
+new token on that same Buddy and answers `authorizedServer`: when it is set,
+keep the socket and sign with the new token; when it is null, place again with
+`serverWithLeastClients`. A Buddy silently drops datagrams for a token it was
+never told about, so a native refresh without it is a re-placement.
 
 ## Game-loop lifecycle
 
