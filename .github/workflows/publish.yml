@@ -233,21 +233,27 @@ jobs:
           # published, the fetch succeeded on the OLD version, and the version check below
           # failed a good release. So the wait is for the tag to serve THIS version, not
           # merely for it to serve something.
-          for attempt in 1 2 3 4 5 6 7 8; do
+          # ...and judge by what `npm pack` actually FETCHED, not by what `npm view` says: on
+          # 2026-09-06 (prod, 15.4.2) `view` answered 15.4.2 while `pack "@latest"` still
+          # delivered 15.4.1 from a stale edge, and the version check failed a good release.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            rm -rf "$work"/*.tgz "$work/package"
             served=$(npm view "$NAME@$DIST_TAG" version 2>/dev/null || true)
-            if [ "$served" = "$PUBLISH_VERSION" ]; then
-              if (cd "$work" && npm pack "$NAME@$DIST_TAG" >/dev/null 2>&1); then break; fi
+            packed=""
+            if [ "$served" = "$PUBLISH_VERSION" ] && (cd "$work" && npm pack "$NAME@$DIST_TAG" >/dev/null 2>&1); then
+              t=$(find "$work" -name '*.tgz' -print -quit)
+              [ -n "$t" ] && tar -xzf "$t" -C "$work" && packed=$(node -p "require('$work/package/package.json').version")
+              [ "$packed" = "$PUBLISH_VERSION" ] && break
             fi
-            echo "  '$DIST_TAG' serves '${served:-nothing}', not $PUBLISH_VERSION yet (attempt $attempt); waiting"
-            rm -f "$work"/*.tgz
-            sleep 10
+            echo "  '$DIST_TAG' serves '${served:-nothing}' (packed '${packed:-nothing}'), not $PUBLISH_VERSION yet (attempt $attempt); waiting"
+            sleep 15
           done
           tarball=$(find "$work" -name '*.tgz' -print -quit)
           if [ -z "$tarball" ]; then
             echo "::error::published $PUBLISH_VERSION but could not fetch $NAME@$DIST_TAG back from the registry to verify it. An unverifiable publish is not a verified one."
             exit 1
           fi
-          tar -xzf "$tarball" -C "$work"
+          [ -d "$work/package" ] || tar -xzf "$tarball" -C "$work"
           origin="$work/package/dist/default-origin.js"
           [ -f "$origin" ] || { echo "::error::the published tarball has no dist/default-origin.js, so the default it ships cannot be checked"; exit 1; }
           got_ver=$(node -p "require('$work/package/package.json').version")
