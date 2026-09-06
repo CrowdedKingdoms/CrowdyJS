@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '15.4.1';
+export const VERSION = '15.4.2';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -466,6 +466,7 @@ export {
   BrowserSessionPkceStore,
   PortalConsentRequiredError,
   type AppTokenResponse,
+  type CurrentServer,
   type PortalAuthorizationCode,
   type PortalConsentState,
   type AppAuthorizationGrant,
