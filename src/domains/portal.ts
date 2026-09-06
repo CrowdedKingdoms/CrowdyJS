@@ -61,6 +61,21 @@ export interface AppTokenResponse {
   discoveryUrl: string | null;
   /** Browser launch URL for this app, if configured. */
   launchUrl: string | null;
+  /**
+   * Set only by `refresh(currentServer)`: the replication server the NEW token was just
+   * authorized on -- the one the caller said it is connected to. When present, keep the
+   * UDP session and start signing with the new token; when null (or the caller passed
+   * nothing), the new token is known to no server and a native client must place again
+   * with `serverWithLeastClients`. Browser clients use the UDP proxy and never need it.
+   * Absent (undefined) against a Game API older than v1.83.7.
+   */
+  authorizedServer?: { ip4: string; clientPort: number } | null;
+}
+
+/** The replication server a native client is connected to: the `ip4` + `clientPort` that `serverWithLeastClients` handed it. */
+export interface CurrentServer {
+  ip4: string;
+  clientPort: number;
 }
 
 export interface PortalAuthorizationCode {
@@ -127,6 +142,15 @@ const ExchangePortalCodeDocument = parse(
 const RefreshAppTokenDocument = parse(
   `mutation RefreshAppToken { refreshAppToken { ${APP_TOKEN_FIELDS} } }`,
 ) as TypedDocumentNode<{ refreshAppToken: AppTokenResponse }, Record<string, never>>;
+
+// Asked for only when a server is named, so a client against a Game API older than
+// v1.83.7 (no `currentServer` argument, no `authorizedServer` field) keeps refreshing.
+const RefreshAppTokenOnServerDocument = parse(
+  `mutation RefreshAppTokenOnServer($currentServer: CurrentServerInput) { refreshAppToken(currentServer: $currentServer) { ${APP_TOKEN_FIELDS} authorizedServer { ip4 clientPort } } }`,
+) as TypedDocumentNode<
+  { refreshAppToken: AppTokenResponse },
+  { currentServer: CurrentServer }
+>;
 
 export interface PortalConsentState {
   appId: string;
@@ -271,8 +295,16 @@ export class PortalAPI {
    * TTL) and store it. Call before expiry to keep playing without bouncing
    * through the Overworld. Requires the current app token on this session.
    */
-  async refresh(): Promise<AppTokenResponse> {
-    const data = await this.api.request(RefreshAppTokenDocument, {});
+  async refresh(currentServer?: CurrentServer): Promise<AppTokenResponse> {
+    // NATIVE CLIENTS NAME THEIR SERVER. A Buddy drops datagrams for a token it was
+    // never told about, and until ck-api v1.83.7 the only thing that told it was
+    // `serverWithLeastClients` -- so every 30-minute refresh was a re-placement. With
+    // `currentServer` the API installs the NEW token on that server and answers
+    // `authorizedServer`; the caller keeps its socket when it is set and places again
+    // when it is null. Browser clients (UDP proxy) omit it and nothing changes.
+    const data = currentServer
+      ? await this.api.request(RefreshAppTokenOnServerDocument, { currentServer })
+      : await this.api.request(RefreshAppTokenDocument, {});
     this.session.setToken(data.refreshAppToken.token);
     return data.refreshAppToken;
   }
