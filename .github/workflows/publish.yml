@@ -228,10 +228,18 @@ jobs:
           set -euo pipefail
           work=$(mktemp -d)
           # npm can serve a just-published version a moment late; retry rather than either
-          # failing a good release or sleeping a fixed guess.
-          for attempt in 1 2 3 4 5; do
-            if (cd "$work" && npm pack "$NAME@$DIST_TAG" >/dev/null 2>&1); then break; fi
-            echo "  registry not serving $NAME@$DIST_TAG yet (attempt $attempt); waiting"
+          # failing a good release or sleeping a fixed guess. The dist-tag itself lags too:
+          # on 2026-09-06 `dev` still resolved 15.4.1-dev.1 seconds after 15.4.2-dev.1 was
+          # published, the fetch succeeded on the OLD version, and the version check below
+          # failed a good release. So the wait is for the tag to serve THIS version, not
+          # merely for it to serve something.
+          for attempt in 1 2 3 4 5 6 7 8; do
+            served=$(npm view "$NAME@$DIST_TAG" version 2>/dev/null || true)
+            if [ "$served" = "$PUBLISH_VERSION" ]; then
+              if (cd "$work" && npm pack "$NAME@$DIST_TAG" >/dev/null 2>&1); then break; fi
+            fi
+            echo "  '$DIST_TAG' serves '${served:-nothing}', not $PUBLISH_VERSION yet (attempt $attempt); waiting"
+            rm -f "$work"/*.tgz
             sleep 10
           done
           tarball=$(find "$work" -name '*.tgz' -print -quit)
