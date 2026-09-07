@@ -1,4 +1,20 @@
 export {
+  CrowdyStudioClientLogBuffer,
+  bindClientLogShipper,
+  formatClientLogTail,
+  type CrowdyStudioClientLogLine,
+  type CrowdyStudioClientLogTarget,
+  type CrowdyStudioClientLogTransport,
+} from './client-logs.js';
+export {
+  bindGameContextShipper,
+  type CrowdyStudioGameContextBlock,
+  type CrowdyStudioGameContextBounds,
+  type CrowdyStudioGameContextSnapshot,
+  type CrowdyStudioGameContextTransport,
+  type CrowdyStudioGameContextVec3,
+} from './game-context.js';
+export {
   CrowdyStudioController,
   type CrowdyStudioControllerOptions,
   type CrowdyStudioBroker,
@@ -23,6 +39,7 @@ export {
   mountCrowdyStudio,
   type CrowdyStudioHandle,
   type MountCrowdyStudioAgentOptions,
+  type MountCrowdyStudioDshOptions,
   type MountCrowdyStudioOptions,
 } from './mount.js';
 export {
@@ -66,11 +83,31 @@ export {
   type CrowdyStudioNewProjectOptions,
 } from './starter-projects.js';
 export {
+  agentChatRequiresBuildMode,
+  extractDiagnosticSourceSnippet,
+  formatDiagnosticsForAgentChat,
+  isParseStyleDiagnosticMessage,
   parseRustcDiagnostics,
+  DIAGNOSTIC_SOURCE_WINDOW_RADIUS,
   type CrowdyStudioDiagnostic,
   type CrowdyStudioDiagnosticSeverity,
   type CrowdyStudioDiagnosticSource,
+  type DiagnosticSourceSnippet,
+  type FormatDiagnosticsOptions,
 } from './diagnostics.js';
+export {
+  formatRuntimeFailureForAgentChat,
+  formatRuntimeFailureDisplay,
+  parseRuntimeFailureFromExtensions,
+  type RuntimeFailureCause,
+  type RuntimeFailureEnvelope,
+} from './runtime-failure.js';
+export {
+  extractEnclosingRustBlock,
+  sha256DigestHex,
+  sha256DigestHexSync,
+  type ExtractedRustBlock,
+} from './rust-block-extract.js';
 export {
   isCurrentDiagnosticVersion,
   type MonacoCrowdyStudioEditorOptions,
@@ -107,6 +144,12 @@ export {
   CrowdyStudioAgentDomShell,
   type CrowdyStudioAgentDomShellOptions,
 } from './agent-dom-shell.js';
+export * from './dsh/index.js';
+export {
+  CrowdyStudioGitHubTransport,
+  type CrowdyStudioGitHubRepo,
+  type CrowdyStudioGitHubStatus,
+} from './github/transport.js';
 export {
   STUDIO_LAYOUT_STORAGE_KEY,
   STUDIO_PANE_IDS,

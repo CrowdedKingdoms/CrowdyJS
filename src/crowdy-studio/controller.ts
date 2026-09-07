@@ -9,7 +9,26 @@ import {
   digestCanonicalJson,
   sha256Digest,
 } from '../crowdy-agent/schema.js';
+import {
+  CrowdyStudioClientLogBuffer,
+  type CrowdyStudioClientLogLine,
+} from './client-logs.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
+import {
+  CrowdyStudioGitHubTransport,
+  type CrowdyStudioGitHubStatus,
+} from './github/transport.js';
+import {
+  mergeStudioFilesFromGitHub,
+  pullStudioFilesFromGitHub,
+  pushStudioFilesToGitHub,
+} from './github/sync.js';
+import {
+  formatRuntimeFailureDisplay,
+  parseRuntimeFailureFromExtensions,
+  type RuntimeFailureEnvelope,
+} from './runtime-failure.js';
+import { CrowdyGraphQLError } from '../errors.js';
 import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
@@ -127,6 +146,12 @@ export interface CrowdyStudioInvokeResult {
   resultJson?: string | null;
   fuelUsed?: string;
   durationUs?: number;
+  /** Set when playerComputeInvoke throws (GraphQL or transport failure). */
+  error?: string;
+  /** Structured failure from GraphQL extensions.runtimeFailure when present. */
+  failure?: RuntimeFailureEnvelope;
+  /** Export name used for this invoke (for chat handoff). */
+  exportName?: string;
 }
 
 export interface CrowdyStudioState {
@@ -150,6 +175,10 @@ export interface CrowdyStudioState {
   usage: CrowdyStudioUsageSnapshot | null;
   wallet: CrowdyStudioWalletSnapshot | null;
   invokeResult: CrowdyStudioInvokeResult | null;
+  /** Last Test draft `crowdy::log` lines from the CLIENT worker. */
+  clientLogs: readonly CrowdyStudioClientLogLine[];
+  github: CrowdyStudioGitHubStatus | null;
+  githubMessage?: string;
 }
 
 export type CrowdyStudioPlayerCompute = Pick<
@@ -206,6 +235,10 @@ export interface CrowdyStudioControllerOptions {
   brokerFactory?: (options: PlayerCodeBrokerOptions) => CrowdyStudioBroker;
   isOnline?: () => boolean;
   onStateChange?: (state: CrowdyStudioState) => void;
+  /** Fired for each captured `crowdy::log` line during Test draft. */
+  onClientLog?: (line: CrowdyStudioClientLogLine) => void;
+  /** Local game-api GitHub App surface (same origin as DSH). */
+  github?: CrowdyStudioGitHubTransport;
 }
 
 export interface CrowdyStudioStopResult {
@@ -248,6 +281,8 @@ export class CrowdyStudioController {
     usage: null,
     wallet: null,
     invokeResult: null,
+    clientLogs: [],
+    github: null,
   };
   private readonly listeners = new Set<(state: CrowdyStudioState) => void>();
   private readonly humanEditListeners = new Set<() => void>();
@@ -267,6 +302,9 @@ export class CrowdyStudioController {
   >();
   private pageVisible = true;
   private destroyed = false;
+  private readonly clientLogBuffer = new CrowdyStudioClientLogBuffer();
+  private githubStatusGeneration = 0;
+  private suppressGitHubPush = false;
 
   constructor(private readonly options: CrowdyStudioControllerOptions) {
     if (options.onStateChange) this.listeners.add(options.onStateChange);
@@ -404,7 +442,28 @@ export class CrowdyStudioController {
       }
       throw error;
     }
-    const [projects, personalLibraryFiles, commonFiles] = loaded;
+    let [projects, personalLibraryFiles, commonFiles] = loaded;
+    if (this.options.github) {
+      const github = this.options.github;
+      const appId = this.options.appId;
+      const statuses = await Promise.all(
+        projects.map(async (project) => {
+          try {
+            const status = await github.status({
+              appId,
+              projectId: project.projectId,
+            });
+            return status.owner && status.repo ? project : null;
+          } catch {
+            // Unbound or local GitHub API unavailable: hide postgres leftovers.
+            return null;
+          }
+        }),
+      );
+      projects = statuses.filter(
+        (project): project is CrowdyStudioProjectSummary => project != null,
+      );
+    }
     this.update({
       projects,
       personalLibraryFiles,
@@ -417,12 +476,170 @@ export class CrowdyStudioController {
         (project) => project.projectId === this.options.initialProjectId,
       ) ?? projects[0];
     if (first) await this.loadProject(first.projectId);
+    await this.refreshGitHubStatus();
+  }
+
+  async refreshGitHubStatus(): Promise<void> {
+    if (!this.options.github) return;
+    const generation = ++this.githubStatusGeneration;
+    const projectId = this.state.project?.projectId;
+    try {
+      const github = await this.options.github.status({
+        appId: this.options.appId,
+        projectId,
+      });
+      if (generation !== this.githubStatusGeneration) return;
+      this.update({ github, githubMessage: undefined });
+      await this.pullGitHubIfBound();
+    } catch (error) {
+      if (generation !== this.githubStatusGeneration) return;
+      this.update({
+        githubMessage: errorMessage(error),
+      });
+    }
+  }
+
+  private githubBind(): { owner: string; repo: string; branch: string } | null {
+    const github = this.state.github;
+    if (!github?.owner || !github.repo) return null;
+    return {
+      owner: github.owner,
+      repo: github.repo,
+      branch: github.branch || 'main',
+    };
+  }
+
+  private async pushGitHubIfBound(
+    files: readonly CrowdyStudioProjectFile[],
+  ): Promise<void> {
+    if (!this.options.github) return;
+    let bind = this.githubBind();
+    if (!bind && this.state.project) {
+      try {
+        const github = await this.options.github.status({
+          appId: this.options.appId,
+          projectId: this.state.project.projectId,
+        });
+        this.update({ github, githubMessage: this.state.githubMessage });
+        bind = github.owner && github.repo
+          ? {
+              owner: github.owner,
+              repo: github.repo,
+              branch: github.branch || 'main',
+            }
+          : null;
+      } catch {
+        return;
+      }
+    }
+    if (!bind) return;
+    try {
+      const pushed = await pushStudioFilesToGitHub(
+        this.options.github,
+        bind,
+        files,
+      );
+      if (pushed > 0) {
+        this.update({
+          githubMessage: `Pushed ${pushed} file${pushed === 1 ? '' : 's'} to GitHub.`,
+        });
+      }
+    } catch (error) {
+      this.update({
+        githubMessage: `GitHub push failed: ${errorMessage(error)}`,
+      });
+    }
+  }
+
+  private async pullGitHubIfBound(): Promise<void> {
+    if (!this.options.github) return;
+    const bind = this.githubBind();
+    const project = this.state.project;
+    if (!bind || !project) return;
+    if (this.editGeneration !== this.persistedGeneration) {
+      this.update({
+        githubMessage: 'Save Studio edits before pulling from GitHub.',
+      });
+      return;
+    }
+    try {
+      const incoming = await pullStudioFilesFromGitHub(this.options.github, bind);
+      const { files, changed } = mergeStudioFilesFromGitHub(
+        project.files,
+        incoming,
+      );
+      if (!changed) {
+        this.update({ githubMessage: 'GitHub is in sync.' });
+        return;
+      }
+      project.files = files;
+      this.editGeneration += 1;
+      this.update({
+        project,
+        githubMessage: 'Pulled from GitHub.',
+      });
+      this.suppressGitHubPush = true;
+      try {
+        await this.saveNow();
+      } finally {
+        this.suppressGitHubPush = false;
+      }
+    } catch (error) {
+      this.update({
+        githubMessage: `GitHub pull failed: ${errorMessage(error)}`,
+      });
+    }
+  }
+
+  async connectGitHub(): Promise<void> {
+    if (!this.options.github) {
+      throw new Error('GitHub Studio transport is not configured.');
+    }
+    const { connectUrl } = await this.options.github.connectUrl();
+    window.open(connectUrl, '_blank', 'noopener,noreferrer');
+    this.update({
+      githubMessage: 'Finish GitHub install in the new tab, then click Refresh.',
+    });
+  }
+
+  async bindGitHubRepo(slug: string): Promise<void> {
+    if (!this.options.github) {
+      throw new Error('GitHub Studio transport is not configured.');
+    }
+    const projectId = this.state.project?.projectId;
+    if (!projectId) {
+      throw new Error('Open a Studio project before binding a GitHub repo.');
+    }
+    const trimmed = slug.trim();
+    const at = trimmed.lastIndexOf('@');
+    const repoPath = at > 0 ? trimmed.slice(0, at) : trimmed;
+    const branch = at > 0 ? trimmed.slice(at + 1).trim() || 'main' : 'main';
+    const slash = repoPath.indexOf('/');
+    if (slash <= 0 || slash === repoPath.length - 1) {
+      throw new Error('Use owner/repo or owner/repo@branch');
+    }
+    const github = await this.options.github.bind({
+      appId: this.options.appId,
+      projectId,
+      owner: repoPath.slice(0, slash),
+      repo: repoPath.slice(slash + 1),
+      branch,
+    });
+    this.update({ github, githubMessage: undefined });
   }
 
   async createProject(
     options: Omit<CrowdyStudioNewProjectOptions, 'appId' | 'gridId'>,
   ): Promise<CrowdyStudioProject> {
     this.ensureAlive();
+    if (this.options.github) {
+      await this.refreshGitHubStatus();
+      if (!this.state.github?.connected) {
+        throw new Error(
+          'Connect GitHub before creating a mod. GitHub is the filesystem; Studio, DSH, and your IDE all edit that repo.',
+        );
+      }
+    }
     if (this.state.project && !(await this.saveNow())) {
       throw new Error('Resolve or retry the current project save before creating another');
     }
@@ -437,7 +654,44 @@ export class CrowdyStudioController {
       saveState: 'SAVED',
       saveMessage: undefined,
     });
+    if (this.options.github) {
+      try {
+        const github = await this.options.github.createMod({
+          appId: this.options.appId,
+          projectId: project.projectId,
+          name: project.metadata.name,
+          kind: project.kind,
+          files: [
+            ...(project.kind === 'FULL_STACK'
+              ? [
+                  {
+                    path: 'crowdy.json',
+                    content:
+                      '{\n  "server": "server",\n  "client": "client"\n}\n',
+                  },
+                ]
+              : []),
+            ...project.files.map((file) => ({
+              path:
+                project.kind === 'FULL_STACK'
+                  ? `${file.target.toLowerCase()}/${file.path}`
+                  : file.path,
+              content: file.content,
+            })),
+          ],
+        });
+        this.update({ github, githubMessage: undefined });
+      } catch (error) {
+        const message = errorMessage(error);
+        this.update({ githubMessage: message });
+        throw new Error(message);
+      }
+    }
     return project;
+  }
+
+  requiresGitHubConnect(): boolean {
+    return Boolean(this.options.github) && !this.state.github?.connected;
   }
 
   async switchProject(projectId: string): Promise<void> {
@@ -491,7 +745,9 @@ export class CrowdyStudioController {
       runs: [],
       logs: [],
       invokeResult: null,
+      clientLogs: [],
     });
+    this.clientLogBuffer.clear();
     this.restartVisibleSurfacePolling();
   }
 
@@ -885,6 +1141,38 @@ export class CrowdyStudioController {
     );
   }
 
+  /**
+   * Re-read the open project and install it as an agent revision. Server-executed
+   * write tools report only a revision id and content hashes, so the bodies have
+   * to come back over the project provider before the editor can show them.
+   * Returns false when the durable revision already matches what is open.
+   */
+  async adoptAgentRevision(
+    synchronization: Omit<CrowdyStudioProjectSynchronization, 'source'> = {},
+  ): Promise<boolean> {
+    const current = this.requireProject();
+    const project = await this.options.projectProvider.getProject({
+      ...this.scope(),
+      projectId: current.projectId,
+    });
+    if (project.revision.id === this.requireProject().revision.id) return false;
+    this.synchronizeProject(project, { source: 'AGENT', ...synchronization });
+    return true;
+  }
+
+  /**
+   * Pull a newer durable revision (Harness write/edit) into the open editor.
+   * No-ops while the human has unsaved edits or an unresolved conflict so we
+   * never clobber the buffer or spam conflict state during a turn.
+   */
+  async pullRemoteAgentRevision(): Promise<'skipped' | 'unchanged' | 'adopted'> {
+    if (!this.state.project) return 'skipped';
+    if (this.persistedGeneration !== this.editGeneration) return 'skipped';
+    if (this.state.saveState === 'CONFLICT') return 'skipped';
+    const adopted = await this.adoptAgentRevision();
+    return adopted ? 'adopted' : 'unchanged';
+  }
+
   async restoreCheckpoint(
     checkpointId: string,
     approvalGrant: string,
@@ -979,10 +1267,12 @@ export class CrowdyStudioController {
     const targets = plan ? [...plan.targets] : projectTargets(project.kind);
     const operation = ++this.operationGeneration;
     this.stopSurfacePolling();
+    this.clientLogBuffer.clear();
     this.update({
       runtime: { phase: draft ? 'TESTING_DRAFT' : 'DEPLOYING_LIVE' },
       buildOutput: '',
       authoritativeDiagnostics: [],
+      clientLogs: [],
     });
     try {
       if (targets.length === 1) {
@@ -1230,6 +1520,7 @@ export class CrowdyStudioController {
       artifactHash: artifact.artifactHash,
       fuelPerDispatch: artifact.fuelPerDispatch,
       onPresentation: this.options.onPresentation,
+      onLog: (level, message) => this.captureClientLog(level, message),
       tickIntervalMs: this.options.clientTickIntervalMs ?? 1_000,
     };
     const broker =
@@ -1304,15 +1595,31 @@ export class CrowdyStudioController {
     if (!projectTargets(project.kind).includes('SERVER')) {
       throw new Error('Invoke requires a SERVER target');
     }
-    const result = await this.options.playerCompute.invoke({
-      ...this.scope(),
-      moduleName: moduleNameFor(project, 'SERVER'),
-      exportName: exportName.trim() || 'invoke',
-      paramsJson: paramsJson?.trim() || null,
-    });
-    this.checkAgentOperation(agentOperation);
-    this.update({ invokeResult: result });
-    return result;
+    const resolvedExport = exportName.trim() || 'invoke';
+    try {
+      const result = await this.options.playerCompute.invoke({
+        ...this.scope(),
+        moduleName: moduleNameFor(project, 'SERVER'),
+        exportName: resolvedExport,
+        paramsJson: paramsJson?.trim() || null,
+      });
+      this.checkAgentOperation(agentOperation);
+      const invokeResult: CrowdyStudioInvokeResult = {
+        ...result,
+        exportName: resolvedExport,
+      };
+      this.update({ invokeResult });
+      return invokeResult;
+    } catch (error) {
+      const { error: errorText, failure } = formatInvokeErrorParts(error);
+      const invokeResult: CrowdyStudioInvokeResult = {
+        error: errorText,
+        failure,
+        exportName: resolvedExport,
+      };
+      this.update({ invokeResult });
+      return invokeResult;
+    }
   }
 
   setSurfaceVisible(surface: CrowdyStudioPolledSurface, visible: boolean): void {
@@ -1418,6 +1725,9 @@ export class CrowdyStudioController {
                 : this.state.runtimeSync.state,
           },
         });
+        if (!this.suppressGitHubPush) {
+          await this.pushGitHubIfBound(snapshot.files);
+        }
       } catch (error) {
         if (error instanceof CrowdyStudioRevisionConflictError) {
           this.conflictRemote = error.remoteProject ?? null;
@@ -1651,6 +1961,19 @@ export class CrowdyStudioController {
     this.update({ runtime: { phase, message } });
   }
 
+  private captureClientLog(level: number, message: string): void {
+    this.clientLogBuffer.append({
+      at: new Date().toISOString(),
+      level,
+      message,
+      target: 'CLIENT',
+    });
+    const stored = this.clientLogBuffer.tail(1).slice(-1)[0];
+    if (!stored) return;
+    this.update({ clientLogs: this.clientLogBuffer.tail() });
+    this.options.onClientLog?.(stored);
+  }
+
   private update(patch: Partial<CrowdyStudioState>): void {
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener(this.state);
@@ -1855,6 +2178,52 @@ function fileRefExists(
       ? file.id === ref.referenceId
       : file.target === ref.target && file.path === ref.path,
   );
+}
+
+function formatInvokeErrorParts(error: unknown): {
+  error: string;
+  failure?: RuntimeFailureEnvelope;
+} {
+  if (error instanceof CrowdyGraphQLError) {
+    const failure = parseRuntimeFailureFromExtensions(error.extensions);
+    const remediation =
+      typeof error.extensions?.remediation === 'string'
+        ? error.extensions.remediation
+        : undefined;
+    if (failure) {
+      return {
+        error: formatRuntimeFailureDisplay(failure, remediation),
+        failure: {
+          ...failure,
+          ...(remediation && !failure.remediation ? { remediation } : {}),
+        },
+      };
+    }
+
+    const code = typeof error.code === 'string' ? error.code : undefined;
+    const message = error.message;
+
+    let line: string;
+    if (code && code.length > 0) {
+      if (message === code || message.startsWith(`${code}:`)) {
+        line = message;
+      } else if (
+        code === 'INTERNAL_SERVER_ERROR' &&
+        message.startsWith('PLAYER_MODULE_')
+      ) {
+        line = message;
+      } else {
+        line = `${code}: ${message}`;
+      }
+    } else {
+      line = message;
+    }
+
+    return {
+      error: remediation ? `${line}\n${remediation}` : line,
+    };
+  }
+  return { error: errorMessage(error) };
 }
 
 function errorMessage(error: unknown): string {

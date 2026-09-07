@@ -2,6 +2,11 @@ import {
   CrowdyStudioController,
   type CrowdyStudioControllerOptions,
 } from './controller.js';
+import { bindClientLogShipper } from './client-logs.js';
+import {
+  bindGameContextShipper,
+  type CrowdyStudioGameContextSnapshot,
+} from './game-context.js';
 import {
   CROWDY_AGENT_TOOL_REGISTRY_V1,
   CrowdyAgentBrowserToolDispatcher,
@@ -18,6 +23,11 @@ import {
   type PlayerHostAdapterV1,
 } from '../player-host/index.js';
 import { CrowdyStudioDomShell } from './dom-shell.js';
+import {
+  CrowdyStudioDshController,
+  dshMessageLooksLikeMutation,
+  type CrowdyStudioDshTransport,
+} from './dsh/index.js';
 import type {
   CrowdyStudioEditorAdapter,
   CrowdyStudioEditorCallbacks,
@@ -34,6 +44,19 @@ export interface MountCrowdyStudioOptions
     MonacoCrowdyStudioEditorOptions {
   /** Optional durable Agentic Crowdy Studio vertical slice. */
   agent?: MountCrowdyStudioAgentOptions;
+  /**
+   * Optional parallel DeepSeek Harness chat dock (DEV). Independent of
+   * {@link agent}; uses the same open Crowdy Studio project.
+   */
+  dsh?: MountCrowdyStudioDshOptions;
+}
+
+export interface MountCrowdyStudioDshOptions {
+  transport: CrowdyStudioDshTransport;
+  appId: string;
+  autoInitialize?: boolean;
+  /** Live player chunk / grid / catalog. Polled and posted to the sidecar. */
+  getGameContext?: () => CrowdyStudioGameContextSnapshot | null | undefined;
 }
 
 export interface MountCrowdyStudioAgentOptions
@@ -58,6 +81,7 @@ export interface MountCrowdyStudioAgentOptions
 export interface CrowdyStudioHandle {
   controller: CrowdyStudioController;
   agent: CrowdyStudioAgentController | null;
+  dsh: CrowdyStudioDshController | null;
   controlLeaseManager: AgentControlLeaseManager | null;
   editorMode: CrowdyStudioEditorMode;
   destroy(): void;
@@ -105,8 +129,23 @@ export async function mountCrowdyStudio(
     throw new Error('mountCrowdyStudio requires a DOM document');
   }
 
-  const controller = new CrowdyStudioController(options);
+  let controller: CrowdyStudioController;
+  const clientLogShipper = bindClientLogShipper(
+    () => controller.getState().project?.projectId,
+    options.dsh?.transport,
+    options.onClientLog,
+  );
+  const gameContextShipper = bindGameContextShipper(
+    () => controller.getState().project?.projectId,
+    options.dsh?.transport,
+    options.dsh?.getGameContext,
+  );
+  controller = new CrowdyStudioController({
+    ...options,
+    onClientLog: clientLogShipper.onClientLog,
+  });
   let agent: CrowdyStudioAgentController | null = null;
+  let dsh: CrowdyStudioDshController | null = null;
   let controlLeaseManager: AgentControlLeaseManager | null = null;
   if (options.agent) {
     const registry =
@@ -206,17 +245,31 @@ export async function mountCrowdyStudio(
       },
     });
   }
-  const shell = new CrowdyStudioDomShell(host, controller, agent ?? undefined, {
-    getPlayLeaseContext: () => {
-      const capabilities = controlLeaseManager?.snapshot().capabilities;
-      return capabilities
-        ? {
-            controlledEntityId: capabilities.controlledEntityId,
-            hostCapabilityRevision: capabilities.revision,
-          }
-        : null;
+  if (options.dsh) {
+    dsh = new CrowdyStudioDshController({
+      transport: options.dsh.transport,
+      appId: options.dsh.appId,
+      resolveProjectId: () => controller.getState().project?.projectId,
+      beforeSend: () => gameContextShipper.publish(),
+    });
+  }
+  const shell = new CrowdyStudioDomShell(
+    host,
+    controller,
+    agent ?? undefined,
+    {
+      getPlayLeaseContext: () => {
+        const capabilities = controlLeaseManager?.snapshot().capabilities;
+        return capabilities
+          ? {
+              controlledEntityId: capabilities.controlledEntityId,
+              hostCapabilityRevision: capabilities.revision,
+            }
+          : null;
+      },
     },
-  });
+    dsh ?? undefined,
+  );
   const unsubscribeHumanEdit = controller.onHumanEdit(() =>
     agent?.preemptForHumanEdit(),
   );
@@ -272,15 +325,27 @@ export async function mountCrowdyStudio(
     if (nextProjectId !== selectedProjectId) {
       selectedProjectId = nextProjectId;
       agent?.projectSelectionChanged(nextProjectId);
+      // Re-list harness sessions for the newly selected project.
+      if (dsh && nextProjectId) {
+        void dsh.initialize().catch(() => undefined);
+      }
+      gameContextShipper.publish();
     }
   });
+  const unsubscribeDshBusy = dsh
+    ? bindDshProjectPull(dsh, controller)
+    : () => {};
   const onVisibilityChange = (): void => {
     const visible = document.visibilityState !== 'hidden';
     controller.setPageVisible(visible);
     agent?.setPageVisible(visible);
+    if (visible) {
+      void controller.refreshGitHubStatus();
+    }
   };
   document.addEventListener('visibilitychange', onVisibilityChange);
-  onVisibilityChange();
+  controller.setPageVisible(document.visibilityState !== 'hidden');
+  agent?.setPageVisible(document.visibilityState !== 'hidden');
 
   try {
     await controller.initialize();
@@ -304,15 +369,28 @@ export async function mountCrowdyStudio(
         console.warn('Crowdy Studio agent could not attach; manual Studio remains available', error);
       });
     }
+    if (dsh && options.dsh?.autoInitialize !== false) {
+      await dsh.initialize().catch((error) => {
+        console.warn(
+          'Crowdy Studio Harness dock could not attach; Crowdy Agent remains available',
+          error,
+        );
+      });
+    }
+    gameContextShipper.publish();
   } catch (error) {
     disconnectLayoutObserver();
     document.removeEventListener('visibilitychange', onVisibilityChange);
     unsubscribe();
+    unsubscribeDshBusy();
     const failedEditor = editor as CrowdyStudioEditorAdapter | null;
     failedEditor?.dispose();
     shell.dispose();
     unsubscribeHumanEdit();
+    clientLogShipper.dispose();
+    gameContextShipper.dispose();
     agent?.destroy();
+    dsh?.destroy();
     controller.destroy();
     throw error;
   }
@@ -320,6 +398,7 @@ export async function mountCrowdyStudio(
   return {
     controller,
     agent,
+    dsh,
     controlLeaseManager,
     get editorMode() {
       return editor?.mode ?? 'textarea';
@@ -330,14 +409,72 @@ export async function mountCrowdyStudio(
       disconnectLayoutObserver();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       unsubscribe();
+      unsubscribeDshBusy();
       editor?.dispose();
       editor = null;
       shell.dispose();
       unsubscribeHumanEdit();
+      clientLogShipper.dispose();
+      gameContextShipper.dispose();
       agent?.destroy();
       agent = null;
+      dsh?.destroy();
+      dsh = null;
       controller.destroy();
     },
+  };
+}
+
+/**
+ * Keep Monaco on the durable project while Harness write/edit tools run.
+ * Polls during a busy turn, pulls immediately on a mutation card, and pulls
+ * once more when the turn goes idle.
+ */
+function bindDshProjectPull(
+  dsh: CrowdyStudioDshController,
+  controller: CrowdyStudioController,
+): () => void {
+  let busy = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let lastMutationSig = '';
+
+  const pull = (): void => {
+    void controller.pullRemoteAgentRevision().catch((error) => {
+      console.warn(
+        'Crowdy Studio could not adopt a Harness project revision',
+        error,
+      );
+    });
+  };
+
+  const stop = (): void => {
+    if (timer) clearInterval(timer);
+    timer = null;
+  };
+
+  const unsubscribe = dsh.subscribe((state) => {
+    const mutationSig = state.messages
+      .filter(dshMessageLooksLikeMutation)
+      .map((message) => `${message.seq}:${message.title ?? ''}`)
+      .join('|');
+    if (mutationSig && mutationSig !== lastMutationSig) {
+      lastMutationSig = mutationSig;
+      pull();
+    }
+    if (state.busy && !busy) {
+      pull();
+      timer = setInterval(pull, 1_500);
+    }
+    if (!state.busy && busy) {
+      stop();
+      pull();
+    }
+    busy = state.busy;
+  });
+
+  return () => {
+    stop();
+    unsubscribe();
   };
 }
 

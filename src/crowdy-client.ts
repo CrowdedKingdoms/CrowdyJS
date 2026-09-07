@@ -32,7 +32,7 @@ import { createBootstrapRediscover } from './bootstrap-rediscover.js';
 import { RealtimeMetrics } from './metrics.js';
 import { SubscriptionManager } from './subscriptions.js';
 import type { CrowdyLogger } from './logger.js';
-import type { TokenStore } from './session.js';
+import { BrowserLocalStorageTokenStore, type TokenStore } from './session.js';
 import { CrowdyProtocolError } from './errors.js';
 import { WorldClient } from './world.js';
 import { GameKitClient, type GameKitOptions } from './kit/index.js';
@@ -72,6 +72,8 @@ import { ComputeAPI } from './domains/compute.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 import { CrowdyAgentGraphQLTransport } from './crowdy-agent/graphql-transport.js';
+import { CrowdyStudioDshGraphQLTransport } from './crowdy-studio/dsh/graphql-transport.js';
+import { CrowdyStudioGitHubTransport } from './crowdy-studio/github/transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { MarketplaceAPI } from './domains/marketplace.js';
 import { PlayerModelAPI } from './domains/playerModel.js';
@@ -96,6 +98,20 @@ export interface CrowdyClientConfig {
   graphqlEndpoint?: string;
   /** WS endpoint. Defaults to `${wsUrl}/graphql`. */
   wsEndpoint?: string;
+  /**
+   * Optional separate GraphQL endpoint for the DEV-only DeepSeek Harness dock
+   * and GitHub App Studio fields (`crowdyStudioDsh*`, `crowdyStudioGitHub*`).
+   * Use this when gameplay talks to a remote tier API that does not serve those
+   * fields, and a local game-api does (e.g. Vite `/graphql-dsh` → `:4000`).
+   * Datacenter moves do not retarget this. Uses {@link dshTokenStore} (or a
+   * dedicated `crowdyjs:dsh-session` store), not the gameplay app token.
+   */
+  dshGraphqlEndpoint?: string;
+  /**
+   * Persistence for the local DSH/GitHub Bearer token. Ignored unless
+   * `dshGraphqlEndpoint` is set. Defaults to `crowdyjs:dsh-session`.
+   */
+  dshTokenStore?: TokenStore;
 
   // ----- Common -----
   /** Per-request HTTP timeout in milliseconds. */
@@ -283,6 +299,16 @@ export class CrowdyClient {
   readonly crowdyStudio: CrowdyStudioAPI;
   /** Durable typed Agentic Crowdy Studio GraphQL transport. */
   readonly crowdyStudioAgent: CrowdyAgentGraphQLTransport;
+  /** DEV-only parallel DeepSeek Harness Studio dock transport. */
+  readonly crowdyStudioDsh: CrowdyStudioDshGraphQLTransport;
+  /** GitHub App Studio filesystem (local game-api, same endpoint as DSH). */
+  readonly crowdyStudioGitHub: CrowdyStudioGitHubTransport;
+  /**
+   * Session for `dshGraphqlEndpoint` (Harness + GitHub). Distinct from the
+   * gameplay app token when that endpoint is set.
+   */
+  readonly dshSession: AuthState;
+  private readonly studioLocalAuth: AuthAPI;
 
   /** P4a marketplace (free mode): store, installs, consent, claim flows. */
   readonly marketplace: MarketplaceAPI;
@@ -475,6 +501,28 @@ export class CrowdyClient {
       wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),
     });
+    const dshEndpoint = config.dshGraphqlEndpoint?.trim();
+    this.dshSession = dshEndpoint
+      ? new AuthState(
+          config.dshTokenStore ??
+            new BrowserLocalStorageTokenStore('crowdyjs:dsh-session'),
+        )
+      : this.session;
+    const studioLocalGraphql = dshEndpoint
+      ? new GraphQLClient(
+          {
+            graphqlEndpoint: resolveDshGraphqlEndpoint(dshEndpoint),
+            timeout: config.timeout,
+            logger: config.logger,
+          },
+          this.dshSession,
+        )
+      : this.graphql;
+    this.studioLocalAuth = dshEndpoint
+      ? new AuthAPI(studioLocalGraphql, this.dshSession)
+      : this.auth;
+    this.crowdyStudioDsh = new CrowdyStudioDshGraphQLTransport(studioLocalGraphql);
+    this.crowdyStudioGitHub = new CrowdyStudioGitHubTransport(studioLocalGraphql);
     this.playerWallet = new PlayerWalletAPI(this.graphql);
     this.marketplace = new MarketplaceAPI(this.graphql);
     this.playerModel = new PlayerModelAPI(this.graphql);
@@ -498,6 +546,18 @@ export class CrowdyClient {
   /** Imperatively set the Bearer token (useful for SSO / token rehydrate). */
   setToken(token: string | null): void {
     this.session.setToken(token);
+  }
+
+  /**
+   * Sign in to the local DSH/GitHub game-api. No-op when gameplay and Studio
+   * share one GraphQL origin (the gameplay session is used).
+   */
+  async loginStudioLocal(input: {
+    email: string;
+    password: string;
+  }): Promise<void> {
+    if (this.dshSession === this.session) return;
+    await this.studioLocalAuth.login(input);
   }
 
   /** Read the current Bearer token (null if no session). */
@@ -620,4 +680,11 @@ function toGraphqlEndpoint(
   if (!trimmed) return undefined;
   const noSlash = trimmed.replace(/\/$/, '');
   return noSlash.endsWith(`/${suffix}`) ? noSlash : `${noSlash}/${suffix}`;
+}
+
+/** Same-origin Vite paths stay as-is; absolute URLs get `/graphql` if needed. */
+function resolveDshGraphqlEndpoint(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/')) return trimmed;
+  return toGraphqlEndpoint(trimmed, 'graphql') ?? trimmed;
 }

@@ -58,6 +58,7 @@
     "build": "npm run check:authoring-index && tsc && npm run check:agent-descriptors && node scripts/copy-live-coding-assets.mjs",
     "test": "npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/e2e/*.test.mjs",
     "test:unit": "npm run build && node --test test/unit/*.test.mjs",
+    "test:studio-dsh-harness": "node scripts/test-studio-dsh-harness.mjs",
     "test:e2e": "npm run build && node --test --test-concurrency=1 test/e2e/*.test.mjs",
     "coverage": "npm run build && node --test --experimental-test-coverage test/unit/*.test.mjs",
     "watch": "tsc --watch",

@@ -1,0 +1,708 @@
+import {
+  dshHasUnansweredQuestion,
+  dshShouldShowWorking,
+  dshWorkingLabel,
+  type CrowdyStudioDshController,
+  type CrowdyStudioDshMessage,
+  type CrowdyStudioDshState,
+} from './controller.js';
+import type { StudioLayoutController } from '../layout.js';
+import {
+  ASK_USER_CUSTOM_OPTION,
+  looksLikeAskUserQuestion,
+  parseAskUserQuestions,
+  type AskUserQuestion,
+} from './ask-user-question.js';
+import {
+  AskUserQuestionWizard,
+  questionWizardFromSelectValue,
+} from './question-wizard.js';
+import { dshTranscriptRenderKey } from './transcript-key.js';
+import { fillMarkdown } from './markdown.js';
+
+export interface CrowdyStudioDshDomShellOptions {
+  layout?: StudioLayoutController;
+}
+
+/**
+ * DeepSeek Harness chat dock: transcript-first layout matching dsh web
+ * (user bubbles, tool cards, working indicator, Ask-anything composer).
+ */
+export class CrowdyStudioDshDomShell {
+  readonly root: HTMLElement;
+  private readonly connection: HTMLElement;
+  private readonly sessionSelect: HTMLSelectElement;
+  private readonly modelSelect: HTMLSelectElement;
+  private readonly transcript: HTMLElement;
+  private readonly working: HTMLElement;
+  private readonly workingLabelEl: HTMLElement;
+  private readonly live: HTMLElement;
+  private readonly liveLabelEl: HTMLElement;
+  private readonly errorBanner: HTMLElement;
+  private readonly questionJump: HTMLButtonElement;
+  private readonly composer: HTMLTextAreaElement;
+  private readonly send: HTMLButtonElement;
+  private readonly stop: HTMLButtonElement;
+  private readonly newSession: HTMLButtonElement;
+  private readonly unsubscribe: () => void;
+  private readonly options: CrowdyStudioDshDomShellOptions;
+  private disposed = false;
+  private lastTranscriptKey = '';
+
+  constructor(
+    host: HTMLElement,
+    private readonly controller: CrowdyStudioDshController,
+    options: CrowdyStudioDshDomShellOptions = {},
+  ) {
+    this.options = options;
+    this.root = document.createElement('aside');
+    this.root.className = 'ck-crowdy-studio-dsh-dock';
+    this.root.setAttribute('aria-label', 'DeepSeek Harness chat');
+
+    const header = document.createElement('header');
+    header.className = 'ck-crowdy-studio-dsh-header';
+
+    const brand = document.createElement('div');
+    brand.className = 'ck-crowdy-studio-dsh-brand';
+    this.connection = document.createElement('span');
+    this.connection.className = 'ck-crowdy-studio-dsh-connection';
+    this.connection.setAttribute('role', 'status');
+    this.connection.setAttribute('aria-live', 'polite');
+    const wordmark = document.createElement('h2');
+    wordmark.textContent = 'Harness';
+    brand.append(this.connection, wordmark);
+
+    this.newSession = button('New');
+    this.newSession.className = 'ck-crowdy-studio-dsh-new';
+    this.newSession.title = 'New session';
+    this.newSession.addEventListener('click', () => {
+      void this.run(() => this.controller.createSession());
+      options.layout?.setVisible('dsh', true);
+    });
+    this.modelSelect = document.createElement('select');
+    this.modelSelect.className = 'ck-crowdy-studio-dsh-model-select';
+    this.modelSelect.setAttribute('aria-label', 'Harness model');
+    this.modelSelect.hidden = true;
+    this.modelSelect.addEventListener('change', () => {
+      const modelId = this.modelSelect.value;
+      if (!modelId) return;
+      void this.run(() => this.controller.setModel(modelId));
+    });
+    this.sessionSelect = document.createElement('select');
+    this.sessionSelect.className = 'ck-crowdy-studio-dsh-session-select';
+    this.sessionSelect.setAttribute('aria-label', 'Harness session');
+    this.sessionSelect.hidden = true;
+    this.sessionSelect.addEventListener('change', () => {
+      const sessionId = this.sessionSelect.value;
+      if (!sessionId) return;
+      void this.run(() => this.controller.selectSession(sessionId));
+    });
+    this.live = renderWorking('Working');
+    this.live.className = 'ck-crowdy-studio-dsh-live';
+    this.live.hidden = true;
+    this.liveLabelEl = this.live.querySelector(
+      '.ck-crowdy-studio-dsh-working-label',
+    ) as HTMLElement;
+    header.append(
+      brand,
+      this.modelSelect,
+      this.sessionSelect,
+      this.live,
+      this.newSession,
+    );
+
+    this.transcript = document.createElement('div');
+    this.transcript.className = 'ck-crowdy-studio-dsh-transcript';
+    this.transcript.setAttribute('role', 'log');
+    this.transcript.setAttribute('aria-live', 'polite');
+    this.transcript.setAttribute('aria-relevant', 'additions text');
+
+    this.working = renderWorking('Working');
+    this.working.hidden = true;
+    this.workingLabelEl = this.working.querySelector(
+      '.ck-crowdy-studio-dsh-working-label',
+    ) as HTMLElement;
+
+    this.errorBanner = document.createElement('p');
+    this.errorBanner.className = 'ck-crowdy-studio-dsh-error';
+    this.errorBanner.hidden = true;
+
+    this.questionJump = button('Question waiting — scroll to answer');
+    this.questionJump.className = 'ck-crowdy-studio-dsh-question-jump';
+    this.questionJump.hidden = true;
+    this.questionJump.addEventListener('click', () => {
+      const card = this.transcript.querySelector(
+        '[data-kind="question"]:not([data-answered="true"])',
+      );
+      if (card instanceof HTMLElement) {
+        card.scrollIntoView({ block: 'center', inline: 'nearest' });
+        this.syncQuestionJump();
+      }
+    });
+    this.transcript.addEventListener('scroll', () => this.syncQuestionJump(), {
+      passive: true,
+    });
+
+    const form = document.createElement('form');
+    form.className = 'ck-crowdy-studio-dsh-composer';
+    this.composer = document.createElement('textarea');
+    this.composer.rows = 1;
+    this.composer.maxLength = 32_768;
+    this.composer.placeholder = 'Ask anything…';
+    this.composer.setAttribute('aria-label', 'Message DeepSeek Harness');
+    const actions = document.createElement('div');
+    actions.className = 'ck-crowdy-studio-dsh-composer-actions';
+    this.stop = button('Stop');
+    this.stop.className = 'ck-crowdy-studio-dsh-stop';
+    this.stop.hidden = true;
+    this.stop.addEventListener('click', (event) => {
+      event.preventDefault();
+      void this.run(() => this.controller.cancel());
+    });
+    this.send = button('', 'submit');
+    this.send.className = 'ck-crowdy-studio-dsh-send';
+    this.send.append(sendIcon());
+    this.send.setAttribute('aria-label', 'Send');
+    actions.append(this.stop, this.send);
+    form.append(this.composer, actions);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const content = this.composer.value;
+      if (!content.trim()) return;
+      this.composer.value = '';
+      resizeComposer(this.composer);
+      void this.run(async () => {
+        await this.controller.sendMessage(content);
+        options.layout?.setVisible('dsh', true);
+      });
+    });
+    this.composer.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+    this.composer.addEventListener('input', () => resizeComposer(this.composer));
+
+    this.root.append(
+      header,
+      this.transcript,
+      this.questionJump,
+      this.working,
+      this.errorBanner,
+      form,
+    );
+    host.appendChild(this.root);
+
+    this.unsubscribe = this.controller.subscribe((state) => this.render(state));
+    this.render(this.controller.getState());
+  }
+
+  /**
+   * Prefill the composer and reveal Harness. Does not send — the human
+   * edits or hits Send. Used by Problems / Invoke "Add to chat".
+   */
+  prefillComposer(content: string): void {
+    this.options.layout?.setVisible('dsh', true);
+    const clipped = content.slice(0, this.composer.maxLength);
+    this.composer.value = clipped;
+    resizeComposer(this.composer);
+    this.composer.focus();
+    const caret = clipped.length;
+    this.composer.setSelectionRange(caret, caret);
+  }
+
+  /** Current composer text (for appending into an existing draft). */
+  getComposerValue(): string {
+    return this.composer.value;
+  }
+
+  /** Reveal Harness and send immediately. */
+  async askWithMessage(content: string): Promise<void> {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    this.options.layout?.setVisible('dsh', true);
+    this.composer.value = '';
+    resizeComposer(this.composer);
+    await this.controller.sendMessage(trimmed);
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.unsubscribe();
+    this.root.remove();
+  }
+
+  private render(state: CrowdyStudioDshState): void {
+    if (this.disposed) return;
+
+    const working = dshShouldShowWorking(state.messages, state.busy);
+    const workingLabel = dshWorkingLabel(state.messages);
+    this.connection.dataset.connection = state.connection;
+    this.connection.dataset.busy = String(working);
+    this.connection.title = statusTitle(state, working);
+    this.connection.textContent = '';
+    this.root.dataset.busy = String(working);
+    this.working.hidden = !working;
+    this.live.hidden = !working;
+    if (this.workingLabelEl.textContent !== workingLabel) {
+      this.workingLabelEl.textContent = workingLabel;
+    }
+    if (this.liveLabelEl.textContent !== workingLabel) {
+      this.liveLabelEl.textContent = workingLabel;
+    }
+    const liveLabel = working
+      ? `Harness is working: ${workingLabel}`
+      : 'Harness is idle';
+    this.working.setAttribute('aria-label', liveLabel);
+    this.live.setAttribute('aria-label', liveLabel);
+
+    this.modelSelect.replaceChildren();
+    this.modelSelect.hidden = state.modelOptions.length === 0;
+    this.modelSelect.disabled = working;
+    for (const option of state.modelOptions) {
+      const item = document.createElement('option');
+      item.value = option.id;
+      item.textContent = option.name;
+      item.selected = option.id === state.modelId;
+      this.modelSelect.append(item);
+    }
+
+    this.sessionSelect.replaceChildren();
+    this.sessionSelect.hidden = state.sessions.length === 0;
+    for (const session of state.sessions) {
+      const option = document.createElement('option');
+      option.value = session.sessionId;
+      option.textContent = session.title || 'Untitled';
+      option.selected = session.sessionId === state.activeSessionId;
+      this.sessionSelect.append(option);
+    }
+
+    const transcriptKey = dshTranscriptRenderKey(state);
+    if (transcriptKey !== this.lastTranscriptKey) {
+      const pinnedToBottom =
+        this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight <
+        48;
+      const scrollTop = this.transcript.scrollTop;
+      const openCards = new Set(
+        Array.from(this.transcript.querySelectorAll('details[open]')).map(
+          (card) => (card as HTMLElement).dataset.seq ?? '',
+        ),
+      );
+      this.lastTranscriptKey = transcriptKey;
+      this.transcript.replaceChildren();
+      if (state.messages.length === 0 && !state.busy) {
+        const empty = document.createElement('div');
+        empty.className = 'ck-crowdy-studio-dsh-empty';
+        const heading = document.createElement('p');
+        heading.className = 'ck-crowdy-studio-dsh-empty-title';
+        heading.textContent = state.activeSessionId
+          ? 'What can I help you with?'
+          : 'Start a Harness session';
+        const hint = document.createElement('p');
+        hint.textContent = state.activeSessionId
+          ? 'Ask anything about this workspace.'
+          : 'New starts a session for the open Studio project.';
+        empty.append(heading, hint);
+        this.transcript.append(empty);
+      } else {
+        for (const message of state.messages) {
+          if (message.kind === 'turn-end') continue;
+          this.transcript.append(
+            renderMessage(message, {
+              busy: state.busy,
+              open: openCards.has(String(message.seq)),
+              onAnswer: (text) => {
+                void this.run(async () => {
+                  await this.controller.sendMessage(text);
+                  this.options.layout?.setVisible('dsh', true);
+                });
+              },
+            }),
+          );
+        }
+        const unanswered = dshHasUnansweredQuestion(state.messages);
+        // Follow the live turn. After Submit, an answered question card must
+        // not yank the viewport back to mid-transcript while tools keep going.
+        if (pinnedToBottom || unanswered || state.busy) {
+          this.transcript.scrollTop = this.transcript.scrollHeight;
+        } else {
+          this.transcript.scrollTop = scrollTop;
+        }
+        if (unanswered) {
+          const questionCard = this.transcript.querySelector(
+            '[data-kind="question"]:not([data-answered="true"])',
+          );
+          if (questionCard instanceof HTMLElement) {
+            questionCard.scrollIntoView({ block: 'center', inline: 'nearest' });
+          }
+        }
+      }
+    }
+
+    this.syncQuestionJump();
+
+    this.errorBanner.hidden = !state.lastError;
+    this.errorBanner.textContent = state.lastError ?? '';
+
+    const blocked = state.connection === 'error';
+    this.send.disabled = blocked;
+    this.newSession.disabled = blocked;
+    this.stop.hidden = !working;
+    this.composer.disabled = blocked;
+  }
+
+  /**
+   * The jump chip used to dump the whole question title above Ask anything,
+   * so a long ask_user_question appeared twice. Keep a one-line chip, and
+   * only when the yellow card is scrolled off the transcript.
+   */
+  private syncQuestionJump(): void {
+    const card = this.transcript.querySelector(
+      '[data-kind="question"]:not([data-answered="true"])',
+    );
+    if (!(card instanceof HTMLElement)) {
+      this.questionJump.hidden = true;
+      return;
+    }
+    this.questionJump.textContent = 'Question waiting — scroll to answer';
+    const root = this.transcript.getBoundingClientRect();
+    const box = card.getBoundingClientRect();
+    const visible = box.bottom > root.top + 8 && box.top < root.bottom - 8;
+    this.questionJump.hidden = visible;
+  }
+
+  private async run(action: () => Promise<void>): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      console.warn('Crowdy Studio Harness dock action failed', error);
+    }
+  }
+}
+
+function renderMessage(
+  message: CrowdyStudioDshMessage,
+  options: {
+    busy: boolean;
+    open: boolean;
+    onAnswer: (text: string) => void;
+  },
+): HTMLElement {
+  const questions = questionsFromMessage(message);
+  if (questions) {
+    return renderQuestion(message, questions, options);
+  }
+
+  if (message.kind === 'tool' || message.kind === 'todo' || message.kind === 'thinking') {
+    const details = document.createElement('details');
+    details.className = 'ck-crowdy-studio-dsh-card';
+    details.dataset.kind = message.kind;
+    details.dataset.seq = String(message.seq);
+    if (options.open || /^Error\b/i.test(message.text) || message.title === 'Error') {
+      details.open = true;
+    }
+    const summary = document.createElement('summary');
+    summary.textContent = message.title || labelForKind(message.kind);
+    const body = document.createElement('pre');
+    body.textContent = message.text;
+    details.append(summary, body);
+    return details;
+  }
+
+  const row = document.createElement('article');
+  row.className = 'ck-crowdy-studio-dsh-message';
+  row.dataset.kind = message.kind;
+  row.dataset.role = message.role;
+  if (message.kind === 'error') {
+    const setup = /OPENROUTER_API_KEY|DEEPSEEK_API_KEY/.test(message.text);
+    if (setup) row.dataset.setup = 'true';
+    const title = document.createElement('strong');
+    title.textContent =
+      message.title || (setup ? 'Add an OpenRouter API key' : 'Error');
+    const body = document.createElement('p');
+    body.textContent = message.text;
+    row.append(title, body);
+    return row;
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'ck-crowdy-studio-dsh-bubble';
+  if (message.kind === 'assistant') {
+    fillMarkdown(bubble, message.text);
+  } else {
+    fillBody(bubble, message.text);
+  }
+  row.append(bubble);
+  return row;
+}
+
+function questionsFromMessage(message: CrowdyStudioDshMessage) {
+  if (!looksLikeAskUserQuestion(message)) return null;
+  return parseAskUserQuestions(message.text) ?? [];
+}
+
+function renderQuestion(
+  message: CrowdyStudioDshMessage,
+  questions: NonNullable<ReturnType<typeof parseAskUserQuestions>> | [],
+  options: {
+    busy: boolean;
+    onAnswer: (text: string) => void;
+  },
+): HTMLElement {
+  const card = document.createElement('article');
+  card.className = 'ck-crowdy-studio-dsh-question';
+  card.dataset.kind = 'question';
+  card.dataset.seq = String(message.seq);
+
+  const heading = document.createElement('header');
+  heading.className = 'ck-crowdy-studio-dsh-question-kicker';
+  card.append(heading);
+
+  const items: AskUserQuestion[] =
+    questions.length > 0
+      ? questions
+      : [
+          {
+            id: 'custom',
+            question: message.title?.trim() || 'The agent needs a decision from you.',
+            options: [],
+          },
+        ];
+
+  if (message.answeredText) {
+    return renderAnsweredQuestion(card, heading, items, message.answeredText);
+  }
+
+  const wizard = new AskUserQuestionWizard(items);
+  const prompts: HTMLElement[] = [];
+
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'ck-crowdy-studio-dsh-question-back';
+  back.textContent = 'Back';
+
+  const submit = document.createElement('button');
+  submit.type = 'button';
+  submit.className = 'ck-crowdy-studio-dsh-question-submit';
+  submit.disabled = true;
+
+  const syncStep = (): void => {
+    const view = wizard.view;
+    heading.textContent = view.heading;
+    prompts.forEach((prompt, index) => {
+      prompt.hidden = index !== view.step;
+    });
+    back.hidden = !view.backVisible;
+    submit.textContent = view.submitLabel;
+    submit.disabled = !view.submitEnabled;
+  };
+
+  for (const question of items) {
+    const prompt = renderQuestionPrompt(question, {
+      onChange: (value, customText) => {
+        questionWizardFromSelectValue(wizard, value, customText);
+        syncStep();
+      },
+      onSubmit: () => submit.click(),
+    });
+    prompts.push(prompt.element);
+    card.append(prompt.element);
+  }
+
+  back.addEventListener('click', () => {
+    wizard.back();
+    syncStep();
+  });
+
+  submit.addEventListener('click', () => {
+    if (submit.disabled) return;
+    const payload = wizard.continue();
+    syncStep();
+    if (payload) options.onAnswer(payload);
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'ck-crowdy-studio-dsh-question-actions';
+  actions.append(back, submit);
+  card.append(actions);
+  syncStep();
+  return card;
+}
+
+function renderAnsweredQuestion(
+  card: HTMLElement,
+  heading: HTMLElement,
+  questions: AskUserQuestion[],
+  answeredText: string,
+): HTMLElement {
+  card.dataset.answered = 'true';
+  heading.textContent = 'Answers';
+  const pairs = answeredText.split(/\n\n+/).map((block) => {
+    const [question = '', ...rest] = block.split('\n');
+    return { question: question.trim(), answer: rest.join('\n').trim() };
+  });
+  questions.forEach((question, index) => {
+    const pair =
+      pairs.find((item) => item.question === question.question) ?? pairs[index];
+    const block = document.createElement('div');
+    block.className = 'ck-crowdy-studio-dsh-question-block';
+    const prompt = document.createElement('p');
+    prompt.className = 'ck-crowdy-studio-dsh-question-prompt';
+    prompt.textContent = question.question;
+    const answer = document.createElement('p');
+    answer.className = 'ck-crowdy-studio-dsh-question-answer';
+    answer.textContent = pair?.answer || answeredText;
+    block.append(prompt, answer);
+    card.append(block);
+  });
+  if (questions.length === 0) {
+    const body = document.createElement('p');
+    body.className = 'ck-crowdy-studio-dsh-question-answer';
+    body.textContent = answeredText;
+    card.append(body);
+  }
+  return card;
+}
+
+function renderQuestionPrompt(
+  question: AskUserQuestion,
+  options: {
+    onChange: (value: string, customText: string) => void;
+    onSubmit: () => void;
+  },
+): {
+  element: HTMLElement;
+} {
+  const block = document.createElement('div');
+  block.className = 'ck-crowdy-studio-dsh-question-block';
+
+  const prompt = document.createElement('p');
+  prompt.className = 'ck-crowdy-studio-dsh-question-prompt';
+  prompt.textContent = question.question;
+
+  const select = document.createElement('select');
+  select.className = 'ck-crowdy-studio-dsh-question-select';
+  select.setAttribute('aria-label', question.question);
+  // The turn is often still "busy" while the tool waits for this answer.
+  select.disabled = false;
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Choose an option…';
+  select.append(placeholder);
+  question.options.forEach((option, index) => {
+    const choice = document.createElement('option');
+    choice.value = String(index);
+    choice.textContent = option.description
+      ? `${option.label} — ${option.description}`
+      : option.label;
+    select.append(choice);
+  });
+  const other = document.createElement('option');
+  other.value = ASK_USER_CUSTOM_OPTION;
+  other.textContent = 'Other…';
+  select.append(other);
+
+  const custom = document.createElement('textarea');
+  custom.className = 'ck-crowdy-studio-dsh-question-custom';
+  custom.rows = 2;
+  custom.placeholder = 'Type your own answer…';
+  custom.hidden = true;
+  custom.disabled = false;
+
+  const syncPrompt = (): void => {
+    custom.hidden = select.value !== ASK_USER_CUSTOM_OPTION;
+    options.onChange(select.value, custom.value);
+  };
+  select.addEventListener('change', syncPrompt);
+  custom.addEventListener('input', syncPrompt);
+  custom.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      options.onSubmit();
+    }
+  });
+
+  block.append(prompt, select, custom);
+  return { element: block };
+}
+
+function renderWorking(label: string): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'ck-crowdy-studio-dsh-working';
+  row.setAttribute('aria-live', 'polite');
+  const dots = document.createElement('span');
+  dots.className = 'ck-crowdy-studio-dsh-dots';
+  dots.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 3; i += 1) {
+    dots.append(document.createElement('i'));
+  }
+  const text = document.createElement('span');
+  text.className = 'ck-crowdy-studio-dsh-working-label';
+  text.textContent = label;
+  row.append(dots, text);
+  return row;
+}
+
+function fillBody(target: HTMLElement, text: string): void {
+  const parts = text.split(/```/);
+  if (parts.length === 1) {
+    const body = document.createElement('p');
+    body.textContent = text;
+    target.append(body);
+    return;
+  }
+  parts.forEach((part, index) => {
+    if (!part) return;
+    if (index % 2 === 1) {
+      const pre = document.createElement('pre');
+      const fence = part.replace(/^[a-zA-Z0-9_-]+\n/, '');
+      pre.textContent = fence;
+      target.append(pre);
+    } else {
+      const body = document.createElement('p');
+      body.textContent = part.replace(/^\n+|\n+$/g, '');
+      if (body.textContent) target.append(body);
+    }
+  });
+}
+
+function statusTitle(state: CrowdyStudioDshState, working: boolean): string {
+  const parts: string[] = [state.connection];
+  if (working) parts.push(`working · ${dshWorkingLabel(state.messages)}`);
+  if (state.projectId) parts.push(`project ${state.projectId}`);
+  if (state.lastError) parts.push(state.lastError);
+  return parts.join(' · ');
+}
+
+function labelForKind(kind: CrowdyStudioDshMessage['kind']): string {
+  if (kind === 'thinking') return 'Thought';
+  if (kind === 'todo') return 'Todos';
+  return 'Tool';
+}
+
+function resizeComposer(composer: HTMLTextAreaElement): void {
+  composer.style.height = 'auto';
+  composer.style.height = `${Math.min(Math.max(composer.scrollHeight, 24), 160)}px`;
+}
+
+function button(label: string, type: 'button' | 'submit' = 'button'): HTMLButtonElement {
+  const control = document.createElement('button');
+  control.type = type;
+  control.textContent = label;
+  return control;
+}
+
+function sendIcon(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute(
+    'd',
+    'M3.4 20.6 21 12 3.4 3.4l.1 6.8L15 12l-11.5 1.8z',
+  );
+  svg.append(path);
+  return svg;
+}

@@ -8,12 +8,22 @@ import {
   type CrowdyStudioAgentDomShellOptions,
 } from './agent-dom-shell.js';
 import {
+  CrowdyStudioDshDomShell,
+  type CrowdyStudioDshController,
+} from './dsh/index.js';
+import {
   StudioLayoutController,
   studioPaneSizeRange,
   type StudioLayoutState,
   type StudioPaneId,
 } from './layout.js';
 import { createPaneSplitter, type PaneSplitterHandle } from './splitter.js';
+import {
+  explainInvokeFundsNeeded,
+  formatWalletBalanceLabel,
+  formatWalletNeedsFundsLabel,
+  playerComputeNeedsFunds,
+} from './funds-needed.js';
 import {
   projectTargets,
   type CrowdyStudioFileRef,
@@ -22,6 +32,15 @@ import {
   type CrowdyStudioTarget,
 } from './models.js';
 import { CROWDY_STUDIO_STYLES } from './styles.js';
+import {
+  formatDiagnosticsForAgentChat,
+  type CrowdyStudioDiagnostic,
+} from './diagnostics.js';
+import {
+  formatRuntimeFailureForAgentChat,
+  type RuntimeFailureEnvelope,
+} from './runtime-failure.js';
+import { extractEnclosingRustBlock, sha256DigestHex } from './rust-block-extract.js';
 
 type PanelName = 'problems' | 'build' | 'logs' | 'runs' | 'invoke';
 
@@ -99,16 +118,19 @@ export class CrowdyStudioDomShell {
   private readonly invokeExport: HTMLInputElement;
   private readonly invokeParams: HTMLTextAreaElement;
   private readonly invokeResult: HTMLElement;
+  private readonly invokeAgentToolbar: HTMLElement;
   private readonly panelButtons = new Map<PanelName, HTMLButtonElement>();
   private readonly panels = new Map<PanelName, HTMLElement>();
   private readonly railButtons = new Map<StudioPaneId, HTMLButtonElement>();
   private readonly splitters = new Map<StudioPaneId, PaneSplitterHandle>();
   private readonly agentShell: CrowdyStudioAgentDomShell | null;
+  private readonly dshShell: CrowdyStudioDshDomShell | null;
   private readonly unsubscribeLayout: () => void;
   private activePanel: PanelName = 'problems';
   private explorerForm: ExplorerFormState | null = null;
   private lastState: CrowdyStudioState | null = null;
   private lastPhase = 'IDLE';
+  private lastInvokeErrorKey: string | null = null;
   private disposed = false;
 
   constructor(
@@ -116,6 +138,7 @@ export class CrowdyStudioDomShell {
     private readonly controller: CrowdyStudioController,
     agentController?: CrowdyStudioAgentController,
     agentOptions: CrowdyStudioAgentDomShellOptions = {},
+    dshController?: CrowdyStudioDshController,
   ) {
     const style = document.createElement('style');
     style.textContent = CROWDY_STUDIO_STYLES;
@@ -298,10 +321,41 @@ export class CrowdyStudioDomShell {
       this.agentShell = null;
     }
 
+    // ----- DeepSeek Harness dock (parallel, DEV) --------------------------
+    if (dshController) {
+      rail.append(
+        this.railButton(
+          'dsh',
+          'Harness',
+          'Show or hide the DeepSeek Harness chat dock',
+        ),
+      );
+      this.workspace.append(
+        this.paneSplitter(
+          'dsh',
+          'vertical',
+          'after',
+          'Resize the Harness dock',
+        ),
+      );
+      this.dshShell = new CrowdyStudioDshDomShell(
+        this.workspace,
+        dshController,
+        { layout: this.layout },
+      );
+      this.root.dataset.dsh = 'true';
+    } else {
+      this.dshShell = null;
+    }
+
     // ----- Wiring ---------------------------------------------------------
     this.newForm.addEventListener('submit', (event) => {
       event.preventDefault();
       void this.run(async () => {
+        if (this.controller.requiresGitHubConnect()) {
+          await this.controller.connectGitHub();
+          return;
+        }
         await this.controller.createProject({
           name: this.newName.value,
           kind: this.newKind.value as CrowdyStudioProjectKind,
@@ -369,9 +423,35 @@ export class CrowdyStudioDomShell {
     this.invokeParams.setAttribute('aria-label', 'Invoke JSON parameters');
     const invokeButton = button('Invoke server export');
     this.invokeResult = document.createElement('pre');
+    this.invokeAgentToolbar = element('div', 'ck-crowdy-studio-problems-toolbar');
+    this.invokeAgentToolbar.hidden = true;
+    const addInvoke = button('Add to chat');
+    addInvoke.setAttribute(
+      'aria-label',
+      'Add this invoke failure to the Harness chat composer',
+    );
+    addInvoke.addEventListener('click', () => {
+      void this.addInvokeFailureToChat('prefill');
+    });
+    const askInvoke = button('Ask agent to fix');
+    askInvoke.className = 'ck-crowdy-studio-primary';
+    askInvoke.setAttribute(
+      'aria-label',
+      'Send this invoke failure to Harness',
+    );
+    askInvoke.addEventListener('click', () => {
+      void this.run(async () => {
+        await this.addInvokeFailureToChat('ask');
+      });
+    });
+    this.invokeAgentToolbar.append(addInvoke, askInvoke);
     const invokeControls = element('div', 'ck-crowdy-studio-invoke');
     invokeControls.append(this.invokeExport, this.invokeParams, invokeButton);
-    this.invokePanel.append(invokeControls, this.invokeResult);
+    this.invokePanel.append(
+      invokeControls,
+      this.invokeAgentToolbar,
+      this.invokeResult,
+    );
     invokeButton.addEventListener('click', () => {
       void this.run(() =>
         this.controller.invoke(
@@ -408,15 +488,18 @@ export class CrowdyStudioDomShell {
     this.renderBuild(state);
     this.renderRuntimeRows(this.logsPanel, state.logs);
     this.renderRuntimeRows(this.runsPanel, state.runs);
-    this.invokeResult.textContent = state.invokeResult
-      ? formatInvokeResult(state.invokeResult)
-      : '';
+    this.renderInvoke(state);
     this.runtimeStatus.textContent =
       [state.runtime.phase, state.runtime.target, state.runtime.message]
         .filter(Boolean)
         .join(' · ') || 'IDLE';
     this.runtimeStatus.dataset.phase = state.runtime.phase;
     this.budgetStatus.textContent = budgetText(state);
+    const needsFunds = playerComputeNeedsFunds(state);
+    this.budgetStatus.dataset.fundsNeeded = needsFunds ? 'true' : 'false';
+    this.budgetStatus.title = needsFunds
+      ? 'Player compute wallet is empty. Top up to run Test draft and Invoke.'
+      : '';
     this.autoRevealFailures(state);
   }
 
@@ -432,6 +515,7 @@ export class CrowdyStudioDomShell {
     this.saveMenu.dispose();
     this.runMenu.dispose();
     this.agentShell?.dispose();
+    this.dshShell?.dispose();
     this.root.remove();
   }
 
@@ -468,7 +552,7 @@ export class CrowdyStudioDomShell {
     if (!width) return;
     const overlaying: StudioPaneId[] = [];
     if (width <= 900) overlaying.push('settings');
-    if (width <= 760) overlaying.push('agent');
+    if (width <= 760) overlaying.push('agent', 'dsh');
     if (width <= 620) overlaying.push('explorer');
     if (!overlaying.includes(opened)) return;
     for (const pane of overlaying) {
@@ -502,8 +586,15 @@ export class CrowdyStudioDomShell {
       settings: this.settings,
       bottom: this.bottom,
       agent: this.agentShell?.root ?? null,
+      dsh: this.dshShell?.root ?? null,
     };
-    for (const pane of ['explorer', 'settings', 'bottom', 'agent'] as const) {
+    for (const pane of [
+      'explorer',
+      'settings',
+      'bottom',
+      'agent',
+      'dsh',
+    ] as const) {
       const paneElement = paneElements[pane];
       const visible = state.visible[pane] && paneElement !== null;
       if (paneElement) {
@@ -541,6 +632,73 @@ export class CrowdyStudioDomShell {
       this.revealPanel(diagnostics > 0 ? 'problems' : 'build');
     }
     this.lastPhase = phase;
+
+    const invokeError = state.invokeResult?.error;
+    const invokeKey = invokeError
+      ? `${state.invokeResult?.exportName ?? ''}:${invokeError}`
+      : null;
+    if (invokeKey && invokeKey !== this.lastInvokeErrorKey) {
+      this.revealPanel('invoke');
+    }
+    this.lastInvokeErrorKey = invokeKey;
+  }
+
+  private renderInvoke(state: CrowdyStudioState): void {
+    this.invokeResult.textContent = state.invokeResult
+      ? formatInvokeResult(state)
+      : '';
+    this.invokeResult.dataset.fundsNeeded =
+      state.invokeResult?.error &&
+      explainInvokeFundsNeeded(state.invokeResult.error, state)
+        ? 'true'
+        : 'false';
+    const hasFailure = Boolean(
+      state.invokeResult?.error || state.invokeResult?.failure,
+    );
+    this.invokeAgentToolbar.hidden = !hasFailure || !this.chatTarget();
+  }
+
+  private chatTarget():
+    | CrowdyStudioDshDomShell
+    | CrowdyStudioAgentDomShell
+    | null {
+    return this.dshShell ?? this.agentShell;
+  }
+
+  private chatDockName(): string {
+    return this.dshShell ? 'Harness' : 'Crowdy Agent';
+  }
+
+  private async addInvokeFailureToChat(
+    mode: 'prefill' | 'ask',
+  ): Promise<void> {
+    const target = this.chatTarget();
+    if (!target) return;
+    const state = this.lastState ?? this.controller.getState();
+    const invoke = state.invokeResult;
+    if (!invoke?.error && !invoke?.failure) return;
+
+    const failure: RuntimeFailureEnvelope = invoke.failure ?? {
+      code: 'INVOKE_FAILED',
+      summary: invoke.error ?? 'Invoke failed',
+    };
+    const project = state.project;
+    const serverSource =
+      project?.files.find(
+        (file) =>
+          file.target === 'SERVER' &&
+          (file.path === 'src/lib.rs' || file.path === 'lib.rs'),
+      )?.content ?? null;
+    const message = formatRuntimeFailureForAgentChat(failure, {
+      exportName: invoke.exportName ?? this.invokeExport.value,
+      serverSource,
+      projectRevision: project?.revision?.id ?? null,
+    });
+    if (mode === 'prefill') {
+      target.prefillComposer(message);
+      return;
+    }
+    await target.askWithMessage(message);
   }
 
   // ----- Menus -----------------------------------------------------------
@@ -666,9 +824,16 @@ export class CrowdyStudioDomShell {
       items.push(empty('No projects yet.'));
     }
     const divider = element('div', 'ck-crowdy-studio-menu-divider');
-    const newProject = menuItem('New project…');
+    const needsGitHub = this.controller.requiresGitHubConnect();
+    const newProject = menuItem(
+      needsGitHub ? 'Connect GitHub to create a mod…' : 'New project…',
+    );
     newProject.addEventListener('click', () => {
       this.projectMenu.close();
+      if (this.controller.requiresGitHubConnect()) {
+        void this.run(() => this.controller.connectGitHub());
+        return;
+      }
       this.newForm.dataset.open = 'true';
       this.newName.focus();
     });
@@ -704,7 +869,15 @@ export class CrowdyStudioDomShell {
     const focused = focusedExplorerField(this.explorer);
     this.explorer.replaceChildren();
     if (!state.project) {
-      this.explorer.append(empty('Create a project to start authoring.'));
+      this.explorer.append(
+        empty(
+          this.controller.requiresGitHubConnect()
+            ? 'Connect GitHub first. New mods create a GitHub repo you can edit in Studio, DSH, or your own IDE.'
+            : 'Create a project to start authoring.',
+        ),
+        this.githubSection(state),
+      );
+      restoreExplorerFocus(this.explorer, focused);
       return;
     }
     for (const target of projectTargets(state.project.kind)) {
@@ -721,10 +894,90 @@ export class CrowdyStudioDomShell {
       );
     }
     this.explorer.append(
+      this.githubSection(state),
       this.referenceSection('Personal library', state.personalLibraryFiles),
       this.referenceSection('Common files', state.commonFiles),
     );
     restoreExplorerFocus(this.explorer, focused);
+  }
+
+  private githubSection(state: CrowdyStudioState): HTMLElement {
+    const section = element('section', 'ck-crowdy-studio-section');
+    const header = element('div', 'ck-crowdy-studio-section-header');
+    const title = document.createElement('span');
+    title.textContent = 'GitHub';
+    header.append(title);
+    section.append(header);
+    const github = state.github;
+    if (!github) {
+      const row = document.createElement('p');
+      row.textContent =
+        state.githubMessage ||
+        'GitHub status is loading, or this API does not serve Crowdy Studio GitHub fields.';
+      section.append(row);
+      const refresh = document.createElement('button');
+      refresh.type = 'button';
+      refresh.textContent = 'Refresh';
+      refresh.addEventListener('click', () => {
+        void this.run(() => this.controller.refreshGitHubStatus());
+      });
+      section.append(refresh);
+      return section;
+    }
+    if (!github.configured || !github.connected) {
+      const row = document.createElement('p');
+      row.textContent = github.configured
+        ? 'Connect GitHub first. New mods create a repo on your account; Studio, DSH, and your IDE all edit that repo.'
+        : 'Create the local GitHub App, then install it on your account.';
+      section.append(row);
+      const connect = document.createElement('button');
+      connect.type = 'button';
+      connect.textContent = 'Connect GitHub';
+      connect.addEventListener('click', () => {
+        void this.run(() => this.controller.connectGitHub());
+      });
+      section.append(connect);
+    } else {
+      const row = document.createElement('p');
+      const account = github.accountLogin ? `@${github.accountLogin}` : 'connected';
+      const selection = github.repositorySelection === 'all' ? 'all repos' : 'selected repos';
+      row.textContent = `Connected as ${account} (${selection}).`;
+      section.append(row);
+      if (github.owner && github.repo) {
+        const bound = document.createElement('p');
+        bound.textContent = `Bound ${github.owner}/${github.repo}@${github.branch || 'main'}`;
+        section.append(bound);
+      }
+      const bindRow = document.createElement('div');
+      const slug = document.createElement('input');
+      slug.type = 'text';
+      slug.placeholder = 'owner/repo@main';
+      slug.value = github.owner && github.repo
+        ? `${github.owner}/${github.repo}@${github.branch || 'main'}`
+        : '';
+      const bind = document.createElement('button');
+      bind.type = 'button';
+      bind.textContent = 'Bind repo';
+      bind.addEventListener('click', () => {
+        void this.run(() => this.controller.bindGitHubRepo(slug.value));
+      });
+      bindRow.append(slug, bind);
+      section.append(bindRow);
+    }
+    if (state.githubMessage) {
+      const msg = document.createElement('p');
+      msg.textContent = state.githubMessage;
+      section.append(msg);
+    }
+    const refresh = document.createElement('button');
+    refresh.type = 'button';
+    refresh.textContent =
+      github?.owner && github.repo ? 'Pull from GitHub' : 'Refresh';
+    refresh.addEventListener('click', () => {
+      void this.run(() => this.controller.refreshGitHubStatus());
+    });
+    section.append(refresh);
+    return section;
   }
 
   private projectSection(
@@ -1063,9 +1316,36 @@ export class CrowdyStudioDomShell {
       this.problemsPanel.append(empty('No problems.'));
       return;
     }
+    const chat = this.chatTarget();
+    if (chat) {
+      const toolbar = element('div', 'ck-crowdy-studio-problems-toolbar');
+      const addAll = button('Add to chat');
+      addAll.setAttribute(
+        'aria-label',
+        `Add all Problems to the ${this.chatDockName()} chat composer`,
+      );
+      addAll.addEventListener('click', () =>
+        chat.prefillComposer(formatDiagnosticsForAgentChat(diagnostics)),
+      );
+      const ask = button('Ask agent to fix');
+      ask.className = 'ck-crowdy-studio-primary';
+      ask.setAttribute(
+        'aria-label',
+        `Send all Problems to ${this.chatDockName()}`,
+      );
+      ask.addEventListener('click', () =>
+        void this.run(async () => {
+          await chat.askWithMessage(formatDiagnosticsForAgentChat(diagnostics));
+        }),
+      );
+      toolbar.append(addAll, ask);
+      this.problemsPanel.append(toolbar);
+    }
     for (const diagnostic of diagnostics) {
-      const row = element('button', 'ck-crowdy-studio-problem');
-      row.dataset.source = diagnostic.source;
+      const row = element('div', 'ck-crowdy-studio-problem-row');
+      const open = element('button', 'ck-crowdy-studio-problem');
+      open.dataset.source = diagnostic.source;
+      open.type = 'button';
       const source = document.createElement('span');
       source.textContent =
         diagnostic.source === 'rustc' ? 'rustc' : 'advisory';
@@ -1073,16 +1353,95 @@ export class CrowdyStudioDomShell {
       location.textContent = `${diagnostic.target.toLowerCase()}/${diagnostic.path}:${diagnostic.line}:${diagnostic.column}`;
       const message = document.createElement('span');
       message.textContent = diagnostic.message;
-      row.append(source, location, message);
-      row.addEventListener('click', () =>
+      open.append(source, location, message);
+      open.addEventListener('click', () =>
         this.controller.openFile({
           source: 'PROJECT',
           target: diagnostic.target,
           path: diagnostic.path,
         }),
       );
+      row.append(open);
+      if (chat) {
+        const add = button('Add');
+        add.className = 'ck-crowdy-studio-problem-add';
+        add.setAttribute(
+          'aria-label',
+          `Add problem ${location.textContent} to ${this.chatDockName()} chat`,
+        );
+        add.addEventListener('click', (event) => {
+          event.stopPropagation();
+          void this.addDiagnosticToChat(diagnostic);
+        });
+        if (diagnostic.source === 'rustc') {
+          const fix = button('Fix with AI');
+          fix.className = 'ck-crowdy-studio-primary ck-crowdy-studio-problem-fix';
+          fix.setAttribute(
+            'aria-label',
+            `Ask ${this.chatDockName()} to fix ${location.textContent}`,
+          );
+          fix.addEventListener('click', (event) => {
+            event.stopPropagation();
+            void this.run(async () => {
+              await this.fixDiagnosticWithAi(diagnostic);
+            });
+          });
+          row.append(add, fix);
+        } else {
+          row.append(add);
+        }
+      }
       this.problemsPanel.append(row);
     }
+  }
+
+  private async diagnosticChatSeed(
+    diagnostic: CrowdyStudioDiagnostic,
+  ): Promise<string> {
+    const project = this.controller.getState().project;
+    const file = project?.files.find(
+      (entry) =>
+        entry.target === diagnostic.target && entry.path === diagnostic.path,
+    );
+    const fileContent = file?.content ?? null;
+    let blockContentHash: string | null = null;
+    let fileContentHash: string | null = null;
+    if (fileContent) {
+      fileContentHash = await sha256DigestHex(fileContent);
+      const block = extractEnclosingRustBlock(
+        fileContent,
+        diagnostic.line,
+        diagnostic.column,
+      );
+      if (block) blockContentHash = await sha256DigestHex(block.text);
+    }
+    return formatDiagnosticsForAgentChat([diagnostic], {
+      singleProblem: true,
+      fileContent,
+      blockContentHash,
+      fileContentHash,
+    });
+  }
+
+  private async addDiagnosticToChat(
+    diagnostic: CrowdyStudioDiagnostic,
+  ): Promise<void> {
+    const chat = this.chatTarget();
+    if (!chat) return;
+    const existing = chat.getComposerValue();
+    const snippet = await this.diagnosticChatSeed(diagnostic);
+    const combined = existing.trim()
+      ? `${existing.trimEnd()}\n\n${snippet}`
+      : snippet;
+    chat.prefillComposer(combined);
+  }
+
+  private async fixDiagnosticWithAi(
+    diagnostic: CrowdyStudioDiagnostic,
+  ): Promise<void> {
+    const chat = this.chatTarget();
+    if (!chat) return;
+    await chat.askWithMessage(await this.diagnosticChatSeed(diagnostic));
   }
 
   private renderBuild(state: CrowdyStudioState): void {
@@ -1123,12 +1482,25 @@ function budgetText(state: CrowdyStudioState): string {
     ? `units ${state.usage.hourUnitsUsed}/${state.usage.unitsPerHour ?? '∞'} · compiles ${state.usage.compilesThisHour}/${state.usage.maxCompilesPerHour}`
     : '';
   const wallet = state.wallet
-    ? `wallet ${state.wallet.balanceCents} ${state.wallet.currency}`
+    ? playerComputeNeedsFunds(state)
+      ? formatWalletNeedsFundsLabel(state.wallet)
+      : formatWalletBalanceLabel(state.wallet)
     : '';
   return [usage, wallet].filter(Boolean).join(' · ');
 }
 
-function formatInvokeResult(result: NonNullable<CrowdyStudioState['invokeResult']>): string {
+function formatInvokeResult(state: CrowdyStudioState): string {
+  const result = state.invokeResult;
+  if (!result) return '';
+  if (result.error) {
+    const funds = explainInvokeFundsNeeded(result.error, state);
+    return [
+      funds ?? result.error,
+      result.exportName ? `export ${result.exportName}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
   return [
     result.resultJson ?? result.resultBase64 ?? '(empty result)',
     result.fuelUsed ? `${result.fuelUsed} fuel` : '',
