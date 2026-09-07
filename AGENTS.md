@@ -240,8 +240,10 @@ remainder. **The public consumer is
 Crowdy Studio embed with CLIENT mods, kit-seeded model, and an in-app org → app
 → tier → seed wizard, verified end to end on dev by a third-party account. It
 pins the tier's exact prerelease per branch and its `AGENTS.md` lists the
-platform facts it depends on. The [build-a-game tutorial](https://docs.crowdedkingdoms.com/build-a-game/intro)
-still points at the older `simple-web-demo`.
+platform facts it depends on. It is also the
+[build-a-game tutorial](https://docs.crowdedkingdoms.com/build-a-game/intro)'s
+companion since 2026-09-07; `simple-web-demo` (the June 2026 companion with a
+`file:` SDK dependency) was deleted the same day.
 
 Papercuts The Construct hit in this SDK (each worked around there; fix here):
 `ChunkStore.setVoxel` without `state` sends `voxelState: ''` and the API refuses
