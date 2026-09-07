@@ -16,7 +16,7 @@ const gameApi = resolve(
 const cockpit = resolve(
   root,
   '..',
-  'cks-project-root-ben-crowdy-dsh-cockpit-test',
+  process.env.CROWDY_DSH_COCKPIT ?? 'crowdy-dsh-cockpit-test',
   'crowdy-dsh',
 );
 const rounds = Number(process.env.HARNESS_TEST_ROUNDS ?? 2);
