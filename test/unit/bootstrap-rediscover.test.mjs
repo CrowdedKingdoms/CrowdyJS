@@ -19,15 +19,15 @@ function jsonResponse(body, ok = true, status = 200) {
 test('asks the discovery URL, not the instance, and returns its endpoints', async () => {
   const calls = [];
   const rediscover = createBootstrapRediscover({
-    discoveryUrl: 'https://ck.prod.cp.cks-env.com',
+    discoveryUrl: 'https://ck.prod.crowdedkingdoms.com',
     getToken: () => 'app-token',
     fetchImpl: async (url, init) => {
       calls.push({ url, init });
       return jsonResponse({
         data: {
           gameClientBootstrap: {
-            gameApiUrl: 'https://ck-api-5.pgc.prod.cp.cks-env.com',
-            gameApiWsUrl: 'wss://ck-api-5.pgc.prod.cp.cks-env.com',
+            gameApiUrl: 'https://ck-api-or-5.prod.crowdedkingdoms.com',
+            gameApiWsUrl: 'wss://ck-api-or-5.prod.crowdedkingdoms.com',
           },
         },
       });
@@ -37,18 +37,18 @@ test('asks the discovery URL, not the instance, and returns its endpoints', asyn
   const got = await rediscover('76375790011136');
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'https://ck.prod.cp.cks-env.com/graphql');
+  assert.equal(calls[0].url, 'https://ck.prod.crowdedkingdoms.com/graphql');
   assert.equal(calls[0].init.headers.authorization, 'Bearer app-token');
   assert.deepEqual(got, {
-    httpUrl: 'https://ck-api-5.pgc.prod.cp.cks-env.com',
-    wsUrl: 'wss://ck-api-5.pgc.prod.cp.cks-env.com',
+    httpUrl: 'https://ck-api-or-5.prod.crowdedkingdoms.com',
+    wsUrl: 'wss://ck-api-or-5.prod.crowdedkingdoms.com',
   });
 });
 
 test('does not double up /graphql when the discovery URL already has it', async () => {
   let seen = null;
   const rediscover = createBootstrapRediscover({
-    discoveryUrl: 'https://ck.prod.cp.cks-env.com/graphql',
+    discoveryUrl: 'https://ck.prod.crowdedkingdoms.com/graphql',
     getToken: () => 't',
     fetchImpl: async (url) => {
       seen = url;
@@ -58,7 +58,7 @@ test('does not double up /graphql when the discovery URL already has it', async 
     },
   });
   await rediscover('1');
-  assert.equal(seen, 'https://ck.prod.cp.cks-env.com/graphql');
+  assert.equal(seen, 'https://ck.prod.crowdedkingdoms.com/graphql');
 });
 
 test('returns null instead of throwing when the load balancer is down', async () => {

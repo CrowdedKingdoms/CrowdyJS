@@ -4,7 +4,10 @@ fragment ComputeModuleFields on WasmModule {
   name
   description
   enabled
-  alwaysOn
+  # `alwaysOn` was selected here and is gone (2026-09-01). It is deprecated
+  # server-side and now always false: a module runs only while its app has a
+  # player present. Selecting it would hand every caller a field whose value no
+  # longer means anything.
   currentVersionId
   circuitState
   consecutiveFailures

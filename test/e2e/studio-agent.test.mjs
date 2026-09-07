@@ -97,6 +97,82 @@ test('studio agent: effective policy on CROWDY_TEST_APP_ID is not killed', { ski
   assert.ok((e.allowedModes ?? []).includes('ASK'));
 });
 
+/**
+ * EVERY APP MUST HAVE A DEFAULT TIER, and that is all this asserts about its contents.
+ *
+ * It is deliberately NOT "the default tier grants use_studio_agent". That assertion was
+ * written on 2026-08-26 and removed the same hour, because measuring first showed it was
+ * a guess dressed as a rule: NO app on dev grants it there, including the flagship
+ * blocks-with-friends. `ASK session create succeeds` below finds-or-creates a tier
+ * carrying the permission precisely because the default is not expected to have it --
+ * the agent entitlement is opt-in per tier by design.
+ *
+ * What the default tier DOES vary in is worth knowing and is not this suite's to
+ * legislate. On dev, blocks-with-friends grants eight runtime permissions including
+ * run_server_code and run_client_code; titan-assault grants four and neither. A game
+ * whose automations run server code will behave completely differently on those two
+ * tiers, and no test here can say which is intended -- that is a product decision about
+ * one app, not an invariant of the platform.
+ *
+ * So this checks the structural thing that IS invariant: a player who has bought nothing
+ * lands on the default tier, and an app without one has nowhere to put them.
+ */
+test('studio agent: the app has a default access tier for ordinary players', { skip, timeout: 60_000 }, async () => {
+  const owner = await provisionOwner();
+  const id = appId();
+  const tiers = (await gqlManagement(
+    `query($a: BigInt!){ appAccessTiers(appId:$a){ tierId name isDefault status permissionKeys } }`,
+    { a: id },
+    owner.token,
+  )).appAccessTiers ?? [];
+
+  const live = tiers.filter((t) => t.status !== 'archived');
+  assert.ok(live.length > 0, `app ${id} has no active access tier at all`);
+
+  const dflt = live.find((t) => t.isDefault);
+  assert.ok(
+    dflt,
+    `app ${id} has ${live.length} active tier(s) and none is the default. ` +
+      'A player who has not bought anything lands on the default tier; without one ' +
+      'there is nothing for grantAppAccess to put them on.',
+  );
+  assert.ok(
+    (dflt.permissionKeys ?? []).includes('access'),
+    `app ${id}'s default tier "${dflt.name}" (${dflt.tierId}) does not grant even ` +
+      `'access'. It grants: ${JSON.stringify(dflt.permissionKeys ?? [])}. Nobody ` +
+      'arriving on it can connect at all.',
+  );
+});
+
+/**
+ * THE WALLET IS A THIRD GATE, and it fails with its own vocabulary.
+ *
+ * `enable-studio-agent.sh` checks it and this suite did not: platform policy, app
+ * policy and the ORG'S RUNTIME STATUS are three independent reasons the agent stops,
+ * and knowing which one is out is most of the diagnosis. A denied wallet does not say
+ * AGENT_APP_KILLED -- so with only the policy assertions above, that failure arrives as
+ * an unexplained refusal at session create, which is where it is most expensive to read.
+ */
+test('studio agent: the org\'s runtime wallet is active', { skip, timeout: 60_000 }, async () => {
+  const owner = await provisionOwner();
+  const id = appId();
+  const app = (await gqlManagement(
+    `query($a: BigInt!){ app(appId:$a){ appId orgId runtimeStatus runtimeDenialReason } }`,
+    { a: id },
+    owner.token,
+  )).app;
+  assert.ok(app, `app ${id} did not resolve`);
+  assert.equal(
+    app.runtimeStatus,
+    'active',
+    `app ${id} (org ${app.orgId}) has runtimeStatus=${app.runtimeStatus} ` +
+      `reason=${app.runtimeDenialReason}. Server code and agent automations are gated ` +
+      'on this independently of the agent policies, so the policy tests can be green ' +
+      'while nothing runs.',
+  );
+  assert.equal(app.runtimeDenialReason, null, `runtimeDenialReason=${app.runtimeDenialReason}`);
+});
+
 test('studio agent: ASK session create succeeds', { skip, timeout: 120_000 }, async () => {
   const owner = await provisionOwner();
   const id = appId();

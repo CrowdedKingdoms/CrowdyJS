@@ -73,8 +73,19 @@ export interface BinaryRelayCallbacks {
  * walk an entire fleet's clients somewhere else, which is a much worse outcome
  * than an unbalanced fleet.
  *
- * Compares the last two labels, so `ck-api-4.pgc.prod.cp.cks-env.com` and
- * `ck.prod.cp.cks-env.com` match, and `evil.example.com` does not.
+ * Compares the last two labels, so `ck-api-or-4.prod.crowdedkingdoms.com` and
+ * `ck.prod.crowdedkingdoms.com` match, and `evil.example.com` does not.
+ *
+ * TWO LABELS IS COARSER THAN IT LOOKS, AND IT GOT MORE VISIBLE RATHER THAN WORSE.
+ * Every tier now sits under one brand root, so "the last two labels" is
+ * `crowdedkingdoms.com` for all of them and a redirect could in principle move a prod
+ * client onto a dev host. That was equally true before the 2026-08 root migration --
+ * the tiers shared a single root then too -- so this is a long-standing property the
+ * rename exposed, not one it introduced. It still does the job it was written for:
+ * stopping a compromised instance walking clients to an unrelated domain. Narrowing
+ * it to the tier is a deliberate change with its own blast radius (it would refuse
+ * legitimate cross-datacenter redirects if a tier ever spans roots) and belongs in
+ * its own reviewed diff, not in a rename.
  */
 export function isSameEstate(current: string, candidate: string): boolean {
   const host = (raw: string): string | null => {

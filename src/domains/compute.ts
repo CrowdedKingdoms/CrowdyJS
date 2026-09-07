@@ -112,13 +112,19 @@ export class ComputeAPI {
 
   /**
    * Create or update a module's metadata (upsert key `(appId, name)`). New
-   * modules start disabled; enable after a successful compile. Set
-   * `alwaysOn: true` for world-simulation modules that must run without
-   * connected players (otherwise modules load lazily on realtime presence).
+   * modules start disabled; enable after a successful compile.
+   *
+   * **Nothing runs for an app with no player in it.** A module ticks only while
+   * its app has at least one player connected, anywhere in the fleet, and stops
+   * when the last one leaves. `alwaysOn` is retired (2026-09-01) and passing
+   * `true` is refused — a world that must advance while empty should compute the
+   * elapsed time on its first tick after a player returns, which is cheaper than
+   * ticking an empty world and gives the same result.
    *
    * Requires the org **`manage_compute`** permission.
    *
    * @throws {CrowdyGraphQLError} `FORBIDDEN` without the permission.
+   * @throws {CrowdyGraphQLError} `BAD_REQUEST` if `alwaysOn: true` is passed.
    */
   async upsertModule(
     input: ComputeUpsertModuleMutationVariables['input'],

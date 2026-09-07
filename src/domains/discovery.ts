@@ -1,7 +1,7 @@
 /**
  * Where each app lives — the call a client makes BEFORE it authenticates.
  *
- * WHY IT COMES FIRST. `ck.<tier>.cp.cks-env.com` is a multivalue DNS record over every
+ * WHY IT COMES FIRST. `ck.<tier>.crowdedkingdoms.com` is a multivalue DNS record over every
  * datacenter's load balancer, so a cold client's first request lands wherever DNS
  * pointed it — and roughly half the time that is not the datacenter hosting the app.
  * Authenticating there writes the session in the wrong place and then mints the app

@@ -4,23 +4,38 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.1.0** and **15.1.0 is published** —
-`latest`, `@dev` and `@test` all moved to it on 2026-08-22. This paragraph said
-"nothing is published at that number yet" for a day afterwards, which is the
-version-in-prose hazard: `package.json` and the registry disagreeing IS the
-normal state between a merge and a release, and a page cannot tell you which
-state you are in. Ask: `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+**Current package:** `package.json` is **15.3.0**. Whether that is *published* is
+not answerable from this page, and the paragraph this replaces proved it: it read
+"nothing is published at that number yet" for a day after 15.1.0 shipped.
+`package.json` and the registry disagreeing IS the normal state between a merge
+and a release, and prose cannot tell you which state you are in. Ask:
+`npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**No consumer has adopted 15.1.0**, and none needs to — all nine Crowdy-Games
-projects are still on the 15.0.0 line and CrowdyCPP's parity pin is 15.0.0.
-Nothing downstream does password management, which is what 15.1.0 adds. That is
-a deliberate state, not lag.
+**15.3.0 adds** the ck-api v1.67 surface (`channel_name` on channel
+notifications, the two `NOTIFICATION_CHANNEL_*` lint codes,
+`NOTIFICATION_UNDELIVERABLE`, the two notification counters on
+`GmAppDiagnostics`), the `kit/notifications.ts` builders, and a `quarantine`
+field on `CrowdyModelRefusal`. **15.2.0** was the release before it.
+
+**Do not hardcode consumer SDK pins here — they rot.** Ask
+`npm view @crowdedkingdoms/crowdyjs dist-tags` for what npm serves, and in
+Crowdy-Games use `scripts/ci/check-sdk-pins.mjs` /
+`grep '"@crowdedkingdoms/crowdyjs"' */package.json` for what each game actually
+pins. CrowdyCPP's parity pin is `crowdyjsParityTarget` in
+`CrowdyCPP/package.json` — read it there, not from this page.
 
 `dev/vX.Y.Z` / `test/vX.Y.Z` publish
 `X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
 tag moves `latest`. Consumers pin the EXACT prerelease for their tier — never a
 caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
 `gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
+
+**TIER ALIGNMENT (hard rule for consumers).** A consumer branch may only
+reference CrowdyJS artifacts from the **same** tier: Crowdy-Games / CrowdyCPP
+`dev` → `@dev` / the `dev/` tag’s commit; `test` → `@test`; `prod` → `latest`.
+Publishing `prod/vX.Y.Z` does **not** authorize bumping Games-`dev` or
+CPP-`dev` to that plain version — those ladders promote separately
+(`test`↔`test`, `prod`↔`prod`).
 
 **15.0.0 IS A BREAKING MAJOR, AND THIS FILE DESCRIBED THE PREVIOUS ONE FOR A
 DAY.** It **removed `devLogin`** and added **`auth.login` / `auth.register`**.
@@ -46,9 +61,9 @@ Read [README.md](README.md) first. [MIGRATION.md](MIGRATION.md) covers breaking
 changes. This file is the game-concept → API map the README does not repeat.
 
 There is **one origin**. `managementUrl` / `client.management` were removed in
-v14. The `cks-management-api` GitHub repo still exists (unarchived) but is
-not a running service; gameplay data lives in **PostgreSQL + Citus** via
-`cks-game-api`, not galaxy.
+v14. The `cks-management-api` GitHub repo still exists (**archived**) but is
+not a running service and is not a schema source; gameplay data lives in
+**PostgreSQL + Citus** via `cks-game-api`, not galaxy.
 
 ## Repo orientation
 
@@ -63,8 +78,111 @@ not a running service; gameplay data lives in **PostgreSQL + Citus** via
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
   depend on sibling repos at build time.
 - `test/e2e` — live suites; they skip without `CROWDY_*`. Point
-  `CROWDY_HTTP_URL` at the **shared entry origin** (`ck.<tier>.v7.cks-env.com`),
-  not a single datacenter.
+  `CROWDY_HTTP_URL` at the **tier's public origin** — the same value
+  `CROWDY_DEFAULT_HTTP_ORIGIN` in `src/default-origin.ts` carries, e.g.
+  `https://ck.dev.crowdedkingdoms.com` — and not at a single datacenter.
+  This used to say `ck.<tier>.v7.cks-env.com`, the FLEET root. That was the same
+  host on every tier until dev's root moved on 2026-08-25, and it was never the
+  name a client is supposed to hold: an SDK test that dials an origin no
+  customer is given proves the wrong thing works.
+
+  **`CROWDY_HTTP_URL` ALONE IS NOT ENOUGH AGAINST A TIER, and the suite does not
+  say so — it fails as if the server were broken.** Five things are required, and
+  three of them have defaults or fallbacks that are right for the local smoke
+  stack and wrong for every deployed tier:
+
+  | variable | against a tier |
+  |---|---|
+  | `CROWDY_HTTP_URL` | `https://ck.<tier>.crowdedkingdoms.com` |
+  | `CROWDY_OWNER_EMAIL` / `_PASSWORD` | `infra-cp/<tier>/org-admin/crowdedkingdomstudios` |
+  | `CROWDY_OPERATOR_EMAIL` / `_PASSWORD` | `infra-cp/<tier>/admin/ck-operator` |
+  | `CROWDY_TEST_APP_ID` | a real app id — **never leave this unset** |
+
+  plus the app's Studio-agent policy, which a rebuilt tier leaves fail-closed:
+  `infra-control-plane/scripts/ops/enable-studio-agent.sh --tier <tier> --app-id <id>`.
+
+  WHY THE TABLE IS WORTH THE SPACE. `CROWDY_TEST_APP_ID` defaults to `'1'`, and no
+  deployed tier has an app numbered 1 — ids are Snowflake53 and sixteen digits
+  long. Unset, the suite asks about an app nobody owns, and the answer is
+  `Missing app permission 'manage_access_tiers'`, which reads as a broken
+  permission model rather than a missing variable. On 2026-08-26 that presented as
+  19 of 34 failing on dev and 21 on test, and survived a from-scratch tier rebuild
+  — which is exactly the evidence that argues "it must be the server". With all
+  five set, both tiers pass 33 with 1 skip.
+
+  **ON A COLD-STARTED TIER THE OWNER AND THE OPERATOR ARE THE SAME ACCOUNT.** The
+  org-admin secret survives a rebuild but names an account the dropped database
+  took with it, so `infra-cp/<tier>/org-admin/*` will not authenticate until it is
+  re-provisioned. Point both pairs at `infra-cp/<tier>/admin/ck-operator` and use
+  an app that account owns. Prod after its 2026-08-27 rebuild: **38 pass, 1 skip.**
+
+  **THE ONE SKIP IS `payments: ORG_WALLET_TOPUP checkout`, AND ON PROD IT MUST
+  STAY SKIPPED.** It is gated behind `CROWDY_TEST_PAYMENTS=1` and is sandbox-only.
+  Prod's `paypalEnv` is `live`, so setting that variable there moves real money. A
+  skip normally deserves the same scrutiny as a failure; this is the case where the
+  skip is the correct answer, which is why it says so in its own name.
+
+- **`src/default-origin.ts` IS GENERATED PER BRANCH — NEVER HAND-EDIT IT.**
+  `dev` carries the dev origin, `test` test's, `prod` prod's. Regenerate with
+  `infra-control-plane/scripts/ops/sync-client-origins.mjs --write --tier <tier>`;
+  `check-sdk-default-origin.mjs` refuses a file naming the wrong tier.
+
+  **EVERY MERGE RESOLVES THIS FILE SILENTLY AND CAN GO EITHER WAY.** A back-merge
+  from prod put `tier = 'prod'` on `dev`, and both promotions in the 2026-08-27
+  cycle carried the source branch's origin onto the destination with **no
+  conflict**. After any merge between branches, regenerate for the
+  DESTINATION tier and run the gate. The SDK pins in `Crowdy-Games` are the same
+  hazard for the same reason: git has no idea these files are per-branch.
+
+  **AND IT DOES REACH THE REGISTRY — THIS PARAGRAPH USED TO SAY OTHERWISE.** It
+  read "the published artifact was fine throughout; the BRANCH had drifted from
+  what it had published," which held for 2026-08-27 and then stopped being the
+  general rule. `15.4.0` was tagged while `dev` and `test` still carried prod's
+  origin, so `@dev` and `@test` **published** artifacts declaring
+  `ck.prod.crowdedkingdoms.com`, and every consumer of either tag that built a
+  client with no explicit origin dialled production. Fixing the branches did not
+  fix that; only `15.4.1` did. Do not read branch drift as harmless — a release
+  cut during the drift window ships it.
+
+  **THE PROMOTION THAT DOES NOT CONFLICT IS THE DANGEROUS ONE.** On 2026-09-02
+  this hit CrowdyJS and CrowdyCPP on the same day, in the same release, both
+  silently, both times putting `tier = 'test'` on `prod` — the tier where it costs
+  the most, since `latest` is what an unconfigured production consumer resolves.
+  Both were caught only by re-reading the file after a merge that reported no
+  conflict.
+
+  **The mechanism, measured in a scratch repository rather than reasoned about,
+  because the reasoning here was wrong for a day.** This paragraph used to say the
+  carry happens because resolving the `dev` → `test` conflict leaves `test` as the
+  only side that touched the file. That is not it, and a lab reproduction says so:
+  a promotion rewrites this file silently whenever **the merge base already holds
+  the DESTINATION's value and the destination has not re-committed it while the
+  source has.** One side changed, so git resolves it trivially and reports
+  success. The wrong explanation mattered because it implied the risk lives at one
+  particular rung; it does not.
+
+  That measurement also killed the tidier-looking fix, twice over. **A
+  `.gitattributes` merge driver cannot help.** Git never consults a merge driver
+  for a one-sided change, and one-sided *is* the dangerous case — the driver
+  logged zero invocations while the carry happened. And `.gitattributes` can
+  *name* a driver but cannot ship it: `merge.<name>.driver` is local config, so a
+  fresh clone reads it as unset and git falls back to its default silently. A CI
+  runner has no driver at all.
+
+  So it has to be an assertion, and now it is one. `npm run check:default-origin`
+  runs on every push and pull request, judging the PR **base** so a promotion is
+  refused before the merge rather than after; the same check runs in
+  `publish.yml`'s `guard` against the tier the **tag** names, before anything is
+  built; and after `npm publish` the workflow packs the dist-tag back down and
+  reads what the registry actually serves. Reading the file by hand after a
+  promotion is still a good habit, but it is no longer the only thing standing
+  between a promotion and a wrong-tier release.
+
+  One footgun in the generator itself: `sync-client-origins.mjs --write --tier X`
+  writes **both** SDK working trees, CrowdyJS and CrowdyCPP, with no regard for
+  which branch either one has checked out. Regenerating CrowdyJS for `test` will
+  happily stamp `test` onto a CrowdyCPP checkout sitting on `dev`. Check
+  `git status` in the sibling too, and revert what you did not mean to change.
 
 ## Core mental model: one endpoint, two tokens, two clients
 
@@ -85,7 +203,7 @@ not a running service; gameplay data lives in **PostgreSQL + Citus** via
 | Client-side bookkeeping | `createWorldSession` from `@crowdedkingdoms/crowdyjs/stores` |
 | Persistent terrain | `chunks.*` (durable) + `udp.sendVoxelUpdate` (realtime) |
 | Server-side rules (inventory, stats, NPCs) | `gameModel` containers / properties / functions with invoke policies — **admin-seeded before play** |
-| World life with no client online | `gameModel` automations (`autonomousInvocable` functions) |
+| World life between requests | `gameModel` automations (`autonomousInvocable` functions) — see the presence rule below |
 | Ready-made genre mappings | `kit(appId)` blueprints + runtime helpers |
 | Client-side simulation authority | `host.heartbeat` + `is_host` invoke policy |
 | Voice / chat / guilds | `udp.sendAudioPacket`; `udp.sendTextPacket`; `channels.*`; `teams.*` |
@@ -100,6 +218,19 @@ Everything realtime is addressed to a **chunk** and fanned out within
 studio-admin token (`manage_apps`) before players can invoke it — `kit.deploy`
 or `gameModel.seed`. Host election is informational unless you put `is_host`
 on the invoke policy.
+
+**Nothing runs for an app with no player in it** (platform change 2026-09-01).
+Compute modules tick only while the app has at least one player connected
+somewhere in the fleet, and `alwaysOn` is retired — `computeUpsertModule` refuses
+`true`. Scheduled work (cron and interval automations, `gm_timers`) that comes due
+while an app is empty is skipped silently and rescheduled from the moment a player
+returns; missed runs are never made up.
+
+This row used to read "world life with no client online", which was true and is
+not. Write automations so they are **idempotent in elapsed time**: advance the
+world by `now - lastTick` rather than by one fixed step per tick, and store
+expiries as timestamps rather than as remaining-tick counters. A blueprint that
+assumes a cadence will silently stall while nobody is playing.
 
 Blocks with Friends (crowdy.games, source not public) is the complete
 consumer of these surfaces: World Stores + kit blueprints + a hand-authored

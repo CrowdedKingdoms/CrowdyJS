@@ -63,8 +63,8 @@ function hostOf(url) {
 /**
  * Everything after the first DNS label — the tier zone.
  *
- * `ck-or.dev.cp.cks-env.com` and `ck-api-or-1.dev.cp.cks-env.com` share
- * `dev.cp.cks-env.com`, which is what proves two endpoints belong to the same
+ * `ck-or.dev.crowdedkingdoms.com` and `ck-api-or-1.dev.crowdedkingdoms.com` share
+ * `dev.crowdedkingdoms.com`, which is what proves two endpoints belong to the same
  * fleet rather than to a tier somebody pointed at by accident.
  */
 function zoneOf(url) {

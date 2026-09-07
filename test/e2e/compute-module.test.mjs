@@ -5,9 +5,18 @@
  * synchronously invoke an export, read the monitoring surface, and delete.
  *
  * Needs management + game-api HTTP (no realtime/WS). The test app is created
- * fresh and published to the shared environment; the module is `alwaysOn`
- * because a playerless test app never activates lazily. Auto-skips unless the
- * compute e2e env is configured.
+ * fresh and published to the shared environment.
+ *
+ * WHY THIS WORKS WITH NO PLAYER CONNECTED. Since 2026-09-01 a module TICKS only
+ * while its app has a player present, and `alwaysOn` is refused. This test used
+ * to set it precisely because a playerless app never activated. It does not need
+ * it: every assertion below is driven by the SYNCHRONOUS INVOKE, which is a
+ * request rather than a scheduled tick and is not presence-gated. The tick
+ * trigger is still created and read back, because binding one is configuration.
+ *
+ * What this test therefore does NOT cover is a tick actually firing. That needs a
+ * connected player and belongs in a realtime suite. Auto-skips unless the compute
+ * e2e env is configured.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -101,9 +110,10 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
 
     appId = app.appId;
 
-    // Author: new modules start disabled; alwaysOn so it runs without players.
+    // Author: new modules start disabled. No `alwaysOn` -- it is retired and
+    // passing true is refused with BAD_REQUEST.
     const mod = await game.compute.upsertModule({
-      appId, name: moduleName, description: 'e2e counter', alwaysOn: true,
+      appId, name: moduleName, description: 'e2e counter',
     });
     assert.equal(mod.name, moduleName);
     assert.equal(mod.enabled, false, 'new modules start disabled');
@@ -201,11 +211,14 @@ test('compute modules: author -> deploy -> compile -> enable -> invoke -> observ
     const remaining = await game.compute.modules({ appId });
     assert.equal(remaining.length, 0);
   } finally {
-    // An ENABLED module outlives this process: it is `alwaysOn`, so the fleet
-    // keeps ticking it at 2 Hz forever. When the delete above was the last
-    // statement of the happy path only, every failure after `setModuleEnabled`
-    // leaked one — two were still running on dev, from two different failures of
-    // the rollup assertion above. Best-effort, because the app may not exist.
+    // An ENABLED module outlives this process. It no longer ticks forever --
+    // presence gating means an abandoned module in an empty app costs nothing
+    // until somebody joins that app -- but the row, its triggers and its
+    // compiled version all persist, and the app is real. When the delete above
+    // was the last statement of the happy path only, every failure after
+    // `setModuleEnabled` leaked one; two were left running on dev by two
+    // different failures of the rollup assertion. Best-effort, because the app
+    // may not exist.
     try {
       if (game && appId) {
         await game.compute.deleteModule({ appId, name: moduleName });

@@ -22,6 +22,34 @@
  *   CROWDY_OWNER_PASSWORD   the owner's password; required since the dev bypass
  *                           was removed
  *   CROWDY_TEST_APP_ID      app to test against (default '1')
+ *   CROWDY_OPERATOR_EMAIL   operator/super-admin persona; falls back to the owner
+ *   CROWDY_OPERATOR_PASSWORD  when unset -- see provisionOperator below
+ *
+ * THE DEFAULT APP ID IS A LOCAL-STACK DEFAULT AND IT IS A TRAP AGAINST A TIER.
+ * No deployed tier has an app numbered 1 -- ids are Snowflake53, so they are
+ * sixteen digits. Leaving CROWDY_TEST_APP_ID unset therefore points the whole
+ * suite at an app that does not exist, and the failure does not say so: the
+ * permission check on a nonexistent app answers `Missing app permission
+ * 'manage_access_tiers'`, which reads as "the owner's roles are wrong". On
+ * 2026-08-26 that cost an afternoon across two tiers -- 16 of 34 tests failing,
+ * on a gate that was otherwise sound -- and was diagnosed only by asking the
+ * database who owned app 1 and being told nobody.
+ *
+ * So against a tier, set all three of APP_ID, OPERATOR_EMAIL and
+ * OPERATOR_PASSWORD. The operator pair is not optional either: the fallback to
+ * the owner exists for the local smoke stack, where the seeded owner is also a
+ * super-admin. On a tier the two personas are different accounts, and the two
+ * operator-persona tests fail `Invalid credentials` without it.
+ *
+ * The tier's values live in Secrets Manager:
+ *   owner     infra-cp/<tier>/org-admin/crowdedkingdomstudios
+ *   operator  infra-cp/<tier>/admin/ck-operator
+ *   app id    appBySlug(orgSlug:"crowdedkingdomstudios", appSlug:"blocks-with-friends")
+ *
+ * ONE MORE THING THE SUITE CANNOT DO FOR ITSELF: the app's Studio-agent policy.
+ * A rebuilt tier leaves it fail-closed, and two tests assert it is not
+ * AGENT_APP_KILLED. The door is the control plane's
+ * `scripts/ops/enable-studio-agent.sh --tier <tier> --app-id <id>`.
  *
  * PROVISIONING STAYS ON THE ENTRY ORIGIN; GAMEPLAY DOES NOT. Sign-in, grants and
  * `mintAppToken` all read and write reference tables that every datacenter

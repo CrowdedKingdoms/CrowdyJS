@@ -11,7 +11,7 @@
  *
  * An app is resident in exactly ONE datacenter, because it is distributed on
  * `app_id` and all of its shards live on one node. `CROWDY_HTTP_URL` is the
- * ENTRY origin — the shared multivalue name (`ck.<tier>.cp.cks-env.com`) that
+ * ENTRY origin — the shared multivalue name (`ck.<tier>.crowdedkingdoms.com`) that
  * resolves to every datacenter's load balancer. It is the way IN and nothing
  * else: a cold client's first request lands wherever DNS pointed it, which on a
  * two-datacenter fleet is the wrong place about half the time.

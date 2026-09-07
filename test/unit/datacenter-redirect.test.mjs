@@ -15,9 +15,9 @@ import test from 'node:test';
  * client to a dead address and turns a clear "offline" into a hang.
  */
 
-const ENDPOINT = 'https://ck-va.prod.cp.cks-env.com/graphql';
-const OR_HTTP = 'https://ck-or.prod.cp.cks-env.com';
-const OR_WS = 'wss://ck-or.prod.cp.cks-env.com';
+const ENDPOINT = 'https://ck-va.prod.crowdedkingdoms.com/graphql';
+const OR_HTTP = 'https://ck-or.prod.crowdedkingdoms.com';
+const OR_WS = 'wss://ck-or.prod.crowdedkingdoms.com';
 
 function wrongDatacenterError() {
   return {

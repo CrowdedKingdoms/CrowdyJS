@@ -9,6 +9,7 @@ import {
   PublishAppToSharedDocument,
   CancelSharedSubscriptionDocument,
   SetAppSpendCapsDocument,
+  SetAppReservedThroughputDocument,
   SetAutoBillingDocument,
   SetupSharedPaymentMethodDocument,
   RemoveSharedPaymentMethodDocument,
@@ -21,6 +22,7 @@ import {
   type PublishAppToSharedMutation,
   type CancelSharedSubscriptionMutation,
   type SetAppSpendCapsMutation,
+  type SetAppReservedThroughputMutation,
   type SetAutoBillingMutation,
   type SetupSharedPaymentMethodMutation,
   type RemoveSharedPaymentMethodMutation,
@@ -197,6 +199,59 @@ export class SharedEnvironmentAPI {
       dailyLimitCents: caps.dailyLimitCents,
     });
     return data.setAppSpendCaps;
+  }
+
+
+  /**
+   * Reserve realtime (UDP) capacity for a shared app. Requires `manage_billing`
+   * on the app's org.
+   *
+   * **A reservation is a FLOOR, not a ceiling.** It obliges the platform to keep
+   * that much capacity provisioned and in service for you — it raises the
+   * autoscaling minimum for the fleet your app runs on. It does **not** cap what
+   * you may send: traffic above the reserved rate is metered like any other
+   * traffic rather than refused.
+   *
+   * **It buys capacity, not volume.** The monthly reservation fee is charged in
+   * addition to metered usage and includes no data allowance of its own. Every
+   * byte is metered from the first one whether or not you hold a reservation:
+   * reserving 5 MB/s does not make the first 5 MB/s free.
+   *
+   * **It is not how you lift the free-tier cap.** Unfunded free apps are shaped
+   * at roughly 1 MB/s. That shaping is lifted by funding the org wallet or
+   * enabling auto-billing ({@link setAutoBilling}), not by reserving — before
+   * 2026-09-01 a reservation did double duty as a rate-limit bypass and no longer
+   * does.
+   *
+   * Billed monthly whether or not the capacity is used; upgrades are prorated for
+   * the current month, and lowering or clearing a reservation charges nothing.
+   *
+   * Reservations are sold in two independent dimensions, because a game may need
+   * a great deal of one and little of the other: realtime throughput (this
+   * method) and GraphQL operations per second. Reserving one does not reserve the
+   * other. Read both back from `app.reservedUdpBytesPerSec` and
+   * `app.reservedGraphqlOpsPerSec`.
+   *
+   * @param input - `orgId`, `appId`, and `reservedBytesPerSec` (decimal MB/s:
+   *   1_000_000 = 1 MB/s; 0 clears the reservation).
+   * @param idempotencyKey - Recommended for retries; replaying the same key with
+   *   identical arguments returns the first result instead of charging again.
+   * @returns The updated app and the cents debited from the org wallet.
+   * @throws {CrowdyGraphQLError} `FORBIDDEN` without `manage_billing`.
+   */
+  async setReservedThroughput(
+    input: {
+      orgId: string;
+      appId: string;
+      reservedBytesPerSec: string;
+    },
+    idempotencyKey?: string,
+  ): Promise<SetAppReservedThroughputMutation['setAppReservedThroughput']> {
+    const data = await this.api.request(SetAppReservedThroughputDocument, {
+      input,
+      idempotencyKey,
+    });
+    return data.setAppReservedThroughput;
   }
 
   /**

@@ -1251,6 +1251,14 @@ export class GameModelAPI {
    * Idempotent on `(appId, name)`. The game-api dispatcher runs it headlessly;
    * a tick is just "invoke a function on behalf of the server".
    *
+   * **Only while the app has a player in it** (2026-09-01). A scheduled
+   * automation that comes due while the app is empty is skipped silently and
+   * rescheduled from the moment a player returns; the missed runs are never made
+   * up. Write the entry point so it is idempotent in ELAPSED TIME -- advance the
+   * world by `now - lastRun` rather than by one step per tick -- or it will
+   * silently fall behind whenever nobody is playing. `event` and `manual`
+   * triggers are unaffected: something already asked for those.
+   *
    * Requires the app-admin **`manage_apps`** permission.
    *
    * @param input - {@link UpsertAutomationInput}: `appId`; `name` (upsert key);
@@ -1496,6 +1504,12 @@ export class GameModelAPI {
    * replica, so it fires once. Requires the app-admin **`manage_apps`**
    * permission, because a timer fires headlessly with system authority rather
    * than a player's.
+   *
+   * A timer whose deadline passes while the app has no players **waits** rather
+   * than firing into an empty world: the sweep only claims timers for apps with a
+   * player present, so it is still armed and fires when somebody returns. It is
+   * therefore late, not lost -- read the current time in the handler rather than
+   * assuming the delay you asked for is the delay that elapsed.
    *
    * For player-driven delays, declare a `timers` effect on the function instead
    * (see {@link GameModelAPI.upsertFunction}) so the delay is part of your game

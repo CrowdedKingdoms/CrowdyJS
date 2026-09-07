@@ -10,6 +10,8 @@ query App($appId: BigInt!) {
     metadata
     splitMode
     deploymentTarget
+    reservedUdpBytesPerSec
+    reservedGraphqlOpsPerSec
     runtimeStatus
     runtimeDenialReason
     gameApiUrl
