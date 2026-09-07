@@ -234,8 +234,22 @@ assumes a cadence will silently stall while nobody is playing.
 
 Blocks with Friends (crowdy.games, source not public) is the complete
 consumer of these surfaces: World Stores + kit blueprints + a hand-authored
-remainder. The [build-a-game tutorial](https://docs.crowdedkingdoms.com/build-a-game/intro)
-walks the same patterns with public code.
+remainder. **The public consumer is
+[`CrowdedKingdoms/the-construct`](https://github.com/CrowdedKingdoms/the-construct)**
+(2026-09-07): an engine-agnostic starter over this SDK with two renderers, the
+Crowdy Studio embed with CLIENT mods, kit-seeded model, and an in-app org → app
+→ tier → seed wizard, verified end to end on dev by a third-party account. It
+pins the tier's exact prerelease per branch and its `AGENTS.md` lists the
+platform facts it depends on. The [build-a-game tutorial](https://docs.crowdedkingdoms.com/build-a-game/intro)
+still points at the older `simple-web-demo`.
+
+Papercuts The Construct hit in this SDK (each worked around there; fix here):
+`ChunkStore.setVoxel` without `state` sends `voxelState: ''` and the API refuses
+it; `PlayerCodeBroker` ticks a client mod only when `tickIntervalMs` is set, which
+the embed docs' minimal example omits; `starter-projects.ts` declares only
+`crowdy-compute-sdk` although `host_call` takes a `serde_json::Value`; the
+in-flight `actorUpdate` at the instant of `refreshGameplayToken()` is refused
+`UNAUTHORIZED` once.
 
 ## Docs
 
