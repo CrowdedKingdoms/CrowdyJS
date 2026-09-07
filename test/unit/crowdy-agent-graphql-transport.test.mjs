@@ -188,7 +188,7 @@ function messageEvent(seq, type, content) {
   };
 }
 
-async function harness({ heartbeatError } = {}) {
+async function harness({ heartbeatError, listSessions = true } = {}) {
   const agent = await import('../../dist/crowdy-agent/index.js');
   const generated = await import('../../dist/generated/graphql.js');
   const { CrowdyGraphQLError } = await import('../../dist/index.js');
@@ -226,21 +226,22 @@ async function harness({ heartbeatError } = {}) {
       }
       if (document === generated.CrowdyStudioAgentSessionsDocument) {
         const node = session(buildRegistry.registryDigest);
+        const nodes = listSessions ? [node] : [];
         return {
           crowdyStudioAgentSessions: {
             __typename: 'AgentSessionConnection',
-            edges: [{
+            edges: nodes.map((entry) => ({
               __typename: 'AgentSessionEdge',
               cursor: 'session-cursor-1',
-              node,
-            }],
+              node: entry,
+            })),
             pageInfo: {
               __typename: 'AgentPageInfo',
               hasNextPage: false,
-              endCursor: 'session-cursor-1',
+              endCursor: nodes.length ? 'session-cursor-1' : null,
             },
-            nodes: [node],
-            endCursor: 'session-cursor-1',
+            nodes,
+            endCursor: nodes.length ? 'session-cursor-1' : null,
             hasNextPage: false,
           },
         };
@@ -487,7 +488,7 @@ async function settle(ms = 15) {
 }
 
 test('generated transport runs create, attach, dispatch, result, heartbeat, replay, and cancel', async () => {
-  const value = await harness();
+  const value = await harness({ listSessions: false });
   await value.controller.initialize();
   assert.equal(value.controller.getState().lastContiguousSeq, '1');
   assert.equal(value.wsPayload.variables.afterSeq, '1');
