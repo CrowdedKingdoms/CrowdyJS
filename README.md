@@ -174,7 +174,7 @@ never told about, so a native refresh without it is a re-placement.
    — `appId` is **required** (the SDK opens the realtime socket on demand and
    scopes it to that app).
 4. Join a chunk by sending an initial actor update.
-5. Send actor, voxel, text, audio, and client-event updates through `game.udp`
+5. Send actor, voxel, text, audio, video, and client-event updates through `game.udp`
    or the higher-level `game.world(appId)` helpers.
 6. Before the app token expires, call `game.refreshGameplayToken()`.
 7. Call `client.close()` (and `game.close()`) when disposing the SDK instances.
@@ -203,7 +203,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.marketplace` | Player-code store/install/consent flows plus player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`) and client-mod artifact fetches. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
 | `client.crowdyStudioAgent` | Generated, app-token Game API transport for durable agent sessions: history/session pages, descriptors/budgets, approvals, tool results, heartbeat, control mutations, ordered event subscriptions. |
-| `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`). |
+| `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendVideoPacket` / `sendVideoFrame`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token (see [Token refresh](#token-refresh-during-gameplay)). |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`, `actor.sendToActor`). |
@@ -287,6 +287,16 @@ const unsubscribe = client.udp.subscribe(
     voxelUpdate: (event) => { /* ... */ },
     text: (event) => { /* ... */ },
     audio: (event) => { /* ... */ },
+    video: (event) => {
+      // One webcam fragment; feed a VideoFrameAssembler to get whole frames.
+      const frame = assembler.ingest(event.uuid, decodeBase64(event.videoData));
+      if (frame) drawJpeg(event.uuid, frame.bytes);
+    },
+    actorLeft: (event) => {
+      // The server says this actor is gone (about 5 s after its last update).
+      // World Stores do this for you: `session.actors.onLeave` fires at once.
+      removeAvatar(event.uuid);
+    },
     clientEvent: (event) => { /* ... */ },
     serverEvent: (event) => { /* ... */ },
     singleActorMessage: (event) => {
@@ -460,6 +470,9 @@ session.self.patchState({ x: 12.5, yaw: 1.57 });
 console.log(session.self.status, session.self.lastAck?.state);
 
 // Everyone else: typed, self-filtered, staleness-managed — render from it.
+// A departure the server announces (ActorLeftNotification, Buddy v0.25.0)
+// removes the actor and fires `onLeave` immediately; the 12 s reaper is the
+// fallback for a lost datagram. A later update for the same uuid is a rejoin.
 for (const actor of session.actors.list()) {
   render(actor.uuid, actor.state, actor.samples); // samples → interpolation
 }
