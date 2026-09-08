@@ -102,7 +102,7 @@
     "ws": "^8.21.1"
   },
   "dependencies": {
-    "@codingame/monaco-vscode-api": "25.1.2",
+    "@codingame/monaco-vscode-api": "36.2.7",
     "@codingame/monaco-vscode-editor-api": "25.1.2",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@vscode/tree-sitter-wasm": "0.3.1",
