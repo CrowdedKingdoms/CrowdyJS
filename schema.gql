@@ -175,6 +175,10 @@ type User {
   """
   isOperator: Boolean!
   """
+  Whether this account has a password set. Studio reads it to say "set a password" only to accounts that have none (magic-link and OAuth sign-ups); it used to say so to everyone. The hash itself never leaves the process.
+  """
+  hasPassword: Boolean!
+  """
   The user's effective permission keys on the given org (empty if not a member; full set if super admin). Requires a valid bearer game token.
   """
   permissionsForOrg(
@@ -491,7 +495,7 @@ type AppAccessTier {
   """Optional marketing description of what the tier includes."""
   description: String
   """
-  Runtime permission keys granted to users on this tier (a subset of runtimePermissions), e.g. "access", "teleport", "update_voxel_data", "use_voice_chat".
+  Runtime permission keys granted to users on this tier (a subset of runtimePermissions), e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat" (webcam; not granted by default).
   """
   permissionKeys: [String!]!
   """
@@ -1162,11 +1166,11 @@ type App {
   """
   reservedEgressBytesPerSec: BigInt! @deprecated(reason: "Renamed 2026-09-01 when reservations split by traffic type. Use reservedUdpBytesPerSec; this returns the same value for one release.")
   """
-  Reserved realtime (UDP) capacity in bytes/s. Guarantees a minimum the platform provisions for you; it is not a limit on what you may send. Billed monthly whether or not used. 0 = none.
+  Reserved realtime (UDP) capacity in bytes/s. Guarantees a minimum the platform provisions for you; it is not a limit on what you may send. Billed monthly whether or not used, IN ADDITION TO metered usage -- a reservation buys capacity, not volume, so reserving 5 MB/s does not make the first 5 MB/s free. Independent of reservedGraphqlOpsPerSec. 0 = none.
   """
   reservedUdpBytesPerSec: BigInt!
   """
-  Reserved API request rate in GraphQL operations/sec. Guarantees a minimum the platform provisions for you; it is not a limit on how many requests you may make. Billed monthly whether or not used. 0 = none.
+  Reserved API request rate in GraphQL operations/sec. Guarantees a minimum the platform provisions for you; it is not a limit on how many requests you may make. Billed monthly whether or not used, IN ADDITION TO metered usage -- a reservation buys capacity, not volume. Independent of reservedUdpBytesPerSec: reserving one does not reserve the other. 0 = none.
   """
   reservedGraphqlOpsPerSec: BigInt!
   """
@@ -1174,7 +1178,7 @@ type App {
   """
   runtimeStatus: String!
   """
-  When runtimeStatus is not "active", why the runtime is gated: "free_allowance", "insufficient_funds", "spend_cap", or "subscription_lapsed". Null when active.
+  When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", or "subscription_lapsed". Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds".
   """
   runtimeDenialReason: String
   """
@@ -1301,6 +1305,60 @@ enum CodeAdmissionSubjectKind {
 }
 
 """
+A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy.
+"""
+type GraphQLServer {
+  """Unique id of this GraphQL server registration."""
+  graphqlServerId: ID!
+  """
+  Logical kind of GraphQL service. Every current server is 'game-api', which serves both the management and game surfaces; 'management-api' appears only on rows predating their unification.
+  """
+  kind: String
+  """
+  Internal/private IPv4 address of this server. Use publicIp4 for external reachability.
+  """
+  ip4: String
+  """
+  Internal/private IPv6 address of this server. Use publicIp6 for external reachability.
+  """
+  ip6: String
+  """
+  UUID of the Buddy realtime runtime instance this API server is paired with, if any.
+  """
+  runtimeServerId: String
+  """Cloud provider instance id of the underlying host, if known."""
+  providerInstanceId: String
+  """Public IPv4 address clients use to reach this server, if assigned."""
+  publicIp4: String
+  """Public IPv6 address clients use to reach this server, if assigned."""
+  publicIp6: String
+  """TCP port the GraphQL/HTTP API listens on (default 4000)."""
+  apiPort: Int!
+  """
+  Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.crowdedkingdoms.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you.
+  """
+  publicHostname: String
+  """
+  Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients.
+  """
+  status: ServerState!
+  """Current CPU utilization percentage (0-100) of the host, if reported."""
+  cpuUsagePct: Float
+  """
+  Current memory utilization percentage (0-100) of the host, if reported.
+  """
+  memoryUsagePct: Float
+  """1-minute load average of the host, if reported."""
+  loadAverage1m: Float
+  """When this server was first registered in the fleet."""
+  createdAt: DateTime!
+  """
+  When this server row was last updated (heartbeat). Use to judge freshness.
+  """
+  updatedAt: DateTime!
+}
+
+"""
 A short-lived, app-scoped gameplay token (Overworld portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session.
 """
 type AppTokenResponse {
@@ -1332,6 +1390,10 @@ type AppTokenResponse {
   Browser launch URL for this app (where the player's browser plays it), if configured.
   """
   launchUrl: String
+  """
+  Set only by `refreshAppToken` when the caller passed `currentServer`: the Buddy the NEW token was just authorized on, which is the node the client is already connected to. When present, keep the existing UDP session and start signing datagrams with the new token; there is no need to call serverWithLeastClients. Null when the caller passed nothing, or when that node can no longer serve this app (gone, draining, Full, or not local to the app) -- then call serverWithLeastClients for a fresh placement, exactly as before.
+  """
+  authorizedServer: ServerStatus
 }
 
 """
@@ -1382,6 +1444,30 @@ type PortalConsentState {
   consentRequired: Boolean!
 }
 
+"""
+A semantic-style version as four integer components (major.minor.patch.build). Compare components in order (major, then minor, then patch, then build).
+"""
+type VersionInfo {
+  """Major version number"""
+  major: Int!
+  """Minor version number"""
+  minor: Int!
+  """Patch version number"""
+  patch: Int!
+  """Build number"""
+  build: Int!
+}
+
+"""
+Server version plus the minimum client version the server will accept. A client whose build is older than minimumClientVersion should prompt the user to update before connecting.
+"""
+type ServerVersionInfo {
+  """Current server version"""
+  serverVersion: VersionInfo!
+  """Minimum accepted client version"""
+  minimumClientVersion: VersionInfo!
+}
+
 type OrgWallet {
   """Unique wallet id (BigInt as a decimal string)."""
   walletId: BigInt!
@@ -1421,7 +1507,7 @@ type WalletTransaction {
   """
   balanceAfter: BigInt!
   """
-  What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved egress capacity, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced.
+  What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved capacity -- realtime bytes/s or GraphQL operations/s -- charged in addition to metered usage rather than including any of it, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive), "refund" (a payment-provider refund of a top-up, the credited amount leaving the wallet again, negative), "chargeback" (a card dispute on an org top-up, clawed back from the org wallet, negative). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced.
   """
   transactionType: String!
   """
@@ -1463,156 +1549,6 @@ type AppBudget {
   createdAt: DateTime!
   """When the budget was last updated (ISO-8601 UTC timestamp)."""
   updatedAt: DateTime!
-}
-
-"""
-One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged.
-"""
-type RateCardEntryType {
-  """Which card this row is on."""
-  scope: RateScope!
-  """
-  The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates.
-  """
-  metric: String!
-  """
-  Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity.
-  """
-  unitLabel: String!
-  """
-  How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 19 with unitQuantity 1073741824 is 19 cents per GiB.
-  """
-  unitQuantity: BigInt!
-  """
-  Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged.
-  """
-  priceCents: Float!
-  """ISO currency code. USD today."""
-  currency: String!
-  """
-  Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit.
-  """
-  freePerHour: BigInt
-  """
-  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app), and player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance.
-  """
-  freePerMonth: BigInt
-  """Operator note on the seed row; null when unset."""
-  description: String
-}
-
-"""
-Which rate card. SHARED prices organization metered usage for shared-environment apps (billed hourly to the org wallet as "shared_usage"). PLAYER prices player compute (billed hourly to the player wallet as "usage_debit").
-"""
-enum RateScope {
-  SHARED
-  PLAYER
-}
-
-"""
-One Crowdy Studio agent model price, in micro-USD per million tokens. Only an ACTIVE row with a model_id ever prices a run.
-"""
-type AgentRateCardEntryType {
-  """Stable code for this card row, unique across the table."""
-  code: String!
-  """
-  Provider model this prices, matched against the resolved model at ingest. Null is only legal on a non-ACTIVE row.
-  """
-  modelId: String
-  """ISO currency code. USD today."""
-  currency: String!
-  """
-  DRAFT, ACTIVE or RETIRED. Only ACTIVE, inside its effective window, prices a run; an uncarded model is left unbilled rather than charged at cost.
-  """
-  status: String!
-  """Micro-USD per million uncached prompt tokens."""
-  inputMicroUsdPerMillion: BigInt!
-  """Micro-USD per million completion tokens."""
-  outputMicroUsdPerMillion: BigInt!
-  """Micro-USD per million reasoning tokens."""
-  reasoningMicroUsdPerMillion: BigInt!
-  """Micro-USD per million cached prompt tokens."""
-  cachedInputMicroUsdPerMillion: BigInt!
-}
-
-"""
-One priced dimension of the public rate card: its rate and its free allowances. A dimension with a price of 0 is metered but not charged.
-"""
-type PublicRateCardEntryType {
-  """Which card this row is on."""
-  scope: RateScope!
-  """
-  The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". This is the key your usage is aggregated under, so it is what to match a bill line against.
-  """
-  metric: String!
-  """
-  Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity.
-  """
-  unitLabel: String!
-  """
-  How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 19 with unitQuantity 1073741824 is 19 cents per GiB. priceCents and unitQuantity are two halves of one price and mean nothing apart.
-  """
-  unitQuantity: BigInt!
-  """
-  Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted. 0 means metered but not charged.
-  """
-  priceCents: Float!
-  """ISO currency code. USD today."""
-  currency: String!
-  """
-  Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit.
-  """
-  freePerHour: BigInt
-  """
-  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app). Null when this dimension has no monthly allowance.
-  """
-  freePerMonth: BigInt
-}
-
-"""
-One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards.
-"""
-type RateChangeType {
-  scope: RateScope!
-  metric: String!
-  """
-  One of "priceCents", "unitLabel", "unitQuantity", "freePerHour" or "freePerMonth".
-  """
-  field: String!
-  """
-  The value before this call, as a decimal string. "none" when there was no allowance row.
-  """
-  previous: String!
-  """The value after this call, as a decimal string."""
-  updated: String!
-}
-
-"""The result of setting a rate: the new row and what moved."""
-type SetRateCardResult {
-  """The dimension as it now stands."""
-  entry: RateCardEntryType!
-  """
-  One entry per field that changed. Never empty: a call that would change nothing is refused rather than reported as a successful no-op.
-  """
-  changes: [RateChangeType!]!
-}
-
-"""
-An organization whose wallet is not debited and whose apps are not denied for funds. Usage is still metered; waived amounts are in org_billing_waivers.
-"""
-type BillingExemptOrgType {
-  """Organization id (BigInt as a decimal string)."""
-  orgId: BigInt!
-  """Organization name."""
-  name: String!
-  """Organization slug."""
-  slug: String!
-  """Why the exemption exists. Required when setting it true."""
-  reason: String!
-  """When the exemption was last set true."""
-  setAt: DateTime!
-  """Operator user_id who last set the exemption true."""
-  setBy: BigInt
 }
 
 type Checkout {
@@ -1802,7 +1738,7 @@ type AppRuntimeState {
   """Current runtime gate decision (active / grace / denied / suspended)."""
   runtimeStatus: AppRuntimeStatus!
   """
-  free_allowance | insufficient_funds | spend_cap | subscription_lapsed when not active.
+  insufficient_funds | spend_cap | subscription_lapsed when not active. Historical rows may carry free_allowance, which the gate no longer produces.
   """
   runtimeDenialReason: String
   """Owning org wallet balance, in cents."""
@@ -1862,10 +1798,12 @@ type FreeAppQuotaApp {
   """URL slug for the app."""
   slug: String!
   """
-  True when the app consumes a free org slot (shared, not archived, no active subscription, no reserved throughput).
+  True when the app consumes a free org slot (shared, not archived, no active subscription, no reserved realtime capacity). Only a REALTIME (UDP) reservation releases a slot; a GraphQL operations reservation does not.
   """
   consumesFreeSlot: Boolean!
-  """Reserved egress throughput in bytes/sec (0 when none)."""
+  """
+  Reserved REALTIME (UDP) capacity in bytes/sec (0 when none). This is the dimension that decides free-slot consumption; a GraphQL operations reservation is separate and is not reported here. Same value as App.reservedUdpBytesPerSec.
+  """
   reservedEgressBytesPerSec: BigInt!
   """True when the app has an active legacy shared subscription."""
   hasActiveSubscription: Boolean!
@@ -1906,7 +1844,7 @@ type SetAppReservedThroughputResult {
 }
 
 """
-Result of publishing an app to the shared environment. All paths publish immediately; usage above the free hourly allowance is wallet-billed.
+Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is wallet-billed: each app has a per-dimension hourly allowance and, for client egress, 5 decimal GB per calendar month. An unfunded free app is also shaped to roughly 1 MB/s; funding the org wallet or enabling auto-billing lifts that.
 """
 type PublishAppResult {
   appId: BigInt!
@@ -1966,6 +1904,181 @@ type PaymentMethodSetup {
   clientSecret: String
   """Provider publishable key for the browser SDK."""
   publishableKey: String
+}
+
+"""
+One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged.
+"""
+type RateCardEntryType {
+  """Which card this row is on."""
+  scope: RateScope!
+  """
+  The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates.
+  """
+  metric: String!
+  """
+  Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity.
+  """
+  unitLabel: String!
+  """
+  How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 19 with unitQuantity 1073741824 is 19 cents per GiB.
+  """
+  unitQuantity: BigInt!
+  """
+  Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged.
+  """
+  priceCents: Float!
+  """ISO currency code. USD today."""
+  currency: String!
+  """
+  Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit.
+  """
+  freePerHour: BigInt
+  """
+  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app), and player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance.
+  """
+  freePerMonth: BigInt
+  """
+  The allowance as the biller reads it: raw metric units free per freePeriod, as a BigInt decimal string. freePerHour and freePerMonth are views of this same row for the periods they name; a DAY allowance shows only here. Null when the dimension has no allowance row.
+  """
+  freeUnits: BigInt
+  """
+  The period freeUnits resets on. Null when the dimension has no allowance row.
+  """
+  freePeriod: AllowancePeriod
+  """Operator note on the seed row; null when unset."""
+  description: String
+}
+
+"""
+Which rate card. SHARED prices organization metered usage for shared-environment apps (billed hourly to the org wallet as "shared_usage"). PLAYER prices player compute (billed hourly to the player wallet as "usage_debit").
+"""
+enum RateScope {
+  SHARED
+  PLAYER
+}
+
+"""
+The interval a free allowance resets on and a dimension is rounded over. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving; the development quota is MONTH.
+"""
+enum AllowancePeriod {
+  HOUR
+  DAY
+  MONTH
+}
+
+"""
+One Crowdy Studio agent model price, in micro-USD per million tokens. Only an ACTIVE row with a model_id ever prices a run.
+"""
+type AgentRateCardEntryType {
+  """Stable code for this card row, unique across the table."""
+  code: String!
+  """
+  Provider model this prices, matched against the resolved model at ingest. Null is only legal on a non-ACTIVE row.
+  """
+  modelId: String
+  """ISO currency code. USD today."""
+  currency: String!
+  """
+  DRAFT, ACTIVE or RETIRED. Only ACTIVE, inside its effective window, prices a run; an uncarded model is left unbilled rather than charged at cost.
+  """
+  status: String!
+  """Micro-USD per million uncached prompt tokens."""
+  inputMicroUsdPerMillion: BigInt!
+  """Micro-USD per million completion tokens."""
+  outputMicroUsdPerMillion: BigInt!
+  """Micro-USD per million reasoning tokens."""
+  reasoningMicroUsdPerMillion: BigInt!
+  """Micro-USD per million cached prompt tokens."""
+  cachedInputMicroUsdPerMillion: BigInt!
+}
+
+"""
+One priced dimension of the public rate card: its rate and its free allowances. A dimension with a price of 0 is metered but not charged.
+"""
+type PublicRateCardEntryType {
+  """Which card this row is on."""
+  scope: RateScope!
+  """
+  The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". This is the key your usage is aggregated under, so it is what to match a bill line against.
+  """
+  metric: String!
+  """
+  Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity.
+  """
+  unitLabel: String!
+  """
+  How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 19 with unitQuantity 1073741824 is 19 cents per GiB. priceCents and unitQuantity are two halves of one price and mean nothing apart.
+  """
+  unitQuantity: BigInt!
+  """
+  Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted. 0 means metered but not charged.
+  """
+  priceCents: Float!
+  """ISO currency code. USD today."""
+  currency: String!
+  """
+  Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit.
+  """
+  freePerHour: BigInt
+  """
+  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app). Null when this dimension has no monthly allowance.
+  """
+  freePerMonth: BigInt
+  """
+  The allowance as the biller reads it: raw metric units free per freePeriod, as a BigInt decimal string. Null when the dimension has no allowance row.
+  """
+  freeUnits: BigInt
+  """
+  The period freeUnits resets on. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving.
+  """
+  freePeriod: AllowancePeriod
+}
+
+"""
+One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards.
+"""
+type RateChangeType {
+  scope: RateScope!
+  metric: String!
+  """
+  One of "priceCents", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth".
+  """
+  field: String!
+  """
+  The value before this call, as a decimal string. "none" when there was no allowance row.
+  """
+  previous: String!
+  """The value after this call, as a decimal string."""
+  updated: String!
+}
+
+"""The result of setting a rate: the new row and what moved."""
+type SetRateCardResult {
+  """The dimension as it now stands."""
+  entry: RateCardEntryType!
+  """
+  One entry per field that changed. Never empty: a call that would change nothing is refused rather than reported as a successful no-op.
+  """
+  changes: [RateChangeType!]!
+}
+
+"""
+An organization whose wallet is not debited and whose apps are not denied for funds. Usage is still metered; waived amounts are in org_billing_waivers.
+"""
+type BillingExemptOrgType {
+  """Organization id (BigInt as a decimal string)."""
+  orgId: BigInt!
+  """Organization name."""
+  name: String!
+  """Organization slug."""
+  slug: String!
+  """Why the exemption exists. Required when setting it true."""
+  reason: String!
+  """When the exemption was last set true."""
+  setAt: DateTime!
+  """Operator user_id who last set the exemption true."""
+  setBy: BigInt
 }
 
 """An edge in a WalletTransaction connection."""
@@ -4389,7 +4502,7 @@ type GraphqlOperationUsageRow {
 }
 
 """
-Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window.
+Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. WHICH OF THESE YOU PAY FOR: the *SendBytes fields are the billable direction, and *RecvBytes are metered but do NOT count toward Aggregate Data Volume, the monthly free-tier and overage measure. All byte figures are wire bytes measured at the network interface, including transport and network headers, and after any compression the service applies -- they will not match a client-side byte counter.
 """
 type OrgUsageSummary {
   """Organization id (as a string)."""
@@ -4409,7 +4522,7 @@ type OrgUsageSummary {
 }
 
 """
-Aggregate byte totals plus the top GraphQL operations for one app over the window.
+Aggregate byte totals plus the top GraphQL operations for one app over the window. WHICH OF THESE YOU PAY FOR: the *SendBytes fields are the billable direction, and *RecvBytes are metered but do NOT count toward Aggregate Data Volume, the monthly free-tier and overage measure. All byte figures are wire bytes measured at the network interface, including transport and network headers, and after any compression the service applies -- they will not match a client-side byte counter.
 """
 type AppUsageSummary {
   """App id (as a string)."""
@@ -4443,9 +4556,13 @@ type AppUsageProjection {
   """App id (as a string)."""
   appId: String!
   """
-  Egress bytes recorded so far this calendar month (from app_monthly_egress).
+  Egress bytes recorded so far this calendar month (from app_monthly_egress). Egress only -- bytes the service delivered to clients, measured as wire bytes at the network interface. Ingress is metered separately and does not count toward this figure or the allowance it is compared against.
   """
   currentEgressBytes: String!
+  """
+  Ingress bytes recorded so far this calendar month (from app_monthly_egress.ingress_bytes): bytes clients sent the service over UDP replication and GraphQL, measured on the same basis as egress. Billed once, as aggregate_data_ingress above its own monthly allowance; never counted toward the egress figure or allowance.
+  """
+  currentIngressBytes: String!
   """
   True when at least 3 days have elapsed in the month (projection is meaningful).
   """
@@ -4474,7 +4591,9 @@ type OrgAppUsageProjectionRow {
   appId: String!
   """App display name."""
   appName: String!
-  """Egress bytes so far this calendar month."""
+  """
+  Egress bytes so far this calendar month. Egress only; ingress does not count toward the aggregate volume.
+  """
   currentEgressBytes: String!
   """Projected end-of-month egress bytes, or null when insufficient data."""
   projectedBytes: String
@@ -4507,7 +4626,7 @@ type OrgUsageProjection {
   """True when any shared app is on track to exceed its free allowance."""
   onTrackToExceedAny: Boolean!
   """
-  True when org total projected egress exceeds the combined free tier — suggest reserved throughput.
+  True when org total projected egress exceeds the combined free tier, so the org should expect a metered bill. Note that a capacity reservation is NOT a remedy for this: reservations buy provisioned capacity and are charged in addition to metered usage, so they do not reduce an egress bill. What this signals is that the org needs a funded wallet or auto-billing.
   """
   suggestReservedThroughput: Boolean!
 }
@@ -4536,84 +4655,6 @@ type PlayerPulse {
   Number of studios in the percentile comparison pool (studios with all_time_peak > 0).
   """
   poolSize: Int!
-}
-
-"""
-A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy.
-"""
-type GraphQLServer {
-  """Unique id of this GraphQL server registration."""
-  graphqlServerId: ID!
-  """
-  Logical kind of GraphQL service. Every current server is 'game-api', which serves both the management and game surfaces; 'management-api' appears only on rows predating their unification.
-  """
-  kind: String
-  """
-  Internal/private IPv4 address of this server. Use publicIp4 for external reachability.
-  """
-  ip4: String
-  """
-  Internal/private IPv6 address of this server. Use publicIp6 for external reachability.
-  """
-  ip6: String
-  """
-  UUID of the Buddy realtime runtime instance this API server is paired with, if any.
-  """
-  runtimeServerId: String
-  """Cloud provider instance id of the underlying host, if known."""
-  providerInstanceId: String
-  """Public IPv4 address clients use to reach this server, if assigned."""
-  publicIp4: String
-  """Public IPv6 address clients use to reach this server, if assigned."""
-  publicIp6: String
-  """TCP port the GraphQL/HTTP API listens on (default 4000)."""
-  apiPort: Int!
-  """
-  Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.crowdedkingdoms.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you.
-  """
-  publicHostname: String
-  """
-  Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients.
-  """
-  status: ServerState!
-  """Current CPU utilization percentage (0-100) of the host, if reported."""
-  cpuUsagePct: Float
-  """
-  Current memory utilization percentage (0-100) of the host, if reported.
-  """
-  memoryUsagePct: Float
-  """1-minute load average of the host, if reported."""
-  loadAverage1m: Float
-  """When this server was first registered in the fleet."""
-  createdAt: DateTime!
-  """
-  When this server row was last updated (heartbeat). Use to judge freshness.
-  """
-  updatedAt: DateTime!
-}
-
-"""
-A semantic-style version as four integer components (major.minor.patch.build). Compare components in order (major, then minor, then patch, then build).
-"""
-type VersionInfo {
-  """Major version number"""
-  major: Int!
-  """Minor version number"""
-  minor: Int!
-  """Patch version number"""
-  patch: Int!
-  """Build number"""
-  build: Int!
-}
-
-"""
-Server version plus the minimum client version the server will accept. A client whose build is older than minimumClientVersion should prompt the user to update before connecting.
-"""
-type ServerVersionInfo {
-  """Current server version"""
-  serverVersion: VersionInfo!
-  """Minimum accepted client version"""
-  minimumClientVersion: VersionInfo!
 }
 
 """
@@ -5322,10 +5363,12 @@ type WasmModuleTrigger {
   moduleId: String!
   """Trigger type: tick | event | invoke."""
   triggerType: String!
-  """For tick triggers: the tick rate in Hz."""
+  """
+  For tick triggers: the tick rate in Hz. The module ticks at this rate only while its app has a player connected somewhere in the fleet, and stops when the last one leaves.
+  """
   tickHz: Float
   """
-  For event triggers: function_invoked | property_changed | container_created | compute_event.
+  For event triggers: function_invoked | property_changed | container_created | compute_event | player_left. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included.
   """
   onEvent: String
   """Event filter: only this model function name."""
@@ -5765,7 +5808,9 @@ type GmAutomation {
   lastError: String
   """When the automation last ran."""
   lastRunAt: DateTime
-  """When the automation is next due (schedule)."""
+  """
+  When the automation is next due (schedule). Due is not a promise to run: a schedule that comes due while the app has no players is skipped, and this advances to the next slot without the skipped run being made up.
+  """
   nextRunAt: DateTime
 }
 
@@ -5780,16 +5825,20 @@ type GmAutomationTrigger {
   """The automation this trigger fires."""
   automationId: String!
   """
-  Observed event: function_invoked | property_changed | container_created | player_count_changed.
+  Observed event: function_invoked | property_changed | container_created | player_count_changed | player_left.
   """
   onEvent: String!
-  """Filter: only this function name. Always null for player_count_changed."""
+  """
+  Filter: only this function name. Always null for player_count_changed and player_left.
+  """
   functionName: String
   """
-  Filter: only this container type. Always null for player_count_changed.
+  Filter: only this container type. Always null for player_count_changed and player_left.
   """
   containerTypeName: String
-  """Filter: only this property key. Always null for player_count_changed."""
+  """
+  Filter: only this property key. Always null for player_count_changed and player_left.
+  """
   propertyKey: String
   """
   property_changed only: which writes are observed — "direct" (gameModelSetProperty), "function" (a mutation applied inside an invoke, automation run, or timer fire), or "any". Always "any" for other events, which ignore it.
@@ -6075,6 +6124,8 @@ enum PlayerFaultCode {
   RATE_LIMITED
   """A metered allowance is spent and does not return on its own."""
   QUOTA_EXHAUSTED
+  WALLET_EMPTY
+  SPEND_CAP_REACHED
   """A breaker is open or an operator switch is off for this subject."""
   TEMPORARILY_DISABLED
   """The arguments did not satisfy the function's contract."""
@@ -7663,7 +7714,7 @@ type Query {
     appId: BigInt!
   ): [AppAccessTier!]!
   """
-  Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index.
+  Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index.
   """
   runtimePermissions: [String!]!
   """
@@ -7900,6 +7951,22 @@ type Query {
   The calling user's active app authorizations ("connected apps"). Requires a SESSION token.
   """
   myAuthorizedApps: [AppAuthorizationGrant!]!
+  """
+  Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this.
+  """
+  serverWithLeastClients: ServerStatus!
+  """
+  List every registered GraphQL API server regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers).
+  """
+  graphqlServers: [GraphQLServer!]!
+  """
+  List only healthy GraphQL API servers (status = ReadyForClients) for client routing/discovery. No authentication required.
+  """
+  activeGraphQLServers: [GraphQLServer!]!
+  """
+  Current server version and the minimum client version the server accepts. No authentication required. Compare your client build against minimumClientVersion before connecting and prompt an update if it is too old.
+  """
+  versionInfo: ServerVersionInfo!
   """
   Returns the organization's wallet, creating an empty zero-balance wallet on first access if one does not yet exist (so it never returns null). Use it to read the current balance and currency before charging usage or topping up. Requires the 'view_billing' org permission.
   """
@@ -8350,22 +8417,6 @@ type Query {
     """Organization id (BigInt) to report player pulse for."""
     orgId: BigInt!
   ): PlayerPulse! @requiresPermission(scope: "org", permission: "view_usage", scopeArg: "orgId")
-  """
-  Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this.
-  """
-  serverWithLeastClients: ServerStatus!
-  """
-  List every registered GraphQL API server regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers).
-  """
-  graphqlServers: [GraphQLServer!]!
-  """
-  List only healthy GraphQL API servers (status = ReadyForClients) for client routing/discovery. No authentication required.
-  """
-  activeGraphQLServers: [GraphQLServer!]!
-  """
-  Current server version and the minimum client version the server accepts. No authentication required. Compare your client build against minimumClientVersion before connecting and prompt an update if it is too old.
-  """
-  versionInfo: ServerVersionInfo!
   """
   Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1.
   """
@@ -9884,12 +9935,14 @@ type Mutation {
   """
   createOrganization(input: CreateOrganizationInput!): Organization!
   """
-  Super admin only. Used to freeze/unfreeze orgs platform-wide. SIDE EFFECT: sets organizations.status. What that gates today is narrower than it sounds: a non-'active' status stops the org's API TOKENS from authenticating, but it does not remove its members' permissions, so a frozen org's signed-in members can still act. Refuses 'retired' in either direction — retirement is retireOrganization, which writes a tombstone.
+  Super admin only. Freeze ('frozen') or unfreeze ('active') an organization platform-wide. A FROZEN organization grants its members NO org permission (super admins excepted, so it is reversible): they cannot spend its wallet, create or manage apps, or change members, and every such refusal names the freeze; its API tokens stop authenticating; the org itself still resolves by id and slug so Studio can show the state. Takes exactly 'active' or 'frozen'; 'retired' is refused in either direction — retirement is retireOrganization, which writes a tombstone.
   """
   setOrgStatus(
     """Organization id (BigInt as string)."""
     orgId: BigInt!
-    """New status, e.g. 'active' or 'frozen'. 'retired' is refused here."""
+    """
+    New status: 'active' or 'frozen'. Anything else, including 'retired', is refused.
+    """
     status: String!
   ): Organization! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
@@ -10060,9 +10113,14 @@ type Mutation {
   """
   exchangePortalCode(input: ExchangePortalCodeInput!): AppTokenResponse!
   """
-  Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement.
+  Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients.
   """
-  refreshAppToken: AppTokenResponse!
+  refreshAppToken(
+    """
+    The Buddy this client is connected to, so the refreshed token can be authorized there. Omit for browser (UDP-proxy) clients.
+    """
+    currentServer: CurrentServerInput
+  ): AppTokenResponse!
   """
   Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the Overworld consent screen before createPortalAuthorizationCode. Idempotent. Requires a SESSION token.
   """
@@ -10900,7 +10958,7 @@ type Mutation {
     input: GrantTierFeatureInput!
   ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
-  Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps').
+  Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps'). NOTHING RUNS FOR AN APP WITH NO PLAYER IN IT: a SCHEDULE trigger that comes due while the app is empty is skipped and rescheduled from the moment a player returns, and the missed runs are never made up -- so write the entry point to advance the world by elapsed time rather than by one step per run. Event and manual triggers are unaffected, because something already asked.
   """
   gameModelUpsertAutomation(
     """
@@ -10963,7 +11021,7 @@ type Mutation {
     name: String!
   ): GmAutomationRun! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
-  Arm a one-shot timer: invoke a function once, after a delay. The timer is durable (it survives an API restart) and claimed by exactly one replica, so it fires once. The target function must be autonomousInvocable, because the fire is headless and runs with system authority rather than a player's — which is also why this needs app-admin ('manage_apps'). For player-driven delays, author a timers effect on a function instead so the delay is part of your game logic. Supply dedupeKey to make re-arming replace the pending timer rather than queue another fire.
+  Arm a one-shot timer: invoke a function once, after a delay. The timer is durable (it survives an API restart) and claimed by exactly one replica, so it fires once. A timer whose deadline passes while the app has no players WAITS rather than firing into an empty world, and fires when somebody returns: late, not lost. Read the clock in the handler rather than assuming the delay you asked for is the delay that elapsed. The target function must be autonomousInvocable, because the fire is headless and runs with system authority rather than a player's — which is also why this needs app-admin ('manage_apps'). For player-driven delays, author a timers effect on a function instead so the delay is part of your game logic. Supply dedupeKey to make re-arming replace the pending timer rather than queue another fire.
   """
   gameModelScheduleInvoke(
     """
@@ -11203,6 +11261,15 @@ type Mutation {
     """
     input: ClientAudioPacketInput!
   ): Boolean! @requiresPermission(scope: "runtime", permission: "use_voice_chat", scopeArg: "input.appId")
+  """
+  Send ONE webcam video fragment, fanned out to nearby actors as a ClientVideoNotification (Buddy v0.25.0). Requires a bearer game token and the use_video_chat runtime permission at app AND grid level -- without it the game server responds asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). A datagram carries at most ~1117 bytes of videoData, so an encoded frame is split by the SDK into fragments (6-byte header: version, codec, frameId, fragIndex, fragCount; at most 16 per frame) and reassembled by receivers; this is a mutation PER FRAGMENT and sustained video belongs on the binary realtime relay. Every receiver in range pays the egress bytes: keep distance small and frames few. Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING -- NOT that it was delivered; the sender receives no echo, only errors (GenericErrorResponse, correlated by sequenceNumber) on udpNotifications.
+  """
+  sendVideoPacket(
+    """
+    The video fragment to send: target appId, chunk coordinates, 32-byte source uuid, base64 videoData (fragment header + frame slice), and optional distance/decayRate/sequenceNumber. See ClientVideoPacketInput.
+    """
+    input: ClientVideoPacketInput!
+  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_video_chat", scopeArg: "input.appId")
   """
   Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
@@ -12270,6 +12337,18 @@ input ExchangePortalCodeInput {
 }
 
 """
+The Buddy a native client is CURRENTLY connected to, named by the `ip4` and `clientPort` that `serverWithLeastClients` handed it. Pass it to `refreshAppToken` so the refreshed token is authorized on that same node and the client keeps its session there instead of being re-placed.
+"""
+input CurrentServerInput {
+  """
+  The `ip4` of the ServerStatus the client is connected to (as returned by serverWithLeastClients).
+  """
+  ip4: String!
+  """The `clientPort` of the ServerStatus the client is connected to."""
+  clientPort: Int!
+}
+
+"""
 Approve (consent to) an app receiving app-scoped tokens via the Overworld portal.
 """
 input AuthorizeAppInput {
@@ -12322,6 +12401,14 @@ input SetRateCardInput {
   """
   freePerHour: BigInt
   """
+  New free allowance in raw metric units per freePeriod, as a BigInt decimal string. Must be >= 0. Leaves the period as it is unless freePeriod is also given. Not combinable with freePerHour, which is the older spelling of freeUnits with freePeriod HOUR.
+  """
+  freeUnits: BigInt
+  """
+  New period for the free allowance. Leaves the units as they are unless freeUnits is also given. Moving a dimension to MONTH is how the development quota is stated.
+  """
+  freePeriod: AllowancePeriod
+  """
   New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged.
   """
   freePerMonth: BigInt
@@ -12332,15 +12419,15 @@ input SetRateCardInput {
 }
 
 """
-Set or change an app's reserved sustained throughput on the shared environment.
+Set or change an app's reserved REALTIME (UDP) capacity on the shared environment. Reservations are sold in two independent dimensions and this mutation sets one of them; read both back from App.reservedUdpBytesPerSec and App.reservedGraphqlOpsPerSec.
 """
 input SetAppReservedThroughputInput {
   """Organization that owns the app."""
   orgId: BigInt!
-  """App to configure reserved throughput for."""
+  """App to configure reserved realtime (UDP) capacity for."""
   appId: BigInt!
   """
-  Reserved sustained egress in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation (free tier).
+  Reserved sustained realtime capacity in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation, which releases the provisioned floor and stops the monthly fee; it does not change how the app is shaped, because the ~1 MB/s free-tier cap is decided by whether the org can be charged rather than by whether it holds a reservation. A reservation buys capacity, not volume: the fee is charged in addition to metered usage and includes no data allowance.
   """
   reservedBytesPerSec: BigInt!
 }
@@ -13327,7 +13414,7 @@ input FunctionPermissionEffectInput {
   """
   action: String!
   """
-  Runtime permission keys to grant/revoke (validated against the runtime_permissions catalog, e.g. 'access', 'teleport', 'update_voxel_data', 'use_voice_chat').
+  Runtime permission keys to grant/revoke (validated against the runtime_permissions catalog, e.g. 'access', 'teleport', 'update_voxel_data', 'use_voice_chat', 'use_video_chat').
   """
   permissionKeys: [String!]!
   """
@@ -13627,19 +13714,19 @@ input UpsertAutomationTriggerInput {
   """The automation (by name) this trigger fires."""
   automationName: String!
   """
-  Event to observe: function_invoked | property_changed | container_created | player_count_changed. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params.
+  Event to observe: function_invoked | property_changed | container_created | player_count_changed | player_left. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params. player_left fires once per actor that stops being present (about five seconds after its last update), the LAST player included, and injects actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason (presence_removed | lease_expired) and remaining_player_count.
   """
   onEvent: String!
   """
-  Filter: only this function name. Applies to function_invoked; rejected for property_changed, container_created, and player_count_changed.
+  Filter: only this function name. Applies to function_invoked; rejected for property_changed, container_created, player_count_changed and player_left.
   """
   functionName: String
   """
-  Filter: only this container type. For function_invoked this is the type of the invocation's "self" container, so you can watch "this function, on this type". Rejected for player_count_changed.
+  Filter: only this container type. For function_invoked this is the type of the invocation's "self" container, so you can watch "this function, on this type". Rejected for player_count_changed and player_left.
   """
   containerTypeName: String
   """
-  Filter: only this property key. Applies to property_changed; rejected for function_invoked, container_created, and player_count_changed.
+  Filter: only this property key. Applies to property_changed; rejected for function_invoked, container_created, player_count_changed and player_left.
   """
   propertyKey: String
   """
@@ -13891,7 +13978,7 @@ input UpsertComputeTriggerInput {
   """
   tickHz: Float
   """
-  For event triggers: function_invoked | property_changed | container_created | compute_event.
+  For event triggers: function_invoked | property_changed | container_created | compute_event | player_left. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included.
   """
   onEvent: String
   """Event filter: only this model function name."""
@@ -14050,6 +14137,36 @@ input ClientAudioPacketInput {
   distance: Int
   """
   Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for audio packets.
+  """
+  decayRate: Int
+  """
+  Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription.
+  """
+  sequenceNumber: Int
+}
+
+"""
+Input for sending one webcam video FRAGMENT to the UDP game server, fanned out to nearby players as a ClientVideoNotification. A datagram carries at most ~1117 bytes of videoData, so an encoded frame is split by the SDK into fragments that each start with the 6-byte video fragment header (version, codec, frameId, fragIndex, fragCount) and are reassembled by the receiver; this mutation sends ONE such fragment. Sustained video belongs on the binary realtime relay; this path works but is a mutation per fragment.
+"""
+input ClientVideoPacketInput {
+  """The ID of the app where the video is being sent from."""
+  appId: BigInt!
+  """The chunk coordinates where the video source is located."""
+  chunk: ChunkCoordinatesInput!
+  """
+  A unique identifier for the video source (typically the player UUID). Must be exactly 32 bytes when encoded as UTF-8.
+  """
+  uuid: String!
+  """
+  One video fragment, base64-encoded: the 6-byte fragment header followed by that slice of the encoded frame. Opaque to the server.
+  """
+  videoData: String!
+  """
+  Chunk replication distance (0-8). Defaults to 1 for video packets. Every receiver in range pays the egress bytes; keep this small.
+  """
+  distance: Int
+  """
+  Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for video packets.
   """
   decayRate: Int
   """
@@ -14966,7 +15083,7 @@ type Subscription {
 """
 All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version.
 """
-union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | ChannelMessageNotification | GenericErrorResponse | RealtimeConnectionEvent
+union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientVideoNotification | ActorLeftNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | ChannelMessageNotification | GenericErrorResponse | RealtimeConnectionEvent
 
 """
 LEGACY — never emitted. The game server retired the dedicated actor-update response opcode (129); an applied update now arrives as your own ActorUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version.
@@ -15105,6 +15222,62 @@ type ClientAudioNotification {
   """The compressed audio data, base64-encoded."""
   audioData: String!
   """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Notification received when another client sends a webcam video fragment. Received via the udpNotifications subscription. videoData is ONE fragment: a 6-byte header (version, codec, frameId uint16 BE, fragIndex, fragCount) followed by that slice of the encoded frame; reassemble fragments with the same uuid and frameId, and drop an incomplete frame when a newer frameId arrives or after ~500 ms.
+"""
+type ClientVideoNotification {
+  """The ID of the app where the video is coming from."""
+  appId: BigInt!
+  """The X coordinate of the chunk where the video source is located."""
+  chunkX: BigInt!
+  """The Y coordinate of the chunk where the video source is located."""
+  chunkY: BigInt!
+  """The Z coordinate of the chunk where the video source is located."""
+  chunkZ: BigInt!
+  """Chunk replication distance (0-8) from the original message."""
+  distance: Int!
+  """Decay algorithm (0-5) from the original message."""
+  decayRate: Int!
+  """
+  The unique identifier of the video source (typically the player UUID sending the video).
+  """
+  uuid: String!
+  """
+  One video fragment, base64-encoded: 6-byte fragment header then the frame slice.
+  """
+  videoData: String!
+  """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+The game server has stopped considering an actor present (Buddy v0.25.0). Emitted ONCE, over the actor's last chunk with the replication rings its own updates used, at the moment its presence record is removed -- roughly five seconds after its last update. Not emitted when the actor merely moved to another server. Treat a later ActorUpdateNotification for the same uuid as a rejoin. Received via the udpNotifications subscription.
+"""
+type ActorLeftNotification {
+  """The ID of the app the actor was in."""
+  appId: BigInt!
+  """The X coordinate of the actor's last chunk."""
+  chunkX: BigInt!
+  """The Y coordinate of the actor's last chunk."""
+  chunkY: BigInt!
+  """The Z coordinate of the actor's last chunk."""
+  chunkZ: BigInt!
+  """Chunk replication distance (0-8) the notification was fanned out over."""
+  distance: Int!
+  """The unique identifier of the actor that left."""
+  uuid: String!
+  """
+  Why the server stopped considering the actor present: 0 = STALE (it stopped updating). 1 is reserved for an immediate server-side release; treat any other value as STALE.
+  """
+  leftReason: Int!
+  """Correlation byte from the datagram tail (always 0 today)."""
   sequenceNumber: Int!
   """Server-generated epoch milliseconds timestamp."""
   epochMillis: BigInt!

@@ -4,14 +4,26 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.3.0**. Whether that is *published* is
+**Current package:** `package.json` is **15.5.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**15.3.0 adds** the ck-api v1.67 surface (`channel_name` on channel
+**15.5.0 adds** webcam video and the server-announced departure (Buddy `v0.25.x`,
+ck-api `v1.87.x`): `udp.sendVideoPacket` / `udp.sendVideoFrame`, the `video` and
+`actorLeft` handlers, `ClientVideoNotification` / `ActorLeftNotification`, the pure
+`media/video-frames.ts` (6-byte fragment header, `fragmentFrame`,
+`VideoFrameAssembler`; the seven fixtures CrowdyCPP mirrors), and
+`RemoteActorStore.remove` wired to `actorLeft` so `onLeave` fires the moment the
+server says so rather than after the 12 s reap. Video is gated by `use_video_chat`
+(bit 9), opt-in on the app's tier; the world grid follows the tier for it since
+ck-api `v1.87.1`. On the GraphQL proxy a frame is a mutation PER FRAGMENT -- use
+`binaryTransport` for live video. The wire contract is published under "Wire
+formats" on docs.crowdedkingdoms.com.
+
+**15.3.0 added** the ck-api v1.67 surface (`channel_name` on channel
 notifications, the two `NOTIFICATION_CHANNEL_*` lint codes,
 `NOTIFICATION_UNDELIVERABLE`, the two notification counters on
 `GmAppDiagnostics`), the `kit/notifications.ts` builders, and a `quarantine`
@@ -234,8 +246,24 @@ assumes a cadence will silently stall while nobody is playing.
 
 Blocks with Friends (crowdy.games, source not public) is the complete
 consumer of these surfaces: World Stores + kit blueprints + a hand-authored
-remainder. The [build-a-game tutorial](https://docs.crowdedkingdoms.com/build-a-game/intro)
-walks the same patterns with public code.
+remainder. **The public consumer is
+[`CrowdedKingdoms/the-construct`](https://github.com/CrowdedKingdoms/the-construct)**
+(2026-09-07): an engine-agnostic starter over this SDK with two renderers, the
+Crowdy Studio embed with CLIENT mods, kit-seeded model, and an in-app org → app
+→ tier → seed wizard, verified end to end on dev by a third-party account. It
+pins the tier's exact prerelease per branch and its `AGENTS.md` lists the
+platform facts it depends on. It is also the
+[build-a-game tutorial](https://docs.crowdedkingdoms.com/build-a-game/intro)'s
+companion since 2026-09-07; `simple-web-demo` (the June 2026 companion with a
+`file:` SDK dependency) was deleted the same day.
+
+Papercuts The Construct hit in this SDK (each worked around there; fix here):
+`ChunkStore.setVoxel` without `state` sends `voxelState: ''` and the API refuses
+it; `PlayerCodeBroker` ticks a client mod only when `tickIntervalMs` is set, which
+the embed docs' minimal example omits; `starter-projects.ts` declares only
+`crowdy-compute-sdk` although `host_call` takes a `serde_json::Value`; the
+in-flight `actorUpdate` at the instant of `refreshGameplayToken()` is refused
+`UNAUTHORIZED` once.
 
 ## Docs
 

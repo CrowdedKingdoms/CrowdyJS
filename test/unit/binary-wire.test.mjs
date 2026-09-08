@@ -35,6 +35,7 @@ const SERIALIZERS = {
   actorUpdateDefaults: wire.serializeActorUpdate,
   voxelUpdate: wire.serializeVoxelUpdate,
   audioPacket: wire.serializeAudioPacket,
+  videoPacket: wire.serializeVideoPacket,
   textPacket: wire.serializeTextPacket,
   clientEvent: wire.serializeClientEvent,
   singleActorMessage: wire.serializeSingleActorMessage,

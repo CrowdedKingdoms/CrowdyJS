@@ -1,0 +1,3 @@
+mutation SendVideoPacket($input: ClientVideoPacketInput!) {
+  sendVideoPacket(input: $input)
+}

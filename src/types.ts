@@ -312,6 +312,34 @@ export interface ClientAudioPacketInput {
   sequenceNumber?: number;
 }
 
+// Client Video Packet
+/**
+ * Input for sending ONE webcam video fragment, broadcast to nearby players. `videoData` is base64 of a 6-byte fragment header plus a slice of the encoded frame (see `fragmentFrame`); a frame crosses as up to 16 of these.
+ */
+export interface ClientVideoPacketInput {
+  /** Id of the app the video is sent from. */
+  appId: number;
+  /** Chunk the video source is located in. */
+  chunk: ChunkCoordinatesInput;
+  /** The video source's 32-ASCII-character id (typically the player's). */
+  uuid: string;
+  /** One video fragment (6-byte header + frame slice), base64-encoded. */
+  videoData: string;
+  /** Chunk replication distance, `0`–`8` (clamped). Defaults to `1` for video; every receiver in range pays the egress bytes. */
+  distance?: number;
+  /**
+   * Decay algorithm (`0` none, `1` exponential, `2`–`5` linear 50/25/10/5%).
+   * Defaults server-side to `0` (none) for video packets.
+   */
+  decayRate?: number;
+  /**
+   * Client-assigned correlation id (uint8 `0`–`255`, wraps modulo 256).
+   * **Correlation only** — not an idempotency key. Echoed on any
+   * `GenericErrorResponse` for this send.
+   */
+  sequenceNumber?: number;
+}
+
 // Client Text Packet
 /**
  * Input for sending a text/chat message, broadcast to nearby players.
@@ -551,6 +579,65 @@ export interface ClientAudioNotification {
 }
 
 /**
+ * Fan-out notification carrying ONE webcam video fragment from a nearby client (Buddy v0.25.0). Reassemble with `VideoFrameAssembler`.
+ * Delivered on the `udpNotifications` subscription.
+ */
+export interface ClientVideoNotification {
+  /** Discriminator for the {@link UdpNotification} union. */
+  __typename: 'ClientVideoNotification';
+  /** Id of the app the video is from ({@link BigInt} decimal string). */
+  appId: BigInt;
+  /** X coordinate of the video source's chunk ({@link BigInt} int64 decimal string). */
+  chunkX: BigInt;
+  /** Y coordinate of the video source's chunk ({@link BigInt} int64 decimal string). */
+  chunkY: BigInt;
+  /** Z coordinate of the video source's chunk ({@link BigInt} int64 decimal string). */
+  chunkZ: BigInt;
+  /** Chunk replication distance (`0`–`8`) from the original message. */
+  distance: number;
+  /** Decay algorithm (`0`–`5`) from the original message. */
+  decayRate: number;
+  /** The 32-ASCII-character id of the video source (typically the player). */
+  uuid: string;
+  /** One video fragment (6-byte header + frame slice), base64-encoded (decode with {@link decodeBase64}). */
+  videoData: string;
+  /** The sender's sequence number for this message (`0`–`255`). */
+  sequenceNumber: number;
+  /** Server-generated timestamp in epoch milliseconds ({@link BigInt} string). */
+  epochMillis: BigInt;
+}
+
+/**
+ * The server stopped considering an actor present (Buddy v0.25.0): emitted ONCE
+ * over the actor's last chunk about five seconds after its last update, never for
+ * a mere server migration. Treat a later {@link ActorUpdateNotification} for the
+ * same `uuid` as a rejoin. The World Stores remove the actor and fire `onLeave`
+ * on receipt.
+ */
+export interface ActorLeftNotification {
+  /** Discriminator. */
+  __typename: 'ActorLeftNotification';
+  /** Id of the app the actor was in ({@link BigInt} decimal string). */
+  appId: string;
+  /** X coordinate of the actor's last chunk ({@link BigInt} int64 decimal string). */
+  chunkX: string;
+  /** Y coordinate of the actor's last chunk ({@link BigInt} int64 decimal string). */
+  chunkY: string;
+  /** Z coordinate of the actor's last chunk ({@link BigInt} int64 decimal string). */
+  chunkZ: string;
+  /** Replication distance (0–8) the notification was fanned out over. */
+  distance: number;
+  /** The 32-ASCII-character id of the actor that left. */
+  uuid: string;
+  /** `0` = STALE (it stopped updating). `1` is reserved; treat anything else as STALE. */
+  leftReason: number;
+  /** Correlation byte from the datagram tail (always 0 today). */
+  sequenceNumber: number;
+  /** Server-generated epoch milliseconds ({@link BigInt} decimal string). */
+  epochMillis: string;
+}
+
+/**
  * Fan-out notification carrying a nearby client's text/chat message.
  * Delivered on the `udpNotifications` subscription.
  */
@@ -677,6 +764,8 @@ export type UdpNotification =
   | VoxelUpdateNotification
   | VoxelUpdateResponse
   | ClientAudioNotification
+  | ClientVideoNotification
+  | ActorLeftNotification
   | ClientTextNotification
   | ClientEventNotification
   | ServerEventNotification
@@ -716,6 +805,10 @@ export type VoxelUpdateHandler = (notification: VoxelUpdateNotification) => void
 export type VoxelUpdateResponseHandler = (response: VoxelUpdateResponse) => void;
 /** Callback for a {@link ClientAudioNotification} (nearby voice/audio packet). */
 export type ClientAudioHandler = (notification: ClientAudioNotification) => void;
+/** Callback for a {@link ClientVideoNotification} (one nearby webcam video fragment). */
+export type ClientVideoHandler = (notification: ClientVideoNotification) => void;
+/** Callback for an {@link ActorLeftNotification} (an actor stopped being present). */
+export type ActorLeftHandler = (notification: ActorLeftNotification) => void;
 /** Callback for a {@link ClientTextNotification} (nearby text/chat message). */
 export type ClientTextHandler = (notification: ClientTextNotification) => void;
 /** Callback for a {@link ClientEventNotification} (nearby custom client event). */

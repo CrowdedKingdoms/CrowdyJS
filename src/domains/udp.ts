@@ -16,6 +16,8 @@ import {
   type SendVoxelUpdateMutationVariables,
   SendAudioPacketDocument,
   type SendAudioPacketMutationVariables,
+  SendVideoPacketDocument,
+  type SendVideoPacketMutationVariables,
   SendTextPacketDocument,
   type SendTextPacketMutationVariables,
   SendClientEventDocument,
@@ -36,9 +38,12 @@ import {
   serializeClientEvent,
   serializeSingleActorMessage,
   serializeTextPacket,
+  serializeVideoPacket,
   serializeVoxelUpdate,
   type RelaySignContext,
 } from '../binary-wire.js';
+import { fragmentFrame, type VideoCodec } from '../media/video-frames.js';
+import { encodeBase64 } from '../utils.js';
 
 /**
  * UDP proxy access for browser-style clients that can't open raw UDP sockets.
@@ -433,6 +438,76 @@ export class UdpAPI {
     const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
     await this.sendAudioPacket(request);
     return wait;
+  }
+
+  /**
+   * Send ONE webcam video fragment, fanned out to nearby actors as a
+   * `ClientVideoNotification` (Buddy v0.25.0). Fire-and-forget; opens a UDP
+   * proxy session automatically. Gated by the `use_video_chat` runtime
+   * permission at app AND grid level — without it the game server replies
+   * asynchronously with a `GenericErrorResponse` (`errorCode` `UNAUTHORIZED`).
+   * Prefer {@link sendVideoFrame}, which fragments a whole encoded frame; this is
+   * the single-datagram primitive beneath it.
+   *
+   * On the GraphQL proxy path this is a mutation PER FRAGMENT (30–80 a second for
+   * live video). Enable `binaryTransport` so video rides the relay.
+   *
+   * @param input - {@link ClientVideoPacketInput}: `videoData` is base64 of a
+   *   6-byte fragment header plus a slice of the encoded frame (see
+   *   `fragmentFrame`); `distance` defaults to 1, `decayRate` to 0.
+   * @returns `true` when accepted for sending — **not** confirmation of delivery.
+   */
+  async sendVideoPacket(
+    input: SendVideoPacketMutationVariables['input'],
+  ): Promise<boolean> {
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeVideoPacket(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('video', input);
+      return viaRelay;
+    }
+    const data = await this.gql.request(SendVideoPacketDocument, { input });
+    this.record('video', input);
+    return data.sendVideoPacket;
+  }
+
+  /**
+   * Send one encoded webcam frame (a JPEG or WebP file) as however many
+   * fragments it needs (at most 16, ~17.8 KB), each a {@link sendVideoPacket}.
+   * Receivers reassemble with `VideoFrameAssembler`. Every receiver in range
+   * pays the egress bytes: keep `distance` at 0–1, frames small (≤ 8 KB) and
+   * the rate low (≤ 10 fps).
+   *
+   * @param input - `appId`, `chunk`, `uuid`, optional `distance` / `decayRate`,
+   *   plus `frame` (encoded bytes), `frameId` (0–65535, +1 per frame, wraps —
+   *   the caller keeps the counter) and `codec` (0 JPEG default, 1 WebP).
+   * @returns the number of fragments sent.
+   * @throws {RangeError} when the frame exceeds 16 fragments; nothing is sent.
+   */
+  async sendVideoFrame(input: {
+    appId: string;
+    chunk: { x: string; y: string; z: string };
+    uuid: string;
+    frame: Uint8Array;
+    frameId: number;
+    codec?: VideoCodec;
+    distance?: number;
+    decayRate?: number;
+  }): Promise<number> {
+    const fragments = fragmentFrame(input.frame, input.frameId, input.codec);
+    for (const fragment of fragments) {
+      await this.sendVideoPacket({
+        appId: input.appId,
+        chunk: input.chunk,
+        uuid: input.uuid,
+        videoData: encodeBase64(fragment),
+        distance: input.distance,
+        decayRate: input.decayRate,
+        sequenceNumber: input.frameId & 0xff,
+      });
+    }
+    return fragments.length;
   }
 
   /**
