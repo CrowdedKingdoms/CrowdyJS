@@ -644,20 +644,32 @@ export class GameModelAPI {
    *
    * Note: an authority denial or an expression-evaluation error is **not** a
    * thrown exception — it comes back as a resolved result with `success: false`
-   * and an `errorMessage`. Inspect `result.success` rather than relying on
-   * `try/catch` for those cases.
+   * and `fault.code` (`NOT_ALLOWED` for a policy refusal). Inspect
+   * `result.success` rather than relying on `try/catch` for those cases.
+   *
+   * **The invoke policy applies to app admins too** (ck-api v1.89.0). Your own
+   * account, testing your own game, is judged exactly like a player's. Before
+   * that release a `manage_apps` holder skipped every policy implicitly, which
+   * made policies look unenforced to the people who wrote them. Administrative
+   * tooling that needs to run a function regardless of its policy sets
+   * `bypassPolicy: true`: honoured only with `manage_apps` (a GraphQL
+   * `NOT_ALLOWED` error otherwise, nothing runs), reported back as
+   * `policyBypassed: true` on the result, and audit-logged server-side.
    *
    * @param input - {@link InvokeFunctionInput}: `appId` (decimal string), the
    *   `functionName`, the `selfContainerId` (the container the function runs
    *   against, referenced as `self` in expressions), an optional `sessionId`
-   *   context, and `paramsJson` (a JSON-object string of params).
+   *   context, `paramsJson` (a JSON-object string of params), and the optional
+   *   administrative `bypassPolicy` flag described above.
    * @returns A {@link GmInvokeResult}: `success`, the logged `eventId`, the
    *   JSON-encoded `returnValueJson`, the `mutationsApplied` (each with
-   *   before/after JSON values), and `errorMessage` when `success` is `false`.
+   *   before/after JSON values), `fault` when `success` is `false`, and
+   *   `policyBypassed` when the call skipped the policy on purpose.
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`,
    *   `NOT_FOUND` for an unknown function/container, `FORBIDDEN` if the function
-   *   isn't `player`-scope, or `BAD_USER_INPUT` for malformed params. (Authority
-   *   and evaluation failures surface as `success: false`, see above.)
+   *   isn't `player`-scope, `NOT_ALLOWED` for `bypassPolicy` without
+   *   `manage_apps`, or `BAD_USER_INPUT` for malformed params. (Authority and
+   *   evaluation failures surface as `success: false`, see above.)
    */
   async invoke(
     input: GameModelInvokeMutationVariables['input'],

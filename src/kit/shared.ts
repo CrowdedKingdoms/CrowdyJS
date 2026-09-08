@@ -117,6 +117,7 @@ export async function kitInvoke<T = unknown>(
           eventId: '',
           functionName: input.functionName,
           success: false,
+          policyBypassed: null,
           returnValueJson: null,
           // Synthesised locally from a THROWN verdict, so there is no server
           // attribution to carry. Null rather than a guessed blame: `playerFaultOf`

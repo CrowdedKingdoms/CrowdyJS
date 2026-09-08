@@ -6510,6 +6510,10 @@ type GmInvokeResult {
   A platform-authored sentence matching `fault`, safe to show a player. It carries no engine detail on purpose (decision D4): the failing expression, the timeout and the gas figures are in gameModelEvents and the fault record, where a developer reads them and a player does not.
   """
   errorMessage: String @deprecated(reason: "Read `fault` instead and choose your own wording. This field no longer carries the engine's error text and will be removed once no client depends on it.")
+  """
+  True when the caller asked for bypassPolicy and held manage_apps, so the function's invoke policy was NOT evaluated for this call. Null/false otherwise. An administrative invoke that did not set bypassPolicy was judged exactly like a player's.
+  """
+  policyBypassed: Boolean
 }
 
 """An audit-log entry recording one function invocation and its outcome."""
@@ -11120,7 +11124,7 @@ type Mutation {
     edgeId: String!
   ): Boolean!
   """
-  Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). Invoke-policy denials are gameplay verdicts, NOT exceptions: they return success=false with errorMessage and log a failure event (observable via gameModelEvents). Scope violations (calling a server-scope function as a non-admin, or an internal function directly) are misconfigurations and throw FORBIDDEN. This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here. RATE LIMITED per player per app, defaulting to 120 invocations per 10 seconds: over the limit the call is refused with extensions.code RATE_LIMITED, extensions.blame 'budget' (the caller's own budget — not a fault in the game's code and not a platform failure) and extensions.retryAfterMs. A client that awaits each response cannot reach the limit, because the per-call ceiling already bounds a serial caller well below it.
+  Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). Invoke-policy denials are gameplay verdicts, NOT exceptions: they return success=false with errorMessage and log a failure event (observable via gameModelEvents). Scope violations (calling a server-scope function as a non-admin, or an internal function directly) are misconfigurations and throw FORBIDDEN. THE POLICY APPLIES TO APP ADMINS TOO (since v1.89.0): a manage_apps holder is judged exactly like a player unless the input sets bypassPolicy=true, which is refused for anyone else, marks the result policyBypassed=true and is audit-logged. This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here. RATE LIMITED per player per app, defaulting to 120 invocations per 10 seconds: over the limit the call is refused with extensions.code RATE_LIMITED, extensions.blame 'budget' (the caller's own budget — not a fault in the game's code and not a platform failure) and extensions.retryAfterMs. A client that awaits each response cannot reach the limit, because the per-call ceiling already bounds a serial caller well below it.
   """
   gameModelInvoke(
     """
@@ -13921,6 +13925,10 @@ input InvokeFunctionInput {
   sessionId: String
   """JSON object of params."""
   paramsJson: String
+  """
+  Administrative override: skip the function's invoke policy for this one call. Only a caller holding manage_apps on the app may set it (NOT_ALLOWED otherwise, nothing runs); the result then carries policyBypassed=true and the call is audit-logged. Default false. Until v1.89.0 every manage_apps holder bypassed every invoke policy IMPLICITLY, so a developer testing their own game with their own account saw policies that appeared not to be enforced; now an admin's invoke is judged exactly like a player's unless they say otherwise.
+  """
+  bypassPolicy: Boolean
 }
 
 """
