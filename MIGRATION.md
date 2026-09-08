@@ -1,3 +1,68 @@
+# CrowdyJS v15.6 — a browser game signs in through Studio, not through `auth.*`
+
+**Nothing removed, two methods added, and a platform rule that decides which
+of the two sign-in paths your code may take.** ck-api `v1.88.0` (2026-09-08).
+
+## Direct sign-in is first-party only
+
+`auth.login`, `auth.register`, `auth.requestLoginLink` / `completeLoginLink`,
+`auth.socialLoginStart` / `socialLoginComplete`, `auth.checkAuthMethod`,
+`auth.requestPasswordReset` / `resetPassword` are now served only to:
+
+- **first-party browser origins** — Studio and the crowdy.games host; and
+- **non-browser callers** — anything that sends no `Origin` header (Node, a
+  CLI, CrowdyCPP, tests).
+
+From a browser page on **any other origin** (every customer's game) the API
+refuses with `extensions.code` **`HOSTED_SIGN_IN_REQUIRED`** (403).
+`isHostedSignInRequiredError(e)` recognises it. The reason is the player's
+password: a form on a customer's domain that collects it is indistinguishable,
+to the platform and to the player, from a phishing page.
+
+## What to call instead: `portal.signIn` and `portal.handleSignInCallback`
+
+```ts
+// boot: finish a sign-in we are returning from (no-op without ?code=)
+const entered = await client.portal.handleSignInCallback();
+
+// "Sign in with Crowded Kingdoms" button
+await client.portal.signIn({ appId, redirectUri: `${location.origin}/auth/callback` });
+```
+
+`signIn` sends the player to Studio's hosted `/authorize` with a PKCE
+challenge; the player signs in there (and consents, if your app is not
+trusted); Studio redirects back to your `redirectUri` with a one-time code;
+`handleSignInCallback` exchanges it for an **app-scoped token** and stores it
+on the client. You never held a session token, and you never needed one.
+
+- The hosted page is derived from the API host you configured
+  (`ck.<tier>.crowdedkingdoms.com` -> `studio.<tier>.crowdedkingdoms.com/authorize`,
+  `localhost:3000` -> `localhost:3001`). Pass `authorizeUrl` to override;
+  `defaultHostedSignInUrl(endpoint)` is the derivation.
+- Your `redirectUri`'s **origin** must be one of the app's registered redirect
+  URIs (Studio > Apps > client settings). That same entry is what puts your
+  origin on the API's CORS allow-list, live, without a restart.
+- `beginEntry` / `completeEntry` are the same two steps without the defaults
+  and are unchanged. `handleAuthorizeRequest` is what Studio's page calls.
+
+## If you are first-party or not in a browser, nothing changes
+
+Studio, the Overworld lobby, CrowdyCPP, load tools and scripts keep calling
+`auth.login` / `register` and then `portal.mintAppToken(appId)`.
+
+## Also in this release (server side, no SDK change)
+
+- `resetPassword` now revokes **every** session of the account; `changePassword`
+  every session but the calling one. A client that kept a second tab signed in
+  will find it signed out after either.
+- Ten failed `login` attempts for one address in fifteen minutes answer
+  `RATE_LIMITED`; `register`, `checkAuthMethod`, the reset and resend mutations
+  and `requestLoginLink` are rate-limited per address and per client too.
+- GraphQL introspection is off on every tier; the SDL is published at
+  docs.crowdedkingdoms.com and shipped in this package.
+
+---
+
 # CrowdyJS v15.4 — nothing runs for an app with no player in it
 
 **One removal, one addition, and a change in what the platform does that no SDK

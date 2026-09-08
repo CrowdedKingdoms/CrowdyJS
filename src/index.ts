@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '15.5.0';
+export const VERSION = '15.6.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -484,6 +484,8 @@ export {
   PortalAPI,
   BrowserSessionPkceStore,
   PortalConsentRequiredError,
+  defaultHostedSignInUrl,
+  isHostedSignInRequiredError,
   type AppTokenResponse,
   type CurrentServer,
   type PortalAuthorizationCode,
@@ -491,6 +493,7 @@ export {
   type AppAuthorizationGrant,
   type PkceStore,
   type BeginEntryParams,
+  type SignInParams,
 } from './domains/portal.js';
 export { generatePkcePair, generateState, type PkcePair } from './pkce.js';
 export { PlatformAPI, type PlatformConfig } from './domains/platform.js';

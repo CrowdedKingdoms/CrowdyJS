@@ -13,15 +13,29 @@
  * client whose token store holds that game's app token.
  *
  * Browser handoff (cross-origin) is an OAuth2 Authorization-Code + PKCE flow:
- *   1. game origin: `beginEntry()` -> redirect the player to the Overworld
- *      `/authorize` page carrying a PKCE challenge + the game's redirect URI.
- *   2. Overworld origin (holds the session): `handleAuthorizeRequest()` ->
+ *   1. game origin: `signIn()` (or the lower-level `beginEntry()`) -> redirect
+ *      the player to Studio's hosted `/authorize` page carrying a PKCE
+ *      challenge + the game's redirect URI.
+ *   2. Studio origin (holds the session): `handleAuthorizeRequest()` ->
  *      mints a one-time code and redirects back to the game.
- *   3. game origin: `completeEntry()` -> exchanges the code (+ the PKCE verifier
- *      it kept locally) for an app token and stores it.
+ *   3. game origin: `handleSignInCallback()` (or `completeEntry()`) ->
+ *      exchanges the code (+ the PKCE verifier it kept locally) for an app
+ *      token and stores it.
  *
- * Native / same-origin callers can skip the redirect dance and call
- * `mintAppToken(appId)` directly with a session token.
+ * THIS IS THE ONLY WAY A BROWSER GAME ON ITS OWN DOMAIN SIGNS A PLAYER IN
+ * (ck-api v1.88.0, 2026-09-08). The direct sign-in mutations behind
+ * `client.auth.login` / `register` / magic link / social are served only to
+ * first-party origins (Studio, the Crowdy Games host); from any other browser
+ * origin they are refused with `HOSTED_SIGN_IN_REQUIRED`
+ * ({@link isHostedSignInRequiredError}). The reason is the player's password:
+ * a form on a customer's domain that collects it is indistinguishable, to the
+ * platform and to the player, from a phishing page. Hosted sign-in means the
+ * password is only ever typed into Studio and the game receives a token
+ * confined to itself.
+ *
+ * Native / first-party / non-browser callers (no `Origin` header) can skip
+ * the redirect dance: sign in with `client.auth.*` and call
+ * `mintAppToken(appId)` directly with the session token.
  */
 
 import { parse } from 'graphql';
@@ -228,12 +242,84 @@ const SetAppClientSettingsDocument = parse(
 export interface BeginEntryParams {
   /** Target app id (decimal string). */
   appId: string;
-  /** The Overworld identity origin's authorize page, e.g. `https://overworld.example.com/authorize`. */
+  /** The hosted sign-in page, e.g. `https://studio.dev.crowdedkingdoms.com/authorize`. */
   authorizeUrl: string;
-  /** Where the Overworld should send the player back (this game's callback). */
+  /** Where Studio should send the player back (this game's callback). */
   redirectUri: string;
   /** Optional CSRF/correlation state; one is generated if omitted. */
   state?: string;
+}
+
+export interface SignInParams {
+  /** Target app id (decimal string). */
+  appId: string;
+  /**
+   * Where Studio sends the player back (this game's callback URL). Its ORIGIN
+   * must be one of the app's registered redirect URIs (Studio > Apps > client
+   * settings), which is also what puts the origin on the API's CORS allow-list.
+   */
+  redirectUri: string;
+  /**
+   * The hosted sign-in page. Defaults to the Studio `/authorize` of the tier
+   * this client dials ({@link defaultHostedSignInUrl}); pass it explicitly for
+   * a self-hosted or unusual layout.
+   */
+  authorizeUrl?: string;
+  /** Optional CSRF/correlation state; one is generated if omitted. */
+  state?: string;
+  /**
+   * `false` to only compute and return the URL without navigating (tests,
+   * SSR, a custom link). Default: navigate with `location.assign` when a
+   * browser `location` exists.
+   */
+  navigate?: boolean;
+}
+
+/**
+ * The hosted sign-in page for the tier a GraphQL endpoint belongs to.
+ *
+ * The CK API answers on `ck.<tier>.crowdedkingdoms.com` and Studio on
+ * `studio.<tier>.crowdedkingdoms.com` (infra-control-plane `dns-tier.ts`,
+ * `CK_STUDIO_PUBLIC_HOST_BY_TIER`), so the first label is the only difference;
+ * locally the API is on :3000 and Studio on :3001. Anything else has no
+ * convention to lean on and the caller must pass `authorizeUrl`.
+ */
+export function defaultHostedSignInUrl(graphqlEndpoint: string): string {
+  const url = new URL(graphqlEndpoint);
+  const host = url.hostname.toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return `${url.protocol}//${host}:3001/authorize`;
+  }
+  if (host.startsWith('ck.')) {
+    return `https://studio.${host.slice('ck.'.length)}/authorize`;
+  }
+  throw new Error(
+    `Cannot derive the hosted sign-in page from ${graphqlEndpoint}; pass authorizeUrl explicitly (the tier's Studio origin + /authorize).`,
+  );
+}
+
+/**
+ * `HOSTED_SIGN_IN_REQUIRED`: a direct sign-in mutation (`auth.login`,
+ * `auth.register`, magic link, social, reset...) was called from a browser
+ * origin that is not first-party. The remedy is {@link PortalAPI.signIn}.
+ * ck-api v1.88.0.
+ */
+export function isHostedSignInRequiredError(error: unknown): boolean {
+  const e = error as {
+    code?: unknown;
+    extensions?: { code?: unknown };
+    graphQLErrors?: Array<{ extensions?: { code?: unknown } }>;
+    message?: unknown;
+  } | null;
+  const codes = [
+    e?.code,
+    e?.extensions?.code,
+    ...(e?.graphQLErrors ?? []).map((g) => g.extensions?.code),
+  ];
+  if (codes.includes('HOSTED_SIGN_IN_REQUIRED')) return true;
+  return /HOSTED_SIGN_IN_REQUIRED|only available to first-party/i.test(
+    typeof e?.message === 'string' ? e.message : '',
+  );
 }
 
 export class PortalAPI {
@@ -355,12 +441,64 @@ export class PortalAPI {
     return data.setAppClientSettings;
   }
 
+  // ----- Hosted sign-in (the browser game's whole flow, two calls) -----------
+
+  /**
+   * Send the player to Studio's hosted sign-in and come back with an app token.
+   *
+   * ```ts
+   * // on the "Sign in with Crowded Kingdoms" button:
+   * await client.portal.signIn({ appId, redirectUri: `${location.origin}/auth/callback` });
+   *
+   * // on /auth/callback (or unconditionally on boot -- it is a no-op without ?code=):
+   * const entered = await client.portal.handleSignInCallback();
+   * if (entered) start(entered); // client now holds an app-scoped token
+   * ```
+   *
+   * This is `beginEntry()` with the hosted page defaulted to the tier's Studio
+   * and the navigation done for you. It is the ONLY sign-in a browser game on
+   * its own domain can use: `client.auth.login` and friends are refused from a
+   * non-first-party origin with `HOSTED_SIGN_IN_REQUIRED`. Resolves to the URL
+   * navigated to (useful when `navigate: false`).
+   */
+  async signIn(params: SignInParams): Promise<string> {
+    const authorizeUrl =
+      params.authorizeUrl ?? defaultHostedSignInUrl(this.api.getEndpoint());
+    const url = await this.beginEntry({
+      appId: params.appId,
+      authorizeUrl,
+      redirectUri: params.redirectUri,
+      state: params.state,
+    });
+    const loc = (globalThis as { location?: { assign?: (u: string) => void } })
+      .location;
+    if (params.navigate !== false && typeof loc?.assign === 'function') {
+      loc.assign(url);
+    }
+    return url;
+  }
+
+  /**
+   * The return leg of {@link signIn}: exchange the `?code=` Studio sent back
+   * for an app-scoped token and store it on this client. Returns null when the
+   * URL carries no code, so it is safe to call on every boot. In a browser it
+   * also strips `code` and `state` from the address bar, so a reload does not
+   * try to spend a code that has already been used (a replay is refused).
+   */
+  async handleSignInCallback(
+    search?: string,
+  ): Promise<AppTokenResponse | null> {
+    const result = await this.completeEntry(search);
+    if (result && search === undefined) stripCodeFromLocation();
+    return result;
+  }
+
   // ----- Browser PKCE redirect helpers -------------------------------------
 
   /**
    * Destination-game side, step 1: generate a PKCE pair, persist the verifier,
-   * and return the Overworld authorize URL to navigate to. The caller does
-   * `window.location.assign(url)`.
+   * and return the hosted sign-in URL to navigate to. The caller does
+   * `window.location.assign(url)`. Prefer {@link signIn}, which does both.
    */
   async beginEntry(params: BeginEntryParams): Promise<string> {
     const state = params.state ?? generateState();
@@ -376,9 +514,11 @@ export class PortalAPI {
   }
 
   /**
-   * Overworld/identity side: handle an incoming `/authorize` request. Reads the
+   * Studio (identity) side: handle an incoming `/authorize` request. Reads the
    * game's params from the URL, mints a code with the session token, and returns
-   * the URL to redirect the player back to (carrying `code` + `state`).
+   * the URL to redirect the player back to (carrying `code` + `state`). Studio's
+   * own `/authorize` page is the production caller; a self-hosted identity page
+   * may use it too.
    */
   async handleAuthorizeRequest(
     search?: string,
@@ -440,4 +580,22 @@ export class PortalAPI {
 function defaultSearch(): string {
   const loc = (globalThis as { location?: { search?: string } }).location;
   return loc?.search ?? '';
+}
+
+/** Remove `code` and `state` from the address bar without a navigation. */
+function stripCodeFromLocation(): void {
+  const g = globalThis as {
+    location?: { href?: string };
+    history?: { replaceState?: (a: unknown, b: string, c: string) => void };
+  };
+  if (!g.location?.href || typeof g.history?.replaceState !== 'function') return;
+  try {
+    const url = new URL(g.location.href);
+    if (!url.searchParams.has('code')) return;
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    g.history.replaceState(null, '', url.toString());
+  } catch {
+    // Not a parseable location (tests, exotic embeds): nothing to strip.
+  }
 }

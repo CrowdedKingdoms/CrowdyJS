@@ -5389,17 +5389,17 @@ export type Mutation = {
   cancelSharedSubscription: AppSharedSubscription;
   /** Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout. */
   capturePaypalCheckout: Checkout;
-  /** Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success. Refuses with extensions.code INVALID_CURRENT_PASSWORD (403) when the current password is wrong, and PASSWORD_NOT_SET (409) when the account has no password to change — use setInitialPassword for that, which needs only the session. NEITHER of those means the session is invalid, and neither is UNAUTHENTICATED: both were until v1.60.0, so a client that signs the user out on UNAUTHENTICATED was signing them out over a typo. Existing sessions are not revoked. */
+  /** Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success. Refuses with extensions.code INVALID_CURRENT_PASSWORD (403) when the current password is wrong, and PASSWORD_NOT_SET (409) when the account has no password to change — use setInitialPassword for that, which needs only the session. NEITHER of those means the session is invalid, and neither is UNAUTHENTICATED: both were until v1.60.0, so a client that signs the user out on UNAUTHENTICATED was signing them out over a typo. Every OTHER session for the account is revoked (with the app tokens minted from it); the session that made this call stays valid, so the client does not need to sign in again. */
   changePassword: Scalars['Boolean']['output'];
   /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
   claimFreeAppAccess: AppUserAccess;
-  /** Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus player-code keys already carried by the caller's tier, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain. */
+  /** Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus the player-code keys and use_video_chat where the caller's tier already carries them, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain. */
   claimGridChunk: ChunkClaimResult;
   /** Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses (ownership arrives only via grid purchase, P4b). The grid must exist and have no current owner; game rules gate who may attempt a claim. */
   claimGridOwnership: GridClaimResult;
   /** Remove an app's compute allowance, returning it to observation against the platform reference allowance. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
   clearAppComputeBudget: Scalars['Boolean']['output'];
-  /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. */
+  /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   completeLoginLink: AuthResponse;
   /** Delete a compute module and (via cascade) its versions, triggers, and lease. Run history is retained for auditing. Returns true when a module was deleted. Requires the org 'manage_compute' permission. */
   computeDeleteModule: Scalars['Boolean']['output'];
@@ -5421,7 +5421,7 @@ export type Mutation = {
   computeUpsertModule: WasmModule;
   /** Bind a trigger to a compute module: a tick loop (tickHz, clamped by policy), an event subscription (model or compute events), or a client-invokable export (with an optional invoke policy). Requires the org 'manage_compute' permission. */
   computeUpsertTrigger: WasmModuleTrigger;
-  /** Confirms a user email address using the token from the confirmation email (also enables password sign-in for the account). Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call). */
+  /** Confirms a user email address using the token from the confirmation email (also enables password sign-in for the account). Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   confirmEmail: Scalars['Boolean']['output'];
   /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
   connectUdpProxy: UdpProxyConnectionStatus;
@@ -5637,7 +5637,7 @@ export type Mutation = {
   leaveTeam: Scalars['Boolean']['output'];
   /** Link an additional federated identity (from a socialLoginStart callback) to the signed-in account. Requires a session token; throws if the identity is already linked to another account. */
   linkIdentity: UserIdentity;
-  /** Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed. */
+  /** Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed. First-party origins only: a browser page on any other origin is refused with HOSTED_SIGN_IN_REQUIRED (403) and must use the hosted sign-in redirect (CrowdyJS portal.signIn) instead; requests with no Origin header (native clients, scripts) are unaffected. Rate-limited per address and per client. */
   login: AuthResponse;
   /** Ends the current session by deleting the game_token that authenticated this request; other devices stay logged in. An identity session logout also cascades to (revokes) every app token it minted. Returns false if no token was resolved. */
   logout: Scalars['Boolean']['output'];
@@ -5681,7 +5681,7 @@ export type Mutation = {
   refreshAppToken: AppTokenResponse;
   /** Request a refund of a paid acquisition (P4b). Allowed only within the refund window and before meaningful use (first install/fetch voids it), capped per buyer; a successful refund credits the wallet, reverses the ledger split, claws back the seller balance, revokes the acquisition, and drains installs. Returns cents refunded. */
   refundPlayerCodeAcquisition: Scalars['Int']['output'];
-  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email (e.g. created via magic link/social), the password is attached pending email confirmation and no session is returned, refused with extensions.code EMAIL_ALREADY_REGISTERED (409). It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public. */
+  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   register: AuthResponse;
   /** OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired. */
   reinstateOrganization: OrgRetirementType;
@@ -5697,9 +5697,9 @@ export type Mutation = {
   removeTeamMember: Scalars['Boolean']['output'];
   /** Renew a RENT acquisition (or extend a TIME_LIMITED window): a wallet charge on the same acquisition that pushes its expiry out. A drained install resumes on the next scheduler pass without re-consent. Paid modes only (P4b). */
   renewPlayerCodeAcquisition: PlayerCodeAcquisition;
-  /** Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public. */
+  /** Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   requestLoginLink: RequestLoginLinkResult;
-  /** Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public. */
+  /** Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   requestPasswordReset: Scalars['Boolean']['output'];
   /** Pay out the calling player's payable balance to their Connect account (D6 minimum, 7-day delay, reserves enforced). Returns cents paid. */
   requestSellerPayout: Scalars['Int']['output'];
@@ -5707,9 +5707,9 @@ export type Mutation = {
   requestToJoinChannel: GroupMember;
   /** Request to join a request-only team (creates a pending membership a manager can approve via addTeamMember). Behaves identically to joinTeam; named for request-policy UIs. */
   requestToJoinTeam: GroupMember;
-  /** Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public. */
+  /** Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   resendConfirmationEmail: Scalars['Boolean']['output'];
-  /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call). Existing sessions are not revoked. */
+  /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). EVERY existing session for the account is revoked (and every app token minted from one): a reset is what an owner does after losing control of the account, so whoever held a session loses it. The user signs in again with the new password. */
   resetPassword: Scalars['Boolean']['output'];
   /** OPERATOR ONLY. Retires an organization: sets organizations.status to 'retired', stamps deleted_at, archives its apps, and writes a tombstone to org_retirements. RETIREMENT IS A STATE, NOT A DELETION — no wallet_transactions, org_billing_waivers, app_shared_usage_charges or other ledger row is altered or removed, so an auditor can still reconstruct exactly what this organization spent, with the same joins as before, indefinitely. There is no purge and no retention window, by decision rather than by omission: org ledger rows are retained forever (operator decision, 2026-08-21), so retirement is only ever a state. A retired organization's remaining wallet balance is FROZEN indefinitely by the same decision — held, not refunded and not forfeited — and the amount is recorded on the tombstone. AFTER RETIREMENT the org's API tokens stop authenticating, its members lose every org permission (super admins excepted, so this is reversible), and it is excluded from the caller's organization list — but it is still readable by id and slug, because a retired org that answers like a missing one is worse than one that says what it is. Refuses unless expectedSlug matches the org named by orgId, and refuses an organization holding money unless acknowledgeFrozenBalance is passed. Reverse it with reinstateOrganization. */
   retireOrganization: OrgRetirementType;
@@ -5809,9 +5809,9 @@ export type Mutation = {
   setTeamPolicy: AppGroupPolicy;
   /** Begins vaulting a card for off-session auto-billing. Returns a Stripe SetupIntent client secret the browser confirms; no charge is made here. Requires the 'manage_billing' org permission. */
   setupSharedPaymentMethod: PaymentMethodSetup;
-  /** Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public. */
+  /** Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   socialLoginComplete: AuthResponse;
-  /** Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public. */
+  /** Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   socialLoginStart: SocialLoginStart;
   /** Earn-to-mod: convert payable seller balance into the player wallet without a provider round-trip (07 §4.1). Returns cents credited. */
   spendPayoutBalanceToWallet: Scalars['Int']['output'];
@@ -8585,7 +8585,7 @@ export type Query = {
   channelRoles: Array<GroupRole>;
   /** List all active channels in an app (not just the caller's). */
   channels: Array<Group>;
-  /** Email-first adaptive login: check whether the account has password sign-in enabled. Public; does not reveal whether the email is registered. */
+  /** Email-first adaptive login: check whether the account has password sign-in enabled. Public. It answers true only for an account that has a password, so it does reveal that such an account exists; unknown addresses and password-less accounts both answer false. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited per address and per client. */
   checkAuthMethod: AuthMethodResult;
   /** Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckouts` instead. */
   checkouts: CheckoutsPage;
