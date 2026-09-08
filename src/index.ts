@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '15.4.2';
+export const VERSION = '15.5.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -98,6 +98,7 @@ export {
   parseRelayFrame,
   serializeActorUpdate,
   serializeAudioPacket,
+  serializeVideoPacket,
   serializeChannelMessage,
   serializeClientEvent,
   serializeSingleActorMessage,
@@ -105,6 +106,20 @@ export {
   serializeVoxelUpdate,
   type RelaySignContext,
 } from './binary-wire.js';
+export {
+  VIDEO_FRAGMENT_HEADER_BYTES,
+  MAX_VIDEO_FRAGMENT_BODY_BYTES,
+  MAX_VIDEO_FRAGMENTS,
+  VIDEO_FRAME_TIMEOUT_MS,
+  VIDEO_FRAGMENT_VERSION,
+  VideoCodec,
+  fragmentFrame,
+  parseVideoFragmentHeader,
+  isNewerFrameId,
+  VideoFrameAssembler,
+  type VideoFragmentHeader,
+  type AssembledVideoFrame,
+} from './media/video-frames.js';
 export {
   RealtimeMetrics,
   payloadBytesOf,
@@ -426,6 +441,8 @@ export type {
   VoxelUpdateNotification,
   VoxelUpdateResponse,
   ClientAudioNotification,
+  ClientVideoNotification,
+  ActorLeftNotification,
   ClientTextNotification,
   ClientEventNotification,
   ServerEventNotification,
@@ -435,6 +452,8 @@ export type {
   VoxelUpdateHandler,
   VoxelUpdateResponseHandler,
   ClientAudioHandler,
+  ClientVideoHandler,
+  ActorLeftHandler,
   ClientTextHandler,
   ClientEventHandler,
   ServerEventHandler,
@@ -569,6 +588,7 @@ export type {
   ActorUpdateRequestInput,
   VoxelUpdateRequestInput,
   ClientAudioPacketInput,
+  ClientVideoPacketInput,
   ClientTextPacketInput,
   ClientEventNotificationInput,
   UdpProxyConnectionStatus,
