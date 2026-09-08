@@ -702,3 +702,217 @@ test('pullRemoteAgentRevision skips while the human has unsaved edits', async ()
   );
   controller.destroy();
 });
+
+const FULL_STACK_CROWDY_JSON = `{
+  "server": "server",
+  "client": "client"
+}
+`;
+
+function boundGitHub(over = {}) {
+  const puts = [];
+  const files = {
+    'crowdy.json': FULL_STACK_CROWDY_JSON,
+    'server/Cargo.toml': '[package]\nname="server"',
+    'server/src/lib.rs': 'fn server() {}',
+    'client/Cargo.toml': '[package]\nname="client"',
+    'client/src/lib.rs': 'fn client() {}',
+    ...over.files,
+  };
+  return {
+    puts,
+    async status({ projectId } = {}) {
+      if (over.status) return over.status({ projectId });
+      if (projectId && over.unboundIds?.includes(projectId)) {
+        return { configured: true, connected: true, owner: null, repo: null, branch: null };
+      }
+      return {
+        configured: true,
+        connected: true,
+        accountLogin: 'BenjaminScholtens',
+        repositorySelection: 'all',
+        owner: 'BenjaminScholtens',
+        repo: 'crowdy-mod-github-connected-project-cd40',
+        branch: 'main',
+      };
+    },
+    async tree({ path }) {
+      if (!path) {
+        return [
+          { path: 'client', type: 'dir' },
+          { path: 'crowdy.json', type: 'file' },
+          { path: 'server', type: 'dir' },
+        ];
+      }
+      if (path === 'server') {
+        return [
+          { path: 'server/Cargo.toml', type: 'file' },
+          { path: 'server/src', type: 'dir' },
+        ];
+      }
+      if (path === 'server/src') {
+        return [{ path: 'server/src/lib.rs', type: 'file' }];
+      }
+      if (path === 'client') {
+        return [
+          { path: 'client/Cargo.toml', type: 'file' },
+          { path: 'client/src', type: 'dir' },
+        ];
+      }
+      if (path === 'client/src') {
+        return [{ path: 'client/src/lib.rs', type: 'file' }];
+      }
+      return [];
+    },
+    async getFile({ path }) {
+      if (!(path in files)) throw new Error(`missing ${path}`);
+      return { path, content: files[path], sha: 'sha' };
+    },
+    async putFile(input) {
+      puts.push(input);
+      files[input.path] = input.content;
+      return { path: input.path, content: input.content, sha: 'new' };
+    },
+    async connectUrl() {
+      return { connectUrl: 'https://github.com/apps/x/installations/new', state: 'st' };
+    },
+    async bind() {
+      return this.status();
+    },
+  };
+}
+
+test('saveNow pushes bound Studio files to GitHub', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const github = boundGitHub();
+  const controller = new CrowdyStudioController(
+    options(provider, playerCompute(), { github, autosaveMs: 10_000 }),
+  );
+  await controller.initialize();
+  assert.equal(controller.getState().githubMessage, 'GitHub is in sync.');
+  controller.updateFile('SERVER', 'src/lib.rs', 'fn server() {}\n// marker\n');
+  await controller.saveNow();
+  assert.equal(
+    github.puts.some((row) => row.path === 'server/src/lib.rs' && row.content.includes('marker')),
+    true,
+  );
+  assert.match(controller.getState().githubMessage, /Pushed \d+ file/);
+  controller.destroy();
+});
+
+test('pull-save sets suppressGitHubPush so GitHub is not dual-written', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const github = boundGitHub({
+    files: { 'server/src/lib.rs': 'fn server() {}\n// remote\n' },
+  });
+  const controller = new CrowdyStudioController(
+    options(provider, playerCompute(), { github, autosaveMs: 10_000 }),
+  );
+  await controller.initialize();
+  assert.equal(controller.getState().githubMessage, 'Pulled from GitHub.');
+  assert.equal(github.puts.length, 0);
+  assert.match(
+    controller.getState().project.files.find(
+      (file) => file.target === 'SERVER' && file.path === 'src/lib.rs',
+    ).content,
+    /remote/,
+  );
+  controller.destroy();
+});
+
+test('dirty Studio edits refuse Pull from GitHub', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const github = boundGitHub();
+  const controller = new CrowdyStudioController(
+    options(provider, playerCompute(), { github, autosaveMs: 10_000 }),
+  );
+  await controller.initialize();
+  controller.updateFile('SERVER', 'src/lib.rs', 'fn dirty() {}');
+  await controller.refreshGitHubStatus();
+  assert.equal(
+    controller.getState().githubMessage,
+    'Save Studio edits before pulling from GitHub.',
+  );
+  controller.destroy();
+});
+
+test('unbound postgres leftovers are hidden when GitHub transport is present', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  provider.listProjects = async () => [
+    {
+      projectId: 'project-1',
+      name: 'Weather tools',
+      kind: 'FULL_STACK',
+      revisionId: 'r1',
+      updatedAt: '2026-07-23T00:00:00Z',
+    },
+    {
+      projectId: 'leftover',
+      name: 'Unbound leftover',
+      kind: 'SERVER',
+      revisionId: 'r0',
+      updatedAt: '2026-07-23T00:00:00Z',
+    },
+  ];
+  const github = boundGitHub({ unboundIds: ['leftover'] });
+  const controller = new CrowdyStudioController(
+    options(provider, playerCompute(), { github, autosaveMs: 10_000 }),
+  );
+  await controller.initialize();
+  assert.deepEqual(
+    controller.getState().projects.map((project) => project.projectId),
+    ['project-1'],
+  );
+  controller.destroy();
+});
+
+test('stale githubStatusGeneration is ignored', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  let releaseFirst;
+  const first = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  let stallNext = false;
+  const github = boundGitHub({
+    status: async () => {
+      if (stallNext) {
+        stallNext = false;
+        await first;
+        return {
+          configured: true,
+          connected: true,
+          owner: 'stale',
+          repo: 'stale-repo',
+          branch: 'main',
+        };
+      }
+      return {
+        configured: true,
+        connected: true,
+        owner: 'BenjaminScholtens',
+        repo: 'crowdy-mod-github-connected-project-cd40',
+        branch: 'main',
+      };
+    },
+  });
+  const controller = new CrowdyStudioController(
+    options(provider, playerCompute(), { github, autosaveMs: 10_000 }),
+  );
+  await controller.initialize();
+  stallNext = true;
+  const pending = controller.refreshGitHubStatus();
+  const second = controller.refreshGitHubStatus();
+  await second;
+  releaseFirst();
+  await pending;
+  assert.equal(
+    controller.getState().github.repo,
+    'crowdy-mod-github-connected-project-cd40',
+  );
+  controller.destroy();
+});
