@@ -2,13 +2,13 @@
 # with the security-hardening program (see the repo's security.yml). PRs land
 # against the default branch (prod); rebase or cherry-pick onto dev as usual.
 version: 2
-target-branch: dev
 updates:
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: weekly
       day: monday
+    target-branch: dev
     open-pull-requests-limit: 5
     groups:
       npm-minor-and-patch:
@@ -23,3 +23,4 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    target-branch: dev
