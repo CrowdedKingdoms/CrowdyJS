@@ -358,110 +358,6 @@ type AvatarDTO {
   createdAt: DateTime!
 }
 
-type Organization {
-  """Unique organization id (primary key). BigInt as a string."""
-  orgId: BigInt!
-  """Human-readable organization name."""
-  name: String!
-  """Unique URL-safe slug (lowercase letters, numbers, and dashes)."""
-  slug: String!
-  """user_id of the organization owner (BigInt as string)."""
-  ownerUserId: BigInt!
-  """
-  Lifecycle status: 'active', 'frozen' (setOrgStatus) or 'retired' (retireOrganization). A retired organization still resolves by id and slug — it is a state, not a deletion, and its whole ledger is intact — but it grants its members no permissions, its API tokens no longer authenticate, and it is omitted from myOrganizations.
-  """
-  status: String!
-  """When the organization was created."""
-  createdAt: DateTime!
-  """When the organization was last updated."""
-  updatedAt: DateTime!
-}
-
-type OrgMember {
-  """
-  Unique membership id (primary key, BigInt as string). Distinct from userId.
-  """
-  orgMemberId: BigInt!
-  """Organization this membership belongs to (BigInt as string)."""
-  orgId: BigInt!
-  """The member's user_id (BigInt as string)."""
-  userId: BigInt!
-  """
-  Membership status. Only 'active' members count for permission checks; other values (e.g. 'invited' or 'removed') grant no permissions.
-  """
-  status: String!
-  """When the membership was created."""
-  createdAt: DateTime!
-  """When the membership was last updated."""
-  updatedAt: DateTime!
-}
-
-type OrgToken {
-  """Unique token id (primary key, BigInt as string)."""
-  orgTokenId: BigInt!
-  """Organization that owns this token (BigInt as string)."""
-  orgId: BigInt!
-  """Optional human-readable label."""
-  label: String
-  """
-  For 'service' tokens, the environment id (UUID) the token is scoped to; null for user-minted tokens.
-  """
-  environmentId: String
-  """
-  'user_minted' (human-created) or 'service' (minted by the control plane for per-tenant game-apis).
-  """
-  kind: String!
-  """False once revoked; inactive tokens cannot authenticate."""
-  isActive: Boolean!
-  """Optional expiry timestamp; null means the token never expires."""
-  expiresAt: DateTime
-  """When the token last authenticated a request, if ever."""
-  lastUsedAt: DateTime
-  """When the token was revoked, if it has been."""
-  revokedAt: DateTime
-  """When the token was created."""
-  createdAt: DateTime!
-  """When the token was last updated."""
-  updatedAt: DateTime!
-}
-
-type OrgRole {
-  """Unique role id (primary key, BigInt as string)."""
-  orgRoleId: BigInt!
-  """Organization this role belongs to (BigInt as string)."""
-  orgId: BigInt!
-  """Display name of the role."""
-  roleName: String!
-  """Optional human-readable description of the role."""
-  description: String
-  """
-  True for built-in / seeded roles managed by the platform; typically not editable.
-  """
-  isSystem: Boolean!
-  """When the role was created."""
-  createdAt: DateTime!
-  """
-  Permission keys granted by this role (resolved from org_role_permissions).
-  """
-  permissions: [String!]!
-}
-
-"""
-Represents one user's membership in one organization. Bundles the org, the union of permissions across the user's assigned roles, and the role list itself - so the UI can render an org dashboard without a follow-up round trip.
-"""
-type OrgMembership {
-  """The organization."""
-  org: Organization!
-  """
-  Effective permission keys the user holds in this org (union across assigned roles; full set for super admins).
-  """
-  permissions: [String!]!
-  """Roles assigned to the user in this org."""
-  roles: [OrgRole!]!
-  """When the user joined the organization."""
-  joinedAt: DateTime!
-}
-
 """
 A free or purchasable access tier for an app, bundling a price and the set of runtime permission keys that granted users receive.
 """
@@ -1024,6 +920,110 @@ type PlaceableDatacenters {
   The datacenter of the instance that answered this call, or null if it was not told its own. Present so a picker can SAY which datacenter it is talking to; deliberately NOT a default. The published origin is a multivalue record over every datacenter's load balancer, so the instance answering is whichever one DNS picked, and defaulting to it would place apps by exactly the accident createApp's required argument exists to remove.
   """
   servedBy: String
+}
+
+type Organization {
+  """Unique organization id (primary key). BigInt as a string."""
+  orgId: BigInt!
+  """Human-readable organization name."""
+  name: String!
+  """Unique URL-safe slug (lowercase letters, numbers, and dashes)."""
+  slug: String!
+  """user_id of the organization owner (BigInt as string)."""
+  ownerUserId: BigInt!
+  """
+  Lifecycle status: 'active', 'frozen' (setOrgStatus) or 'retired' (retireOrganization). A retired organization still resolves by id and slug — it is a state, not a deletion, and its whole ledger is intact — but it grants its members no permissions, its API tokens no longer authenticate, and it is omitted from myOrganizations.
+  """
+  status: String!
+  """When the organization was created."""
+  createdAt: DateTime!
+  """When the organization was last updated."""
+  updatedAt: DateTime!
+}
+
+type OrgMember {
+  """
+  Unique membership id (primary key, BigInt as string). Distinct from userId.
+  """
+  orgMemberId: BigInt!
+  """Organization this membership belongs to (BigInt as string)."""
+  orgId: BigInt!
+  """The member's user_id (BigInt as string)."""
+  userId: BigInt!
+  """
+  Membership status. Only 'active' members count for permission checks; other values (e.g. 'invited' or 'removed') grant no permissions.
+  """
+  status: String!
+  """When the membership was created."""
+  createdAt: DateTime!
+  """When the membership was last updated."""
+  updatedAt: DateTime!
+}
+
+type OrgToken {
+  """Unique token id (primary key, BigInt as string)."""
+  orgTokenId: BigInt!
+  """Organization that owns this token (BigInt as string)."""
+  orgId: BigInt!
+  """Optional human-readable label."""
+  label: String
+  """
+  For 'service' tokens, the environment id (UUID) the token is scoped to; null for user-minted tokens.
+  """
+  environmentId: String
+  """
+  'user_minted' (human-created) or 'service' (minted by the control plane for per-tenant game-apis).
+  """
+  kind: String!
+  """False once revoked; inactive tokens cannot authenticate."""
+  isActive: Boolean!
+  """Optional expiry timestamp; null means the token never expires."""
+  expiresAt: DateTime
+  """When the token last authenticated a request, if ever."""
+  lastUsedAt: DateTime
+  """When the token was revoked, if it has been."""
+  revokedAt: DateTime
+  """When the token was created."""
+  createdAt: DateTime!
+  """When the token was last updated."""
+  updatedAt: DateTime!
+}
+
+type OrgRole {
+  """Unique role id (primary key, BigInt as string)."""
+  orgRoleId: BigInt!
+  """Organization this role belongs to (BigInt as string)."""
+  orgId: BigInt!
+  """Display name of the role."""
+  roleName: String!
+  """Optional human-readable description of the role."""
+  description: String
+  """
+  True for built-in / seeded roles managed by the platform; typically not editable.
+  """
+  isSystem: Boolean!
+  """When the role was created."""
+  createdAt: DateTime!
+  """
+  Permission keys granted by this role (resolved from org_role_permissions).
+  """
+  permissions: [String!]!
+}
+
+"""
+Represents one user's membership in one organization. Bundles the org, the union of permissions across the user's assigned roles, and the role list itself - so the UI can render an org dashboard without a follow-up round trip.
+"""
+type OrgMembership {
+  """The organization."""
+  org: Organization!
+  """
+  Effective permission keys the user holds in this org (union across assigned roles; full set for super admins).
+  """
+  permissions: [String!]!
+  """Roles assigned to the user in this org."""
+  roles: [OrgRole!]!
+  """When the user joined the organization."""
+  joinedAt: DateTime!
 }
 
 type OrgPermission {
@@ -7774,7 +7774,7 @@ type Query {
   """
   availableLoginProviders: [String!]!
   """
-  Email-first adaptive login: check whether the account has password sign-in enabled. Public; does not reveal whether the email is registered.
+  Email-first adaptive login: check whether the account has password sign-in enabled. Public. It answers true only for an account that has a password, so it does reveal that such an account exists; unknown addresses and password-less accounts both answer false. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited per address and per client.
   """
   checkAuthMethod(input: CheckAuthMethodInput!): AuthMethodResult!
   """The signed-in user's linked sign-in identities."""
@@ -9818,23 +9818,23 @@ type Mutation {
     appId: BigInt!
   ): AppUserAccess!
   """
-  Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public.
+  Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
   requestLoginLink(input: RequestLoginLinkInput!): RequestLoginLinkResult!
   """
-  Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used.
+  Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise).
   """
   completeLoginLink(input: CompleteLoginLinkInput!): AuthResponse!
   """
-  Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public.
+  Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise).
   """
   socialLoginStart(input: SocialLoginStartInput!): SocialLoginStart!
   """
-  Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public.
+  Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise).
   """
   socialLoginComplete(input: SocialLoginCompleteInput!): AuthResponse!
   """
-  Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed.
+  Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed. First-party origins only: a browser page on any other origin is refused with HOSTED_SIGN_IN_REQUIRED (403) and must use the hosted sign-in redirect (CrowdyJS portal.signIn) instead; requests with no Origin header (native clients, scripts) are unaffected. Rate-limited per address and per client.
   """
   login(
     """
@@ -9843,7 +9843,7 @@ type Mutation {
     loginUserInput: LoginUserInput!
   ): AuthResponse!
   """
-  Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email (e.g. created via magic link/social), the password is attached pending email confirmation and no session is returned, refused with extensions.code EMAIL_ALREADY_REGISTERED (409). It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public.
+  Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
   register(
     """
@@ -9852,35 +9852,35 @@ type Mutation {
     registerUserInput: RegisterUserInput!
   ): AuthResponse!
   """
-  Confirms a user email address using the token from the confirmation email (also enables password sign-in for the account). Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call).
+  Confirms a user email address using the token from the confirmation email (also enables password sign-in for the account). Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise).
   """
   confirmEmail(
     """The confirmation token from the emailed link."""
     token: String!
   ): Boolean!
   """
-  Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public.
+  Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
   requestPasswordReset(
     """Email address to send the password-reset link to."""
     email: String!
   ): Boolean!
   """
-  Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call). Existing sessions are not revoked.
+  Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). EVERY existing session for the account is revoked (and every app token minted from one): a reset is what an owner does after losing control of the account, so whoever held a session loses it. The user signs in again with the new password.
   """
   resetPassword(
     """Wraps the reset token and the new password."""
     resetPasswordInput: ResetPasswordInput!
   ): Boolean!
   """
-  Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public.
+  Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
   resendConfirmationEmail(
     """Email address of the account to re-send confirmation to."""
     email: String!
   ): Boolean!
   """
-  Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success. Refuses with extensions.code INVALID_CURRENT_PASSWORD (403) when the current password is wrong, and PASSWORD_NOT_SET (409) when the account has no password to change — use setInitialPassword for that, which needs only the session. NEITHER of those means the session is invalid, and neither is UNAUTHENTICATED: both were until v1.60.0, so a client that signs the user out on UNAUTHENTICATED was signing them out over a typo. Existing sessions are not revoked.
+  Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success. Refuses with extensions.code INVALID_CURRENT_PASSWORD (403) when the current password is wrong, and PASSWORD_NOT_SET (409) when the account has no password to change — use setInitialPassword for that, which needs only the session. NEITHER of those means the session is invalid, and neither is UNAUTHENTICATED: both were until v1.60.0, so a client that signs the user out on UNAUTHENTICATED was signing them out over a typo. Every OTHER session for the account is revoked (with the app tokens minted from it); the session that made this call stays valid, so the client does not need to sign in again.
   """
   changePassword(
     """The user's current password, for verification."""
@@ -11543,7 +11543,7 @@ type Mutation {
     gridId: BigInt!
   ): GridClaimResult!
   """
-  Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus player-code keys already carried by the caller's tier, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain.
+  Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus the player-code keys and use_video_chat where the caller's tier already carries them, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain.
   """
   claimGridChunk(
     """
