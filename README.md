@@ -49,30 +49,32 @@ const client = createCrowdyClient({
   },
 });
 
-// Restore a previous session if there is one, otherwise sign in.
+// A browser game on its own domain signs players in through Crowded Kingdoms'
+// HOSTED sign-in: the player types their password into Studio, never into your
+// page, and your client comes back holding a token confined to your app.
 await client.session.restore();
-if (!client.session.getToken()) {
-  // Email + password:
-  await client.auth.login({ email: 'player@example.com', password });
-  // ...or create the account: client.auth.register({ email, password })
-  // Or magic link: email a one-time link, then complete with the token from it.
-  await client.auth.requestLoginLink({ email: 'player@example.com', redirectUri });
-  await client.auth.completeLoginLink(tokenFromLink);
-  // Or social/OIDC: socialLoginStart('google', redirectUri) -> socialLoginComplete({ provider, code, state })
+const entered = await client.portal.handleSignInCallback(); // no-op without ?code=
+if (!entered && !client.session.getToken()) {
+  // On your "Sign in with Crowded Kingdoms" button:
+  await client.portal.signIn({ appId, redirectUri: `${location.origin}/auth/callback` });
+  return; // the browser is navigating to Studio
 }
 
-// Every sign-in returns an identity SESSION token (rejected for gameplay).
-// Identity reads run on it:
+// The client now holds an app-scoped token: gameplay reads and the UDP proxy run on it.
 const me = await client.users.me();
 console.log(me.email);
 ```
 
+Your game's origin must be registered under the app's **redirect URIs**
+(Studio > Apps > client settings); that one entry admits it to CORS and to the
+hosted sign-in return. Direct sign-in (`client.auth.login` / `register` / magic
+link / social) is served only to first-party pages (Studio, crowdy.games) and to
+non-browser callers (Node, CLI, tests); from any other browser origin the API
+answers `HOSTED_SIGN_IN_REQUIRED` (`isHostedSignInRequiredError`). See
+[Authentication](#authentication-session-token-vs-app-scoped-tokens).
+
 There is one endpoint. `managementUrl` was removed in v14 — see
 [MIGRATION.md](MIGRATION.md).
-
-**Gameplay needs an app-scoped token, not the session token.** Mint one per
-app and drive the world/UDP surface from a per-game client — see
-[Authentication](#authentication-session-token-vs-app-scoped-tokens).
 
 ## Authentication: session token vs app-scoped tokens
 
@@ -81,23 +83,57 @@ studio admin and token minting, and **rejected for gameplay**. Each game is
 entered with a short-lived **app-scoped token** confined to that one app, so a
 game stack never receives the player's full session.
 
-Use two clients: an Overworld/identity client (session token) and a per-game
-client (app token). They never share a token store, and they need not share a
-URL — `mintAppToken` returns the endpoint for the app's own datacenter.
+**Which flow you use depends on where your code runs** (ck-api v1.88.0,
+2026-09-08):
+
+| your code runs...                                   | sign in with                              | then                                  |
+|-----------------------------------------------------|-------------------------------------------|---------------------------------------|
+| in a browser, on your own domain (every customer game) | `portal.signIn` -> Studio -> `portal.handleSignInCallback` | the client already holds the app token |
+| in a browser, on a first-party host (Studio, crowdy.games) | `auth.login` / magic link / social       | `portal.mintAppToken(appId)`          |
+| outside a browser (Node, CLI, CrowdyCPP, tests)        | `auth.login` / `auth.register`            | `portal.mintAppToken(appId)`          |
+
+The first row is the only one a game on its own domain can take: the direct
+sign-in mutations are refused from a non-first-party browser origin with
+`HOSTED_SIGN_IN_REQUIRED`. The reason is the player's password: a form on a
+customer's domain that collects it is indistinguishable, to the platform and to
+the player, from a phishing page.
+
+**Hosted sign-in** (browser game, own domain) is OAuth2 Authorization Code +
+PKCE; the verifier never leaves your origin and your page never sees a
+credential:
 
 ```ts
-// Overworld/identity client
-const overworld = createCrowdyClient({
+const game = createCrowdyClient({ httpUrl: apiUrl, wsUrl,
+  tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:app:' + appId) });
+
+// Boot: finish a sign-in we are returning from (no-op without ?code=).
+const entered = await game.portal.handleSignInCallback();
+
+// "Sign in with Crowded Kingdoms" button: go to Studio's hosted page and come back.
+await game.portal.signIn({ appId, redirectUri: `${location.origin}/auth/callback` });
+// -> Studio /authorize (the player signs in there, consents if the app is not trusted)
+// -> back to redirectUri?code=...&state=...  -> handleSignInCallback() above
+```
+
+`signIn` derives the hosted page from the API host you configured
+(`ck.<tier>.crowdedkingdoms.com` -> `studio.<tier>.crowdedkingdoms.com/authorize`,
+`localhost:3000` -> `localhost:3001`); pass `authorizeUrl` to override. Your
+`redirectUri`'s origin must be one of the app's registered redirect URIs.
+`beginEntry` / `completeEntry` are the same steps without the defaults.
+
+**Direct sign-in + mint** (first-party page or non-browser). Use two clients: an
+identity client (session token) and a per-game client (app token). They never
+share a token store, and they need not share a URL — `mintAppToken` returns the
+endpoint for the app's own datacenter.
+
+```ts
+const identity = createCrowdyClient({
   httpUrl: apiUrl,
   tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:session'),
 });
-// Sign-in (email + password via auth.login / auth.register, magic link, or social/OIDC)
-// yields the session token. There is no dev bypass: devLogin was removed in 15.0.0.
-await overworld.auth.requestLoginLink({ email, redirectUri });
-await overworld.auth.completeLoginLink(tokenFromLink);
+await identity.auth.login({ email, password }); // or register / magic link / social
 
-// Native / same-origin: mint directly, then build a game client.
-const t = await overworld.portal.mintAppToken(appId);
+const t = await identity.portal.mintAppToken(appId);
 const game = createCrowdyClient({
   httpUrl: t.gameApiUrl!,
   wsUrl: t.gameApiWsUrl!,
@@ -107,24 +143,7 @@ game.setToken(t.token);
 game.world(appId).subscribe({ actorUpdate: (n) => { /* ... */ } });
 ```
 
-Browser cross-origin handoff is OAuth2 Authorization Code + PKCE — the
-verifier never leaves the game origin:
-
-```ts
-// Game origin, on "enter": redirect to the Overworld authorize page.
-location.assign(await game.portal.beginEntry({
-  appId, authorizeUrl: 'https://overworld.example.com/authorize',
-  redirectUri: location.origin + location.pathname,
-}));
-
-// Overworld /authorize page (holds the session token):
-location.assign(await overworld.portal.handleAuthorizeRequest());
-
-// Game origin, on callback boot: exchange code+verifier -> app token (stored).
-const entered = await game.portal.completeEntry();
-```
-
-Game-to-game routes through the Overworld for a fresh per-game token.
+Game-to-game routes through Studio's hosted page for a fresh per-game token.
 
 Notes:
 
