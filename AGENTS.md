@@ -316,3 +316,13 @@ branch it names (`scripts/ci/resolve-release-tier.sh`).
 
 Never hand-edit `src/generated/graphql.ts`. `npm install && npm run build`
 must succeed in a clean clone of this repo alone.
+
+## Security review on the identity surface (2026-09-08)
+
+A PR that touches `src/domains/auth.ts`, `src/domains/portal.ts`, `src/pkce.ts`, `src/session.ts` or `src/auth-state.ts` runs the Cursor **`security-review`** subagent
+against the branch before it is opened, and the PR body carries its findings
+(or "security-review: no findings"). CODEOWNERS requests the code owner on
+the same paths. This is the process half of the lesson from the v1.87.2
+`register` account takeover: two individually correct pieces composed into a
+takeover, and nothing in the pipeline was positioned to notice. `security.yml`
+(gitleaks, dependency audit, SAST) is the mechanical half and runs on every PR.
