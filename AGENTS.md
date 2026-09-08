@@ -4,14 +4,20 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.5.0**. Whether that is *published* is
+**Current package:** `package.json` is **15.6.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**15.5.0 adds** webcam video and the server-announced departure (Buddy `v0.25.x`,
+**15.6.0 adds hosted sign-in** (ck-api `v1.88.0`): `portal.signIn` /
+`portal.handleSignInCallback`, `defaultHostedSignInUrl`,
+`isHostedSignInRequiredError`, and the README's sign-in story rewritten around
+"where does your code run". Nothing was removed; `auth.*` is unchanged for
+first-party and non-browser callers. See the mental-model section below.
+
+**15.5.0 added** webcam video and the server-announced departure (Buddy `v0.25.x`,
 ck-api `v1.87.x`): `udp.sendVideoPacket` / `udp.sendVideoFrame`, the `video` and
 `actorLeft` handlers, `ClientVideoNotification` / `ActorLeftNotification`, the pure
 `media/video-frames.ts` (6-byte fragment header, `fragmentFrame`,
@@ -206,6 +212,22 @@ not a running service and is not a schema source; gameplay data lives in
 3. Build one identity client and one client per game. When `mintAppToken`
    returns `gameApiUrl` / `gameApiWsUrl`, point the game client at them.
 4. `udp.subscribe(handlers, appId)` requires the appId and an app-scoped token.
+
+**A BROWSER GAME ON ITS OWN DOMAIN NEVER CALLS `auth.*` (ck-api v1.88.0,
+2026-09-08).** Step 1 is served only to first-party browser origins (Studio,
+the crowdy.games host) and to non-browser callers (no `Origin` header). From
+any other browser origin the API answers `HOSTED_SIGN_IN_REQUIRED`
+(`isHostedSignInRequiredError`). A customer's game does steps 1 and 2 in one
+hop with **`portal.signIn({ appId, redirectUri })`** -> Studio `/authorize` ->
+**`portal.handleSignInCallback()`**, which stores an app token; the player's
+password is typed into Studio, never into the game. `signIn` derives the hosted
+page from the API host (`ck.<tier>.` -> `studio.<tier>.`, `localhost:3000` ->
+`:3001`; `defaultHostedSignInUrl`); the game's origin must be in the app's
+`redirect_uris`, which is also what admits it to CORS. `beginEntry` /
+`completeEntry` / `handleAuthorizeRequest` are the underlying steps and stay
+(Studio's own `/authorize` page uses `handleAuthorizeRequest`). Do not write a
+README example that calls `auth.login` from a game page; the-construct is the
+reference consumer of the hosted flow.
 
 ## Game concept → API surface
 

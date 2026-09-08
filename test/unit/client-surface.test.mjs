@@ -161,6 +161,8 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.portal, 'portal', [
     'mintAppToken', 'createAuthorizationCode', 'exchangeCode', 'refresh',
     'beginEntry', 'handleAuthorizeRequest', 'completeEntry',
+    // Hosted sign-in (ck-api v1.88.0): the browser game's whole flow.
+    'signIn', 'handleSignInCallback',
     'getConsent', 'authorizeApp', 'revokeAppAuthorization',
     'myAuthorizedApps', 'setAppClientSettings',
   ]);
