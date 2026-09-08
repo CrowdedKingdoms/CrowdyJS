@@ -113,6 +113,18 @@ export interface UdpNotificationHandlers {
    */
   audio?: (notification: Extract<UdpNotification, { __typename?: 'ClientAudioNotification' }>) => void;
   /** A nearby client sent a text/chat message (`text` is UTF-8). */
+  /**
+   * A nearby client sent one webcam video FRAGMENT; `videoData` is base64 of a
+   * 6-byte fragment header plus a slice of the encoded frame. Feed the decoded
+   * bytes to a `VideoFrameAssembler` (see `media/video-frames.ts`) to get frames.
+   */
+  video?: (notification: Extract<UdpNotification, { __typename?: 'ClientVideoNotification' }>) => void;
+  /**
+   * The server stopped considering an actor present (about five seconds after
+   * its last update; never for a mere server migration). Emitted once. A later
+   * `actorUpdate` for the same uuid is a rejoin.
+   */
+  actorLeft?: (notification: Extract<UdpNotification, { __typename?: 'ActorLeftNotification' }>) => void;
   text?: (notification: Extract<UdpNotification, { __typename?: 'ClientTextNotification' }>) => void;
   /**
    * A nearby client emitted a custom client event (a client-defined
@@ -1166,6 +1178,12 @@ export class RealtimeClient {
           case 'ClientAudioNotification':
             handlers.audio?.(notification);
             break;
+          case 'ClientVideoNotification':
+            handlers.video?.(notification);
+            break;
+          case 'ActorLeftNotification':
+            handlers.actorLeft?.(notification);
+            break;
           case 'ClientTextNotification':
             handlers.text?.(notification);
             break;
@@ -1258,6 +1276,8 @@ const NOTIFICATION_KINDS: Record<string, string> = {
   VoxelUpdateNotification: 'voxelUpdate',
   VoxelUpdateResponse: 'voxelUpdateResponse',
   ClientAudioNotification: 'audio',
+  ClientVideoNotification: 'video',
+  ActorLeftNotification: 'actorLeft',
   ClientTextNotification: 'text',
   ClientEventNotification: 'clientEvent',
   ServerEventNotification: 'serverEvent',
