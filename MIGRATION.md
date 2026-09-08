@@ -1,3 +1,26 @@
+# CrowdyJS v15.7 — invoke policies apply to app admins
+
+**Nothing removed, one input flag and one result field added.** ck-api `v1.89.0`
+(2026-09-08).
+
+Until now a caller holding `manage_apps` on the app skipped every Game Model
+invoke policy implicitly, with nothing on the result to say so. A developer
+testing their own game with their own account therefore saw `self.hp > 0` pass
+at `hp = 0` and `owner_of_self` pass on another player's row. From ck-api
+v1.89.0 an admin's `gameModel.invoke` is judged exactly like a player's.
+
+- `InvokeFunctionInput.bypassPolicy?: boolean` (default `false`) skips the policy
+  for one call. Honoured only with `manage_apps` — anyone else gets a thrown
+  `CrowdyGraphQLError` with code `NOT_ALLOWED` and nothing runs.
+- `GmInvokeResult.policyBypassed` is `true` on a result that skipped the policy,
+  so a client can tell the two kinds of success apart. The server audit-logs the
+  call.
+- A policy refusal is still a resolved result: `success: false`,
+  `fault.code === 'NOT_ALLOWED'`.
+
+**Action:** if your GM console, seed script or admin tool relied on the old skip,
+add `bypassPolicy: true` to those calls. Player code needs no change.
+
 # CrowdyJS v15.6 — a browser game signs in through Studio, not through `auth.*`
 
 **Nothing removed, two methods added, and a platform rule that decides which
