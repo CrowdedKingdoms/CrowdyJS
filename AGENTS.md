@@ -4,12 +4,20 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.6.0**. Whether that is *published* is
+**Current package:** `package.json` is **15.7.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**15.7.0 tracks ck-api `v1.89.0`: invoke policies apply to app admins.**
+`gameModel.invoke` gains the optional administrative `bypassPolicy` input and the
+`policyBypassed` result field; nothing else changed. Until v1.89.0 a `manage_apps`
+holder skipped every invoke policy implicitly, so a developer testing with their
+own account saw policies that looked unenforced. GM tooling that depended on that
+must now pass `bypassPolicy: true` (refused with `NOT_ALLOWED` without
+`manage_apps`).
 
 **15.6.0 adds hosted sign-in** (ck-api `v1.88.0`): `portal.signIn` /
 `portal.handleSignInCallback`, `defaultHostedSignInUrl`,
