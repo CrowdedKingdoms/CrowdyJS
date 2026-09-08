@@ -23,6 +23,7 @@ fragment GmInvokeResultFields on GmInvokeResult {
   eventId
   functionName
   success
+  policyBypassed
   returnValueJson
   fault {
     code
