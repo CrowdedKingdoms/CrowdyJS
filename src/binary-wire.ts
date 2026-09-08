@@ -38,6 +38,11 @@ export const WireMessageType = {
   CLIENT_EVENT_NOTIFICATION_2: 138,
   SERVER_EVENT_NOTIFICATION_2: 139,
   SINGLE_ACTOR_MESSAGE: 142,
+  // Buddy v0.25.0: webcam video pair (audio's shape, payload = one SDK
+  // fragment, see media/video-frames.ts) and the server-only actor-left downlink.
+  CLIENT_VIDEO_PACKET_2: 143,
+  CLIENT_VIDEO_NOTIFICATION_2: 144,
+  ACTOR_LEFT_NOTIFICATION_2: 145,
 } as const;
 
 const SPATIAL_HEADER_SIZE = 68;
@@ -291,6 +296,27 @@ export function serializeAudioPacket(
     input.decayRate ?? 0,
     input.uuid,
     decodeBase64(input.audioData ?? ''),
+    input.sequenceNumber ?? 0,
+  );
+}
+
+/**
+ * One video FRAGMENT (header + body slice from `fragmentFrame`) as a 143 datagram.
+ * Defaults match audio: `distance` 1, `decayRate` 0.
+ */
+export function serializeVideoPacket(
+  ctx: RelaySignContext,
+  input: SpatialSendBase & { videoData: string },
+): Promise<Uint8Array> {
+  return serializeSpatial(
+    ctx,
+    WireMessageType.CLIENT_VIDEO_PACKET_2,
+    input.appId,
+    input.chunk,
+    input.distance ?? 1,
+    input.decayRate ?? 0,
+    input.uuid,
+    decodeBase64(input.videoData ?? ''),
     input.sequenceNumber ?? 0,
   );
 }
@@ -587,6 +613,21 @@ function parseOne(bytes: Uint8Array): UdpNotification | null {
         ...spatialCommon(p),
         audioData: encodeBase64(p.payload),
       } as UdpNotification;
+    case WireMessageType.CLIENT_VIDEO_NOTIFICATION_2:
+      return {
+        __typename: 'ClientVideoNotification',
+        ...spatialCommon(p),
+        videoData: encodeBase64(p.payload),
+      } as UdpNotification;
+    case WireMessageType.ACTOR_LEFT_NOTIFICATION_2: {
+      // [1B reason]; anything but 1 reads as STALE (0) per the contract.
+      const { decayRate: _r, ...rest } = spatialCommon(p);
+      return {
+        __typename: 'ActorLeftNotification',
+        ...rest,
+        leftReason: p.payload.length >= 1 && p.payload[0] === 1 ? 1 : 0,
+      } as UdpNotification;
+    }
     case WireMessageType.CLIENT_TEXT_NOTIFICATION_2:
       return {
         __typename: 'ClientTextNotification',

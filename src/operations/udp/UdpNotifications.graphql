@@ -63,6 +63,29 @@ subscription UdpNotifications {
       sequenceNumber
       epochMillis
     }
+    ... on ClientVideoNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      decayRate
+      uuid
+      videoData
+      sequenceNumber
+      epochMillis
+    }
+    ... on ActorLeftNotification {
+      appId
+      chunkX
+      chunkY
+      chunkZ
+      distance
+      uuid
+      leftReason
+      sequenceNumber
+      epochMillis
+    }
     ... on ClientTextNotification {
       appId
       chunkX
