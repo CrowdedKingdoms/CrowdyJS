@@ -73,6 +73,29 @@ export type ActorFilterInput = {
   uuid?: InputMaybe<Scalars['String']['input']>;
 };
 
+/** The game server has stopped considering an actor present (Buddy v0.25.0). Emitted ONCE, over the actor's last chunk with the replication rings its own updates used, at the moment its presence record is removed -- roughly five seconds after its last update. Not emitted when the actor merely moved to another server. Treat a later ActorUpdateNotification for the same uuid as a rejoin. Received via the udpNotifications subscription. */
+export type ActorLeftNotification = {
+  __typename?: 'ActorLeftNotification';
+  /** The ID of the app the actor was in. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the actor's last chunk. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the actor's last chunk. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the actor's last chunk. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Chunk replication distance (0-8) the notification was fanned out over. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** Why the server stopped considering the actor present: 0 = STALE (it stopped updating). 1 is reserved for an immediate server-side release; treat any other value as STALE. */
+  leftReason: Scalars['Int']['output'];
+  /** Correlation byte from the datagram tail (always 0 today). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The unique identifier of the actor that left. */
+  uuid: Scalars['String']['output'];
+};
+
 /** The signed-in identity behind a bearer token. */
 export type ActorType = {
   __typename?: 'ActorType';
@@ -992,6 +1015,13 @@ export type AgentToolResultInput = {
   sessionId: Scalars['String']['input'];
 };
 
+/** The interval a free allowance resets on and a dimension is rounded over. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving; the development quota is MONTH. */
+export enum AllowancePeriod {
+  Day = 'DAY',
+  Hour = 'HOUR',
+  Month = 'MONTH'
+}
+
 /** A publishable application (game/experience) owned by an organization. Its discoverability is controlled by visibility and its lifecycle by status. */
 export type App = {
   __typename?: 'App';
@@ -1034,11 +1064,11 @@ export type App = {
    * @deprecated Renamed 2026-09-01 when reservations split by traffic type. Use reservedUdpBytesPerSec; this returns the same value for one release.
    */
   reservedEgressBytesPerSec: Scalars['BigInt']['output'];
-  /** Reserved API request rate in GraphQL operations/sec. Guarantees a minimum the platform provisions for you; it is not a limit on how many requests you may make. Billed monthly whether or not used. 0 = none. */
+  /** Reserved API request rate in GraphQL operations/sec. Guarantees a minimum the platform provisions for you; it is not a limit on how many requests you may make. Billed monthly whether or not used, IN ADDITION TO metered usage -- a reservation buys capacity, not volume. Independent of reservedUdpBytesPerSec: reserving one does not reserve the other. 0 = none. */
   reservedGraphqlOpsPerSec: Scalars['BigInt']['output'];
-  /** Reserved realtime (UDP) capacity in bytes/s. Guarantees a minimum the platform provisions for you; it is not a limit on what you may send. Billed monthly whether or not used. 0 = none. */
+  /** Reserved realtime (UDP) capacity in bytes/s. Guarantees a minimum the platform provisions for you; it is not a limit on what you may send. Billed monthly whether or not used, IN ADDITION TO metered usage -- a reservation buys capacity, not volume, so reserving 5 MB/s does not make the first 5 MB/s free. Independent of reservedGraphqlOpsPerSec. 0 = none. */
   reservedUdpBytesPerSec: Scalars['BigInt']['output'];
-  /** When runtimeStatus is not "active", why the runtime is gated: "free_allowance", "insufficient_funds", "spend_cap", or "subscription_lapsed". Null when active. */
+  /** When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", or "subscription_lapsed". Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds". */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
   /** Shared-environment runtime gate, mirrored to the game DB and enforced by game-api + Buddy: "active", "grace", "denied", or "suspended". */
   runtimeStatus: Scalars['String']['output'];
@@ -1075,7 +1105,7 @@ export type AppAccessTier = {
   isFree: Scalars['Boolean']['output'];
   /** Display name of the tier (e.g. "Free", "Pro"). */
   name: Scalars['String']['output'];
-  /** Runtime permission keys granted to users on this tier (a subset of runtimePermissions), e.g. "access", "teleport", "update_voxel_data", "use_voice_chat". */
+  /** Runtime permission keys granted to users on this tier (a subset of runtimePermissions), e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat" (webcam; not granted by default). */
   permissionKeys: Array<Scalars['String']['output']>;
   /** Price in the smallest currency unit (cents) for paid tiers; null for free tiers. */
   priceCents: Maybe<Scalars['BigInt']['output']>;
@@ -1308,7 +1338,7 @@ export type AppRuntimeState = {
   deploymentTarget: AppDeploymentTarget;
   /** Per-app hourly spend cap in cents (set via setAppSpendCaps). Null = no cap. */
   hourlyLimitCents: Maybe<Scalars['BigInt']['output']>;
-  /** free_allowance | insufficient_funds | spend_cap | subscription_lapsed when not active. */
+  /** insufficient_funds | spend_cap | subscription_lapsed when not active. Historical rows may carry free_allowance, which the gate no longer produces. */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
   /** Current runtime gate decision (active / grace / denied / suspended). */
   runtimeStatus: AppRuntimeStatus;
@@ -1360,6 +1390,8 @@ export type AppTokenResponse = {
   __typename?: 'AppTokenResponse';
   /** The app this token is confined to, as a String. */
   appId: Scalars['String']['output'];
+  /** Set only by `refreshAppToken` when the caller passed `currentServer`: the Buddy the NEW token was just authorized on, which is the node the client is already connected to. When present, keep the existing UDP session and start signing datagrams with the new token; there is no need to call serverWithLeastClients. Null when the caller passed nothing, or when that node can no longer serve this app (gone, draining, Full, or not local to the app) -- then call serverWithLeastClients for a fresh placement, exactly as before. */
+  authorizedServer: Maybe<ServerStatus>;
   /** Stable entry origin, resolving to every datacenter, that always reaches SOME healthy instance. Use it to re-discover endpoints when `gameApiUrl` stops answering: a token-holding client cannot re-mint, because that needs the identity session it does not have. Never a per-datacenter or per-instance address. */
   discoveryUrl: Maybe<Scalars['String']['output']>;
   /** ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this, or re-portal through the Overworld for a different app. */
@@ -1381,8 +1413,10 @@ export type AppUsageProjection = {
   __typename?: 'AppUsageProjection';
   /** App id (as a string). */
   appId: Scalars['String']['output'];
-  /** Egress bytes recorded so far this calendar month (from app_monthly_egress). */
+  /** Egress bytes recorded so far this calendar month (from app_monthly_egress). Egress only -- bytes the service delivered to clients, measured as wire bytes at the network interface. Ingress is metered separately and does not count toward this figure or the allowance it is compared against. */
   currentEgressBytes: Scalars['String']['output'];
+  /** Ingress bytes recorded so far this calendar month (from app_monthly_egress.ingress_bytes): bytes clients sent the service over UDP replication and GraphQL, measured on the same basis as egress. Billed once, as aggregate_data_ingress above its own monthly allowance; never counted toward the egress figure or allowance. */
+  currentIngressBytes: Scalars['String']['output'];
   /** Fractional UTC days elapsed since the calendar month started. */
   daysElapsed: Scalars['Float']['output'];
   /** Per-app free monthly egress allowance in bytes (5 decimal GB). */
@@ -1397,7 +1431,7 @@ export type AppUsageProjection = {
   sufficientData: Scalars['Boolean']['output'];
 };
 
-/** Aggregate byte totals plus the top GraphQL operations for one app over the window. */
+/** Aggregate byte totals plus the top GraphQL operations for one app over the window. WHICH OF THESE YOU PAY FOR: the *SendBytes fields are the billable direction, and *RecvBytes are metered but do NOT count toward Aggregate Data Volume, the monthly free-tier and overage measure. All byte figures are wire bytes measured at the network interface, including transport and network headers, and after any compression the service applies -- they will not match a client-side byte counter. */
 export type AppUsageSummary = {
   __typename?: 'AppUsageSummary';
   /** App id (as a string). */
@@ -2059,6 +2093,49 @@ export type ClientTextPacketInput = {
   text: Scalars['String']['input'];
   /** A unique identifier for the text source (typically the player UUID). Must be exactly 32 bytes when encoded as UTF-8. */
   uuid: Scalars['String']['input'];
+};
+
+/** Notification received when another client sends a webcam video fragment. Received via the udpNotifications subscription. videoData is ONE fragment: a 6-byte header (version, codec, frameId uint16 BE, fragIndex, fragCount) followed by that slice of the encoded frame; reassemble fragments with the same uuid and frameId, and drop an incomplete frame when a newer frameId arrives or after ~500 ms. */
+export type ClientVideoNotification = {
+  __typename?: 'ClientVideoNotification';
+  /** The ID of the app where the video is coming from. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk where the video source is located. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk where the video source is located. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk where the video source is located. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The unique identifier of the video source (typically the player UUID sending the video). */
+  uuid: Scalars['String']['output'];
+  /** One video fragment, base64-encoded: 6-byte fragment header then the frame slice. */
+  videoData: Scalars['String']['output'];
+};
+
+/** Input for sending one webcam video FRAGMENT to the UDP game server, fanned out to nearby players as a ClientVideoNotification. A datagram carries at most ~1117 bytes of videoData, so an encoded frame is split by the SDK into fragments that each start with the 6-byte video fragment header (version, codec, frameId, fragIndex, fragCount) and are reassembled by the receiver; this mutation sends ONE such fragment. Sustained video belongs on the binary realtime relay; this path works but is a mutation per fragment. */
+export type ClientVideoPacketInput = {
+  /** The ID of the app where the video is being sent from. */
+  appId: Scalars['BigInt']['input'];
+  /** The chunk coordinates where the video source is located. */
+  chunk: ChunkCoordinatesInput;
+  /** Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for video packets. */
+  decayRate?: InputMaybe<Scalars['Int']['input']>;
+  /** Chunk replication distance (0-8). Defaults to 1 for video packets. Every receiver in range pays the egress bytes; keep this small. */
+  distance?: InputMaybe<Scalars['Int']['input']>;
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** A unique identifier for the video source (typically the player UUID). Must be exactly 32 bytes when encoded as UTF-8. */
+  uuid: Scalars['String']['input'];
+  /** One video fragment, base64-encoded: the 6-byte fragment header followed by that slice of the encoded frame. Opaque to the server. */
+  videoData: Scalars['String']['input'];
 };
 
 /** Controls player-code censorship for an app. IMPLICIT_ALLOW admits lawful code by default; ALLOW_LIST requires every code target, including self-authored code, to match an active code/author/org admission. */
@@ -3447,6 +3524,14 @@ export enum CrowdyStudioTarget {
   Server = 'SERVER'
 }
 
+/** The Buddy a native client is CURRENTLY connected to, named by the `ip4` and `clientPort` that `serverWithLeastClients` handed it. Pass it to `refreshAppToken` so the refreshed token is authorized on that same node and the client keeps its session there instead of being re-placed. */
+export type CurrentServerInput = {
+  /** The `clientPort` of the ServerStatus the client is connected to. */
+  clientPort: Scalars['Int']['input'];
+  /** The `ip4` of the ServerStatus the client is connected to (as returned by serverWithLeastClients). */
+  ip4: Scalars['String']['input'];
+};
+
 /** Whether a datacenter currently has a ck-api instance able to serve clients. Three-valued on purpose: "nothing is serving there" and "the liveness signal could not be read" look identical through a boolean and call for opposite reactions. */
 export enum DatacenterServingStatus {
   /** The signal was readable and reported no instance able to take a client there. An app placed here would be created and stored correctly, and its players would be told the app is temporarily offline until an instance returns. */
@@ -3662,7 +3747,7 @@ export type FreeAppQuotaApp = {
   __typename?: 'FreeAppQuotaApp';
   /** App id (BigInt). */
   appId: Scalars['BigInt']['output'];
-  /** True when the app consumes a free org slot (shared, not archived, no active subscription, no reserved throughput). */
+  /** True when the app consumes a free org slot (shared, not archived, no active subscription, no reserved realtime capacity). Only a REALTIME (UDP) reservation releases a slot; a GraphQL operations reservation does not. */
   consumesFreeSlot: Scalars['Boolean']['output'];
   /** How this app is credited: 'free_slot', 'reserved', or 'paid_subscription'. */
   creditKind: Scalars['String']['output'];
@@ -3670,7 +3755,7 @@ export type FreeAppQuotaApp = {
   hasActiveSubscription: Scalars['Boolean']['output'];
   /** App display name. */
   name: Scalars['String']['output'];
-  /** Reserved egress throughput in bytes/sec (0 when none). */
+  /** Reserved REALTIME (UDP) capacity in bytes/sec (0 when none). This is the dimension that decides free-slot consumption; a GraphQL operations reservation is separate and is not reported here. Same value as App.reservedUdpBytesPerSec. */
   reservedEgressBytesPerSec: Scalars['BigInt']['output'];
   /** URL slug for the app. */
   slug: Scalars['String']['output'];
@@ -3728,7 +3813,7 @@ export type FunctionPermissionEffectInput = {
   action: Scalars['String']['input'];
   /** Expression resolving the grid id (int) the permissions apply to, e.g. "self.grid_id". The grid must belong to the app. */
   gridIdExpression: Scalars['String']['input'];
-  /** Runtime permission keys to grant/revoke (validated against the runtime_permissions catalog, e.g. 'access', 'teleport', 'update_voxel_data', 'use_voice_chat'). */
+  /** Runtime permission keys to grant/revoke (validated against the runtime_permissions catalog, e.g. 'access', 'teleport', 'update_voxel_data', 'use_voice_chat', 'use_video_chat'). */
   permissionKeys: Array<Scalars['String']['input']>;
   /** Grant only: optional expression resolving a TTL in seconds (int > 0) after which the grant expires (rentals/leases), e.g. '86400'. Omit for a non-expiring grant. */
   ttlSecondsExpression?: InputMaybe<Scalars['String']['input']>;
@@ -4002,7 +4087,7 @@ export type GmAutomation = {
   maxTargets: Scalars['Int']['output'];
   /** Automation name (unique per app); the upsert key. */
   name: Scalars['String']['output'];
-  /** When the automation is next due (schedule). */
+  /** When the automation is next due (schedule). Due is not a promise to run: a schedule that comes due while the app has no players is skipped, and this advances to the next slot without the skipped run being made up. */
   nextRunAt: Maybe<Scalars['DateTime']['output']>;
   /** JSON object of static params passed to the entry point. */
   paramsJson: Scalars['String']['output'];
@@ -4149,19 +4234,19 @@ export type GmAutomationTrigger = {
   appId: Scalars['BigInt']['output'];
   /** The automation this trigger fires. */
   automationId: Scalars['String']['output'];
-  /** Filter: only this container type. Always null for player_count_changed. */
+  /** Filter: only this container type. Always null for player_count_changed and player_left. */
   containerTypeName: Maybe<Scalars['String']['output']>;
   /** Debounce window in ms. player_count_changed coalesces on the trailing edge; other model events use their existing leading-edge behavior. */
   debounceMs: Scalars['Int']['output'];
-  /** Filter: only this function name. Always null for player_count_changed. */
+  /** Filter: only this function name. Always null for player_count_changed and player_left. */
   functionName: Maybe<Scalars['String']['output']>;
   /** When this trigger last matched an event and dispatched a run, or null if it has never matched. A trigger that stays null while its event is happening is almost always a filter that cannot match — see warnings. */
   lastMatchedAt: Maybe<Scalars['DateTime']['output']>;
   /** Runs this trigger dispatched in the last 24 hours, including runs a guard then dropped. Fires suppressed by debounceMs never reach a run and are not counted. */
   matchCount24h: Scalars['Int']['output'];
-  /** Observed event: function_invoked | property_changed | container_created | player_count_changed. */
+  /** Observed event: function_invoked | property_changed | container_created | player_count_changed | player_left. */
   onEvent: Scalars['String']['output'];
-  /** Filter: only this property key. Always null for player_count_changed. */
+  /** Filter: only this property key. Always null for player_count_changed and player_left. */
   propertyKey: Maybe<Scalars['String']['output']>;
   /** Unique trigger id (UUID). */
   triggerId: Scalars['String']['output'];
@@ -5506,7 +5591,7 @@ export type Mutation = {
   gameModelRevokeTierFeature: Scalars['Boolean']['output'];
   /** Run an automation once, immediately (manual trigger), regardless of its schedule. Applies the same guard chain (app gate, rate limit, circuit) and records a run. Useful for testing an NPC. Requires app-admin ('manage_apps'). */
   gameModelRunAutomation: GmAutomationRun;
-  /** Arm a one-shot timer: invoke a function once, after a delay. The timer is durable (it survives an API restart) and claimed by exactly one replica, so it fires once. The target function must be autonomousInvocable, because the fire is headless and runs with system authority rather than a player's — which is also why this needs app-admin ('manage_apps'). For player-driven delays, author a timers effect on a function instead so the delay is part of your game logic. Supply dedupeKey to make re-arming replace the pending timer rather than queue another fire. */
+  /** Arm a one-shot timer: invoke a function once, after a delay. The timer is durable (it survives an API restart) and claimed by exactly one replica, so it fires once. A timer whose deadline passes while the app has no players WAITS rather than firing into an empty world, and fires when somebody returns: late, not lost. Read the clock in the handler rather than assuming the delay you asked for is the delay that elapsed. The target function must be autonomousInvocable, because the fire is headless and runs with system authority rather than a player's — which is also why this needs app-admin ('manage_apps'). For player-driven delays, author a timers effect on a function instead so the delay is part of your game logic. Supply dedupeKey to make re-arming replace the pending timer rather than queue another fire. */
   gameModelScheduleInvoke: GmTimer;
   /** Bulk-create game-model definitions (container types, property defs, functions) and optionally instances (containers + edges) in one transaction — used to initialize or import a model. Requires app-admin ('manage_apps'). Returns counts created, warnings, and a map of seed temp_id -> created container UUID. */
   gameModelSeed: GmSeedResult;
@@ -5520,7 +5605,7 @@ export type Mutation = {
   gameModelSetProperty: GmContainer;
   /** Set or clear the session's current-turn user, for turn-based play (authority enforced by the service). Pass userId null to clear the turn. Requires a valid token. */
   gameModelSetSessionTurn: GmSession;
-  /** Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps'). */
+  /** Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps'). NOTHING RUNS FOR AN APP WITH NO PLAYER IN IT: a SCHEDULE trigger that comes due while the app is empty is skipped and rescheduled from the moment a player returns, and the missed runs are never made up -- so write the entry point to advance the world by elapsed time rather than by one step per run. Event and manual triggers are unaffected, because something already asked. */
   gameModelUpsertAutomation: GmAutomation;
   /** Create an event trigger that fires an automation in reaction to model activity or a complete app-scoped active-player-count transition. player_count_changed rejects model filters, starts silent-baseline tracking, injects reserved previous/current/delta/revision params, and uses trailing-edge debounce; other event behavior is unchanged. Matched in the API server post-commit. Requires app-admin ('manage_apps'). */
   gameModelUpsertAutomationTrigger: GmAutomationTrigger;
@@ -5592,7 +5677,7 @@ export type Mutation = {
   publishPlayerCodeVersion: PlayerCodeListingVersion;
   /** Buy a grid listing with real money (P4b). Debits the player wallet management-side (platform/org split), then assigns grid_ownership + the listed player-code keys atomically; a failure to apply ownership refunds the charge. For blueprint listings, targetChunk picks where the fresh grid is stamped. This is the ownership path for marketplace_only-policy apps. */
   purchaseGrid: GridPurchaseResult;
-  /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. */
+  /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
   refreshAppToken: AppTokenResponse;
   /** Request a refund of a paid acquisition (P4b). Allowed only within the refund window and before meaningful use (first install/fetch voids it), capped per buyer; a successful refund credits the wallet, reverses the ledger split, claws back the seller balance, revokes the acquisition, and drains installs. Returns cents refunded. */
   refundPlayerCodeAcquisition: Scalars['Int']['output'];
@@ -5658,6 +5743,8 @@ export type Mutation = {
   sendTestEmail: SendTestEmailResult;
   /** Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendTextPacket: Scalars['Boolean']['output'];
+  /** Send ONE webcam video fragment, fanned out to nearby actors as a ClientVideoNotification (Buddy v0.25.0). Requires a bearer game token and the use_video_chat runtime permission at app AND grid level -- without it the game server responds asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). A datagram carries at most ~1117 bytes of videoData, so an encoded frame is split by the SDK into fragments (6-byte header: version, codec, frameId, fragIndex, fragCount; at most 16 per frame) and reassembled by receivers; this is a mutation PER FRAGMENT and sustained video belongs on the binary realtime relay. Every receiver in range pays the egress bytes: keep distance small and frames few. Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING -- NOT that it was delivered; the sender receives no echo, only errors (GenericErrorResponse, correlated by sequenceNumber) on udpNotifications. */
+  sendVideoPacket: Scalars['Boolean']['output'];
   /** Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendVoxelUpdate: Scalars['Boolean']['output'];
   /** Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission. */
@@ -5700,7 +5787,7 @@ export type Mutation = {
   setOperator: User;
   /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
   setOrgBillingExempt: BillingExemptOrgType;
-  /** Super admin only. Used to freeze/unfreeze orgs platform-wide. SIDE EFFECT: sets organizations.status. What that gates today is narrower than it sounds: a non-'active' status stops the org's API TOKENS from authenticating, but it does not remove its members' permissions, so a frozen org's signed-in members can still act. Refuses 'retired' in either direction — retirement is retireOrganization, which writes a tombstone. */
+  /** Super admin only. Freeze ('frozen') or unfreeze ('active') an organization platform-wide. A FROZEN organization grants its members NO org permission (super admins excepted, so it is reversible): they cannot spend its wallet, create or manage apps, or change members, and every such refusal names the freeze; its API tokens stop authenticating; the org itself still resolves by id and slug so Studio can show the state. Takes exactly 'active' or 'frozen'; 'retired' is refused in either direction — retirement is retireOrganization, which writes a tombstone. */
   setOrgStatus: Organization;
   /** Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method. */
   setPlayerAutoBilling: PlayerAutoBilling;
@@ -6639,6 +6726,11 @@ export type MutationPurchaseGridArgs = {
 };
 
 
+export type MutationRefreshAppTokenArgs = {
+  currentServer?: InputMaybe<CurrentServerInput>;
+};
+
+
 export type MutationRefundPlayerCodeAcquisitionArgs = {
   acquisitionId: Scalars['String']['input'];
   appId: Scalars['BigInt']['input'];
@@ -6800,6 +6892,11 @@ export type MutationSendTestEmailArgs = {
 
 export type MutationSendTextPacketArgs = {
   input: ClientTextPacketInput;
+};
+
+
+export type MutationSendVideoPacketArgs = {
+  input: ClientVideoPacketInput;
 };
 
 
@@ -7219,7 +7316,7 @@ export type OrgAppUsageProjectionRow = {
   appId: Scalars['String']['output'];
   /** App display name. */
   appName: Scalars['String']['output'];
-  /** Egress bytes so far this calendar month. */
+  /** Egress bytes so far this calendar month. Egress only; ingress does not count toward the aggregate volume. */
   currentEgressBytes: Scalars['String']['output'];
   /** True when this app is on track to exceed its free allowance, or null when insufficient data. */
   onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
@@ -7396,7 +7493,7 @@ export type OrgUsageProjection = {
   onTrackToExceedAny: Scalars['Boolean']['output'];
   /** True when at least 3 days have elapsed in the month (projection is meaningful). */
   sufficientData: Scalars['Boolean']['output'];
-  /** True when org total projected egress exceeds the combined free tier — suggest reserved throughput. */
+  /** True when org total projected egress exceeds the combined free tier, so the org should expect a metered bill. Note that a capacity reservation is NOT a remedy for this: reservations buy provisioned capacity and are charged in addition to metered usage, so they do not reduce an egress bill. What this signals is that the org needs a funded wallet or auto-billing. */
   suggestReservedThroughput: Scalars['Boolean']['output'];
   /** Total free monthly egress allowance across all shared apps in the org (apps × 5 GB). */
   totalFreeAllowanceBytes: Scalars['String']['output'];
@@ -7404,7 +7501,7 @@ export type OrgUsageProjection = {
   totalProjectedBytes: Maybe<Scalars['String']['output']>;
 };
 
-/** Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. */
+/** Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. WHICH OF THESE YOU PAY FOR: the *SendBytes fields are the billable direction, and *RecvBytes are metered but do NOT count toward Aggregate Data Volume, the monthly free-tier and overage measure. All byte figures are wire bytes measured at the network interface, including transport and network headers, and after any compression the service applies -- they will not match a client-side byte counter. */
 export type OrgUsageSummary = {
   __typename?: 'OrgUsageSummary';
   /** Total GraphQL bytes received across all org apps (string counter). */
@@ -7961,6 +8058,7 @@ export enum PlayerFaultCode {
   QuotaExhausted = 'QUOTA_EXHAUSTED',
   /** This caller is asking too often. It arrives ONLY as a thrown error, never in band on a result, and `extensions.retryAfterMs` carries the wait. That number is the milliseconds REMAINING in the current fixed window at the moment the refusal was built, not a fixed backoff, so a second refusal inside the same window carries a smaller number: treat it as a deadline from receipt and do not reuse a cached one. */
   RateLimited = 'RATE_LIMITED',
+  SpendCapReached = 'SPEND_CAP_REACHED',
   /** A breaker is open or an operator switch is off for this subject. */
   TemporarilyDisabled = 'TEMPORARILY_DISABLED',
   /** No valid credential was presented. */
@@ -7971,6 +8069,7 @@ export enum PlayerFaultCode {
   UserCodeLimitExceeded = 'USER_CODE_LIMIT_EXCEEDED',
   /** The app's own code ran past the time it is allowed. */
   UserCodeTooSlow = 'USER_CODE_TOO_SLOW',
+  WalletEmpty = 'WALLET_EMPTY',
   /** This app is served from another datacenter. The error extensions carry `gameApiUrl`; move there and retry. */
   WrongDatacenter = 'WRONG_DATACENTER'
 }
@@ -8314,6 +8413,10 @@ export type PublicRateCardEntryType = {
   freePerHour: Maybe<Scalars['BigInt']['output']>;
   /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app). Null when this dimension has no monthly allowance. */
   freePerMonth: Maybe<Scalars['BigInt']['output']>;
+  /** The period freeUnits resets on. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving. */
+  freePeriod: Maybe<AllowancePeriod>;
+  /** The allowance as the biller reads it: raw metric units free per freePeriod, as a BigInt decimal string. Null when the dimension has no allowance row. */
+  freeUnits: Maybe<Scalars['BigInt']['output']>;
   /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". This is the key your usage is aggregated under, so it is what to match a bill line against. */
   metric: Scalars['String']['output'];
   /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted. 0 means metered but not charged. */
@@ -8326,7 +8429,7 @@ export type PublicRateCardEntryType = {
   unitQuantity: Scalars['BigInt']['output'];
 };
 
-/** Result of publishing an app to the shared environment. All paths publish immediately; usage above the free hourly allowance is wallet-billed. */
+/** Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is wallet-billed: each app has a per-dimension hourly allowance and, for client egress, 5 decimal GB per calendar month. An unfunded free app is also shaped to roughly 1 MB/s; funding the org wallet or enabling auto-billing lifts that. */
 export type PublishAppResult = {
   __typename?: 'PublishAppResult';
   appId: Scalars['BigInt']['output'];
@@ -8764,7 +8867,7 @@ export type Query = {
   quotasForOrg: Array<ServiceQuota>;
   /** OPERATOR ONLY. Every organization currently retired, newest first. A retirement nobody can enumerate is indistinguishable from an organization that was quietly lost. */
   retiredOrganizations: Array<OrgRetirementType>;
-  /** Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index. */
+  /** Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index. */
   runtimePermissions: Array<Scalars['String']['output']>;
   /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
   serverWithLeastClients: ServerStatus;
@@ -9860,6 +9963,10 @@ export type RateCardEntryType = {
   freePerHour: Maybe<Scalars['BigInt']['output']>;
   /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app), and player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance. */
   freePerMonth: Maybe<Scalars['BigInt']['output']>;
+  /** The period freeUnits resets on. Null when the dimension has no allowance row. */
+  freePeriod: Maybe<AllowancePeriod>;
+  /** The allowance as the biller reads it: raw metric units free per freePeriod, as a BigInt decimal string. freePerHour and freePerMonth are views of this same row for the periods they name; a DAY allowance shows only here. Null when the dimension has no allowance row. */
+  freeUnits: Maybe<Scalars['BigInt']['output']>;
   /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates. */
   metric: Scalars['String']['output'];
   /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged. */
@@ -9875,7 +9982,7 @@ export type RateCardEntryType = {
 /** One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards. */
 export type RateChangeType = {
   __typename?: 'RateChangeType';
-  /** One of "priceCents", "unitLabel", "unitQuantity", "freePerHour" or "freePerMonth". */
+  /** One of "priceCents", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth". */
   field: Scalars['String']['output'];
   metric: Scalars['String']['output'];
   /** The value before this call, as a decimal string. "none" when there was no allowance row. */
@@ -10540,13 +10647,13 @@ export type SetAppClientSettingsInput = {
   redirectUris?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
-/** Set or change an app's reserved sustained throughput on the shared environment. */
+/** Set or change an app's reserved REALTIME (UDP) capacity on the shared environment. Reservations are sold in two independent dimensions and this mutation sets one of them; read both back from App.reservedUdpBytesPerSec and App.reservedGraphqlOpsPerSec. */
 export type SetAppReservedThroughputInput = {
-  /** App to configure reserved throughput for. */
+  /** App to configure reserved realtime (UDP) capacity for. */
   appId: Scalars['BigInt']['input'];
   /** Organization that owns the app. */
   orgId: Scalars['BigInt']['input'];
-  /** Reserved sustained egress in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation (free tier). */
+  /** Reserved sustained realtime capacity in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation, which releases the provisioned floor and stops the monthly fee; it does not change how the app is shaped, because the ~1 MB/s free-tier cap is decided by whether the org can be charged rather than by whether it holds a reservation. A reservation buys capacity, not volume: the fee is charged in addition to metered usage and includes no data allowance. */
   reservedBytesPerSec: Scalars['BigInt']['input'];
 };
 
@@ -10882,6 +10989,10 @@ export type SetRateCardInput = {
   freePerHour?: InputMaybe<Scalars['BigInt']['input']>;
   /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. */
   freePerMonth?: InputMaybe<Scalars['BigInt']['input']>;
+  /** New period for the free allowance. Leaves the units as they are unless freeUnits is also given. Moving a dimension to MONTH is how the development quota is stated. */
+  freePeriod?: InputMaybe<AllowancePeriod>;
+  /** New free allowance in raw metric units per freePeriod, as a BigInt decimal string. Must be >= 0. Leaves the period as it is unless freePeriod is also given. Not combinable with freePerHour, which is the older spelling of freeUnits with freePeriod HOUR. */
+  freeUnits?: InputMaybe<Scalars['BigInt']['input']>;
   /** The metered dimension to reprice. Refused unless the platform actually meters it: a rate for an unmetered metric bills nobody while appearing configured. */
   metric: Scalars['String']['input'];
   /** New price in cents per unitQuantity raw units. Must be >= 0; 0 means meter but do not charge. Omit to leave the price unchanged. Fractional values are accepted (the column is NUMERIC(20,6)). */
@@ -11160,7 +11271,7 @@ export enum UdpErrorCode {
 }
 
 /** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version. */
-export type UdpNotification = ActorUpdateNotification | ActorUpdateResponse | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
+export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
 
 /** UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md. */
 export type UdpProxyConnectionStatus = {
@@ -11418,15 +11529,15 @@ export type UpsertAutomationTriggerInput = {
   appId: Scalars['BigInt']['input'];
   /** The automation (by name) this trigger fires. */
   automationName: Scalars['String']['input'];
-  /** Filter: only this container type. For function_invoked this is the type of the invocation's "self" container, so you can watch "this function, on this type". Rejected for player_count_changed. */
+  /** Filter: only this container type. For function_invoked this is the type of the invocation's "self" container, so you can watch "this function, on this type". Rejected for player_count_changed and player_left. */
   containerTypeName?: InputMaybe<Scalars['String']['input']>;
   /** Debounce window in ms. player_count_changed uses trailing-edge coalescing (first previous count plus latest current count/revision); existing model events retain leading-edge suppression. */
   debounceMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Filter: only this function name. Applies to function_invoked; rejected for property_changed, container_created, and player_count_changed. */
+  /** Filter: only this function name. Applies to function_invoked; rejected for property_changed, container_created, player_count_changed and player_left. */
   functionName?: InputMaybe<Scalars['String']['input']>;
-  /** Event to observe: function_invoked | property_changed | container_created | player_count_changed. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params. */
+  /** Event to observe: function_invoked | property_changed | container_created | player_count_changed | player_left. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params. player_left fires once per actor that stops being present (about five seconds after its last update), the LAST player included, and injects actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason (presence_removed | lease_expired) and remaining_player_count. */
   onEvent: Scalars['String']['input'];
-  /** Filter: only this property key. Applies to property_changed; rejected for function_invoked, container_created, and player_count_changed. */
+  /** Filter: only this property key. Applies to property_changed; rejected for function_invoked, container_created, player_count_changed and player_left. */
   propertyKey?: InputMaybe<Scalars['String']['input']>;
   /** property_changed only: which writes to observe — "direct" (gameModelSetProperty), "function" (a mutation applied inside a gameModelInvoke, automation run, or timer fire), or "any" (default). Rejected for other events. */
   writeSource?: InputMaybe<Scalars['String']['input']>;
@@ -11464,7 +11575,7 @@ export type UpsertComputeTriggerInput = {
   invokePolicyJson?: InputMaybe<Scalars['String']['input']>;
   /** The module (by name) this trigger drives. */
   moduleName: Scalars['String']['input'];
-  /** For event triggers: function_invoked | property_changed | container_created | compute_event. */
+  /** For event triggers: function_invoked | property_changed | container_created | compute_event | player_left. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included. */
   onEvent?: InputMaybe<Scalars['String']['input']>;
   /** Event filter: only this property key. */
   propertyKey?: InputMaybe<Scalars['String']['input']>;
@@ -11592,6 +11703,8 @@ export type User = {
   grantEarlyAccess: Scalars['Boolean']['output'];
   /** Admin override forcing early access on/off regardless of normal eligibility (set via `setEarlyAccessOverride`). */
   grantEarlyAccessOverride: Scalars['Boolean']['output'];
+  /** Whether this account has a password set. Studio reads it to say "set a password" only to accounts that have none (magic-link and OAuth sign-ups); it used to say so to everyone. The hash itself never leaves the process. */
+  hasPassword: Scalars['Boolean']['output'];
   /** Whether the account email has been confirmed. */
   isConfirmed: Scalars['Boolean']['output'];
   /** Company-employee flag that grants access to control-plane / operator features. Independent from is_super_admin. */
@@ -12026,7 +12139,7 @@ export type WalletTransaction = {
   referenceId: Maybe<Scalars['String']['output']>;
   /** Unique transaction id (BigInt as a decimal string). */
   transactionId: Scalars['BigInt']['output'];
-  /** What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved egress capacity, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced. */
+  /** What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved capacity -- realtime bytes/s or GraphQL operations/s -- charged in addition to metered usage rather than including any of it, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive), "refund" (a payment-provider refund of a top-up, the credited amount leaving the wallet again, negative), "chargeback" (a card dispute on an org top-up, clawed back from the org wallet, negative). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced. */
   transactionType: Scalars['String']['output'];
   /** Wallet this transaction belongs to (BigInt as a decimal string). */
   walletId: Scalars['BigInt']['output'];
@@ -12273,11 +12386,11 @@ export type WasmModuleTrigger = {
   invokePolicyJson: Maybe<Scalars['String']['output']>;
   /** The module this trigger drives. */
   moduleId: Scalars['String']['output'];
-  /** For event triggers: function_invoked | property_changed | container_created | compute_event. */
+  /** For event triggers: function_invoked | property_changed | container_created | compute_event | player_left. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included. */
   onEvent: Maybe<Scalars['String']['output']>;
   /** Event filter: only this property key. */
   propertyKey: Maybe<Scalars['String']['output']>;
-  /** For tick triggers: the tick rate in Hz. */
+  /** For tick triggers: the tick rate in Hz. The module ticks at this rate only while its app has a player connected somewhere in the fleet, and stops when the last one leaves. */
   tickHz: Maybe<Scalars['Float']['output']>;
   /** Unique trigger id (UUID). */
   triggerId: Scalars['String']['output'];
@@ -15299,6 +15412,13 @@ export type SendTextPacketMutationVariables = Exact<{
 
 export type SendTextPacketMutation = { __typename?: 'Mutation', sendTextPacket: boolean };
 
+export type SendVideoPacketMutationVariables = Exact<{
+  input: ClientVideoPacketInput;
+}>;
+
+
+export type SendVideoPacketMutation = { __typename?: 'Mutation', sendVideoPacket: boolean };
+
 export type SendVoxelUpdateMutationVariables = Exact<{
   input: VoxelUpdateRequestInput;
 }>;
@@ -15310,12 +15430,14 @@ export type UdpNotificationsSubscriptionVariables = Exact<{ [key: string]: never
 
 
 export type UdpNotificationsSubscription = { __typename?: 'Subscription', udpNotifications:
+    | { __typename: 'ActorLeftNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, uuid: string, leftReason: number, sequenceNumber: number, epochMillis: string }
     | { __typename: 'ActorUpdateNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, state: string, sequenceNumber: number, epochMillis: string }
     | { __typename: 'ActorUpdateResponse', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, sequenceNumber: number, epochMillis: string }
     | { __typename: 'ChannelMessageNotification', channelId: string, uuid: string, payload: string, sequenceNumber: number, epochMillis: string }
     | { __typename: 'ClientAudioNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, audioData: string, sequenceNumber: number, epochMillis: string }
     | { __typename: 'ClientEventNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, eventType: number, state: string, sequenceNumber: number, epochMillis: string }
     | { __typename: 'ClientTextNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, text: string, sequenceNumber: number, epochMillis: string }
+    | { __typename: 'ClientVideoNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, videoData: string, sequenceNumber: number, epochMillis: string }
     | { __typename: 'GenericErrorResponse', sequenceNumber: number, errorCode: UdpErrorCode }
     | { __typename: 'RealtimeConnectionEvent', status: string, code: string, message: string, retryable: boolean }
     | { __typename: 'ServerEventNotification', appId: string, chunkX: string, chunkY: string, chunkZ: string, distance: number, decayRate: number, uuid: string, eventType: number, state: string, sequenceNumber: number, epochMillis: string }
@@ -15914,8 +16036,9 @@ export const SendChannelMessageDocument = {"kind":"Document","definitions":[{"ki
 export const SendClientEventDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendClientEvent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ClientEventNotificationInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendClientEvent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<SendClientEventMutation, SendClientEventMutationVariables>;
 export const SendSingleActorMessageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendSingleActorMessage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SingleActorMessageInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendSingleActorMessage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<SendSingleActorMessageMutation, SendSingleActorMessageMutationVariables>;
 export const SendTextPacketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendTextPacket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ClientTextPacketInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendTextPacket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<SendTextPacketMutation, SendTextPacketMutationVariables>;
+export const SendVideoPacketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendVideoPacket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ClientVideoPacketInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendVideoPacket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<SendVideoPacketMutation, SendVideoPacketMutationVariables>;
 export const SendVoxelUpdateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendVoxelUpdate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"VoxelUpdateRequestInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendVoxelUpdate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<SendVoxelUpdateMutation, SendVoxelUpdateMutationVariables>;
-export const UdpNotificationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"UdpNotifications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"udpNotifications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ActorUpdateNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ActorUpdateResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"VoxelUpdateNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"voxelX"}},{"kind":"Field","name":{"kind":"Name","value":"voxelY"}},{"kind":"Field","name":{"kind":"Name","value":"voxelZ"}},{"kind":"Field","name":{"kind":"Name","value":"voxelType"}},{"kind":"Field","name":{"kind":"Name","value":"voxelState"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"VoxelUpdateResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientAudioNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"audioData"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientTextNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"text"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientEventNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ServerEventNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"SingleActorMessageNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ChannelMessageNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"channelId"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GenericErrorResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"RealtimeConnectionEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}}]}}]}}]}}]} as unknown as DocumentNode<UdpNotificationsSubscription, UdpNotificationsSubscriptionVariables>;
+export const UdpNotificationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"UdpNotifications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"udpNotifications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ActorUpdateNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ActorUpdateResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"VoxelUpdateNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"voxelX"}},{"kind":"Field","name":{"kind":"Name","value":"voxelY"}},{"kind":"Field","name":{"kind":"Name","value":"voxelZ"}},{"kind":"Field","name":{"kind":"Name","value":"voxelType"}},{"kind":"Field","name":{"kind":"Name","value":"voxelState"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"VoxelUpdateResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientAudioNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"audioData"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientVideoNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"videoData"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ActorLeftNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"leftReason"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientTextNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"text"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClientEventNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ServerEventNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"distance"}},{"kind":"Field","name":{"kind":"Name","value":"decayRate"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"SingleActorMessageNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"chunkX"}},{"kind":"Field","name":{"kind":"Name","value":"chunkY"}},{"kind":"Field","name":{"kind":"Name","value":"chunkZ"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ChannelMessageNotification"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"channelId"}},{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"epochMillis"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GenericErrorResponse"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sequenceNumber"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"RealtimeConnectionEvent"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}}]}}]}}]}}]} as unknown as DocumentNode<UdpNotificationsSubscription, UdpNotificationsSubscriptionVariables>;
 export const UdpProxyConnectionStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"UdpProxyConnectionStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"udpProxyConnectionStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connected"}},{"kind":"Field","name":{"kind":"Name","value":"serverIp6"}},{"kind":"Field","name":{"kind":"Name","value":"serverClientPort"}},{"kind":"Field","name":{"kind":"Name","value":"lastMessageTime"}}]}}]}}]} as unknown as DocumentNode<UdpProxyConnectionStatusQuery, UdpProxyConnectionStatusQueryVariables>;
 export const AppGraphqlOperationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppGraphqlOperations"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"since"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DateTime"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appGraphqlOperations"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"since"},"value":{"kind":"Variable","name":{"kind":"Name","value":"since"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"operationName"}},{"kind":"Field","name":{"kind":"Name","value":"totalOps"}},{"kind":"Field","name":{"kind":"Name","value":"sendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"recvBytes"}}]}}]}}]} as unknown as DocumentNode<AppGraphqlOperationsQuery, AppGraphqlOperationsQueryVariables>;
 export const AppUsageSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppUsageSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"since"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DateTime"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"operationLimit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUsageSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"since"},"value":{"kind":"Variable","name":{"kind":"Name","value":"since"}}},{"kind":"Argument","name":{"kind":"Name","value":"operationLimit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"operationLimit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"replicationSendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"replicationRecvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"graphqlSendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"graphqlRecvBytes"}},{"kind":"Field","name":{"kind":"Name","value":"automationRuns"}},{"kind":"Field","name":{"kind":"Name","value":"automationInvocations"}},{"kind":"Field","name":{"kind":"Name","value":"automationComputeUnits"}},{"kind":"Field","name":{"kind":"Name","value":"topGraphqlOperations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"operationName"}},{"kind":"Field","name":{"kind":"Name","value":"totalOps"}},{"kind":"Field","name":{"kind":"Name","value":"sendBytes"}},{"kind":"Field","name":{"kind":"Name","value":"recvBytes"}}]}}]}}]}}]} as unknown as DocumentNode<AppUsageSummaryQuery, AppUsageSummaryQueryVariables>;
