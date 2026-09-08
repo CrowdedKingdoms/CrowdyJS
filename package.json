@@ -98,7 +98,7 @@
     "@graphql-tools/merge": "^9.1.10",
     "@types/node": "^22.10.7",
     "happy-dom": "^20.11.1",
-    "typescript": "^5.7.3",
+    "typescript": "^7.0.2",
     "ws": "^8.21.1"
   },
   "dependencies": {
