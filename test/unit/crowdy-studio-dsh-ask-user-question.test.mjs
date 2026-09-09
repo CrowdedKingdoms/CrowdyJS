@@ -46,6 +46,20 @@ test('parses fenced assistant JSON so the bubble becomes a question card', () =>
   assert.equal(questions[0].id, 'api_name');
 });
 
+test('parses an unlabeled markdown fence the same way as ```json', () => {
+  const raw = `\`\`\`\n${JSON.stringify(headerShaped)}\n\`\`\``;
+  const questions = parseAskUserQuestions(raw);
+  assert.ok(questions);
+  assert.equal(questions[0].id, 'api_name');
+});
+
+test('pulls a questions object out of surrounding prose', () => {
+  const raw = `Please pick one:\n${JSON.stringify(headerShaped)}\nThanks.`;
+  const questions = parseAskUserQuestions(raw);
+  assert.ok(questions);
+  assert.equal(questions[0].id, 'api_name');
+});
+
 test('accepts prompt as the question text', () => {
   const questions = parseAskUserQuestions(
     JSON.stringify({

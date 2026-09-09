@@ -15,6 +15,7 @@ const {
   repoPathToStudioFile,
   resolveGitHubLayout,
   studioFileToRepoPath,
+  trimSlash,
 } = await import('../../dist/crowdy-studio/github/sync.js');
 
 const BIND = {
@@ -58,6 +59,13 @@ function githubFs(files) {
     },
   };
 }
+
+test('trimSlash strips only leading and trailing slashes', () => {
+  assert.equal(trimSlash('///server/src///'), 'server/src');
+  assert.equal(trimSlash('client'), 'client');
+  assert.equal(trimSlash('///'), '');
+  assert.equal(trimSlash(''), '');
+});
 
 test('server/ + client/ dirs are the fullstack GitHub layout', () => {
   const layout = layoutFromRootEntries([

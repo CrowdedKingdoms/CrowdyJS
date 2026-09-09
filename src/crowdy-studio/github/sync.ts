@@ -31,7 +31,11 @@ export const DEFAULT_FULL_STACK_CROWDY_JSON = `{
 `;
 
 export function trimSlash(path: string): string {
-  return path.replace(/^\/+|\/+$/g, '');
+  let start = 0;
+  let end = path.length;
+  while (start < end && path.charCodeAt(start) === 47) start += 1;
+  while (end > start && path.charCodeAt(end - 1) === 47) end -= 1;
+  return start === 0 && end === path.length ? path : path.slice(start, end);
 }
 
 export function joinRepo(root: string, rel: string): string {

@@ -233,10 +233,50 @@ function jsonCandidates(raw: string): string[] {
   const trimmed = raw.trim();
   if (!trimmed) return [];
   const out: string[] = [];
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/iu);
-  if (fenced?.[1]?.trim()) out.push(fenced[1].trim());
+  const fenced = extractFencedCandidate(trimmed);
+  if (fenced) out.push(fenced);
   out.push(trimmed);
-  const embedded = trimmed.match(/\{[\s\S]*"questions"\s*:[\s\S]*\}/u);
-  if (embedded?.[0] && !out.includes(embedded[0])) out.push(embedded[0]);
+  const embedded = extractQuestionsObject(trimmed);
+  if (embedded && !out.includes(embedded)) out.push(embedded);
   return out;
+}
+
+function isUnicodeSpace(ch: string): boolean {
+  return /\s/u.test(ch);
+}
+
+/** First ``` … ``` body; optional `json` tag. Linear indexOf, not a quantified regex. */
+function extractFencedCandidate(text: string): string | null {
+  const fence = '```';
+  const start = text.indexOf(fence);
+  if (start === -1) return null;
+  let i = start + fence.length;
+  if (text.slice(i, i + 4).toLowerCase() === 'json') i += 4;
+  while (i < text.length && isUnicodeSpace(text[i]!)) i += 1;
+  const end = text.indexOf(fence, i);
+  if (end === -1) return null;
+  const inner = text.slice(i, end).trim();
+  return inner || null;
+}
+
+/**
+ * Same span as `/\{[\s\S]*"questions"\s*:[\s\S]*\}/`: first `{` through last `}`
+ * if `"questions"` + optional unicode space + `:` appears between them.
+ */
+function extractQuestionsObject(text: string): string | null {
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace <= firstBrace) return null;
+  const inner = text.slice(firstBrace, lastBrace + 1);
+  const key = '"questions"';
+  let search = 0;
+  while (search < inner.length) {
+    const at = inner.indexOf(key, search);
+    if (at === -1) return null;
+    let j = at + key.length;
+    while (j < inner.length && isUnicodeSpace(inner[j]!)) j += 1;
+    if (inner[j] === ':') return inner;
+    search = at + 1;
+  }
+  return null;
 }
