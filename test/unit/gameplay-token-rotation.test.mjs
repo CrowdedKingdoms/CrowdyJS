@@ -156,3 +156,139 @@ test('refreshGameplayToken retains the fresh token when reconnect fails so conne
   assert.equal(connectCalls, 2);
   client.close();
 });
+
+function operationName(document) {
+  const def = document?.definitions?.find((d) => d.kind === 'OperationDefinition');
+  return def?.name?.value ?? null;
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+const ACTOR_UPDATE = {
+  appId: '42',
+  chunk: { x: '0', y: '0', z: '0' },
+  uuid: 'a'.repeat(32),
+  state: '',
+};
+
+test('refreshGameplayToken waits for in-flight sendActorUpdate before disconnect', async () => {
+  const { createCrowdyClient } = await loadSdk();
+  const order = [];
+  const tokenStore = {
+    get: () => null,
+    set: (token) => order.push(`set:${token}`),
+    clear: () => {},
+  };
+  const client = createClient(createCrowdyClient, tokenStore);
+  client.setToken(OLD_TOKEN);
+  order.length = 0;
+  const sendGate = deferred();
+  const sendStarted = deferred();
+  client.graphql.request = async (document) => {
+    const name = operationName(document);
+    if (name === 'SendActorUpdate') {
+      order.push(`send:${client.getToken()}`);
+      sendStarted.resolve();
+      await sendGate.promise;
+      return { sendActorUpdate: true };
+    }
+    if (name === 'RefreshAppToken') {
+      order.push(`refresh:${client.getToken()}`);
+      return { refreshAppToken: FRESH_TOKEN };
+    }
+    throw new Error(`unexpected GraphQL operation ${name}`);
+  };
+  client.udp.disconnect = async () => {
+    order.push(`disconnect:${client.getToken()}`);
+    return true;
+  };
+  client.udp.connect = async () => {
+    order.push(`connect:${client.getToken()}`);
+    return { connected: true };
+  };
+
+  const send = client.udp.sendActorUpdate(ACTOR_UPDATE);
+  await sendStarted.promise;
+  const refresh = client.refreshGameplayToken();
+  await Promise.resolve();
+  assert.equal(
+    order.includes(`disconnect:${OLD_TOKEN}`),
+    false,
+    'disconnect must wait for the in-flight actorUpdate',
+  );
+  sendGate.resolve();
+  await send;
+  await refresh;
+  assert.deepEqual(order, [
+    `send:${OLD_TOKEN}`,
+    `disconnect:${OLD_TOKEN}`,
+    `refresh:${OLD_TOKEN}`,
+    `set:${FRESH_TOKEN.token}`,
+    `connect:${FRESH_TOKEN.token}`,
+  ]);
+  client.close();
+});
+
+test('sendActorUpdate during refreshGameplayToken waits and uses the new token', async () => {
+  const { createCrowdyClient } = await loadSdk();
+  const order = [];
+  const tokenStore = {
+    get: () => null,
+    set: (token) => order.push(`set:${token}`),
+    clear: () => {},
+  };
+  const client = createClient(createCrowdyClient, tokenStore);
+  client.setToken(OLD_TOKEN);
+  order.length = 0;
+  const disconnectGate = deferred();
+  const disconnectStarted = deferred();
+  client.udp.disconnect = async () => {
+    order.push(`disconnect:${client.getToken()}`);
+    disconnectStarted.resolve();
+    await disconnectGate.promise;
+    return true;
+  };
+  client.graphql.request = async (document) => {
+    const name = operationName(document);
+    if (name === 'SendActorUpdate') {
+      order.push(`send:${client.getToken()}`);
+      return { sendActorUpdate: true };
+    }
+    if (name === 'RefreshAppToken') {
+      order.push(`refresh:${client.getToken()}`);
+      return { refreshAppToken: FRESH_TOKEN };
+    }
+    throw new Error(`unexpected GraphQL operation ${name}`);
+  };
+  client.udp.connect = async () => {
+    order.push(`connect:${client.getToken()}`);
+    return { connected: true };
+  };
+
+  const refresh = client.refreshGameplayToken();
+  await disconnectStarted.promise;
+  const send = client.udp.sendActorUpdate(ACTOR_UPDATE);
+  await Promise.resolve();
+  assert.equal(
+    order.some((entry) => entry.startsWith('send:')),
+    false,
+    'send must wait for the in-flight gameplay-token refresh',
+  );
+  disconnectGate.resolve();
+  await refresh;
+  await send;
+  assert.deepEqual(order, [
+    `disconnect:${OLD_TOKEN}`,
+    `refresh:${OLD_TOKEN}`,
+    `set:${FRESH_TOKEN.token}`,
+    `connect:${FRESH_TOKEN.token}`,
+    `send:${FRESH_TOKEN.token}`,
+  ]);
+  client.close();
+});

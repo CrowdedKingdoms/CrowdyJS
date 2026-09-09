@@ -348,14 +348,19 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
       uuid: this.senderUuid(),
       detail: { chunk: input.chunk, x: input.x, y: input.y, z: input.z },
     });
+    // Omit voxelState when the caller did not supply state. Sending '' is
+    // refused by game-api while VoxelUpdateRequestInput.voxelState is String!;
+    // the sibling schema change makes the field nullable, and omitting it is
+    // the SDK contract either way.
     return this.ctx.client.udp.sendVoxelUpdate({
       appId: this.ctx.appId,
       chunk: toChunkInput(input.chunk),
       uuid: this.senderUuid(),
       voxel: { x: input.x, y: input.y, z: input.z },
       voxelType: input.voxelType,
-      voxelState:
-        input.state !== undefined ? this.voxelStateCodec.encode(input.state) : '',
+      ...(input.state !== undefined
+        ? { voxelState: this.voxelStateCodec.encode(input.state) }
+        : {}),
       sequenceNumber,
       ...(this.config.distance !== undefined ? { distance: this.config.distance } : {}),
       ...(this.config.decayRate !== undefined

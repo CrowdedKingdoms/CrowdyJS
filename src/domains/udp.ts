@@ -80,12 +80,47 @@ import { encodeBase64 } from '../utils.js';
  */
 export class UdpAPI {
   private readonly sequences = new SequenceAllocator();
+  private readonly inFlightActorUpdates = new Set<Promise<unknown>>();
 
   constructor(
     private gql: GraphQLClient,
     private subs: SubscriptionManager,
     private metrics?: RealtimeMetrics,
+    /**
+     * When set, every UDP send waits for this promise (a gameplay-token
+     * rotation) before leaving the client, so a send that starts during
+     * {@link CrowdyClient.refreshGameplayToken} uses the new token.
+     */
+    private waitForGameplayTokenRefresh?: () => Promise<unknown> | null | undefined,
   ) {}
+
+  /**
+   * Resolves when every in-flight {@link sendActorUpdate} has settled.
+   * {@link CrowdyClient.refreshGameplayToken} waits here before disconnecting
+   * the old proxy so those sends are not refused `UNAUTHORIZED`.
+   */
+  async waitForInFlightActorUpdates(): Promise<void> {
+    if (this.inFlightActorUpdates.size === 0) return;
+    await Promise.allSettled([...this.inFlightActorUpdates]);
+  }
+
+  private async awaitGameplayTokenReady(): Promise<void> {
+    const pending = this.waitForGameplayTokenRefresh?.();
+    if (!pending) return;
+    try {
+      await pending;
+    } catch {
+      // Rotation failed; still send so the caller sees the send error
+      // against whatever token remains.
+    }
+  }
+
+  private trackActorUpdate<T>(work: Promise<T>): Promise<T> {
+    this.inFlightActorUpdates.add(work);
+    return work.finally(() => {
+      this.inFlightActorUpdates.delete(work);
+    });
+  }
 
   /** Count a message accepted for sending (see `client.metrics`). */
   private record(kind: string, input: object): void {
@@ -219,6 +254,13 @@ export class UdpAPI {
   async sendActorUpdate(
     input: SendActorUpdateMutationVariables['input'],
   ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
+    return this.trackActorUpdate(this.dispatchActorUpdate(input));
+  }
+
+  private async dispatchActorUpdate(
+    input: SendActorUpdateMutationVariables['input'],
+  ): Promise<boolean> {
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeActorUpdate(ctx, input),
     );
@@ -320,7 +362,8 @@ export class UdpAPI {
    *   - `voxel` — `{ x, y, z }` voxel coordinates within the chunk; each is an
    *     int16 (-32768 to 32767).
    *   - `voxelType` — the new voxel type id.
-   *   - `voxelState` — voxel state blob, base64-encoded.
+   *   - `voxelState` — optional voxel state blob, base64-encoded. Omit
+   *     when the voxel has no state; do not send `''`.
    *   - `distance` — replication radius in chunk units, 0-8 (clamped); defaults
    *     to 8 for voxel updates.
    *   - `decayRate` — decay algorithm 0-5 (see {@link sendActorUpdate});
@@ -331,8 +374,11 @@ export class UdpAPI {
    * @throws {CrowdyGraphQLError} on auth/validation failures.
    */
   async sendVoxelUpdate(
-    input: SendVoxelUpdateMutationVariables['input'],
+    input: Omit<SendVoxelUpdateMutationVariables['input'], 'voxelState'> & {
+      voxelState?: string;
+    },
   ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeVoxelUpdate(ctx, input),
     );
@@ -340,7 +386,9 @@ export class UdpAPI {
       this.record('voxelUpdate', input);
       return viaRelay;
     }
-    const data = await this.gql.request(SendVoxelUpdateDocument, { input });
+    const data = await this.gql.request(SendVoxelUpdateDocument, {
+      input: input as SendVoxelUpdateMutationVariables['input'],
+    });
     this.record('voxelUpdate', input);
     return data.sendVoxelUpdate;
   }
@@ -365,7 +413,9 @@ export class UdpAPI {
    *   (its `code` is the server's `errorCode`).
    */
   async sendVoxelUpdateAndWait(
-    input: SendVoxelUpdateMutationVariables['input'],
+    input: Omit<SendVoxelUpdateMutationVariables['input'], 'voxelState'> & {
+      voxelState?: string;
+    },
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
     const request = this.withSequence(input);
@@ -400,6 +450,7 @@ export class UdpAPI {
   async sendAudioPacket(
     input: SendAudioPacketMutationVariables['input'],
   ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeAudioPacket(ctx, input),
     );
@@ -460,6 +511,7 @@ export class UdpAPI {
   async sendVideoPacket(
     input: SendVideoPacketMutationVariables['input'],
   ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeVideoPacket(ctx, input),
     );
@@ -533,6 +585,7 @@ export class UdpAPI {
   async sendTextPacket(
     input: SendTextPacketMutationVariables['input'],
   ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeTextPacket(ctx, input),
     );
@@ -600,6 +653,7 @@ export class UdpAPI {
   async sendClientEvent(
     input: SendClientEventMutationVariables['input'],
   ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeClientEvent(ctx, input),
     );
@@ -665,6 +719,7 @@ export class UdpAPI {
   async sendSingleActorMessage(
     input: SendSingleActorMessageMutationVariables['input'],
   ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeSingleActorMessage(ctx, input),
     );
@@ -702,6 +757,7 @@ export class UdpAPI {
   async sendChannelMessage(
     input: SendChannelMessageMutationVariables['input'],
   ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeChannelMessage(ctx, input),
     );

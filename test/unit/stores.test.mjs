@@ -746,6 +746,18 @@ test('ChunkStore: bulk load + hydration, realtime merge, optimistic edits, world
   assert.equal(sent.input.voxelType, 4);
   assert.deepEqual(voxelStateCodec.decode(sent.input.voxelState), { growth: 0 });
 
+  // setVoxel without `state` must omit voxelState (not send '').
+  await store.setVoxel({
+    chunk: { x: 0, y: 0, z: 0 }, x: 8, y: 8, z: 8, voxelType: 2,
+  });
+  const sentBare = net.sent.filter((s) => s.kind === 'voxelUpdate').at(-1);
+  assert.equal(sentBare.input.voxelType, 2);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(sentBare.input, 'voxelState'),
+    false,
+    'setVoxel without state must not send voxelState: \'\'',
+  );
+
   // Write-back: one throttled chunk per tick, then flush drains the rest.
   ticker.advance(100);
   await Promise.resolve();
