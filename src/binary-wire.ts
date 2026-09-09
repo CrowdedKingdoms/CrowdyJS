@@ -258,7 +258,7 @@ export function serializeVoxelUpdate(
   input: SpatialSendBase & {
     voxel: { x: number; y: number; z: number };
     voxelType: number;
-    voxelState: string;
+    voxelState?: string;
   },
 ): Promise<Uint8Array> {
   const voxelState = decodeBase64(input.voxelState ?? '');

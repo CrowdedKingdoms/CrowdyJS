@@ -67,6 +67,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 crowdy-compute-sdk = "${SDK_VERSION}"
+serde_json = "1"
 `,
     },
     {
@@ -85,6 +86,7 @@ fn on_init() {
 }
 
 fn on_tick(_dt_ms: u32) {
+    // The host only ticks when tickIntervalMs is set (omit/0 = invoke-only).
     // Server host calls are permission checked and clamped to the owned grid.
     // Type "crowdy::" for the platform-indexed host-call surface.
 }
@@ -106,9 +108,11 @@ fn on_init() {
 }
 
 fn on_tick(_dt_ms: u32) {
-    // Client host calls are allow-listed by PlayerCodeBroker. Presentation
-    // effects (for example HUD updates) never receive the page's app token.
-    // Type "crowdy::" for lifecycle and host-call completions.
+    // The host only ticks when PlayerCodeBroker.tickIntervalMs is set
+    // (omit/0 = invoke-only). Client host calls are allow-listed by
+    // PlayerCodeBroker. Presentation effects (for example HUD updates)
+    // never receive the page's app token. Type "crowdy::" for lifecycle
+    // and host-call completions.
 }
 
 fn on_invoke(payload: &[u8]) -> Vec<u8> {
