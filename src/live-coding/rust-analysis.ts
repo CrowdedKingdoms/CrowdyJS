@@ -117,7 +117,7 @@ const TARGET_SNIPPETS: Record<'server' | 'client', CompletionItem[]> = {
       kind: 15,
       detail: 'CLIENT init, tick, and invoke entry points',
       documentation:
-        'Runs in the browser Rust sandbox. Page capabilities are exposed only through the broker allow-list.',
+        'Runs in the browser Rust sandbox. Page capabilities are exposed only through the broker allow-list. The host only ticks when PlayerCodeBroker.tickIntervalMs is set.',
       insertText:
         'fn on_init() {\n    $1\n}\n\nfn on_tick(dt_ms: u32) {\n    $2\n}\n\nfn on_invoke(payload: &[u8]) -> Vec<u8> {\n    $3\n}\n\ncrowdy_compute_sdk::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);',
       sortText: '0-client-lifecycle',
@@ -127,7 +127,7 @@ const TARGET_SNIPPETS: Record<'server' | 'client', CompletionItem[]> = {
       kind: 15,
       detail: 'CLIENT tick for allow-listed HUD/presentation effects',
       documentation:
-        'Presentation calls cross PlayerCodeBroker; the language worker and guest module never receive page credentials.',
+        'Presentation calls cross PlayerCodeBroker; the language worker and guest module never receive page credentials. The host only ticks when tickIntervalMs is set.',
       insertText:
         'fn on_tick(dt_ms: u32) {\n    // Call an allow-listed presentation host function here.\n    $1\n}',
       sortText: '0-client-presentation',
@@ -356,7 +356,7 @@ function targetLifecycleNote(
       : 'SERVER lifecycle code executes in the platform sandbox and is activated only after an authoritative compile succeeds.';
   }
   return word === 'on_tick'
-    ? 'CLIENT ticks execute inside the browser guest sandbox; all page effects cross the PlayerCodeBroker allow-list.'
+    ? 'CLIENT ticks execute inside the browser guest sandbox only when PlayerCodeBroker.tickIntervalMs is set; all page effects cross the PlayerCodeBroker allow-list.'
     : 'CLIENT lifecycle code is loaded from the exact hash-bound artifact produced for this project version.';
 }
 
