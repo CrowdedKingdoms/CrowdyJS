@@ -916,7 +916,9 @@ export class GameModelAPI {
    *   the `typeName` (the stable upsert key, unique per app); a `displayName`;
    *   optional `description`; optional `instantiableBy` (`admin | member |
    *   owner`); optional `defaultPropertyVisibility` (`public | owner | hidden`);
-   *   and optional `metadataJson` (JSON-object string).
+   *   optional `bindPolicyJson` (who may claim a `bindingKey` on
+   *   `ensureContainer`; omit to leave the type unbound); and optional
+   *   `metadataJson` (JSON-object string).
    * @returns The upserted {@link GmContainerType}.
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`,
    *   `FORBIDDEN` (`requiredPermission === 'manage_apps'`), or `BAD_USER_INPUT`.

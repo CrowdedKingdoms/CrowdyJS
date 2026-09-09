@@ -58,11 +58,6 @@ type Avatar {
 }
 
 """
-A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
-"""
-scalar DateTime
-
-"""
 Integer (x, y, z) address of a 16x16x16-voxel chunk within an app's world grid. Each unit step moves one whole chunk (16 voxels) along that axis. Components are signed 64-bit integers serialized as decimal strings (see the BigInt scalar).
 """
 type ChunkCoordinates {
@@ -5068,6 +5063,20 @@ type NearbyGridPermissions {
 }
 
 """
+A grid overlapping a scanned region (returned by nearbyGrids). Bounds only — no permission keys.
+"""
+type NearbyGrid {
+  """The app (tenant) that owns the grid."""
+  appId: BigInt!
+  """The grid id."""
+  gridId: BigInt!
+  """Low (minimum) corner chunk of the grid box."""
+  lowChunk: ChunkCoordinates!
+  """High (maximum) corner chunk of the grid box."""
+  highChunk: ChunkCoordinates!
+}
+
+"""
 The permission-key whitelist configured for a grid (the grid_permission_limits input table).
 """
 type GridPermissionLimits {
@@ -5368,7 +5377,7 @@ type WasmModuleTrigger {
   """
   tickHz: Float
   """
-  For event triggers: function_invoked | property_changed | container_created | compute_event | player_left. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included.
+  For event triggers: function_invoked | property_changed | container_created | compute_event | player_left | player_joined. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included. player_joined (v1.93.0) is delivered with actor_uuid, user_id, chunk_x/y/z, first_seen_at and current_player_count.
   """
   onEvent: String
   """Event filter: only this model function name."""
@@ -5825,19 +5834,19 @@ type GmAutomationTrigger {
   """The automation this trigger fires."""
   automationId: String!
   """
-  Observed event: function_invoked | property_changed | container_created | player_count_changed | player_left.
+  Observed event: function_invoked | property_changed | container_created | player_count_changed | player_left | player_joined.
   """
   onEvent: String!
   """
-  Filter: only this function name. Always null for player_count_changed and player_left.
+  Filter: only this function name. Always null for player_count_changed, player_left and player_joined.
   """
   functionName: String
   """
-  Filter: only this container type. Always null for player_count_changed and player_left.
+  Filter: only this container type. Always null for player_count_changed, player_left and player_joined.
   """
   containerTypeName: String
   """
-  Filter: only this property key. Always null for player_count_changed and player_left.
+  Filter: only this property key. Always null for player_count_changed, player_left and player_joined.
   """
   propertyKey: String
   """
@@ -6600,7 +6609,9 @@ type GmAppPolicy {
   defaultParticipantRole: String!
 }
 
-"""Summary of what a gameModelSeed call created."""
+"""
+Summary of what a gameModelSeed call created. containersCreated / edgesCreated count new rows only; idMapJson still maps every tempId, including existing containers on re-seed.
+"""
 type GmSeedResult {
   """Number of container types created."""
   containerTypesCreated: Int!
@@ -6614,7 +6625,9 @@ type GmSeedResult {
   edgesCreated: Int!
   """Non-fatal warnings produced while seeding."""
   warnings: [String!]!
-  """JSON object mapping seed temp_id -> created container UUID."""
+  """
+  JSON object mapping seed temp_id -> container UUID (existing id on re-seed).
+  """
   idMapJson: String!
 }
 
@@ -7572,6 +7585,11 @@ type GmFunctionBreakerStatus {
 Arbitrary-precision signed integer (used for 64-bit ids and chunk coordinates such as appId, userId and chunk x/y/z). ALWAYS transmitted as a base-10 decimal STRING in BOTH directions — send it quoted (e.g. "1024", "-5") and read it back as a string; never use a raw JSON number, because large values overflow IEEE-754 doubles. The server rejects any value that is not a valid integer string.
 """
 scalar BigInt
+
+"""
+ISO-8601 DateTime or relative duration (e.g. 1d, 7d, 1h) interpreted as a lookback window ending at now.
+"""
+scalar DateTime
 
 type Query {
   """
@@ -8544,6 +8562,15 @@ type Query {
     """
     input: NearbyGridPermissionsInput!
   ): [NearbyGridPermissions!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  List every grid overlapping a chunk-coordinate bounding box, returning gridId and bounds only. Player-safe: no permission keys and no impersonation userId. Requires an app-scoped token for the same app.
+  """
+  nearbyGrids(
+    """
+    The app and the low/high chunk corners of the region to scan (corners are normalized).
+    """
+    input: NearbyGridsInput!
+  ): [NearbyGrid!]!
   """
   Read the permission-key whitelist configured for a grid. An empty list means there is no limit (every active runtime permission may be granted on the grid). Requires app-admin ('manage_apps').
   """
@@ -9558,6 +9585,18 @@ input NearbyGridPermissionsInput {
   appId: BigInt!
   """The user whose effective permissions to report per grid."""
   userId: BigInt!
+  """Low corner of the region to scan, in chunk coordinates (normalized)."""
+  lowChunk: ChunkCoordinatesInput!
+  """High corner of the region to scan, in chunk coordinates (normalized)."""
+  highChunk: ChunkCoordinatesInput!
+}
+
+"""
+Scan a region for grids. Player-safe: returns bounds only, no permission keys and no impersonation userId.
+"""
+input NearbyGridsInput {
+  """The app (tenant) to scan within."""
+  appId: BigInt!
   """Low corner of the region to scan, in chunk coordinates (normalized)."""
   lowChunk: ChunkCoordinatesInput!
   """High corner of the region to scan, in chunk coordinates (normalized)."""
@@ -10923,7 +10962,7 @@ type Mutation {
     name: String!
   ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
-  Bulk-create game-model definitions (container types, property defs, functions) and optionally instances (containers + edges) in one transaction — used to initialize or import a model. Requires app-admin ('manage_apps'). Returns counts created, warnings, and a map of seed temp_id -> created container UUID.
+  Bulk-create game-model definitions (container types, property defs, functions) and upsert instances (containers + edges) in one transaction — used to initialize or import a model. Seed containers bind as `seed:` + tempId and re-seed maps tempId to the existing id (containersCreated increments only on insert). Requires app-admin ('manage_apps').
   """
   gameModelSeed(
     """
@@ -11079,7 +11118,7 @@ type Mutation {
     input: CreateContainerInput!
   ): GmContainer!
   """
-  Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules) AND by the type's bindPolicy, so a caller who may not instantiate the type, or may not claim keys for it, errors only in the not-exists case. bindingKey is client-supplied, so on a member- or owner-instantiable type ANY entitled player may create the keyed row and becomes its owner — which inverts every owner_of_self invoke policy on that type. Set the container type's bindPolicy (e.g. {"type":"is_host"}), or use an admin-instantiable type, for any object more than one player shares. Requires a valid token.
+  Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules) AND by the type's bindPolicy, so a caller who may not instantiate the type, or may not claim keys for it, errors only in the not-exists case. bindingKey is client-supplied, so on a member- or owner-instantiable type ANY entitled player may create the keyed row and becomes its owner — which inverts every owner_of_self invoke policy on that type. Set the container type's bindPolicy (e.g. {"type":"is_host"}), or use an admin-instantiable type, for any object more than one player shares. The prefix `seed:` is reserved for gameModelSeed (v1.93.0); a non-admin ensure cannot claim it. Requires a valid token.
   """
   gameModelEnsureContainer(
     """
@@ -13567,9 +13606,13 @@ input SeedFunctionInput {
   timers: [FunctionTimerInput!]
 }
 
-"""A container (instance) to create as part of a seed."""
+"""
+A container (instance) to upsert as part of a seed. Re-seed matches on binding_key `seed:` + tempId; same-name instances are allowed.
+"""
 input SeedContainerInput {
-  """Developer-assigned id used only for edge references in this seed."""
+  """
+  Developer-assigned id used for edge references and as the seed binding key (`seed:` + tempId). Re-seed maps this tempId to the existing container id.
+  """
   tempId: String!
   """The container type to instantiate."""
   typeName: String!
@@ -13718,19 +13761,19 @@ input UpsertAutomationTriggerInput {
   """The automation (by name) this trigger fires."""
   automationName: String!
   """
-  Event to observe: function_invoked | property_changed | container_created | player_count_changed | player_left. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params. player_left fires once per actor that stops being present (about five seconds after its last update), the LAST player included, and injects actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason (presence_removed | lease_expired) and remaining_player_count.
+  Event to observe: function_invoked | property_changed | container_created | player_count_changed | player_left | player_joined. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params. player_left fires once per actor that stops being present (about five seconds after its last update), the LAST player included, and injects actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason (presence_removed | lease_expired) and remaining_player_count. player_joined (v1.93.0) fires once per actor the roster newly inserted (ON CONFLICT no-op is not a join), and injects actor_uuid, user_id, chunk_x/y/z, first_seen_at and current_player_count. A Redis flush can emit leave then join on later ticks.
   """
   onEvent: String!
   """
-  Filter: only this function name. Applies to function_invoked; rejected for property_changed, container_created, player_count_changed and player_left.
+  Filter: only this function name. Applies to function_invoked; rejected for property_changed, container_created, player_count_changed, player_left and player_joined.
   """
   functionName: String
   """
-  Filter: only this container type. For function_invoked this is the type of the invocation's "self" container, so you can watch "this function, on this type". Rejected for player_count_changed and player_left.
+  Filter: only this container type. For function_invoked this is the type of the invocation's "self" container, so you can watch "this function, on this type". Rejected for player_count_changed, player_left and player_joined.
   """
   containerTypeName: String
   """
-  Filter: only this property key. Applies to property_changed; rejected for function_invoked, container_created, player_count_changed and player_left.
+  Filter: only this property key. Applies to property_changed; rejected for function_invoked, container_created, player_count_changed, player_left and player_joined.
   """
   propertyKey: String
   """
@@ -13864,7 +13907,7 @@ input EnsureContainerInput {
   """The container type to resolve or instantiate."""
   typeName: String!
   """
-  Opaque client-derived key (max 128 chars) identifying the shared container within (appId, typeName, sessionId). All concurrent ensures with the same key return the same containerId.
+  Opaque client-derived key (max 128 chars) identifying the shared container within (appId, typeName, sessionId). All concurrent ensures with the same key return the same containerId. The prefix `seed:` is reserved for gameModelSeed; non-admin ensureContainer may not claim it.
   """
   bindingKey: String!
   """Human-friendly display name. Used ONLY when this call creates the row."""
@@ -13986,7 +14029,7 @@ input UpsertComputeTriggerInput {
   """
   tickHz: Float
   """
-  For event triggers: function_invoked | property_changed | container_created | compute_event | player_left. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included.
+  For event triggers: function_invoked | property_changed | container_created | compute_event | player_left | player_joined. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included. player_joined (v1.93.0) is delivered with actor_uuid, user_id, chunk_x/y/z, first_seen_at and current_player_count, once per roster INSERT (ON CONFLICT no-op is not a join). A Redis flush can emit leave then join on later ticks.
   """
   onEvent: String
   """Event filter: only this model function name."""
@@ -14109,8 +14152,10 @@ input VoxelUpdateRequestInput {
   The new voxel type ID. This determines the appearance and properties of the voxel.
   """
   voxelType: Int!
-  """The voxel state data, base64-encoded."""
-  voxelState: String!
+  """
+  Optional voxel state data, base64-encoded. Omit (or send an empty string) when the voxel has no extra state — an empty payload is a type-only update.
+  """
+  voxelState: String
   """
   Chunk replication distance (0-8). Defaults to 8 for voxel updates. Clamped to 0-8.
   """
