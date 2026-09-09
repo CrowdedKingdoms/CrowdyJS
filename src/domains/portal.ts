@@ -567,6 +567,15 @@ export class PortalAPI {
    */
   async completeEntry(search?: string): Promise<AppTokenResponse | null> {
     const params = new URLSearchParams(search ?? defaultSearch());
+    // GitHub App install/OAuth also uses `code` + `state`. Those must not be
+    // exchanged as Overworld portal codes — that overwrites the play token.
+    if (
+      params.has('github') ||
+      params.has('installation_id') ||
+      params.has('setup_action')
+    ) {
+      return null;
+    }
     const code = params.get('code');
     if (!code) return null;
     const state = params.get('state') ?? '';
