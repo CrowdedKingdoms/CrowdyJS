@@ -631,6 +631,23 @@ platform index only — never a credential and never a server connection.
 Compiled CLIENT artifacts run through `PlayerCodeBroker`, which keeps tokens
 on the page, allow-lists host calls, and locally clamps chunk-targeted effects
 to the owned grid before the normal SDK path reaches server authorization.
+The host only ticks a CLIENT mod when `tickIntervalMs` is set (omit or `0`
+is invoke-only):
+
+```ts
+import { PlayerCodeBroker } from '@crowdedkingdoms/crowdyjs';
+
+const broker = new PlayerCodeBroker({
+  workerUrl,
+  grid,
+  onHostCall,
+  tickIntervalMs: 1000, // required for on_tick; omit for invoke-only
+});
+await broker.start(artifactBytes);
+```
+
+The Studio embed defaults `clientTickIntervalMs` to `1000` when you do not
+pass one; a raw `PlayerCodeBroker` does not.
 
 Most games embed the ready-made shell rather than hand-rolling window chrome
 around `mountCrowdyStudio`:

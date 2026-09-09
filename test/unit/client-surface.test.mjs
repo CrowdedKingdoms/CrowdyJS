@@ -39,7 +39,7 @@ test('client exposes the full management + game sub-client surface', async () =>
     httpUrl: 'https://game.invalid',
     wsUrl: 'wss://game.invalid',
   });
-  assertMethods(client, 'client', ['refreshGameplayToken']);
+  assertMethods(client, 'client', ['refreshGameplayToken', 'waitForGameplayTokenRefresh']);
 
   // Existing client-facing sub-clients still present.
   for (const k of [
