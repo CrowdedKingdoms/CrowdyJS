@@ -4,14 +4,14 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.8.0-dev.1**. Whether that is *published* is
+**Current package:** `package.json` is **15.8.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**15.8.0-dev.1 papercuts:** `ChunkStore.setVoxel` without `state` omits
+**15.8.0 papercuts:** `ChunkStore.setVoxel` without `state` omits
 `voxelState` (no more `''`); starter `Cargo.toml` includes `serde_json`;
 `refreshGameplayToken` waits for in-flight `sendActorUpdate` and new UDP
 sends wait for an in-flight rotation. CLIENT `on_tick` still needs
@@ -296,7 +296,7 @@ companion since 2026-09-07; `simple-web-demo` (the June 2026 companion with a
 The Construct papercuts from 2026-09-07 (`voxelState: ''`, starter
 `serde_json`, in-flight `actorUpdate` across `refreshGameplayToken`, and
 the omitted `tickIntervalMs` in the minimal CLIENT example) are fixed in
-`15.8.0-dev.1`. `PlayerCodeBroker` still ticks only when `tickIntervalMs`
+`15.8.0`. `PlayerCodeBroker` still ticks only when `tickIntervalMs`
 is set — that is the contract, not a bug; the README example now sets it.
 
 ## Docs

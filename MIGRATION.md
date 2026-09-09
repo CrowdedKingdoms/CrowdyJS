@@ -1,6 +1,6 @@
 # CrowdyJS v15.8 — Construct papercuts
 
-**Nothing removed.** `15.8.0-dev.1` (2026-09-09).
+**Nothing removed.** `15.8.0` (2026-09-09).
 
 - `ChunkStore.setVoxel` without `state` **omits** `voxelState` instead of
   sending `''` (which the live `String!` schema refused). Pass `state` when
