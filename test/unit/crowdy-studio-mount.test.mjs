@@ -63,4 +63,10 @@ test('Crowdy Studio styles size to their host and respond to container width', a
   assert.match(CROWDY_STUDIO_STYLES, /height:100%;min-height:0/);
   assert.match(CROWDY_STUDIO_STYLES, /@container\(max-width:900px\)/);
   assert.doesNotMatch(CROWDY_STUDIO_STYLES, /min-height:680px/);
+  assert.match(
+    CROWDY_STUDIO_STYLES,
+    /\.ck-crowdy-studio-github-card\{display:flex;flex-direction:column/,
+  );
+  assert.match(CROWDY_STUDIO_STYLES, /--ck-bg/);
+  assert.match(CROWDY_STUDIO_STYLES, /--ck-accent/);
 });

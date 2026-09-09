@@ -902,82 +902,130 @@ export class CrowdyStudioDomShell {
   }
 
   private githubSection(state: CrowdyStudioState): HTMLElement {
-    const section = element('section', 'ck-crowdy-studio-section');
+    const section = element(
+      'section',
+      'ck-crowdy-studio-section ck-crowdy-studio-github',
+    );
     const header = element('div', 'ck-crowdy-studio-section-header');
-    const title = document.createElement('span');
-    title.textContent = 'GitHub';
+    const title = element('span', 'ck-crowdy-studio-github-title');
+    title.append(githubMark());
+    const heading = document.createElement('span');
+    heading.textContent = 'GitHub';
+    title.append(heading);
     header.append(title);
+    const tone = githubMessageTone(state.githubMessage);
+    if (state.githubMessage) {
+      const badge = element(
+        'span',
+        `ck-crowdy-studio-github-badge ck-crowdy-studio-github-badge--${tone}`,
+      );
+      badge.textContent = githubBadgeLabel(state.githubMessage);
+      badge.title = state.githubMessage;
+      header.append(badge);
+    }
     section.append(header);
+
+    const card = element('div', 'ck-crowdy-studio-github-card');
     const github = state.github;
     if (!github) {
-      const row = document.createElement('p');
-      row.textContent =
-        state.githubMessage ||
-        'GitHub status is loading, or this API does not serve Crowdy Studio GitHub fields.';
-      section.append(row);
-      const refresh = document.createElement('button');
-      refresh.type = 'button';
-      refresh.textContent = 'Refresh';
-      refresh.addEventListener('click', () => {
-        void this.run(() => this.controller.refreshGitHubStatus());
-      });
-      section.append(refresh);
+      card.append(
+        githubCopy(
+          state.githubMessage ||
+            'GitHub status is loading, or this API does not serve Crowdy Studio GitHub fields.',
+        ),
+        this.githubRefreshButton('Refresh'),
+      );
+      section.append(card);
       return section;
     }
     if (!github.configured || !github.connected) {
-      const row = document.createElement('p');
-      row.textContent = github.configured
-        ? 'Connect GitHub first. New mods create a repo on your account; Studio, DSH, and your IDE all edit that repo.'
-        : 'Create the local GitHub App, then install it on your account.';
-      section.append(row);
-      const connect = document.createElement('button');
-      connect.type = 'button';
-      connect.textContent = 'Connect GitHub';
+      card.append(
+        githubCopy(
+          github.configured
+            ? 'Connect GitHub first. New mods create a repo on your account; Studio, DSH, and your IDE all edit that repo.'
+            : 'Create the local GitHub App, then install it on your account.',
+        ),
+      );
+      const connect = button('Connect GitHub');
+      connect.classList.add('ck-crowdy-studio-primary');
       connect.addEventListener('click', () => {
         void this.run(() => this.controller.connectGitHub());
       });
-      section.append(connect);
+      card.append(connect, this.githubRefreshButton('Refresh'));
     } else {
-      const row = document.createElement('p');
-      const account = github.accountLogin ? `@${github.accountLogin}` : 'connected';
-      const selection = github.repositorySelection === 'all' ? 'all repos' : 'selected repos';
-      row.textContent = `Connected as ${account} (${selection}).`;
-      section.append(row);
-      if (github.owner && github.repo) {
-        const bound = document.createElement('p');
-        bound.textContent = `Bound ${github.owner}/${github.repo}@${github.branch || 'main'}`;
-        section.append(bound);
-      }
-      const bindRow = document.createElement('div');
+      const account = github.accountLogin
+        ? `@${github.accountLogin}`
+        : 'connected';
+      const selection =
+        github.repositorySelection === 'all' ? 'all repos' : 'selected repos';
+      const identity = element('div', 'ck-crowdy-studio-github-identity');
+      identity.setAttribute(
+        'aria-label',
+        `Connected as ${account} (${selection}).`,
+      );
+      const avatar = element('span', 'ck-crowdy-studio-github-avatar');
+      avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = (github.accountLogin ?? 'G').slice(0, 1).toUpperCase();
+      const identityText = element(
+        'span',
+        'ck-crowdy-studio-github-identity-text',
+      );
+      const login = element('span', 'ck-crowdy-studio-github-login');
+      login.textContent = account;
+      const scope = element('span', 'ck-crowdy-studio-github-scope');
+      scope.textContent =
+        github.repositorySelection === 'all'
+          ? 'All repositories'
+          : 'Selected repositories';
+      identityText.append(login, scope);
+      identity.append(avatar, identityText);
+      card.append(identity);
+
+      const bind = element('div', 'ck-crowdy-studio-github-bind');
+      const bindRow = element('div', 'ck-crowdy-studio-github-bind-row');
       const slug = document.createElement('input');
       slug.type = 'text';
       slug.placeholder = 'owner/repo@main';
-      slug.value = github.owner && github.repo
-        ? `${github.owner}/${github.repo}@${github.branch || 'main'}`
-        : '';
-      const bind = document.createElement('button');
-      bind.type = 'button';
-      bind.textContent = 'Bind repo';
-      bind.addEventListener('click', () => {
+      slug.setAttribute('aria-label', 'Bound repository');
+      slug.dataset.explorerField = 'true';
+      slug.value =
+        github.owner && github.repo
+          ? `${github.owner}/${github.repo}@${github.branch || 'main'}`
+          : '';
+      bindRow.append(slug);
+      const bindButton = button('Bind repo');
+      bindButton.addEventListener('click', () => {
         void this.run(() => this.controller.bindGitHubRepo(slug.value));
       });
-      bindRow.append(slug, bind);
-      section.append(bindRow);
+      bind.append(labeled('Repository', bindRow), bindButton);
+      card.append(bind);
     }
     if (state.githubMessage) {
-      const msg = document.createElement('p');
+      const msg = element('p', 'ck-crowdy-studio-github-status');
+      msg.dataset.tone = tone;
       msg.textContent = state.githubMessage;
-      section.append(msg);
+      card.append(msg);
     }
-    const refresh = document.createElement('button');
-    refresh.type = 'button';
-    refresh.textContent =
-      github?.owner && github.repo ? 'Pull from GitHub' : 'Refresh';
+    if (github.configured && github.connected) {
+      card.append(
+        this.githubRefreshButton(
+          github.owner && github.repo ? 'Pull from GitHub' : 'Refresh',
+        ),
+      );
+    }
+    section.append(card);
+    return section;
+  }
+
+  private githubRefreshButton(label: string): HTMLButtonElement {
+    const refresh = button(label);
+    if (label === 'Pull from GitHub') {
+      refresh.classList.add('ck-crowdy-studio-primary');
+    }
     refresh.addEventListener('click', () => {
       void this.run(() => this.controller.refreshGitHubStatus());
     });
-    section.append(refresh);
-    return section;
+    return refresh;
   }
 
   private projectSection(
@@ -1604,6 +1652,64 @@ function empty(message: string): HTMLElement {
   const value = element('div', 'ck-crowdy-studio-empty');
   value.textContent = message;
   return value;
+}
+
+function githubMark(): Element {
+  if (typeof document.createElementNS === 'function') {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill', 'currentColor');
+    path.setAttribute(
+      'd',
+      'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z',
+    );
+    svg.append(path);
+    return svg;
+  }
+  const mark = element('span', 'ck-crowdy-studio-github-mark');
+  mark.setAttribute('aria-hidden', 'true');
+  return mark;
+}
+
+function githubCopy(text: string): HTMLParagraphElement {
+  const value = element('p', 'ck-crowdy-studio-github-copy');
+  value.textContent = text;
+  return value;
+}
+
+type GitHubMessageTone = 'ok' | 'warn' | 'err';
+
+function githubMessageTone(message: string | undefined): GitHubMessageTone {
+  if (!message) return 'ok';
+  const lower = message.toLowerCase();
+  if (
+    lower.includes('failed') ||
+    lower.includes('error') ||
+    lower.includes('refuse')
+  ) {
+    return 'err';
+  }
+  if (
+    lower.includes('save studio edits') ||
+    lower.includes('finish github install')
+  ) {
+    return 'warn';
+  }
+  return 'ok';
+}
+
+function githubBadgeLabel(message: string): string {
+  if (message === 'GitHub is in sync.') return 'In sync';
+  if (/^Pushed \d+ file/.test(message)) return 'Pushed';
+  if (message === 'Pulled from GitHub.') return 'Pulled';
+  if (message === 'Save Studio edits before pulling from GitHub.') {
+    return 'Save first';
+  }
+  if (/failed/i.test(message)) return 'Failed';
+  if (/install/i.test(message)) return 'Install';
+  return 'GitHub';
 }
 
 function setInputUnlessFocused(

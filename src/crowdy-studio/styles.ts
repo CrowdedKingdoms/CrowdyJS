@@ -88,6 +88,29 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-panel pre[data-funds-needed=true]{color:#fde68a;white-space:pre-wrap}
 .ck-crowdy-studio-empty{color:var(--ck-muted);padding:8px}
 
+/* GitHub connection card — stacked for the ~213px explorer */
+.ck-crowdy-studio-github-title{display:inline-flex;align-items:center;gap:6px;color:var(--ck-text);text-transform:none;letter-spacing:0}
+.ck-crowdy-studio-github-title svg,.ck-crowdy-studio-github-mark{width:14px;height:14px;flex:none}
+.ck-crowdy-studio-github-mark{display:inline-block;border-radius:3px;background:currentColor}
+.ck-crowdy-studio-github-badge{flex:none;text-transform:none;font-weight:650;font-size:10px;letter-spacing:.02em;padding:1px 7px;border-radius:999px;border:1px solid var(--ck-line);color:var(--ck-muted);background:#0f172a;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-crowdy-studio-github-badge--ok{color:#86efac;border-color:#166534;background:#052e16}
+.ck-crowdy-studio-github-badge--warn{color:#fde68a;border-color:#854d0e;background:#1c1917}
+.ck-crowdy-studio-github-badge--err{color:#fca5a5;border-color:#7f1d1d;background:#1c1017}
+.ck-crowdy-studio-github-card{display:flex;flex-direction:column;gap:8px;padding:8px;border:1px solid var(--ck-line);border-radius:8px;background:var(--ck-bg)}
+.ck-crowdy-studio-github-copy,.ck-crowdy-studio-github-status{margin:0;color:var(--ck-muted);font-size:12px;font-weight:400;text-transform:none;overflow-wrap:anywhere}
+.ck-crowdy-studio-github-status[data-tone=ok]{color:#86efac}
+.ck-crowdy-studio-github-status[data-tone=warn]{color:#fde68a}
+.ck-crowdy-studio-github-status[data-tone=err]{color:#fca5a5}
+.ck-crowdy-studio-github-identity{display:flex;align-items:center;gap:8px;min-width:0}
+.ck-crowdy-studio-github-avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#0f172a;border:1px solid var(--ck-line);color:var(--ck-accent);font-weight:700;flex:none}
+.ck-crowdy-studio-github-identity-text{display:flex;flex-direction:column;min-width:0}
+.ck-crowdy-studio-github-login{color:var(--ck-text);font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-crowdy-studio-github-scope{color:var(--ck-muted);font-size:11px}
+.ck-crowdy-studio-github-bind{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ck-crowdy-studio-github-bind label{display:grid;gap:3px;margin:0;color:var(--ck-muted);font-size:11px;font-weight:650}
+.ck-crowdy-studio-github-bind-row{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ck-crowdy-studio-github-bind-row input,.ck-crowdy-studio-github-card>button,.ck-crowdy-studio-github-bind>button{width:100%;min-width:0}
+
 /* Status bar */
 .ck-crowdy-studio-statusbar{display:flex;align-items:center;gap:14px;padding:3px 10px;border-top:1px solid var(--ck-line);background:#0b1220;font-size:12px;min-height:24px}
 .ck-crowdy-studio-status{color:var(--ck-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

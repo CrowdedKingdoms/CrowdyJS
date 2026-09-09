@@ -515,6 +515,14 @@ class FakeDocument {
   createElement(tagName) {
     return new FakeElement(tagName, this);
   }
+  createElementNS(_namespace, tagName) {
+    return this.createElement(tagName);
+  }
+  createTextNode(text) {
+    const node = new FakeElement('#text', this);
+    node.textContent = String(text);
+    return node;
+  }
   addEventListener(type, listener) {
     let values = this.listeners.get(type);
     if (!values) this.listeners.set(type, (values = new Set()));
