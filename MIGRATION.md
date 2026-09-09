@@ -1,3 +1,14 @@
+# CrowdyJS v15.9 — nearbyGrids, player_joined, bindPolicyJson
+
+**Nothing removed.** `15.9.0` (2026-09-10). Tracks ck-api `v1.93.0`.
+
+- `gameApps.nearbyGrids` lists overlapping grids (id + bounds). No permission
+  keys and no impersonation `userId`. `nearbyPermissions` is unchanged.
+- Codegen picks up `player_joined` (automations / compute `onEvent`) and
+  `gameModelSeed` container upsert (`seed:<tempId>`).
+- Studio ops return `bindPolicyJson` on container types. Authoring surface
+  only — do not write live Titan Assault policies from the SDK.
+
 # CrowdyJS v15.8 — Construct papercuts
 
 **Nothing removed.** `15.8.0` (2026-09-09).
