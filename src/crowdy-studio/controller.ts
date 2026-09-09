@@ -442,28 +442,7 @@ export class CrowdyStudioController {
       }
       throw error;
     }
-    let [projects, personalLibraryFiles, commonFiles] = loaded;
-    if (this.options.github) {
-      const github = this.options.github;
-      const appId = this.options.appId;
-      const statuses = await Promise.all(
-        projects.map(async (project) => {
-          try {
-            const status = await github.status({
-              appId,
-              projectId: project.projectId,
-            });
-            return status.owner && status.repo ? project : null;
-          } catch {
-            // Unbound or local GitHub API unavailable: hide postgres leftovers.
-            return null;
-          }
-        }),
-      );
-      projects = statuses.filter(
-        (project): project is CrowdyStudioProjectSummary => project != null,
-      );
-    }
+    const [projects, personalLibraryFiles, commonFiles] = loaded;
     this.update({
       projects,
       personalLibraryFiles,

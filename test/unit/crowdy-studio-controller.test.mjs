@@ -839,7 +839,7 @@ test('dirty Studio edits refuse Pull from GitHub', async () => {
   controller.destroy();
 });
 
-test('unbound postgres leftovers are hidden when GitHub transport is present', async () => {
+test('unbound postgres projects stay listed so Bind can attach a repo', async () => {
   const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   provider.listProjects = async () => [
@@ -859,6 +859,25 @@ test('unbound postgres leftovers are hidden when GitHub transport is present', a
     },
   ];
   const github = boundGitHub({ unboundIds: ['leftover'] });
+  const controller = new CrowdyStudioController(
+    options(provider, playerCompute(), { github, autosaveMs: 10_000 }),
+  );
+  await controller.initialize();
+  assert.deepEqual(
+    controller.getState().projects.map((project) => project.projectId),
+    ['project-1', 'leftover'],
+  );
+  controller.destroy();
+});
+
+test('GitHub status failure during initialize still lists postgres projects', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const github = boundGitHub({
+    status: async () => {
+      throw new Error('GitHub status timed out');
+    },
+  });
   const controller = new CrowdyStudioController(
     options(provider, playerCompute(), { github, autosaveMs: 10_000 }),
   );
