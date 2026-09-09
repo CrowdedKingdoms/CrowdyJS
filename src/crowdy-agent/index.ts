@@ -22,6 +22,13 @@ export {
   type CrowdyStudioAgentStateV1,
 } from './controller.js';
 export {
+  AGENT_SESSION_EMPTYISH_LAST_SEQ,
+  agentSessionMemoryKey,
+  pickResumableAgentSession,
+  type AgentSessionResumeBinding,
+  type StudioSessionMemory,
+} from './session-resume.js';
+export {
   CrowdyAgentGraphQLTransport,
   type CrowdyAgentGraphQLSubscriptionClient,
   type CrowdyAgentGraphQLTransportOptions,
