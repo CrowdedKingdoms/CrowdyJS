@@ -4,6 +4,12 @@ import {
   wrapGlueSab,
   writeGlueResult,
 } from './glue-sab.js';
+import {
+  PLUGIN_HOST_FUNCTIONS,
+  PLUGIN_PRESENT_FUNCTIONS,
+  assertPluginHostArgs,
+  pluginChannelFor,
+} from './plugin-host.js';
 
 export interface PlayerCodeGridBounds {
   low: { x: bigint; y: bigint; z: bigint };
@@ -33,10 +39,14 @@ export interface PlayerCodeWorkerLike {
  * render. The broker forwards these to the game-declared channel; the mod
  * never touches the DOM (04 §4 presentation hooks).
  */
-export interface PlayerCodePresentation {
-  channel: 'hud' | 'overlay';
-  payload: unknown;
-}
+export type PlayerCodePresentation =
+  | { channel: 'hud'; payload: unknown }
+  | { channel: 'overlay'; payload: unknown }
+  | {
+      channel: 'appearance' | 'mesh' | 'mechanics';
+      fn: string;
+      args: Record<string, unknown>;
+    };
 
 export interface PlayerCodeBrokerOptions {
   /** Platform-owned glue worker URL; the worker never receives auth tokens. */
@@ -104,7 +114,7 @@ const ALLOWED_HOST_CALLS: Record<string, ReadonlySet<string>> = {
   ]),
   world_write: new Set(['voxel_set']),
   egress: new Set(['emit_spatial']),
-  present: new Set(['hud_set', 'overlay_draw']),
+  present: new Set(['hud_set', 'overlay_draw', ...PLUGIN_HOST_FUNCTIONS]),
   // grid_info is answered by the broker itself (the mod's own clamped bounds),
   // so a client mod can address its grid without a server round-trip.
   meta: new Set(['grid_permission_check', 'grid_info']),
@@ -128,7 +138,7 @@ const CHUNK_FUNCTIONS = new Set([
   'actors_list_radius',
 ]);
 
-const PRESENTATION_FUNCTIONS = new Set(['hud_set', 'overlay_draw']);
+const PRESENTATION_FUNCTIONS = new Set(['hud_set', 'overlay_draw', ...PLUGIN_HOST_FUNCTIONS]);
 
 const FN_TO_GROUP = new Map<string, string>();
 for (const [group, fns] of Object.entries(ALLOWED_HOST_CALLS)) {
@@ -379,10 +389,17 @@ export class PlayerCodeBroker {
       if (PRESENTATION_FUNCTIONS.has(raw.fn)) {
         // Presentation never reaches the SDK/server: it goes only to the
         // game-declared channel. A game that offers no sink silently drops it.
-        this.options.onPresentation?.({
-          channel: raw.fn === 'hud_set' ? 'hud' : 'overlay',
-          payload: args.payload,
-        });
+        if (PLUGIN_PRESENT_FUNCTIONS.has(raw.fn)) {
+          assertPluginHostArgs(raw.fn, args);
+          const channel = pluginChannelFor(raw.fn);
+          if (!channel) throw new Error(`unknown plugin host function '${raw.fn}'`);
+          this.options.onPresentation?.({ channel, fn: raw.fn, args });
+        } else {
+          this.options.onPresentation?.({
+            channel: raw.fn === 'hud_set' ? 'hud' : 'overlay',
+            payload: args.payload,
+          });
+        }
         data = { delivered: !!this.options.onPresentation };
       } else {
         data = await this.options.onHostCall({ fn: raw.fn, args });

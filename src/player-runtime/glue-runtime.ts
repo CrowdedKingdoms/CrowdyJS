@@ -40,6 +40,13 @@ export const GLUE_HOST_FUNCTIONS = [
   'emit_spatial',
   'hud_set',
   'overlay_draw',
+  'grid_skin_set',
+  'grid_skin_clear',
+  'mesh_asset_register',
+  'mesh_asset_attach',
+  'mesh_asset_spawn',
+  'mesh_asset_clear',
+  'mechanics_emit',
   'grid_permission_check',
 ] as const;
 

@@ -401,6 +401,7 @@ test('full-stack deploy saves once and orders client, server, pairing, enable, r
     'enabled:weather-server:true',
     'artifact:weather-client:client-v1',
     'broker:start',
+    'enabled:weather-client:true',
   ]);
   assert.equal(controller.getState().runtime.phase, 'RUNNING');
   controller.destroy();
