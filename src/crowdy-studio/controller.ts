@@ -190,6 +190,12 @@ export interface CrowdyStudioControllerOptions {
   targetPermissions?: Partial<
     Record<CrowdyStudioTarget, { canWrite: boolean; canRun: boolean }>
   >;
+  /**
+   * Local CLIENT tick cadence in ms, forwarded to
+   * {@link PlayerCodeBrokerOptions.tickIntervalMs}. The host only ticks
+   * when this is set (or when this default of 1000 ms applies). Omit/0 on
+   * a raw {@link PlayerCodeBroker} is invoke-only.
+   */
   clientTickIntervalMs?: number;
   autosaveMs?: number;
   retryMs?: number;

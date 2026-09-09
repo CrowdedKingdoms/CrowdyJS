@@ -267,8 +267,12 @@ export interface VoxelUpdateRequestInput {
   voxel: VoxelCoordinatesInput;
   /** The new voxel type id, which determines its appearance/properties. */
   voxelType: number;
-  /** Voxel state data, base64-encoded. */
-  voxelState: string;
+  /**
+   * Voxel state data, base64-encoded. Omit when the voxel has no state —
+   * do not send `''` (the live schema still types this `String!`; empty
+   * was refused).
+   */
+  voxelState?: string;
   /** Chunk replication distance, `0`–`8` (clamped). Defaults to `8`. */
   distance?: number;
   /**
