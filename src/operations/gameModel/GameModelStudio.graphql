@@ -81,6 +81,7 @@ mutation GameModelUpsertContainerType($input: UpsertContainerTypeInput!) {
     description
     instantiableBy
     defaultPropertyVisibility
+    bindPolicyJson
     metadataJson
   }
 }
@@ -161,6 +162,7 @@ query GameModelContainerTypes($appId: BigInt!) {
     description
     instantiableBy
     defaultPropertyVisibility
+    bindPolicyJson
     metadataJson
   }
 }

@@ -5,6 +5,7 @@ import {
   TransferGridOwnershipDocument,
   GridUserPermissionsDocument,
   NearbyGridPermissionsDocument,
+  NearbyGridsDocument,
   GridPermissionLimitsDocument,
   GridGroupGrantsDocument,
   CreateGridDocument,
@@ -19,6 +20,7 @@ import {
   type TransferGridOwnershipMutation,
   type GridUserPermissionsQuery,
   type NearbyGridPermissionsQuery,
+  type NearbyGridsQuery,
   type GridPermissionLimitsQuery,
   type GridGroupGrantsQuery,
   type CreateGridMutation,
@@ -31,6 +33,7 @@ import {
   type AssignGridOwnershipInput,
   type TransferGridOwnershipInput,
   type NearbyGridPermissionsInput,
+  type NearbyGridsInput,
   type CreateGridInput,
   type DeleteGridInput,
   type GrantGridPermissionsInput,
@@ -128,6 +131,21 @@ export class GameAppsAPI {
       input,
     });
     return data.nearbyGridPermissions;
+  }
+
+  /**
+   * List grids overlapping a chunk-coordinate box. Player-safe: bounds only,
+   * no permission keys and no impersonation userId. Requires an app-scoped
+   * token (ck-api v1.93.0).
+   *
+   * @param input - {@link NearbyGridsInput} (app, corners).
+   * @returns The overlapping grids with id and bounds.
+   */
+  async nearbyGrids(
+    input: NearbyGridsInput,
+  ): Promise<NearbyGridsQuery['nearbyGrids']> {
+    const data = await this.graphql.request(NearbyGridsDocument, { input });
+    return data.nearbyGrids;
   }
 
   /**
