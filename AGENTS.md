@@ -4,17 +4,26 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.9.0**. Whether that is *published* is
+**Current package:** `package.json` is **15.10.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
+**15.10.0 (no ck-api dependency):** `portal.completeEntry` returns `null` when
+the query carries `github` / `installation_id` / `setup_action` — a GitHub App
+callback is never spent as an Overworld portal code. `CrowdyStudioAgentController`
+resumes the last matching BUILD session on Studio mount instead of creating an
+empty one each time (`session-resume.ts`, `sessionMemory` option). Agent error
+redaction, trailing-slash strip, and starter module slug are linear scans
+(CodeQL `js/polynomial-redos`). No GitHub or DSH surface ships in this
+version; see the wrapper `studio-github-program/` design before adding one.
+
 **15.9.0 tracks ck-api `v1.93.0`:** `gameApps.nearbyGrids` (player-safe bounds),
 codegen for `player_joined` / seed upsert / `now()`, and Studio ops select
 `bindPolicyJson` on container types (authoring surface; no live Titan Assault
-policy writes). Package version must stay `15.9.0` — the publish tag adds
+policy writes). Package version stays bare (`15.10.0`) — the publish tag adds
 `-dev.N` / `-test.N`.
 
 **15.8.0 papercuts:** `ChunkStore.setVoxel` without `state` omits

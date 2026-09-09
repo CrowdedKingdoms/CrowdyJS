@@ -1,3 +1,20 @@
+# CrowdyJS v15.10 — portal GitHub guard, Agent session resume
+
+**Nothing removed.** `15.10.0` (2026-09-09). No ck-api version dependency.
+
+- `portal.completeEntry(search?)` returns `null` without calling the API when
+  the query has `github`, `installation_id`, or `setup_action`. A GitHub App
+  install callback that lands on a game origin no longer overwrites the play
+  token. Plain `?code=&state=` from hosted sign-in is unchanged.
+- `CrowdyStudioAgentController.initialize()` lists sessions and reopens the
+  remembered / most recent resumable session for the same app + project before
+  calling `createSession`. Pass `sessionMemory` to control where the last
+  session id is kept (defaults to `localStorage`). Closed or revoked sessions
+  are never resumed. New exports: `pickResumableAgentSession`,
+  `agentSessionMemoryKey`, `StudioSessionMemory`.
+- Internal: agent error redaction and two path/slug helpers are linear scans
+  with identical matches.
+
 # CrowdyJS v15.9 — nearbyGrids, player_joined, bindPolicyJson
 
 **Nothing removed.** `15.9.0` (2026-09-10). Tracks ck-api `v1.93.0`.
