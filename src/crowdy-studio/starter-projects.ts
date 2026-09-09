@@ -120,11 +120,30 @@ crowdy::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);
 }
 
 function moduleName(value: string): string {
-  const slug = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-+|-+$/gu, '')
-    .slice(0, 48);
+  const slug = slugModuleName(value).slice(0, 48);
   return slug || 'player-mod';
+}
+
+/**
+ * Same span as trim + lower + `/[^a-z0-9]+/gu` → `-`, then `/^-+|-+$/gu`.
+ * Linear scan; non-ASCII and punctuation collapse to a single dash.
+ */
+function slugModuleName(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  let dashed = '';
+  let pendingDash = false;
+  let started = false;
+  for (const ch of trimmed) {
+    const code = ch.codePointAt(0) ?? 0;
+    const alnum = (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
+    if (alnum) {
+      if (pendingDash && started) dashed += '-';
+      dashed += ch;
+      started = true;
+      pendingDash = false;
+    } else {
+      pendingDash = true;
+    }
+  }
+  return dashed;
 }
