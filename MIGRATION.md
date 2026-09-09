@@ -1,3 +1,20 @@
+# CrowdyJS v15.8 — Construct papercuts
+
+**Nothing removed.** `15.8.0-dev.1` (2026-09-09).
+
+- `ChunkStore.setVoxel` without `state` **omits** `voxelState` instead of
+  sending `''` (which the live `String!` schema refused). Pass `state` when
+  you have one; ck-api is being changed to accept a missing/empty field.
+- Studio starter `Cargo.toml` now lists `serde_json = "1"` next to
+  `crowdy-compute-sdk` so `host_call` compiles.
+- `PlayerCodeBroker` still ticks only when `tickIntervalMs` is set. The
+  README minimal CLIENT example now sets it; the Studio embed already
+  defaults `clientTickIntervalMs` to `1000`.
+- `refreshGameplayToken` waits for in-flight `udp.sendActorUpdate` before
+  disconnecting the old proxy. New UDP sends wait for an in-flight
+  rotation and then use the fresh token. Use
+  `client.waitForGameplayTokenRefresh()` if you send outside `UdpAPI`.
+
 # CrowdyJS v15.7 — invoke policies apply to app admins
 
 **Nothing removed, one input flag and one result field added.** ck-api `v1.89.0`

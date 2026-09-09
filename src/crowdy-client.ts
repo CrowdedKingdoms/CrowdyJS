@@ -463,7 +463,12 @@ export class CrowdyClient {
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);
     this.teams = new TeamsAPI(this.graphql);
-    this.udp = new UdpAPI(this.graphql, this.realtime, this.metrics);
+    this.udp = new UdpAPI(
+      this.graphql,
+      this.realtime,
+      this.metrics,
+      () => this.gameplayTokenRefresh,
+    );
     this.gameModel = new GameModelAPI(this.graphql, {
       wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),
@@ -514,7 +519,10 @@ export class CrowdyClient {
    * then opens a proxy authenticated by the new token. The session token
    * listener restarts the existing realtime subscription in place, so its
    * registered notification handlers are retained rather than duplicated.
-   * Concurrent calls share one in-flight rotation.
+   * Concurrent calls share one in-flight rotation. In-flight
+   * {@link UdpAPI.sendActorUpdate} calls are allowed to settle before the
+   * old proxy is disconnected; new UDP sends wait for this rotation via
+   * {@link waitForGameplayTokenRefresh} so they use the fresh token.
    *
    * Failure semantics:
    * - If the old proxy disconnect rejects or does not confirm closure, rotation
@@ -545,6 +553,7 @@ export class CrowdyClient {
   }
 
   private async performGameplayTokenRefresh(): Promise<AppTokenResponse> {
+    await this.udp.waitForInFlightActorUpdates();
     const disconnected = await this.udp.disconnect();
     if (!disconnected) {
       throw new CrowdyProtocolError({
@@ -556,6 +565,20 @@ export class CrowdyClient {
     const token = await this.portal.refresh();
     await this.udp.connect();
     return token;
+  }
+
+  /**
+   * Wait while a {@link refreshGameplayToken} rotation is in flight.
+   * Resolves immediately when none is running. UDP sends use this so a
+   * packet that starts during rotation waits for the new token.
+   */
+  async waitForGameplayTokenRefresh(): Promise<void> {
+    if (!this.gameplayTokenRefresh) return;
+    try {
+      await this.gameplayTokenRefresh;
+    } catch {
+      // Rotation failed; callers still proceed against the current token.
+    }
   }
 
   /**

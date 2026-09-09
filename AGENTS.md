@@ -4,12 +4,18 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.7.0**. Whether that is *published* is
+**Current package:** `package.json` is **15.8.0-dev.1**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**15.8.0-dev.1 papercuts:** `ChunkStore.setVoxel` without `state` omits
+`voxelState` (no more `''`); starter `Cargo.toml` includes `serde_json`;
+`refreshGameplayToken` waits for in-flight `sendActorUpdate` and new UDP
+sends wait for an in-flight rotation. CLIENT `on_tick` still needs
+`tickIntervalMs` — the README minimal example now sets it.
 
 **15.7.0 tracks ck-api `v1.89.0`: invoke policies apply to app admins.**
 `gameModel.invoke` gains the optional administrative `bypassPolicy` input and the
@@ -287,13 +293,11 @@ platform facts it depends on. It is also the
 companion since 2026-09-07; `simple-web-demo` (the June 2026 companion with a
 `file:` SDK dependency) was deleted the same day.
 
-Papercuts The Construct hit in this SDK (each worked around there; fix here):
-`ChunkStore.setVoxel` without `state` sends `voxelState: ''` and the API refuses
-it; `PlayerCodeBroker` ticks a client mod only when `tickIntervalMs` is set, which
-the embed docs' minimal example omits; `starter-projects.ts` declares only
-`crowdy-compute-sdk` although `host_call` takes a `serde_json::Value`; the
-in-flight `actorUpdate` at the instant of `refreshGameplayToken()` is refused
-`UNAUTHORIZED` once.
+The Construct papercuts from 2026-09-07 (`voxelState: ''`, starter
+`serde_json`, in-flight `actorUpdate` across `refreshGameplayToken`, and
+the omitted `tickIntervalMs` in the minimal CLIENT example) are fixed in
+`15.8.0-dev.1`. `PlayerCodeBroker` still ticks only when `tickIntervalMs`
+is set — that is the contract, not a bug; the README example now sets it.
 
 ## Docs
 
