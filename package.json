@@ -109,7 +109,7 @@
     "dompurify": "3.4.12",
     "graphql": "^16.13.2",
     "graphql-ws": "^6.0.8",
-    "vscode-jsonrpc": "8.2.0",
+    "vscode-jsonrpc": "9.0.2",
     "vscode-languageserver-protocol": "3.17.5",
     "web-tree-sitter": "0.26.11"
   },
