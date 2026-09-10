@@ -2760,7 +2760,7 @@ type GridClaimResult {
 }
 
 """
-How a player claim confers grid ownership in this app (D4): SELF_CLAIM (the claim alone assigns ownership), APPROVAL (claims create requests designated approvers accept), INVITE (only against a standing invite), or MARKETPLACE_ONLY (only a marketplace grid purchase; direct claims refused — the purchase edge ships in P4b).
+How a player claim confers grid ownership in this app (D4): SELF_CLAIM (the claim alone assigns ownership), APPROVAL (claims create requests designated approvers accept), INVITE (only against a standing invite), or MARKETPLACE_ONLY (direct claims refused). setAppGridClaimPolicy refuses MARKETPLACE_ONLY while paid grid commerce is off the public API.
 """
 enum GridClaimPolicy {
   SELF_CLAIM
@@ -2815,42 +2815,6 @@ type ReleaseClaimedGridResult {
   True after the ownership, ACL rows, and grid were removed in one committed transaction.
   """
   released: Boolean!
-}
-
-"""
-A grid listing available in the app store (P4b): a blueprint that stamps a fresh grid per purchase, or a concrete grid. Buying it confers grid_ownership + the listed player-code keys + the quota preset atomically.
-"""
-type GridListing {
-  """UUID of the grid listing."""
-  gridListingId: String!
-  """App the listing belongs to."""
-  appId: BigInt!
-  """'blueprint' or 'concrete'."""
-  kind: String!
-  """Display name."""
-  name: String!
-  """Store description."""
-  description: String!
-  """Price in cents."""
-  priceCents: Int!
-  """Player-code keys conferred on purchase."""
-  conferredPermissionKeys: [String!]!
-  """Resale policy for the grid."""
-  resalePolicy: String!
-  """Studio cut (bps) on resale, when applicable."""
-  studioCutBps: Int
-  """Catalog status: 'active' or 'delisted'."""
-  status: String
-}
-
-"""
-Result of purchasing a grid listing: the owned grid the buyer now holds.
-"""
-type GridPurchaseResult {
-  """The grid the buyer now owns."""
-  gridId: BigInt!
-  """True when ownership was assigned."""
-  ownershipAssigned: Boolean!
 }
 
 """
@@ -2913,94 +2877,6 @@ type PlayerCodeAdmissionQueueEntry {
   Which allow-list subject matched: 'code', 'author', or 'org'. Null while pending.
   """
   matchedSubjectKind: String
-}
-
-"""
-A seller's payout balance (player or org). pending ages through the D6 delay window into payable; reserved is the D6 young-account holdback or a T11 freeze.
-"""
-type SellerPayoutBalance {
-  """'user' or 'org'."""
-  partyKind: String!
-  """User id or org id."""
-  partyRef: BigInt!
-  """Cents still aging in the delay window."""
-  pendingCents: Int!
-  """Cents aged, unreserved, and withdrawable."""
-  payableCents: Int!
-  """Cents held back (reserve or T11 freeze)."""
-  reservedCents: Int!
-  """Stripe Connect Express onboarding state."""
-  onboardingStatus: SellerOnboardingStatus!
-  """Whether payouts are frozen by a T11 review hold."""
-  payoutsFrozen: Boolean!
-}
-
-"""
-A seller (player or org) payout-account state: NONE (never started), PENDING (Stripe Connect Express onboarding incomplete), COMPLETE (payouts enabled), or BLOCKED (provider or platform hold).
-"""
-enum SellerOnboardingStatus {
-  NONE
-  PENDING
-  COMPLETE
-  BLOCKED
-}
-
-"""
-Result of beginning seller onboarding: the Stripe Connect Express account link the seller opens to finish KYC.
-"""
-type SellerOnboardingLink {
-  """Current onboarding state."""
-  status: SellerOnboardingStatus!
-  """
-  The Stripe-hosted onboarding URL to open; null when already complete or unavailable in the seller region.
-  """
-  onboardingUrl: String
-  """
-  Why onboarding is unavailable (e.g. region unsupported); null otherwise.
-  """
-  unavailableReason: String
-}
-
-"""
-An Account Session for Stripe's EMBEDDED Connect components: the browser initializes Connect.js with the publishable key + this short-lived client secret and mounts the account-onboarding / payouts / balances components INSIDE the platform UI — sellers never leave for a Stripe-hosted page. Re-request on expiry. The hosted-link flow (beginSellerOnboarding) remains the fallback.
-"""
-type SellerAccountSession {
-  """Short-lived Account Session client secret for Connect.js."""
-  clientSecret: String!
-  """Stripe publishable key the browser initializes Connect.js with."""
-  publishableKey: String
-  """The connected account the session is scoped to (provider ref only)."""
-  accountRef: String!
-  """
-  Whether onboarding is already complete (payouts enabled) — render the payouts/balances components instead of onboarding.
-  """
-  onboardingComplete: Boolean!
-  """When the client secret expires; re-request after this."""
-  expiresAt: DateTime
-}
-
-"""One entry in the T11 commerce risk queue (studio/operator moderation)."""
-type CommerceRiskFlag {
-  """Flag row id."""
-  flagId: String!
-  """App the flag belongs to."""
-  appId: BigInt!
-  """
-  Flag kind: 'buyer_velocity', 'listing_velocity', 'same_party', 'chargeback', or 'manual'.
-  """
-  kind: String!
-  """Related order UUID, if any."""
-  orderId: String
-  """Subject: 'user' or 'org'."""
-  subjectKind: String!
-  """Subject user or org id."""
-  subjectRef: BigInt!
-  """Detail note."""
-  detail: String
-  """'open', 'released', or 'confirmed'."""
-  status: String!
-  """When the flag was raised."""
-  createdAt: DateTime!
 }
 
 """
@@ -4668,6 +4544,60 @@ type GameHost {
   Timestamp of the host's earliest still-connected actor (`MIN(actors.created_at)` for the host's group). Used as the primary election ordering key.
   """
   earliestActorJoinedAt: DateTime!
+}
+
+"""
+GitHub connection for the caller and, when a project is named, the repository bound to it. GitHub is a Studio filesystem capability, not a login provider.
+"""
+type CrowdyStudioGitHubStatus {
+  """This tier has a GitHub App registered."""
+  configured: Boolean!
+  """The caller has installed the App on a GitHub account."""
+  connected: Boolean!
+  """GitHub login the App is installed on."""
+  accountLogin: String
+  """`User` or `Organization`."""
+  accountType: String
+  """Bound repository owner, when a project was named."""
+  owner: String
+  repo: String
+  branch: String
+  """
+  Studio autosave also pushes to the bound repository. Off by default; the project owner opts in.
+  """
+  autosave: Boolean!
+  """Where to send the modder to install or manage the App."""
+  installUrl: String
+}
+
+type CrowdyStudioGitHubConnectStart {
+  """Install URL for this tier's App, carrying a signed state."""
+  connectUrl: String!
+}
+
+type CrowdyStudioGitHubRepo {
+  owner: String!
+  name: String!
+  fullName: String!
+  private: Boolean!
+  defaultBranch: String
+}
+
+type CrowdyStudioGitHubTreeEntry {
+  """Repo-relative path."""
+  path: String!
+  """`blob` or `tree`."""
+  type: String!
+  sha: String
+  size: Int
+}
+
+type CrowdyStudioGitHubFile {
+  path: String!
+  """UTF-8 content."""
+  content: String!
+  """Blob SHA; send it back on update."""
+  sha: String!
 }
 
 """
@@ -8324,22 +8254,6 @@ type Query {
     """Numeric app id whose admission queue to view."""
     appId: BigInt!
   ): [PlayerCodeAdmissionQueueEntry!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
-  """The calling player's seller payout balance (pending/payable/reserved)."""
-  mySellerPayoutBalance: SellerPayoutBalance!
-  """
-  The app's open T11 commerce risk queue (velocity holds, same-party flags, chargebacks). Requires 'manage_compute'.
-  """
-  commerceRiskQueue(
-    """App whose risk queue to view."""
-    appId: BigInt!
-  ): [CommerceRiskFlag!]! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
-  """
-  Browse the app's grid listings (P4b): blueprints that stamp a fresh grid per purchase, or concrete grids. Buying confers ownership + keys + quota preset atomically.
-  """
-  gridListings(
-    """App whose grid listings to browse."""
-    appId: BigInt!
-  ): [GridListing!]!
   """
   Read the app-owned Agentic Crowdy Studio policy row, or a disabled/killed deny-all projection when no row exists. Requires 'view_compute_diagnostics' on the app. This is configuration only: use crowdyStudioAgentEffectivePolicy to see platform clamp and kill precedence. No provider key, prompt, source, header, request/response body, payer reference, or other secret is exposed.
   """
@@ -9368,6 +9282,29 @@ type Query {
   """
   cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog! @requiresPermission(scope: "operator", permission: "is_operator")
   """
+  GitHub connection for the caller and the repository bound to a Crowdy Studio project. GitHub is a Studio filesystem capability, not a login provider.
+  """
+  crowdyStudioGitHubStatus(
+    """
+    App that owns the project; with projectId, the bound repository is included.
+    """
+    appId: BigInt
+    """
+    Crowdy Studio project to report the repository bind and autosave setting for.
+    """
+    projectId: String
+  ): CrowdyStudioGitHubStatus!
+  """
+  Repositories the caller granted to their Crowdy Studio installation. Identity session only.
+  """
+  crowdyStudioGitHubRepos: [CrowdyStudioGitHubRepo!]!
+  """
+  Recursive file list of the repository bound to the project (Git Trees API).
+  """
+  crowdyStudioGitHubTree(input: CrowdyStudioGitHubProjectInput!): [CrowdyStudioGitHubTreeEntry!]!
+  """One UTF-8 file from the bound repository, with its blob SHA."""
+  crowdyStudioGitHubFile(input: CrowdyStudioGitHubFileInput!): CrowdyStudioGitHubFile!
+  """
   List flexible player-model containers owned by the caller in one currently owned grid. Requires an app-scoped token and current grid ownership; never returns app-wide or foreign-owner rows.
   """
   playerModelContainers(
@@ -9613,6 +9550,17 @@ input GmPropertyPredicateInput {
   op: String!
   """JSON-encoded comparison value (e.g. '"enemy"', 'true', '10')."""
   valueJson: String!
+}
+
+input CrowdyStudioGitHubProjectInput {
+  appId: BigInt!
+  projectId: String!
+}
+
+input CrowdyStudioGitHubFileInput {
+  appId: BigInt!
+  projectId: String!
+  path: String!
 }
 
 """
@@ -10462,7 +10410,7 @@ type Mutation {
     status: PlayerCodeListingStatus!
   ): PlayerCodeListing!
   """
-  Set how a player claim confers grid ownership in this app (D4): SELF_CLAIM, APPROVAL (optionally with a designated approver list), INVITE, or MARKETPLACE_ONLY. Requires 'manage_apps'. SIDE EFFECTS: replica-syncs to game-api, where claimGridOwnership enforces the policy. Changing policy never revokes existing grid_ownership rows.
+  Set how a player claim confers grid ownership in this app (D4): SELF_CLAIM, APPROVAL (optionally with a designated approver list), or INVITE. MARKETPLACE_ONLY is refused with FEATURE_DISABLED while paid grid commerce is off the public API. Requires 'manage_apps'. Changing policy never revokes existing grid_ownership rows.
   """
   setAppGridClaimPolicy(
     """Numeric app id whose claim policy to set."""
@@ -10474,83 +10422,6 @@ type Mutation {
     """
     approverUserIds: [BigInt!] = []
   ): GridClaimPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
-  """
-  Create an Account Session for Stripe's EMBEDDED Connect components on the calling player's seller account (created on first call): the browser initializes Connect.js with the returned publishable key + client secret and mounts account-onboarding / payouts / balances INSIDE the platform UI. Client secrets are short-lived — re-request on expiry. The hosted-link flow (beginSellerOnboarding) remains the fallback.
-  """
-  createSellerAccountSession(
-    """ISO country code for the payout account (first call only)."""
-    country: String!
-  ): SellerAccountSession!
-  """
-  Create an embedded-components Account Session for an ORG's payout account (org-owned listings, DN-9). Requires 'manage_billing' in the org.
-  """
-  createOrgSellerAccountSession(
-    """Org whose payout account to manage."""
-    orgId: BigInt!
-    """ISO country code for the payout account (first call only)."""
-    country: String!
-  ): SellerAccountSession!
-  """
-  Begin Stripe Connect Express seller onboarding for the calling player (personal listings). Returns the hosted onboarding URL to finish KYC, or an unavailable reason in unsupported regions. Required before pricing a listing above free.
-  """
-  beginSellerOnboarding(
-    """ISO country code for the payout account (Stripe-supported)."""
-    country: String!
-  ): SellerOnboardingLink!
-  """
-  Begin Stripe Connect Express onboarding for an ORG's payout account (org-owned listings, DN-9). Requires 'manage_billing' in the org.
-  """
-  beginOrgSellerOnboarding(
-    """Org to onboard."""
-    orgId: BigInt!
-    """ISO country code for the payout account."""
-    country: String!
-  ): SellerOnboardingLink!
-  """
-  Pay out the calling player's payable balance to their Connect account (D6 minimum, 7-day delay, reserves enforced). Returns cents paid.
-  """
-  requestSellerPayout: Int!
-  """
-  Earn-to-mod: convert payable seller balance into the player wallet without a provider round-trip (07 §4.1). Returns cents credited.
-  """
-  spendPayoutBalanceToWallet(
-    """Cents to convert."""
-    amountCents: Int!
-  ): Int!
-  """
-  Set (author-only) the acquisition mode and pricing for a code listing. Non-free modes require completed seller onboarding. Curation can reject a listing but never reprice it (07 §1.2).
-  """
-  setListingPricing(
-    """Listing, mode, and price/interval/budget."""
-    input: SetListingPricingInput!
-  ): Boolean!
-  """
-  Set the app's marketplace org revenue share in basis points (OQ-3; taken from the post-platform remainder). Requires 'manage_billing'. BWF uses 0.
-  """
-  setAppMarketplaceOrgShare(
-    """App to configure."""
-    appId: BigInt!
-    """Org share in basis points (0..10000)."""
-    bps: Int!
-  ): Int! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
-  """
-  Release (settle held order + unfreeze payout) or confirm (uphold) a T11 risk flag. Requires 'manage_compute'.
-  """
-  decideCommerceRiskFlag(
-    """App that owns the flag."""
-    appId: BigInt!
-    """UUID of the flag."""
-    flagId: String!
-    """True to release, false to confirm."""
-    release: Boolean!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
-  """
-  Create a studio grid listing (07 §1.1): a blueprint that stamps a fresh grid per sale, or a concrete grid. Requires 'manage_apps'. Purchase (in-game) confers grid_ownership + the listed keys + quota preset atomically.
-  """
-  createGridListing(
-    """Grid listing config."""
-    input: CreateGridListingInput!
-  ): GridListing! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. A model/tool/mode/risk list naming anything outside the platform allowlist is REFUSED with AGENT_POLICY_INVALID quoting the platform's current list, rather than silently reduced; a list you do send is stored exactly as sent and can only narrow, and omitting it entirely means 'no narrowing', which inherits the platform's list live on every read. Numeric and retention values are still clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision and appends a sanitized audit event. NOTHING IS PUSHED TO GAME API: its runtime pulls crowdy.studio-agent-policy/1, obtaining a replica the first time a permitted caller asks about an app that has none, and re-pulling an existing replica once it passes refreshAfter (two thirds of its 60s validity). A change therefore reaches enforcement within about a minute for an app already in use, and not at all until someone asks for one that is not. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT.
   """
@@ -11456,21 +11327,6 @@ type Mutation {
     name: String!
   ): Boolean!
   """
-  Buy a grid listing with real money (P4b). Debits the player wallet management-side (platform/org split), then assigns grid_ownership + the listed player-code keys atomically; a failure to apply ownership refunds the charge. For blueprint listings, targetChunk picks where the fresh grid is stamped. This is the ownership path for marketplace_only-policy apps.
-  """
-  purchaseGrid(
-    """App that owns the listing."""
-    appId: BigInt!
-    """UUID of the grid listing to buy."""
-    gridListingId: String!
-    """Blueprint stamp chunk X."""
-    chunkX: Int
-    """Blueprint stamp chunk Y."""
-    chunkY: Int
-    """Blueprint stamp chunk Z."""
-    chunkZ: Int
-  ): GridPurchaseResult!
-  """
   Create a marketplace listing (free mode) for code the caller authors — personally, or org-owned via ownerOrgId (DN-9; requires manage_compute in that org). SIDE EFFECTS: writes the catalog row with an ownership audit entry. Publishing never uploads source; versions snapshot artifact hashes only.
   """
   publishPlayerCode(
@@ -11485,7 +11341,7 @@ type Mutation {
     input: PublishPlayerCodeVersionInput!
   ): PlayerCodeListingVersion!
   """
-  Acquire a free listing: writes the entitlement row (no payment edge exists in P4a — paid modes are P4b). Idempotent per (listing, caller). Allowed in any admission mode; in allow_list apps an unadmitted acquisition holds until the listing/author/org is admitted, at which point installPlayerCode proceeds.
+  Acquire a free listing: writes the entitlement row. Paid listings (price_cents > 0 or a non-free acquisition mode) are refused with FEATURE_DISABLED. Idempotent per (listing, caller). Allowed in any admission mode; in allow_list apps an unadmitted acquisition holds until the listing/author/org is admitted, at which point installPlayerCode proceeds.
   """
   acquirePlayerCode(
     """App that owns the listing."""
@@ -11512,33 +11368,6 @@ type Mutation {
     """Version to pin; defaults to the newest published version."""
     versionId: String
   ): PlayerCodeInstall!
-  """
-  Renew a RENT acquisition (or extend a TIME_LIMITED window): a wallet charge on the same acquisition that pushes its expiry out. A drained install resumes on the next scheduler pass without re-consent. Paid modes only (P4b).
-  """
-  renewPlayerCodeAcquisition(
-    """App of the acquisition."""
-    appId: BigInt!
-    """UUID of the acquisition to renew."""
-    acquisitionId: String!
-  ): PlayerCodeAcquisition!
-  """
-  Top up a COST_LIMITED acquisition's compute-unit budget: a wallet charge that adds the listing's unit budget to the license. Exhausted installs resume once the budget clears their consumed units. Paid modes only (P4b).
-  """
-  topUpPlayerCodeAcquisition(
-    """App of the acquisition."""
-    appId: BigInt!
-    """UUID of the acquisition to top up."""
-    acquisitionId: String!
-  ): PlayerCodeAcquisition!
-  """
-  Request a refund of a paid acquisition (P4b). Allowed only within the refund window and before meaningful use (first install/fetch voids it), capped per buyer; a successful refund credits the wallet, reverses the ledger split, claws back the seller balance, revokes the acquisition, and drains installs. Returns cents refunded.
-  """
-  refundPlayerCodeAcquisition(
-    """App of the acquisition."""
-    appId: BigInt!
-    """UUID of the acquisition to refund."""
-    acquisitionId: String!
-  ): Int!
   """
   Uninstall: removes the registered instances, grid client attachments, and fetch rights. The acquisition row is RETAINED for audit; reinstalling later needs no new acquisition. Returns false when no matching active install exists.
   """
@@ -11577,7 +11406,7 @@ type Mutation {
     consentCapabilityHash: String!
   ): Boolean!
   """
-  Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses (ownership arrives only via grid purchase, P4b). The grid must exist and have no current owner; game rules gate who may attempt a claim.
+  Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses. The grid must exist and have no current owner; game rules gate who may attempt a claim.
   """
   claimGridOwnership(
     """App containing the grid."""
@@ -11842,6 +11671,26 @@ type Mutation {
     """Open session, current epoch, and retry key."""
     input: AgentSessionControlInput!
   ): AgentSession!
+  """
+  Install URL for this tier's Crowdy Studio GitHub App with a signed state. Identity session only. No GitHub token ever reaches the browser.
+  """
+  crowdyStudioGitHubConnectUrl: CrowdyStudioGitHubConnectStart!
+  """
+  Bind a Crowdy Studio project you own to a repository granted to your installation. Verifies the branch exists. Identity session only. Autosave stays off until you turn it on.
+  """
+  crowdyStudioGitHubBind(input: BindCrowdyStudioGitHubInput!): CrowdyStudioGitHubStatus!
+  """
+  Remove the repository bind from a project you own. Files in Crowdy Studio are untouched.
+  """
+  crowdyStudioGitHubUnbind(input: CrowdyStudioGitHubProjectInput!): CrowdyStudioGitHubStatus!
+  """
+  Opt a bound project into (or out of) pushing Studio autosaves to GitHub. Default is off.
+  """
+  crowdyStudioGitHubSetAutosave(input: SetCrowdyStudioGitHubAutosaveInput!): CrowdyStudioGitHubStatus!
+  """
+  Create or update one UTF-8 file in the bound repository. Send the current sha on update; a stale sha is refused with GITHUB_STALE_SHA.
+  """
+  crowdyStudioGitHubPutFile(input: CrowdyStudioGitHubPutFileInput!): CrowdyStudioGitHubFile!
   """
   Create a flexible player-model instance in a currently owned grid. The server forces ownerUserId to the caller; this cannot author studio types or app-wide rows.
   """
@@ -12586,56 +12435,6 @@ input TransferPlayerCodeListingInput {
   toOwnerKind: PlayerCodeOwnerKind!
   """Numeric user id or org id of the new owner, per toOwnerKind."""
   toOwnerRef: BigInt!
-}
-
-input SetListingPricingInput {
-  """App that owns the listing."""
-  appId: BigInt!
-  """UUID of the listing to price."""
-  listingId: String!
-  """
-  Acquisition mode: 'free', 'buy', 'rent', 'time_limited', or 'cost_limited'.
-  """
-  acquisitionMode: String!
-  """Price in cents (required for all non-free modes; author-set only)."""
-  priceCents: Int
-  """Rent billing interval in days (rent mode)."""
-  rentIntervalDays: Int
-  """Single fixed window in days (time_limited mode)."""
-  windowDays: Int
-  """Compute-unit budget the license grants (cost_limited mode)."""
-  unitBudget: BigInt
-  """
-  Whether an acquired license may travel with a grid resale (default false; 07 §5.a).
-  """
-  licenseTransferable: Boolean
-}
-
-input CreateGridListingInput {
-  """App the listing belongs to."""
-  appId: BigInt!
-  """'blueprint' or 'concrete'."""
-  kind: String!
-  """Display name."""
-  name: String!
-  """Store description."""
-  description: String
-  """JSON bounds/placement config (blueprint listings)."""
-  blueprintConfigJson: String
-  """The concrete grid id being sold (concrete listings)."""
-  gridId: BigInt
-  """Price in cents."""
-  priceCents: Int!
-  """Player-code keys the sale confers (e.g. write/run server/client)."""
-  conferredPermissionKeys: [String!]
-  """JSON per-grid quota preset bound on purchase."""
-  quotaPresetJson: String
-  """
-  Resale policy: 'no_resale' (default), 'resale_free', or 'resale_with_studio_cut'.
-  """
-  resalePolicy: String
-  """Studio cut (bps) taken on resales, when resale_with_studio_cut."""
-  studioCutBps: Int
 }
 
 """
@@ -15003,6 +14802,30 @@ input CancelAgentRunInput {
   clientEpoch: BigInt!
   """Active run UUID to cancel; omit to cancel the session currentRun."""
   runId: String
+}
+
+input BindCrowdyStudioGitHubInput {
+  appId: BigInt!
+  projectId: String!
+  owner: String!
+  repo: String!
+  branch: String
+}
+
+input SetCrowdyStudioGitHubAutosaveInput {
+  appId: BigInt!
+  projectId: String!
+  autosave: Boolean!
+}
+
+input CrowdyStudioGitHubPutFileInput {
+  appId: BigInt!
+  projectId: String!
+  path: String!
+  content: String!
+  message: String!
+  """Required when the file already exists."""
+  sha: String
 }
 
 """
