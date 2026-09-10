@@ -17,10 +17,13 @@ updates:
       npm-minor-and-patch:
         update-types: [minor, patch]
     # SDK pins are tier-aligned (dev -> X.Y.Z-dev.N, ...) and promoted by hand;
-    # a bot bump would cross tiers. Every other dependency is fair game.
+    # a bot bump would cross tiers. Semver-major is a scheduled upgrade, not a
+    # weekly bot PR — ungrouped majors eat open-pull-requests-limit.
     ignore:
       - dependency-name: "@crowdedkingdoms/*"
       - dependency-name: "@cks/*"
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
