@@ -92,7 +92,7 @@
   "homepage": "https://github.com/CrowdedKingdoms/CrowdyJS#readme",
   "devDependencies": {
     "@graphql-codegen/cli": "^6.3.0",
-    "@graphql-codegen/typed-document-node": "^6.1.8",
+    "@graphql-codegen/typed-document-node": "^7.1.0",
     "@graphql-codegen/typescript": "^5.0.10",
     "@graphql-codegen/typescript-operations": "^5.1.0",
     "@graphql-tools/merge": "^9.1.10",
