@@ -142,3 +142,4 @@ export {
 export * from './embed/index.js';
 export * from '../crowdy-agent/index.js';
 export * from '../player-host/index.js';
+export * from './github/index.js';

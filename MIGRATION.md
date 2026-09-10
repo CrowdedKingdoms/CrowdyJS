@@ -1,3 +1,21 @@
+# CrowdyJS v15.11 — GitHub repositories for Crowdy Studio projects
+
+**Nothing removed.** `15.11.0` (2026-09-09). Tracks ck-api `v1.96.0`.
+
+- `client.crowdyStudioGitHub` (`CrowdyStudioGitHubTransport`): `status({appId, projectId})`,
+  `connectUrl()`, `repos()`, `bind({appId, projectId, owner, repo, branch?})`,
+  `unbind`, `setAutosave({..., autosave})`, `tree`, `getFile({..., path})`,
+  `putFile({..., path, content, message, sha?})`. Reads and writes never name a
+  repository; the game API resolves it from the project's bind and refuses a
+  stale `sha` with `GITHUB_STALE_SHA`.
+- `mountCrowdyStudio` / `CrowdyStudioController` accept `github` (the transport;
+  `CrowdyStudioEmbed` passes `client.crowdyStudioGitHub` automatically). State
+  gains `github`, `githubMessage`, `githubBusy`; methods `refreshGitHubStatus`,
+  `connectGitHub`, `bindGitHubRepo`, `unbindGitHub`, `setGitHubAutosave`,
+  `pushToGitHub`, `pullFromGitHub`.
+- Autosave push is **opt-in per project** and off by default. Pull is explicit.
+- `crowdy-studio/github/sync.js` exports the layout mapping helpers.
+
 # CrowdyJS v15.10 — portal GitHub guard, Agent session resume
 
 **Nothing removed.** `15.10.0` (2026-09-09). No ck-api version dependency.
