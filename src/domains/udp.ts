@@ -437,7 +437,11 @@ export class UdpAPI {
    *   - `chunk` — `{ x, y, z }` chunk address (signed int64 decimal strings).
    *   - `uuid` — 32-ASCII-character source id (typically the player; not
    *     RFC-4122).
-   *   - `audioData` — compressed audio, base64-encoded.
+   *   - `audioData` — compressed audio, base64-encoded. The platform never
+   *     inspects the bytes. Browser games should send G.711 µ-law, 8 kHz
+   *     mono, ~60 ms frames (480 bytes), with a wrapping `sequenceNumber`
+   *     so receivers can drop late/duplicate packets. See The Construct
+   *     `VoiceService` and Blocks with Friends `VoiceChat`.
    *   - `distance` — replication radius in chunk units, 0-8 (clamped); defaults
    *     to 1 for audio packets.
    *   - `decayRate` — decay algorithm 0-5 (see {@link sendActorUpdate});
