@@ -8,6 +8,7 @@ import type {
   CrowdyStudioPlayerWallet,
 } from '../controller.js';
 import type { CrowdyStudioProjectProvider } from '../models.js';
+import type { CrowdyStudioGitHubTransport } from '../github/transport.js';
 import type {
   CrowdyAgentMode,
   CrowdyAgentPreemptionReason,
@@ -51,6 +52,8 @@ export interface CrowdyStudioEmbedServices {
   playerWallet?: CrowdyStudioPlayerWallet;
   /** Production agent transport; omission keeps the agent fail-closed/hidden. */
   crowdyStudioAgent?: CrowdyStudioAgentTransportV1;
+  /** GitHub repository loop; omission hides the card. `CrowdyClient` provides it. */
+  crowdyStudioGitHub?: CrowdyStudioGitHubTransport;
 }
 
 export interface CrowdyStudioEmbedTargetPermission {
@@ -485,6 +488,7 @@ export class CrowdyStudioEmbed {
     const handle = await mountCrowdyStudio(element, {
       projectProvider: client.crowdyStudio,
       playerCompute: client.playerCompute,
+      ...(client.crowdyStudioGitHub ? { github: client.crowdyStudioGitHub } : {}),
       playerWallet: client.playerWallet,
       appId,
       gridId: context.gridId,

@@ -72,6 +72,7 @@ import { ComputeAPI } from './domains/compute.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 import { CrowdyAgentGraphQLTransport } from './crowdy-agent/graphql-transport.js';
+import { CrowdyStudioGitHubTransport } from './crowdy-studio/github/transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { MarketplaceAPI } from './domains/marketplace.js';
 import { PlayerModelAPI } from './domains/playerModel.js';
@@ -283,6 +284,8 @@ export class CrowdyClient {
   readonly crowdyStudio: CrowdyStudioAPI;
   /** Durable typed Agentic Crowdy Studio GraphQL transport. */
   readonly crowdyStudioAgent: CrowdyAgentGraphQLTransport;
+  /** GitHub repository loop for Crowdy Studio projects (same session; the API resolves the repo from the bind). */
+  readonly crowdyStudioGitHub: CrowdyStudioGitHubTransport;
 
   /** P4a marketplace (free mode): store, installs, consent, claim flows. */
   readonly marketplace: MarketplaceAPI;
@@ -476,6 +479,7 @@ export class CrowdyClient {
     this.compute = new ComputeAPI(this.graphql);
     this.playerCompute = new PlayerComputeAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
+    this.crowdyStudioGitHub = new CrowdyStudioGitHubTransport(this.graphql);
     this.crowdyStudioAgent = new CrowdyAgentGraphQLTransport(this.graphql, {
       wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),

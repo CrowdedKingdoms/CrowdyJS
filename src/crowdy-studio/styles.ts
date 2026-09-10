@@ -36,6 +36,10 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-explorer,.ck-crowdy-studio-settings{flex:none;background:var(--ck-panel);overflow:auto;padding:8px;min-width:0}
 .ck-crowdy-studio-settings{border-left:1px solid var(--ck-line)}
 .ck-crowdy-studio-settings h3{margin:0 0 8px}
+.ck-crowdy-studio-github{margin-top:16px;padding-top:12px;border-top:1px solid var(--ck-line)}
+.ck-crowdy-studio-github-row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.ck-crowdy-studio-github-row input{flex:1;min-width:0}
+.ck-crowdy-studio-github-status,.ck-crowdy-studio-github-message{margin:4px 0;font-size:12px;opacity:.85}
 .ck-crowdy-studio-editor-column{display:flex;flex-direction:column;flex:1;min-width:240px;min-height:0}
 .ck-crowdy-studio-editor{flex:1;min-height:80px;position:relative}
 .ck-crowdy-studio-textarea{width:100%;height:100%;min-height:0;resize:none;background:#0b1020;color:var(--ck-text);border:0;padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}

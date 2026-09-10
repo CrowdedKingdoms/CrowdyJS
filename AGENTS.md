@@ -4,12 +4,21 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.10.0**. Whether that is *published* is
+**Current package:** `package.json` is **15.11.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**15.11.0 tracks ck-api `v1.96.0` (Crowdy Studio GitHub repos):** `client.crowdyStudioGitHub`
+is a transport on the ONE session (`status`, `connectUrl`, `repos`, `bind`, `unbind`,
+`setAutosave`, `tree`, `getFile`, `putFile`); reads and writes carry only
+`(appId, projectId)` and the API resolves the bound repository. The Studio settings
+pane grows a "GitHub repository" card (Connect, Bind `owner/repo@branch`, Unbind,
+Push, Pull, Refresh, and an "Also push autosaves" toggle that is **off by default**).
+Pull is always explicit and refuses over unsaved edits. No second endpoint, no
+second session, no `loginStudioLocal`. Card hides when the tier has no App.
 
 **15.10.0 (no ck-api dependency):** `portal.completeEntry` returns `null` when
 the query carries `github` / `installation_id` / `setup_action` — a GitHub App
@@ -23,7 +32,7 @@ version; see the wrapper `studio-github-program/` design before adding one.
 **15.9.0 tracks ck-api `v1.93.0`:** `gameApps.nearbyGrids` (player-safe bounds),
 codegen for `player_joined` / seed upsert / `now()`, and Studio ops select
 `bindPolicyJson` on container types (authoring surface; no live Titan Assault
-policy writes). Package version stays bare (`15.10.0`) — the publish tag adds
+policy writes). Package version stays bare (`15.11.0`) — the publish tag adds
 `-dev.N` / `-test.N`.
 
 **15.8.0 papercuts:** `ChunkStore.setVoxel` without `state` omits

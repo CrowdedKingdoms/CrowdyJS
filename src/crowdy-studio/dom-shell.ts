@@ -87,6 +87,17 @@ export class CrowdyStudioDomShell {
   private readonly bottom: HTMLElement;
   private readonly tabs: HTMLElement;
   private readonly settingsName: HTMLInputElement;
+  private readonly github: HTMLElement;
+  private readonly githubStatus: HTMLElement;
+  private readonly githubConnect: HTMLButtonElement;
+  private readonly githubBindInput: HTMLInputElement;
+  private readonly githubBind: HTMLButtonElement;
+  private readonly githubUnbind: HTMLButtonElement;
+  private readonly githubAutosave: HTMLInputElement;
+  private readonly githubPush: HTMLButtonElement;
+  private readonly githubPull: HTMLButtonElement;
+  private readonly githubRefresh: HTMLButtonElement;
+  private readonly githubMessage: HTMLElement;
   private readonly settingsDescription: HTMLInputElement;
   private readonly serverModuleName: HTMLInputElement;
   private readonly clientModuleName: HTMLInputElement;
@@ -247,6 +258,68 @@ export class CrowdyStudioDomShell {
       labeled('Pairing', this.pairing),
     );
 
+    // ----- GitHub repository card -------------------------------------------
+    // Bring-your-own repo. The repository is resolved server-side from the
+    // project's bind; the card never learns a token. Autosave push is off
+    // until the owner turns it on here.
+    this.github = element('section', 'ck-crowdy-studio-github');
+    const githubTitle = element('h3');
+    githubTitle.textContent = 'GitHub repository';
+    this.githubStatus = element('p', 'ck-crowdy-studio-github-status');
+    this.githubConnect = button('Connect GitHub');
+    this.githubConnect.addEventListener('click', () => {
+      void this.controller.connectGitHub().catch((error: unknown) => this.githubNote(error));
+    });
+    this.githubBindInput = input('owner/repo or owner/repo@branch');
+    this.githubBind = button('Bind');
+    this.githubBind.addEventListener('click', () => {
+      void this.controller
+        .bindGitHubRepo(this.githubBindInput.value)
+        .then(() => {
+          this.githubBindInput.value = '';
+        })
+        .catch((error: unknown) => this.githubNote(error));
+    });
+    this.githubUnbind = button('Unbind');
+    this.githubUnbind.addEventListener('click', () => {
+      void this.controller.unbindGitHub().catch((error: unknown) => this.githubNote(error));
+    });
+    this.githubAutosave = document.createElement('input');
+    this.githubAutosave.type = 'checkbox';
+    this.githubAutosave.addEventListener('change', () => {
+      void this.controller
+        .setGitHubAutosave(this.githubAutosave.checked)
+        .catch((error: unknown) => this.githubNote(error));
+    });
+    this.githubPush = button('Push to GitHub');
+    this.githubPush.addEventListener('click', () => {
+      void this.controller.pushToGitHub();
+    });
+    this.githubPull = button('Pull from GitHub');
+    this.githubPull.addEventListener('click', () => {
+      void this.controller.pullFromGitHub();
+    });
+    this.githubRefresh = button('Refresh');
+    this.githubRefresh.addEventListener('click', () => {
+      void this.controller.refreshGitHubStatus();
+    });
+    this.githubMessage = element('p', 'ck-crowdy-studio-github-message');
+    const bindRow = element('div', 'ck-crowdy-studio-github-row');
+    bindRow.append(this.githubBindInput, this.githubBind, this.githubUnbind);
+    const syncRow = element('div', 'ck-crowdy-studio-github-row');
+    syncRow.append(this.githubPush, this.githubPull, this.githubRefresh);
+    this.github.append(
+      githubTitle,
+      this.githubStatus,
+      this.githubConnect,
+      bindRow,
+      labeled('Also push autosaves to GitHub', this.githubAutosave),
+      syncRow,
+      this.githubMessage,
+    );
+    this.github.hidden = true;
+    this.settings.append(this.github);
+
     this.workspace.append(
       rail,
       this.explorer,
@@ -397,6 +470,7 @@ export class CrowdyStudioDomShell {
     this.renderExplorer(state);
     this.renderTabs(state);
     this.renderSettings(state);
+    this.renderGitHub(state);
     const projectTargetsAvailable = state.project
       ? projectTargets(state.project.kind).every((target) =>
           this.controller.canTarget(target, 'write'),
@@ -1014,6 +1088,39 @@ export class CrowdyStudioDomShell {
       tab.append(close);
       this.tabs.append(tab);
     }
+  }
+
+  private githubNote(error: unknown): void {
+    this.githubMessage.textContent = error instanceof Error ? error.message : String(error);
+  }
+
+  private renderGitHub(state: CrowdyStudioState): void {
+    const github = state.github;
+    // No transport (status never fetched) or the tier has no App: hide the card.
+    if (!github || !github.configured) {
+      this.github.hidden = true;
+      return;
+    }
+    this.github.hidden = false;
+    const bound = Boolean(github.owner && github.repo);
+    this.githubStatus.textContent = !github.connected
+      ? 'Not connected. Install the Crowdy Studio app on your GitHub account to bind a repository you own.'
+      : bound
+        ? `${github.accountLogin ?? 'GitHub'} · bound to ${github.owner}/${github.repo}@${github.branch}`
+        : `${github.accountLogin ?? 'GitHub'} connected · no repository bound`;
+    this.githubConnect.hidden = github.connected;
+    this.githubConnect.disabled = state.githubBusy;
+    const canBind = github.connected && Boolean(state.project) && !state.githubBusy;
+    this.githubBindInput.disabled = !canBind;
+    this.githubBind.disabled = !canBind;
+    this.githubUnbind.hidden = !bound;
+    this.githubUnbind.disabled = state.githubBusy;
+    this.githubAutosave.disabled = !bound || state.githubBusy;
+    this.githubAutosave.checked = github.autosave;
+    this.githubPush.disabled = !bound || state.githubBusy;
+    this.githubPull.disabled = !bound || state.githubBusy || state.saveState !== 'SAVED';
+    this.githubRefresh.disabled = state.githubBusy;
+    this.githubMessage.textContent = state.githubMessage ?? '';
   }
 
   private renderSettings(state: CrowdyStudioState): void {
