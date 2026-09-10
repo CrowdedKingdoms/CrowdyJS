@@ -10,6 +10,12 @@ import {
   sha256Digest,
 } from '../crowdy-agent/schema.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
+import type { CrowdyStudioGitHubStatus, CrowdyStudioGitHubTransport } from './github/transport.js';
+import {
+  mergeStudioFilesFromGitHub,
+  pullStudioFilesFromGitHub,
+  pushStudioFilesToGitHub,
+} from './github/sync.js';
 import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
@@ -138,6 +144,10 @@ export interface CrowdyStudioState {
   activeFile: CrowdyStudioFileRef | null;
   saveState: CrowdyStudioSaveState;
   saveMessage?: string;
+  /** GitHub repository bound to the open project; null until fetched or when the SDK has no GitHub transport. */
+  github: CrowdyStudioGitHubStatus | null;
+  githubMessage?: string;
+  githubBusy: boolean;
   runtime: CrowdyStudioRuntimeStatus;
   runtimeSync: CrowdyStudioRuntimeSync;
   agentActivity: 'IDLE' | 'PREPARING' | 'WORKING' | 'PAUSED';
@@ -176,6 +186,12 @@ export interface CrowdyStudioControllerOptions {
   projectProvider: CrowdyStudioProjectProvider;
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
+  /**
+   * GitHub repository loop (bring-your-own repo). Optional: without it the
+   * card is hidden. Reads and writes are resolved server-side from the
+   * project's bind; autosave push happens only when the owner opted in.
+   */
+  github?: CrowdyStudioGitHubTransport;
   appId: string;
   gridId: string;
   initialProjectId?: string;
@@ -242,6 +258,8 @@ export class CrowdyStudioController {
     openFiles: [],
     activeFile: null,
     saveState: 'SAVED',
+    github: null,
+    githubBusy: false,
     runtime: { phase: 'IDLE' },
     runtimeSync: { state: 'NEVER_RUN' },
     agentActivity: 'IDLE',
@@ -497,8 +515,13 @@ export class CrowdyStudioController {
       runs: [],
       logs: [],
       invokeResult: null,
+      github: null,
+      githubMessage: undefined,
+      githubBusy: false,
     });
     this.restartVisibleSurfacePolling();
+    // Status only; a pull is always the modder's explicit action.
+    void this.refreshGitHubStatus();
   }
 
   openFile(ref: CrowdyStudioFileRef): void {
@@ -707,6 +730,156 @@ export class CrowdyStudioController {
       return await this.savePromise;
     } finally {
       this.savePromise = null;
+    }
+  }
+
+  // ----- GitHub repository loop ------------------------------------------
+
+  private githubStatusGeneration = 0;
+  private suppressGitHubPush = false;
+
+  /** Re-read connection + bind for the open project. Never pulls on its own. */
+  async refreshGitHubStatus(): Promise<void> {
+    if (!this.options.github) return;
+    const generation = ++this.githubStatusGeneration;
+    try {
+      const github = await this.options.github.status({
+        appId: this.options.appId,
+        projectId: this.state.project?.projectId,
+      });
+      if (generation !== this.githubStatusGeneration) return;
+      this.update({ github, githubMessage: undefined });
+    } catch (error) {
+      if (generation !== this.githubStatusGeneration) return;
+      this.update({ githubMessage: errorMessage(error) });
+    }
+  }
+
+  private githubScope(): { appId: string; projectId: string } | null {
+    const projectId = this.state.project?.projectId;
+    return projectId ? { appId: this.options.appId, projectId } : null;
+  }
+
+  /** Opens the install page in a new tab; identity comes back through the signed state, never the browser. */
+  async connectGitHub(): Promise<string> {
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    const { connectUrl } = await this.options.github.connectUrl();
+    if (typeof window !== 'undefined') window.open(connectUrl, '_blank', 'noopener,noreferrer');
+    this.update({ githubMessage: 'Finish installing on GitHub in the new tab, then Refresh.' });
+    return connectUrl;
+  }
+
+  /** `owner/repo` or `owner/repo@branch`. */
+  async bindGitHubRepo(slug: string): Promise<void> {
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    const scope = this.githubScope();
+    if (!scope) throw new Error('Open a Studio project before binding a repository.');
+    const trimmed = slug.trim();
+    const at = trimmed.lastIndexOf('@');
+    const repoPath = at > 0 ? trimmed.slice(0, at) : trimmed;
+    const branch = at > 0 ? trimmed.slice(at + 1).trim() : '';
+    const slash = repoPath.indexOf('/');
+    if (slash <= 0 || slash === repoPath.length - 1) {
+      throw new Error('Use owner/repo or owner/repo@branch');
+    }
+    this.update({ githubBusy: true });
+    try {
+      const github = await this.options.github.bind({
+        ...scope,
+        owner: repoPath.slice(0, slash),
+        repo: repoPath.slice(slash + 1),
+        ...(branch ? { branch } : {}),
+      });
+      this.update({ github, githubMessage: `Bound ${github.owner}/${github.repo}@${github.branch}. Autosave push is off until you turn it on.` });
+    } finally {
+      this.update({ githubBusy: false });
+    }
+  }
+
+  async unbindGitHub(): Promise<void> {
+    if (!this.options.github) return;
+    const scope = this.githubScope();
+    if (!scope) return;
+    const github = await this.options.github.unbind(scope);
+    this.update({ github, githubMessage: 'Repository unbound. Files in Studio are unchanged.' });
+  }
+
+  /** Opt the open project into (or out of) pushing autosaves. Default off. */
+  async setGitHubAutosave(autosave: boolean): Promise<void> {
+    if (!this.options.github) return;
+    const scope = this.githubScope();
+    if (!scope) return;
+    const github = await this.options.github.setAutosave({ ...scope, autosave });
+    this.update({
+      github,
+      githubMessage: autosave ? 'Autosave now also pushes to GitHub.' : 'Autosave push is off.',
+    });
+  }
+
+  /** Explicit push of the current files (or a subset) to the bound repository. */
+  async pushToGitHub(
+    files?: readonly CrowdyStudioProjectFile[],
+    opts: { quiet?: boolean } = {},
+  ): Promise<number> {
+    if (!this.options.github) return 0;
+    const scope = this.githubScope();
+    if (!scope || !this.state.github?.owner) {
+      if (!opts.quiet) this.update({ githubMessage: 'Bind a repository first.' });
+      return 0;
+    }
+    const toPush = files ?? this.state.project?.files ?? [];
+    this.update({ githubBusy: true });
+    try {
+      const pushed = await pushStudioFilesToGitHub(this.options.github, scope, toPush);
+      this.update({
+        githubMessage:
+          pushed > 0 ? `Pushed ${pushed} file${pushed === 1 ? '' : 's'} to GitHub.` : 'GitHub already has these files.',
+      });
+      return pushed;
+    } catch (error) {
+      this.update({ githubMessage: `GitHub push failed: ${errorMessage(error)}` });
+      return 0;
+    } finally {
+      this.update({ githubBusy: false });
+    }
+  }
+
+  /** Explicit pull: overlay the repository onto the project, then save. Refuses over unsaved edits. */
+  async pullFromGitHub(): Promise<boolean> {
+    if (!this.options.github) return false;
+    const scope = this.githubScope();
+    const project = this.state.project;
+    if (!scope || !project || !this.state.github?.owner) {
+      this.update({ githubMessage: 'Bind a repository first.' });
+      return false;
+    }
+    if (this.editGeneration !== this.persistedGeneration) {
+      this.update({ githubMessage: 'Save Studio edits before pulling from GitHub.' });
+      return false;
+    }
+    this.update({ githubBusy: true });
+    try {
+      const incoming = await pullStudioFilesFromGitHub(this.options.github, scope);
+      const { files, changed } = mergeStudioFilesFromGitHub(project.files, incoming.files);
+      if (!changed) {
+        this.update({ githubMessage: 'GitHub is in sync.' });
+        return true;
+      }
+      project.files = files;
+      this.editGeneration += 1;
+      this.update({ project, githubMessage: 'Pulled from GitHub.' });
+      this.suppressGitHubPush = true;
+      try {
+        await this.saveNow();
+      } finally {
+        this.suppressGitHubPush = false;
+      }
+      return true;
+    } catch (error) {
+      this.update({ githubMessage: `GitHub pull failed: ${errorMessage(error)}` });
+      return false;
+    } finally {
+      this.update({ githubBusy: false });
     }
   }
 
@@ -1406,6 +1579,9 @@ export class CrowdyStudioController {
           // Preserve newer local edits while advancing the revision precondition.
           this.state.project.revision = { ...saved.revision };
           this.state.project.updatedAt = saved.updatedAt;
+        }
+        if (this.state.github?.autosave && !this.suppressGitHubPush) {
+          void this.pushToGitHub(snapshot.files, { quiet: true });
         }
         this.update({
           projects: upsertSummary(this.state.projects, summaryOf(saved)),
