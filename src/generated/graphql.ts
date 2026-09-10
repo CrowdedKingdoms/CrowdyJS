@@ -1656,6 +1656,14 @@ export type BillingExemptOrgType = {
   slug: Scalars['String']['output'];
 };
 
+export type BindCrowdyStudioGitHubInput = {
+  appId: Scalars['BigInt']['input'];
+  branch?: InputMaybe<Scalars['String']['input']>;
+  owner: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+  repo: Scalars['String']['input'];
+};
+
 /** Live (most recent heartbeat) Buddy UDP throughput rates. */
 export type BuddyLiveRates = {
   __typename?: 'BuddyLiveRates';
@@ -2151,29 +2159,6 @@ export enum CodeAdmissionSubjectKind {
   Org = 'ORG'
 }
 
-/** One entry in the T11 commerce risk queue (studio/operator moderation). */
-export type CommerceRiskFlag = {
-  __typename?: 'CommerceRiskFlag';
-  /** App the flag belongs to. */
-  appId: Scalars['BigInt']['output'];
-  /** When the flag was raised. */
-  createdAt: Scalars['DateTime']['output'];
-  /** Detail note. */
-  detail: Maybe<Scalars['String']['output']>;
-  /** Flag row id. */
-  flagId: Scalars['String']['output'];
-  /** Flag kind: 'buyer_velocity', 'listing_velocity', 'same_party', 'chargeback', or 'manual'. */
-  kind: Scalars['String']['output'];
-  /** Related order UUID, if any. */
-  orderId: Maybe<Scalars['String']['output']>;
-  /** 'open', 'released', or 'confirmed'. */
-  status: Scalars['String']['output'];
-  /** Subject: 'user' or 'org'. */
-  subjectKind: Scalars['String']['output'];
-  /** Subject user or org id. */
-  subjectRef: Scalars['BigInt']['output'];
-};
-
 /** Complete a magic-link sign-in with the emailed token. */
 export type CompleteLoginLinkInput = {
   /** The one-time token from the magic-link URL. */
@@ -2459,31 +2444,6 @@ export type CreateGridInput = {
   corner1: ChunkCoordinatesInput;
   /** The opposite corner of the grid box, in chunk coordinates. May equal corner1 for a single-chunk grid. */
   corner2: ChunkCoordinatesInput;
-};
-
-export type CreateGridListingInput = {
-  /** App the listing belongs to. */
-  appId: Scalars['BigInt']['input'];
-  /** JSON bounds/placement config (blueprint listings). */
-  blueprintConfigJson?: InputMaybe<Scalars['String']['input']>;
-  /** Player-code keys the sale confers (e.g. write/run server/client). */
-  conferredPermissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** Store description. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** The concrete grid id being sold (concrete listings). */
-  gridId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** 'blueprint' or 'concrete'. */
-  kind: Scalars['String']['input'];
-  /** Display name. */
-  name: Scalars['String']['input'];
-  /** Price in cents. */
-  priceCents: Scalars['Int']['input'];
-  /** JSON per-grid quota preset bound on purchase. */
-  quotaPresetJson?: InputMaybe<Scalars['String']['input']>;
-  /** Resale policy: 'no_resale' (default), 'resale_free', or 'resale_with_studio_cut'. */
-  resalePolicy?: InputMaybe<Scalars['String']['input']>;
-  /** Studio cut (bps) taken on resales, when resale_with_studio_cut. */
-  studioCutBps?: InputMaybe<Scalars['Int']['input']>;
 };
 
 /** Result of createGrid. This is a hybrid result rather than a thrown error: inspect `error` first. When `error` is NO_ERROR the call succeeded and `grid` is populated; otherwise `grid` is null and `error` explains why. */
@@ -3378,6 +3338,82 @@ export enum CrowdyStudioFileProvenance {
   /** The file was copied from a specific revision of the owner’s private personal library. */
   Library = 'LIBRARY'
 }
+
+export type CrowdyStudioGitHubConnectStart = {
+  __typename?: 'CrowdyStudioGitHubConnectStart';
+  /** Install URL for this tier's App, carrying a signed state. */
+  connectUrl: Scalars['String']['output'];
+};
+
+export type CrowdyStudioGitHubFile = {
+  __typename?: 'CrowdyStudioGitHubFile';
+  /** UTF-8 content. */
+  content: Scalars['String']['output'];
+  path: Scalars['String']['output'];
+  /** Blob SHA; send it back on update. */
+  sha: Scalars['String']['output'];
+};
+
+export type CrowdyStudioGitHubFileInput = {
+  appId: Scalars['BigInt']['input'];
+  path: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+};
+
+export type CrowdyStudioGitHubProjectInput = {
+  appId: Scalars['BigInt']['input'];
+  projectId: Scalars['String']['input'];
+};
+
+export type CrowdyStudioGitHubPutFileInput = {
+  appId: Scalars['BigInt']['input'];
+  content: Scalars['String']['input'];
+  message: Scalars['String']['input'];
+  path: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+  /** Required when the file already exists. */
+  sha?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type CrowdyStudioGitHubRepo = {
+  __typename?: 'CrowdyStudioGitHubRepo';
+  defaultBranch: Maybe<Scalars['String']['output']>;
+  fullName: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  owner: Scalars['String']['output'];
+  private: Scalars['Boolean']['output'];
+};
+
+/** GitHub connection for the caller and, when a project is named, the repository bound to it. GitHub is a Studio filesystem capability, not a login provider. */
+export type CrowdyStudioGitHubStatus = {
+  __typename?: 'CrowdyStudioGitHubStatus';
+  /** GitHub login the App is installed on. */
+  accountLogin: Maybe<Scalars['String']['output']>;
+  /** `User` or `Organization`. */
+  accountType: Maybe<Scalars['String']['output']>;
+  /** Studio autosave also pushes to the bound repository. Off by default; the project owner opts in. */
+  autosave: Scalars['Boolean']['output'];
+  branch: Maybe<Scalars['String']['output']>;
+  /** This tier has a GitHub App registered. */
+  configured: Scalars['Boolean']['output'];
+  /** The caller has installed the App on a GitHub account. */
+  connected: Scalars['Boolean']['output'];
+  /** Where to send the modder to install or manage the App. */
+  installUrl: Maybe<Scalars['String']['output']>;
+  /** Bound repository owner, when a project was named. */
+  owner: Maybe<Scalars['String']['output']>;
+  repo: Maybe<Scalars['String']['output']>;
+};
+
+export type CrowdyStudioGitHubTreeEntry = {
+  __typename?: 'CrowdyStudioGitHubTreeEntry';
+  /** Repo-relative path. */
+  path: Scalars['String']['output'];
+  sha: Maybe<Scalars['String']['output']>;
+  size: Maybe<Scalars['Int']['output']>;
+  /** `blob` or `tree`. */
+  type: Scalars['String']['output'];
+};
 
 /** The source catalog used for a copy-by-value project file import. */
 export enum CrowdyStudioImportSource {
@@ -4975,7 +5011,7 @@ export type Grid = {
   low_chunk: ChunkCoordinates;
 };
 
-/** How a player claim confers grid ownership in this app (D4): SELF_CLAIM (the claim alone assigns ownership), APPROVAL (claims create requests designated approvers accept), INVITE (only against a standing invite), or MARKETPLACE_ONLY (only a marketplace grid purchase; direct claims refused — the purchase edge ships in P4b). */
+/** How a player claim confers grid ownership in this app (D4): SELF_CLAIM (the claim alone assigns ownership), APPROVAL (claims create requests designated approvers accept), INVITE (only against a standing invite), or MARKETPLACE_ONLY (direct claims refused). setAppGridClaimPolicy refuses MARKETPLACE_ONLY while paid grid commerce is off the public API. */
 export enum GridClaimPolicy {
   Approval = 'APPROVAL',
   Invite = 'INVITE',
@@ -5067,31 +5103,6 @@ export type GridGroupGrant = {
   permissionKey: Scalars['String']['output'];
 };
 
-/** A grid listing available in the app store (P4b): a blueprint that stamps a fresh grid per purchase, or a concrete grid. Buying it confers grid_ownership + the listed player-code keys + the quota preset atomically. */
-export type GridListing = {
-  __typename?: 'GridListing';
-  /** App the listing belongs to. */
-  appId: Scalars['BigInt']['output'];
-  /** Player-code keys conferred on purchase. */
-  conferredPermissionKeys: Array<Scalars['String']['output']>;
-  /** Store description. */
-  description: Scalars['String']['output'];
-  /** UUID of the grid listing. */
-  gridListingId: Scalars['String']['output'];
-  /** 'blueprint' or 'concrete'. */
-  kind: Scalars['String']['output'];
-  /** Display name. */
-  name: Scalars['String']['output'];
-  /** Price in cents. */
-  priceCents: Scalars['Int']['output'];
-  /** Resale policy for the grid. */
-  resalePolicy: Scalars['String']['output'];
-  /** Catalog status: 'active' or 'delisted'. */
-  status: Maybe<Scalars['String']['output']>;
-  /** Studio cut (bps) on resale, when applicable. */
-  studioCutBps: Maybe<Scalars['Int']['output']>;
-};
-
 /** Kind of principal holding grid title. P1 can assign USER owners; GROUP and ORG are schema-reserved for future shared ownership. */
 export enum GridOwnerKind {
   Group = 'GROUP',
@@ -5131,15 +5142,6 @@ export type GridPermissionLimits = {
   gridId: Scalars['BigInt']['output'];
   /** The permission keys this grid is limited to. Empty means no limit (every active grid permission is allowed). */
   permissionKeys: Array<Scalars['String']['output']>;
-};
-
-/** Result of purchasing a grid listing: the owned grid the buyer now holds. */
-export type GridPurchaseResult = {
-  __typename?: 'GridPurchaseResult';
-  /** The grid the buyer now owns. */
-  gridId: Scalars['BigInt']['output'];
-  /** True when ownership was assigned. */
-  ownershipAssigned: Scalars['Boolean']['output'];
 };
 
 /** Whether the current title is permanent ownership or an expiring rental. */
@@ -5363,7 +5365,7 @@ export type MintAppTokenInput = {
 
 export type Mutation = {
   __typename?: 'Mutation';
-  /** Acquire a free listing: writes the entitlement row (no payment edge exists in P4a — paid modes are P4b). Idempotent per (listing, caller). Allowed in any admission mode; in allow_list apps an unadmitted acquisition holds until the listing/author/org is admitted, at which point installPlayerCode proceeds. */
+  /** Acquire a free listing: writes the entitlement row. Paid listings (price_cents > 0 or a non-free acquisition mode) are refused with FEATURE_DISABLED. Idempotent per (listing, caller). Allowed in any admission mode; in allow_list apps an unadmitted acquisition holds until the listing/author/org is admitted, at which point installPlayerCode proceeds. */
   acquirePlayerCode: PlayerCodeAcquisition;
   /** Application liveness heartbeat for the authenticated user's existing actor rows in an app. Refreshes actors.updated_at so the user stays host-eligible, then returns the freshly-elected host so a client can fold its poll and heartbeat into one round-trip. This is not proof of a live Buddy session and does not refresh the separate Buddy presence lease used by security-sensitive artifact/compute occupancy gates. */
   actorHeartbeat: Maybe<GameHost>;
@@ -5383,12 +5385,8 @@ export type Mutation = {
   assignGroupToGrid: Array<GridGroupGrant>;
   /** Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the Overworld consent screen before createPortalAuthorizationCode. Idempotent. Requires a SESSION token. */
   authorizeApp: AppAuthorizationGrant;
-  /** Begin Stripe Connect Express onboarding for an ORG's payout account (org-owned listings, DN-9). Requires 'manage_billing' in the org. */
-  beginOrgSellerOnboarding: SellerOnboardingLink;
   /** Begin vaulting a card on the caller's player wallet (P4b): returns a Stripe SetupIntent client secret + publishable key for the browser to confirm. On success the card is saved for wallet auto-recharge and rent auto-renew. Closes the P2 gap where players had no card-setup path. */
   beginPlayerCardSetup: PlayerCardSetup;
-  /** Begin Stripe Connect Express seller onboarding for the calling player (personal listings). Returns the hosted onboarding URL to finish KYC, or an unavailable reason in unsupported regions. Required before pricing a listing above free. */
-  beginSellerOnboarding: SellerOnboardingLink;
   /** DESTRUCTIVE. Cancels an app's paid shared-environment subscription. The app loses its paid shared slot (typically at currentPeriodEnd) and may be denied runtime once the period lapses unless a free slot covers it. Returns the updated subscription. Requires the 'manage_billing' permission on the app's org. */
   cancelSharedSubscription: AppSharedSubscription;
   /** Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout. */
@@ -5399,7 +5397,7 @@ export type Mutation = {
   claimFreeAppAccess: AppUserAccess;
   /** Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus the player-code keys and use_video_chat where the caller's tier already carries them, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain. */
   claimGridChunk: ChunkClaimResult;
-  /** Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses (ownership arrives only via grid purchase, P4b). The grid must exist and have no current owner; game rules gate who may attempt a claim. */
+  /** Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses. The grid must exist and have no current owner; game rules gate who may attempt a claim. */
   claimGridOwnership: GridClaimResult;
   /** Remove an app's compute allowance, returning it to observation against the platform reference allowance. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
   clearAppComputeBudget: Scalars['Boolean']['output'];
@@ -5453,20 +5451,14 @@ export type Mutation = {
   createCheckout: Checkout;
   /** Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit within one of the app's grid assignments (its buildable regions); it MAY be nested inside a broader containing grid such as the open-by-default world grid, but must not partially overlap a peer grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS). */
   createGrid: CreateGridResponse;
-  /** Create a studio grid listing (07 §1.1): a blueprint that stamps a fresh grid per sale, or a concrete grid. Requires 'manage_apps'. Purchase (in-game) confers grid_ownership + the listed keys + quota preset atomically. */
-  createGridListing: GridListing;
   /** Creates a custom role in an organization with a name, optional description, and permission keys. Requires the 'manage_members' permission on the org (super admins bypass). */
   createOrgRole: OrgRole;
-  /** Create an embedded-components Account Session for an ORG's payout account (org-owned listings, DN-9). Requires 'manage_billing' in the org. */
-  createOrgSellerAccountSession: SellerAccountSession;
   /** Mints a new org API token and returns the plaintext token exactly once - save it, since subsequent queries only show metadata. Requires the 'manage_tokens' permission on the target org (super admins bypass). */
   createOrgToken: OrgTokenWithSecret;
   /** Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token. */
   createOrganization: Organization;
   /** Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Requires a SESSION token. */
   createPortalAuthorizationCode: PortalAuthorizationCode;
-  /** Create an Account Session for Stripe's EMBEDDED Connect components on the calling player's seller account (created on first call): the browser initializes Connect.js with the returned publishable key + client secret and mounts account-onboarding / payouts / balances INSIDE the platform UI. Client secrets are short-lived — re-request on expiry. The hosted-link flow (beginSellerOnboarding) remains the fallback. */
-  createSellerAccountSession: SellerAccountSession;
   /** Create a team. Whether the caller may create one is governed by the per-app team policy (app_group_policies: admin | member | anyone). The caller becomes the owner and is granted a system 'leader' role holding every team permission. New teams default to the app's default membership policy unless overridden. */
   createTeam: Group;
   /** Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs). */
@@ -5505,6 +5497,16 @@ export type Mutation = {
   crowdyStudioAgentToolResult: AgentToolCall;
   /** Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
   crowdyStudioCommonPublish: CrowdyStudioCommonFile;
+  /** Bind a Crowdy Studio project you own to a repository granted to your installation. Verifies the branch exists. Identity session only. Autosave stays off until you turn it on. */
+  crowdyStudioGitHubBind: CrowdyStudioGitHubStatus;
+  /** Install URL for this tier's Crowdy Studio GitHub App with a signed state. Identity session only. No GitHub token ever reaches the browser. */
+  crowdyStudioGitHubConnectUrl: CrowdyStudioGitHubConnectStart;
+  /** Create or update one UTF-8 file in the bound repository. Send the current sha on update; a stale sha is refused with GITHUB_STALE_SHA. */
+  crowdyStudioGitHubPutFile: CrowdyStudioGitHubFile;
+  /** Opt a bound project into (or out of) pushing Studio autosaves to GitHub. Default is off. */
+  crowdyStudioGitHubSetAutosave: CrowdyStudioGitHubStatus;
+  /** Remove the repository bind from a project you own. Files in Crowdy Studio are untouched. */
+  crowdyStudioGitHubUnbind: CrowdyStudioGitHubStatus;
   /** Create or optimistically update one private personal-library source file. Requires an app-scoped token; ownership is always the authenticated player and cannot be delegated. Safe source paths, 64-KiB content, revision, and configurable bounded aggregate library storage are enforced atomically. */
   crowdyStudioLibrarySave: CrowdyStudioLibraryFile;
   /** Archive or restore one caller-owned personal-library file under optimistic revision control. Requires an app-scoped token and exact app/user ownership; archived entries remain retained but cannot be imported until restored. */
@@ -5523,8 +5525,6 @@ export type Mutation = {
   crowdyStudioProjectSaveMetadata: CrowdyStudioProject;
   /** Archive or restore a private project without deleting any source or provenance, using optimistic revision control. Requires an app-scoped token and exact owner match. Archived projects remain readable by their owner but are read-only until restored. */
   crowdyStudioProjectSetArchived: CrowdyStudioProject;
-  /** Release (settle held order + unfreeze payout) or confirm (uphold) a T11 risk flag. Requires 'manage_compute'. */
-  decideCommerceRiskFlag: Scalars['Boolean']['output'];
   /** Approve or deny a pending grid claim request (claim policy APPROVAL). Callable by the app's designated approver users or studio staff holding manage_compute. Approval assigns grid_ownership to the requester. */
   decideGridClaim: GridClaimRequest;
   /** DESTRUCTIVE: permanently deletes the actor identified by `uuid` and returns a copy of the now-deleted row. OWNER-EXCLUSIVE: only the owner may delete (throws Unauthorized otherwise). Requires a valid game token. `uuid` is the 32-character ASCII actor id. */
@@ -5679,12 +5679,8 @@ export type Mutation = {
   publishPlayerCode: PlayerCodeListing;
   /** Publish an immutable version under a listing from the caller's successfully compiled module versions. Snapshots artifact hashes, explicit SERVER-to-required-CLIENT edges, and the derived aggregate capability summary; publishing fails if a required client version is absent from the bundle. Source never leaves the author's rows. */
   publishPlayerCodeVersion: PlayerCodeListingVersion;
-  /** Buy a grid listing with real money (P4b). Debits the player wallet management-side (platform/org split), then assigns grid_ownership + the listed player-code keys atomically; a failure to apply ownership refunds the charge. For blueprint listings, targetChunk picks where the fresh grid is stamped. This is the ownership path for marketplace_only-policy apps. */
-  purchaseGrid: GridPurchaseResult;
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
   refreshAppToken: AppTokenResponse;
-  /** Request a refund of a paid acquisition (P4b). Allowed only within the refund window and before meaningful use (first install/fetch voids it), capped per buyer; a successful refund credits the wallet, reverses the ledger split, claws back the seller balance, revokes the acquisition, and drains installs. Returns cents refunded. */
-  refundPlayerCodeAcquisition: Scalars['Int']['output'];
   /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   register: AuthResponse;
   /** OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired. */
@@ -5699,14 +5695,10 @@ export type Mutation = {
   removeSharedPaymentMethod: Scalars['Boolean']['output'];
   /** Remove a member from a team. Requires the 'manage_members' team permission, except that any member may remove themselves. DESTRUCTIVE: drops the membership and its roles. Returns true if a membership was removed. */
   removeTeamMember: Scalars['Boolean']['output'];
-  /** Renew a RENT acquisition (or extend a TIME_LIMITED window): a wallet charge on the same acquisition that pushes its expiry out. A drained install resumes on the next scheduler pass without re-consent. Paid modes only (P4b). */
-  renewPlayerCodeAcquisition: PlayerCodeAcquisition;
   /** Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   requestLoginLink: RequestLoginLinkResult;
   /** Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   requestPasswordReset: Scalars['Boolean']['output'];
-  /** Pay out the calling player's payable balance to their Connect account (D6 minimum, 7-day delay, reserves enforced). Returns cents paid. */
-  requestSellerPayout: Scalars['Int']['output'];
   /** Request to join a request-only channel (creates a pending membership a manager can approve via addChannelMember). Behaves identically to joinChannel; named for request-policy UIs. */
   requestToJoinChannel: GroupMember;
   /** Request to join a request-only team (creates a pending membership a manager can approve via addTeamMember). Behaves identically to joinTeam; named for request-policy UIs. */
@@ -5759,10 +5751,8 @@ export type Mutation = {
   setAppCodeAdmissionMode: CodeAdmissionMode;
   /** Set an app's compute allowance in units per minute, spanning the model expression engine and both WASM tiers. One unit is one millisecond of measured execution time. An over-ceiling value is REFUSED naming the ceiling (6000000 units per minute) rather than accepted and clamped, so the value reported back is always the value in force. Set enforce to true to refuse invokes when the allowance is exceeded; leave it false to record the decision and admit, which is what produces the measurements a threshold should be chosen from. Requires app-admin ('manage_apps'). */
   setAppComputeBudget: AppComputeBudgetInfo;
-  /** Set how a player claim confers grid ownership in this app (D4): SELF_CLAIM, APPROVAL (optionally with a designated approver list), INVITE, or MARKETPLACE_ONLY. Requires 'manage_apps'. SIDE EFFECTS: replica-syncs to game-api, where claimGridOwnership enforces the policy. Changing policy never revokes existing grid_ownership rows. */
+  /** Set how a player claim confers grid ownership in this app (D4): SELF_CLAIM, APPROVAL (optionally with a designated approver list), or INVITE. MARKETPLACE_ONLY is refused with FEATURE_DISABLED while paid grid commerce is off the public API. Requires 'manage_apps'. Changing policy never revokes existing grid_ownership rows. */
   setAppGridClaimPolicy: GridClaimPolicy;
-  /** Set the app's marketplace org revenue share in basis points (OQ-3; taken from the post-platform remainder). Requires 'manage_billing'. BWF uses 0. */
-  setAppMarketplaceOrgShare: Scalars['Int']['output'];
   /** Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Note that the ~1 MB/s free-tier shaping is lifted by funding a wallet, not by reserving. Requires 'manage_billing' on the app's org. */
   setAppReservedThroughput: SetAppReservedThroughputResult;
   /** Sets per-app hourly/daily spend caps (in cents) and returns the re-evaluated runtime state. Pass null for a limit to clear that cap. Exceeding a cap denies the app's runtime (runtimeDenialReason = spend_cap). Requires the 'manage_billing' permission on the app's org. */
@@ -5785,8 +5775,6 @@ export type Mutation = {
   setGridPermissionLimits: GridPermissionLimits;
   /** Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Refuses with extensions.code PASSWORD_ALREADY_SET (409) when a password is already set — use changePassword, which verifies the current one, or the reset flow if it is forgotten. (Before v1.60.0 that refusal reached clients as INTERNAL_SERVER_ERROR while this description said CONFLICT, so a client could only recognise it by the message text.) A security notification is emailed to the account address. Existing sessions are not revoked. */
   setInitialPassword: Scalars['Boolean']['output'];
-  /** Set (author-only) the acquisition mode and pricing for a code listing. Non-free modes require completed seller onboarding. Curation can reject a listing but never reprice it (07 §1.2). */
-  setListingPricing: Scalars['Boolean']['output'];
   /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
   setOperator: User;
   /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
@@ -5817,12 +5805,8 @@ export type Mutation = {
   socialLoginComplete: AuthResponse;
   /** Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   socialLoginStart: SocialLoginStart;
-  /** Earn-to-mod: convert payable seller balance into the player wallet without a provider round-trip (07 §4.1). Returns cents credited. */
-  spendPayoutBalanceToWallet: Scalars['Int']['output'];
   /** Checks whether the authenticated user is allowed to teleport an actor to a destination within an app and returns the authorization result. This is an authorization check only — it does NOT itself move the actor; the UDP runtime performs the actual movement. Requires a valid bearer game token plus the app-level "teleport" runtime permission. Returns success=false with errorCode INVALID_APP_ID (non-positive appId), UNAUTHORIZED (reserved sentinel destination -6,-6,-6 or missing permission), or success=true / NO_ERROR when allowed. */
   teleportRequest: TeleportResponse;
-  /** Top up a COST_LIMITED acquisition's compute-unit budget: a wallet charge that adds the listing's unit budget to the license. Exhausted installs resume once the budget clears their consumed units. Paid modes only (P4b). */
-  topUpPlayerCodeAcquisition: PlayerCodeAcquisition;
   /** Transfer grid title to another user. The current user owner or an app admin may transfer. DESTRUCTIVE/SECURITY-SENSITIVE: atomically disables every player module on the grid pending new-owner consent, wipes module state, removes the old owner direct grid grants, and closes the old title row. The new owner receives no implicit permissions. */
   transferGridOwnership: GridOwnership;
   /** Transfer a listing between personal and org ownership (DN-9). The caller must be the current owner (user-owned) or hold manage_compute in the owning org; transfers to an org require manage_compute in the receiving org. SIDE EFFECTS: append-only ownership audit row + replica sync to game-api. Ownership moves listing control and source-access rights; from P4b it also moves proceeds. */
@@ -5932,17 +5916,6 @@ export type MutationAssignGroupToGridArgs = {
 
 export type MutationAuthorizeAppArgs = {
   input: AuthorizeAppInput;
-};
-
-
-export type MutationBeginOrgSellerOnboardingArgs = {
-  country: Scalars['String']['input'];
-  orgId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationBeginSellerOnboardingArgs = {
-  country: Scalars['String']['input'];
 };
 
 
@@ -6119,19 +6092,8 @@ export type MutationCreateGridArgs = {
 };
 
 
-export type MutationCreateGridListingArgs = {
-  input: CreateGridListingInput;
-};
-
-
 export type MutationCreateOrgRoleArgs = {
   input: CreateOrgRoleInput;
-};
-
-
-export type MutationCreateOrgSellerAccountSessionArgs = {
-  country: Scalars['String']['input'];
-  orgId: Scalars['BigInt']['input'];
 };
 
 
@@ -6147,11 +6109,6 @@ export type MutationCreateOrganizationArgs = {
 
 export type MutationCreatePortalAuthorizationCodeArgs = {
   input: CreatePortalAuthorizationCodeInput;
-};
-
-
-export type MutationCreateSellerAccountSessionArgs = {
-  country: Scalars['String']['input'];
 };
 
 
@@ -6253,6 +6210,26 @@ export type MutationCrowdyStudioCommonPublishArgs = {
 };
 
 
+export type MutationCrowdyStudioGitHubBindArgs = {
+  input: BindCrowdyStudioGitHubInput;
+};
+
+
+export type MutationCrowdyStudioGitHubPutFileArgs = {
+  input: CrowdyStudioGitHubPutFileInput;
+};
+
+
+export type MutationCrowdyStudioGitHubSetAutosaveArgs = {
+  input: SetCrowdyStudioGitHubAutosaveInput;
+};
+
+
+export type MutationCrowdyStudioGitHubUnbindArgs = {
+  input: CrowdyStudioGitHubProjectInput;
+};
+
+
 export type MutationCrowdyStudioLibrarySaveArgs = {
   input: SaveCrowdyStudioLibraryFileInput;
 };
@@ -6295,13 +6272,6 @@ export type MutationCrowdyStudioProjectSaveMetadataArgs = {
 
 export type MutationCrowdyStudioProjectSetArchivedArgs = {
   input: SetCrowdyStudioProjectArchivedInput;
-};
-
-
-export type MutationDecideCommerceRiskFlagArgs = {
-  appId: Scalars['BigInt']['input'];
-  flagId: Scalars['String']['input'];
-  release: Scalars['Boolean']['input'];
 };
 
 
@@ -6721,23 +6691,8 @@ export type MutationPublishPlayerCodeVersionArgs = {
 };
 
 
-export type MutationPurchaseGridArgs = {
-  appId: Scalars['BigInt']['input'];
-  chunkX?: InputMaybe<Scalars['Int']['input']>;
-  chunkY?: InputMaybe<Scalars['Int']['input']>;
-  chunkZ?: InputMaybe<Scalars['Int']['input']>;
-  gridListingId: Scalars['String']['input'];
-};
-
-
 export type MutationRefreshAppTokenArgs = {
   currentServer?: InputMaybe<CurrentServerInput>;
-};
-
-
-export type MutationRefundPlayerCodeAcquisitionArgs = {
-  acquisitionId: Scalars['String']['input'];
-  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -6780,12 +6735,6 @@ export type MutationRemoveSharedPaymentMethodArgs = {
 export type MutationRemoveTeamMemberArgs = {
   groupId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationRenewPlayerCodeAcquisitionArgs = {
-  acquisitionId: Scalars['String']['input'];
-  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -6943,12 +6892,6 @@ export type MutationSetAppGridClaimPolicyArgs = {
 };
 
 
-export type MutationSetAppMarketplaceOrgShareArgs = {
-  appId: Scalars['BigInt']['input'];
-  bps: Scalars['Int']['input'];
-};
-
-
 export type MutationSetAppReservedThroughputArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   input: SetAppReservedThroughputInput;
@@ -7011,11 +6954,6 @@ export type MutationSetGridPermissionLimitsArgs = {
 
 export type MutationSetInitialPasswordArgs = {
   newPassword: Scalars['String']['input'];
-};
-
-
-export type MutationSetListingPricingArgs = {
-  input: SetListingPricingInput;
 };
 
 
@@ -7109,19 +7047,8 @@ export type MutationSocialLoginStartArgs = {
 };
 
 
-export type MutationSpendPayoutBalanceToWalletArgs = {
-  amountCents: Scalars['Int']['input'];
-};
-
-
 export type MutationTeleportRequestArgs = {
   input: TeleportRequestInput;
-};
-
-
-export type MutationTopUpPlayerCodeAcquisitionArgs = {
-  acquisitionId: Scalars['String']['input'];
-  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -8618,8 +8545,6 @@ export type Query = {
   checkouts: CheckoutsPage;
   /** Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckoutsConnection` instead. Relay cursor connection; prefer this over the offset-based checkouts. */
   checkoutsConnection: CheckoutsConnection;
-  /** The app's open T11 commerce risk queue (velocity holds, same-party flags, chargebacks). Requires 'manage_compute'. */
-  commerceRiskQueue: Array<CommerceRiskFlag>;
   /** A snapshot of an app's compute footprint: module/version/trigger counts plus 24h run activity and the most-active modules. Requires the org 'view_compute_diagnostics' permission. */
   computeAppDiagnostics: WasmAppDiagnostics;
   /** Read one compute module by name. Requires the org 'view_compute_diagnostics' permission. */
@@ -8664,6 +8589,14 @@ export type Query = {
   crowdyStudioAgentUsage: CrowdyStudioAgentUsagePage;
   /** List the current immutable versions of published Crowdy Studio-curated common files for one app. Requires an app-scoped token for appId; unlike private player source, this catalog content is intentionally readable by players in that app. Results are bounded and may be filtered by target. */
   crowdyStudioCommonFiles: Array<CrowdyStudioCommonFile>;
+  /** One UTF-8 file from the bound repository, with its blob SHA. */
+  crowdyStudioGitHubFile: CrowdyStudioGitHubFile;
+  /** Repositories the caller granted to their Crowdy Studio installation. Identity session only. */
+  crowdyStudioGitHubRepos: Array<CrowdyStudioGitHubRepo>;
+  /** GitHub connection for the caller and the repository bound to a Crowdy Studio project. GitHub is a Studio filesystem capability, not a login provider. */
+  crowdyStudioGitHubStatus: CrowdyStudioGitHubStatus;
+  /** Recursive file list of the repository bound to the project (Git Trees API). */
+  crowdyStudioGitHubTree: Array<CrowdyStudioGitHubTreeEntry>;
   /** List the authenticated player’s private reusable Crowdy Studio source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or Crowdy Studio operators. The bounded result defaults to 50. */
   crowdyStudioLibraryFiles: Array<CrowdyStudioLibraryFile>;
   /** Load one private Crowdy Studio project with all bounded source files. Requires an app-scoped token for appId and exact caller ownership; missing, cross-app, and cross-user ids all return the same NOT_FOUND shape. Grid owners and Crowdy Studio operators receive no source override. */
@@ -8756,8 +8689,6 @@ export type Query = {
   gridClientMods: Array<GridClientMod>;
   /** List the group/role -> permission-key grants configured on a grid for one group (rows of the `grid_group_grants` input table). These are inputs to the effective ACL, not the materialized result — use `gridUserPermissions` for a specific user's effective keys. Requires app-admin ('manage_apps'). */
   gridGroupGrants: Array<GridGroupGrant>;
-  /** Browse the app's grid listings (P4b): blueprints that stamp a fresh grid per purchase, or concrete grids. Buying confers ownership + keys + quota preset atomically. */
-  gridListings: Array<GridListing>;
   /** Read the current first-class ownership record for a grid. Requires authentication. Returns null when the grid has no current/unexpired owner. Player server code always resolves its execution identity from this record. */
   gridOwnership: Maybe<GridOwnership>;
   /** Read the permission-key whitelist configured for a grid. An empty list means there is no limit (every active runtime permission may be granted on the grid). Requires app-admin ('manage_apps'). */
@@ -8806,8 +8737,6 @@ export type Query = {
    * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
    */
   myPropertyTokens: UserPropertyTokenData;
-  /** The calling player's seller payout balance (pending/payable/reserved). */
-  mySellerPayoutBalance: SellerPayoutBalance;
   /** The caller's teams in an app, with their roles and effective team permissions. Use this to discover which teams the current user belongs to and what they may do in each. */
   myTeams: Array<GroupMembership>;
   /** List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps'). */
@@ -9202,11 +9131,6 @@ export type QueryCheckoutsConnectionArgs = {
 };
 
 
-export type QueryCommerceRiskQueueArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
 export type QueryComputeAppDiagnosticsArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -9320,6 +9244,22 @@ export type QueryCrowdyStudioCommonFilesArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
   target?: InputMaybe<CrowdyStudioTarget>;
+};
+
+
+export type QueryCrowdyStudioGitHubFileArgs = {
+  input: CrowdyStudioGitHubFileInput;
+};
+
+
+export type QueryCrowdyStudioGitHubStatusArgs = {
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  projectId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryCrowdyStudioGitHubTreeArgs = {
+  input: CrowdyStudioGitHubProjectInput;
 };
 
 
@@ -9591,11 +9531,6 @@ export type QueryGridGroupGrantsArgs = {
   appId: Scalars['BigInt']['input'];
   gridId: Scalars['BigInt']['input'];
   groupId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGridListingsArgs = {
-  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -10451,59 +10386,6 @@ export type SeedPropertyInput = {
   valueType: Scalars['String']['input'];
 };
 
-/** An Account Session for Stripe's EMBEDDED Connect components: the browser initializes Connect.js with the publishable key + this short-lived client secret and mounts the account-onboarding / payouts / balances components INSIDE the platform UI — sellers never leave for a Stripe-hosted page. Re-request on expiry. The hosted-link flow (beginSellerOnboarding) remains the fallback. */
-export type SellerAccountSession = {
-  __typename?: 'SellerAccountSession';
-  /** The connected account the session is scoped to (provider ref only). */
-  accountRef: Scalars['String']['output'];
-  /** Short-lived Account Session client secret for Connect.js. */
-  clientSecret: Scalars['String']['output'];
-  /** When the client secret expires; re-request after this. */
-  expiresAt: Maybe<Scalars['DateTime']['output']>;
-  /** Whether onboarding is already complete (payouts enabled) — render the payouts/balances components instead of onboarding. */
-  onboardingComplete: Scalars['Boolean']['output'];
-  /** Stripe publishable key the browser initializes Connect.js with. */
-  publishableKey: Maybe<Scalars['String']['output']>;
-};
-
-/** Result of beginning seller onboarding: the Stripe Connect Express account link the seller opens to finish KYC. */
-export type SellerOnboardingLink = {
-  __typename?: 'SellerOnboardingLink';
-  /** The Stripe-hosted onboarding URL to open; null when already complete or unavailable in the seller region. */
-  onboardingUrl: Maybe<Scalars['String']['output']>;
-  /** Current onboarding state. */
-  status: SellerOnboardingStatus;
-  /** Why onboarding is unavailable (e.g. region unsupported); null otherwise. */
-  unavailableReason: Maybe<Scalars['String']['output']>;
-};
-
-/** A seller (player or org) payout-account state: NONE (never started), PENDING (Stripe Connect Express onboarding incomplete), COMPLETE (payouts enabled), or BLOCKED (provider or platform hold). */
-export enum SellerOnboardingStatus {
-  Blocked = 'BLOCKED',
-  Complete = 'COMPLETE',
-  None = 'NONE',
-  Pending = 'PENDING'
-}
-
-/** A seller's payout balance (player or org). pending ages through the D6 delay window into payable; reserved is the D6 young-account holdback or a T11 freeze. */
-export type SellerPayoutBalance = {
-  __typename?: 'SellerPayoutBalance';
-  /** Stripe Connect Express onboarding state. */
-  onboardingStatus: SellerOnboardingStatus;
-  /** 'user' or 'org'. */
-  partyKind: Scalars['String']['output'];
-  /** User id or org id. */
-  partyRef: Scalars['BigInt']['output'];
-  /** Cents aged, unreserved, and withdrawable. */
-  payableCents: Scalars['Int']['output'];
-  /** Whether payouts are frozen by a T11 review hold. */
-  payoutsFrozen: Scalars['Boolean']['output'];
-  /** Cents still aging in the delay window. */
-  pendingCents: Scalars['Int']['output'];
-  /** Cents held back (reserve or T11 freeze). */
-  reservedCents: Scalars['Int']['output'];
-};
-
 /** Accept one bounded human message and queue exactly one serialized run. */
 export type SendAgentMessageInput = {
   /** Current attached client epoch. */
@@ -10868,6 +10750,12 @@ export type SetCrowdyStudioAgentPlatformPolicyInput = {
   turnLimits?: InputMaybe<CrowdyStudioAgentTurnLimitsInput>;
 };
 
+export type SetCrowdyStudioGitHubAutosaveInput = {
+  appId: Scalars['BigInt']['input'];
+  autosave: Scalars['Boolean']['input'];
+  projectId: Scalars['String']['input'];
+};
+
 /** Optimistically archive or restore one caller-owned personal-library file. */
 export type SetCrowdyStudioLibraryFileArchivedInput = {
   /** App tenant that owns the private library entry. */
@@ -10914,25 +10802,6 @@ export type SetGridPermissionLimitsInput = {
   gridId: Scalars['BigInt']['input'];
   /** The whitelist of permission keys allowed on this grid. Empty array removes all limits (every active grid permission becomes grantable again). Each key must be a known runtime permission key, unique, and at most 64 chars. */
   permissionKeys: Array<Scalars['String']['input']>;
-};
-
-export type SetListingPricingInput = {
-  /** Acquisition mode: 'free', 'buy', 'rent', 'time_limited', or 'cost_limited'. */
-  acquisitionMode: Scalars['String']['input'];
-  /** App that owns the listing. */
-  appId: Scalars['BigInt']['input'];
-  /** Whether an acquired license may travel with a grid resale (default false; 07 §5.a). */
-  licenseTransferable?: InputMaybe<Scalars['Boolean']['input']>;
-  /** UUID of the listing to price. */
-  listingId: Scalars['String']['input'];
-  /** Price in cents (required for all non-free modes; author-set only). */
-  priceCents?: InputMaybe<Scalars['Int']['input']>;
-  /** Rent billing interval in days (rent mode). */
-  rentIntervalDays?: InputMaybe<Scalars['Int']['input']>;
-  /** Compute-unit budget the license grants (cost_limited mode). */
-  unitBudget?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Single fixed window in days (time_limited mode). */
-  windowDays?: InputMaybe<Scalars['Int']['input']>;
 };
 
 /** Replace a member's roles in a group (the listed roles become their full set). */
@@ -14410,133 +14279,6 @@ export type MarketplaceSetGridClaimPolicyMutationVariables = Exact<{
 
 export type MarketplaceSetGridClaimPolicyMutation = { __typename?: 'Mutation', setAppGridClaimPolicy: GridClaimPolicy };
 
-export type MarketplaceRenewAcquisitionMutationVariables = Exact<{
-  appId: Scalars['BigInt']['input'];
-  acquisitionId: Scalars['String']['input'];
-}>;
-
-
-export type MarketplaceRenewAcquisitionMutation = { __typename?: 'Mutation', renewPlayerCodeAcquisition: { __typename?: 'PlayerCodeAcquisition', acquisitionId: string, listingId: string, appId: string, mode: PlayerCodeAcquisitionMode, status: string, expiresAt: string | null, unitBudget: string | null, unitsConsumed: string, acquiredAt: string } };
-
-export type MarketplaceTopUpAcquisitionMutationVariables = Exact<{
-  appId: Scalars['BigInt']['input'];
-  acquisitionId: Scalars['String']['input'];
-}>;
-
-
-export type MarketplaceTopUpAcquisitionMutation = { __typename?: 'Mutation', topUpPlayerCodeAcquisition: { __typename?: 'PlayerCodeAcquisition', acquisitionId: string, listingId: string, appId: string, mode: PlayerCodeAcquisitionMode, status: string, expiresAt: string | null, unitBudget: string | null, unitsConsumed: string, acquiredAt: string } };
-
-export type MarketplaceRefundAcquisitionMutationVariables = Exact<{
-  appId: Scalars['BigInt']['input'];
-  acquisitionId: Scalars['String']['input'];
-}>;
-
-
-export type MarketplaceRefundAcquisitionMutation = { __typename?: 'Mutation', refundPlayerCodeAcquisition: number };
-
-export type MarketplaceGridListingsQueryVariables = Exact<{
-  appId: Scalars['BigInt']['input'];
-}>;
-
-
-export type MarketplaceGridListingsQuery = { __typename?: 'Query', gridListings: Array<{ __typename?: 'GridListing', gridListingId: string, appId: string, kind: string, name: string, description: string, priceCents: number, conferredPermissionKeys: Array<string>, resalePolicy: string }> };
-
-export type MarketplacePurchaseGridMutationVariables = Exact<{
-  appId: Scalars['BigInt']['input'];
-  gridListingId: Scalars['String']['input'];
-  chunkX?: InputMaybe<Scalars['Int']['input']>;
-  chunkY?: InputMaybe<Scalars['Int']['input']>;
-  chunkZ?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type MarketplacePurchaseGridMutation = { __typename?: 'Mutation', purchaseGrid: { __typename?: 'GridPurchaseResult', gridId: string, ownershipAssigned: boolean } };
-
-export type MarketplaceSetListingPricingMutationVariables = Exact<{
-  input: SetListingPricingInput;
-}>;
-
-
-export type MarketplaceSetListingPricingMutation = { __typename?: 'Mutation', setListingPricing: boolean };
-
-export type MarketplaceSetOrgShareMutationVariables = Exact<{
-  appId: Scalars['BigInt']['input'];
-  bps: Scalars['Int']['input'];
-}>;
-
-
-export type MarketplaceSetOrgShareMutation = { __typename?: 'Mutation', setAppMarketplaceOrgShare: number };
-
-export type MarketplaceBeginSellerOnboardingMutationVariables = Exact<{
-  country: Scalars['String']['input'];
-}>;
-
-
-export type MarketplaceBeginSellerOnboardingMutation = { __typename?: 'Mutation', beginSellerOnboarding: { __typename?: 'SellerOnboardingLink', status: SellerOnboardingStatus, onboardingUrl: string | null, unavailableReason: string | null } };
-
-export type MarketplaceCreateAccountSessionMutationVariables = Exact<{
-  country: Scalars['String']['input'];
-}>;
-
-
-export type MarketplaceCreateAccountSessionMutation = { __typename?: 'Mutation', createSellerAccountSession: { __typename?: 'SellerAccountSession', clientSecret: string, publishableKey: string | null, accountRef: string, onboardingComplete: boolean, expiresAt: string | null } };
-
-export type MarketplaceCreateOrgAccountSessionMutationVariables = Exact<{
-  orgId: Scalars['BigInt']['input'];
-  country: Scalars['String']['input'];
-}>;
-
-
-export type MarketplaceCreateOrgAccountSessionMutation = { __typename?: 'Mutation', createOrgSellerAccountSession: { __typename?: 'SellerAccountSession', clientSecret: string, publishableKey: string | null, accountRef: string, onboardingComplete: boolean, expiresAt: string | null } };
-
-export type MarketplaceBeginOrgSellerOnboardingMutationVariables = Exact<{
-  orgId: Scalars['BigInt']['input'];
-  country: Scalars['String']['input'];
-}>;
-
-
-export type MarketplaceBeginOrgSellerOnboardingMutation = { __typename?: 'Mutation', beginOrgSellerOnboarding: { __typename?: 'SellerOnboardingLink', status: SellerOnboardingStatus, onboardingUrl: string | null, unavailableReason: string | null } };
-
-export type MarketplaceMySellerBalanceQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type MarketplaceMySellerBalanceQuery = { __typename?: 'Query', mySellerPayoutBalance: { __typename?: 'SellerPayoutBalance', partyKind: string, partyRef: string, pendingCents: number, payableCents: number, reservedCents: number, onboardingStatus: SellerOnboardingStatus, payoutsFrozen: boolean } };
-
-export type MarketplaceRequestPayoutMutationVariables = Exact<{ [key: string]: never; }>;
-
-
-export type MarketplaceRequestPayoutMutation = { __typename?: 'Mutation', requestSellerPayout: number };
-
-export type MarketplaceSpendPayoutToWalletMutationVariables = Exact<{
-  amountCents: Scalars['Int']['input'];
-}>;
-
-
-export type MarketplaceSpendPayoutToWalletMutation = { __typename?: 'Mutation', spendPayoutBalanceToWallet: number };
-
-export type MarketplaceCommerceRiskQueueQueryVariables = Exact<{
-  appId: Scalars['BigInt']['input'];
-}>;
-
-
-export type MarketplaceCommerceRiskQueueQuery = { __typename?: 'Query', commerceRiskQueue: Array<{ __typename?: 'CommerceRiskFlag', flagId: string, appId: string, kind: string, orderId: string | null, subjectKind: string, subjectRef: string, detail: string | null, status: string, createdAt: string }> };
-
-export type MarketplaceDecideRiskFlagMutationVariables = Exact<{
-  appId: Scalars['BigInt']['input'];
-  flagId: Scalars['String']['input'];
-  release: Scalars['Boolean']['input'];
-}>;
-
-
-export type MarketplaceDecideRiskFlagMutation = { __typename?: 'Mutation', decideCommerceRiskFlag: boolean };
-
-export type MarketplaceCreateGridListingMutationVariables = Exact<{
-  input: CreateGridListingInput;
-}>;
-
-
-export type MarketplaceCreateGridListingMutation = { __typename?: 'Mutation', createGridListing: { __typename?: 'GridListing', gridListingId: string, appId: string, kind: string, name: string, priceCents: number, resalePolicy: string, status: string | null } };
-
 export type CreateOrgRoleMutationVariables = Exact<{
   input: CreateOrgRoleInput;
 }>;
@@ -15940,23 +15682,6 @@ export const MarketplaceAppAcquisitionsDocument = {"kind":"Document","definition
 export const MarketplaceTransferListingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceTransferListing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"TransferPlayerCodeListingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transferPlayerCodeListing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeListingFields"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeListingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeListing"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"mediaJson"}},{"kind":"Field","name":{"kind":"Name","value":"licenseMode"}},{"kind":"Field","name":{"kind":"Name","value":"acquisitionMode"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"rentIntervalDays"}},{"kind":"Field","name":{"kind":"Name","value":"windowDays"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<MarketplaceTransferListingMutation, MarketplaceTransferListingMutationVariables>;
 export const MarketplaceSetListingStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceSetListingStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"listingId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeListingStatus"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setPlayerCodeListingStatus"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"listingId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"listingId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeListingFields"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeListingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeListing"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"mediaJson"}},{"kind":"Field","name":{"kind":"Name","value":"licenseMode"}},{"kind":"Field","name":{"kind":"Name","value":"acquisitionMode"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"rentIntervalDays"}},{"kind":"Field","name":{"kind":"Name","value":"windowDays"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<MarketplaceSetListingStatusMutation, MarketplaceSetListingStatusMutationVariables>;
 export const MarketplaceSetGridClaimPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceSetGridClaimPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"policy"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"GridClaimPolicy"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"approverUserIds"}},"type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAppGridClaimPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"policy"},"value":{"kind":"Variable","name":{"kind":"Name","value":"policy"}}},{"kind":"Argument","name":{"kind":"Name","value":"approverUserIds"},"value":{"kind":"Variable","name":{"kind":"Name","value":"approverUserIds"}}}]}]}}]} as unknown as DocumentNode<MarketplaceSetGridClaimPolicyMutation, MarketplaceSetGridClaimPolicyMutationVariables>;
-export const MarketplaceRenewAcquisitionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceRenewAcquisition"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"acquisitionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"renewPlayerCodeAcquisition"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"acquisitionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"acquisitionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeAcquisitionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeAcquisitionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeAcquisition"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"acquisitionId"}},{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"unitsConsumed"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}}]}}]} as unknown as DocumentNode<MarketplaceRenewAcquisitionMutation, MarketplaceRenewAcquisitionMutationVariables>;
-export const MarketplaceTopUpAcquisitionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceTopUpAcquisition"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"acquisitionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"topUpPlayerCodeAcquisition"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"acquisitionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"acquisitionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeAcquisitionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeAcquisitionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeAcquisition"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"acquisitionId"}},{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"unitsConsumed"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}}]}}]} as unknown as DocumentNode<MarketplaceTopUpAcquisitionMutation, MarketplaceTopUpAcquisitionMutationVariables>;
-export const MarketplaceRefundAcquisitionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceRefundAcquisition"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"acquisitionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"refundPlayerCodeAcquisition"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"acquisitionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"acquisitionId"}}}]}]}}]} as unknown as DocumentNode<MarketplaceRefundAcquisitionMutation, MarketplaceRefundAcquisitionMutationVariables>;
-export const MarketplaceGridListingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceGridListings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridListings"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridListingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"conferredPermissionKeys"}},{"kind":"Field","name":{"kind":"Name","value":"resalePolicy"}}]}}]}}]} as unknown as DocumentNode<MarketplaceGridListingsQuery, MarketplaceGridListingsQueryVariables>;
-export const MarketplacePurchaseGridDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplacePurchaseGrid"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridListingId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"chunkX"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"chunkY"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"chunkZ"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"purchaseGrid"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridListingId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridListingId"}}},{"kind":"Argument","name":{"kind":"Name","value":"chunkX"},"value":{"kind":"Variable","name":{"kind":"Name","value":"chunkX"}}},{"kind":"Argument","name":{"kind":"Name","value":"chunkY"},"value":{"kind":"Variable","name":{"kind":"Name","value":"chunkY"}}},{"kind":"Argument","name":{"kind":"Name","value":"chunkZ"},"value":{"kind":"Variable","name":{"kind":"Name","value":"chunkZ"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"ownershipAssigned"}}]}}]}}]} as unknown as DocumentNode<MarketplacePurchaseGridMutation, MarketplacePurchaseGridMutationVariables>;
-export const MarketplaceSetListingPricingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceSetListingPricing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetListingPricingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setListingPricing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<MarketplaceSetListingPricingMutation, MarketplaceSetListingPricingMutationVariables>;
-export const MarketplaceSetOrgShareDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceSetOrgShare"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"bps"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAppMarketplaceOrgShare"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"bps"},"value":{"kind":"Variable","name":{"kind":"Name","value":"bps"}}}]}]}}]} as unknown as DocumentNode<MarketplaceSetOrgShareMutation, MarketplaceSetOrgShareMutationVariables>;
-export const MarketplaceBeginSellerOnboardingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceBeginSellerOnboarding"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"country"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"beginSellerOnboarding"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"country"},"value":{"kind":"Variable","name":{"kind":"Name","value":"country"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingUrl"}},{"kind":"Field","name":{"kind":"Name","value":"unavailableReason"}}]}}]}}]} as unknown as DocumentNode<MarketplaceBeginSellerOnboardingMutation, MarketplaceBeginSellerOnboardingMutationVariables>;
-export const MarketplaceCreateAccountSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceCreateAccountSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"country"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createSellerAccountSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"country"},"value":{"kind":"Variable","name":{"kind":"Name","value":"country"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"clientSecret"}},{"kind":"Field","name":{"kind":"Name","value":"publishableKey"}},{"kind":"Field","name":{"kind":"Name","value":"accountRef"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingComplete"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]} as unknown as DocumentNode<MarketplaceCreateAccountSessionMutation, MarketplaceCreateAccountSessionMutationVariables>;
-export const MarketplaceCreateOrgAccountSessionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceCreateOrgAccountSession"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"country"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgSellerAccountSession"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"country"},"value":{"kind":"Variable","name":{"kind":"Name","value":"country"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"clientSecret"}},{"kind":"Field","name":{"kind":"Name","value":"publishableKey"}},{"kind":"Field","name":{"kind":"Name","value":"accountRef"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingComplete"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]} as unknown as DocumentNode<MarketplaceCreateOrgAccountSessionMutation, MarketplaceCreateOrgAccountSessionMutationVariables>;
-export const MarketplaceBeginOrgSellerOnboardingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceBeginOrgSellerOnboarding"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"country"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"beginOrgSellerOnboarding"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"country"},"value":{"kind":"Variable","name":{"kind":"Name","value":"country"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingUrl"}},{"kind":"Field","name":{"kind":"Name","value":"unavailableReason"}}]}}]}}]} as unknown as DocumentNode<MarketplaceBeginOrgSellerOnboardingMutation, MarketplaceBeginOrgSellerOnboardingMutationVariables>;
-export const MarketplaceMySellerBalanceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceMySellerBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mySellerPayoutBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"partyKind"}},{"kind":"Field","name":{"kind":"Name","value":"partyRef"}},{"kind":"Field","name":{"kind":"Name","value":"pendingCents"}},{"kind":"Field","name":{"kind":"Name","value":"payableCents"}},{"kind":"Field","name":{"kind":"Name","value":"reservedCents"}},{"kind":"Field","name":{"kind":"Name","value":"onboardingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"payoutsFrozen"}}]}}]}}]} as unknown as DocumentNode<MarketplaceMySellerBalanceQuery, MarketplaceMySellerBalanceQueryVariables>;
-export const MarketplaceRequestPayoutDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceRequestPayout"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestSellerPayout"}}]}}]} as unknown as DocumentNode<MarketplaceRequestPayoutMutation, MarketplaceRequestPayoutMutationVariables>;
-export const MarketplaceSpendPayoutToWalletDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceSpendPayoutToWallet"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"amountCents"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"spendPayoutBalanceToWallet"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"amountCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"amountCents"}}}]}]}}]} as unknown as DocumentNode<MarketplaceSpendPayoutToWalletMutation, MarketplaceSpendPayoutToWalletMutationVariables>;
-export const MarketplaceCommerceRiskQueueDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceCommerceRiskQueue"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"commerceRiskQueue"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"flagId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"orderId"}},{"kind":"Field","name":{"kind":"Name","value":"subjectKind"}},{"kind":"Field","name":{"kind":"Name","value":"subjectRef"}},{"kind":"Field","name":{"kind":"Name","value":"detail"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<MarketplaceCommerceRiskQueueQuery, MarketplaceCommerceRiskQueueQueryVariables>;
-export const MarketplaceDecideRiskFlagDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceDecideRiskFlag"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"flagId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"release"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"decideCommerceRiskFlag"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"flagId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"flagId"}}},{"kind":"Argument","name":{"kind":"Name","value":"release"},"value":{"kind":"Variable","name":{"kind":"Name","value":"release"}}}]}]}}]} as unknown as DocumentNode<MarketplaceDecideRiskFlagMutation, MarketplaceDecideRiskFlagMutationVariables>;
-export const MarketplaceCreateGridListingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"MarketplaceCreateGridListing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateGridListingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createGridListing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridListingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"resalePolicy"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<MarketplaceCreateGridListingMutation, MarketplaceCreateGridListingMutationVariables>;
 export const CreateOrgRoleDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrgRole"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrgRoleInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgRole"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgRoleId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"roleName"}},{"kind":"Field","name":{"kind":"Name","value":"isSystem"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CreateOrgRoleMutation, CreateOrgRoleMutationVariables>;
 export const CreateOrgTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrgToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrgTokenInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrgToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgTokenId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"token"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CreateOrgTokenMutation, CreateOrgTokenMutationVariables>;
 export const CreateOrganizationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateOrganization"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOrganizationInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOrganization"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateOrganizationMutation, CreateOrganizationMutationVariables>;
