@@ -106,12 +106,12 @@
     "@codingame/monaco-vscode-editor-api": "25.1.2",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@vscode/tree-sitter-wasm": "0.3.1",
-    "dompurify": "3.4.12",
+    "dompurify": "3.4.15",
     "graphql": "^16.13.2",
     "graphql-ws": "^6.0.8",
     "vscode-jsonrpc": "8.2.0",
-    "vscode-languageserver-protocol": "3.17.5",
-    "web-tree-sitter": "0.26.11"
+    "vscode-languageserver-protocol": "3.18.3",
+    "web-tree-sitter": "0.27.0"
   },
   "overrides": {
     "dompurify": "$dompurify"
