@@ -1474,6 +1474,31 @@ export type BatchActorLookupInput = {
   uuids: Array<Scalars['String']['input']>;
 };
 
+/** One settlement unit of the lossless ledger: a (payer, meter, period) for a continuous meter, or one request for a request-priced meter. Amounts in micro-USD; nothing is rounded. */
+export type BillingCharge = {
+  __typename?: 'BillingCharge';
+  appId: Scalars['BigInt']['output'];
+  billedMicrousd: Scalars['BigInt']['output'];
+  chargeId: Scalars['String']['output'];
+  heldMicrousd: Scalars['BigInt']['output'];
+  meter: Scalars['String']['output'];
+  payerId: Scalars['BigInt']['output'];
+  payerKind: Scalars['String']['output'];
+  periodStart: Maybe<Scalars['DateTime']['output']>;
+  pricedTotalMicrousd: Scalars['BigInt']['output'];
+  quantityFree: Scalars['BigInt']['output'];
+  quantityTotal: Scalars['BigInt']['output'];
+  settlementRef: Scalars['String']['output'];
+  state: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+  writtenOffMicrousd: Scalars['BigInt']['output'];
+};
+
+export type BillingCreditResult = {
+  __typename?: 'BillingCreditResult';
+  creditedMicrousd: Scalars['BigInt']['output'];
+};
+
 /** An organization whose wallet is not debited and whose apps are not denied for funds. Usage is still metered; waived amounts are in org_billing_waivers. */
 export type BillingExemptOrgType = {
   __typename?: 'BillingExemptOrgType';
@@ -1489,6 +1514,48 @@ export type BillingExemptOrgType = {
   setBy: Maybe<Scalars['BigInt']['output']>;
   /** Organization slug. */
   slug: Scalars['String']['output'];
+};
+
+/** One run of the ledger invariant checks. */
+export type BillingInvariantRun = {
+  __typename?: 'BillingInvariantRun';
+  /** JSON text. */
+  detail: Maybe<Scalars['String']['output']>;
+  ok: Scalars['Boolean']['output'];
+  ranAt: Scalars['DateTime']['output'];
+  residueMicrousd: Scalars['BigInt']['output'];
+  runId: Scalars['String']['output'];
+  /** JSON text. */
+  sums: Scalars['String']['output'];
+};
+
+/** Ledger versus provider for one UTC day. */
+export type BillingReconciliation = {
+  __typename?: 'BillingReconciliation';
+  day: Scalars['String']['output'];
+  deltaMicrousd: Maybe<Scalars['BigInt']['output']>;
+  /** JSON text. */
+  detail: Maybe<Scalars['String']['output']>;
+  expectedMicrousd: Scalars['BigInt']['output'];
+  provider: Scalars['String']['output'];
+  providerReportedMicrousd: Maybe<Scalars['BigInt']['output']>;
+  status: Scalars['String']['output'];
+};
+
+/** A billable amount that could not be billed, with the reason. */
+export type BillingWriteOff = {
+  __typename?: 'BillingWriteOff';
+  amountMicrousd: Scalars['BigInt']['output'];
+  appId: Maybe<Scalars['BigInt']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  /** JSON text. */
+  evidence: Maybe<Scalars['String']['output']>;
+  meter: Scalars['String']['output'];
+  payerId: Scalars['BigInt']['output'];
+  payerKind: Scalars['String']['output'];
+  quantity: Scalars['BigInt']['output'];
+  reason: Scalars['String']['output'];
+  writeOffId: Scalars['String']['output'];
 };
 
 export type BindCrowdyStudioGitHubInput = {
@@ -5228,6 +5295,8 @@ export type Mutation = {
   connectUdpProxy: UdpProxyConnectionStatus;
   /** Consent to run a grid-attached client mod (D2): acknowledges the attachment's exact capability hash. A newer version with a widened summary carries a different hash, so stale consents fail closed — re-consent is always explicit. Consent is per player per attachment. */
   consentGridClientMod: Scalars['Boolean']['output'];
+  /** Operator only. Credit the payer of an over-billed charge (an I3 finding: an allowance or rate was raised after the charge landed) the difference, and close the charge row. Idempotent per charge state. SIDE EFFECT: a wallet credit and a CREDIT event. */
+  cpBillingCreditOverbill: BillingCreditResult;
   /** Operator only (is_operator). Patches the platform compute ceilings: omitted fields stay unchanged, an explicit null clears that override (game-api falls back to env/default), a value (> 0) sets it. SIDE EFFECTS: fans a replica notify out to every game-api so the new ceilings clamp computeSetPolicy within ~30 seconds without a restart, and writes an audit entry. Lowering a ceiling does not shrink already-stored per-app policies; it rejects future computeSetPolicy values above the new ceiling. Returns the updated ceilings row. */
   cpSetComputePlatformCeilings: CpComputePlatformCeilings;
   /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment and a sanitized audit event. NOTHING IS PUSHED TO GAME API: preemption takes effect when its runtime next pulls this app's crowdy.studio-agent-policy/1 replica, which is within about a minute for an app already holding one and not at all for an app that does not until a permitted caller asks. Releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
@@ -5805,6 +5874,13 @@ export type MutationConsentGridClientModArgs = {
   appId: Scalars['BigInt']['input'];
   attachmentId: Scalars['String']['input'];
   consentCapabilityHash: Scalars['String']['input'];
+};
+
+
+export type MutationCpBillingCreditOverbillArgs = {
+  appId: Scalars['BigInt']['input'];
+  chargeId: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
 };
 
 
@@ -7175,12 +7251,19 @@ export type OrgUsageSummary = {
 
 export type OrgWallet = {
   __typename?: 'OrgWallet';
-  /** Current wallet balance in minor currency units (cents) of `currency`, as a BigInt decimal string. May be negative if usage was charged against an empty wallet. */
+  /**
+   * DEPRECATED. balanceMicrousd / 10,000 truncated toward zero, as a BigInt decimal string.
+   * @deprecated Cents are a display convenience derived from balanceMicrousd (truncated toward zero). Read balanceMicrousd.
+   */
   balanceCents: Scalars['BigInt']['output'];
+  /** Current wallet balance in MICRO-USD (1 USD = 1,000,000), as a BigInt decimal string. The unit of account since 2026-09-11: every charge is recorded to the micro-USD and nothing is rounded. May be negative when accrued usage settled against an empty wallet. */
+  balanceMicrousd: Scalars['BigInt']['output'];
   /** When the wallet was created (ISO-8601 UTC timestamp). */
   createdAt: Scalars['DateTime']['output'];
   /** ISO-4217 currency code for `balanceCents`, lowercase (e.g. "usd"). Defaults to "usd". */
   currency: Scalars['String']['output'];
+  /** Micro-USD currently held against in-flight request-priced usage (a model turn reserves its worst case here before it runs and releases the difference when it settles). Spendable balance is balanceMicrousd - holdsMicrousd. */
+  holdsMicrousd: Scalars['BigInt']['output'];
   /** Organization that owns this wallet (BigInt as a decimal string). There is exactly one wallet per organization. */
   orgId: Scalars['BigInt']['output'];
   /** When the wallet was last modified, e.g. on balance change (ISO-8601 UTC timestamp). */
@@ -7860,12 +7943,19 @@ export type PlayerUsageCharge = {
 /** The caller's player wallet (player compute P2, DN-5): a platform-scoped balance funding that player's grid compute across every org/app they play in. Out-of-band from org wallets — player usage never touches an org's money. */
 export type PlayerWallet = {
   __typename?: 'PlayerWallet';
-  /** Current balance in cents (may go negative on a closed hour). */
+  /**
+   * DEPRECATED. balanceMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from balanceMicrousd (truncated toward zero). Read balanceMicrousd.
+   */
   balanceCents: Scalars['BigInt']['output'];
+  /** Current balance in MICRO-USD (1 USD = 1,000,000). The unit of account since 2026-09-11; nothing is rounded. May go negative when accrued usage settles against an empty wallet. */
+  balanceMicrousd: Scalars['BigInt']['output'];
   /** Wallet creation time. */
   createdAt: Scalars['DateTime']['output'];
   /** ISO currency code (lowercase). */
   currency: Scalars['String']['output'];
+  /** Micro-USD held against in-flight request-priced usage (a model turn reserves its worst case before it runs). Spendable = balanceMicrousd - holdsMicrousd. */
+  holdsMicrousd: Scalars['BigInt']['output'];
   /** The owning player user id. */
   userId: Scalars['BigInt']['output'];
   /** Wallet id. */
@@ -7875,12 +7965,22 @@ export type PlayerWallet = {
 /** One player-wallet ledger entry: top-ups, hourly usage debits, auto-recharges, refunds, and adjustments. Usage debits carry the app and reference the hour's charge row, whose snapshot splits platform vs studio-markup components. */
 export type PlayerWalletTransaction = {
   __typename?: 'PlayerWalletTransaction';
-  /** Signed amount in cents (debits negative). */
+  /**
+   * DEPRECATED. amountMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from amountMicrousd (truncated toward zero). Read amountMicrousd.
+   */
   amountCents: Scalars['BigInt']['output'];
+  /** Signed amount in micro-USD (debits negative). Exact. */
+  amountMicrousd: Scalars['BigInt']['output'];
   /** The app a usage debit covers; null for wallet-level entries. */
   appId: Maybe<Scalars['BigInt']['output']>;
-  /** Balance after this entry. */
+  /**
+   * DEPRECATED. balanceAfterMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from balanceAfterMicrousd. Read balanceAfterMicrousd.
+   */
   balanceAfter: Scalars['BigInt']['output'];
+  /** Balance in micro-USD after this entry. */
+  balanceAfterMicrousd: Scalars['BigInt']['output'];
   /** Entry time. */
   createdAt: Scalars['DateTime']['output'];
   /** Human description. */
@@ -8226,10 +8326,14 @@ export type Query = {
   avatarAppStates: Array<AppAvatarState>;
   /** Bulk-fetches actors by a list of 32-character ASCII uuids in one round-trip. Requires a valid game token. PUBLIC-STATE ONLY: `privateState` is stripped (null) for every result regardless of ownership. Unknown uuids are silently omitted. Use this to resolve many actors at once; use `actor` for a single owner-scoped fetch. */
   batchLookupActors: Array<Actor>;
+  /** The lossless ledger's charge rows for one app: every (payer, meter, period) or request that has been priced, with what was billed, held and written off, in micro-USD. Requires 'view_billing' on the org. */
+  billingCharges: Array<BillingCharge>;
   /** OPERATOR ONLY. Every organization currently marked billing_exempt. An exemption nobody can enumerate is an exemption that outlives its reason. */
   billingExemptOrgs: Array<BillingExemptOrgType>;
   /** OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price and hourly free allowance. SHARED is organization usage billed to the org wallet as "shared_usage"; PLAYER is player compute billed to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only. Customers read the same rates through `meteredRateCard`, which is public and omits the operator note. */
   billingRateCard: Array<RateCardEntryType>;
+  /** Amounts the platform could not bill this org for, with the reason (an exempt org, a provider with no generation record, a process that died with metered usage in memory). Requires 'view_billing' on the org. */
+  billingWriteOffs: Array<BillingWriteOff>;
   /** Fetch one channel by id. Errors if the id is not a channel. */
   channel: Group;
   /** List the members of a channel (the subscriber set, including pending requests), each with their status and roles. */
@@ -8266,6 +8370,12 @@ export type Query = {
   computeModules: Array<WasmModule>;
   /** The platform's engine-template registry: ready-made compute engines (mob/world/match/deck/instance/director/matchmaking/market/board/minigame/abilities/movement-warden/territory/racing/...) deployable by name with computeDeployTemplate. Requires the org 'manage_compute' permission. */
   computeTemplates: Array<ComputeTemplateInfo>;
+  /** Operator only. The ledger invariant runs, newest first: whether the sums closed and, when they did not, which check failed and by how much. */
+  cpBillingInvariantRuns: Array<BillingInvariantRun>;
+  /** Operator only. Ledger-versus-provider reconciliation, one row per provider per UTC day. */
+  cpBillingReconciliations: Array<BillingReconciliation>;
+  /** Operator only (is_operator or is_super_admin). Every write-off, newest first. */
+  cpBillingWriteOffs: Array<BillingWriteOff>;
   /** Operator only (is_operator). The stored platform ceilings for the per-app WASM compute policy (the knobs computeSetPolicy clamps against). Null fields mean no operator override: game-api uses its COMPUTE_PLATFORM_MAX_* env var, then the code default. Read-only. */
   cpComputePlatformCeilings: CpComputePlatformCeilings;
   /** Operator only (is_operator or is_super_admin). What the ANSWERING ck-api instance carries for Agentic Studio: allowlisted models with their pinned micro-USD prices, the implemented crowdy.agent-tools/1 tools with risk classes, and the complete mode and risk-class value sets a policy may draw from. It is deployed configuration read from that one process, not stored policy and not a fleet-wide claim, so it reports which instance and datacenter answered. A platform policy may name a model or tool absent here: the write succeeds, the value is stored and echoed back, and no run can use it. */
@@ -8777,8 +8887,21 @@ export type QueryBatchLookupActorsArgs = {
 };
 
 
+export type QueryBillingChargesArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryBillingRateCardArgs = {
   scope: RateScope;
+};
+
+
+export type QueryBillingWriteOffsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
 };
 
 
@@ -8884,6 +9007,21 @@ export type QueryComputeModulesArgs = {
 
 export type QueryComputeTemplatesArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryCpBillingInvariantRunsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCpBillingReconciliationsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCpBillingWriteOffsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -11664,12 +11802,22 @@ export type VoxelUpdatesByDistanceResponse = {
 
 export type WalletTransaction = {
   __typename?: 'WalletTransaction';
-  /** Signed change applied to the wallet in minor currency units (cents), as a BigInt decimal string: positive credits funds, negative debits funds. */
+  /**
+   * DEPRECATED. amountMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from amountMicrousd (truncated toward zero). Read amountMicrousd.
+   */
   amountCents: Scalars['BigInt']['output'];
+  /** Signed change applied to the wallet in MICRO-USD, as a BigInt decimal string: positive credits funds, negative debits funds. Exact; nothing is rounded. */
+  amountMicrousd: Scalars['BigInt']['output'];
   /** App that incurred the charge (BigInt as a decimal string), set on usage-type transactions; null for org-level credits such as top-ups. */
   appId: Maybe<Scalars['BigInt']['output']>;
-  /** Wallet balance in cents immediately after this transaction was applied, as a BigInt decimal string. */
+  /**
+   * DEPRECATED. balanceAfterMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from balanceAfterMicrousd (truncated toward zero). Read balanceAfterMicrousd.
+   */
   balanceAfter: Scalars['BigInt']['output'];
+  /** Wallet balance in micro-USD immediately after this transaction was applied, as a BigInt decimal string. */
+  balanceAfterMicrousd: Scalars['BigInt']['output'];
   /** When the transaction was recorded (ISO-8601 UTC timestamp). */
   createdAt: Scalars['DateTime']['output'];
   /** Optional human-readable note describing the transaction; null when not set. */
@@ -12378,7 +12526,7 @@ export type WalletBalanceQueryVariables = Exact<{
 }>;
 
 
-export type WalletBalanceQuery = { __typename?: 'Query', walletBalance: { __typename?: 'OrgWallet', walletId: string, orgId: string, balanceCents: string, currency: string, createdAt: string, updatedAt: string } };
+export type WalletBalanceQuery = { __typename?: 'Query', walletBalance: { __typename?: 'OrgWallet', walletId: string, orgId: string, balanceMicrousd: string, holdsMicrousd: string, balanceCents: string, currency: string, createdAt: string, updatedAt: string } };
 
 export type WalletTransactionsQueryVariables = Exact<{
   orgId: Scalars['BigInt']['input'];
@@ -12387,7 +12535,7 @@ export type WalletTransactionsQueryVariables = Exact<{
 }>;
 
 
-export type WalletTransactionsQuery = { __typename?: 'Query', walletTransactions: Array<{ __typename?: 'WalletTransaction', transactionId: string, walletId: string, orgId: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string }> };
+export type WalletTransactionsQuery = { __typename?: 'Query', walletTransactions: Array<{ __typename?: 'WalletTransaction', transactionId: string, walletId: string, orgId: string, amountMicrousd: string, balanceAfterMicrousd: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string }> };
 
 export type WalletTransactionsConnectionQueryVariables = Exact<{
   orgId: Scalars['BigInt']['input'];
@@ -12396,7 +12544,7 @@ export type WalletTransactionsConnectionQueryVariables = Exact<{
 }>;
 
 
-export type WalletTransactionsConnectionQuery = { __typename?: 'Query', walletTransactionsConnection: { __typename?: 'WalletTransactionsConnection', totalCount: number | null, edges: Array<{ __typename?: 'WalletTransactionEdge', cursor: string, node: { __typename?: 'WalletTransaction', transactionId: string, walletId: string, orgId: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string } }>, pageInfo: { __typename?: 'ConnectionPageInfo', hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null } } };
+export type WalletTransactionsConnectionQuery = { __typename?: 'Query', walletTransactionsConnection: { __typename?: 'WalletTransactionsConnection', totalCount: number | null, edges: Array<{ __typename?: 'WalletTransactionEdge', cursor: string, node: { __typename?: 'WalletTransaction', transactionId: string, walletId: string, orgId: string, amountMicrousd: string, balanceAfterMicrousd: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string } }>, pageInfo: { __typename?: 'ConnectionPageInfo', hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null } } };
 
 export type AddChannelMemberMutationVariables = Exact<{
   groupId: Scalars['BigInt']['input'];
@@ -14066,9 +14214,9 @@ export type PlayerAutomationDeleteMutationVariables = Exact<{
 
 export type PlayerAutomationDeleteMutation = { __typename?: 'Mutation', playerAutomationDelete: boolean };
 
-export type PlayerWalletFieldsFragment = { __typename?: 'PlayerWallet', walletId: string, userId: string, balanceCents: string, currency: string, createdAt: string };
+export type PlayerWalletFieldsFragment = { __typename?: 'PlayerWallet', walletId: string, userId: string, balanceMicrousd: string, holdsMicrousd: string, balanceCents: string, currency: string, createdAt: string };
 
-export type PlayerWalletTransactionFieldsFragment = { __typename?: 'PlayerWalletTransaction', transactionId: string, walletId: string, userId: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string };
+export type PlayerWalletTransactionFieldsFragment = { __typename?: 'PlayerWalletTransaction', transactionId: string, walletId: string, userId: string, amountMicrousd: string, balanceAfterMicrousd: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string };
 
 export type PlayerSpendCapFieldsFragment = { __typename?: 'PlayerSpendCap', userId: string, scope: string, scopeRef: string | null, dailyLimitCents: string | null, monthlyLimitCents: string | null, currentDayUsageCents: string, currentMonthUsageCents: string };
 
@@ -14081,7 +14229,7 @@ export type PlayerWasmPolicyFieldsFragment = { __typename?: 'PlayerWasmPolicy', 
 export type PlayerWalletBalanceQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type PlayerWalletBalanceQuery = { __typename?: 'Query', playerWalletBalance: { __typename?: 'PlayerWallet', walletId: string, userId: string, balanceCents: string, currency: string, createdAt: string } };
+export type PlayerWalletBalanceQuery = { __typename?: 'Query', playerWalletBalance: { __typename?: 'PlayerWallet', walletId: string, userId: string, balanceMicrousd: string, holdsMicrousd: string, balanceCents: string, currency: string, createdAt: string } };
 
 export type PlayerWalletTransactionsQueryVariables = Exact<{
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -14089,7 +14237,7 @@ export type PlayerWalletTransactionsQueryVariables = Exact<{
 }>;
 
 
-export type PlayerWalletTransactionsQuery = { __typename?: 'Query', playerWalletTransactions: Array<{ __typename?: 'PlayerWalletTransaction', transactionId: string, walletId: string, userId: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string }> };
+export type PlayerWalletTransactionsQuery = { __typename?: 'Query', playerWalletTransactions: Array<{ __typename?: 'PlayerWalletTransaction', transactionId: string, walletId: string, userId: string, amountMicrousd: string, balanceAfterMicrousd: string, amountCents: string, balanceAfter: string, transactionType: string, description: string | null, referenceId: string | null, appId: string | null, createdAt: string }> };
 
 export type PlayerUsageChargesQueryVariables = Exact<{
   appId?: InputMaybe<Scalars['BigInt']['input']>;
@@ -14822,8 +14970,8 @@ export const GridClaimRequestFieldsFragmentDoc = {"kind":"Document","definitions
 export const PlayerWasmModuleFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModule"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"authorUserId"}},{"kind":"Field","name":{"kind":"Name","value":"authorOrgId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"draft"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"currentTarget"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleFieldsFragment, unknown>;
 export const PlayerWasmModuleVersionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"sourceFilesJson"}},{"kind":"Field","name":{"kind":"Name","value":"openSource"}},{"kind":"Field","name":{"kind":"Name","value":"compileStatus"}},{"kind":"Field","name":{"kind":"Name","value":"compileLog"}},{"kind":"Field","name":{"kind":"Name","value":"compiledSizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleVersionFieldsFragment, unknown>;
 export const PlayerWasmModuleRunFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWasmModuleRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"executedAsUserId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}}]}}]} as unknown as DocumentNode<PlayerWasmModuleRunFieldsFragment, unknown>;
-export const PlayerWalletFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWallet"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletFieldsFragment, unknown>;
-export const PlayerWalletTransactionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletTransactionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWalletTransaction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletTransactionFieldsFragment, unknown>;
+export const PlayerWalletFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWallet"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"holdsMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletFieldsFragment, unknown>;
+export const PlayerWalletTransactionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletTransactionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWalletTransaction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"amountMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfterMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletTransactionFieldsFragment, unknown>;
 export const PlayerSpendCapFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerSpendCapFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerSpendCap"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"dailyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentDayUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}}]}}]} as unknown as DocumentNode<PlayerSpendCapFieldsFragment, unknown>;
 export const PlayerAutoBillingFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerAutoBillingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerAutoBilling"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"limitCents"}},{"kind":"Field","name":{"kind":"Name","value":"autoBilledThisPeriodCents"}},{"kind":"Field","name":{"kind":"Name","value":"rechargeAmountCents"}},{"kind":"Field","name":{"kind":"Name","value":"lowWaterThresholdCents"}},{"kind":"Field","name":{"kind":"Name","value":"hasPaymentMethod"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}}]}}]} as unknown as DocumentNode<PlayerAutoBillingFieldsFragment, unknown>;
 export const PlayerUsageChargeFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerUsageChargeFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerUsageCharge"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chargeId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"periodEnd"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"platformCents"}},{"kind":"Field","name":{"kind":"Name","value":"markupCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"usageSnapshotJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerUsageChargeFieldsFragment, unknown>;
@@ -14881,9 +15029,9 @@ export const UpdateAvatarAppStateDocument = {"kind":"Document","definitions":[{"
 export const AppBudgetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppBudget"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudget"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudgetId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppBudgetQuery, AppBudgetQueryVariables>;
 export const AppBudgetsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppBudgets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudgets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudgetId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppBudgetsQuery, AppBudgetsQueryVariables>;
 export const SetAppBudgetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAppBudget"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"monthlyLimitCents"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAppBudget"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"monthlyLimitCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"monthlyLimitCents"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appBudgetId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SetAppBudgetMutation, SetAppBudgetMutationVariables>;
-export const WalletBalanceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"WalletBalance"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletBalance"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<WalletBalanceQuery, WalletBalanceQueryVariables>;
-export const WalletTransactionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"WalletTransactions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletTransactions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<WalletTransactionsQuery, WalletTransactionsQueryVariables>;
-export const WalletTransactionsConnectionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"WalletTransactionsConnection"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletTransactionsConnection"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}},{"kind":"Field","name":{"kind":"Name","value":"startCursor"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"totalCount"}}]}}]}}]} as unknown as DocumentNode<WalletTransactionsConnectionQuery, WalletTransactionsConnectionQueryVariables>;
+export const WalletBalanceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"WalletBalance"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletBalance"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"holdsMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<WalletBalanceQuery, WalletBalanceQueryVariables>;
+export const WalletTransactionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"WalletTransactions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletTransactions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"amountMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfterMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<WalletTransactionsQuery, WalletTransactionsQueryVariables>;
+export const WalletTransactionsConnectionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"WalletTransactionsConnection"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletTransactionsConnection"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"amountMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfterMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}},{"kind":"Field","name":{"kind":"Name","value":"startCursor"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"totalCount"}}]}}]}}]} as unknown as DocumentNode<WalletTransactionsConnectionQuery, WalletTransactionsConnectionQueryVariables>;
 export const AddChannelMemberDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AddChannelMember"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"groupId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"addChannelMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"groupId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"groupId"}}},{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupMemberId"}},{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"roles"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupRoleId"}},{"kind":"Field","name":{"kind":"Name","value":"roleName"}},{"kind":"Field","name":{"kind":"Name","value":"rank"}},{"kind":"Field","name":{"kind":"Name","value":"isSystem"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}}]}}]}}]}}]} as unknown as DocumentNode<AddChannelMemberMutation, AddChannelMemberMutationVariables>;
 export const ChannelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Channel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"groupId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"channel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"groupId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"groupId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"groupType"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"membershipPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"defaultRoleId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ChannelQuery, ChannelQueryVariables>;
 export const ChannelMembersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ChannelMembers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"groupId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"channelMembers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"groupId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"groupId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupMemberId"}},{"kind":"Field","name":{"kind":"Name","value":"groupId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"roles"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"groupRoleId"}},{"kind":"Field","name":{"kind":"Name","value":"roleName"}},{"kind":"Field","name":{"kind":"Name","value":"rank"}},{"kind":"Field","name":{"kind":"Name","value":"isSystem"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}}]}}]}}]}}]} as unknown as DocumentNode<ChannelMembersQuery, ChannelMembersQueryVariables>;
@@ -15092,8 +15240,8 @@ export const PlayerAutomationsDocument = {"kind":"Document","definitions":[{"kin
 export const PlayerAutomationCreateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerAutomationCreate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreatePlayerAutomationInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerAutomationCreate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"triggerJson"}},{"kind":"Field","name":{"kind":"Name","value":"actionJson"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"pausedUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerAutomationCreateMutation, PlayerAutomationCreateMutationVariables>;
 export const PlayerAutomationSetEnabledDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerAutomationSetEnabled"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetPlayerAutomationEnabledInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerAutomationSetEnabled"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"triggerJson"}},{"kind":"Field","name":{"kind":"Name","value":"actionJson"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"pausedUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PlayerAutomationSetEnabledMutation, PlayerAutomationSetEnabledMutationVariables>;
 export const PlayerAutomationDeleteDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PlayerAutomationDelete"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerAutomationRefInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerAutomationDelete"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<PlayerAutomationDeleteMutation, PlayerAutomationDeleteMutationVariables>;
-export const PlayerWalletBalanceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerWalletBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerWalletBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWalletFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWallet"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletBalanceQuery, PlayerWalletBalanceQueryVariables>;
-export const PlayerWalletTransactionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerWalletTransactions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerWalletTransactions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWalletTransactionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletTransactionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWalletTransaction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletTransactionsQuery, PlayerWalletTransactionsQueryVariables>;
+export const PlayerWalletBalanceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerWalletBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerWalletBalance"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWalletFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWallet"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"balanceMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"holdsMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"balanceCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletBalanceQuery, PlayerWalletBalanceQueryVariables>;
+export const PlayerWalletTransactionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerWalletTransactions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerWalletTransactions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerWalletTransactionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerWalletTransactionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerWalletTransaction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transactionId"}},{"kind":"Field","name":{"kind":"Name","value":"walletId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"amountMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfterMicrousd"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"balanceAfter"}},{"kind":"Field","name":{"kind":"Name","value":"transactionType"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"referenceId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerWalletTransactionsQuery, PlayerWalletTransactionsQueryVariables>;
 export const PlayerUsageChargesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerUsageCharges"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerUsageCharges"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerUsageChargeFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerUsageChargeFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerUsageCharge"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"chargeId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"periodStart"}},{"kind":"Field","name":{"kind":"Name","value":"periodEnd"}},{"kind":"Field","name":{"kind":"Name","value":"amountCents"}},{"kind":"Field","name":{"kind":"Name","value":"platformCents"}},{"kind":"Field","name":{"kind":"Name","value":"markupCents"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"usageSnapshotJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerUsageChargesQuery, PlayerUsageChargesQueryVariables>;
 export const PlayerSpendCapsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PlayerSpendCaps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerSpendCaps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerSpendCapFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerSpendCapFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerSpendCap"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"dailyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentDayUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}}]}}]} as unknown as DocumentNode<PlayerSpendCapsQuery, PlayerSpendCapsQueryVariables>;
 export const SetPlayerSpendCapDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetPlayerSpendCap"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"scope"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"dailyLimitCents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"monthlyLimitCents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setPlayerSpendCap"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"scope"},"value":{"kind":"Variable","name":{"kind":"Name","value":"scope"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"dailyLimitCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"dailyLimitCents"}}},{"kind":"Argument","name":{"kind":"Name","value":"monthlyLimitCents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"monthlyLimitCents"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerSpendCapFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerSpendCapFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerSpendCap"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"scopeRef"}},{"kind":"Field","name":{"kind":"Name","value":"dailyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"monthlyLimitCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentDayUsageCents"}},{"kind":"Field","name":{"kind":"Name","value":"currentMonthUsageCents"}}]}}]} as unknown as DocumentNode<SetPlayerSpendCapMutation, SetPlayerSpendCapMutationVariables>;
