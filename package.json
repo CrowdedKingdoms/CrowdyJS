@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
-  "version": "15.12.0",
+  "version": "15.12.1",
   "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
@@ -99,16 +99,16 @@
     "@types/node": "^22.10.7",
     "happy-dom": "^20.11.1",
     "typescript": "^5.7.3",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "dependencies": {
     "@codingame/monaco-vscode-api": "25.1.2",
     "@codingame/monaco-vscode-editor-api": "25.1.2",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@vscode/tree-sitter-wasm": "0.3.1",
-    "dompurify": "3.4.12",
+    "dompurify": "3.4.15",
     "graphql": "^16.13.2",
-    "graphql-ws": "^6.0.8",
+    "graphql-ws": "^6.2.1",
     "vscode-jsonrpc": "8.2.0",
     "vscode-languageserver-protocol": "3.17.5",
     "web-tree-sitter": "0.26.11"
