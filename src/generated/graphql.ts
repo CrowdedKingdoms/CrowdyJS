@@ -19,18 +19,6 @@ export type Scalars = {
   DateTime: { input: string; output: string; }
 };
 
-/** Monotonically acknowledge the highest contiguous applied event. */
-export type AcknowledgeAgentEventsInput = {
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
-  /** Highest contiguous applied sequence. It cannot move backward or exceed committed history. */
-  throughSeq: Scalars['BigInt']['input'];
-};
-
 export type Actor = {
   __typename?: 'Actor';
   /** App (game) this actor belongs to. BigInt serialized as a decimal string. */
@@ -372,17 +360,6 @@ export type AgentCheckpointFile = {
   target: Scalars['String']['output'];
 };
 
-/** Result of attaching a fresh interactive client epoch. */
-export type AgentClientAttachment = {
-  __typename?: 'AgentClientAttachment';
-  /** New server-issued monotonic client epoch. */
-  clientEpoch: Scalars['BigInt']['output'];
-  /** Persisted contiguous cursor for this client instance; subscribe after this sequence. */
-  replayAfterSeq: Scalars['BigInt']['output'];
-  /** Session after fencing older epochs. */
-  session: AgentSession;
-};
-
 /** Stable safe error envelope carried inside tool/run events. Branch on code, never message. */
 export type AgentError = {
   __typename?: 'AgentError';
@@ -398,13 +375,6 @@ export type AgentError = {
   requiredScope: Maybe<Scalars['String']['output']>;
   /** Whether policy permits a deliberate retry. */
   retryable: Scalars['Boolean']['output'];
-};
-
-/** Monotonic event acknowledgement result. */
-export type AgentEventAcknowledgement = {
-  __typename?: 'AgentEventAcknowledgement';
-  /** Highest persisted contiguous acknowledged sequence. */
-  throughSeq: Scalars['BigInt']['output'];
 };
 
 /** Common identity/order fields on every typed durable agent event variant. */
@@ -427,19 +397,6 @@ export type AgentEventBase = {
   version: Scalars['String']['output'];
 };
 
-/** Bounded ordered history connection, exclusive of the supplied afterSeq. */
-export type AgentEventConnection = {
-  __typename?: 'AgentEventConnection';
-  /** Events in ascending contiguous sequence order. */
-  edges: Array<AgentEventEdge>;
-  /** SDK-compatible ordered typed events. */
-  events: Array<CrowdyStudioAgentEvent>;
-  /** SDK-compatible history continuation indicator. */
-  hasMore: Scalars['Boolean']['output'];
-  /** History page metadata. */
-  pageInfo: AgentPageInfo;
-};
-
 /** One ordered event connection edge. */
 export type AgentEventEdge = {
   __typename?: 'AgentEventEdge';
@@ -447,27 +404,6 @@ export type AgentEventEdge = {
   cursor: Scalars['String']['output'];
   /** Typed durable event node. */
   node: CrowdyStudioAgentEvent;
-};
-
-/** Server acknowledgement of the 2-second client heartbeat and 5-second Play freshness window. */
-export type AgentHeartbeat = {
-  __typename?: 'AgentHeartbeat';
-  /** Play lease remains server-fresh through this instant, bounded by its hard expiry; null without an active Play lease. */
-  playLeaseFreshUntil: Maybe<Scalars['DateTime']['output']>;
-  /** Authoritative server receipt time. */
-  serverTime: Scalars['DateTime']['output'];
-  /** Renewed 30-second workspace lease expiry; null when no unchanged connected workspace lease can be renewed. */
-  workspaceLeaseExpiresAt: Maybe<Scalars['DateTime']['output']>;
-};
-
-/** Two-second attached-client heartbeat that rechecks policy/permission/context, refreshes five-second Play freshness, and renews an unchanged workspace lease to 30 seconds. */
-export type AgentHeartbeatInput = {
-  /** Exact current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
 };
 
 /** Short-lived context-bound capability. The model cannot create, widen, or renew it. */
@@ -747,31 +683,6 @@ export type AgentSession = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-/** Bounded owner/app session connection. */
-export type AgentSessionConnection = {
-  __typename?: 'AgentSessionConnection';
-  /** Sessions ordered newest first. */
-  edges: Array<AgentSessionEdge>;
-  /** SDK-compatible final opaque cursor. */
-  endCursor: Maybe<Scalars['String']['output']>;
-  /** SDK-compatible next-page indicator. */
-  hasNextPage: Scalars['Boolean']['output'];
-  /** SDK-compatible session nodes in newest-first order. */
-  nodes: Array<AgentSession>;
-  /** Connection page metadata. */
-  pageInfo: AgentPageInfo;
-};
-
-/** Common human session-control shape for pause, resume, and close. */
-export type AgentSessionControlInput = {
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
-};
-
 /** One session connection edge. */
 export type AgentSessionEdge = {
   __typename?: 'AgentSessionEdge';
@@ -779,23 +690,6 @@ export type AgentSessionEdge = {
   cursor: Scalars['String']['output'];
   /** Owner/app-scoped session node. */
   node: AgentSession;
-};
-
-/** Typed browser tool-call terminal record returned after submit. */
-export type AgentToolCall = {
-  __typename?: 'AgentToolCall';
-  /** True when the idempotent terminal result was accepted. */
-  accepted: Scalars['Boolean']['output'];
-  /** Canonical argument hash. */
-  argumentHash: Scalars['String']['output'];
-  /** Safe terminal error, or null. */
-  error: Maybe<AgentError>;
-  /** Durable terminal/current status. */
-  status: CrowdyStudioAgentToolCallStatus;
-  /** Stable tool call UUID. */
-  toolCallId: Scalars['String']['output'];
-  /** Logical descriptor name. */
-  toolName: Scalars['String']['output'];
 };
 
 /** One effective immutable tool descriptor. Schemas are JSON Schema 2020-12 objects serialized as canonical JSON. */
@@ -853,15 +747,6 @@ export type AgentToolDescriptor = {
   version: Scalars['String']['output'];
   /** Provider-safe exact wire name including major version. */
   wireName: Scalars['String']['output'];
-};
-
-/** Effective mode/policy-filtered descriptor registry. */
-export type AgentToolDescriptorSet = {
-  __typename?: 'AgentToolDescriptorSet';
-  /** Digest pinned by the current session. */
-  registryDigest: Scalars['String']['output'];
-  /** Only tools implemented and currently allowed for this session; omitted contract tools are not executable. */
-  tools: Array<AgentToolDescriptor>;
 };
 
 /** Typed tool event. JSON fields are descriptor-versioned and validated against the descriptor returned by crowdyStudioAgentToolDescriptors; they are never arbitrary executor input. */
@@ -977,42 +862,6 @@ export type AgentToolResultEnvelope = {
   status: CrowdyStudioAgentToolResultStatus;
   /** Matching tool call UUID. */
   toolCallId: Scalars['String']['output'];
-};
-
-/** Complete crowdy.tool-result/1 browser result envelope. */
-export type AgentToolResultEnvelopeInput = {
-  /** Stable AGENT_* error code for non-success; omit for SUCCEEDED. */
-  errorCode?: InputMaybe<Scalars['String']['input']>;
-  /** Safe bounded error message for non-success; no stack, source, prompt, headers, or tokens. */
-  errorMessage?: InputMaybe<Scalars['String']['input']>;
-  /** Whether policy permits deliberate retry; defaults false. */
-  errorRetryable?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Browser execution finish timestamp. */
-  finishedAt: Scalars['DateTime']['input'];
-  /** Exact authoritative context version observed by the host. */
-  observedContextVersion: Scalars['String']['input'];
-  /** Output JSON object required for SUCCEEDED and validated against the pinned descriptor; omit for failures. Maximum 128 KiB. */
-  outputJson?: InputMaybe<Scalars['String']['input']>;
-  /** Result protocol version; must be 'crowdy.tool-result/1'. */
-  protocolVersion: Scalars['String']['input'];
-  /** Browser execution start timestamp. */
-  startedAt: Scalars['DateTime']['input'];
-  /** Known terminal executor outcome. */
-  status: CrowdyStudioAgentToolResultStatus;
-  /** Dispatched tool call UUID. */
-  toolCallId: Scalars['String']['input'];
-};
-
-/** Submit one idempotent terminal browser result for the matching owner/session epoch. */
-export type AgentToolResultInput = {
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Complete descriptor-validated crowdy.tool-result/1 result envelope. */
-  result: AgentToolResultEnvelopeInput;
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
 };
 
 /** The interval a free allowance resets on and a dimension is rounded over. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving; the development quota is MONTH. */
@@ -1562,20 +1411,6 @@ export type AssignGroupToGridInput = {
   permissionKeys: Array<Scalars['String']['input']>;
 };
 
-/** Attach one interactive browser and optional selected project/grid, atomically repinning policy/registry/context while fencing old tabs, leases, approvals, and browser dispatches. */
-export type AttachAgentClientInput = {
-  /** Optional stable browser instance UUID. Omit to use the single-interactive-client session cursor. */
-  clientInstanceId?: InputMaybe<Scalars['String']['input']>;
-  /** Optional authoritative grid context selected by the attaching Studio. Omit to retain the current grid. */
-  gridId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Optional owner project UUID selected by the attaching Studio. Omit to retain the current selection; null explicitly clears it outside BUILD. */
-  projectId?: InputMaybe<Scalars['String']['input']>;
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
-};
-
 /** Whether the account has a password set. Does not reveal whether the email is registered. */
 export type AuthMethodResult = {
   __typename?: 'AuthMethodResult';
@@ -1681,18 +1516,6 @@ export type BuddyLiveRates = {
   serverId: Scalars['String']['output'];
   /** Timestamp of the heartbeat these rates came from. */
   updatedAt: Scalars['DateTime']['output'];
-};
-
-/** Immediately request cancellation of one active session run. */
-export type CancelAgentRunInput = {
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Active run UUID to cancel; omit to cancel the session currentRun. */
-  runId?: InputMaybe<Scalars['String']['input']>;
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
 };
 
 /** Input for publishing a message to a channel. Delivered to every active member of the channel (regardless of location), not chunk-routed. The sender must have the channel send_messages permission. */
@@ -2292,24 +2115,6 @@ export type CreateActorInput = {
   uuid: Scalars['String']['input'];
 };
 
-/** Create an owner/app-scoped session with pinned human mode, project/grid context, model, policy, registry, and provider disclosure choice. */
-export type CreateAgentSessionInput = {
-  /** App tenant; the bearer credential must be an unexpired app token for this exact app and the caller must hold use_studio_agent. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional selected grid context; selection grants no authority. */
-  gridId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Human-selected initial ASK, BUILD, or PLAY mode. */
-  mode: CrowdyStudioAgentMode;
-  /** Optional private owner project UUID. Required for BUILD; cross-owner/app ids return the same not-found shape. */
-  projectId?: InputMaybe<Scalars['String']['input']>;
-  /** Optional explicit first-use consent for selected private project source. Omit/false for message-only or metadata-only sessions. */
-  providerDataConsent?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Optional requested allowlisted model. Omit for the platform default. */
-  requestedModel?: InputMaybe<Scalars['String']['input']>;
-};
-
 /** Input payload for creating a new app. */
 export type CreateAppInput = {
   /** Datacenter the app will live in, e.g. 'or' or 'va'. Query placeableDatacenters for the accepted codes and whether each can currently hold an app. REQUIRED and permanent: an app is distributed on app_id, so all of its data lives on one node in one datacenter and that is fixed when the id is minted. Creation FAILS if the datacenter is unknown to this deployment or holds no capacity, rather than creating an app that cannot be routed. There is no default — the instance answering this call may be in a different datacenter from the one you want. Moving an app afterwards is an operator action. */
@@ -2897,26 +2702,6 @@ export enum CrowdyStudioAgentPolicyKind {
   Effective = 'EFFECTIVE',
   /** Operator-owned platform policy and hard ceilings. */
   Platform = 'PLATFORM'
-}
-
-/** Closed CrowdyJS/BWF reason vocabulary for synchronous lease and control preemption. */
-export enum CrowdyStudioAgentPreemptionReason {
-  AdmissionChanged = 'ADMISSION_CHANGED',
-  BudgetFailure = 'BUDGET_FAILURE',
-  ClientReattached = 'CLIENT_REATTACHED',
-  ContextChanged = 'CONTEXT_CHANGED',
-  ControlTargetChanged = 'CONTROL_TARGET_CHANGED',
-  Death = 'DEATH',
-  Disconnected = 'DISCONNECTED',
-  Escape = 'ESCAPE',
-  HumanEdit = 'HUMAN_EDIT',
-  HumanInput = 'HUMAN_INPUT',
-  HumanStop = 'HUMAN_STOP',
-  LeaseExpired = 'LEASE_EXPIRED',
-  OperatorKill = 'OPERATOR_KILL',
-  PermissionChanged = 'PERMISSION_CHANGED',
-  QuotaFailure = 'QUOTA_FAILURE',
-  SessionClosed = 'SESSION_CLOSED'
 }
 
 /** Provider privacy posture. ZDR and collection denial are locked true; provider request/response bodies are never persisted. */
@@ -3625,22 +3410,6 @@ export enum DatacenterServingStatus {
   /** The liveness signal itself could not be read or trusted. Must NOT be presented as an outage: a fleet-wide heartbeat failure once made every datacenter look dead while all of them were fine, and healthy players were told their app was offline. */
   Unknown = 'UNKNOWN'
 }
-
-/** Approve or reject one exact pending tool call by its displayed argument hash. */
-export type DecideAgentToolInput = {
-  /** Exact sha256 hash displayed by APPROVAL_REQUESTED; substitutions and stale contexts fail. */
-  argumentHash: Scalars['String']['input'];
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Optional bounded human rejection reason. */
-  reason?: InputMaybe<Scalars['String']['input']>;
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
-  /** Pending tool call UUID. */
-  toolCallId: Scalars['String']['input'];
-};
 
 /** Define an app feature key. */
 export type DefineAppFeatureInput = {
@@ -4938,24 +4707,6 @@ export type GmTypeSchema = {
   typeName: Scalars['String']['output'];
 };
 
-/** Human-grant a visible, scoped Play lease for the current grid/entity/host revision. */
-export type GrantAgentLeaseInput = {
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Current player-controlled entity identifier, capped at 128 characters. */
-  controlledEntityId: Scalars['String']['input'];
-  /** Human-selected duration in seconds (1–600); no silent renewal. */
-  durationSeconds: Scalars['Int']['input'];
-  /** Exact current host capability revision. */
-  hostCapabilityRevision: Scalars['String']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Explicit unique Play scopes: observe, locomotion, interact, craft, combat, communicate, or travel. */
-  scopes: Array<Scalars['String']['input']>;
-  /** Owner/app PLAY session UUID. */
-  sessionId: Scalars['String']['input'];
-};
-
 /** Input for granting a user access to an app, optionally on a specific tier. */
 export type GrantAppAccessInput = {
   /** Numeric id of the app to grant access to. The caller must hold manage_access_tiers on this app. */
@@ -5513,36 +5264,6 @@ export type Mutation = {
   createTeamRole: GroupRole;
   /** OPERATOR ONLY. Credits an organization wallet without a payment provider, for seeding a test environment or making an operator adjustment, and records it in the wallet ledger as an "admin_credit" transaction. Use this instead of writing to org_wallets by hand: it creates the wallet if absent, repairs a missing wallet id, and moves the balance and the ledger row together in one transaction. Pass a referenceId to make retries idempotent. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so a credit that clears an insufficient_funds denial lifts it immediately instead of leaving the app refusing clients. */
   creditOrgWallet: WalletTransaction;
-  /** Monotonically persist one attached epoch’s highest contiguous applied event sequence. Requires the app-scoped owner, exact current epoch, and idempotency key; stale epochs and gaps fail with stable errors. */
-  crowdyStudioAgentAcknowledgeEvents: AgentEventAcknowledgement;
-  /** Human-grant one unexpired pending tool call by exact argument hash. The server revalidates epoch, context, policy, lease, descriptor, permissions, and project revision before single-use consumption. Requires the app-scoped owner, use_studio_agent, and idempotency key; approval never creates missing authority. */
-  crowdyStudioAgentApproveTool: AgentApproval;
-  /** Attach one interactive browser, allocate a new monotonic epoch, return that client instance’s replay cursor, and fence every older epoch plus its leases, approvals, and pending browser tools. Requires the app-scoped owner, use_studio_agent, and idempotency key; reconnect never replays an effect. */
-  crowdyStudioAgentAttachClient: AgentClientAttachment;
-  /** Immediately make one owner/session run durably CANCELLED, revoke pending capabilities/tools, and abort its local provider stream when present. Requires the app-scoped owner, current epoch, exact run id, and idempotency key; cancellation never silently resumes. */
-  crowdyStudioAgentCancelRun: AgentRun;
-  /** Permanently close one owner/app session, preempt its active run, revoke leases/approvals/dispatches, detach clients, and start the 30-day agent-data cleanup clock without deleting canonical projects/runtime state. Requires the current epoch and idempotency key. */
-  crowdyStudioAgentCloseSession: AgentSession;
-  /** Create a durable owner/app Agentic Crowdy Studio session and pin mode, private project/grid context, allowlisted model, exact Management platform/app revisions, and the mode/tool/risk-filtered registry digest. Requires an app-scoped token, use_studio_agent, a fresh non-killed policy, and an idempotency key; optional consent applies only to private source. */
-  crowdyStudioAgentCreateSession: AgentSession;
-  /** Human-grant a visible PLAY lease with explicit scopes, controlled entity, host capability revision, epoch, context, and 1–600 second duration. Requires PLAY mode, selected grid, app-scoped owner, use_studio_agent, effective policy, and idempotency key; the model cannot grant or renew it. */
-  crowdyStudioAgentGrantLease: AgentLease;
-  /** Recheck current agent permission, policy, owner context, and record the attached heartbeat. CrowdyJS sends this every two seconds; PLAY is stale after five seconds and an unchanged workspace lease renews to 30 seconds. Requires the current app-scoped owner/epoch and an idempotency key. */
-  crowdyStudioAgentHeartbeat: AgentHeartbeat;
-  /** Immediately pause the session and active run, revoke leases/approvals/pending dispatches, and persist SESSION_PAUSED. This human safety action does not wait for provider progress; requires the app-scoped owner, current epoch, and idempotency key. */
-  crowdyStudioAgentPause: AgentSession;
-  /** Human-deny one unexpired pending exact tool call, terminally denying the call and failing its run without any effect. Requires the app-scoped owner, current epoch, matching hash, and idempotency key. */
-  crowdyStudioAgentRejectTool: AgentApproval;
-  /** Explicitly resume a paused session after fresh policy/context validation and requeue its paused run. PLAY never restores an old lease. Requires the app-scoped owner, current epoch, use_studio_agent, and idempotency key. */
-  crowdyStudioAgentResume: AgentSession;
-  /** Immediately and idempotently revoke one owner/session lease. This safety action remains available without waiting for provider/model progress and does not require approval; requires an app-scoped owner, current epoch, and idempotency key. */
-  crowdyStudioAgentRevokeLease: AgentLease;
-  /** Append one bounded, redacted human message and queue exactly one serialized provider/tool run. Requires an active app-scoped owner, use_studio_agent, current epoch, fresh Management policy, complete budget reservation, and idempotency key; private source remains separately policy/consent gated. */
-  crowdyStudioAgentSendMessage: AgentRun;
-  /** Atomically human-select ASK, BUILD, or PLAY plus optional project/grid and repin effective policy revisions, descriptors, registry digest, and context. The change preempts runs and revokes old leases/approvals. Requires current epoch, app owner, use_studio_agent, mode policy, and idempotency key. */
-  crowdyStudioAgentSetMode: AgentSession;
-  /** Submit one idempotent terminal result for a matching BROWSER dispatch. The server fences old epochs/context, validates output against the pinned descriptor, redacts before persistence/provider continuation, and never retries OUTCOME_UNKNOWN. Requires an app-scoped owner and idempotency key. */
-  crowdyStudioAgentToolResult: AgentToolCall;
   /** Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
   crowdyStudioCommonPublish: CrowdyStudioCommonFile;
   /** Bind a Crowdy Studio project you own to a repository granted to your installation. Verifies the branch exists. Identity session only. Autosave stays off until you turn it on. */
@@ -6177,81 +5898,6 @@ export type MutationCreditOrgWalletArgs = {
   orgId: Scalars['BigInt']['input'];
   reason: Scalars['String']['input'];
   referenceId?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type MutationCrowdyStudioAgentAcknowledgeEventsArgs = {
-  input: AcknowledgeAgentEventsInput;
-};
-
-
-export type MutationCrowdyStudioAgentApproveToolArgs = {
-  input: DecideAgentToolInput;
-};
-
-
-export type MutationCrowdyStudioAgentAttachClientArgs = {
-  input: AttachAgentClientInput;
-};
-
-
-export type MutationCrowdyStudioAgentCancelRunArgs = {
-  input: CancelAgentRunInput;
-};
-
-
-export type MutationCrowdyStudioAgentCloseSessionArgs = {
-  input: AgentSessionControlInput;
-};
-
-
-export type MutationCrowdyStudioAgentCreateSessionArgs = {
-  input: CreateAgentSessionInput;
-};
-
-
-export type MutationCrowdyStudioAgentGrantLeaseArgs = {
-  input: GrantAgentLeaseInput;
-};
-
-
-export type MutationCrowdyStudioAgentHeartbeatArgs = {
-  input: AgentHeartbeatInput;
-};
-
-
-export type MutationCrowdyStudioAgentPauseArgs = {
-  input: AgentSessionControlInput;
-};
-
-
-export type MutationCrowdyStudioAgentRejectToolArgs = {
-  input: DecideAgentToolInput;
-};
-
-
-export type MutationCrowdyStudioAgentResumeArgs = {
-  input: AgentSessionControlInput;
-};
-
-
-export type MutationCrowdyStudioAgentRevokeLeaseArgs = {
-  input: RevokeAgentLeaseInput;
-};
-
-
-export type MutationCrowdyStudioAgentSendMessageArgs = {
-  input: SendAgentMessageInput;
-};
-
-
-export type MutationCrowdyStudioAgentSetModeArgs = {
-  input: SetAgentModeInput;
-};
-
-
-export type MutationCrowdyStudioAgentToolResultArgs = {
-  input: AgentToolResultInput;
 };
 
 
@@ -8626,20 +8272,10 @@ export type Query = {
   cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog;
   /** Operator only (is_operator or is_super_admin). Read the platform Agentic Studio enablement, global emergency kill, model/tool/mode/risk allowlists, budget ceilings, retention/privacy policy, pilot funding seam, timestamps, and revision. No provider credential or request body is stored or returned. */
   cpCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
-  /** Return every effective TURN, SESSION, and PLAYER_DAY request/token/reasoning/cost/tool-round/wall-clock/tool-call/compile dimension with reserved, consumed, and non-negative remaining values. The pilot is platform-funded and this owner/app query never debits a wallet. */
-  crowdyStudioAgentBudget: AgentBudget;
   /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, the resolved model/tool/mode/risk lists (models and modes are the platform/app intersection; a tool or risk list the app left empty is inherited from the platform whole, because empty at a layer that can only narrow means no narrowing), minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
   crowdyStudioAgentEffectivePolicy: CrowdyStudioAgentPolicy;
-  /** Replay ordered durable typed events with seq greater than afterSeq. Requires the app-scoped owner and use_studio_agent. Use this query to fill subscription gaps; results are ascending, at-least-once safe, default 100, maximum 200. */
-  crowdyStudioAgentHistory: AgentEventConnection;
   /** Read the app-owned Agentic Crowdy Studio policy row, or a disabled/killed deny-all projection when no row exists. Requires 'view_compute_diagnostics' on the app. This is configuration only: use crowdyStudioAgentEffectivePolicy to see platform clamp and kill precedence. No provider key, prompt, source, header, request/response body, payer reference, or other secret is exposed. */
   crowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
-  /** Return one durable Agentic Crowdy Studio session plus its active run, leases, and pending approval. Requires an unexpired app-scoped token, use_studio_agent, and exact session owner/app visibility; missing and foreign ids return AGENT_SESSION_NOT_FOUND. */
-  crowdyStudioAgentSession: AgentSession;
-  /** List the authenticated owner’s Agentic Crowdy Studio sessions in one app using an opaque cursor, newest first. Requires an app-scoped token for appId and use_studio_agent. The bounded page defaults to 20 and allows 1–50. */
-  crowdyStudioAgentSessions: AgentSessionConnection;
-  /** Return only implemented tools allowed by the current mode plus the exact non-stale Management model/tool/risk policy. Each entry includes the complete canonical crowdy.agent-tool/1 descriptor and digest. Requires the app-scoped owner and use_studio_agent. */
-  crowdyStudioAgentToolDescriptors: AgentToolDescriptorSet;
   /** Read the app's sanitized platform-funded Agentic Studio usage over a bounded time window. Requires 'view_compute_diagnostics'. Returns exact OpenRouter prompt/completion/reasoning/cache/native token and decimal-USD cost dimensions, request/tool/compile/wall counts, and pinned policy revisions. It never returns prompts, source, private reasoning, headers, provider bodies, credentials, payer references, or wallet data; pilot usage never debits a player wallet. */
   crowdyStudioAgentUsage: CrowdyStudioAgentUsagePage;
   /** List the current immutable versions of published Crowdy Studio-curated common files for one app. Requires an app-scoped token for appId; unlike private player source, this catalog content is intentionally readable by players in that app. Results are bounded and may be filtered by target. */
@@ -9251,42 +8887,13 @@ export type QueryComputeTemplatesArgs = {
 };
 
 
-export type QueryCrowdyStudioAgentBudgetArgs = {
-  sessionId: Scalars['String']['input'];
-};
-
-
 export type QueryCrowdyStudioAgentEffectivePolicyArgs = {
   appId: Scalars['BigInt']['input'];
 };
 
 
-export type QueryCrowdyStudioAgentHistoryArgs = {
-  afterSeq?: InputMaybe<Scalars['BigInt']['input']>;
-  first?: InputMaybe<Scalars['Int']['input']>;
-  sessionId: Scalars['String']['input'];
-};
-
-
 export type QueryCrowdyStudioAgentPolicyArgs = {
   appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryCrowdyStudioAgentSessionArgs = {
-  sessionId: Scalars['String']['input'];
-};
-
-
-export type QueryCrowdyStudioAgentSessionsArgs = {
-  after?: InputMaybe<Scalars['String']['input']>;
-  appId: Scalars['BigInt']['input'];
-  first?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryCrowdyStudioAgentToolDescriptorsArgs = {
-  sessionId: Scalars['String']['input'];
 };
 
 
@@ -10118,20 +9725,6 @@ export type RetireOrganizationInput = {
   reason: Scalars['String']['input'];
 };
 
-/** Immediately revoke one visible lease. */
-export type RevokeAgentLeaseInput = {
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Lease UUID to revoke. */
-  leaseId: Scalars['String']['input'];
-  /** Optional strict CrowdyJS/BWF preemption reason; defaults to HUMAN_STOP. */
-  reason?: InputMaybe<CrowdyStudioAgentPreemptionReason>;
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
-};
-
 /** Revoke a user's direct grants on a grid (deletes from the grid_user_direct_grants input table). */
 export type RevokeGridPermissionsInput = {
   /** The app (tenant) that owns the grid. */
@@ -10456,18 +10049,6 @@ export type SeedPropertyInput = {
   valueType: Scalars['String']['input'];
 };
 
-/** Accept one bounded human message and queue exactly one serialized run. */
-export type SendAgentMessageInput = {
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Human intent text, normalized, secret-scanned, and capped at 16 KiB. It never grants authority. */
-  content: Scalars['String']['input'];
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** Owner/app active session UUID. */
-  sessionId: Scalars['String']['input'];
-};
-
 /** Result of an operator test send. */
 export type SendTestEmailResult = {
   __typename?: 'SendTestEmailResult';
@@ -10604,22 +10185,6 @@ export type ServiceQuota = {
   tierId: Maybe<Scalars['BigInt']['output']>;
   /** When the rule was last updated (ISO-8601 UTC timestamp). */
   updatedAt: Scalars['DateTime']['output'];
-};
-
-/** Atomically select human mode plus optional project/grid and repin effective policy revisions, descriptors, registry digest, and context while preempting old authority. */
-export type SetAgentModeInput = {
-  /** Current attached client epoch. */
-  clientEpoch: Scalars['BigInt']['input'];
-  /** Optional grid context to atomically repin with the mode. Omit to retain it; PLAY requires the resulting grid. */
-  gridId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Required retry key. Same owner, operation, key, and input replay the first result; changed input returns IDEMPOTENCY_CONFLICT. */
-  idempotencyKey: Scalars['String']['input'];
-  /** New human-selected mode; the model cannot call this mutation. */
-  mode: CrowdyStudioAgentMode;
-  /** Optional owner project UUID to atomically repin with the mode. Omit to retain it; BUILD requires the resulting selection. */
-  projectId?: InputMaybe<Scalars['String']['input']>;
-  /** Owner/app session UUID. */
-  sessionId: Scalars['String']['input'];
 };
 
 /** Register/update an app's OAuth client settings for the portal handoff (requires manage_apps on the app). */
@@ -11108,21 +10673,12 @@ export type SocialLoginStartInput = {
 
 export type Subscription = {
   __typename?: 'Subscription';
-  /** Replay durable events with seq greater than afterSeq, then tail newly committed facts using database replay plus in-memory wakeups. Requires an app-scoped owner, use_studio_agent, and exact current clientEpoch. Delivery is ordered and at-least-once: deduplicate eventId/seq, fill gaps with crowdyStudioAgentHistory, and acknowledge only contiguous sequences. */
-  crowdyStudioAgentEvents: CrowdyStudioAgentEvent;
   /** Stream complete active gameplay-session count transitions for one app. There is no bootstrap event: query gameModelActivePlayerCount for the current snapshot. The first complete sample is a silent baseline; PARTIAL/UNAVAILABLE samples do not emit or become zero. Delivery uses a Postgres-backed cross-replica best-effort feed with a bounded oldest-drop buffer. Deduplicate by revision; after reconnect or a revision gap, requery gameModelActivePlayerCount. Requires an app-scoped token for this exact app. */
   gameModelActivePlayerCountChanged: GameModelActivePlayerCountChange;
   /** Push notification whenever a container in the app changes: an invoke mutated it, a direct gameModelSetProperty wrote it, or it was created/deleted. Metadata only (containerId, typeName, changedKeys — no property values); pull the visibility-filtered state with gameModelContainerState on receipt. Post-commit and best-effort (a dropped event costs one missed pull, never correctness) — durable reads remain the source of truth. Optional typeName/sessionId filters narrow delivery. Fans out across all API replicas. Requires a valid token. Replaces interval polling with pull-on-push. */
   gameModelContainerChanged: GmContainerChange;
   /** Realtime downlink from the game server: spatial notifications and responses, GenericErrorResponse (errors from your sends, correlated by sequenceNumber), and RealtimeConnectionEvent (lifecycle/setup failures). Requires a bearer game token AND an appId-scoped connection — the appId is read from the graphql-transport-ws connection (game tokens are app-agnostic and one UDP socket is shared across apps, so an app-agnostic subscription is rejected with a RealtimeConnectionEvent code APP_ID_REQUIRED, and a missing/invalid token with AUTH_REQUIRED). On subscribe, opens a UDP proxy session if none exists (binds to the least-loaded game server); open/transport failures are delivered as RealtimeConnectionEvent (code UDP_PROXY_CONNECTION_FAILED) and then the stream ends. Only this app’s spatial fan-out is delivered; appId-less control frames always pass. Subscribe before/while sending so async results are not missed. Unsubscribing stops delivery only — it does NOT close the UDP session; call disconnectUdpProxy (or rely on the server inactivity timeout) to release it. */
   udpNotifications: Maybe<UdpNotification>;
-};
-
-
-export type SubscriptionCrowdyStudioAgentEventsArgs = {
-  afterSeq: Scalars['BigInt']['input'];
-  clientEpoch: Scalars['BigInt']['input'];
-  sessionId: Scalars['String']['input'];
 };
 
 
