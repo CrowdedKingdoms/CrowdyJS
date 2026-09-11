@@ -78,6 +78,14 @@ export class CrowdyStudioDshPane {
     this.frame.className = 'ck-crowdy-studio-dsh-frame';
     this.frame.title = 'Crowdy Studio agent';
     this.frame.setAttribute('allow', 'clipboard-write');
+    // The harness is served from the game's own origin: `BroadcastChannel`
+    // and OPFS are origin-scoped, so it cannot live anywhere else today.
+    // `allow-same-origin` is therefore required and `allow-scripts` runs the
+    // worker. With both set the sandbox does NOT isolate the frame from this
+    // page (the browser says as much in its console); what it still removes is
+    // top-level navigation, popups, forms, downloads and modals. The real
+    // control is the CSP the host serves on `/dsh/*`.
+    this.frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
 
     this.spend = el('div', 'ck-crowdy-studio-dsh-spend');
     this.message = el('div', 'ck-crowdy-studio-dsh-message');
@@ -94,12 +102,47 @@ export class CrowdyStudioDshPane {
       getToken: options.getToken,
       graphqlUrl: options.graphqlUrl,
       host: options.host,
+      confirmLiveDeploy: (summary) => this.confirmLiveDeploy(summary.projectName),
       onWarning: (text) => {
         this.say(text);
         options.onWarning?.(text);
       },
       onStatus: (status) => this.renderStatus(status),
       onFileChanged: (change) => this.say(`Agent updated ${change.target.toLowerCase()}/${change.path}.`),
+    });
+  }
+
+  /**
+   * The page-side gate on a live deploy. The harness UI has its own approval
+   * inside the iframe, but the page cannot see it and the channel is open to
+   * any same-origin script, so the player confirms here too. Auto-declines
+   * after a minute so a stale prompt cannot be accepted by accident later.
+   */
+  private confirmLiveDeploy(projectName: string): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      this.message.hidden = false;
+      this.message.replaceChildren();
+      const text = el('span');
+      text.textContent = `The agent wants to deploy ${projectName} live to everyone in this grid. `;
+      const approve = el('button', 'ck-crowdy-studio-dsh-confirm');
+      approve.type = 'button';
+      approve.textContent = 'Deploy live';
+      const decline = el('button', 'ck-crowdy-studio-dsh-decline');
+      decline.type = 'button';
+      decline.textContent = 'Not now';
+      let settled = false;
+      const finish = (answer: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.message.replaceChildren();
+        this.message.hidden = true;
+        resolve(answer);
+      };
+      const timer = setTimeout(() => finish(false), 60_000);
+      approve.addEventListener('click', () => finish(true));
+      decline.addEventListener('click', () => finish(false));
+      this.message.append(text, approve, ' ', decline);
     });
   }
 
@@ -244,4 +287,6 @@ export const CROWDY_STUDIO_DSH_STYLES = `
 .ck-crowdy-studio-dsh-spend{padding:4px 10px;font-size:11px;color:var(--ck-muted);border-top:1px solid var(--ck-line)}
 .ck-crowdy-studio-dsh-spend a{color:#bae6fd}
 .ck-crowdy-studio-dsh-message{padding:4px 10px;font-size:11px;color:#fde68a;border-top:1px solid var(--ck-line)}
+.ck-crowdy-studio-dsh-message button{font-size:11px;padding:2px 8px;margin-left:4px}
+.ck-crowdy-studio-dsh-confirm{background:#b91c1c;color:#fff;border:0;border-radius:3px}
 `;

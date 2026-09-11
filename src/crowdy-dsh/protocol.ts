@@ -2,30 +2,37 @@
  * Wire protocol between the Crowdy Studio page and the DeepSeek Harness that
  * runs in a Web Worker inside the Studio agent pane.
  *
- * The harness side lives in `@crowdedkingdoms/crowdy-dsh/bridge-protocol`
- * (cks-project-root/crowdy-dsh/src/bridge/protocol.ts); this file mirrors it
- * so the SDK stays dependency-free. Keep the two in step.
+ * The harness side lives in the published `@crowdedkingdoms/crowdy-dsh`
+ * package (`bridge-protocol` export); this file mirrors it so the SDK stays
+ * dependency-free. Keep the two in step.
  *
  * Two channels exist:
  *
  *   - `postMessage` between the page and the harness iframe: the iframe says
  *     `crowdy-dsh:ready`, the page answers `crowdy-dsh:boot` with the home
- *     files to seed, and the iframe reports `crowdy-dsh:booted` or `:failed`.
+ *     files to seed and a one-time `nonce`, and the iframe reports
+ *     `crowdy-dsh:booted` or `:failed`.
  *   - one `BroadcastChannel` (name chosen by the page) between the page and
  *     the worker: the worker asks the page to do what only the page can
  *     (draft tests, screenshots, project switching, game observation) and the
  *     page pushes token, project and context updates.
+ *
+ * A `BroadcastChannel` is open to every same-origin script, so the channel
+ * name is unguessable and every frame carries the boot nonce; a frame without
+ * the right nonce is dropped. The page still confirms a live deploy with the
+ * player before running it, because the harness UI's approval is inside the
+ * iframe and the page cannot see it.
  */
 
-export const CROWDY_DSH_PROTOCOL_VERSION = 1 as const;
+export const CROWDY_DSH_PROTOCOL_VERSION = 2 as const;
 
 export type DshBridgeSide = 'page' | 'worker';
 
 export type DshBridgeFrame =
-  | { v: 1; from: DshBridgeSide; t: 'req'; id: string; method: string; params: unknown }
-  | { v: 1; from: DshBridgeSide; t: 'res'; id: string; result: unknown }
-  | { v: 1; from: DshBridgeSide; t: 'err'; id: string; code: string; message: string }
-  | { v: 1; from: DshBridgeSide; t: 'event'; event: string; payload: unknown };
+  | { v: 2; n: string; from: DshBridgeSide; t: 'req'; id: string; method: string; params: unknown }
+  | { v: 2; n: string; from: DshBridgeSide; t: 'res'; id: string; result: unknown }
+  | { v: 2; n: string; from: DshBridgeSide; t: 'err'; id: string; code: string; message: string }
+  | { v: 2; n: string; from: DshBridgeSide; t: 'event'; event: string; payload: unknown };
 
 export interface DshScreenshotResult {
   name: string;
@@ -124,17 +131,25 @@ export type DshFrameMessage =
 /** The page's answer to `crowdy-dsh:ready`. */
 export interface DshBootMessage {
   type: 'crowdy-dsh:boot';
-  /** Home-relative files to seed (`crowdy.json`, `settings.yaml`). */
+  /**
+   * Home-relative files to seed (`crowdy.json`, `settings.yaml`). Never the
+   * app token: that travels over the channel (`page.hello` / `page.token`) and
+   * lives only in the worker's memory.
+   */
   files: Record<string, string>;
+  /** One-time secret every bridge frame must carry; also in `crowdy.json`. */
+  nonce: string;
   /** OPFS scope for restored sessions; omit to start fresh. */
   persistScope?: string;
   mount?: string;
 }
 
-export function isDshBridgeFrame(value: unknown): value is DshBridgeFrame {
+export function isDshBridgeFrame(value: unknown, nonce?: string): value is DshBridgeFrame {
   if (!value || typeof value !== 'object') return false;
   const frame = value as Partial<DshBridgeFrame>;
-  return frame.v === CROWDY_DSH_PROTOCOL_VERSION && (frame.from === 'page' || frame.from === 'worker') && typeof frame.t === 'string';
+  if (frame.v !== CROWDY_DSH_PROTOCOL_VERSION || typeof frame.n !== 'string' || typeof frame.t !== 'string') return false;
+  if (frame.from !== 'page' && frame.from !== 'worker') return false;
+  return nonce === undefined || frame.n === nonce;
 }
 
 export function isDshFrameMessage(value: unknown): value is DshFrameMessage {

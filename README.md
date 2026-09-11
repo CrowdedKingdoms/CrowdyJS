@@ -695,12 +695,18 @@ Crowdy Studio project (the bound GitHub repository when the project has one).
 The model is reached through the tier's metered endpoint
 (`POST /v1/model/chat/completions`) with the player's own app token, so usage
 is priced per request at the app's rate card and billed to the player's wallet
-by default (or the app's org wallet when its billing admin chose that). No
-model key, shell or network reaches the model; what it can do in the game runs
-through this SDK on the page.
+by default (or the app's org wallet when its billing admin chose that). The
+harness worker holds that token in memory to call the API as the player; it is
+sent over the page/worker channel, never written to a seed file, the worker's
+virtual filesystem or OPFS, and no tool exposes it to the model. The model has
+no shell and no network of its own; what it can do in the game runs through
+this SDK on the page, and a live deploy additionally waits for the player to
+confirm in the pane.
 
-A game enables the pane with the `dsh` option and ships the packed harness
-(`@crowdedkingdoms/crowdy-dsh`'s `dist/dsh-web/`) under a same-origin path:
+A game enables the pane with the `dsh` option and ships the packed harness from
+the published `@crowdedkingdoms/crowdy-dsh` npm package (`dist/dsh-web/`,
+stamped with `BUILD.json`) under a same-origin path, usually by copying it into
+`public/dsh/` at build time:
 
 ```ts
 const studio = createCrowdyStudioEmbed({
@@ -741,8 +747,11 @@ keeps the `PlayerHostAdapterV1` observation contract and its schemas.
 The host document must allow the iframe (`frame-src 'self'`) and serve the
 harness path with `script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:`,
 `connect-src 'self' blob:`, `worker-src 'self' blob:` and
-`frame-ancestors 'self'`; the game page's own policy stays strict. See the
-[crowdy-dsh README](https://github.com/CrowdedKingdoms/cks-project-root/tree/dev/crowdy-dsh).
+`frame-ancestors 'self'`; the game page's own policy stays strict. The iframe
+is same-origin by design (`BroadcastChannel` and OPFS are origin-scoped), so
+its `sandbox="allow-scripts allow-same-origin"` does not isolate it from the
+page; that CSP is the control. See the
+[`@crowdedkingdoms/crowdy-dsh` README on npm](https://www.npmjs.com/package/@crowdedkingdoms/crowdy-dsh).
 
 ## Errors
 

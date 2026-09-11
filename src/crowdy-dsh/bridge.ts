@@ -1,12 +1,27 @@
 /**
  * Page half of the Studio ↔ harness bridge.
  *
- * Owns the iframe handshake (seed files, persistence scope), the
+ * Owns the iframe handshake (seed files, persistence scope, boot nonce), the
  * `BroadcastChannel` the worker's tools call into, and the mapping from those
  * calls onto the headless `CrowdyStudioController` and the game's
- * `PlayerHostAdapterV1`. The model never gets a token, the network or DOM
- * input: everything it asks for runs here with the player's own authority,
- * through the same controller methods the human buttons use.
+ * `PlayerHostAdapterV1` (observe only). Everything the model asks for runs
+ * here with the player's own authority, through the same controller methods
+ * the human buttons use; a live deploy additionally waits for the player to
+ * confirm on the page.
+ *
+ * Where the player's app token goes, precisely: the harness worker needs it
+ * to call the metered model endpoint and the GraphQL API as the player. It is
+ * sent over the channel (`page.hello`, `page.token`), held in the worker's
+ * memory as `process.env.CROWDY_APP_TOKEN`, and never written to a seed file,
+ * the virtual filesystem or OPFS. The model has no tool that reads the
+ * environment, and the Crowdy filesystem backend serves only the project
+ * mount, so `read_file` cannot reach it either.
+ *
+ * The iframe is same-origin by design: `BroadcastChannel` and OPFS are both
+ * origin-scoped. A `sandbox` attribute therefore cannot isolate it, and the
+ * Content-Security-Policy the host serves on `/dsh/*` is the control that
+ * matters (see the-construct's `security-headers.mjs`). Moving the harness to
+ * its own origin with a `MessageChannel` relay is tracked as a follow-up.
  */
 
 import type { CrowdyStudioController, CrowdyStudioDeployResult, CrowdyStudioState } from '../crowdy-studio/controller.js';
@@ -41,8 +56,12 @@ export interface CrowdyStudioDshHost {
   captureFrame?(): Promise<HTMLCanvasElement | ImageBitmap | Blob | null>;
   /** One-line description of the current view, attached beside a capture. */
   describeView?(): string | undefined;
-  /** Structured world observation; the `game_observe` tool and `context/`. */
-  playerHost?: PlayerHostAdapterV1;
+  /**
+   * Structured world observation; the `game_observe` tool and `context/`.
+   * Observe only: the bridge has no request that dispatches a command, so a
+   * host may pass its full `PlayerHostAdapterV1` or just `{ observe }`.
+   */
+  playerHost?: Pick<PlayerHostAdapterV1, 'observe'>;
   /** Recent `crowdy::log` lines from the CLIENT module and browser runtime errors. */
   clientLogs?(): readonly string[];
 }
@@ -59,6 +78,13 @@ export interface StudioDshBridgeOptions {
   host?: CrowdyStudioDshHost;
   /** Longest screenshot side, in pixels. */
   maxCaptureSide?: number;
+  /**
+   * Ask the player, on the page, whether the agent may deploy live. Resolves
+   * `true` to proceed. Without it `studio.deployLive` is refused: the approval
+   * inside the harness UI is not visible to the page and cannot stand in for
+   * this one.
+   */
+  confirmLiveDeploy?(summary: { projectName: string }): Promise<boolean>;
   /** Called when the worker changed a project file, after the controller reloaded. */
   onFileChanged?(change: { target: 'SERVER' | 'CLIENT'; path: string }): void;
   onWarning?(message: string): void;
@@ -81,7 +107,14 @@ const DEFAULT_MAX_SIDE = 1280;
 const HELLO_DEBOUNCE_MS = 1_500;
 
 export class StudioDshBridge {
-  readonly channelName = `crowdy-dsh:${Math.random().toString(36).slice(2, 10)}`;
+  /** Unguessable: any same-origin script can open a `BroadcastChannel` by name. */
+  readonly channelName = `crowdy-dsh:${randomId()}`;
+  /**
+   * One-time secret carried by every frame on the channel. The iframe boot
+   * message delivers it to the worker; a host that boots the harness itself
+   * (tests, a native shell) reads it here and must pass it along.
+   */
+  readonly nonce = randomId();
   private channel: BroadcastChannel | null = null;
   private frameListener: ((event: MessageEvent) => void) | null = null;
   private booted = false;
@@ -208,15 +241,15 @@ export class StudioDshBridge {
   // ── boot ────────────────────────────────────────────────────────────────────
 
   private bootMessage(): DshBootMessage {
-    const token = this.options.getToken() ?? '';
-    this.lastToken = token;
     const projectId = this.options.controller.getState().project?.projectId ?? '';
+    // No token here: `crowdy.json` lands in the worker's filesystem. The
+    // token follows over the channel once the worker says it is ready.
     const crowdy = {
       graphqlUrl: this.options.graphqlUrl,
       appId: this.options.appId,
       projectId,
-      appToken: token,
       bridgeChannel: this.channelName,
+      bridgeNonce: this.nonce,
       githubFirst: true,
       root: '/dsh/workspace',
       persistScope: this.options.persistScope,
@@ -227,6 +260,7 @@ export class StudioDshBridge {
         'crowdy.json': JSON.stringify(crowdy, null, 2),
         'settings.yaml': renderSettingsYaml(this.options.transport.modelBaseUrl, this.models),
       },
+      nonce: this.nonce,
       persistScope: this.options.persistScope,
       mount: '/dsh/workspace',
     };
@@ -255,23 +289,25 @@ export class StudioDshBridge {
 
   private emit<E extends keyof DshPageEventMap>(event: E, payload: DshPageEventMap[E]): void {
     if (!this.channel) return;
-    const frame: DshBridgeFrame = { v: CROWDY_DSH_PROTOCOL_VERSION, from: 'page', t: 'event', event, payload };
+    const frame: DshBridgeFrame = { v: CROWDY_DSH_PROTOCOL_VERSION, n: this.nonce, from: 'page', t: 'event', event, payload };
     this.channel.postMessage(frame);
   }
 
   private reply(id: string, result: unknown): void {
-    const frame: DshBridgeFrame = { v: CROWDY_DSH_PROTOCOL_VERSION, from: 'page', t: 'res', id, result };
+    const frame: DshBridgeFrame = { v: CROWDY_DSH_PROTOCOL_VERSION, n: this.nonce, from: 'page', t: 'res', id, result };
     this.channel?.postMessage(frame);
   }
 
   private fail(id: string, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    const frame: DshBridgeFrame = { v: CROWDY_DSH_PROTOCOL_VERSION, from: 'page', t: 'err', id, code: 'PAGE_ERROR', message };
+    const frame: DshBridgeFrame = { v: CROWDY_DSH_PROTOCOL_VERSION, n: this.nonce, from: 'page', t: 'err', id, code: 'PAGE_ERROR', message };
     this.channel?.postMessage(frame);
   }
 
   private async handle(data: unknown): Promise<void> {
-    if (!isDshBridgeFrame(data) || data.from !== 'worker') return;
+    // Frames without this boot's nonce are dropped unread: the channel is
+    // reachable by any same-origin script, the nonce only by the worker we booted.
+    if (!isDshBridgeFrame(data, this.nonce) || data.from !== 'worker') return;
     if (data.t === 'event') {
       this.onWorkerEvent(data.event as keyof DshWorkerEventMap, data.payload);
       return;
@@ -335,8 +371,13 @@ export class StudioDshBridge {
         return this.screenshot((params as { label?: string } | undefined)?.label) as never;
       case 'studio.draftTest':
         return this.build('draft') as never;
-      case 'studio.deployLive':
+      case 'studio.deployLive': {
+        const confirm = this.options.confirmLiveDeploy;
+        if (!confirm) throw new Error('Live deploys from the agent are not enabled on this page; use the Deploy button in Crowdy Studio.');
+        const projectName = controller.getState().project?.metadata.name ?? 'this project';
+        if (!(await confirm({ projectName }))) throw new Error('The player declined the live deploy. Keep working with draft tests.');
         return this.build('live') as never;
+      }
       case 'studio.runtimeStatus':
         return { runtime: this.runtimeStatus(controller.getState()) } as never;
       case 'studio.runtimeLogs': {
@@ -470,6 +511,17 @@ export class StudioDshBridge {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+/** 128 bits from the platform CSPRNG, hex; falls back to `Math.random` only where `crypto` is absent. */
+function randomId(): string {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID().replace(/-/g, '');
+  if (c?.getRandomValues) {
+    const bytes = c.getRandomValues(new Uint8Array(16));
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
 
 function clampLimit(value: number | undefined, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
