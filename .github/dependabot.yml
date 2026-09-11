@@ -22,6 +22,9 @@ updates:
     ignore:
       - dependency-name: "@crowdedkingdoms/*"
       - dependency-name: "@cks/*"
+      # 0.26→0.27 breaks the Monaco worker Test job. Hold until that is fixed;
+      # do not take it inside the grouped npm-minor-and-patch PR.
+      - dependency-name: "web-tree-sitter"
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions

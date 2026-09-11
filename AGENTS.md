@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.12.0**. Whether that is *published* is
+**Current package:** `package.json` is **15.12.1**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
@@ -38,8 +38,12 @@ version; see the wrapper `studio-github-program/` design before adding one.
 **15.9.0 tracks ck-api `v1.93.0`:** `gameApps.nearbyGrids` (player-safe bounds),
 codegen for `player_joined` / seed upsert / `now()`, and Studio ops select
 `bindPolicyJson` on container types (authoring surface; no live Titan Assault
-policy writes). Package version stays bare (`15.12.0`) — the publish tag adds
+policy writes). Package version stays bare (`15.12.1`) — the publish tag adds
 `-dev.N` / `-test.N`.
+
+**15.12.1** is a dependency-only patch: DOMPurify 3.4.15, `ws` 8.21.3,
+`graphql-ws` 6.2.1. `web-tree-sitter` stays on 0.26.11 (0.27 breaks the Monaco
+worker). No API change.
 
 **15.8.0 papercuts:** `ChunkStore.setVoxel` without `state` omits
 `voxelState` (no more `''`); starter `Cargo.toml` includes `serde_json`;
