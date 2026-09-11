@@ -128,6 +128,8 @@ export class StudioDshBridge {
   private readonly inflight = new Set<Pending>();
   private models: CrowdyStudioModelCatalogEntry[] = [];
   private status: StudioDshBridgeStatus = { phase: 'idle' };
+  /** One live-deploy question at a time: a second request must not replace the first prompt. */
+  private liveDeployPending = false;
 
   constructor(private readonly options: StudioDshBridgeOptions) {}
 
@@ -374,8 +376,18 @@ export class StudioDshBridge {
       case 'studio.deployLive': {
         const confirm = this.options.confirmLiveDeploy;
         if (!confirm) throw new Error('Live deploys from the agent are not enabled on this page; use the Deploy button in Crowdy Studio.');
-        const projectName = controller.getState().project?.metadata.name ?? 'this project';
-        if (!(await confirm({ projectName }))) throw new Error('The player declined the live deploy. Keep working with draft tests.');
+        // Serialized: two concurrent requests would share one prompt and the
+        // player could answer a question other than the one on screen.
+        if (this.liveDeployPending) throw new Error('A live deploy is already waiting for the player to answer. Wait for that answer before asking again.');
+        this.liveDeployPending = true;
+        let approved: boolean;
+        try {
+          const projectName = controller.getState().project?.metadata.name ?? 'this project';
+          approved = await confirm({ projectName });
+        } finally {
+          this.liveDeployPending = false;
+        }
+        if (!approved) throw new Error('The player declined the live deploy. Keep working with draft tests.');
         return this.build('live') as never;
       }
       case 'studio.runtimeStatus':

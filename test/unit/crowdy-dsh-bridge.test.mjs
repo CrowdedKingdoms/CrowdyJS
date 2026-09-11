@@ -196,6 +196,7 @@ test('a live deploy runs only after the page-side confirmation says yes', async 
     },
   });
   let answer = false;
+  let holdAnswer = null;
   const bridge = new StudioDshBridge({
     controller,
     transport: { modelBaseUrl: 'http://api.test/v1/model', models: async () => [] },
@@ -205,6 +206,7 @@ test('a live deploy runs only after the page-side confirmation says yes', async 
     graphqlUrl: 'http://api.test/graphql',
     confirmLiveDeploy: async (summary) => {
       answers.push(summary.projectName);
+      if (holdAnswer) await holdAnswer;
       return answer;
     },
   });
@@ -221,6 +223,18 @@ test('a live deploy runs only after the page-side confirmation says yes', async 
     assert.equal(build.mode, 'live');
     assert.equal(build.ok, true);
     assert.ok(controller.calls.includes('deployLive'));
+
+    // While one question is open, a second request is refused rather than
+    // replacing the prompt the player is looking at.
+    let release;
+    const held = new Promise((resolve) => (release = resolve));
+    holdAnswer = held;
+    const first = ask(worker, 'studio.deployLive', {});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await assert.rejects(ask(worker, 'studio.deployLive', {}), /already waiting/);
+    release();
+    const second = await first;
+    assert.equal(second.mode, 'live');
   } finally {
     bridge.detach();
     worker.close();
