@@ -77,8 +77,6 @@ export class CrowdyStudioDshPane {
     this.frame = document.createElement('iframe');
     this.frame.className = 'ck-crowdy-studio-dsh-frame';
     this.frame.title = 'Crowdy Studio agent';
-    // Same-origin document; the harness needs scripts and its own worker.
-    this.frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-downloads');
     this.frame.setAttribute('allow', 'clipboard-write');
 
     this.spend = el('div', 'ck-crowdy-studio-dsh-spend');
