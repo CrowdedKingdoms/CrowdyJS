@@ -17,13 +17,18 @@ and a release, and prose cannot tell you which state you are in. Ask:
 renew/top-up/refund, seller onboarding/payouts, and the risk queue are gone
 with the GraphQL documents — the schema no longer has those fields.
 
+**This branch makes GitHub the Crowdy Studio working tree.** Bound Monaco persist
+is `crowdyStudioGitHubPutFile` (a GitHub commit). Deploy/Test draft send `commitSha`
+(or `pinBranchHead`), not a Postgres file dump. Layout comes from
+`crowdyStudioGitHubLayout` — do not copy a local `crowdy.json` grammar. Create is
+`crowdyStudioGitHubCreateMod`. Pull, Push, and “also push autosaves” are gone.
+`client.crowdyStudioGitHub` is identity-session only; play app-tokens receive
+`SCOPE_MISSING`. `CrowdyStudioEmbed` accepts `github:` for the identity transport.
+
 **15.11.0 tracks ck-api `v1.96.0` (Crowdy Studio GitHub repos):** `client.crowdyStudioGitHub`
 is a transport on the ONE session (`status`, `connectUrl`, `repos`, `bind`, `unbind`,
-`setAutosave`, `tree`, `getFile`, `putFile`); reads and writes carry only
-`(appId, projectId)` and the API resolves the bound repository. The Studio settings
-pane grows a "GitHub repository" card (Connect, Bind `owner/repo@branch`, Unbind,
-Push, Pull, Refresh, and an "Also push autosaves" toggle that is **off by default**).
-Pull is always explicit and refuses over unsaved edits. No second endpoint, no
+`setAutosave`, `tree`, `getFile`, `putFile`). 15.11 dual-wrote Studio saves to
+Postgres and optionally pushed; this branch does not. No second endpoint, no
 second session, no `loginStudioLocal`. Card hides when the tier has no App.
 
 **15.10.0 (no ck-api dependency):** `portal.completeEntry` returns `null` when

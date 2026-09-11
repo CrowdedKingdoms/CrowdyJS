@@ -498,3 +498,48 @@ test('createCrowdyStudioEmbed returns a working embed instance', () => {
   assert.ok(embed instanceof CrowdyStudioEmbed);
   assert.equal(embed.open, false);
 });
+
+test('embed uses options.github (identity) and never the play-token client transport', async () => {
+  const playCalls = [];
+  const identityCalls = [];
+  const playGithub = {
+    async status() {
+      playCalls.push('status');
+      throw new Error('play token must not call crowdyStudioGitHub*');
+    },
+  };
+  const identityGithub = {
+    async status(input) {
+      identityCalls.push(input);
+      return {
+        configured: true,
+        connected: true,
+        accountLogin: 'modder',
+        accountType: 'User',
+        owner: null,
+        repo: null,
+        branch: null,
+        githubSha: null,
+        projectId: null,
+        autosave: false,
+        installUrl: null,
+      };
+    },
+  };
+  const { embed } = makeEmbed({
+    options: {
+      client: {
+        crowdyStudio: sampleProvider(),
+        playerCompute: sampleCompute(),
+        crowdyStudioGitHub: playGithub,
+      },
+      github: identityGithub,
+    },
+  });
+  embed.toggle(embedContext());
+  await waitForMounted();
+  assert.equal(playCalls.length, 0);
+  assert.ok(identityCalls.length >= 1);
+  embed.close();
+  await settleLateMount();
+});

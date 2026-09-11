@@ -1,6 +1,7 @@
 export {
   CrowdyStudioGitHubTransport,
   type CrowdyStudioGitHubFile,
+  type CrowdyStudioGitHubLayout,
   type CrowdyStudioGitHubProjectScope,
   type CrowdyStudioGitHubRepo,
   type CrowdyStudioGitHubStatus,
@@ -8,15 +9,16 @@ export {
 } from './transport.js';
 export {
   DEFAULT_FULL_STACK_CROWDY_JSON,
-  layoutFromTree,
+  isRustAuthoringPath,
+  joinRepo,
+  layoutFromApi,
+  loadStudioFilesFromGitHub,
   mergeStudioFilesFromGitHub,
-  parseCrowdyJson,
-  pullStudioFilesFromGitHub,
-  pushStudioFilesToGitHub,
+  persistStudioFilesToGitHub,
   repoPathToStudioFile,
-  resolveGitHubLayout,
   studioFileToRepoPath,
-  studioFilesMissingOnGitHub,
+  studioFilesToRepoSeed,
+  trimSlash,
   type GitHubFiles,
   type GitHubLayout,
 } from './sync.js';

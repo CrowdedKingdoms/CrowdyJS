@@ -26,6 +26,7 @@ fragment PlayerWasmModuleVersionFields on PlayerWasmModuleVersion {
   compileStatus
   compileLog
   compiledSizeBytes
+  githubCommitSha
   createdAt
 }
 

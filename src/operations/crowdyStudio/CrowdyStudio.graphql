@@ -29,6 +29,10 @@ fragment CrowdyStudioProjectFields on CrowdyStudioProject {
     createdAt
     updatedAt
   }
+  githubOwner
+  githubRepo
+  githubBranch
+  githubSha
 }
 
 query CrowdyStudioProjects(

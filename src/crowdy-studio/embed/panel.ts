@@ -52,7 +52,7 @@ export interface CrowdyStudioEmbedServices {
   playerWallet?: CrowdyStudioPlayerWallet;
   /** Production agent transport; omission keeps the agent fail-closed/hidden. */
   crowdyStudioAgent?: CrowdyStudioAgentTransportV1;
-  /** GitHub repository loop; omission hides the card. `CrowdyClient` provides it. */
+  /** GitHub repository loop; omission hides the card. Must be an identity session. `CrowdyClient` provides it. */
   crowdyStudioGitHub?: CrowdyStudioGitHubTransport;
 }
 
@@ -84,6 +84,13 @@ export interface CrowdyStudioEmbedAgentSessionOptions {
 /** Static, game-lifetime configuration for the embed shell. */
 export interface CrowdyStudioEmbedOptions {
   client: CrowdyStudioEmbedServices;
+  /**
+   * Identity-session GitHub transport. Play app-tokens receive SCOPE_MISSING
+   * on `crowdyStudioGitHub*`. Pass the Overworld/identity client's
+   * `crowdyStudioGitHub` here. When omitted, the embed uses
+   * `client.crowdyStudioGitHub` (that client must itself be an identity session).
+   */
+  github?: CrowdyStudioGitHubTransport;
   appId: string | (() => string);
   /** Header title. Defaults to "Crowdy Studio". */
   title?: string;
@@ -488,7 +495,11 @@ export class CrowdyStudioEmbed {
     const handle = await mountCrowdyStudio(element, {
       projectProvider: client.crowdyStudio,
       playerCompute: client.playerCompute,
-      ...(client.crowdyStudioGitHub ? { github: client.crowdyStudioGitHub } : {}),
+      ...(this.options.github
+        ? { github: this.options.github }
+        : client.crowdyStudioGitHub
+          ? { github: client.crowdyStudioGitHub }
+          : {}),
       playerWallet: client.playerWallet,
       appId,
       gridId: context.gridId,

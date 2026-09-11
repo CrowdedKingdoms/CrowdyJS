@@ -1,0 +1,96 @@
+fragment CrowdyStudioGitHubStatusFields on CrowdyStudioGitHubStatus {
+  configured
+  connected
+  accountLogin
+  accountType
+  owner
+  repo
+  branch
+  githubSha
+  projectId
+  autosave
+  installUrl
+}
+
+query CrowdyStudioGitHubStatus($appId: BigInt, $projectId: String) {
+  crowdyStudioGitHubStatus(appId: $appId, projectId: $projectId) {
+    ...CrowdyStudioGitHubStatusFields
+  }
+}
+
+mutation CrowdyStudioGitHubConnectUrl {
+  crowdyStudioGitHubConnectUrl {
+    connectUrl
+  }
+}
+
+query CrowdyStudioGitHubRepos {
+  crowdyStudioGitHubRepos {
+    owner
+    name
+    fullName
+    private
+    defaultBranch
+  }
+}
+
+mutation CrowdyStudioGitHubBind($input: BindCrowdyStudioGitHubInput!) {
+  crowdyStudioGitHubBind(input: $input) {
+    ...CrowdyStudioGitHubStatusFields
+  }
+}
+
+mutation CrowdyStudioGitHubCreateMod($input: CreateCrowdyStudioGitHubModInput!) {
+  crowdyStudioGitHubCreateMod(input: $input) {
+    ...CrowdyStudioGitHubStatusFields
+  }
+}
+
+mutation CrowdyStudioGitHubUnbind($input: CrowdyStudioGitHubProjectInput!) {
+  crowdyStudioGitHubUnbind(input: $input) {
+    ...CrowdyStudioGitHubStatusFields
+  }
+}
+
+mutation CrowdyStudioGitHubSetAutosave($input: SetCrowdyStudioGitHubAutosaveInput!) {
+  crowdyStudioGitHubSetAutosave(input: $input) {
+    ...CrowdyStudioGitHubStatusFields
+  }
+}
+
+query CrowdyStudioGitHubTree($input: CrowdyStudioGitHubProjectInput!) {
+  crowdyStudioGitHubTree(input: $input) {
+    path
+    type
+    sha
+    size
+  }
+}
+
+query CrowdyStudioGitHubFile($input: CrowdyStudioGitHubFileInput!) {
+  crowdyStudioGitHubFile(input: $input) {
+    path
+    content
+    sha
+    commitSha
+  }
+}
+
+mutation CrowdyStudioGitHubPutFile($input: CrowdyStudioGitHubPutFileInput!) {
+  crowdyStudioGitHubPutFile(input: $input) {
+    path
+    content
+    sha
+    commitSha
+  }
+}
+
+query CrowdyStudioGitHubLayout($input: CrowdyStudioGitHubProjectInput!) {
+  crowdyStudioGitHubLayout(input: $input) {
+    commitSha
+    server
+    client
+    assets
+    crowdyJson
+  }
+}

@@ -4563,6 +4563,12 @@ type CrowdyStudioGitHubStatus {
   repo: String
   branch: String
   """
+  Optimistic-lock commit SHA (`github_sha` on the project row). Updated on bind, put, and SHA-pinned deploy. Force-push of the branch does not move a live plot.
+  """
+  githubSha: String
+  """Bound project UUID when a project was named or just created."""
+  projectId: String
+  """
   Studio autosave also pushes to the bound repository. Off by default; the project owner opts in.
   """
   autosave: Boolean!
@@ -4598,6 +4604,30 @@ type CrowdyStudioGitHubFile {
   content: String!
   """Blob SHA; send it back on update."""
   sha: String!
+  """
+  Commit SHA after a put. Null on reads. Store as the project github_sha lock.
+  """
+  commitSha: String
+}
+
+"""
+Resolved crowdy.json mapping for a bound repository. CrowdyJS and DSH must use this instead of a local path grammar.
+"""
+type CrowdyStudioGitHubLayout {
+  """Commit SHA the mapping was resolved at."""
+  commitSha: String!
+  """
+  Directory containing the SERVER Cargo.toml. `.` means the repo root.
+  """
+  server: String!
+  """
+  Directory containing the CLIENT Cargo.toml, or null when the mod is server-only.
+  """
+  client: String
+  """Visitor asset prefix (no trailing slash). Default assets."""
+  assets: String!
+  """Raw crowdy.json at the commit, or null when the file is absent."""
+  crowdyJson: String
 }
 
 """
@@ -6797,6 +6827,10 @@ type PlayerWasmModuleVersion {
   compileLog: String
   """Final instrumented/optimized artifact size."""
   compiledSizeBytes: BigInt
+  """
+  Git commit SHA the rust snapshot was fetched at. Null for unbound (legacy sourceFilesJson) deploys. Visitors run this snapshot, never GitHub.
+  """
+  githubCommitSha: String
   """Version creation time."""
   createdAt: DateTime!
 }
@@ -7053,6 +7087,16 @@ type CrowdyStudioProject {
   Private project files ordered by target and path. Bounded to eight files per target.
   """
   files: [CrowdyStudioProjectFile!]!
+  """Bound GitHub owner, or null when unbound (legacy)."""
+  githubOwner: String
+  """Bound GitHub repository name."""
+  githubRepo: String
+  """Bound branch name."""
+  githubBranch: String
+  """
+  Optimistic-lock commit SHA (column github_sha). Force-push of the branch does not move a live plot; deploy pins githubCommitSha on the version row.
+  """
+  githubSha: String
   """Project creation timestamp."""
   createdAt: DateTime!
   """Timestamp of the latest successful project mutation."""
@@ -9282,7 +9326,7 @@ type Query {
   """
   cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  GitHub connection for the caller and the repository bound to a Crowdy Studio project. GitHub is a Studio filesystem capability, not a login provider.
+  GitHub connection for the caller and the repository bound to a Crowdy Studio project. Returns githubSha (commit lock) when a project is named. GitHub is a Studio filesystem capability, not a login provider. Identity session only; play app-tokens receive SCOPE_MISSING.
   """
   crowdyStudioGitHubStatus(
     """
@@ -9299,11 +9343,17 @@ type Query {
   """
   crowdyStudioGitHubRepos: [CrowdyStudioGitHubRepo!]!
   """
-  Recursive file list of the repository bound to the project (Git Trees API).
+  Recursive file list of the repository bound to the project (Git Trees API). Optional commitSha reads a pinned commit; omit for the bound branch HEAD. Identity session only.
   """
   crowdyStudioGitHubTree(input: CrowdyStudioGitHubProjectInput!): [CrowdyStudioGitHubTreeEntry!]!
-  """One UTF-8 file from the bound repository, with its blob SHA."""
+  """
+  One UTF-8 file from the bound repository, with its blob SHA. Optional commitSha reads a pinned commit. Identity session only.
+  """
   crowdyStudioGitHubFile(input: CrowdyStudioGitHubFileInput!): CrowdyStudioGitHubFile!
+  """
+  Resolved crowdy.json mapping (server, client, assets) at a commit SHA. CrowdyJS and DSH must use this as the path-mapping contract. Identity session only.
+  """
+  crowdyStudioGitHubLayout(input: CrowdyStudioGitHubProjectInput!): CrowdyStudioGitHubLayout!
   """
   List flexible player-model containers owned by the caller in one currently owned grid. Requires an app-scoped token and current grid ownership; never returns app-wide or foreign-owner rows.
   """
@@ -9555,12 +9605,20 @@ input GmPropertyPredicateInput {
 input CrowdyStudioGitHubProjectInput {
   appId: BigInt!
   projectId: String!
+  """
+  Commit SHA to read at. Omit to use the bound branch (live HEAD). Deploy pins a SHA separately.
+  """
+  commitSha: String
 }
 
 input CrowdyStudioGitHubFileInput {
   appId: BigInt!
   projectId: String!
   path: String!
+  """
+  Commit SHA to read at. Omit to use the bound branch (live HEAD). Deploy pins a SHA separately.
+  """
+  commitSha: String
 }
 
 """
@@ -11245,11 +11303,11 @@ type Mutation {
     appId: BigInt!
   ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
-  Deploy player-authored Rust into a grid the caller currently owns. Requires the target's write permission at both app-tier and grid ACL layers. One call creates/updates the module and publishes an immutable pending version; the shared compiler builds it asynchronously. Authoring is never admission-gated, but only the original author may replace closed source.
+  Deploy player-authored Rust into a grid the caller currently owns. Requires the target's write permission at both app-tier and grid ACL layers. One call creates/updates the module and publishes an immutable pending version; the shared compiler builds it asynchronously. Authoring is never admission-gated, but only the original author may replace closed source. GitHub-bound mods send commitSha (or pinBranchHead); ck-api fetches rust at that SHA and ignores sourceFilesJson. Visitors never receive a GitHub token.
   """
   playerComputeDeploy(
     """
-    Owned grid, module metadata, SERVER/CLIENT target, source map, and SDK/ABI pins.
+    Owned grid, module metadata, SERVER/CLIENT target, optional sourceFilesJson for unbound deploys, and commitSha for GitHub-bound mods.
     """
     input: DeployPlayerComputeInput!
   ): PlayerWasmModuleVersion!
@@ -11463,7 +11521,7 @@ type Mutation {
     inviteeUserId: BigInt!
   ): Boolean!
   """
-  Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
+  Create a private revisioned Crowdy Studio project. Unbound Postgres drafts are not the product: this mutation is refused with GITHUB_REQUIRED. Use crowdyStudioGitHubCreateMod after Connect GitHub.
   """
   crowdyStudioProjectCreate(
     """
@@ -11481,7 +11539,7 @@ type Mutation {
     input: SaveCrowdyStudioProjectMetadataInput!
   ): CrowdyStudioProject!
   """
-  Atomically save selected private project metadata and a batch of file upserts/deletes under one expected project revision. Requires an app-scoped token and exact project ownership. No partial metadata or file changes survive validation, target-cap, aggregate-storage, module-binding, or revision failures.
+  Atomically save selected private project metadata and a batch of file upserts/deletes. Bound projects refuse file bodies with GITHUB_BOUND_USE_CONTENTS; metadata-only saves still apply.
   """
   crowdyStudioProjectSave(
     """
@@ -11490,7 +11548,7 @@ type Mutation {
     input: SaveCrowdyStudioProjectInput!
   ): CrowdyStudioProject!
   """
-  Apply a batch of project-file upserts and deletes in one transaction under one expected project revision. Requires an app-scoped token and exact project ownership. No partial writes survive path, manifest, independent 8-file/64-KiB-file/256-KiB-target caps, aggregate storage, or revision failures.
+  Apply a batch of project-file upserts and deletes. Bound projects refuse with GITHUB_BOUND_USE_CONTENTS — live bodies go through crowdyStudioGitHubPutFile. Unbound legacy projects still write player_code_project_files under one expected revision.
   """
   crowdyStudioProjectSaveFiles(
     """
@@ -11526,7 +11584,7 @@ type Mutation {
     input: SetCrowdyStudioLibraryFileArchivedInput!
   ): CrowdyStudioLibraryFile!
   """
-  Copy one active caller-owned library revision or one immutable published app-common version into a private project by value. Requires an app-scoped token and exact project ownership. The source is re-authorized, content/provenance are snapshotted, project caps and aggregate storage are checked, and the project revision advances atomically.
+  Copy one active caller-owned library revision or one immutable published app-common version into a private project by value. Bound projects refuse with GITHUB_BOUND_USE_CONTENTS — live bodies go through crowdyStudioGitHubPutFile. Unbound legacy projects still snapshot into player_code_project_files.
   """
   crowdyStudioProjectImportFile(
     """
@@ -11544,7 +11602,7 @@ type Mutation {
     input: PublishCrowdyStudioCommonFileInput!
   ): CrowdyStudioCommonFile! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
   """
-  Lazily create a private project by copying the authenticated author’s latest source from an existing self-authored SERVER module, CLIENT module, or both. Requires an app-scoped token and authorship of every requested module; current grid ownership is deliberately not required for private source recovery after transfer, while any later deploy still rechecks ownership and target permissions. Repeated requests reuse the matching active project.
+  Lazily create a private project from existing self-authored modules. Unbound Postgres drafts are not the product: refused with GITHUB_REQUIRED. Recover source from GitHub or crowdyStudioGitHubCreateMod.
   """
   crowdyStudioProjectCreateFromModules(
     """
@@ -11676,11 +11734,15 @@ type Mutation {
   """
   crowdyStudioGitHubConnectUrl: CrowdyStudioGitHubConnectStart!
   """
-  Bind a Crowdy Studio project you own to a repository granted to your installation. Verifies the branch exists. Identity session only. Autosave stays off until you turn it on.
+  Bind a Crowdy Studio project you own to a repository granted to your installation. Verifies the branch exists, stores its HEAD as github_sha (the optimistic lock). Identity session only. Unbound long-lived Postgres drafts are not the product — prefer crowdyStudioGitHubCreateMod.
   """
   crowdyStudioGitHubBind(input: BindCrowdyStudioGitHubInput!): CrowdyStudioGitHubStatus!
   """
-  Remove the repository bind from a project you own. Files in Crowdy Studio are untouched.
+  Create a GitHub-bound Crowdy Studio mod. Connect GitHub first, create or pick a repository already granted to the installation, then call this. Inserts player_code_projects metadata (no Postgres file bodies) and seeds crowdy.json. Identity session only. Play app-tokens receive SCOPE_MISSING.
+  """
+  crowdyStudioGitHubCreateMod(input: CreateCrowdyStudioGitHubModInput!): CrowdyStudioGitHubStatus!
+  """
+  Remove the repository bind from a project you own. GitHub files are untouched. Authoring stays refused until the project is bound again; github_sha is cleared.
   """
   crowdyStudioGitHubUnbind(input: CrowdyStudioGitHubProjectInput!): CrowdyStudioGitHubStatus!
   """
@@ -11688,7 +11750,7 @@ type Mutation {
   """
   crowdyStudioGitHubSetAutosave(input: SetCrowdyStudioGitHubAutosaveInput!): CrowdyStudioGitHubStatus!
   """
-  Create or update one UTF-8 file in the bound repository. Send the current sha on update; a stale sha is refused with GITHUB_STALE_SHA.
+  Create or update one UTF-8 file in the bound repository. Send the current blob sha on update and optionally expectedCommitSha (project github_sha). A stale lock is GITHUB_STALE_SHA. Identity session only.
   """
   crowdyStudioGitHubPutFile(input: CrowdyStudioGitHubPutFileInput!): CrowdyStudioGitHubFile!
   """
@@ -14147,9 +14209,21 @@ input DeployPlayerComputeInput {
   """SERVER or CLIENT compile target."""
   target: PlayerComputeTarget!
   """
-  JSON object mapping Cargo.toml and src/*.rs relative paths to source. P1 player caps: at most 8 files, 64 KiB/file, 256 KiB total.
+  JSON object mapping Cargo.toml and src/*.rs relative paths to source. Required only for unbound (legacy) deploys. Bound mods ignore this and snapshot rust from GitHub at commitSha. P1 player caps: at most 8 files, 64 KiB/file, 256 KiB total.
   """
-  sourceFilesJson: String!
+  sourceFilesJson: String
+  """
+  Git commit SHA to snapshot for a GitHub-bound mod. Required when the module is bound unless pinBranchHead is true. Stored on player_wasm_module_versions.github_commit_sha so a force-push of main does not move a live plot.
+  """
+  commitSha: String
+  """
+  Resolve the bound branch HEAD, store that SHA as github_sha, and snapshot rust at it. Ignored when commitSha is sent.
+  """
+  pinBranchHead: Boolean
+  """
+  Bound Crowdy Studio project UUID. When omitted, ck-api looks up the caller’s bound project for this grid and module name.
+  """
+  projectId: String
   """Pinned crowdy-compute-sdk version. Defaults to 0.1.5."""
   sdkVersion: String = "0.1.5"
   """Guest ABI version. P1 supports ABI 0."""
@@ -14826,6 +14900,40 @@ input CrowdyStudioGitHubPutFileInput {
   message: String!
   """Required when the file already exists."""
   sha: String
+  """
+  Commit SHA to read at. Omit to use the bound branch (live HEAD). Deploy pins a SHA separately.
+  """
+  commitSha: String
+  """
+  Project github_sha lock. When sent, a mismatch is GITHUB_STALE_SHA — re-read and retry.
+  """
+  expectedCommitSha: String
+}
+
+input CrowdyStudioGitHubSeedFileInput {
+  path: String!
+  content: String!
+}
+
+input CreateCrowdyStudioGitHubModInput {
+  appId: BigInt!
+  """Player-facing project name (also used in the seeded README)."""
+  name: String!
+  """GitHub owner of a repository already granted to this installation."""
+  owner: String!
+  """
+  Repository name already granted to this installation. Create the empty repo on GitHub first; this App does not mint user OAuth tokens and cannot create repos on a personal account.
+  """
+  repo: String!
+  branch: String
+  description: String
+  gridId: BigInt
+  serverModuleName: String
+  clientModuleName: String
+  """
+  Optional repo-relative UTF-8 files to commit after bind (crowdy.json is seeded when omitted).
+  """
+  files: [CrowdyStudioGitHubSeedFileInput!]
 }
 
 """
