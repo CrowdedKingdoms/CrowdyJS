@@ -115,6 +115,16 @@ test('client exposes the full management + game sub-client surface', async () =>
     'nearbyPermissions', 'permissionLimits', 'createGrid', 'grantPermissions',
     'assignGroup',
   ]);
+  assertMethods(client.udp, 'udp', [
+    'connect', 'disconnect', 'connectionStatus', 'subscribe',
+    'sendActorUpdate', 'sendActorUpdateAndWait',
+    'sendVoxelUpdate', 'sendVoxelUpdateAndWait',
+    'sendAudioPacket', 'sendAudioPacketAndWait',
+    'sendVideoPacket', 'sendVideoFrame',
+    'sendTextPacket', 'sendTextPacketAndWait',
+    'sendClientEvent', 'sendClientEventAndWait',
+    'sendSingleActorMessage', 'sendChannelMessage',
+  ]);
   assertMethods(client.apps, 'apps', [
     'codeAdmissionMode', 'codeAdmissions', 'setCodeAdmissionMode', 'admitCode',
     'revokeCodeAdmission',
