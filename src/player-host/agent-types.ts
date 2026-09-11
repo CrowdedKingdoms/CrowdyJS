@@ -15,6 +15,15 @@ export type CrowdyAgentToolRisk =
   | 'IRREVERSIBLE';
 export type CrowdyAgentApprovalPolicy = 'NONE' | 'REQUIRED' | 'CONDITIONAL';
 
+export interface CrowdyAgentLeaseV1 {
+  readonly leaseId?: string;
+  readonly leaseType?: 'WORKSPACE' | 'PLAY';
+  readonly scopes?: readonly string[];
+  readonly expiresAt?: string;
+  readonly lastHeartbeatAt?: string;
+  readonly revokedReason?: string;
+}
+
 export type CrowdyAgentPreemptionReason =
   | 'HUMAN_INPUT'
   | 'HUMAN_EDIT'

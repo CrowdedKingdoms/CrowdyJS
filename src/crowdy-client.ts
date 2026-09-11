@@ -617,6 +617,11 @@ export class CrowdyClient {
     this.realtime.close();
     this.session.setToken(null);
   }
+
+  /** The configured or discovered GraphQL endpoint URL. */
+  get graphqlEndpoint(): string {
+    return this.graphql.endpoint;
+  }
 }
 
 export function createCrowdyClient(

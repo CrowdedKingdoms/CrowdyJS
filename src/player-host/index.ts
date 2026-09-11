@@ -25,6 +25,7 @@ export {
 } from './agent-errors.js';
 export type {
   CrowdyAgentApprovalPolicy,
+  CrowdyAgentLeaseV1,
   CrowdyAgentPreemptionReason,
   CrowdyAgentToolRisk,
 } from './agent-types.js';
