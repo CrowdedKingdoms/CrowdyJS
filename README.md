@@ -221,7 +221,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.playerWallet` | Player spend: balance, spend caps, card setup, policy, charges. |
 | `client.marketplace` | Player-code store/install/consent flows plus player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`) and client-mod artifact fetches. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
-| `client.crowdyStudioAgent` | Generated, app-token Game API transport for durable agent sessions: history/session pages, descriptors/budgets, approvals, tool results, heartbeat, control mutations, ordered event subscriptions. |
+| `client.crowdyStudioGitHub` | GitHub repository loop for Crowdy Studio projects: status, bind, tree, `getFile`, SHA-guarded `putFile`. The Studio agent treats a bound repository as the source of truth. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendVideoPacket` / `sendVideoFrame`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token (see [Token refresh](#token-refresh-during-gameplay)). |
@@ -659,7 +659,7 @@ import { createCrowdyStudioEmbed } from '@crowdedkingdoms/crowdyjs/crowdy-studio
 import workerUrl from '@crowdedkingdoms/crowdyjs/player-glue-worker?worker&url';
 
 const studio = createCrowdyStudioEmbed({
-  client: game, // CrowdyClient: crowdyStudio, playerCompute, playerWallet, crowdyStudioAgent
+  client: game, // CrowdyClient: crowdyStudio, playerCompute, playerWallet, crowdyStudioGitHub
   appId,
   gameName: 'My Game',
   suppressGameplayInput: () => pauseInput(),
@@ -677,55 +677,72 @@ studio.toggle({
 ```
 
 The embed renders a resizable right dock on desktop and a focus-trapped
-fullscreen modal on narrow screens, and mounts the agent dock automatically
-when the client exposes `crowdyStudioAgent` and the game passes a
-`playerHost`. For custom chrome, call `mountCrowdyStudio(host, options)`
-directly; for a headless integration, use `new CrowdyStudioController(options)`.
-New games should start SERVER-only. Untrusted HUD payloads always render as
-text, never HTML.
+fullscreen modal on narrow screens. For custom chrome, call
+`mountCrowdyStudio(host, options)` directly; for a headless integration, use
+`new CrowdyStudioController(options)`. New games should start SERVER-only.
+Untrusted HUD payloads always render as text, never HTML.
 
 See [Crowdy Studio & player client mods](https://docs.crowdedkingdoms.com/crowdyjs/player-client-mods)
 and [Embed Crowdy Studio in your game](https://docs.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).
 
-### Agentic Crowdy Studio
+### The Studio agent (DeepSeek Harness in the browser)
 
-The agent surface adds an Ask/Build/Play AI dock on top of Crowdy Studio,
-built from three browser contracts (`crowdy.studio-agent/1`,
-`crowdy.agent-tools/1`, `crowdy.player-host/1`):
+The agent pane docks beside the editor and runs the
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) entirely
+in the player's browser: the stock harness web UI in a same-origin iframe, the
+harness plugin tree in a Web Worker, and a filesystem whose files are the open
+Crowdy Studio project (the bound GitHub repository when the project has one).
+The model is reached through the tier's metered endpoint
+(`POST /v1/model/chat/completions`) with the player's own app token, so usage
+is priced per request at the app's rate card and billed to the player's wallet
+by default (or the app's org wallet when its billing admin chose that). No
+model key, shell or network reaches the model; what it can do in the game runs
+through this SDK on the page.
 
-- `@crowdedkingdoms/crowdyjs/agent` exports `CrowdyStudioAgentController` (the
-  durable session client: contiguous event ordering, replay/gap fill,
-  attach-epoch fencing, exact approval hashes, budgets, pause/resume/stop) and
-  `CROWDY_AGENT_TOOL_REGISTRY_V1`, an immutable digest-pinned registry of
-  bounded, schema-validated tools. There is deliberately no raw GraphQL
-  executor, DOM driver, `fetch`, shell, or unrestricted SDK bridge in these
-  surfaces.
-- `client.crowdyStudioAgent` is the production GraphQL transport for durable
-  agent sessions; pass it (plus a `playerHost` adapter) to the Studio mount's
-  `agent` option to get the integrated dock.
-- `@crowdedkingdoms/crowdyjs/player-host` exports the generic game
-  observation/control contract: implement `PlayerHostAdapterV1` over your
-  game's typed intent methods, and the exported `AgentControlLeaseManager`,
-  `PlayerControlGate`, and `AgentControlBanner` enforce scoped leases, TTLs,
-  synchronous human preemption, and always-visible Pause/Stop chrome.
+A game enables the pane with the `dsh` option and ships the packed harness
+(`@crowdedkingdoms/crowdy-dsh`'s `dist/dsh-web/`) under a same-origin path:
 
 ```ts
-import { CrowdyStudioAgentController } from '@crowdedkingdoms/crowdyjs/agent';
-
-const agent = new CrowdyStudioAgentController({
-  transport: game.crowdyStudioAgent,
-  createSession: {
-    appId, projectId, gridId,
-    mode: 'BUILD',
-    providerDataConsent: true,
-    idempotencyKey: crypto.randomUUID(),
+const studio = createCrowdyStudioEmbed({
+  client: game,
+  appId,
+  dsh: {
+    graphql: game.graphql,
+    webBase: '/dsh/',                       // where dist/dsh-web is served
+    graphqlUrl: `${apiOrigin}/graphql`,
+    apiOrigin,
+    getToken: () => game.getToken(),
+    persistScope: `${appId}/${userId}`,     // browser-side session persistence key
+    studioOrigin: 'https://studio.crowdedkingdoms.com',
   },
 });
-await agent.initialize(); // attach epoch → durable replay/gap fill → live tail
+
+// Per open: what the model may see.
+studio.toggle({
+  gridId,
+  targetPermissions,
+  playerHost,                               // PlayerHostAdapterV1 → game_observe
+  dshHost: {
+    captureFrame: () => renderer.captureFrame(),   // screenshot tool + auto-capture after draft tests
+    describeView: () => hud.summary(),
+    clientLogs: () => modLogs.tail(200),
+  },
+});
 ```
 
-See [Agentic Crowdy Studio](https://docs.crowdedkingdoms.com/crowdyjs/agentic-crowdy-studio)
-for the full session, lease, and approval model.
+The pane shows a provider-data notice once per app (recorded with
+`crowdyStudioSetProviderConsent`), a Screenshot button, and today's spend
+against the policy ceiling. "Fix with AI" on any problem queues a prompt into
+the agent. `@crowdedkingdoms/crowdyjs/crowdy-dsh` exports the pieces
+(`CrowdyStudioDshPane`, `StudioDshBridge`, `CrowdyStudioDshTransport`, the
+bridge protocol) for custom chrome; `@crowdedkingdoms/crowdyjs/player-host`
+keeps the `PlayerHostAdapterV1` observation contract and its schemas.
+
+The host document must allow the iframe (`frame-src 'self'`) and serve the
+harness path with `script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:`,
+`connect-src 'self' blob:`, `worker-src 'self' blob:` and
+`frame-ancestors 'self'`; the game page's own policy stays strict. See the
+[crowdy-dsh README](https://github.com/CrowdedKingdoms/cks-project-root/tree/dev/crowdy-dsh).
 
 ## Errors
 

@@ -1,7 +1,10 @@
 import {
   mountCrowdyStudio,
+  type MountCrowdyStudioDshOptions,
   type MountCrowdyStudioOptions,
 } from '../mount.js';
+import type { CrowdyStudioDshPane } from '../../crowdy-dsh/pane.js';
+import type { CrowdyStudioDshHost } from '../../crowdy-dsh/bridge.js';
 import type {
   CrowdyStudioController,
   CrowdyStudioPlayerCompute,
@@ -9,17 +12,7 @@ import type {
 } from '../controller.js';
 import type { CrowdyStudioProjectProvider } from '../models.js';
 import type { CrowdyStudioGitHubTransport } from '../github/transport.js';
-import type {
-  CrowdyAgentMode,
-  CrowdyAgentPreemptionReason,
-  CrowdyStudioAgentController,
-  CrowdyStudioAgentTransportV1,
-} from '../../crowdy-agent/index.js';
-import type {
-  AgentControlLeaseManager,
-  AgentControlLeaseManagerOptionsV1,
-  PlayerHostAdapterV1,
-} from '../../player-host/index.js';
+import type { PlayerHostAdapterV1 } from '../../player-host/index.js';
 import type {
   PlayerCodeGridBounds,
   PlayerCodeHostCall,
@@ -50,8 +43,6 @@ export interface CrowdyStudioEmbedServices {
   crowdyStudio: CrowdyStudioProjectProvider;
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
-  /** Production agent transport; omission keeps the agent fail-closed/hidden. */
-  crowdyStudioAgent?: CrowdyStudioAgentTransportV1;
   /** GitHub repository loop; omission hides the card. `CrowdyClient` provides it. */
   crowdyStudioGitHub?: CrowdyStudioGitHubTransport;
 }
@@ -69,17 +60,17 @@ export interface CrowdyStudioEmbedTargetPermissions {
 export interface CrowdyStudioEmbedHandle {
   readonly api: 'crowdy-studio';
   readonly controller: CrowdyStudioController;
-  readonly agent: CrowdyStudioAgentController | null;
-  readonly controlLeaseManager: AgentControlLeaseManager | null;
+  /** The Studio agent pane, when the game configured `dsh`. */
+  readonly dsh: CrowdyStudioDshPane | null;
   destroy(): void;
 }
 
-export interface CrowdyStudioEmbedAgentSessionOptions {
-  mode?: CrowdyAgentMode;
-  providerDataConsent?: boolean;
-  /** Prefixes the generated per-session idempotency key. */
-  idempotencyKeyPrefix?: string;
-}
+/**
+ * Game-lifetime agent configuration. The per-open pieces (the game's capture
+ * and observation hooks) come from {@link CrowdyStudioEmbedContext.playerHost}
+ * and {@link CrowdyStudioEmbedContext.dshHost}.
+ */
+export type CrowdyStudioEmbedDshOptions = Omit<MountCrowdyStudioDshOptions, 'host'>;
 
 /** Static, game-lifetime configuration for the embed shell. */
 export interface CrowdyStudioEmbedOptions {
@@ -95,9 +86,8 @@ export interface CrowdyStudioEmbedOptions {
    * key entirely. Escape always closes.
    */
   closeKeyCode?: string | null;
-  agentSession?: CrowdyStudioEmbedAgentSessionOptions;
-  controlGate?: AgentControlLeaseManagerOptionsV1;
-  onLocalPreempt?(reason: CrowdyAgentPreemptionReason): void;
+  /** Studio agent pane (DeepSeek Harness in the browser); omission hides it. */
+  dsh?: CrowdyStudioEmbedDshOptions;
   /**
    * Suppress gameplay input and return a restoration callback. Used only by
    * the narrow-screen modal; the desktop dock remains non-modal.
@@ -105,6 +95,7 @@ export interface CrowdyStudioEmbedOptions {
   suppressGameplayInput?(): () => void;
   /** Re-measure the game canvas and HUD after dock geometry changes. */
   onLayoutChange?(): void;
+  /** Called after the studio mounted (the agent pane, if any, starts on first open). */
   onAgentMounted?(handle: CrowdyStudioEmbedHandle): void;
   onAgentUnavailable?(message: string): void;
   onAgentUnmounted?(): void;
@@ -131,8 +122,10 @@ export interface CrowdyStudioEmbedContext {
   hud?: CrowdyStudioTextHud;
   /** Custom presentation routing; defaults to `hud` when omitted. */
   onPresentation?(presentation: PlayerCodePresentation): void;
-  /** Game Play adapter; with `client.crowdyStudioAgent` enables the agent. */
+  /** Game observation adapter for the agent's `game_observe`. */
   playerHost?: PlayerHostAdapterV1;
+  /** Screenshot / client-log hooks for the agent; `playerHost` is merged in. */
+  dshHost?: Omit<CrowdyStudioDshHost, 'playerHost'>;
 }
 
 /**
@@ -497,21 +490,14 @@ export class CrowdyStudioEmbed {
       targetPermissions: context.targetPermissions,
       onHostCall: context.onHostCall,
       onPresentation,
-      ...(client.crowdyStudioAgent && context.playerHost
+      ...(this.options.dsh
         ? {
-            agent: {
-              transport: client.crowdyStudioAgent,
-              createSession: {
-                appId,
-                gridId: context.gridId,
-                mode: this.options.agentSession?.mode ?? 'ASK',
-                providerDataConsent:
-                  this.options.agentSession?.providerDataConsent ?? false,
-                idempotencyKey: this.agentIdempotencyKey(),
+            dsh: {
+              ...this.options.dsh,
+              host: {
+                ...context.dshHost,
+                ...(context.playerHost ? { playerHost: context.playerHost } : {}),
               },
-              playerHost: context.playerHost,
-              controlGate: this.options.controlGate,
-              onLocalPreempt: this.options.onLocalPreempt,
             },
           }
         : {}),
@@ -522,8 +508,7 @@ export class CrowdyStudioEmbed {
     return {
       api: 'crowdy-studio',
       controller: handle.controller,
-      agent: handle.agent,
-      controlLeaseManager: handle.controlLeaseManager,
+      dsh: handle.dsh,
       destroy: () => {
         if (destroyed) return;
         destroyed = true;
@@ -535,16 +520,6 @@ export class CrowdyStudioEmbed {
   private currentAppId(): string {
     const { appId } = this.options;
     return typeof appId === 'function' ? appId() : appId;
-  }
-
-  private agentIdempotencyKey(): string {
-    const prefix =
-      this.options.agentSession?.idempotencyKeyPrefix ?? 'ck-agent-session:';
-    const random =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    return `${prefix}${random}`;
   }
 
   private presentationSource(gridId: string): string {

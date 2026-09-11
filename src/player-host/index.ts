@@ -1,10 +1,12 @@
-export {
-  AgentControlLeaseManager,
-  type AgentControlDispatchV1,
-  type AgentControlLeaseManagerOptionsV1,
-  type AgentControlLeaseSnapshotV1,
-  type AgentObservationDispatchV1,
-} from './lease-manager.js';
+/**
+ * The player host contract: how a game exposes its world to the Studio agent
+ * for observation, and the JSON schemas that bound what crosses that seam.
+ *
+ * The lease-based game-control machinery that used to live here (control
+ * gate, lease manager, HUD banner, browser tool handlers) belonged to the
+ * Crowdy Agent's PLAY mode and left with it. The DeepSeek Harness pane reads
+ * the world through `PlayerHostAdapterV1.observe` only.
+ */
 export {
   GAME_COMMAND_RESULT_SCHEMA_V1,
   GAME_COMMAND_SCHEMAS_V1,
@@ -14,21 +16,33 @@ export {
   PLAYER_HOST_CAPABILITIES_SCHEMA_V1,
 } from './schemas.js';
 export {
-  createPlayerHostAgentTools,
-  type PlayerHostAgentToolsV1,
-} from './tools.js';
+  CROWDY_AGENT_ERROR_CODES,
+  CrowdyAgentError,
+  CrowdyAgentOutcomeUnknownError,
+  toAgentError,
+  type AgentErrorV1,
+  type CrowdyAgentErrorCode,
+} from './agent-errors.js';
+export type {
+  CrowdyAgentApprovalPolicy,
+  CrowdyAgentPreemptionReason,
+  CrowdyAgentToolRisk,
+} from './agent-types.js';
 export {
-  PlayerControlGate,
-  type PlayerControlGateAgentControl,
-  type PlayerControlGateOptions,
-  type PlayerControlGateSnapshot,
-} from './control-gate.js';
-export {
-  AGENT_CONTROL_BANNER_STYLES,
-  AgentControlBanner,
-  ensureAgentControlBannerStyles,
-  type AgentControlBannerController,
-} from './control-banner.js';
+  assertBoundedJsonSchema,
+  canonicalJson,
+  deepFreeze,
+  digestCanonicalJson,
+  isDecimalString,
+  sha256Digest,
+  validateJsonSchemaValue,
+  type JsonSchema,
+  type JsonSchemaArray,
+  type JsonSchemaObject,
+  type JsonSchemaString,
+  type JsonSchemaUnion,
+  type JsonSchemaValidationOptions,
+} from './json-schema.js';
 export type {
   GameChatSendCommandV1,
   GameCombatAttackCommandV1,

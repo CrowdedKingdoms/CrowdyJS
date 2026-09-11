@@ -3997,17 +3997,21 @@ type CrowdyStudioAgentPrivacyPolicy {
 }
 
 """
-Funding seam for Agentic Studio. The development pilot is platform-funded and never debits a player wallet; payer/rate-card fields are reserved for a later contract.
+Funding for Agentic Studio model usage. PLATFORM_FUNDED (the pilot default) means the platform absorbs provider cost; METERED means each model request is priced at the agent rate card and charged to the payer: the PLAYER's own wallet by default, or the app's ORG wallet when an org billing admin elected that. Set at the platform layer (billingMode, walletDebitEnabled) and the app layer (payerKind).
 """
 type CrowdyStudioAgentFundingPolicy {
-  """Funding mode. The pilot always returns 'PLATFORM_FUNDED'."""
+  """'PLATFORM_FUNDED' or 'METERED'."""
   billingMode: String!
-  """Future payer kind. The pilot always returns 'PLATFORM'."""
+  """
+  Who pays under METERED: 'PLAYER' (default) or 'ORG'. 'PLATFORM' while platform-funded.
+  """
   payerKind: String!
-  """Future rate-card UUID; null throughout the platform-funded pilot."""
+  """
+  Rate-card UUID pinned by policy; null means the ACTIVE per-model card at request time.
+  """
   rateCardId: String
   """
-  Whether this policy can debit a player wallet. Always false in the pilot.
+  Whether metered usage debits the payer wallet. False while platform-funded.
   """
   walletDebitEnabled: Boolean!
 }
@@ -7250,6 +7254,47 @@ type CrowdyStudioAgentCatalog {
 }
 
 """
+Whether this player has accepted that their Crowdy Studio project source may be sent to a model provider (under the platform ZDR / no-collection routing) for this app.
+"""
+type CrowdyStudioProviderConsent {
+  appId: BigInt!
+  """True once recorded and not revoked."""
+  consented: Boolean!
+  consentedAt: DateTime
+}
+
+"""
+One request through the metered model endpoint, counts and charge only.
+"""
+type CrowdyStudioModelUsageEntry {
+  usageId: String!
+  payerKind: String!
+  status: String!
+  requestedModel: String!
+  resolvedModel: String
+  promptTokens: BigInt!
+  completionTokens: BigInt!
+  reasoningTokens: BigInt!
+  """Rate-carded charge in micro-USD (1,000,000 = $1)."""
+  chargeMicrousd: BigInt!
+  occurredAt: DateTime!
+  client: String!
+}
+
+"""
+The player's model spend in this app today plus their most recent requests.
+"""
+type CrowdyStudioModelUsage {
+  appId: BigInt!
+  payerKind: String!
+  todayRequests: BigInt!
+  todayChargeMicrousd: BigInt!
+  """Today's spend ceiling in micro-USD from the effective policy."""
+  dayLimitMicrousd: BigInt!
+  recent: [CrowdyStudioModelUsageEntry!]!
+}
+
+"""
 A flexible player-owned model container confined to exactly one app, grid, and current owner.
 """
 type PlayerModelContainer {
@@ -9281,6 +9326,14 @@ type Query {
   Operator only (is_operator or is_super_admin). What the ANSWERING ck-api instance carries for Agentic Studio: allowlisted models with their pinned micro-USD prices, the implemented crowdy.agent-tools/1 tools with risk classes, and the complete mode and risk-class value sets a policy may draw from. It is deployed configuration read from that one process, not stored policy and not a fleet-wide claim, so it reports which instance and datacenter answered. A platform policy may name a model or tool absent here: the write succeeds, the value is stored and echoed back, and no run can use it.
   """
   cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Read whether the caller has consented to their project source reaching a model provider for this app. The metered model endpoint (POST /v1/model/chat/completions) refuses with AGENT_SCOPE_DENIED until it is recorded. Requires 'use_studio_agent'.
+  """
+  crowdyStudioProviderConsent(appId: BigInt!): CrowdyStudioProviderConsent! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "appId")
+  """
+  The caller's own model usage in this app: today's request count and rate-carded charge against the policy ceiling, the payer (PLAYER wallet by default, ORG when the app elected it, PLATFORM while platform-funded), and the most recent requests. Counts and charges only; no prompts or provider bodies exist to return. Requires 'use_studio_agent'.
+  """
+  crowdyStudioModelUsage(appId: BigInt!, limit: Int = 20): CrowdyStudioModelUsage! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "appId")
   """
   GitHub connection for the caller and the repository bound to a Crowdy Studio project. GitHub is a Studio filesystem capability, not a login provider.
   """
@@ -11672,6 +11725,10 @@ type Mutation {
     input: AgentSessionControlInput!
   ): AgentSession!
   """
+  Record (or revoke) the caller's consent for their project source in this app to be sent to a model provider through the platform's metered endpoint under ZDR / no-collection routing. Idempotent. Requires 'use_studio_agent'. SIDE EFFECT: enables (or disables) POST /v1/model/chat/completions for this player and app.
+  """
+  crowdyStudioSetProviderConsent(input: SetCrowdyStudioProviderConsentInput!): CrowdyStudioProviderConsent! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "input.appId")
+  """
   Install URL for this tier's Crowdy Studio GitHub App with a signed state. Identity session only. No GitHub token ever reaches the browser.
   """
   crowdyStudioGitHubConnectUrl: CrowdyStudioGitHubConnectStart!
@@ -12473,6 +12530,10 @@ input SetCrowdyStudioAgentAppPolicyInput {
   Optional private-source sharing patch; first-use consent remains locked on.
   """
   privacy: CrowdyStudioAgentPrivacyPolicyInput
+  """
+  Optional funding patch: metering on the platform layer, payer on the app layer.
+  """
+  funding: CrowdyStudioAgentFundingPolicyInput
   """App whose policy is changed."""
   appId: BigInt!
   """
@@ -12588,6 +12649,18 @@ input CrowdyStudioAgentPrivacyPolicyInput {
 }
 
 """
+Funding patch. On the platform layer: billingMode ('PLATFORM_FUNDED' | 'METERED') and walletDebitEnabled. On an app layer: payerKind ('PLAYER' | 'ORG'); choosing ORG spends the org wallet and requires manage_billing on the org. Omitted fields stay unchanged.
+"""
+input CrowdyStudioAgentFundingPolicyInput {
+  """Platform layer only: 'PLATFORM_FUNDED' or 'METERED'."""
+  billingMode: String
+  """App layer: 'PLAYER' (default) or 'ORG'."""
+  payerKind: String
+  """Platform layer only: whether metered usage debits wallets."""
+  walletDebitEnabled: Boolean
+}
+
+"""
 Operator-only platform policy patch. Omitted values stay unchanged; hard v1 privacy and retention maxima still apply.
 """
 input SetCrowdyStudioAgentPlatformPolicyInput {
@@ -12623,6 +12696,10 @@ input SetCrowdyStudioAgentPlatformPolicyInput {
   Optional private-source sharing patch; first-use consent remains locked on.
   """
   privacy: CrowdyStudioAgentPrivacyPolicyInput
+  """
+  Optional funding patch: metering on the platform layer, payer on the app layer.
+  """
+  funding: CrowdyStudioAgentFundingPolicyInput
   """Optional optimistic platform revision."""
   expectedRevision: BigInt
   """Stable kill reason code (max 64); used only while killSwitch is true."""
@@ -14802,6 +14879,14 @@ input CancelAgentRunInput {
   clientEpoch: BigInt!
   """Active run UUID to cancel; omit to cancel the session currentRun."""
   runId: String
+}
+
+"""Record or revoke the provider-data consent for one app."""
+input SetCrowdyStudioProviderConsentInput {
+  """App the consent applies to; must match an app token scope."""
+  appId: BigInt!
+  """True to accept, false to revoke."""
+  consented: Boolean!
 }
 
 input BindCrowdyStudioGitHubInput {

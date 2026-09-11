@@ -2,11 +2,7 @@ import {
   type CrowdyStudioController,
   type CrowdyStudioState,
 } from './controller.js';
-import type { CrowdyStudioAgentController } from '../crowdy-agent/controller.js';
-import {
-  CrowdyStudioAgentDomShell,
-  type CrowdyStudioAgentDomShellOptions,
-} from './agent-dom-shell.js';
+import type { CrowdyStudioDiagnostic } from './diagnostics.js';
 import {
   StudioLayoutController,
   studioPaneSizeRange,
@@ -59,6 +55,24 @@ const FAILURE_PHASES = new Set([
  * activity rail, resized with accessible splitters, and persisted through
  * {@link StudioLayoutController}.
  */
+/**
+ * A pane docked to the right of the editor (the Studio agent). The shell owns
+ * the rail button, the splitter and visibility; the pane owns its content.
+ */
+export interface StudioDockPane {
+  readonly root: HTMLElement;
+  /** Called when the pane first becomes visible. */
+  start?(): Promise<void> | void;
+  dispose(): void;
+}
+
+export interface CrowdyStudioDomShellOptions {
+  /** Build the dock pane inside the workspace element; omit for no dock. */
+  dock?: (workspace: HTMLElement) => StudioDockPane;
+  /** Show a "Fix with AI" action on each problem and route it here. */
+  onFixWithAi?: (diagnostic: CrowdyStudioDiagnostic) => void;
+}
+
 export class CrowdyStudioDomShell {
   readonly root: HTMLElement;
   readonly editorHost: HTMLElement;
@@ -114,7 +128,8 @@ export class CrowdyStudioDomShell {
   private readonly panels = new Map<PanelName, HTMLElement>();
   private readonly railButtons = new Map<StudioPaneId, HTMLButtonElement>();
   private readonly splitters = new Map<StudioPaneId, PaneSplitterHandle>();
-  private readonly agentShell: CrowdyStudioAgentDomShell | null;
+  private readonly dock: StudioDockPane | null;
+  private dockStarted = false;
   private readonly unsubscribeLayout: () => void;
   private activePanel: PanelName = 'problems';
   private explorerForm: ExplorerFormState | null = null;
@@ -125,8 +140,7 @@ export class CrowdyStudioDomShell {
   constructor(
     host: HTMLElement,
     private readonly controller: CrowdyStudioController,
-    agentController?: CrowdyStudioAgentController,
-    agentOptions: CrowdyStudioAgentDomShellOptions = {},
+    private readonly shellOptions: CrowdyStudioDomShellOptions = {},
   ) {
     const style = document.createElement('style');
     style.textContent = CROWDY_STUDIO_STYLES;
@@ -354,21 +368,17 @@ export class CrowdyStudioDomShell {
     host.appendChild(this.root);
 
     // ----- Agent dock ----------------------------------------------------
-    if (agentController) {
+    if (shellOptions.dock) {
       rail.append(
-        this.railButton('agent', 'Agent', 'Show or hide the Crowdy Agent dock'),
+        this.railButton('agent', 'Agent', 'Show or hide the Studio agent'),
       );
       this.workspace.append(
-        this.paneSplitter('agent', 'vertical', 'after', 'Resize the agent dock'),
+        this.paneSplitter('agent', 'vertical', 'after', 'Resize the agent pane'),
       );
-      this.agentShell = new CrowdyStudioAgentDomShell(
-        this.workspace,
-        agentController,
-        { ...agentOptions, layout: agentOptions.layout ?? this.layout },
-      );
+      this.dock = shellOptions.dock(this.workspace);
       this.root.dataset.agent = 'true';
     } else {
-      this.agentShell = null;
+      this.dock = null;
     }
 
     // ----- Wiring ---------------------------------------------------------
@@ -505,7 +515,7 @@ export class CrowdyStudioDomShell {
     this.projectMenu.dispose();
     this.saveMenu.dispose();
     this.runMenu.dispose();
-    this.agentShell?.dispose();
+    this.dock?.dispose();
     this.root.remove();
   }
 
@@ -575,8 +585,14 @@ export class CrowdyStudioDomShell {
       explorer: this.explorer,
       settings: this.settings,
       bottom: this.bottom,
-      agent: this.agentShell?.root ?? null,
+      agent: this.dock?.root ?? null,
     };
+    if (this.dock && state.visible.agent && !this.dockStarted) {
+      this.dockStarted = true;
+      void Promise.resolve(this.dock.start?.()).catch((error) => {
+        console.warn('Crowdy Studio agent pane failed to start', error);
+      });
+    }
     for (const pane of ['explorer', 'settings', 'bottom', 'agent'] as const) {
       const paneElement = paneElements[pane];
       const visible = state.visible[pane] && paneElement !== null;
@@ -1188,6 +1204,22 @@ export class CrowdyStudioDomShell {
           path: diagnostic.path,
         }),
       );
+      const fix = this.shellOptions.onFixWithAi;
+      if (fix) {
+        const wrapper = element('div', 'ck-crowdy-studio-problem-row');
+        const fixButton = element('button', 'ck-crowdy-studio-problem-fix');
+        fixButton.type = 'button';
+        fixButton.textContent = 'Fix with AI';
+        fixButton.title = 'Ask the Studio agent to fix this problem';
+        fixButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          this.layout.setVisible('agent', true);
+          fix(diagnostic);
+        });
+        wrapper.append(row, fixButton);
+        this.problemsPanel.append(wrapper);
+        continue;
+      }
       this.problemsPanel.append(row);
     }
   }
