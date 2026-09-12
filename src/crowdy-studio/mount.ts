@@ -2,21 +2,10 @@ import {
   CrowdyStudioController,
   type CrowdyStudioControllerOptions,
 } from './controller.js';
-import {
-  CROWDY_AGENT_TOOL_REGISTRY_V1,
-  CrowdyAgentBrowserToolDispatcher,
-  CrowdyAgentToolRegistry,
-  CrowdyStudioAgentController,
-  createCrowdyStudioAgentTools,
-  type CrowdyAgentBrowserToolHandlersV1,
-  type CrowdyStudioAgentControllerOptionsV1,
-} from '../crowdy-agent/index.js';
-import {
-  AgentControlLeaseManager,
-  createPlayerHostAgentTools,
-  type AgentControlLeaseManagerOptionsV1,
-  type PlayerHostAdapterV1,
-} from '../player-host/index.js';
+import type { GraphQLClient } from '../client.js';
+import { CrowdyStudioDshPane, CROWDY_STUDIO_DSH_STYLES } from '../crowdy-dsh/pane.js';
+import { CrowdyStudioDshTransport } from '../crowdy-dsh/transport.js';
+import type { CrowdyStudioDshHost } from '../crowdy-dsh/bridge.js';
 import { CrowdyStudioDomShell } from './dom-shell.js';
 import type {
   CrowdyStudioEditorAdapter,
@@ -32,33 +21,38 @@ import { createTextareaCrowdyStudioEditor } from './textarea-editor.js';
 export interface MountCrowdyStudioOptions
   extends CrowdyStudioControllerOptions,
     MonacoCrowdyStudioEditorOptions {
-  /** Optional durable Agentic Crowdy Studio vertical slice. */
-  agent?: MountCrowdyStudioAgentOptions;
+  /**
+   * Optional Studio agent pane: the DeepSeek Harness running in the player's
+   * browser, docked beside the editor. Omit for a Studio without an agent.
+   */
+  dsh?: MountCrowdyStudioDshOptions;
 }
 
-export interface MountCrowdyStudioAgentOptions
-  extends Omit<
-    CrowdyStudioAgentControllerOptionsV1,
-    | 'browserDispatcher'
-    | 'beforeAgentWork'
-    | 'onEpochAttached'
-    | 'onLeaseChanged'
-    | 'onPreempt'
-    | 'resolveProjectBinding'
-  > {
-  registry?: CrowdyAgentToolRegistry;
-  /** Exact additional handlers, normally `game.extension.<game>.*`. */
-  browserHandlers?: CrowdyAgentBrowserToolHandlersV1;
-  playerHost?: PlayerHostAdapterV1;
-  controlGate?: AgentControlLeaseManagerOptionsV1;
-  onLocalPreempt?: CrowdyStudioAgentControllerOptionsV1['onPreempt'];
-  autoInitialize?: boolean;
+export interface MountCrowdyStudioDshOptions {
+  /** GraphQL client the pane uses for consent/usage reads (the game's client). */
+  graphql: GraphQLClient;
+  /** Same-origin path the packed harness page is served from, e.g. `/dsh/`. */
+  webBase: string;
+  /** GraphQL endpoint the harness worker reads/writes project files through. */
+  graphqlUrl: string;
+  /** Origin of the game API for `/v1/model/*` (same origin as `graphqlUrl`). */
+  apiOrigin: string;
+  /** Current app token; re-read whenever the harness needs it. */
+  getToken(): string | null;
+  /** Stable per-player key for session persistence in the browser (never a token). */
+  persistScope: string;
+  /** What the game exposes to the model: captures, observation, client logs. */
+  host?: CrowdyStudioDshHost;
+  /** Studio origin for the wallet link in the pane. */
+  studioOrigin?: string;
+  /** Open the pane on mount (default true). */
+  openOnMount?: boolean;
 }
 
 export interface CrowdyStudioHandle {
   controller: CrowdyStudioController;
-  agent: CrowdyStudioAgentController | null;
-  controlLeaseManager: AgentControlLeaseManager | null;
+  /** The agent pane when `dsh` was configured. */
+  dsh: CrowdyStudioDshPane | null;
   editorMode: CrowdyStudioEditorMode;
   destroy(): void;
 }
@@ -106,120 +100,42 @@ export async function mountCrowdyStudio(
   }
 
   const controller = new CrowdyStudioController(options);
-  let agent: CrowdyStudioAgentController | null = null;
-  let controlLeaseManager: AgentControlLeaseManager | null = null;
-  if (options.agent) {
-    const registry =
-      options.agent.registry ?? CROWDY_AGENT_TOOL_REGISTRY_V1;
-    const hostTools = options.agent.playerHost
-      ? createPlayerHostAgentTools(
-          options.agent.playerHost,
-          {
-            ...options.agent.controlGate,
-            contextVersion:
-              options.agent.controlGate?.contextVersion ??
-              (() =>
-                agent?.getState().session?.contextVersion ??
-                controller.getAgentContext().contextVersion),
-          },
-        )
-      : null;
-    controlLeaseManager = hostTools?.leaseManager ?? null;
-    const handlers = mergeAgentHandlers(
-      createCrowdyStudioAgentTools(controller, {
-        getClientEpoch: () => agent?.getState().clientEpoch ?? null,
-        getContextVersion: () =>
-          agent?.getState().session?.contextVersion,
-        getLeaseKinds: () =>
-          agent
-            ?.getState()
-            .leases.filter((lease) => lease.status === 'ACTIVE')
-            .map((lease) => lease.kind) ?? [],
-        getHostCapabilityRevision: () =>
-          controlLeaseManager?.snapshot().capabilities?.revision,
-        isLeaseActive: (leaseId, kind) =>
-          agent
-            ?.getState()
-            .leases.some(
-              (lease) =>
-                lease.leaseId === leaseId &&
-                lease.kind === kind &&
-                lease.status === 'ACTIVE',
-            ) ?? false,
-      }),
-      hostTools?.handlers,
-      options.agent.browserHandlers,
-    );
-    const dispatcher = new CrowdyAgentBrowserToolDispatcher({
-      registry,
-      handlers,
-      getSessionId: () => agent?.getState().session?.sessionId ?? null,
-      getClientEpoch: () => agent?.getState().clientEpoch ?? null,
-      getContextVersion: () =>
-        agent?.getState().session?.contextVersion ??
-        controller.getAgentContext().contextVersion,
-      getMode: () => agent?.getState().session?.mode ?? 'ASK',
-    });
-    const agentOptions = options.agent;
-    agent = new CrowdyStudioAgentController({
-      ...agentOptions,
-      browserDispatcher: dispatcher,
-      resolveProjectBinding: async () => {
-        const project = controller.getState().project;
-        if (project && !(await controller.saveNow())) {
-          throw new Error(
-            'Resolve the selected project save before starting the agent',
-          );
-        }
-        return {
-          ...(project ? { projectId: project.projectId } : {}),
-          gridId: project?.gridId ?? options.gridId,
-        };
-      },
-      beforeAgentWork: async () => {
-        await controller.prepareForAgentWork();
-      },
-      onPreempt: (reason) => {
-        controlLeaseManager?.preempt(reason);
-        agentOptions.onLocalPreempt?.(reason);
-      },
-      onEpochAttached: (clientEpoch) => {
-        controlLeaseManager?.attach(clientEpoch);
-        if (controlLeaseManager) {
-          void controlLeaseManager.refreshCapabilities().catch(() => {
-            controlLeaseManager?.preempt('CONTEXT_CHANGED');
+  let dsh: CrowdyStudioDshPane | null = null;
+  const dshOptions = options.dsh;
+  const shell = new CrowdyStudioDomShell(host, controller, {
+    dock: dshOptions
+      ? (workspace) => {
+          const style = document.createElement('style');
+          style.textContent = CROWDY_STUDIO_DSH_STYLES;
+          workspace.append(style);
+          dsh = new CrowdyStudioDshPane(workspace, {
+            controller,
+            transport: new CrowdyStudioDshTransport(dshOptions.graphql, {
+              apiOrigin: dshOptions.apiOrigin,
+              getToken: dshOptions.getToken,
+            }),
+            appId: options.appId,
+            webBase: dshOptions.webBase,
+            persistScope: dshOptions.persistScope,
+            getToken: dshOptions.getToken,
+            graphqlUrl: dshOptions.graphqlUrl,
+            host: dshOptions.host,
+            studioOrigin: dshOptions.studioOrigin,
           });
+          return dsh;
         }
-      },
-      onLeaseChanged: (lease) => {
-        if (!controlLeaseManager || lease.kind !== 'PLAY') return;
-        if (lease.status === 'ACTIVE') {
-          void controlLeaseManager
-            .refreshCapabilities()
-            .then(() => controlLeaseManager?.grantLease(lease))
-            .catch(() => controlLeaseManager?.preempt('CONTEXT_CHANGED'));
-        } else {
-          controlLeaseManager.preempt(
-            lease.revokedReason ?? 'LEASE_EXPIRED',
+      : undefined,
+    onFixWithAi: dshOptions
+      ? (diagnostic) => {
+          dsh?.bridge.prompt(
+            `Fix this ${diagnostic.severity} in ${diagnostic.target.toLowerCase()}/${diagnostic.path}:${diagnostic.line}:${diagnostic.column} — ${diagnostic.message}. Read the file first, make the smallest correct change, then run draft_test.`,
           );
         }
-      },
-    });
-  }
-  const shell = new CrowdyStudioDomShell(host, controller, agent ?? undefined, {
-    getPlayLeaseContext: () => {
-      const capabilities = controlLeaseManager?.snapshot().capabilities;
-      return capabilities
-        ? {
-            controlledEntityId: capabilities.controlledEntityId,
-            hostCapabilityRevision: capabilities.revision,
-          }
-        : null;
-    },
+      : undefined,
   });
-  const unsubscribeHumanEdit = controller.onHumanEdit(() =>
-    agent?.preemptForHumanEdit(),
-  );
+  if (dshOptions && dshOptions.openOnMount !== false) {
+    shell.layout.setVisible('agent', true);
+  }
   let editor: CrowdyStudioEditorAdapter | null = null;
   let destroyed = false;
   let recoveringEditor = false;
@@ -264,20 +180,13 @@ export async function mountCrowdyStudio(
     },
   };
 
-  let selectedProjectId = controller.getState().project?.projectId;
   const unsubscribe = controller.subscribe((state) => {
     shell.render(state);
     editor?.sync(state);
-    const nextProjectId = state.project?.projectId;
-    if (nextProjectId !== selectedProjectId) {
-      selectedProjectId = nextProjectId;
-      agent?.projectSelectionChanged(nextProjectId);
-    }
   });
   const onVisibilityChange = (): void => {
     const visible = document.visibilityState !== 'hidden';
     controller.setPageVisible(visible);
-    agent?.setPageVisible(visible);
   };
   document.addEventListener('visibilitychange', onVisibilityChange);
   onVisibilityChange();
@@ -299,11 +208,6 @@ export async function mountCrowdyStudio(
     }
     editor.sync(controller.getState());
     editor.layout();
-    if (agent && options.agent?.autoInitialize !== false) {
-      await agent.initialize().catch((error) => {
-        console.warn('Crowdy Studio agent could not attach; manual Studio remains available', error);
-      });
-    }
   } catch (error) {
     disconnectLayoutObserver();
     document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -311,16 +215,15 @@ export async function mountCrowdyStudio(
     const failedEditor = editor as CrowdyStudioEditorAdapter | null;
     failedEditor?.dispose();
     shell.dispose();
-    unsubscribeHumanEdit();
-    agent?.destroy();
     controller.destroy();
     throw error;
   }
 
   return {
     controller,
-    agent,
-    controlLeaseManager,
+    get dsh() {
+      return dsh;
+    },
     get editorMode() {
       return editor?.mode ?? 'textarea';
     },
@@ -333,33 +236,9 @@ export async function mountCrowdyStudio(
       editor?.dispose();
       editor = null;
       shell.dispose();
-      unsubscribeHumanEdit();
-      agent?.destroy();
-      agent = null;
+      dsh = null;
       controller.destroy();
     },
   };
 }
 
-function mergeAgentHandlers(
-  ...sets: readonly (
-    | CrowdyAgentBrowserToolHandlersV1
-    | null
-    | undefined
-  )[]
-): CrowdyAgentBrowserToolHandlersV1 {
-  const merged: Record<
-    string,
-    CrowdyAgentBrowserToolHandlersV1[string]
-  > = {};
-  for (const set of sets) {
-    if (!set) continue;
-    for (const [name, handler] of Object.entries(set)) {
-      if (merged[name]) {
-        throw new Error(`Duplicate Crowdy Studio browser tool handler: ${name}`);
-      }
-      merged[name] = handler;
-    }
-  }
-  return Object.freeze(merged);
-}

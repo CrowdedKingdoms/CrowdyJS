@@ -71,7 +71,6 @@ import { GameModelAPI } from './domains/gameModel.js';
 import { ComputeAPI } from './domains/compute.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
-import { CrowdyAgentGraphQLTransport } from './crowdy-agent/graphql-transport.js';
 import { CrowdyStudioGitHubTransport } from './crowdy-studio/github/transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { MarketplaceAPI } from './domains/marketplace.js';
@@ -282,8 +281,6 @@ export class CrowdyClient {
   readonly playerCompute: PlayerComputeAPI;
   /** Crowdy Studio cloud projects, libraries, and common source files. */
   readonly crowdyStudio: CrowdyStudioAPI;
-  /** Durable typed Agentic Crowdy Studio GraphQL transport. */
-  readonly crowdyStudioAgent: CrowdyAgentGraphQLTransport;
   /** GitHub repository loop for Crowdy Studio projects (same session; the API resolves the repo from the bind). */
   readonly crowdyStudioGitHub: CrowdyStudioGitHubTransport;
 
@@ -325,13 +322,13 @@ export class CrowdyClient {
     // invented around it, because the alternative is worse than having no
     // default: `createCrowdyClient({ httpUrl: 'https://my-host' })` would get
     // HTTP on their host and the WEBSOCKET on the tier default, splitting one
-    // session across two origins while looking connected. `gameModel` and
-    // `crowdyStudioAgent` refuse a missing wsUrl loudly today and must go on
-    // doing so — a refusal replaced by a silent wrong answer is a bad trade even
-    // when the wrong answer is a live host.
+    // session across two origins while looking connected. `gameModel` refuses
+    // a missing wsUrl loudly today and must go on doing so — a refusal
+    // replaced by a silent wrong answer is a bad trade even when the wrong
+    // answer is a live host.
     //
     // Resolved ONCE here so every sub-client below agrees. Applied per-transport
-    // it reached two of five: `gameModel` and `crowdyStudioAgent` were handed
+    // it reached some transports and not others: `gameModel` was handed
     // `undefined` while the two transports had an answer, and a default that
     // reaches some members of a set and not others is a third configuration
     // nothing was designed for.
@@ -480,10 +477,6 @@ export class CrowdyClient {
     this.playerCompute = new PlayerComputeAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
     this.crowdyStudioGitHub = new CrowdyStudioGitHubTransport(this.graphql);
-    this.crowdyStudioAgent = new CrowdyAgentGraphQLTransport(this.graphql, {
-      wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
-      getToken: () => this.session.getToken(),
-    });
     this.playerWallet = new PlayerWalletAPI(this.graphql);
     this.marketplace = new MarketplaceAPI(this.graphql);
     this.playerModel = new PlayerModelAPI(this.graphql);
@@ -621,9 +614,13 @@ export class CrowdyClient {
 
   /** Closes the WebSocket and clears the in-memory auth token. */
   close(): void {
-    this.crowdyStudioAgent.close();
     this.realtime.close();
     this.session.setToken(null);
+  }
+
+  /** The configured or discovered GraphQL endpoint URL. */
+  get graphqlEndpoint(): string {
+    return this.graphql.endpoint;
   }
 }
 

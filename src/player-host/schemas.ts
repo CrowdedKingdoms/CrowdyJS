@@ -6,8 +6,8 @@ import {
   type JsonSchemaObject,
   type JsonSchemaString,
   type JsonSchemaUnion,
-} from '../crowdy-agent/schema.js';
-import { CROWDY_AGENT_ERROR_CODES } from '../crowdy-agent/errors.js';
+} from './json-schema.js';
+import { CROWDY_AGENT_ERROR_CODES } from './agent-errors.js';
 import type { PlayerHostCommandKind } from './types.js';
 
 const decimal = (): JsonSchemaString => ({
