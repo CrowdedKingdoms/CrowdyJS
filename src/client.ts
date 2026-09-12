@@ -111,6 +111,10 @@ export class GraphQLClient {
     move: DatacenterMove,
   ) => boolean | Promise<boolean>;
 
+  get endpoint(): string {
+    return this.graphqlEndpoint;
+  }
+
   /**
    * @param config - Endpoint, timeout, and logger options; see
    *   {@link GraphQLClientConfig}.

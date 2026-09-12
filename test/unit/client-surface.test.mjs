@@ -63,12 +63,12 @@ test('client exposes the full management + game sub-client surface', async () =>
     'listProjects', 'getProject', 'createProject', 'saveProject',
     'listPersonalLibraryFiles', 'listCommonFiles',
   ]);
-  assertMethods(client.crowdyStudioAgent, 'crowdyStudioAgent', [
-    'getSession', 'listSessions', 'history', 'toolDescriptors', 'budget',
-    'createSession', 'attachClient', 'setMode', 'acknowledgeEvents',
-    'heartbeat', 'sendMessage', 'approveTool', 'rejectTool', 'toolResult',
-    'grantLease', 'revokeLease', 'pause', 'resume', 'cancelRun',
-    'closeSession', 'subscribeEvents', 'close',
+  // The Crowdy Agent transport left with the orchestrator; the Studio agent is
+  // the DeepSeek Harness pane, reached through `crowdyStudioGitHub`, the model
+  // endpoint and the `crowdy-dsh` entry rather than a GraphQL sub-client.
+  assert.equal(client.crowdyStudioAgent, undefined);
+  assertMethods(client.crowdyStudioGitHub, 'crowdyStudioGitHub', [
+    'status', 'connectUrl', 'repos', 'bind', 'unbind', 'setAutosave', 'tree', 'getFile', 'putFile',
   ]);
   assert.equal(client[['player', 'Code', 'Projects'].join('')], undefined);
   // P4a marketplace (free mode): store + installs + consent + claim flows
