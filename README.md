@@ -624,7 +624,8 @@ See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/ga
 ## Crowdy Studio
 
 Crowdy Studio is the in-game SERVER/CLIENT Rust authoring surface for player
-code: cloud projects with target-scoped files, optimistic-concurrency
+code: GitHub-backed cloud projects (Monaco persist is a GraphQL put / GitHub
+commit; Deploy/Test draft send `commitSha`) with optimistic-concurrency
 autosave, draft/live/stop orchestration, and a Monaco editor backed by a local
 Rust language worker. The worker receives source files and the embedded
 platform index only — never a credential and never a server connection.

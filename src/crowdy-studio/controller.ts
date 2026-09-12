@@ -10,11 +10,12 @@ import {
   sha256Digest,
 } from '../crowdy-agent/schema.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
+import { CrowdyGraphQLError } from '../errors.js';
 import type { CrowdyStudioGitHubStatus, CrowdyStudioGitHubTransport } from './github/transport.js';
 import {
-  mergeStudioFilesFromGitHub,
-  pullStudioFilesFromGitHub,
-  pushStudioFilesToGitHub,
+  loadStudioFilesFromGitHub,
+  persistStudioFilesToGitHub,
+  studioFilesToRepoSeed,
 } from './github/sync.js';
 import {
   cloneCrowdyStudioProject,
@@ -188,8 +189,9 @@ export interface CrowdyStudioControllerOptions {
   playerWallet?: CrowdyStudioPlayerWallet;
   /**
    * GitHub repository loop (bring-your-own repo). Optional: without it the
-   * card is hidden. Reads and writes are resolved server-side from the
-   * project's bind; autosave push happens only when the owner opted in.
+   * card is hidden. Must be an identity-session transport — play app-tokens
+   * receive SCOPE_MISSING. Bound persist is GraphQL put (a GitHub commit);
+   * deploy sends that commit SHA.
    */
   github?: CrowdyStudioGitHubTransport;
   appId: string;
@@ -454,6 +456,9 @@ export class CrowdyStudioController {
       ...options,
       ...this.scope(),
     });
+    if (this.options.github) {
+      return this.createGitHubMod(input, options.githubRepo);
+    }
     const project = await this.options.projectProvider.createProject(input);
     this.installProject(project);
     this.update({
@@ -473,11 +478,27 @@ export class CrowdyStudioController {
   }
 
   private async loadProject(projectId: string): Promise<void> {
-    const project = await this.options.projectProvider.getProject({
+    this.githubBlobShaByPath = new Map();
+    let project = await this.options.projectProvider.getProject({
       ...this.scope(),
       projectId,
     });
+    let github: CrowdyStudioGitHubStatus | null = null;
+    if (this.options.github) {
+      try {
+        github = await this.options.github.status({
+          appId: this.options.appId,
+          projectId,
+        });
+      } catch (error) {
+        this.update({ githubMessage: errorMessage(error) });
+      }
+    }
+    if (github?.owner && github.repo && this.options.github) {
+      project = await this.hydrateBoundProject(project, github);
+    }
     this.installProject(project);
+    if (github) this.update({ github, githubMessage: undefined });
     if (this.options.synchronizationProvider) {
       await this.refreshCheckpoints();
     }
@@ -493,6 +514,7 @@ export class CrowdyStudioController {
     this.persistedGeneration = 0;
     this.conflictRemote = null;
     const clone = cloneCrowdyStudioProject(project);
+    this.lastPersistedFiles = clone.files.map((file) => ({ ...file }));
     const preferred =
       clone.files.find((file) => file.path === 'src/lib.rs') ?? clone.files[0];
     const activeFile = preferred ? projectFileRef(preferred) : null;
@@ -505,7 +527,7 @@ export class CrowdyStudioController {
       runtime: { phase: 'IDLE' },
       runtimeSync: {
         state: 'NEVER_RUN',
-        savedRevisionId: clone.revision.id,
+        savedRevisionId: clone.githubSha ?? clone.revision.id,
       },
       agentActivity: 'IDLE',
       checkpoints: [],
@@ -515,13 +537,9 @@ export class CrowdyStudioController {
       runs: [],
       logs: [],
       invokeResult: null,
-      github: null,
-      githubMessage: undefined,
       githubBusy: false,
     });
     this.restartVisibleSurfacePolling();
-    // Status only; a pull is always the modder's explicit action.
-    void this.refreshGitHubStatus();
   }
 
   openFile(ref: CrowdyStudioFileRef): void {
@@ -619,6 +637,7 @@ export class CrowdyStudioController {
     destinationPath = reference.path,
   ): Promise<void> {
     this.requireProject();
+    this.assertUnboundForPostgres('Import from library');
     if (!(await this.saveNow())) {
       throw new Error('Resolve the current project save before importing a file');
     }
@@ -736,10 +755,15 @@ export class CrowdyStudioController {
   // ----- GitHub repository loop ------------------------------------------
 
   private githubStatusGeneration = 0;
-  private suppressGitHubPush = false;
+  private githubBlobShaByPath = new Map<string, string>();
+  private lastPersistedFiles: CrowdyStudioProjectFile[] = [];
 
-  /** Re-read connection + bind for the open project. Never pulls on its own. */
-  async refreshGitHubStatus(): Promise<void> {
+  /**
+   * Re-read connection + bind for the open project.
+   * `reloadFiles` replaces the editor from GitHub (Refresh). Unsaved edits
+   * refuse that reload. Conflict overwrite refreshes blob SHAs only.
+   */
+  async refreshGitHubStatus(opts: { reloadFiles?: boolean } = {}): Promise<void> {
     if (!this.options.github) return;
     const generation = ++this.githubStatusGeneration;
     try {
@@ -749,6 +773,21 @@ export class CrowdyStudioController {
       });
       if (generation !== this.githubStatusGeneration) return;
       this.update({ github, githubMessage: undefined });
+      if (!github.owner || !github.repo || !this.state.project) return;
+      if (opts.reloadFiles) {
+        if (this.editGeneration !== this.persistedGeneration) {
+          this.update({
+            githubMessage: 'Save Studio edits before Refresh reloads the GitHub tree.',
+          });
+          return;
+        }
+        const hydrated = await this.hydrateBoundProject(this.state.project, github);
+        if (generation !== this.githubStatusGeneration) return;
+        this.installProject(hydrated);
+        this.update({ github });
+        return;
+      }
+      await this.refreshGitHubBlobShas(github);
     } catch (error) {
       if (generation !== this.githubStatusGeneration) return;
       this.update({ githubMessage: errorMessage(error) });
@@ -758,6 +797,45 @@ export class CrowdyStudioController {
   private githubScope(): { appId: string; projectId: string } | null {
     const projectId = this.state.project?.projectId;
     return projectId ? { appId: this.options.appId, projectId } : null;
+  }
+
+  private isGitHubBound(): boolean {
+    const github = this.state.github;
+    const project = this.state.project;
+    return Boolean(
+      (github?.owner && github.repo) || (project?.githubOwner && project.githubRepo),
+    );
+  }
+
+  private assertUnboundForPostgres(action: string): void {
+    if (!this.isGitHubBound()) return;
+    throw new Error(
+      `GITHUB_BOUND_USE_CONTENTS: ${action} is not available on a GitHub-backed project. Edit files in the editor; they save as GitHub commits.`,
+    );
+  }
+
+  private async refreshGitHubBlobShas(github: CrowdyStudioGitHubStatus): Promise<void> {
+    if (!this.options.github || !this.state.project) return;
+    const apiLayout = await this.options.github.layout({
+      appId: this.options.appId,
+      projectId: this.state.project.projectId,
+    });
+    const tree = await this.options.github.tree({
+      appId: this.options.appId,
+      projectId: this.state.project.projectId,
+      commitSha: apiLayout.commitSha,
+    });
+    const blobShaByPath = new Map<string, string>();
+    for (const entry of tree) {
+      if (entry.type === 'blob' && entry.sha) blobShaByPath.set(entry.path, entry.sha);
+    }
+    this.githubBlobShaByPath = blobShaByPath;
+    this.update({
+      github: {
+        ...github,
+        githubSha: github.githubSha ?? apiLayout.commitSha,
+      },
+    });
   }
 
   /** Opens the install page in a new tab; identity comes back through the signed state, never the browser. */
@@ -774,23 +852,58 @@ export class CrowdyStudioController {
     if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
     const scope = this.githubScope();
     if (!scope) throw new Error('Open a Studio project before binding a repository.');
-    const trimmed = slug.trim();
-    const at = trimmed.lastIndexOf('@');
-    const repoPath = at > 0 ? trimmed.slice(0, at) : trimmed;
-    const branch = at > 0 ? trimmed.slice(at + 1).trim() : '';
-    const slash = repoPath.indexOf('/');
-    if (slash <= 0 || slash === repoPath.length - 1) {
-      throw new Error('Use owner/repo or owner/repo@branch');
+    if (this.state.project && !(await this.saveNow())) {
+      throw new Error('Resolve the current project save before binding a repository.');
     }
+    const parsed = parseGitHubRepoSlug(slug);
     this.update({ githubBusy: true });
     try {
-      const github = await this.options.github.bind({
+      let github = await this.options.github.bind({
         ...scope,
-        owner: repoPath.slice(0, slash),
-        repo: repoPath.slice(slash + 1),
-        ...(branch ? { branch } : {}),
+        owner: parsed.owner,
+        repo: parsed.repo,
+        ...(parsed.branch ? { branch: parsed.branch } : {}),
       });
-      this.update({ github, githubMessage: `Bound ${github.owner}/${github.repo}@${github.branch}. Autosave push is off until you turn it on.` });
+      const project = this.state.project;
+      if (project) {
+        const loaded = await loadStudioFilesFromGitHub(this.options.github, {
+          appId: this.options.appId,
+          projectId: project.projectId,
+        });
+        if (loaded.files.length > 0) {
+          this.githubBlobShaByPath = loaded.blobShaByPath;
+          this.lastPersistedFiles = loaded.files.map((file) => ({ ...file }));
+          this.installProject({
+            ...project,
+            files: loaded.files,
+            githubOwner: github.owner ?? project.githubOwner,
+            githubRepo: github.repo ?? project.githubRepo,
+            githubBranch: github.branch ?? project.githubBranch,
+            githubSha: github.githubSha ?? loaded.commitSha,
+          });
+        } else {
+          const seeded = await persistStudioFilesToGitHub(
+            this.options.github,
+            { appId: this.options.appId, projectId: project.projectId },
+            project.files,
+            { expectedCommitSha: github.githubSha },
+          );
+          this.githubBlobShaByPath = seeded.blobShaByPath;
+          this.lastPersistedFiles = project.files.map((file) => ({ ...file }));
+          github = { ...github, githubSha: seeded.commitSha ?? github.githubSha };
+          this.installProject({
+            ...project,
+            githubOwner: github.owner ?? project.githubOwner,
+            githubRepo: github.repo ?? project.githubRepo,
+            githubBranch: github.branch ?? project.githubBranch,
+            githubSha: github.githubSha ?? undefined,
+          });
+        }
+      }
+      this.update({
+        github,
+        githubMessage: `Bound ${github.owner}/${github.repo}@${github.branch}. Edits save as GitHub commits.`,
+      });
     } finally {
       this.update({ githubBusy: false });
     }
@@ -801,86 +914,115 @@ export class CrowdyStudioController {
     const scope = this.githubScope();
     if (!scope) return;
     const github = await this.options.github.unbind(scope);
-    this.update({ github, githubMessage: 'Repository unbound. Files in Studio are unchanged.' });
-  }
-
-  /** Opt the open project into (or out of) pushing autosaves. Default off. */
-  async setGitHubAutosave(autosave: boolean): Promise<void> {
-    if (!this.options.github) return;
-    const scope = this.githubScope();
-    if (!scope) return;
-    const github = await this.options.github.setAutosave({ ...scope, autosave });
+    this.githubBlobShaByPath = new Map();
     this.update({
       github,
-      githubMessage: autosave ? 'Autosave now also pushes to GitHub.' : 'Autosave push is off.',
+      githubMessage: 'Repository unbound. Authoring is refused until the project is bound again.',
     });
   }
 
-  /** Explicit push of the current files (or a subset) to the bound repository. */
+  /**
+   * Bound persist is already a GitHub commit. The legacy "also push autosaves"
+   * flag is not the working tree.
+   */
+  async setGitHubAutosave(_autosave?: boolean): Promise<void> {
+    this.update({
+      githubMessage: 'Autosave already commits to GitHub. The also-push-autosaves option is gone.',
+    });
+  }
+
+  /**
+   * Pull/Push are gone: GitHub is the working tree. Kept as a no-op so hosts
+   * that still call these methods get a clear error instead of a dual-write.
+   */
   async pushToGitHub(
-    files?: readonly CrowdyStudioProjectFile[],
+    _files?: readonly CrowdyStudioProjectFile[],
     opts: { quiet?: boolean } = {},
   ): Promise<number> {
-    if (!this.options.github) return 0;
-    const scope = this.githubScope();
-    if (!scope || !this.state.github?.owner) {
-      if (!opts.quiet) this.update({ githubMessage: 'Bind a repository first.' });
-      return 0;
+    if (!opts.quiet) {
+      this.update({
+        githubMessage: 'Pull and Push are gone. Edits save as GitHub commits.',
+      });
     }
-    const toPush = files ?? this.state.project?.files ?? [];
+    return 0;
+  }
+
+  async pullFromGitHub(): Promise<boolean> {
+    this.update({
+      githubMessage: 'Pull and Push are gone. Edits save as GitHub commits. Refresh reloads the bound tree.',
+    });
+    return false;
+  }
+
+  private async createGitHubMod(
+    input: ReturnType<typeof createCrowdyStudioStarterProject>,
+    githubRepo?: string,
+  ): Promise<CrowdyStudioProject> {
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    if (!githubRepo?.trim()) {
+      throw new Error(
+        'Create a GitHub-backed mod: Connect GitHub, grant a repository, then pass owner/repo (or owner/repo@branch). Unbound Postgres drafts are not the product.',
+      );
+    }
+    const parsed = parseGitHubRepoSlug(githubRepo);
+    const layout = {
+      serverRoot: 'server',
+      clientRoot: input.kind === 'CLIENT' || input.kind === 'FULL_STACK' ? 'client' : null,
+      assets: 'assets',
+    };
+    const files = studioFilesToRepoSeed(layout, input.files);
     this.update({ githubBusy: true });
     try {
-      const pushed = await pushStudioFilesToGitHub(this.options.github, scope, toPush);
-      this.update({
-        githubMessage:
-          pushed > 0 ? `Pushed ${pushed} file${pushed === 1 ? '' : 's'} to GitHub.` : 'GitHub already has these files.',
+      const github = await this.options.github.createMod({
+        appId: input.appId,
+        name: input.metadata.name,
+        owner: parsed.owner,
+        repo: parsed.repo,
+        ...(parsed.branch ? { branch: parsed.branch } : {}),
+        gridId: input.gridId,
+        ...(input.metadata.description ? { description: input.metadata.description } : {}),
+        ...(input.metadata.serverModuleName
+          ? { serverModuleName: input.metadata.serverModuleName }
+          : {}),
+        ...(input.metadata.clientModuleName
+          ? { clientModuleName: input.metadata.clientModuleName }
+          : {}),
+        files,
       });
-      return pushed;
-    } catch (error) {
-      this.update({ githubMessage: `GitHub push failed: ${errorMessage(error)}` });
-      return 0;
+      if (!github.projectId) {
+        throw new Error('crowdyStudioGitHubCreateMod did not return a projectId');
+      }
+      await this.loadProject(github.projectId);
+      this.update({
+        github,
+        githubMessage: `Created ${github.owner}/${github.repo}@${github.branch}.`,
+        projects: upsertSummary(this.state.projects, summaryOf(this.requireProject())),
+      });
+      return this.requireProject();
     } finally {
       this.update({ githubBusy: false });
     }
   }
 
-  /** Explicit pull: overlay the repository onto the project, then save. Refuses over unsaved edits. */
-  async pullFromGitHub(): Promise<boolean> {
-    if (!this.options.github) return false;
-    const scope = this.githubScope();
-    const project = this.state.project;
-    if (!scope || !project || !this.state.github?.owner) {
-      this.update({ githubMessage: 'Bind a repository first.' });
-      return false;
-    }
-    if (this.editGeneration !== this.persistedGeneration) {
-      this.update({ githubMessage: 'Save Studio edits before pulling from GitHub.' });
-      return false;
-    }
-    this.update({ githubBusy: true });
-    try {
-      const incoming = await pullStudioFilesFromGitHub(this.options.github, scope);
-      const { files, changed } = mergeStudioFilesFromGitHub(project.files, incoming.files);
-      if (!changed) {
-        this.update({ githubMessage: 'GitHub is in sync.' });
-        return true;
-      }
-      project.files = files;
-      this.editGeneration += 1;
-      this.update({ project, githubMessage: 'Pulled from GitHub.' });
-      this.suppressGitHubPush = true;
-      try {
-        await this.saveNow();
-      } finally {
-        this.suppressGitHubPush = false;
-      }
-      return true;
-    } catch (error) {
-      this.update({ githubMessage: `GitHub pull failed: ${errorMessage(error)}` });
-      return false;
-    } finally {
-      this.update({ githubBusy: false });
-    }
+  private async hydrateBoundProject(
+    project: CrowdyStudioProject,
+    github: CrowdyStudioGitHubStatus,
+  ): Promise<CrowdyStudioProject> {
+    if (!this.options.github) return project;
+    const loaded = await loadStudioFilesFromGitHub(this.options.github, {
+      appId: this.options.appId,
+      projectId: project.projectId,
+    });
+    this.githubBlobShaByPath = loaded.blobShaByPath;
+    this.lastPersistedFiles = loaded.files.map((file) => ({ ...file }));
+    return {
+      ...project,
+      files: loaded.files,
+      githubOwner: github.owner ?? project.githubOwner,
+      githubRepo: github.repo ?? project.githubRepo,
+      githubBranch: github.branch ?? project.githubBranch,
+      githubSha: github.githubSha ?? loaded.commitSha,
+    };
   }
 
   async retrySave(): Promise<boolean> {
@@ -897,6 +1039,27 @@ export class CrowdyStudioController {
 
   async acceptRemoteConflict(): Promise<void> {
     if (this.state.saveState !== 'CONFLICT') return;
+    if (this.isGitHubBound() && this.options.github && this.state.project) {
+      const github = this.state.github;
+      const hydrated = await this.hydrateBoundProject(
+        this.state.project,
+        github ?? {
+          configured: true,
+          connected: true,
+          accountLogin: null,
+          accountType: null,
+          owner: this.state.project.githubOwner ?? null,
+          repo: this.state.project.githubRepo ?? null,
+          branch: this.state.project.githubBranch ?? null,
+          githubSha: this.state.project.githubSha ?? null,
+          projectId: this.state.project.projectId,
+          autosave: false,
+          installUrl: null,
+        },
+      );
+      this.installProject(hydrated);
+      return;
+    }
     const remote =
       this.conflictRemote ??
       (await this.options.projectProvider.getProject({
@@ -908,6 +1071,12 @@ export class CrowdyStudioController {
 
   async overwriteConflict(): Promise<boolean> {
     if (this.state.saveState !== 'CONFLICT') return this.saveNow();
+    if (this.isGitHubBound()) {
+      await this.refreshGitHubStatus();
+      this.conflictRemote = null;
+      this.update({ saveState: 'SAVING', saveMessage: undefined });
+      return this.saveNow();
+    }
     const project = this.requireProject();
     const remote =
       this.conflictRemote ??
@@ -940,6 +1109,7 @@ export class CrowdyStudioController {
   async applyAtomicPatch(
     input: CrowdyStudioAtomicPatchInput,
   ): Promise<CrowdyStudioAtomicPatchResult> {
+    this.assertUnboundForPostgres('Atomic agent patches');
     if (!(await this.saveNow())) {
       throw new Error('Resolve the current project save before applying an agent patch');
     }
@@ -1235,8 +1405,8 @@ export class CrowdyStudioController {
         },
         runtimeSync: {
           state: 'RUNNING_SAVED',
-          savedRevisionId: project.revision.id,
-          runningRevisionId: project.revision.id,
+          savedRevisionId: project.githubSha ?? project.revision.id,
+          runningRevisionId: project.githubSha ?? project.revision.id,
           deployment: draft ? 'DRAFT' : 'LIVE',
           startedAt: new Date().toISOString(),
         },
@@ -1294,20 +1464,26 @@ export class CrowdyStudioController {
       },
     });
 
-    // This is the sole project→legacy wire conversion. Project state, provider
-    // contracts, editors, and templates all use typed files.
-    const sourceFilesJson = JSON.stringify(
-      Object.fromEntries(files.map((file) => [file.path, file.content])),
-    );
+    const bound = this.isGitHubBound();
+    const commitSha = this.state.github?.githubSha ?? project.githubSha;
     const deployed = await this.options.playerCompute.deploy({
       ...this.scope(),
       name,
       target: target as never,
-      sourceFilesJson,
       sdkVersion: project.sdkVersion,
       abiVersion: project.abiVersion,
       tickHz: target === 'SERVER' ? 1 : undefined,
       draft,
+      ...(bound
+        ? {
+            projectId: project.projectId,
+            ...(commitSha ? { commitSha } : { pinBranchHead: true }),
+          }
+        : {
+            sourceFilesJson: JSON.stringify(
+              Object.fromEntries(files.map((file) => [file.path, file.content])),
+            ),
+          }),
     });
     this.checkOperation(operation);
 
@@ -1564,6 +1740,43 @@ export class CrowdyStudioController {
       const snapshot = cloneCrowdyStudioProject(project);
       this.update({ saveState: 'SAVING', saveMessage: undefined });
       try {
+        if (this.isGitHubBound()) {
+          if (!this.options.github) {
+            throw new Error('Bind a GitHub repository before saving this project.');
+          }
+          await this.persistBoundProject(snapshot);
+          this.persistedGeneration = savingGeneration;
+          const commitSha =
+            this.state.github?.githubSha ?? snapshot.githubSha ?? snapshot.revision.id;
+          if (this.state.project?.projectId === snapshot.projectId) {
+            if (this.editGeneration === savingGeneration) {
+              this.state.project = cloneCrowdyStudioProject({
+                ...snapshot,
+                githubSha: commitSha,
+              });
+            } else if (this.state.project) {
+              this.state.project.githubSha = commitSha;
+            }
+          }
+          this.update({
+            projects: upsertSummary(this.state.projects, summaryOf(this.requireProject())),
+            saveState:
+              this.persistedGeneration === this.editGeneration ? 'SAVED' : 'SAVING',
+            saveMessage: undefined,
+            runtimeSync: {
+              ...this.state.runtimeSync,
+              savedRevisionId: commitSha,
+              state:
+                this.state.runtimeSync.state === 'RUNNING_SAVED' ||
+                this.state.runtimeSync.state === 'RUNNING_STALE'
+                  ? this.state.runtimeSync.runningRevisionId === commitSha
+                    ? 'RUNNING_SAVED'
+                    : 'RUNNING_STALE'
+                  : this.state.runtimeSync.state,
+            },
+          });
+          continue;
+        }
         const saved = await this.options.projectProvider.saveProject({
           ...this.scope(),
           projectId: snapshot.projectId,
@@ -1579,9 +1792,6 @@ export class CrowdyStudioController {
           // Preserve newer local edits while advancing the revision precondition.
           this.state.project.revision = { ...saved.revision };
           this.state.project.updatedAt = saved.updatedAt;
-        }
-        if (this.state.github?.autosave && !this.suppressGitHubPush) {
-          void this.pushToGitHub(snapshot.files, { quiet: true });
         }
         this.update({
           projects: upsertSummary(this.state.projects, summaryOf(saved)),
@@ -1601,6 +1811,17 @@ export class CrowdyStudioController {
           },
         });
       } catch (error) {
+        if (
+          error instanceof CrowdyGraphQLError &&
+          error.code === 'GITHUB_STALE_SHA'
+        ) {
+          this.update({
+            saveState: 'CONFLICT',
+            saveMessage: error.message,
+            githubMessage: 'The GitHub commit SHA changed. Keep my version retries the commit; Use cloud version reloads the tree.',
+          });
+          return false;
+        }
         if (error instanceof CrowdyStudioRevisionConflictError) {
           this.conflictRemote = error.remoteProject ?? null;
           this.update({ saveState: 'CONFLICT', saveMessage: error.message });
@@ -1620,6 +1841,30 @@ export class CrowdyStudioController {
     }
     this.update({ saveState: 'SAVED', saveMessage: undefined });
     return true;
+  }
+
+  private async persistBoundProject(snapshot: CrowdyStudioProject): Promise<void> {
+    const scope = this.githubScope();
+    if (!scope || !this.options.github) {
+      throw new Error('Bind a GitHub repository before saving this project.');
+    }
+    const result = await persistStudioFilesToGitHub(
+      this.options.github,
+      scope,
+      snapshot.files,
+      {
+        expectedCommitSha: this.state.github?.githubSha ?? snapshot.githubSha,
+        blobShaByPath: this.githubBlobShaByPath,
+        previous: this.lastPersistedFiles,
+      },
+    );
+    this.githubBlobShaByPath = result.blobShaByPath;
+    this.lastPersistedFiles = snapshot.files.map((file) => ({ ...file }));
+    this.update({
+      github: this.state.github
+        ? { ...this.state.github, githubSha: result.commitSha ?? this.state.github.githubSha }
+        : this.state.github,
+    });
   }
 
   private markEdited(): void {
@@ -1860,6 +2105,26 @@ function compareProjectFile(a: CrowdyStudioProjectFile, b: CrowdyStudioProjectFi
   return crowdyStudioFileKey(a.target, a.path).localeCompare(
     crowdyStudioFileKey(b.target, b.path),
   );
+}
+
+function parseGitHubRepoSlug(slug: string): {
+  owner: string;
+  repo: string;
+  branch?: string;
+} {
+  const trimmed = slug.trim();
+  const at = trimmed.lastIndexOf('@');
+  const repoPath = at > 0 ? trimmed.slice(0, at) : trimmed;
+  const branch = at > 0 ? trimmed.slice(at + 1).trim() : '';
+  const slash = repoPath.indexOf('/');
+  if (slash <= 0 || slash === repoPath.length - 1) {
+    throw new Error('Use owner/repo or owner/repo@branch');
+  }
+  return {
+    owner: repoPath.slice(0, slash),
+    repo: repoPath.slice(slash + 1),
+    ...(branch ? { branch } : {}),
+  };
 }
 
 function moduleNameFor(

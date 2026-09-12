@@ -284,7 +284,11 @@ export class CrowdyClient {
   readonly crowdyStudio: CrowdyStudioAPI;
   /** Durable typed Agentic Crowdy Studio GraphQL transport. */
   readonly crowdyStudioAgent: CrowdyAgentGraphQLTransport;
-  /** GitHub repository loop for Crowdy Studio projects (same session; the API resolves the repo from the bind). */
+  /**
+   * GitHub repository loop for Crowdy Studio projects. Identity session only —
+   * play app-tokens receive SCOPE_MISSING. The API resolves the repo from the
+   * bind; no GitHub token reaches the browser.
+   */
   readonly crowdyStudioGitHub: CrowdyStudioGitHubTransport;
 
   /** P4a marketplace (free mode): store, installs, consent, claim flows. */

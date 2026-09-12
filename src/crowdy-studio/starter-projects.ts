@@ -15,6 +15,11 @@ export interface CrowdyStudioNewProjectOptions {
   name: string;
   kind: CrowdyStudioProjectKind;
   description?: string;
+  /**
+   * `owner/repo` or `owner/repo@branch` already granted to the Crowdy Studio
+   * GitHub App. Required to create a bound mod.
+   */
+  githubRepo?: string;
 }
 
 /** Create a compile-oriented starter without introducing a raw JSON source map. */

@@ -1,3 +1,24 @@
+# CrowdyJS v15.13 — GitHub is the Crowdy Studio working tree
+
+**Pull/Push and also-push-autosaves are gone.** Bound Monaco persist is a GraphQL
+`crowdyStudioGitHubPutFile` (a GitHub commit). Deploy/Test draft send `commitSha`
+(or `pinBranchHead`), not a Postgres file dump.
+
+- `client.crowdyStudioGitHub` is **identity session only**. Play app-tokens
+  receive `SCOPE_MISSING` on every `crowdyStudioGitHub*` field. Construct it from
+  the Overworld/identity client. `CrowdyStudioEmbed` accepts `github:` for that
+  identity transport; if omitted it uses `client.crowdyStudioGitHub`.
+- New ops: `createMod`, `layout` (`crowdyStudioGitHubLayout` — do not copy a
+  local `crowdy.json` grammar). Status includes `githubSha` / `projectId`. Put
+  returns `commitSha` and accepts `expectedCommitSha`.
+- `CrowdyStudioProject` carries `githubOwner` / `githubRepo` / `githubBranch` /
+  `githubSha`. Bound `files` from Postgres are empty; Studio hydrates from GitHub.
+- Create a mod with `createProject({ githubRepo: 'owner/repo' })` →
+  `crowdyStudioGitHubCreateMod`. Unbound `crowdyStudioProjectCreate` is refused.
+- `pushToGitHub` / `pullFromGitHub` / `setGitHubAutosave` remain as no-ops that
+  set a clear message. The Settings card no longer has Pull, Push, or Also push
+  autosaves.
+
 # CrowdyJS v15.11 — GitHub repositories for Crowdy Studio projects
 
 **Nothing removed.** `15.11.0` (2026-09-09). Tracks ck-api `v1.96.0`.

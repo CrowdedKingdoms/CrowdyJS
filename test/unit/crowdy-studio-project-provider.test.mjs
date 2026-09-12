@@ -22,6 +22,10 @@ const dto = {
   totalBytes: '28',
   createdAt: '2026-07-23T00:00:00Z',
   updatedAt: '2026-07-23T00:00:00Z',
+  githubOwner: null,
+  githubRepo: null,
+  githubBranch: null,
+  githubSha: null,
   files: [
     {
       target: 'SERVER',
@@ -183,6 +187,8 @@ test('crowdyStudio maps the generated Game API contract', async () => {
     projectId: dto.projectId,
   });
   assert.equal(project.revision.id, '1');
+  assert.equal(project.githubOwner, undefined);
+  assert.equal(project.githubRepo, undefined);
   await client.crowdyStudio.createProject({
     ...scope,
     kind: project.kind,

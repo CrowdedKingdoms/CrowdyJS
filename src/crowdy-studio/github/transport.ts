@@ -6,13 +6,33 @@
  * names an `owner` / `repo` on a read or write, and no GitHub token ever
  * reaches the browser. GitHub is a filesystem for the project, not a login.
  *
- * Which token may call what is decided server-side: `connectUrl`, `repos`,
- * `bind`, `unbind` need the identity session (hosted Studio); `status`,
- * `setAutosave`, `tree`, `getFile`, `putFile` also work under the in-game
- * embed's app token.
+ * Studio GitHub ops require an **identity session** (Bearer identity token
+ * or first-party `ck_session` + CSRF). A play app-token receives `SCOPE_MISSING`
+ * on every `crowdyStudioGitHub*` field. Construct this transport from the
+ * Overworld/identity client, never from the gameplay client.
  */
 
+import { print } from 'graphql';
 import type { GraphQLClient } from '../../client.js';
+import {
+  CrowdyStudioGitHubBindDocument,
+  CrowdyStudioGitHubConnectUrlDocument,
+  CrowdyStudioGitHubCreateModDocument,
+  CrowdyStudioGitHubFileDocument,
+  CrowdyStudioGitHubLayoutDocument,
+  CrowdyStudioGitHubPutFileDocument,
+  CrowdyStudioGitHubReposDocument,
+  CrowdyStudioGitHubSetAutosaveDocument,
+  CrowdyStudioGitHubStatusDocument,
+  CrowdyStudioGitHubTreeDocument,
+  CrowdyStudioGitHubUnbindDocument,
+  type CreateCrowdyStudioGitHubModInput,
+  type CrowdyStudioGitHubCreateModMutationVariables,
+  type CrowdyStudioGitHubFileInput,
+  type CrowdyStudioGitHubLayoutQuery,
+  type CrowdyStudioGitHubProjectInput,
+  type CrowdyStudioGitHubPutFileInput,
+} from '../../generated/graphql.js';
 
 export interface CrowdyStudioGitHubStatus {
   configured: boolean;
@@ -22,7 +42,14 @@ export interface CrowdyStudioGitHubStatus {
   owner: string | null;
   repo: string | null;
   branch: string | null;
-  /** Autosave also pushes to GitHub. Off by default; the owner opts in. */
+  /** Optimistic-lock commit SHA (`github_sha`). */
+  githubSha: string | null;
+  projectId: string | null;
+  /**
+   * Legacy opt-in to also push Studio autosaves. Bound authoring writes go
+   * through {@link CrowdyStudioGitHubTransport.putFile}; this flag is not the
+   * working tree.
+   */
   autosave: boolean;
   installUrl: string | null;
 }
@@ -47,58 +74,35 @@ export interface CrowdyStudioGitHubFile {
   path: string;
   content: string;
   sha: string;
+  /** Commit SHA after a put. Null on reads. */
+  commitSha: string | null;
+}
+
+export interface CrowdyStudioGitHubLayout {
+  commitSha: string;
+  server: string;
+  client: string | null;
+  assets: string;
+  crowdyJson: string | null;
 }
 
 export interface CrowdyStudioGitHubProjectScope {
   appId: string;
   projectId: string;
+  commitSha?: string;
 }
 
-const STATUS_FIELDS = `
-  configured connected accountLogin accountType owner repo branch autosave installUrl
-`;
-
-const STATUS = `
-  query CrowdyStudioGitHubStatus($appId: BigInt, $projectId: String) {
-    crowdyStudioGitHubStatus(appId: $appId, projectId: $projectId) { ${STATUS_FIELDS} }
-  }
-`;
-const CONNECT = `
-  mutation CrowdyStudioGitHubConnectUrl { crowdyStudioGitHubConnectUrl { connectUrl } }
-`;
-const REPOS = `
-  query CrowdyStudioGitHubRepos { crowdyStudioGitHubRepos { owner name fullName private defaultBranch } }
-`;
-const BIND = `
-  mutation CrowdyStudioGitHubBind($input: BindCrowdyStudioGitHubInput!) {
-    crowdyStudioGitHubBind(input: $input) { ${STATUS_FIELDS} }
-  }
-`;
-const UNBIND = `
-  mutation CrowdyStudioGitHubUnbind($input: CrowdyStudioGitHubProjectInput!) {
-    crowdyStudioGitHubUnbind(input: $input) { ${STATUS_FIELDS} }
-  }
-`;
-const SET_AUTOSAVE = `
-  mutation CrowdyStudioGitHubSetAutosave($input: SetCrowdyStudioGitHubAutosaveInput!) {
-    crowdyStudioGitHubSetAutosave(input: $input) { ${STATUS_FIELDS} }
-  }
-`;
-const TREE = `
-  query CrowdyStudioGitHubTree($input: CrowdyStudioGitHubProjectInput!) {
-    crowdyStudioGitHubTree(input: $input) { path type sha size }
-  }
-`;
-const FILE = `
-  query CrowdyStudioGitHubFile($input: CrowdyStudioGitHubFileInput!) {
-    crowdyStudioGitHubFile(input: $input) { path content sha }
-  }
-`;
-const PUT_FILE = `
-  mutation CrowdyStudioGitHubPutFile($input: CrowdyStudioGitHubPutFileInput!) {
-    crowdyStudioGitHubPutFile(input: $input) { path content sha }
-  }
-`;
+const STATUS = print(CrowdyStudioGitHubStatusDocument);
+const CONNECT = print(CrowdyStudioGitHubConnectUrlDocument);
+const REPOS = print(CrowdyStudioGitHubReposDocument);
+const BIND = print(CrowdyStudioGitHubBindDocument);
+const CREATE_MOD = print(CrowdyStudioGitHubCreateModDocument);
+const UNBIND = print(CrowdyStudioGitHubUnbindDocument);
+const SET_AUTOSAVE = print(CrowdyStudioGitHubSetAutosaveDocument);
+const TREE = print(CrowdyStudioGitHubTreeDocument);
+const FILE = print(CrowdyStudioGitHubFileDocument);
+const PUT_FILE = print(CrowdyStudioGitHubPutFileDocument);
+const LAYOUT = print(CrowdyStudioGitHubLayoutDocument);
 
 export class CrowdyStudioGitHubTransport {
   constructor(private readonly graphql: GraphQLClient) {}
@@ -128,7 +132,16 @@ export class CrowdyStudioGitHubTransport {
     return data.crowdyStudioGitHubBind;
   }
 
-  async unbind(input: CrowdyStudioGitHubProjectScope): Promise<CrowdyStudioGitHubStatus> {
+  async createMod(
+    input: CrowdyStudioGitHubCreateModMutationVariables['input'] | CreateCrowdyStudioGitHubModInput,
+  ): Promise<CrowdyStudioGitHubStatus> {
+    const data = await this.graphql.query<{ crowdyStudioGitHubCreateMod: CrowdyStudioGitHubStatus }>(CREATE_MOD, {
+      input,
+    });
+    return data.crowdyStudioGitHubCreateMod;
+  }
+
+  async unbind(input: CrowdyStudioGitHubProjectInput | CrowdyStudioGitHubProjectScope): Promise<CrowdyStudioGitHubStatus> {
     const data = await this.graphql.query<{ crowdyStudioGitHubUnbind: CrowdyStudioGitHubStatus }>(UNBIND, {
       input,
     });
@@ -152,17 +165,34 @@ export class CrowdyStudioGitHubTransport {
     return data.crowdyStudioGitHubTree ?? [];
   }
 
-  async getFile(input: CrowdyStudioGitHubProjectScope & { path: string }): Promise<CrowdyStudioGitHubFile> {
+  async getFile(
+    input: CrowdyStudioGitHubFileInput | (CrowdyStudioGitHubProjectScope & { path: string }),
+  ): Promise<CrowdyStudioGitHubFile> {
     const data = await this.graphql.query<{ crowdyStudioGitHubFile: CrowdyStudioGitHubFile }>(FILE, { input });
     return data.crowdyStudioGitHubFile;
   }
 
   async putFile(
-    input: CrowdyStudioGitHubProjectScope & { path: string; content: string; message: string; sha?: string },
+    input: CrowdyStudioGitHubPutFileInput | (CrowdyStudioGitHubProjectScope & {
+      path: string;
+      content: string;
+      message: string;
+      sha?: string;
+      expectedCommitSha?: string;
+    }),
   ): Promise<CrowdyStudioGitHubFile> {
     const data = await this.graphql.query<{ crowdyStudioGitHubPutFile: CrowdyStudioGitHubFile }>(PUT_FILE, {
       input,
     });
     return data.crowdyStudioGitHubPutFile;
+  }
+
+  /**
+   * Resolved `crowdy.json` mapping. CrowdyJS and DSH must call this instead of
+   * keeping a local path grammar.
+   */
+  async layout(input: CrowdyStudioGitHubProjectScope): Promise<CrowdyStudioGitHubLayout> {
+    const data = await this.graphql.query<CrowdyStudioGitHubLayoutQuery>(LAYOUT, { input });
+    return data.crowdyStudioGitHubLayout;
   }
 }

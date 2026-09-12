@@ -62,6 +62,12 @@ export interface CrowdyStudioProject {
   revision: CrowdyStudioProjectRevision;
   createdAt: string;
   updatedAt: string;
+  /** Bound GitHub owner; omitted when unbound (legacy). */
+  githubOwner?: string;
+  githubRepo?: string;
+  githubBranch?: string;
+  /** Optimistic-lock commit SHA (`github_sha`). */
+  githubSha?: string;
 }
 
 export interface CrowdyStudioProjectSummary {

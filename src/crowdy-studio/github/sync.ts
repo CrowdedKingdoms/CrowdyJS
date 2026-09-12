@@ -1,38 +1,52 @@
 /**
- * Map Crowdy Studio SERVER/CLIENT files onto the repository bound to the
- * project, and move files both ways through the game API.
+ * Map Crowdy Studio SERVER/CLIENT files onto the bound repository using the
+ * layout returned by `crowdyStudioGitHubLayout`. Do not infer `crowdy.json`
+ * here — that contract lives on ck-api.
  *
- * Layout (from `crowdy.json` at the repo root, else inferred):
- *   SERVER src/lib.rs  <->  server/src/lib.rs
- *   CLIENT src/lib.rs  <->  client/src/lib.rs
+ *   SERVER src/lib.rs  <->  <layout.server>/src/lib.rs
+ *   CLIENT src/lib.rs  <->  <layout.client>/src/lib.rs
  *
- * The repository itself is never named here: every call carries only
+ * The repository itself is never named: every call carries only
  * `(appId, projectId)` and the game API resolves the bind.
  */
 
 import type { CrowdyStudioProjectFile, CrowdyStudioTarget } from '../models.js';
 import type {
+  CrowdyStudioGitHubLayout,
   CrowdyStudioGitHubProjectScope,
   CrowdyStudioGitHubTransport,
   CrowdyStudioGitHubTreeEntry,
 } from './transport.js';
 
 export interface GitHubLayout {
-  serverRoot: string | null;
+  serverRoot: string;
   clientRoot: string | null;
+  assets: string;
 }
 
-/** Minimal surface the sync needs; the transport satisfies it. */
-export type GitHubFiles = Pick<CrowdyStudioGitHubTransport, 'tree' | 'getFile' | 'putFile'>;
+/** Minimal surface persist/load need; the transport satisfies it. */
+export type GitHubFiles = Pick<
+  CrowdyStudioGitHubTransport,
+  'tree' | 'getFile' | 'putFile' | 'layout'
+>;
 
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'target', 'dist', '.cursor']);
 const SKIP_FILES = new Set(['crowdy.json', 'readme.md', 'license', '.gitignore']);
 
 export const DEFAULT_FULL_STACK_CROWDY_JSON = `{
   "server": "server",
-  "client": "client"
+  "client": "client",
+  "assets": "assets"
 }
 `;
+
+export function layoutFromApi(layout: CrowdyStudioGitHubLayout): GitHubLayout {
+  return {
+    serverRoot: layout.server,
+    clientRoot: layout.client,
+    assets: layout.assets,
+  };
+}
 
 export function trimSlash(path: string): string {
   let start = 0;
@@ -58,26 +72,11 @@ export function underRoot(path: string, root: string | null): string | null {
   return null;
 }
 
-export function parseCrowdyJson(content: string): GitHubLayout | null {
-  try {
-    const parsed = JSON.parse(content) as { server?: unknown; client?: unknown };
-    const server = typeof parsed.server === 'string' ? parsed.server.trim() || '.' : null;
-    const clientRoot = typeof parsed.client === 'string' ? parsed.client.trim() || '.' : null;
-    if (server == null && clientRoot == null) return null;
-    return { serverRoot: server, clientRoot };
-  } catch {
-    return null;
-  }
-}
-
-export function layoutFromTree(entries: ReadonlyArray<CrowdyStudioGitHubTreeEntry>): GitHubLayout {
-  const hasDir = (name: string) => entries.some((e) => e.type === 'tree' && e.path === name);
-  const hasClient = hasDir('client');
-  const hasServer = hasDir('server');
-  if (hasServer && hasClient) return { serverRoot: 'server', clientRoot: 'client' };
-  if (hasClient) return { serverRoot: '.', clientRoot: 'client' };
-  if (hasServer) return { serverRoot: 'server', clientRoot: null };
-  return { serverRoot: '.', clientRoot: null };
+/** Studio rust authoring path: Cargo.toml or src/*.rs, no traversal. */
+export function isRustAuthoringPath(rel: string): boolean {
+  if (!rel || rel.includes('..')) return false;
+  if (rel === 'Cargo.toml') return true;
+  return rel.startsWith('src/') && rel.endsWith('.rs');
 }
 
 export function repoPathToStudioFile(
@@ -89,9 +88,13 @@ export function repoPathToStudioFile(
   const name = segments[segments.length - 1]?.toLowerCase() ?? '';
   if (SKIP_FILES.has(name) || SKIP_FILES.has(repoPath.toLowerCase())) return null;
   const clientRel = underRoot(repoPath, layout.clientRoot);
-  if (clientRel != null && clientRel !== '') return { target: 'CLIENT', path: clientRel };
+  if (clientRel != null && clientRel !== '' && isRustAuthoringPath(clientRel)) {
+    return { target: 'CLIENT', path: clientRel };
+  }
   const serverRel = underRoot(repoPath, layout.serverRoot);
-  if (serverRel != null && serverRel !== '') return { target: 'SERVER', path: serverRel };
+  if (serverRel != null && serverRel !== '' && isRustAuthoringPath(serverRel)) {
+    return { target: 'SERVER', path: serverRel };
+  }
   return null;
 }
 
@@ -103,6 +106,18 @@ export function studioFileToRepoPath(
   const root = target === 'CLIENT' ? layout.clientRoot : layout.serverRoot;
   if (root == null) return null;
   return joinRepo(root, path);
+}
+
+export function studioFilesToRepoSeed(
+  layout: GitHubLayout,
+  files: readonly CrowdyStudioProjectFile[],
+): Array<{ path: string; content: string }> {
+  const out: Array<{ path: string; content: string }> = [];
+  for (const file of files) {
+    const path = studioFileToRepoPath(layout, file.target, file.path);
+    if (path) out.push({ path, content: file.content });
+  }
+  return out;
 }
 
 export function mergeStudioFilesFromGitHub(
@@ -128,119 +143,80 @@ export function mergeStudioFilesFromGitHub(
   return { files: [...next.values()], changed };
 }
 
-/** Files present in Studio that the repository no longer has (for the UI to list). */
-export function studioFilesMissingOnGitHub(
-  layout: GitHubLayout,
-  current: readonly CrowdyStudioProjectFile[],
-  tree: ReadonlyArray<CrowdyStudioGitHubTreeEntry>,
-): CrowdyStudioProjectFile[] {
-  const blobs = new Set(tree.filter((e) => e.type === 'blob').map((e) => e.path));
-  return current.filter((file) => {
-    const repoPath = studioFileToRepoPath(layout, file.target, file.path);
-    return repoPath != null && !blobs.has(repoPath);
+/** One layout query, then one tree call, then one read per mapped blob. */
+export async function loadStudioFilesFromGitHub(
+  github: GitHubFiles,
+  scope: CrowdyStudioGitHubProjectScope,
+): Promise<{
+  files: CrowdyStudioProjectFile[];
+  layout: GitHubLayout;
+  tree: CrowdyStudioGitHubTreeEntry[];
+  commitSha: string;
+  blobShaByPath: Map<string, string>;
+}> {
+  const apiLayout = await github.layout(scope);
+  const layout = layoutFromApi(apiLayout);
+  const tree = await github.tree({
+    ...scope,
+    ...(scope.commitSha ? { commitSha: scope.commitSha } : { commitSha: apiLayout.commitSha }),
   });
-}
-
-export async function resolveGitHubLayout(
-  github: GitHubFiles,
-  scope: CrowdyStudioGitHubProjectScope,
-  tree?: ReadonlyArray<CrowdyStudioGitHubTreeEntry>,
-): Promise<{ layout: GitHubLayout; tree: CrowdyStudioGitHubTreeEntry[] }> {
-  const entries = tree ? [...tree] : await github.tree(scope);
-  if (entries.some((e) => e.type === 'blob' && e.path === 'crowdy.json')) {
-    try {
-      const file = await github.getFile({ ...scope, path: 'crowdy.json' });
-      const parsed = parseCrowdyJson(file.content);
-      if (parsed) return { layout: parsed, tree: entries };
-    } catch {
-      // Unreadable crowdy.json: infer from the tree.
-    }
-  }
-  return { layout: layoutFromTree(entries), tree: entries };
-}
-
-/** One tree call, then one read per mapped blob. */
-export async function pullStudioFilesFromGitHub(
-  github: GitHubFiles,
-  scope: CrowdyStudioGitHubProjectScope,
-): Promise<{ files: CrowdyStudioProjectFile[]; layout: GitHubLayout; tree: CrowdyStudioGitHubTreeEntry[] }> {
-  const { layout, tree } = await resolveGitHubLayout(github, scope);
   const files: CrowdyStudioProjectFile[] = [];
+  const blobShaByPath = new Map<string, string>();
   for (const entry of tree) {
     if (entry.type !== 'blob') continue;
     const mapped = repoPathToStudioFile(layout, entry.path);
     if (!mapped) continue;
+    if (entry.sha) blobShaByPath.set(entry.path, entry.sha);
     try {
-      const body = await github.getFile({ ...scope, path: entry.path });
+      const body = await github.getFile({ ...scope, path: entry.path, commitSha: apiLayout.commitSha });
       files.push({ target: mapped.target, path: mapped.path, content: body.content });
+      blobShaByPath.set(entry.path, body.sha);
     } catch {
       continue;
     }
   }
-  return { files, layout, tree };
+  return { files, layout, tree, commitSha: apiLayout.commitSha, blobShaByPath };
 }
 
-async function putFileCreateOrUpdate(
-  github: GitHubFiles,
-  scope: CrowdyStudioGitHubProjectScope,
-  path: string,
-  content: string,
-  message: string,
-  knownSha: string | null | undefined,
-): Promise<boolean> {
-  let sha: string | undefined = knownSha ?? undefined;
-  if (knownSha) {
-    // Skip the write when the blob already matches.
-    try {
-      const existing = await github.getFile({ ...scope, path });
-      if (existing.content === content) return false;
-      sha = existing.sha;
-    } catch {
-      sha = undefined;
-    }
-  }
-  await github.putFile({ ...scope, path, content, message, ...(sha ? { sha } : {}) });
-  return true;
-}
-
-/** Push the given Studio files to the bound repository. Returns files written. */
-export async function pushStudioFilesToGitHub(
+export async function persistStudioFilesToGitHub(
   github: GitHubFiles,
   scope: CrowdyStudioGitHubProjectScope,
   files: readonly CrowdyStudioProjectFile[],
-): Promise<number> {
-  const resolved = await resolveGitHubLayout(github, scope);
-  let layout = resolved.layout;
-  const shaByPath = new Map(
-    resolved.tree.filter((e) => e.type === 'blob').map((e) => [e.path, e.sha]),
+  opts: {
+    expectedCommitSha?: string | null;
+    blobShaByPath?: ReadonlyMap<string, string>;
+    previous?: readonly CrowdyStudioProjectFile[];
+  } = {},
+): Promise<{
+  written: number;
+  commitSha: string | null;
+  blobShaByPath: Map<string, string>;
+}> {
+  const apiLayout = await github.layout(scope);
+  const layout = layoutFromApi(apiLayout);
+  const blobShaByPath = new Map(opts.blobShaByPath ?? []);
+  const previousByKey = new Map(
+    (opts.previous ?? []).map((file) => [`${file.target}:${file.path}`, file.content]),
   );
-  let pushed = 0;
-  const wantsFullStack =
-    files.some((f) => f.target === 'SERVER') && files.some((f) => f.target === 'CLIENT');
-  if (wantsFullStack && !shaByPath.has('crowdy.json')) {
-    // A full-stack project on a repo with no layout file: declare server/ +
-    // client/ first so both trees land under their roots from this push on.
-    await github.putFile({
-      ...scope,
-      path: 'crowdy.json',
-      content: DEFAULT_FULL_STACK_CROWDY_JSON,
-      message: 'studio: add crowdy.json layout',
-    });
-    pushed += 1;
-    layout = { serverRoot: 'server', clientRoot: 'client' };
-  }
+  let expected = opts.expectedCommitSha ?? apiLayout.commitSha;
+  let written = 0;
   for (const file of files) {
     const path = studioFileToRepoPath(layout, file.target, file.path);
     if (!path) continue;
-    const wrote = await putFileCreateOrUpdate(
-      github,
-      scope,
+    const prior = previousByKey.get(`${file.target}:${file.path}`);
+    if (prior === file.content && blobShaByPath.has(path)) continue;
+    const sha = blobShaByPath.get(path);
+    const result = await github.putFile({
+      ...scope,
       path,
-      file.content,
-      `studio: update ${file.target} ${file.path}`,
-      shaByPath.get(path),
-    );
-    if (wrote) pushed += 1;
+      content: file.content,
+      message: `studio: update ${file.target} ${file.path}`,
+      ...(sha ? { sha } : {}),
+      ...(expected ? { expectedCommitSha: expected } : {}),
+    });
+    written += 1;
+    if (result.commitSha) expected = result.commitSha;
+    blobShaByPath.set(path, result.sha);
   }
-  return pushed;
+  return { written, commitSha: expected ?? null, blobShaByPath };
 }

@@ -52,7 +52,8 @@ type CommonDto = CrowdyStudioCommonFilesQuery['crowdyStudioCommonFiles'][number]
  * reusable files. Generated GraphQL documents and DTOs stay in this module;
  * the controller and public project models remain transport-neutral. Mutable
  * projects remain separate from immutable player-compute versions, and only
- * the controller's deploy path converts target files to sourceFilesJson.
+ * the controller's deploy path converts target files to sourceFilesJson for
+ * unbound (legacy) deploys. Bound mods send commitSha instead.
  */
 export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
   private readonly baselines = new Map<string, CrowdyStudioProject>();
@@ -308,6 +309,10 @@ function fromProjectDto(
     },
     createdAt: dto.createdAt,
     updatedAt: dto.updatedAt,
+    ...(dto.githubOwner ? { githubOwner: dto.githubOwner } : {}),
+    ...(dto.githubRepo ? { githubRepo: dto.githubRepo } : {}),
+    ...(dto.githubBranch ? { githubBranch: dto.githubBranch } : {}),
+    ...(dto.githubSha ? { githubSha: dto.githubSha } : {}),
   };
 }
 
