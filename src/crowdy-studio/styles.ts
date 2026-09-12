@@ -96,6 +96,11 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-statusbar-runtime[data-phase=COMPILING],.ck-crowdy-studio-statusbar-runtime[data-phase=TESTING_DRAFT],.ck-crowdy-studio-statusbar-runtime[data-phase=DEPLOYING_LIVE],.ck-crowdy-studio-statusbar-runtime[data-phase=ENABLING]{color:#fde68a}
 .ck-crowdy-studio-statusbar-runtime[data-phase=COMPILE_FAILED],.ck-crowdy-studio-statusbar-runtime[data-phase=ERROR],.ck-crowdy-studio-statusbar-runtime[data-phase=PARTIAL_FAILURE]{color:#fca5a5}
 
+/* Problems: Fix with AI */
+.ck-crowdy-studio-problem-row{display:flex;align-items:stretch;gap:4px}
+.ck-crowdy-studio-problem-row>.ck-crowdy-studio-problem{flex:1;min-width:0}
+.ck-crowdy-studio-problem-fix{flex:none;font-size:11px}
+
 /* Agent dock */
 .ck-crowdy-studio-agent-dock{flex:none;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0;padding:10px;border-left:1px solid var(--ck-line);background:#0b1220;overflow:auto}
 .ck-crowdy-studio-agent-dock header{display:flex;align-items:center;justify-content:space-between;gap:8px}

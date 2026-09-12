@@ -236,7 +236,12 @@ jobs:
           # ...and judge by what `npm pack` actually FETCHED, not by what `npm view` says: on
           # 2026-09-06 (prod, 15.4.2) `view` answered 15.4.2 while `pack "@latest"` still
           # delivered 15.4.1 from a stale edge, and the version check failed a good release.
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+          # THIRTY attempts, not ten: on 2026-09-12 (dev, 16.0.0-dev.1) `view` caught up
+          # on attempt 10 while `pack` still delivered the old version, the loop ran out,
+          # and the job failed a publish the registry was serving correctly a minute later.
+          # A readback that gives up before the edge converges refuses good releases and
+          # proves nothing about bad ones; seven and a half minutes is what the CDN needs.
+          for attempt in $(seq 1 30); do
             rm -rf "$work"/*.tgz "$work/package"
             served=$(npm view "$NAME@$DIST_TAG" version 2>/dev/null || true)
             packed=""

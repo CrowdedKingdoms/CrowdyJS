@@ -22,7 +22,7 @@ export {
 export {
   mountCrowdyStudio,
   type CrowdyStudioHandle,
-  type MountCrowdyStudioAgentOptions,
+  type MountCrowdyStudioDshOptions,
   type MountCrowdyStudioOptions,
 } from './mount.js';
 export {
@@ -117,10 +117,6 @@ export {
   type WorkerLanguageClientOptions,
 } from '../live-coding/worker-transport.js';
 export {
-  CrowdyStudioAgentDomShell,
-  type CrowdyStudioAgentDomShellOptions,
-} from './agent-dom-shell.js';
-export {
   STUDIO_LAYOUT_STORAGE_KEY,
   STUDIO_PANE_IDS,
   StudioLayoutController,
@@ -140,6 +136,6 @@ export {
   type PaneSplitterRange,
 } from './splitter.js';
 export * from './embed/index.js';
-export * from '../crowdy-agent/index.js';
+export * from '../crowdy-dsh/index.js';
 export * from '../player-host/index.js';
 export * from './github/index.js';

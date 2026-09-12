@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
-  "version": "15.12.1",
+  "version": "16.0.0",
   "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
@@ -22,9 +22,9 @@
       "import": "./dist/crowdy-studio/index.js",
       "types": "./dist/crowdy-studio/index.d.ts"
     },
-    "./agent": {
-      "import": "./dist/crowdy-agent/index.js",
-      "types": "./dist/crowdy-agent/index.d.ts"
+    "./crowdy-dsh": {
+      "import": "./dist/crowdy-dsh/index.js",
+      "types": "./dist/crowdy-dsh/index.d.ts"
     },
     "./player-host": {
       "import": "./dist/player-host/index.js",
@@ -53,9 +53,7 @@
     "authoring-index:generate": "node scripts/generate-browser-authoring-index.mjs --write",
     "authoring-index:drift": "node scripts/sync-browser-authoring-index.mjs",
     "check:authoring-index": "node scripts/validate-browser-authoring-index.mjs && node scripts/generate-browser-authoring-index.mjs",
-    "agent-descriptors:drift": "node scripts/sync-agent-descriptor-fixture.mjs",
-    "check:agent-descriptors": "node scripts/validate-agent-descriptor-fixture.mjs",
-    "build": "npm run check:authoring-index && tsc && npm run check:agent-descriptors && node scripts/copy-live-coding-assets.mjs",
+    "build": "npm run check:authoring-index && tsc && node scripts/copy-live-coding-assets.mjs",
     "test": "npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/e2e/*.test.mjs",
     "test:unit": "npm run build && node --test test/unit/*.test.mjs",
     "test:e2e": "npm run build && node --test --test-concurrency=1 test/e2e/*.test.mjs",

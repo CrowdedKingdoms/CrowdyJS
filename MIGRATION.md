@@ -1,3 +1,58 @@
+# CrowdyJS v16.0 — the Crowdy Agent dock is replaced by the in-browser DeepSeek Harness
+
+**Breaking.** `16.0.0` (2026-09-11). Tracks the ck-api release that carries
+the metered model endpoint (first dev release after `v1.98.0`): the 21
+`crowdyStudioAgent*` session/run/lease/tool root fields this SDK used are gone
+from that API, so a 15.x client loses its agent dock the moment it deploys,
+whether or not the client upgrades.
+
+Removed:
+
+- `client.crowdyStudioAgent` (`CrowdyAgentGraphQLTransport`) and everything
+  under `@crowdedkingdoms/crowdyjs/crowdy-agent`: `CrowdyStudioAgentController`,
+  `CrowdyAgentToolRegistry`, `CrowdyAgentBrowserToolDispatcher`,
+  `createCrowdyStudioAgentTools`, `CROWDY_AGENT_TOOL_REGISTRY_V1`, session
+  resume, the `CrowdyStudioAgent.graphql` operations.
+- The `agent` option of `mountCrowdyStudio` / `createCrowdyStudioEmbed`
+  (`MountCrowdyStudioAgentOptions`) and the agent dock (`agent-dom-shell`).
+- From `@crowdedkingdoms/crowdyjs/player-host`: `AgentControlLeaseManager`,
+  `PlayerControlGate`, `AgentControlBanner`, `createPlayerHostAgentTools`.
+  `PlayerHostAdapterV1`, its schemas, `CrowdyAgentError` and the preemption
+  reason vocabulary stay (moved to `player-host/agent-errors.js` and
+  `player-host/agent-types.js`).
+
+Added:
+
+- The `dsh` option of `mountCrowdyStudio` / `createCrowdyStudioEmbed`
+  (`MountCrowdyStudioDshOptions`): `graphql`, `webBase`, `graphqlUrl`,
+  `apiOrigin`, `getToken`, `persistScope`, `studioOrigin?`. `toggle` accepts
+  `playerHost` (observe only) and `dshHost` (`captureFrame`, `describeView`,
+  `clientLogs`).
+- `@crowdedkingdoms/crowdyjs/crowdy-dsh`: `CrowdyStudioDshPane`,
+  `StudioDshBridge`, `CrowdyStudioDshTransport` (`models`, `consent`,
+  `setConsent`, `usage`; `modelBaseUrl` for `/v1/model`), the bridge protocol
+  (`CROWDY_DSH_PROTOCOL_VERSION = 2`).
+- `client.graphqlEndpoint`.
+- `CrowdyStudioController.reloadProject()`; `dom-shell` takes a generic `dock`
+  factory and an `onFixWithAi` hook.
+
+Behaviour worth knowing:
+
+- The harness runs in the player's browser and talks to the model through the
+  tier's metered endpoint with the player's app token; usage is billed to the
+  player's wallet by default, or the app's org wallet when its billing admin
+  elected that. The token travels over the page/worker channel only and is
+  never written to a seed file, the worker's filesystem or OPFS.
+- A live deploy requested by the agent waits for the player to confirm in the
+  pane (`confirmLiveDeploy` on `StudioDshBridgeOptions`); without that hook the
+  request is refused.
+- The agent iframe is same-origin (`BroadcastChannel`, OPFS) and carries
+  `sandbox="allow-scripts allow-same-origin"`, which does not isolate it; the
+  host's CSP on `/dsh/*` is the control. Serving the harness from its own
+  origin over a `MessageChannel` relay is a tracked follow-up.
+- Games ship the harness from the published `@crowdedkingdoms/crowdy-dsh`
+  package (`dist/dsh-web/`), copied under a same-origin path at build time.
+
 # CrowdyJS v15.11 — GitHub repositories for Crowdy Studio projects
 
 **Nothing removed.** `15.11.0` (2026-09-09). Tracks ck-api `v1.96.0`.

@@ -11,6 +11,21 @@ not answerable from this page, and the paragraph this replaces proved it: it rea
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
+**16.0.0 replaces Crowdy Agent with the DeepSeek Harness in-browser pane (`crowdy-dsh`):**
+The bespoke ck-api orchestrator transport (`client.crowdyStudioAgent`,
+`@crowdedkingdoms/crowdyjs/agent`), the Crowdy Agent dock (`agent-dom-shell.ts`),
+and the lease-based game control machinery (`PlayerControlGate`,
+`AgentControlBanner`, `AgentControlLeaseManager`, browser tool handlers) are
+removed. Crowdy Studio mounts the in-browser DeepSeek Harness via the `dsh`
+option on `createCrowdyStudioEmbed` and `mountCrowdyStudio`. The harness runs
+in a Web Worker in the player's browser, edits the open project through the
+game API (or the bound GitHub repo), and calls the metered model endpoint
+(`POST /v1/model/chat/completions`) with the player's own app token. New entry
+`@crowdedkingdoms/crowdyjs/crowdy-dsh` exposes `CrowdyStudioDshPane`,
+`StudioDshBridge`, `CrowdyStudioDshTransport`, and the bridge protocol.
+`@crowdedkingdoms/crowdyjs/player-host` is retained as an observation-only
+contract (`PlayerHostAdapterV1.observe`).
+
 **15.12.0 drops paid player-code commerce and grid sales from the SDK.**
 `client.marketplace` keeps free publish / acquire / install / consent / claim.
 `purchaseGrid`, `createGridListing`, `gridListings`, `setListingPricing`,

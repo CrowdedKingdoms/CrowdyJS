@@ -8,7 +8,7 @@ import type { PlayerWalletAPI } from '../domains/playerWallet.js';
 import {
   digestCanonicalJson,
   sha256Digest,
-} from '../crowdy-agent/schema.js';
+} from '../player-host/json-schema.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
 import type { CrowdyStudioGitHubStatus, CrowdyStudioGitHubTransport } from './github/transport.js';
 import {
@@ -470,6 +470,39 @@ export class CrowdyStudioController {
       throw new Error('Resolve or retry the current project save before switching');
     }
     await this.loadProject(projectId);
+  }
+
+  /**
+   * Re-fetch the open project after another writer changed it (the Studio
+   * agent writes through the game API, not through this editor). Open files
+   * and the active file survive when their paths still exist. Refused while
+   * local edits are unsaved: the human's keystrokes win over a reload, and the
+   * ordinary conflict recovery reconciles on the next save.
+   */
+  async reloadProject(): Promise<void> {
+    this.ensureAlive();
+    const current = this.state.project;
+    if (!current) return;
+    if (this.state.saveState !== 'SAVED') {
+      throw new Error('Unsaved local edits; the reload waits for the next save');
+    }
+    const project = await this.options.projectProvider.getProject({
+      ...this.scope(),
+      projectId: current.projectId,
+    });
+    const openFiles = this.state.openFiles;
+    const activeFile = this.state.activeFile;
+    this.installProject(project);
+    const stillThere = (ref: CrowdyStudioFileRef): boolean =>
+      ref.source !== 'PROJECT' ||
+      project.files.some((file) => file.target === ref.target && file.path === ref.path);
+    const keptOpen = openFiles.filter(stillThere);
+    if (keptOpen.length > 0) {
+      this.update({
+        openFiles: keptOpen,
+        activeFile: activeFile && stillThere(activeFile) ? activeFile : keptOpen[0]!,
+      });
+    }
   }
 
   private async loadProject(projectId: string): Promise<void> {
