@@ -22,7 +22,7 @@ export {
 export {
   CrowdyStudioEmbed,
   createCrowdyStudioEmbed,
-  type CrowdyStudioEmbedAgentSessionOptions,
+  type CrowdyStudioEmbedDshOptions,
   type CrowdyStudioEmbedContext,
   type CrowdyStudioEmbedDisplayMode,
   type CrowdyStudioEmbedHandle,

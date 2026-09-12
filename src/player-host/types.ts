@@ -2,8 +2,8 @@ import type {
   CrowdyAgentApprovalPolicy,
   CrowdyAgentPreemptionReason,
   CrowdyAgentToolRisk,
-} from '../crowdy-agent/types.js';
-import type { AgentErrorV1 } from '../crowdy-agent/errors.js';
+} from './agent-types.js';
+import type { AgentErrorV1 } from './agent-errors.js';
 
 /** Decimal strings avoid coordinate precision loss across GraphQL and JSON. */
 export interface PlayerHostVector3V1 {

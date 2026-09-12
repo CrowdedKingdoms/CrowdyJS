@@ -1,4 +1,4 @@
-import { CrowdyAgentError } from './errors.js';
+import { CrowdyAgentError } from './agent-errors.js';
 
 export type JsonPrimitive = string | number | boolean | null;
 
