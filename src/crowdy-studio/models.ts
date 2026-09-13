@@ -50,16 +50,43 @@ export interface CrowdyStudioProjectRevision {
  * One atomic cloud project snapshot. SERVER and CLIENT files intentionally
  * share a project revision so a full-stack save cannot persist half a pair.
  */
+/**
+ * Where a project's files are authored. Every project starts as `STUDIO`; its
+ * owner may bind a GitHub repository later and unbind it again. GitHub is
+ * never required.
+ */
+export type CrowdyStudioProjectSource = 'STUDIO' | 'GITHUB';
+
+/** The repository a GITHUB project is bound to, and the commit its files mirror. */
+export interface CrowdyStudioProjectGitHub {
+  owner: string;
+  repo: string;
+  branch: string;
+  /**
+   * Commit the project files are at. Every bound write presents it as
+   * `expectedCommitSha`; a stale value is refused with GITHUB_STALE_SHA and
+   * surfaces as a revision conflict.
+   */
+  sha: string | null;
+}
+
 export interface CrowdyStudioProject {
   projectId: string;
   appId: string;
   gridId: string;
   kind: CrowdyStudioProjectKind;
   metadata: CrowdyStudioProjectMetadata;
+  /**
+   * The project files. For a GITHUB project this is the server-maintained
+   * mirror of the repository at `github.sha`, read exactly like a STUDIO
+   * project's files.
+   */
   files: CrowdyStudioProjectFile[];
   sdkVersion: string;
   abiVersion: number;
   revision: CrowdyStudioProjectRevision;
+  source: CrowdyStudioProjectSource;
+  github: CrowdyStudioProjectGitHub | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +98,10 @@ export interface CrowdyStudioProjectSummary {
   revisionId: string;
   serverModuleName?: string;
   clientModuleName?: string;
+  source: CrowdyStudioProjectSource;
+  /** `owner/repo@branch` for a GITHUB project. */
+  github?: string;
+  githubSha: string | null;
   updatedAt: string;
 }
 
@@ -305,5 +336,6 @@ export function cloneCrowdyStudioProject(project: CrowdyStudioProject): CrowdySt
     metadata: { ...project.metadata },
     revision: { ...project.revision },
     files: project.files.map((file) => ({ ...file })),
+    github: project.github ? { ...project.github } : null,
   };
 }

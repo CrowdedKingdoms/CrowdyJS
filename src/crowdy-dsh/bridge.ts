@@ -25,6 +25,7 @@
  */
 
 import type { CrowdyStudioController, CrowdyStudioDeployResult, CrowdyStudioState } from '../crowdy-studio/controller.js';
+import type { CrowdyStudioProject } from '../crowdy-studio/models.js';
 import type { CrowdyStudioDiagnostic } from '../crowdy-studio/diagnostics.js';
 import type { PlayerHostAdapterV1 } from '../player-host/types.js';
 import {
@@ -121,6 +122,7 @@ export class StudioDshBridge {
   private lastHelloAt = 0;
   private lastToken: string | null = null;
   private lastProjectId: string | null | undefined;
+  private lastGithubSha: string | null | undefined;
   private lastSaveState: CrowdyStudioState['saveState'] | undefined;
   private unsubscribeState: (() => void) | null = null;
   private tokenTimer: ReturnType<typeof setInterval> | null = null;
@@ -252,7 +254,6 @@ export class StudioDshBridge {
       projectId,
       bridgeChannel: this.channelName,
       bridgeNonce: this.nonce,
-      githubFirst: true,
       root: '/dsh/workspace',
       persistScope: this.options.persistScope,
     };
@@ -282,9 +283,11 @@ export class StudioDshBridge {
     if (!force && now - this.lastHelloAt < HELLO_DEBOUNCE_MS) return;
     this.lastHelloAt = now;
     const token = this.options.getToken();
+    const current = this.options.controller.getState().project;
     this.emit('page.hello', {
       appId: this.options.appId,
-      projectId: this.options.controller.getState().project?.projectId ?? null,
+      projectId: current?.projectId ?? null,
+      ...(current ? { source: current.source, githubSha: current.github?.sha ?? null } : {}),
       ...(token ? { appToken: token } : {}),
     });
   }
@@ -415,15 +418,15 @@ export class StudioDshBridge {
         await controller.switchProject(projectId);
         const project = controller.getState().project;
         if (!project) throw new Error(`Project ${projectId} did not open.`);
-        this.emit('page.project', { projectId: project.projectId });
-        return { project: summarizeProject(project.projectId, project.metadata.name, project.kind, project.revision.savedAt) } as never;
+        this.emit('page.project', projectEvent(project));
+        return { project: summarizeProject(project) } as never;
       }
       case 'studio.projectCreate': {
         const { name, template } = params as { name: string; template?: string };
         const kind = template === 'server' ? 'SERVER' : template === 'client' ? 'CLIENT' : 'FULL_STACK';
         const project = await controller.createProject({ name, kind: kind as never });
-        this.emit('page.project', { projectId: project.projectId });
-        return { project: summarizeProject(project.projectId, project.metadata.name, project.kind, project.revision.savedAt) } as never;
+        this.emit('page.project', projectEvent(project));
+        return { project: summarizeProject(project) } as never;
       }
       case 'game.observe': {
         const host = this.options.host?.playerHost;
@@ -502,14 +505,19 @@ export class StudioDshBridge {
     const controller = this.options.controller;
     this.lastProjectId = controller.getState().project?.projectId ?? null;
     this.lastSaveState = controller.getState().saveState;
+    this.lastGithubSha = controller.getState().project?.github?.sha ?? null;
     this.unsubscribeState = controller.subscribe((state) => {
       const projectId = state.project?.projectId ?? null;
-      if (projectId !== this.lastProjectId) {
+      const githubSha = state.project?.github?.sha ?? null;
+      // A moved commit is a project change for the worker: its next write must
+      // carry the new expectedCommitSha, and its snapshot is behind the mirror.
+      if (projectId !== this.lastProjectId || githubSha !== this.lastGithubSha) {
         this.lastProjectId = projectId;
-        this.emit('page.project', { projectId });
+        this.lastGithubSha = githubSha;
+        this.emit('page.project', state.project ? projectEvent(state.project) : { projectId: null });
       }
       if (state.saveState === 'SAVED' && this.lastSaveState !== 'SAVED' && this.inflight.size === 0) {
-        this.emit('page.saved', { revision: state.project?.revision.id });
+        this.emit('page.saved', { revision: state.project?.revision.id, githubSha });
       }
       this.lastSaveState = state.saveState;
     });
@@ -558,11 +566,31 @@ function toDshDiagnostic(diagnostic: CrowdyStudioDiagnostic): DshDiagnostic {
 }
 
 function summarize(summary: CrowdyStudioState['projects'][number]): DshProjectSummary {
-  return { projectId: summary.projectId, name: summary.name, kind: String(summary.kind), updatedAt: summary.updatedAt };
+  return {
+    projectId: summary.projectId,
+    name: summary.name,
+    kind: String(summary.kind),
+    updatedAt: summary.updatedAt,
+    source: summary.source,
+    githubSha: summary.githubSha,
+    ...(summary.github ? { github: summary.github } : {}),
+  };
 }
 
-function summarizeProject(projectId: string, name: string, kind: string, updatedAt: string): DshProjectSummary {
-  return { projectId, name, kind, updatedAt };
+function projectEvent(project: CrowdyStudioProject): DshPageEventMap['page.project'] {
+  return { projectId: project.projectId, source: project.source, githubSha: project.github?.sha ?? null };
+}
+
+function summarizeProject(project: CrowdyStudioProject): DshProjectSummary {
+  return {
+    projectId: project.projectId,
+    name: project.metadata.name,
+    kind: project.kind,
+    updatedAt: project.revision.savedAt,
+    source: project.source,
+    githubSha: project.github?.sha ?? null,
+    ...(project.github ? { github: `${project.github.owner}/${project.github.repo}@${project.github.branch}` } : {}),
+  };
 }
 
 /** Render the harness settings that point its native adapter at the metered endpoint. */

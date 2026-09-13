@@ -24,15 +24,23 @@
  * iframe and the page cannot see it.
  */
 
-export const CROWDY_DSH_PROTOCOL_VERSION = 2 as const;
+/**
+ * v3 (CrowdyJS 17): a project carries `source` and `githubSha`. A GITHUB
+ * project's files are the server's mirror of the repository at that commit;
+ * the worker writes them through `crowdyStudioGitHubPutFile` with
+ * `expectedCommitSha = githubSha` and no longer mirrors anything back to
+ * Studio itself. `page.project` / `page.saved` re-announce the commit whenever
+ * it moves so the worker's next write carries the current one.
+ */
+export const CROWDY_DSH_PROTOCOL_VERSION = 3 as const;
 
 export type DshBridgeSide = 'page' | 'worker';
 
 export type DshBridgeFrame =
-  | { v: 2; n: string; from: DshBridgeSide; t: 'req'; id: string; method: string; params: unknown }
-  | { v: 2; n: string; from: DshBridgeSide; t: 'res'; id: string; result: unknown }
-  | { v: 2; n: string; from: DshBridgeSide; t: 'err'; id: string; code: string; message: string }
-  | { v: 2; n: string; from: DshBridgeSide; t: 'event'; event: string; payload: unknown };
+  | { v: typeof CROWDY_DSH_PROTOCOL_VERSION; n: string; from: DshBridgeSide; t: 'req'; id: string; method: string; params: unknown }
+  | { v: typeof CROWDY_DSH_PROTOCOL_VERSION; n: string; from: DshBridgeSide; t: 'res'; id: string; result: unknown }
+  | { v: typeof CROWDY_DSH_PROTOCOL_VERSION; n: string; from: DshBridgeSide; t: 'err'; id: string; code: string; message: string }
+  | { v: typeof CROWDY_DSH_PROTOCOL_VERSION; n: string; from: DshBridgeSide; t: 'event'; event: string; payload: unknown };
 
 export interface DshScreenshotResult {
   name: string;
@@ -71,11 +79,18 @@ export interface DshBuildResult {
   screenshot?: DshScreenshotResult;
 }
 
+export type DshProjectSource = 'STUDIO' | 'GITHUB';
+
 export interface DshProjectSummary {
   projectId: string;
   name: string;
   kind: string;
   updatedAt: string;
+  /** Where the files are authored. GITHUB means the repository is the working tree. */
+  source: DshProjectSource;
+  /** Commit the GITHUB project mirrors; null for a STUDIO project. */
+  githubSha: string | null;
+  /** `owner/repo@branch` for a GITHUB project, for the agent's own words. */
   github?: string;
 }
 
@@ -98,10 +113,17 @@ export interface DshBridgeRequestMap {
 export type DshBridgeMethod = keyof DshBridgeRequestMap;
 
 export interface DshPageEventMap {
-  'page.hello': { appId: string; projectId: string | null; appToken?: string };
+  'page.hello': {
+    appId: string;
+    projectId: string | null;
+    appToken?: string;
+    source?: DshProjectSource;
+    githubSha?: string | null;
+  };
   'page.token': { appToken: string };
-  'page.project': { projectId: string | null };
-  'page.saved': { revision?: string };
+  /** The open project changed, or a GITHUB project's commit moved (bind, refresh, save). */
+  'page.project': { projectId: string | null; source?: DshProjectSource; githubSha?: string | null };
+  'page.saved': { revision?: string; githubSha?: string | null };
   'page.context': {
     observation?: unknown;
     clientLogs?: string[];
