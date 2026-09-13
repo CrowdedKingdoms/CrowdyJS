@@ -19,6 +19,66 @@ import type { UdpNotification } from './realtime.js';
 
 export const RELAY_MAX_DATAGRAM_BYTES = 1232;
 
+/**
+ * MESSAGE_BUNDLE framing: `[1B type=2]{[2B u16 LE len][full message]}...` in
+ * both directions. No count field, every member is a complete signed message,
+ * the wrapper carries no auth of its own, and bundles never nest. The server
+ * has always bundled notifications; Buddy v0.27.0+ accepts client bundles too
+ * ({@link packMessageBundle}, sent by the binary relay transport).
+ */
+export const BUNDLE_HEADER_BYTES = 1;
+export const BUNDLE_LENGTH_PREFIX_BYTES = 2;
+/** Cap on members per datagram, matching Buddy's reader and writer. */
+export const RELAY_MAX_BUNDLE_MEMBERS = 32;
+/** Largest single message that can travel inside a bundle at all. */
+export const RELAY_MAX_BUNDLE_MEMBER_BYTES =
+  RELAY_MAX_DATAGRAM_BYTES - BUNDLE_HEADER_BYTES - BUNDLE_LENGTH_PREFIX_BYTES; // 1229
+
+/**
+ * Bytes a type-2 datagram carrying `members` would occupy (header included).
+ */
+export function bundleSizeOf(members: readonly Uint8Array[]): number {
+  let size = BUNDLE_HEADER_BYTES;
+  for (const m of members) size += BUNDLE_LENGTH_PREFIX_BYTES + m.length;
+  return size;
+}
+
+/**
+ * Pack complete signed messages into one datagram. One member is returned
+ * unwrapped — the 3-byte wrapper buys nothing for a lone message, and the
+ * server does the same on the downlink. Two or more become a MESSAGE_BUNDLE.
+ *
+ * Throws on an empty list, a zero-length member, more than
+ * {@link RELAY_MAX_BUNDLE_MEMBERS} members, or a frame that would exceed
+ * {@link RELAY_MAX_DATAGRAM_BYTES}: callers decide what to flush before they
+ * get here (see `BinaryRelayTransport`).
+ */
+export function packMessageBundle(members: readonly Uint8Array[]): Uint8Array {
+  if (members.length === 0) throw new Error('MESSAGE_BUNDLE needs at least one member');
+  if (members.length > RELAY_MAX_BUNDLE_MEMBERS) {
+    throw new Error(`MESSAGE_BUNDLE holds at most ${RELAY_MAX_BUNDLE_MEMBERS} members`);
+  }
+  for (const m of members) {
+    if (m.length === 0) throw new Error('MESSAGE_BUNDLE member cannot be empty');
+  }
+  if (members.length === 1) return members[0];
+  const size = bundleSizeOf(members);
+  if (size > RELAY_MAX_DATAGRAM_BYTES) {
+    throw new Error(`MESSAGE_BUNDLE of ${size} bytes exceeds ${RELAY_MAX_DATAGRAM_BYTES}`);
+  }
+  const out = new Uint8Array(size);
+  const view = new DataView(out.buffer);
+  out[0] = WireMessageType.MESSAGE_BUNDLE;
+  let off = BUNDLE_HEADER_BYTES;
+  for (const m of members) {
+    view.setUint16(off, m.length, true);
+    off += BUNDLE_LENGTH_PREFIX_BYTES;
+    out.set(m, off);
+    off += m.length;
+  }
+  return out;
+}
+
 /** Wire opcodes (mirror of game-api / Buddy `UdpMessageType`). */
 export const WireMessageType = {
   MESSAGE_BUNDLE: 2,
