@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '17.0.1';
+export const VERSION = '17.1.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -90,11 +90,18 @@ export {
   RELAY_SUBPROTOCOL,
   type BinaryRelayCallbacks,
   type BinaryRelayConfig,
+  type BinaryRelaySendStats,
 } from './binary-relay.js';
 export {
+  BUNDLE_HEADER_BYTES,
+  BUNDLE_LENGTH_PREFIX_BYTES,
+  RELAY_MAX_BUNDLE_MEMBERS,
+  RELAY_MAX_BUNDLE_MEMBER_BYTES,
   RELAY_MAX_DATAGRAM_BYTES,
   WireMessageType,
+  bundleSizeOf,
   createSignContext,
+  packMessageBundle,
   parseRelayFrame,
   serializeActorUpdate,
   serializeAudioPacket,
