@@ -17,8 +17,14 @@ import { silentLogger } from './logger.js';
 import { CrowdyRealtimeError } from './errors.js';
 import type { UdpNotification } from './realtime.js';
 import {
+  BUNDLE_LENGTH_PREFIX_BYTES,
+  bundleSizeOf,
   createSignContext,
+  packMessageBundle,
   parseRelayFrame,
+  RELAY_MAX_BUNDLE_MEMBER_BYTES,
+  RELAY_MAX_BUNDLE_MEMBERS,
+  RELAY_MAX_DATAGRAM_BYTES,
   type RelaySignContext,
 } from './binary-wire.js';
 
@@ -110,6 +116,38 @@ export interface BinaryRelayConfig {
   retryInitialDelayMs?: number;
   retryMaxDelayMs?: number;
   logger?: CrowdyLogger;
+  /**
+   * Pack the datagrams sent within {@link bundleWindowMs} into one
+   * MESSAGE_BUNDLE frame (the server does the same on the downlink). A lone
+   * message goes out unwrapped. Requires a replication server that accepts
+   * client bundles (Buddy v0.27.0+). Defaults to `true`; `false` sends every
+   * message as its own frame, as CrowdyJS did before 17.1.
+   */
+  bundleSends?: boolean;
+  /**
+   * How long a pending bundle waits for more messages before it is flushed, in
+   * milliseconds. Defaults to `1`. `0` flushes on the next macrotask with no
+   * deliberate wait, so sends made in one synchronous burst still share a
+   * frame. Ignored when {@link bundleSends} is false.
+   */
+  bundleWindowMs?: number;
+}
+
+/** Uplink counters kept by the relay transport (see {@link BinaryRelayTransport.stats}). */
+export interface BinaryRelaySendStats {
+  /** Messages accepted for sending (each `sendFrame` call). */
+  messagesSent: number;
+  /** BINARY frames handed to the socket; at most `messagesSent`. */
+  framesSent: number;
+  /** Frames that were MESSAGE_BUNDLE wrappers (two or more members). */
+  bundlesSent: number;
+  /** Bytes handed to the socket, framing included. */
+  bytesSent: number;
+  /**
+   * Messages that were pending in a bundle when the socket went away before
+   * the window closed. UDP would have lost them too; the count says how often.
+   */
+  messagesDropped: number;
 }
 
 function base64UrlEncode(value: string): string {
@@ -133,6 +171,22 @@ export class BinaryRelayTransport {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private generation = 0;
 
+  // Outbound MESSAGE_BUNDLE (config.bundleSends). sendFrame() appends the
+  // signed datagram it is given; the bundle leaves when the window timer fires,
+  // when the next message would not fit, on flushSends(), and on disconnect.
+  private readonly bundleSends: boolean;
+  private readonly bundleWindowMs: number;
+  private pendingMembers: Uint8Array[] = [];
+  private pendingBytes = 0;
+  private bundleTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly sendStats: BinaryRelaySendStats = {
+    messagesSent: 0,
+    framesSent: 0,
+    bundlesSent: 0,
+    bytesSent: 0,
+    messagesDropped: 0,
+  };
+
   constructor(
     config: BinaryRelayConfig,
     private readonly callbacks: BinaryRelayCallbacks,
@@ -142,6 +196,13 @@ export class BinaryRelayTransport {
     this.retryAttempts = config.retryAttempts ?? 8;
     this.retryInitialDelayMs = config.retryInitialDelayMs ?? 250;
     this.retryMaxDelayMs = config.retryMaxDelayMs ?? 5000;
+    this.bundleSends = config.bundleSends ?? true;
+    this.bundleWindowMs = Math.max(0, config.bundleWindowMs ?? 1);
+  }
+
+  /** Snapshot of the uplink counters. */
+  stats(): BinaryRelaySendStats {
+    return { ...this.sendStats };
   }
 
   /** True when the socket is open and the `ready` handshake completed. */
@@ -167,6 +228,8 @@ export class BinaryRelayTransport {
 
   disconnect(): void {
     this.desired = false;
+    // Whatever the last frame queued goes out before the socket does.
+    this.flushSends();
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
@@ -195,7 +258,11 @@ export class BinaryRelayTransport {
     this.open();
   }
 
-  /** Send one pre-serialized Buddy datagram as a BINARY frame. */
+  /**
+   * Send one pre-serialized, signed Buddy message. With `bundleSends` it joins
+   * the pending MESSAGE_BUNDLE and leaves with it (see {@link flushSends});
+   * otherwise it is one BINARY frame right now.
+   */
   sendFrame(frame: Uint8Array): void {
     if (!this.isReady() || !this.ws) {
       throw new CrowdyRealtimeError('Binary relay is not connected', {
@@ -203,7 +270,73 @@ export class BinaryRelayTransport {
         retryable: true,
       });
     }
+    if (frame.length === 0) return;
+    this.sendStats.messagesSent += 1;
+
+    if (!this.bundleSends) {
+      this.transmit(frame, false);
+      return;
+    }
+
+    // Too big to travel inside any bundle: what is pending goes first, then
+    // this one alone (the server does the same with an oversize notification).
+    if (frame.length > RELAY_MAX_BUNDLE_MEMBER_BYTES) {
+      this.flushSends();
+      this.transmit(frame, false);
+      return;
+    }
+
+    const wouldBe = this.pendingBytes + BUNDLE_LENGTH_PREFIX_BYTES + frame.length;
+    if (
+      this.pendingMembers.length > 0 &&
+      (wouldBe > RELAY_MAX_DATAGRAM_BYTES ||
+        this.pendingMembers.length >= RELAY_MAX_BUNDLE_MEMBERS)
+    ) {
+      this.flushSends();
+    }
+
+    if (this.pendingMembers.length === 0) {
+      this.pendingBytes = bundleSizeOf([]);
+      this.bundleTimer = setTimeout(() => {
+        this.bundleTimer = null;
+        this.flushSends();
+      }, this.bundleWindowMs);
+    }
+    this.pendingMembers.push(frame);
+    this.pendingBytes += BUNDLE_LENGTH_PREFIX_BYTES + frame.length;
+  }
+
+  /**
+   * Put the pending bundle on the wire now instead of at the end of the
+   * window. Call it at the end of a frame when that frame's sends should not
+   * wait. No-op when nothing is pending.
+   */
+  flushSends(): void {
+    if (this.bundleTimer) {
+      clearTimeout(this.bundleTimer);
+      this.bundleTimer = null;
+    }
+    const members = this.pendingMembers;
+    if (members.length === 0) return;
+    this.pendingMembers = [];
+    this.pendingBytes = 0;
+
+    if (!this.isReady() || !this.ws) {
+      // The socket went away inside the window. These were fire-and-forget
+      // datagrams; UDP would have lost them too. Count, do not throw: the
+      // caller that queued them has long since returned.
+      this.sendStats.messagesDropped += members.length;
+      return;
+    }
+    this.transmit(packMessageBundle(members), members.length > 1);
+  }
+
+  private transmit(frame: Uint8Array, wrapped: boolean): void {
+    if (!this.ws) return;
     this.ws.send(frame);
+    this.sendStats.framesSent += 1;
+    this.sendStats.bytesSent += frame.length;
+    if (wrapped) this.sendStats.bundlesSent += 1;
   }
 
   private open(): void {

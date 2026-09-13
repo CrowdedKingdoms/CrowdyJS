@@ -419,6 +419,19 @@ one is missing and wait for either a matching notification or
 `GenericErrorResponse`. `sendChannelMessage` broadcasts an opaque payload on a
 channel.
 
+### Bundled sends on the binary relay
+
+With `realtime: { binaryTransport: true }` the SDK signs each message itself
+and, since 17.1, packs the messages sent within `realtime.bundleWindowMs`
+(default 1 ms) into one `MESSAGE_BUNDLE` datagram — the same framing the
+server uses for its notifications, accepted on the uplink by Buddy v0.27.0+. A
+lone message goes out unwrapped. Call `client.udp.flushSends()` at the end of a
+frame to put that frame's sends on the wire without waiting for the window;
+the `...AndWait` variants and `disconnect()` flush on their own.
+`client.realtime.binaryRelayStats()` reports messages, frames, bundles and
+bytes. `realtime: { bundleSends: false }` restores one datagram per message;
+the GraphQL transport is unaffected either way.
+
 ### Actor-to-actor messages
 
 ```ts
