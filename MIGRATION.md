@@ -114,6 +114,10 @@ Added:
 
 Behaviour worth knowing:
 
+- **17.0.1:** a bound save whose `expectedRevisionId` is older than the project
+  the provider last returned is refused as `CrowdyStudioRevisionConflictError`
+  before any commit. 17.0.0 rode the provider's own commit onto the branch in
+  that case (found by the local end-to-end proof, not by a user).
 - Bind, unbind and refresh refuse over unsaved edits and re-read the project
   afterwards (`reloadProject`), because `TAKE_REPOSITORY` and `refresh`
   replace its files and every path gives it a new `github.sha`.
