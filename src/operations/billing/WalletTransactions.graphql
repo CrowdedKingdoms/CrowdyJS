@@ -3,6 +3,8 @@ query WalletTransactions($orgId: BigInt!, $limit: Int, $offset: Int) {
     transactionId
     walletId
     orgId
+    amountMicrousd
+    balanceAfterMicrousd
     amountCents
     balanceAfter
     transactionType
@@ -25,6 +27,8 @@ query WalletTransactionsConnection(
         transactionId
         walletId
         orgId
+        amountMicrousd
+        balanceAfterMicrousd
         amountCents
         balanceAfter
         transactionType
