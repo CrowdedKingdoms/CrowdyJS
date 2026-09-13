@@ -1,6 +1,8 @@
 fragment PlayerWalletFields on PlayerWallet {
   walletId
   userId
+  balanceMicrousd
+  holdsMicrousd
   balanceCents
   currency
   createdAt
@@ -10,6 +12,8 @@ fragment PlayerWalletTransactionFields on PlayerWalletTransaction {
   transactionId
   walletId
   userId
+  amountMicrousd
+  balanceAfterMicrousd
   amountCents
   balanceAfter
   transactionType
@@ -191,10 +195,15 @@ query AppPlayerUsage($appId: BigInt!, $hours: Int) {
     computeUnits
     automationUnits
     compileCount
+    chargedMicrousd
     chargedCents
   }
 }
 
 query AppPlayerMarkupAccrued($appId: BigInt!) {
   appPlayerMarkupAccrued(appId: $appId)
+}
+
+query AppPlayerMarkupAccruedMicrousd($appId: BigInt!) {
+  appPlayerMarkupAccruedMicrousd(appId: $appId)
 }
