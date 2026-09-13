@@ -254,7 +254,6 @@ export class StudioDshBridge {
       projectId,
       bridgeChannel: this.channelName,
       bridgeNonce: this.nonce,
-      githubFirst: true,
       root: '/dsh/workspace',
       persistScope: this.options.persistScope,
     };
