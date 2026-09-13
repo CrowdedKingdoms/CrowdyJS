@@ -1471,9 +1471,17 @@ type OrgWallet {
   """
   orgId: BigInt!
   """
-  Current wallet balance in minor currency units (cents) of `currency`, as a BigInt decimal string. May be negative if usage was charged against an empty wallet.
+  Current wallet balance in MICRO-USD (1 USD = 1,000,000), as a BigInt decimal string. The unit of account since 2026-09-11: every charge is recorded to the micro-USD and nothing is rounded. May be negative when accrued usage settled against an empty wallet.
   """
-  balanceCents: BigInt!
+  balanceMicrousd: BigInt!
+  """
+  Micro-USD currently held against in-flight request-priced usage (a model turn reserves its worst case here before it runs and releases the difference when it settles). Spendable balance is balanceMicrousd - holdsMicrousd.
+  """
+  holdsMicrousd: BigInt!
+  """
+  DEPRECATED. balanceMicrousd / 10,000 truncated toward zero, as a BigInt decimal string.
+  """
+  balanceCents: BigInt! @deprecated(reason: "Cents are a display convenience derived from balanceMicrousd (truncated toward zero). Read balanceMicrousd.")
   """
   ISO-4217 currency code for `balanceCents`, lowercase (e.g. "usd"). Defaults to "usd".
   """
@@ -1494,13 +1502,17 @@ type WalletTransaction {
   """Organization that owns the wallet (BigInt as a decimal string)."""
   orgId: BigInt!
   """
-  Signed change applied to the wallet in minor currency units (cents), as a BigInt decimal string: positive credits funds, negative debits funds.
+  Signed change applied to the wallet in MICRO-USD, as a BigInt decimal string: positive credits funds, negative debits funds. Exact; nothing is rounded.
   """
-  amountCents: BigInt!
+  amountMicrousd: BigInt!
   """
-  Wallet balance in cents immediately after this transaction was applied, as a BigInt decimal string.
+  Wallet balance in micro-USD immediately after this transaction was applied, as a BigInt decimal string.
   """
-  balanceAfter: BigInt!
+  balanceAfterMicrousd: BigInt!
+  """DEPRECATED. amountMicrousd / 10,000 truncated toward zero."""
+  amountCents: BigInt! @deprecated(reason: "Derived from amountMicrousd (truncated toward zero). Read amountMicrousd.")
+  """DEPRECATED. balanceAfterMicrousd / 10,000 truncated toward zero."""
+  balanceAfter: BigInt! @deprecated(reason: "Derived from balanceAfterMicrousd (truncated toward zero). Read balanceAfterMicrousd.")
   """
   What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved capacity -- realtime bytes/s or GraphQL operations/s -- charged in addition to metered usage rather than including any of it, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive), "refund" (a payment-provider refund of a top-up, the credited amount leaving the wallet again, negative), "chargeback" (a card dispute on an org top-up, clawed back from the org wallet, negative). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced.
   """
@@ -2239,8 +2251,16 @@ type PlayerWallet {
   walletId: BigInt!
   """The owning player user id."""
   userId: BigInt!
-  """Current balance in cents (may go negative on a closed hour)."""
-  balanceCents: BigInt!
+  """
+  Current balance in MICRO-USD (1 USD = 1,000,000). The unit of account since 2026-09-11; nothing is rounded. May go negative when accrued usage settles against an empty wallet.
+  """
+  balanceMicrousd: BigInt!
+  """
+  Micro-USD held against in-flight request-priced usage (a model turn reserves its worst case before it runs). Spendable = balanceMicrousd - holdsMicrousd.
+  """
+  holdsMicrousd: BigInt!
+  """DEPRECATED. balanceMicrousd / 10,000 truncated toward zero."""
+  balanceCents: BigInt! @deprecated(reason: "Derived from balanceMicrousd (truncated toward zero). Read balanceMicrousd.")
   """ISO currency code (lowercase)."""
   currency: String!
   """Wallet creation time."""
@@ -2257,10 +2277,14 @@ type PlayerWalletTransaction {
   walletId: BigInt!
   """The owning player user id."""
   userId: BigInt!
-  """Signed amount in cents (debits negative)."""
-  amountCents: BigInt!
-  """Balance after this entry."""
-  balanceAfter: BigInt!
+  """Signed amount in micro-USD (debits negative). Exact."""
+  amountMicrousd: BigInt!
+  """Balance in micro-USD after this entry."""
+  balanceAfterMicrousd: BigInt!
+  """DEPRECATED. amountMicrousd / 10,000 truncated toward zero."""
+  amountCents: BigInt! @deprecated(reason: "Derived from amountMicrousd (truncated toward zero). Read amountMicrousd.")
+  """DEPRECATED. balanceAfterMicrousd / 10,000 truncated toward zero."""
+  balanceAfter: BigInt! @deprecated(reason: "Derived from balanceAfterMicrousd. Read balanceAfterMicrousd.")
   """
   What produced this entry. The complete set of values this API writes: "topup" (credit from a completed checkout, positive), "auto_recharge" (off-session automatic recharge, positive), "payout_credit" (marketplace seller payout, positive), "refund" (marketplace refund returned to the buyer, positive), "usage_debit" (hourly player-compute metered charge for one closed clock hour, negative), "purchase" (marketplace purchase, negative), "adjustment" (operator or dispute-clawback correction, signed).
   """
@@ -2385,8 +2409,10 @@ type AppPlayerUsageRow {
   automationUnits: BigInt!
   """Compile submissions."""
   compileCount: Int!
-  """Cents charged in the window."""
-  chargedCents: BigInt!
+  """Micro-USD charged to the player for this app in the window (exact)."""
+  chargedMicrousd: BigInt!
+  """DEPRECATED. chargedMicrousd / 10,000 truncated toward zero."""
+  chargedCents: BigInt! @deprecated(reason: "Derived from chargedMicrousd (truncated). Read chargedMicrousd.")
 }
 
 """
@@ -2435,6 +2461,70 @@ type PlayerWasmPolicy {
   maxContainerCreatesDay: Int!
   """Client-target fuel budget per browser dispatch (04 §3)."""
   clientFuelPerDispatch: BigInt!
+}
+
+"""
+One settlement unit of the lossless ledger: a (payer, meter, period) for a continuous meter, or one request for a request-priced meter. Amounts in micro-USD; nothing is rounded.
+"""
+type BillingCharge {
+  chargeId: String!
+  appId: BigInt!
+  payerKind: String!
+  payerId: BigInt!
+  meter: String!
+  periodStart: DateTime
+  settlementRef: String!
+  state: String!
+  quantityTotal: BigInt!
+  quantityFree: BigInt!
+  pricedTotalMicrousd: BigInt!
+  billedMicrousd: BigInt!
+  heldMicrousd: BigInt!
+  writtenOffMicrousd: BigInt!
+  updatedAt: DateTime!
+}
+
+"""A billable amount that could not be billed, with the reason."""
+type BillingWriteOff {
+  writeOffId: String!
+  appId: BigInt
+  payerKind: String!
+  payerId: BigInt!
+  meter: String!
+  quantity: BigInt!
+  amountMicrousd: BigInt!
+  reason: String!
+  """JSON text."""
+  evidence: String
+  createdAt: DateTime!
+}
+
+"""One run of the ledger invariant checks."""
+type BillingInvariantRun {
+  runId: String!
+  ranAt: DateTime!
+  ok: Boolean!
+  residueMicrousd: BigInt!
+  """JSON text."""
+  sums: String!
+  """JSON text."""
+  detail: String
+}
+
+"""Ledger versus provider for one UTC day."""
+type BillingReconciliation {
+  provider: String!
+  day: String!
+  expectedMicrousd: BigInt!
+  providerReportedMicrousd: BigInt
+  deltaMicrousd: BigInt
+  status: String!
+  """JSON text."""
+  detail: String
+}
+
+type BillingCreditResult {
+  creditedMicrousd: BigInt!
 }
 
 """
@@ -8173,12 +8263,39 @@ type Query {
     hours: Int
   ): [AppPlayerUsageRow!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  Total player rate-card markup accrued to this app's org income line, in cents (payouts arrive with the P4b ledger). Requires 'view_billing'.
+  DEPRECATED (cents, truncated): read appPlayerMarkupAccruedMicrousd. Total player rate-card markup credited to this app's org wallet, in cents. Requires 'view_billing'.
   """
   appPlayerMarkupAccrued(
     """App whose accrued markup to total."""
     appId: BigInt!
+  ): BigInt! @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId") @deprecated(reason: "Cents truncate; appPlayerMarkupAccruedMicrousd carries the exact amount.")
+  """
+  Total player rate-card markup credited to this app's org wallet (`markup_payout` rows, mirrored as CREDIT events on the ledger), in micro-USD, exact. Cents-era accruals from before the ledger are included. Requires 'view_billing'.
+  """
+  appPlayerMarkupAccruedMicrousd(
+    """App whose credited markup to total."""
+    appId: BigInt!
   ): BigInt! @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId")
+  """
+  The lossless ledger's charge rows for one app: every (payer, meter, period) or request that has been priced, with what was billed, held and written off, in micro-USD. Requires 'view_billing' on the org.
+  """
+  billingCharges(orgId: BigInt!, appId: BigInt!, limit: Int): [BillingCharge!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
+  """
+  Amounts the platform could not bill this org for, with the reason (an exempt org, a provider with no generation record, a process that died with metered usage in memory). Requires 'view_billing' on the org.
+  """
+  billingWriteOffs(orgId: BigInt!, limit: Int): [BillingWriteOff!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
+  """
+  Operator only (is_operator or is_super_admin). Every write-off, newest first.
+  """
+  cpBillingWriteOffs(limit: Int): [BillingWriteOff!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only. The ledger invariant runs, newest first: whether the sums closed and, when they did not, which check failed and by how much.
+  """
+  cpBillingInvariantRuns(limit: Int): [BillingInvariantRun!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only. Ledger-versus-provider reconciliation, one row per provider per UTC day.
+  """
+  cpBillingReconciliations(limit: Int): [BillingReconciliation!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   List an app's marketplace code listings (studio administration view), newest first. Requires 'view_compute_diagnostics'. includeDelisted adds delisted/killed rows for moderation history.
   """
@@ -10321,6 +10438,10 @@ type Mutation {
     """Markup in basis points (0..10000)."""
     markupBps: Int!
   ): Int! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
+  """
+  Operator only. Credit the payer of an over-billed charge (an I3 finding: an allowance or rate was raised after the charge landed) the difference, and close the charge row. Idempotent per charge state. SIDE EFFECT: a wallet credit and a CREDIT event.
+  """
+  cpBillingCreditOverbill(appId: BigInt!, chargeId: String!, reason: String!): BillingCreditResult! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Transfer a listing between personal and org ownership (DN-9). The caller must be the current owner (user-owned) or hold manage_compute in the owning org; transfers to an org require manage_compute in the receiving org. SIDE EFFECTS: append-only ownership audit row + replica sync to game-api. Ownership moves listing control and source-access rights; from P4b it also moves proceeds.
   """
