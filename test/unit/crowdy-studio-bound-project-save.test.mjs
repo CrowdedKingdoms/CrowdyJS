@@ -95,11 +95,14 @@ async function harness(behaviour = {}) {
         }
         assert.equal(variables.input.expectedCommitSha, sha, `put of ${variables.input.path} carries the current commit`);
         const commit = nextSha();
+        // The server advances the project revision with every commit.
+        remote = { ...remote, revision: String(Number(remote.revision) + 1) };
         return { crowdyStudioGitHubPutFile: { path: variables.input.path, content: variables.input.content, sha: 'blob', commitSha: commit } };
       }
       case 'CrowdyStudioGitHubDeleteFile': {
         assert.equal(variables.input.expectedCommitSha, sha);
         const commit = nextSha();
+        remote = { ...remote, revision: String(Number(remote.revision) + 1) };
         return { crowdyStudioGitHubDeleteFile: { configured: true, connected: true, owner: 'modder', repo: 'my-mod', branch: 'main', githubSha: commit } };
       }
       default:
@@ -167,6 +170,31 @@ test('a save with no changes on a bound project touches nothing but the re-read'
     files: project.files,
   });
   assert.deepEqual(calls.map((c) => c.name), ['CrowdyStudioProject', 'CrowdyStudioProject']);
+});
+
+test('a caller holding an older revision than the provider last returned is refused before any commit', async () => {
+  const { client, calls, CrowdyStudioRevisionConflictError } = await harness();
+  const scope = { appId: '1', gridId: '2', projectId: '11111111-1111-4111-8111-111111111111' };
+  const project = await client.crowdyStudio.getProject(scope);
+  // Someone else saved through this provider: the baseline moved on.
+  await client.crowdyStudio.saveProject({
+    ...scope,
+    expectedRevisionId: project.revision.id,
+    metadata: project.metadata,
+    files: [{ target: 'SERVER', path: 'src/lib.rs', content: 'fn newer() {}' }, project.files[1]],
+  });
+  const before = calls.length;
+  await assert.rejects(
+    () =>
+      client.crowdyStudio.saveProject({
+        ...scope,
+        expectedRevisionId: project.revision.id, // the OLD revision
+        metadata: project.metadata,
+        files: [{ target: 'SERVER', path: 'src/lib.rs', content: 'fn stale() {}' }, project.files[1]],
+      }),
+    (error) => error instanceof CrowdyStudioRevisionConflictError && error.remoteProject?.source === 'GITHUB',
+  );
+  assert.equal(calls.slice(before).filter((c) => c.name === 'CrowdyStudioGitHubPutFile').length, 0, 'nothing was committed');
 });
 
 test('GITHUB_STALE_SHA from a put becomes the revision conflict the editor recovers from, carrying the remote project', async () => {

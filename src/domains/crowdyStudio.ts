@@ -210,6 +210,27 @@ export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
     if (!startSha) {
       throw new Error('The bound project has no mirror commit; refresh it from GitHub first.');
     }
+    // The caller's precondition is the revision IT read. The baseline is the
+    // project this provider last returned; the two agree whenever the caller
+    // saved or re-read through here. A caller holding an older revision must
+    // not ride the baseline's commit onto the branch — that is exactly the
+    // lost update the STUDIO path's server-side CAS refuses.
+    if (input.expectedRevisionId !== baseline.revision.id) {
+      let remoteProject: CrowdyStudioProject | undefined;
+      try {
+        remoteProject = await this.getProject({
+          appId: input.appId,
+          gridId: input.gridId,
+          projectId: input.projectId,
+        });
+      } catch {
+        // The conflict remains actionable if the follow-up read fails.
+      }
+      throw new CrowdyStudioRevisionConflictError(
+        `CROWDY_STUDIO_REVISION_CONFLICT: expected project revision ${input.expectedRevisionId}; current revision is ${baseline.revision.id}.`,
+        remoteProject,
+      );
+    }
     try {
       if (metadataChanged(baseline, input)) {
         await this.request(CrowdyStudioProjectSaveDocument, {
