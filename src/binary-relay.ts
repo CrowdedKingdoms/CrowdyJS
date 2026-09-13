@@ -150,6 +150,16 @@ export interface BinaryRelaySendStats {
   messagesDropped: number;
 }
 
+/**
+ * True in a browser whose document is hidden (background tab). Browsers clamp
+ * timers there, so the bundle window cannot be honoured; the transport flushes
+ * each send immediately instead. False outside a document (Node, workers).
+ */
+function documentIsHidden(): boolean {
+  const doc = (globalThis as { document?: { visibilityState?: string } }).document;
+  return doc?.visibilityState === 'hidden';
+}
+
 function base64UrlEncode(value: string): string {
   return btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
@@ -304,6 +314,11 @@ export class BinaryRelayTransport {
     }
     this.pendingMembers.push(frame);
     this.pendingBytes += BUNDLE_LENGTH_PREFIX_BYTES + frame.length;
+
+    // A hidden tab has no frame loop and its timers are throttled to a second
+    // or more, so a heartbeat sent from one would sit in the bundle far longer
+    // than the window says. Nothing else is coming: send it now.
+    if (documentIsHidden()) this.flushSends();
   }
 
   /**

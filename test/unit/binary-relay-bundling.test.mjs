@@ -226,6 +226,32 @@ test('window 0 flushes on the next macrotask, still one frame for a synchronous 
   transport.disconnect();
 });
 
+test('a hidden document flushes every send at once (throttled timers cannot keep the window)', async () => {
+  const { transport, ws } = await readyTransport({ bundleWindowMs: 1000 });
+  globalThis.document = { visibilityState: 'hidden' };
+  try {
+    const a = msg(26);
+    transport.sendFrame(a);
+    assert.equal(ws.sent.length, 1, 'left immediately, no window wait');
+    assert.equal(ws.sent[0], a, 'a lone member goes unwrapped');
+    transport.sendFrame(msg(128));
+    assert.equal(ws.sent.length, 2);
+    assert.equal(transport.stats().bundlesSent, 0);
+
+    // Back in the foreground the window applies again.
+    globalThis.document = { visibilityState: 'visible' };
+    transport.sendFrame(msg(128));
+    transport.sendFrame(msg(26));
+    assert.equal(ws.sent.length, 2, 'pending until the window or a flush');
+    transport.flushSends();
+    assert.equal(ws.sent.length, 3);
+    assert.equal(members(ws.sent[2]).length, 2);
+  } finally {
+    delete globalThis.document;
+    transport.disconnect();
+  }
+});
+
 test('bundleSends: false is one frame per message, immediately, bundlesSent stays 0', async () => {
   const { transport, ws } = await readyTransport({ bundleSends: false });
   const a = msg(128);

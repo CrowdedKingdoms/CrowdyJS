@@ -23,7 +23,10 @@ What changes for you:
 - **Frame-end flush.** A game loop that sends several updates per frame gets
   them in one datagram with no extra latency by calling
   `client.udp.flushSends()` at the end of the frame; otherwise the window
-  timer flushes within ~1 ms (browsers may clamp timers in background tabs).
+  timer flushes within ~1 ms. In a **hidden tab** (`document.visibilityState
+  === 'hidden'`) browsers clamp timers to a second or more, so the transport
+  flushes every send immediately there — a background heartbeat leaves as it
+  always did.
 - **Counters.** `client.realtime.binaryRelayStats()` returns
   `{ messagesSent, framesSent, bundlesSent, bytesSent, messagesDropped }`
   (`framesSent <= messagesSent`; `messagesDropped` counts members that were
