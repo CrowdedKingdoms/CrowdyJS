@@ -107,8 +107,7 @@ export class CrowdyStudioDomShell {
   private readonly githubBindInput: HTMLInputElement;
   private readonly githubBind: HTMLButtonElement;
   private readonly githubUnbind: HTMLButtonElement;
-  private readonly githubAutosave: HTMLInputElement;
-  private readonly githubPush: HTMLButtonElement;
+  private readonly githubInitial: HTMLSelectElement;
   private readonly githubPull: HTMLButtonElement;
   private readonly githubRefresh: HTMLButtonElement;
   private readonly githubMessage: HTMLElement;
@@ -273,9 +272,12 @@ export class CrowdyStudioDomShell {
     );
 
     // ----- GitHub repository card -------------------------------------------
-    // Bring-your-own repo. The repository is resolved server-side from the
-    // project's bind; the card never learns a token. Autosave push is off
-    // until the owner turns it on here.
+    // Bring-your-own repo, never required. The repository is resolved
+    // server-side from the project's bind; the card never learns a token.
+    // Once bound the repository IS the working tree: every save commits, so
+    // there is no push, no pull and no autosave toggle here — only bind (with
+    // a choice of which side is the truth on day one), unbind, and a refresh
+    // that brings the project to the branch head after a push made elsewhere.
     this.github = element('section', 'ck-crowdy-studio-github');
     const githubTitle = element('h3');
     githubTitle.textContent = 'GitHub repository';
@@ -285,10 +287,24 @@ export class CrowdyStudioDomShell {
       void this.controller.connectGitHub().catch((error: unknown) => this.githubNote(error));
     });
     this.githubBindInput = input('owner/repo or owner/repo@branch');
+    this.githubInitial = document.createElement('select');
+    this.githubInitial.className = 'ck-crowdy-studio-github-initial';
+    for (const [value, label] of [
+      ['PUSH_PROJECT', 'Push this project into the repository'],
+      ['TAKE_REPOSITORY', 'Take the repository as this project'],
+    ] as const) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      this.githubInitial.append(option);
+    }
     this.githubBind = button('Bind');
     this.githubBind.addEventListener('click', () => {
       void this.controller
-        .bindGitHubRepo(this.githubBindInput.value)
+        .bindGitHubRepo(
+          this.githubBindInput.value,
+          this.githubInitial.value === 'TAKE_REPOSITORY' ? 'TAKE_REPOSITORY' : 'PUSH_PROJECT',
+        )
         .then(() => {
           this.githubBindInput.value = '';
         })
@@ -298,39 +314,20 @@ export class CrowdyStudioDomShell {
     this.githubUnbind.addEventListener('click', () => {
       void this.controller.unbindGitHub().catch((error: unknown) => this.githubNote(error));
     });
-    this.githubAutosave = document.createElement('input');
-    this.githubAutosave.type = 'checkbox';
-    this.githubAutosave.addEventListener('change', () => {
-      void this.controller
-        .setGitHubAutosave(this.githubAutosave.checked)
-        .catch((error: unknown) => this.githubNote(error));
-    });
-    this.githubPush = button('Push to GitHub');
-    this.githubPush.addEventListener('click', () => {
-      void this.controller.pushToGitHub();
-    });
-    this.githubPull = button('Pull from GitHub');
+    this.githubPull = button('Refresh from GitHub');
     this.githubPull.addEventListener('click', () => {
-      void this.controller.pullFromGitHub();
+      void this.controller.refreshFromGitHub();
     });
-    this.githubRefresh = button('Refresh');
+    this.githubRefresh = button('Refresh status');
     this.githubRefresh.addEventListener('click', () => {
       void this.controller.refreshGitHubStatus();
     });
     this.githubMessage = element('p', 'ck-crowdy-studio-github-message');
     const bindRow = element('div', 'ck-crowdy-studio-github-row');
-    bindRow.append(this.githubBindInput, this.githubBind, this.githubUnbind);
+    bindRow.append(this.githubBindInput, this.githubInitial, this.githubBind, this.githubUnbind);
     const syncRow = element('div', 'ck-crowdy-studio-github-row');
-    syncRow.append(this.githubPush, this.githubPull, this.githubRefresh);
-    this.github.append(
-      githubTitle,
-      this.githubStatus,
-      this.githubConnect,
-      bindRow,
-      labeled('Also push autosaves to GitHub', this.githubAutosave),
-      syncRow,
-      this.githubMessage,
-    );
+    syncRow.append(this.githubPull, this.githubRefresh);
+    this.github.append(githubTitle, this.githubStatus, this.githubConnect, bindRow, syncRow, this.githubMessage);
     this.github.hidden = true;
     this.settings.append(this.github);
 
@@ -1119,22 +1116,26 @@ export class CrowdyStudioDomShell {
     }
     this.github.hidden = false;
     const bound = Boolean(github.owner && github.repo);
+    const sha = github.githubSha ? ` @ ${github.githubSha.slice(0, 7)}` : '';
     this.githubStatus.textContent = !github.connected
-      ? 'Not connected. Install the Crowdy Studio app on your GitHub account to bind a repository you own.'
+      ? 'Not connected. Install the Crowdy Studio app on your GitHub account to bind a repository you own. GitHub is optional; the project saves in Studio either way.'
       : bound
-        ? `${github.accountLogin ?? 'GitHub'} · bound to ${github.owner}/${github.repo}@${github.branch}`
+        ? `${github.accountLogin ?? 'GitHub'} · ${github.owner}/${github.repo}@${github.branch}${sha} is the working tree; saves commit to it.`
         : `${github.accountLogin ?? 'GitHub'} connected · no repository bound`;
     this.githubConnect.hidden = github.connected;
     this.githubConnect.disabled = state.githubBusy;
-    const canBind = github.connected && Boolean(state.project) && !state.githubBusy;
+    const canBind =
+      github.connected && Boolean(state.project) && !bound && !state.githubBusy && state.saveState === 'SAVED';
+    this.githubBindInput.hidden = bound;
+    this.githubInitial.hidden = bound;
+    this.githubBind.hidden = bound;
     this.githubBindInput.disabled = !canBind;
+    this.githubInitial.disabled = !canBind;
     this.githubBind.disabled = !canBind;
     this.githubUnbind.hidden = !bound;
-    this.githubUnbind.disabled = state.githubBusy;
-    this.githubAutosave.disabled = !bound || state.githubBusy;
-    this.githubAutosave.checked = github.autosave;
-    this.githubPush.disabled = !bound || state.githubBusy;
-    this.githubPull.disabled = !bound || state.githubBusy || state.saveState !== 'SAVED';
+    this.githubUnbind.disabled = state.githubBusy || state.saveState !== 'SAVED';
+    this.githubPull.hidden = !bound;
+    this.githubPull.disabled = state.githubBusy || state.saveState !== 'SAVED';
     this.githubRefresh.disabled = state.githubBusy;
     this.githubMessage.textContent = state.githubMessage ?? '';
   }

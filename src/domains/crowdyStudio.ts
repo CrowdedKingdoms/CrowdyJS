@@ -1,6 +1,11 @@
 import type { GraphQLClient } from '../client.js';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import {
+  CrowdyStudioGitHubTransport,
+  type CrowdyStudioGitHubLayout,
+} from '../crowdy-studio/github/transport.js';
+import { studioFileToRepoPath } from '../crowdy-studio/github/layout.js';
+import {
   CrowdyGraphQLError,
   CrowdyHttpError,
   CrowdyNetworkError,
@@ -28,6 +33,7 @@ import {
   CrowdyStudioLibraryFilesDocument,
   CrowdyStudioLibrarySaveDocument,
   CrowdyStudioPairingPreference as CrowdyStudioPairingPreferenceEnum,
+  CrowdyStudioProjectSource as CrowdyStudioProjectSourceEnum,
   CrowdyStudioProjectCreateDocument,
   CrowdyStudioProjectDocument,
   CrowdyStudioProjectImportFileDocument,
@@ -50,14 +56,26 @@ type CommonDto = CrowdyStudioCommonFilesQuery['crowdyStudioCommonFiles'][number]
 /**
  * Schema-coupled Game API adapter for private Crowdy Studio projects and
  * reusable files. Generated GraphQL documents and DTOs stay in this module;
- * the controller and public project models remain transport-neutral. Mutable
- * projects remain separate from immutable player-compute versions, and only
- * the controller's deploy path converts target files to sourceFilesJson.
+ * the controller and public project models remain transport-neutral.
+ *
+ * A project's `source` decides how {@link saveProject} persists files:
+ * `STUDIO` projects go through `crowdyStudioProjectSave` under the project
+ * revision; `GITHUB` projects commit each changed file through
+ * `crowdyStudioGitHubPutFile` / `DeleteFile` under `github.sha`
+ * (`expectedCommitSha`), because their files are a server-maintained mirror
+ * of the repository and the Studio file mutations refuse them. Either way a
+ * lost race is a {@link CrowdyStudioRevisionConflictError} and the editor's
+ * "the remote moved" recovery applies. The controller never learns which.
  */
 export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
   private readonly baselines = new Map<string, CrowdyStudioProject>();
+  private readonly github: CrowdyStudioGitHubTransport;
+  /** Layout per `projectId@commit`; commits are immutable so this never goes stale. */
+  private readonly layouts = new Map<string, CrowdyStudioGitHubLayout>();
 
-  constructor(private readonly graphql: GraphQLClient) {}
+  constructor(private readonly graphql: GraphQLClient) {
+    this.github = new CrowdyStudioGitHubTransport(graphql);
+  }
 
   async listProjects(
     scope: CrowdyStudioProjectScope,
@@ -106,14 +124,17 @@ export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
   async saveProject(
     input: SaveCrowdyStudioProjectInput,
   ): Promise<CrowdyStudioProject> {
+    const baseline =
+      this.baselines.get(input.projectId) ??
+      (await this.getProject({
+        appId: input.appId,
+        gridId: input.gridId,
+        projectId: input.projectId,
+      }));
+    if (baseline.source === 'GITHUB' && baseline.github?.sha) {
+      return this.saveBoundProject(baseline, input);
+    }
     try {
-      const baseline =
-        this.baselines.get(input.projectId) ??
-        (await this.getProject({
-          appId: input.appId,
-          gridId: input.gridId,
-          projectId: input.projectId,
-        }));
       const delta = projectFileDelta(baseline, input);
       const data = await this.request(CrowdyStudioProjectSaveDocument, {
         input: {
@@ -168,6 +189,145 @@ export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
       }
       throw error;
     }
+  }
+
+  /**
+   * Persist a GITHUB project: metadata through the project save (a CAS on the
+   * revision, no file bodies), then each changed file as its own commit on the
+   * bound branch, each carrying the commit the previous one produced. A file
+   * put is atomic on the server (GitHub commit, then mirror + `github_sha`
+   * advance in one transaction), so a stale race part-way through leaves the
+   * earlier commits on the branch and this project describing them; the
+   * conflict recovery re-reads and the remaining diffs are re-applied against
+   * the new commit. Layout comes from the API at the commit being written to.
+   */
+  private async saveBoundProject(
+    baseline: CrowdyStudioProject,
+    input: SaveCrowdyStudioProjectInput,
+  ): Promise<CrowdyStudioProject> {
+    const scope = { appId: input.appId, projectId: input.projectId };
+    const startSha = baseline.github?.sha;
+    if (!startSha) {
+      throw new Error('The bound project has no mirror commit; refresh it from GitHub first.');
+    }
+    // The caller's precondition is the revision IT read. The baseline is the
+    // project this provider last returned; the two agree whenever the caller
+    // saved or re-read through here. A caller holding an older revision must
+    // not ride the baseline's commit onto the branch — that is exactly the
+    // lost update the STUDIO path's server-side CAS refuses.
+    if (input.expectedRevisionId !== baseline.revision.id) {
+      let remoteProject: CrowdyStudioProject | undefined;
+      try {
+        remoteProject = await this.getProject({
+          appId: input.appId,
+          gridId: input.gridId,
+          projectId: input.projectId,
+        });
+      } catch {
+        // The conflict remains actionable if the follow-up read fails.
+      }
+      throw new CrowdyStudioRevisionConflictError(
+        `CROWDY_STUDIO_REVISION_CONFLICT: expected project revision ${input.expectedRevisionId}; current revision is ${baseline.revision.id}.`,
+        remoteProject,
+      );
+    }
+    try {
+      if (metadataChanged(baseline, input)) {
+        await this.request(CrowdyStudioProjectSaveDocument, {
+          input: {
+            appId: input.appId,
+            projectId: input.projectId,
+            expectedRevision: input.expectedRevisionId,
+            gridId: input.gridId,
+            name: input.metadata.name,
+            description: input.metadata.description ?? null,
+            serverModuleName: input.metadata.serverModuleName ?? null,
+            clientModuleName: input.metadata.clientModuleName ?? null,
+            pairingPreference: toApiPairing(
+              projectKind(input),
+              input.metadata.pairingPreference,
+            ),
+            upserts: [],
+            deletes: [],
+          },
+        });
+      }
+      const delta = projectFileDelta(baseline, input);
+      let sha = startSha;
+      if (delta.upserts.length > 0 || delta.deletes.length > 0) {
+        const layout = await this.layoutAt(scope, sha);
+        for (const file of delta.upserts) {
+          const path = normalizeCrowdyStudioPath(file.path);
+          const repoPath = studioFileToRepoPath(layout, file.target, path);
+          if (!repoPath) {
+            throw new Error(
+              `The bound repository's crowdy.json has no ${file.target.toLowerCase()} directory, so ${path} has nowhere to go.`,
+            );
+          }
+          const written = await this.github.putFile({
+            ...scope,
+            path: repoPath,
+            content: file.content,
+            message: `studio: update ${repoPath}`,
+            expectedCommitSha: sha,
+          });
+          sha = written.commitSha ?? sha;
+        }
+        for (const file of delta.deletes) {
+          const repoPath = studioFileToRepoPath(layout, file.target, normalizeCrowdyStudioPath(file.path));
+          if (!repoPath) continue;
+          const status = await this.github.deleteFile({
+            ...scope,
+            path: repoPath,
+            message: `studio: delete ${repoPath}`,
+            expectedCommitSha: sha,
+          });
+          sha = status.githubSha ?? sha;
+        }
+      }
+      return await this.getProject({
+        appId: input.appId,
+        gridId: input.gridId,
+        projectId: input.projectId,
+      });
+    } catch (error) {
+      if (
+        error instanceof CrowdyGraphQLError &&
+        (error.code === 'GITHUB_STALE_SHA' ||
+          error.code === 'CROWDY_STUDIO_REVISION_CONFLICT' ||
+          error.message.includes('GITHUB_STALE_SHA') ||
+          error.message.includes('CROWDY_STUDIO_REVISION_CONFLICT'))
+      ) {
+        let remoteProject: CrowdyStudioProject | undefined;
+        try {
+          remoteProject = await this.getProject({
+            appId: input.appId,
+            gridId: input.gridId,
+            projectId: input.projectId,
+          });
+        } catch {
+          // The conflict remains actionable if the follow-up read fails.
+        }
+        throw new CrowdyStudioRevisionConflictError(error.message, remoteProject);
+      }
+      throw error;
+    }
+  }
+
+  private async layoutAt(
+    scope: { appId: string; projectId: string },
+    commitSha: string,
+  ): Promise<CrowdyStudioGitHubLayout> {
+    const key = `${scope.projectId}@${commitSha}`;
+    const cached = this.layouts.get(key);
+    if (cached) return cached;
+    const layout = await this.github.layout({ ...scope, commitSha });
+    if (this.layouts.size > 64) {
+      const [oldest] = this.layouts.keys();
+      if (oldest !== undefined) this.layouts.delete(oldest);
+    }
+    this.layouts.set(key, layout);
+    return layout;
   }
 
   async listPersonalLibraryFiles(
@@ -259,11 +419,19 @@ export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
 }
 
 function fromSummaryDto(dto: ProjectSummaryDto): CrowdyStudioProjectSummary {
+  const bound =
+    dto.source === CrowdyStudioProjectSourceEnum.Github &&
+    dto.githubOwner &&
+    dto.githubRepo &&
+    dto.githubBranch;
   return {
     projectId: dto.projectId,
     name: dto.name,
     kind: kindFromApi(dto.pairingPreference),
     revisionId: String(dto.revision),
+    source: bound ? 'GITHUB' : 'STUDIO',
+    ...(bound ? { github: `${dto.githubOwner}/${dto.githubRepo}@${dto.githubBranch}` } : {}),
+    githubSha: bound ? (dto.githubSha ?? null) : null,
     ...(dto.serverModuleName
       ? { serverModuleName: dto.serverModuleName }
       : {}),
@@ -306,6 +474,19 @@ function fromProjectDto(
       id: String(dto.revision),
       savedAt: dto.updatedAt,
     },
+    source: dto.source === CrowdyStudioProjectSourceEnum.Github ? 'GITHUB' : 'STUDIO',
+    github:
+      dto.source === CrowdyStudioProjectSourceEnum.Github &&
+      dto.githubOwner &&
+      dto.githubRepo &&
+      dto.githubBranch
+        ? {
+            owner: dto.githubOwner,
+            repo: dto.githubRepo,
+            branch: dto.githubBranch,
+            sha: dto.githubSha ?? null,
+          }
+        : null,
     createdAt: dto.createdAt,
     updatedAt: dto.updatedAt,
   };
@@ -388,6 +569,23 @@ function projectKind(input: SaveCrowdyStudioProjectInput): CrowdyStudioProjectKi
   return 'CLIENT';
 }
 
+function metadataChanged(
+  baseline: CrowdyStudioProject,
+  input: SaveCrowdyStudioProjectInput,
+): boolean {
+  const a = baseline.metadata;
+  const b = input.metadata;
+  return (
+    baseline.gridId !== input.gridId ||
+    a.name !== b.name ||
+    (a.description ?? '') !== (b.description ?? '') ||
+    (a.serverModuleName ?? '') !== (b.serverModuleName ?? '') ||
+    (a.clientModuleName ?? '') !== (b.clientModuleName ?? '') ||
+    toApiPairing(baseline.kind, a.pairingPreference) !==
+      toApiPairing(projectKind(input), b.pairingPreference)
+  );
+}
+
 function projectFileDelta(
   baseline: CrowdyStudioProject,
   input: SaveCrowdyStudioProjectInput,
@@ -428,5 +626,6 @@ function cloneProject(project: CrowdyStudioProject): CrowdyStudioProject {
     metadata: { ...project.metadata },
     files: project.files.map((file) => ({ ...file })),
     revision: { ...project.revision },
+    github: project.github ? { ...project.github } : null,
   };
 }
