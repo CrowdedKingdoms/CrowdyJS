@@ -2409,8 +2409,10 @@ type AppPlayerUsageRow {
   automationUnits: BigInt!
   """Compile submissions."""
   compileCount: Int!
-  """Cents charged in the window."""
-  chargedCents: BigInt!
+  """Micro-USD charged to the player for this app in the window (exact)."""
+  chargedMicrousd: BigInt!
+  """DEPRECATED. chargedMicrousd / 10,000 truncated toward zero."""
+  chargedCents: BigInt! @deprecated(reason: "Derived from chargedMicrousd (truncated). Read chargedMicrousd.")
 }
 
 """
@@ -8261,10 +8263,17 @@ type Query {
     hours: Int
   ): [AppPlayerUsageRow!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  Total player rate-card markup accrued to this app's org income line, in cents (payouts arrive with the P4b ledger). Requires 'view_billing'.
+  DEPRECATED (cents, truncated): read appPlayerMarkupAccruedMicrousd. Total player rate-card markup credited to this app's org wallet, in cents. Requires 'view_billing'.
   """
   appPlayerMarkupAccrued(
     """App whose accrued markup to total."""
+    appId: BigInt!
+  ): BigInt! @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId") @deprecated(reason: "Cents truncate; appPlayerMarkupAccruedMicrousd carries the exact amount.")
+  """
+  Total player rate-card markup credited to this app's org wallet (`markup_payout` rows, mirrored as CREDIT events on the ledger), in micro-USD, exact. Cents-era accruals from before the ledger are included. Requires 'view_billing'.
+  """
+  appPlayerMarkupAccruedMicrousd(
+    """App whose credited markup to total."""
     appId: BigInt!
   ): BigInt! @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId")
   """

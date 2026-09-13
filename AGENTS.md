@@ -11,6 +11,12 @@ not answerable from this page, and the paragraph this replaces proved it: it rea
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
+**16.2.0 completes the ck-api `v1.100.x` sync that 16.1.0 started:**
+`AppPlayerUsageRow.chargedMicrousd` is selected, `playerWallet.appMarkupAccruedMicrousd()`
+wraps `appPlayerMarkupAccruedMicrousd` (`appMarkupAccrued()` is deprecated —
+cents truncate), and `schema.gql` matches ck-api `dev` exactly. 16.1.0's
+snapshot predated the review-fix commit that added those two fields.
+
 **16.1.0 tracks ck-api `v1.100.x` (lossless billing ledger):** org and player
 wallets expose `balanceMicrousd` / `holdsMicrousd`, transactions
 `amountMicrousd` / `balanceAfterMicrousd` (the cents fields stay, deprecated —
