@@ -193,6 +193,16 @@ export class UdpAPI {
    * @returns `true` once the session has been closed.
    * @throws {CrowdyGraphQLError} on auth failures.
    */
+  /**
+   * Binary relay only: put the pending `MESSAGE_BUNDLE` on the wire now
+   * instead of at the end of `realtime.bundleWindowMs`. Call it at the end of a
+   * frame whose sends should not wait. No-op on the GraphQL transport, when
+   * `realtime.bundleSends` is false, or when nothing is pending.
+   */
+  flushSends(): void {
+    this.subs.flushSends();
+  }
+
   async disconnect(): Promise<boolean> {
     if (this.subs.usingBinaryTransport()) {
       this.subs.disconnect();
@@ -341,6 +351,9 @@ export class UdpAPI {
     const request = this.withSequence(input);
     const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
     await this.sendActorUpdate(request);
+    // Nothing can be echoed that has not left: the bundled relay path holds a
+    // send for up to bundleWindowMs, so put it on the wire before waiting.
+    this.subs.flushSends();
     return wait;
   }
 
@@ -421,6 +434,9 @@ export class UdpAPI {
     const request = this.withSequence(input);
     const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
     await this.sendVoxelUpdate(request);
+    // Nothing can be echoed that has not left: the bundled relay path holds a
+    // send for up to bundleWindowMs, so put it on the wire before waiting.
+    this.subs.flushSends();
     return wait;
   }
 
@@ -488,6 +504,9 @@ export class UdpAPI {
     const request = this.withSequence(input);
     const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
     await this.sendAudioPacket(request);
+    // Nothing can be echoed that has not left: the bundled relay path holds a
+    // send for up to bundleWindowMs, so put it on the wire before waiting.
+    this.subs.flushSends();
     return wait;
   }
 
@@ -623,6 +642,9 @@ export class UdpAPI {
     const request = this.withSequence(input);
     const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
     await this.sendTextPacket(request);
+    // Nothing can be echoed that has not left: the bundled relay path holds a
+    // send for up to bundleWindowMs, so put it on the wire before waiting.
+    this.subs.flushSends();
     return wait;
   }
 
@@ -692,6 +714,9 @@ export class UdpAPI {
     const request = this.withSequence(input);
     const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
     await this.sendClientEvent(request);
+    // Nothing can be echoed that has not left: the bundled relay path holds a
+    // send for up to bundleWindowMs, so put it on the wire before waiting.
+    this.subs.flushSends();
     return wait;
   }
 
