@@ -20,9 +20,13 @@ import {
  * `client.admin`).
  *
  * Part of the management surface. Reads require the `view_billing` org/app
- * permission; {@link setAppBudget} requires `manage_billing`. Monetary values
- * are minor currency units (`*Cents`) and serialized as `BigInt` decimal
- * strings.
+ * permission; {@link setAppBudget} requires `manage_billing`. Wallet money is
+ * MICRO-USD (`*Microusd`, 1 USD = 1,000,000) serialized as `BigInt` decimal
+ * strings -- the unit of account since the lossless ledger (ck-api 2026-09-11),
+ * in which nothing is rounded. The `*Cents` fields remain as deprecated
+ * derived values (micro-USD / 10,000, truncated toward zero) and will be
+ * removed in a later major. Budget caps (`monthlyLimitCents`) stay in cents:
+ * they are limits, not money of record.
  *
  * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN` / `SCOPE_MISSING`
  *   per the permission notes above.
@@ -35,7 +39,9 @@ export class BillingAPI {
    * permission.
    *
    * @param orgId - Numeric org id (`BigInt` as a decimal string).
-   * @returns The wallet balance (cents as a decimal string).
+   * @returns The wallet balance: `balanceMicrousd` and `holdsMicrousd`
+   *   (micro-USD as decimal strings; spendable = balance − holds), plus the
+   *   deprecated `balanceCents`.
    */
   async walletBalance(
     orgId: string,

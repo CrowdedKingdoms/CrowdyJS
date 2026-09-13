@@ -61,7 +61,12 @@ import {
 export class PlayerWalletAPI {
   constructor(private readonly graphql: GraphQLClient) {}
 
-  /** The caller's wallet, created empty on first access (never null). */
+  /**
+   * The caller's wallet, created empty on first access (never null).
+   * `balanceMicrousd` / `holdsMicrousd` are micro-USD (1 USD = 1,000,000)
+   * decimal strings; spendable = balance − holds (a model turn holds its
+   * worst case while it runs). `balanceCents` is the deprecated truncation.
+   */
   async balance(): Promise<PlayerWalletBalanceQuery['playerWalletBalance']> {
     const data = await this.graphql.request(PlayerWalletBalanceDocument, {});
     return data.playerWalletBalance;

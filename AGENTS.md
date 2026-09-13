@@ -11,6 +11,12 @@ not answerable from this page, and the paragraph this replaces proved it: it rea
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
+**16.1.0 tracks ck-api `v1.100.x` (lossless billing ledger):** org and player
+wallets expose `balanceMicrousd` / `holdsMicrousd`, transactions
+`amountMicrousd` / `balanceAfterMicrousd` (the cents fields stay, deprecated —
+they are the micro-USD rounded down, not what was charged). Schema sync and
+codegen only; no runtime behaviour change.
+
 **16.0.0 replaces Crowdy Agent with the DeepSeek Harness in-browser pane (`crowdy-dsh`):**
 The bespoke ck-api orchestrator transport (`client.crowdyStudioAgent`,
 `@crowdedkingdoms/crowdyjs/agent`), the Crowdy Agent dock (`agent-dom-shell.ts`),

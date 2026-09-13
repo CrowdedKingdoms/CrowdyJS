@@ -1,6 +1,8 @@
 fragment PlayerWalletFields on PlayerWallet {
   walletId
   userId
+  balanceMicrousd
+  holdsMicrousd
   balanceCents
   currency
   createdAt
@@ -10,6 +12,8 @@ fragment PlayerWalletTransactionFields on PlayerWalletTransaction {
   transactionId
   walletId
   userId
+  amountMicrousd
+  balanceAfterMicrousd
   amountCents
   balanceAfter
   transactionType
