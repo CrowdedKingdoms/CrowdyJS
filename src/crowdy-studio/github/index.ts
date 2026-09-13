@@ -1,22 +1,19 @@
 export {
   CrowdyStudioGitHubTransport,
+  type CrowdyStudioGitHubBindInitial,
   type CrowdyStudioGitHubFile,
+  type CrowdyStudioGitHubLayout,
   type CrowdyStudioGitHubProjectScope,
   type CrowdyStudioGitHubRepo,
   type CrowdyStudioGitHubStatus,
+  type CrowdyStudioGitHubTree,
   type CrowdyStudioGitHubTreeEntry,
 } from './transport.js';
 export {
-  DEFAULT_FULL_STACK_CROWDY_JSON,
-  layoutFromTree,
-  mergeStudioFilesFromGitHub,
-  parseCrowdyJson,
-  pullStudioFilesFromGitHub,
-  pushStudioFilesToGitHub,
+  isRustAuthoringPath,
+  joinRepo,
   repoPathToStudioFile,
-  resolveGitHubLayout,
   studioFileToRepoPath,
-  studioFilesMissingOnGitHub,
-  type GitHubFiles,
-  type GitHubLayout,
-} from './sync.js';
+  trimSlash,
+  underRoot,
+} from './layout.js';
