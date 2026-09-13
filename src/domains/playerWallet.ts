@@ -1,4 +1,4 @@
-import type { GraphQLClient } from '../client.js';
+import type { GraphQLClient } from "../client.js";
 import {
   PlayerWalletBalanceDocument,
   PlayerWalletTransactionsDocument,
@@ -17,6 +17,7 @@ import {
   SetPlayerRateMarkupDocument,
   AppPlayerUsageDocument,
   AppPlayerMarkupAccruedDocument,
+  AppPlayerMarkupAccruedMicrousdDocument,
   type PlayerWalletBalanceQuery,
   type PlayerWalletTransactionsQuery,
   type PlayerWalletTransactionsQueryVariables,
@@ -43,7 +44,9 @@ import {
   type AppPlayerUsageQueryVariables,
   type AppPlayerMarkupAccruedQuery,
   type AppPlayerMarkupAccruedQueryVariables,
-} from '../generated/graphql.js';
+  type AppPlayerMarkupAccruedMicrousdQuery,
+  type AppPlayerMarkupAccruedMicrousdQueryVariables,
+} from "../generated/graphql.js";
 
 /**
  * The player wallet and player-billing surface (player compute P2, DN-5) —
@@ -67,7 +70,7 @@ export class PlayerWalletAPI {
    * decimal strings; spendable = balance − holds (a model turn holds its
    * worst case while it runs). `balanceCents` is the deprecated truncation.
    */
-  async balance(): Promise<PlayerWalletBalanceQuery['playerWalletBalance']> {
+  async balance(): Promise<PlayerWalletBalanceQuery["playerWalletBalance"]> {
     const data = await this.graphql.request(PlayerWalletBalanceDocument, {});
     return data.playerWalletBalance;
   }
@@ -75,7 +78,7 @@ export class PlayerWalletAPI {
   /** The caller's wallet ledger, newest first. */
   async transactions(
     variables: PlayerWalletTransactionsQueryVariables = {},
-  ): Promise<PlayerWalletTransactionsQuery['playerWalletTransactions']> {
+  ): Promise<PlayerWalletTransactionsQuery["playerWalletTransactions"]> {
     const data = await this.graphql.request(
       PlayerWalletTransactionsDocument,
       variables,
@@ -89,7 +92,7 @@ export class PlayerWalletAPI {
    */
   async charges(
     variables: PlayerUsageChargesQueryVariables = {},
-  ): Promise<PlayerUsageChargesQuery['playerUsageCharges']> {
+  ): Promise<PlayerUsageChargesQuery["playerUsageCharges"]> {
     const data = await this.graphql.request(
       PlayerUsageChargesDocument,
       variables,
@@ -98,7 +101,7 @@ export class PlayerWalletAPI {
   }
 
   /** The caller's self-set spend caps with running counters. */
-  async spendCaps(): Promise<PlayerSpendCapsQuery['playerSpendCaps']> {
+  async spendCaps(): Promise<PlayerSpendCapsQuery["playerSpendCaps"]> {
     const data = await this.graphql.request(PlayerSpendCapsDocument, {});
     return data.playerSpendCaps;
   }
@@ -106,7 +109,7 @@ export class PlayerWalletAPI {
   /** Set (or clear with null limits) a global or per-app self spend cap. */
   async setSpendCap(
     variables: SetPlayerSpendCapMutationVariables,
-  ): Promise<SetPlayerSpendCapMutation['setPlayerSpendCap']> {
+  ): Promise<SetPlayerSpendCapMutation["setPlayerSpendCap"]> {
     const data = await this.graphql.request(
       SetPlayerSpendCapDocument,
       variables,
@@ -115,7 +118,7 @@ export class PlayerWalletAPI {
   }
 
   /** The caller's auto-recharge settings. */
-  async autoBilling(): Promise<PlayerAutoBillingQuery['playerAutoBilling']> {
+  async autoBilling(): Promise<PlayerAutoBillingQuery["playerAutoBilling"]> {
     const data = await this.graphql.request(PlayerAutoBillingDocument, {});
     return data.playerAutoBilling;
   }
@@ -123,7 +126,7 @@ export class PlayerWalletAPI {
   /** Configure auto-recharge (requires a vaulted payment method to enable). */
   async setAutoBilling(
     variables: SetPlayerAutoBillingMutationVariables,
-  ): Promise<SetPlayerAutoBillingMutation['setPlayerAutoBilling']> {
+  ): Promise<SetPlayerAutoBillingMutation["setPlayerAutoBilling"]> {
     const data = await this.graphql.request(
       SetPlayerAutoBillingDocument,
       variables,
@@ -137,7 +140,7 @@ export class PlayerWalletAPI {
    * On success the card is saved for wallet auto-recharge and rent auto-renew.
    */
   async beginCardSetup(): Promise<
-    BeginPlayerCardSetupMutation['beginPlayerCardSetup']
+    BeginPlayerCardSetupMutation["beginPlayerCardSetup"]
   > {
     const data = await this.graphql.request(BeginPlayerCardSetupDocument, {});
     return data.beginPlayerCardSetup;
@@ -145,7 +148,7 @@ export class PlayerWalletAPI {
 
   /** The caller's per-app gate states (absence means active). */
   async runtimeStates(): Promise<
-    PlayerRuntimeStatesQuery['playerRuntimeStates']
+    PlayerRuntimeStatesQuery["playerRuntimeStates"]
   > {
     const data = await this.graphql.request(PlayerRuntimeStatesDocument, {});
     return data.playerRuntimeStates;
@@ -154,7 +157,7 @@ export class PlayerWalletAPI {
   /** Studio: list an app's player policy rows (`view_compute_diagnostics`). */
   async policies(
     variables: PlayerWasmPoliciesQueryVariables,
-  ): Promise<PlayerWasmPoliciesQuery['playerWasmPolicies']> {
+  ): Promise<PlayerWasmPoliciesQuery["playerWasmPolicies"]> {
     const data = await this.graphql.request(
       PlayerWasmPoliciesDocument,
       variables,
@@ -165,7 +168,7 @@ export class PlayerWalletAPI {
   /** Studio: upsert a player policy row (`manage_compute`). */
   async setPolicy(
     variables: SetPlayerWasmPolicyMutationVariables,
-  ): Promise<SetPlayerWasmPolicyMutation['setPlayerWasmPolicy']> {
+  ): Promise<SetPlayerWasmPolicyMutation["setPlayerWasmPolicy"]> {
     const data = await this.graphql.request(
       SetPlayerWasmPolicyDocument,
       variables,
@@ -176,7 +179,7 @@ export class PlayerWalletAPI {
   /** Studio: delete a player policy row (`manage_compute`). */
   async deletePolicy(
     variables: DeletePlayerWasmPolicyMutationVariables,
-  ): Promise<DeletePlayerWasmPolicyMutation['deletePlayerWasmPolicy']> {
+  ): Promise<DeletePlayerWasmPolicyMutation["deletePlayerWasmPolicy"]> {
     const data = await this.graphql.request(
       DeletePlayerWasmPolicyDocument,
       variables,
@@ -187,7 +190,7 @@ export class PlayerWalletAPI {
   /** Studio: read the app's player rate-card markup in bps (`view_billing`). */
   async rateMarkup(
     variables: PlayerRateMarkupQueryVariables,
-  ): Promise<PlayerRateMarkupQuery['playerRateMarkup']> {
+  ): Promise<PlayerRateMarkupQuery["playerRateMarkup"]> {
     const data = await this.graphql.request(
       PlayerRateMarkupDocument,
       variables,
@@ -198,7 +201,7 @@ export class PlayerWalletAPI {
   /** Studio: set the app's player rate-card markup in bps (`manage_billing`). */
   async setRateMarkup(
     variables: SetPlayerRateMarkupMutationVariables,
-  ): Promise<SetPlayerRateMarkupMutation['setPlayerRateMarkup']> {
+  ): Promise<SetPlayerRateMarkupMutation["setPlayerRateMarkup"]> {
     const data = await this.graphql.request(
       SetPlayerRateMarkupDocument,
       variables,
@@ -209,19 +212,35 @@ export class PlayerWalletAPI {
   /** Studio: per-player usage aggregate (`view_compute_diagnostics`). */
   async appPlayerUsage(
     variables: AppPlayerUsageQueryVariables,
-  ): Promise<AppPlayerUsageQuery['appPlayerUsage']> {
+  ): Promise<AppPlayerUsageQuery["appPlayerUsage"]> {
     const data = await this.graphql.request(AppPlayerUsageDocument, variables);
     return data.appPlayerUsage;
   }
 
-  /** Studio: total accrued markup income in cents (`view_billing`). */
+  /**
+   * Studio: total accrued markup income in cents (`view_billing`).
+   * @deprecated Cents truncate; `appMarkupAccruedMicrousd` carries the exact amount.
+   */
   async appMarkupAccrued(
     variables: AppPlayerMarkupAccruedQueryVariables,
-  ): Promise<AppPlayerMarkupAccruedQuery['appPlayerMarkupAccrued']> {
+  ): Promise<AppPlayerMarkupAccruedQuery["appPlayerMarkupAccrued"]> {
     const data = await this.graphql.request(
       AppPlayerMarkupAccruedDocument,
       variables,
     );
     return data.appPlayerMarkupAccrued;
+  }
+
+  /** Studio: total accrued markup income in micro-USD, exact (`view_billing`). */
+  async appMarkupAccruedMicrousd(
+    variables: AppPlayerMarkupAccruedMicrousdQueryVariables,
+  ): Promise<
+    AppPlayerMarkupAccruedMicrousdQuery["appPlayerMarkupAccruedMicrousd"]
+  > {
+    const data = await this.graphql.request(
+      AppPlayerMarkupAccruedMicrousdDocument,
+      variables,
+    );
+    return data.appPlayerMarkupAccruedMicrousd;
   }
 }
