@@ -5,11 +5,11 @@ const { StudioDshBridge, renderSettingsYaml } = await import('../../dist/crowdy-
 const { isDshBridgeFrame, isDshFrameMessage } = await import('../../dist/crowdy-dsh/protocol.js');
 
 let nonce = 'unset';
-const frame = (t, extra) => ({ v: 2, n: nonce, from: 'worker', t, ...extra });
+const frame = (t, extra) => ({ v: 3, n: nonce, from: 'worker', t, ...extra });
 
 function fakeController(overrides = {}) {
   let state = {
-    projects: [{ projectId: 'p1', name: 'One', kind: 'FULL_STACK', revisionId: 'r1', updatedAt: 't' }],
+    projects: [{ projectId: 'p1', name: 'One', kind: 'FULL_STACK', revisionId: 'r1', source: 'STUDIO', githubSha: null, updatedAt: 't' }],
     project: {
       projectId: 'p1',
       kind: 'FULL_STACK',
@@ -19,6 +19,8 @@ function fakeController(overrides = {}) {
         { target: 'CLIENT', path: 'src/lib.rs', content: '' },
       ],
       revision: { id: 'r1', savedAt: 't' },
+      source: 'STUDIO',
+      github: null,
     },
     saveState: 'SAVED',
     runtime: { phase: 'IDLE' },
@@ -98,9 +100,9 @@ test('protocol guards accept page/worker frames and iframe messages only', () =>
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} })), true);
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} }), nonce), true);
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} }), 'other'), false, 'wrong nonce');
-  assert.equal(isDshBridgeFrame({ v: 1, from: 'worker', t: 'event' }), false, 'old protocol version');
-  assert.equal(isDshBridgeFrame({ v: 2, from: 'worker', t: 'event' }), false, 'no nonce');
-  assert.equal(isDshBridgeFrame({ v: 2, n: nonce, from: 'stranger', t: 'req' }), false);
+  assert.equal(isDshBridgeFrame({ v: 2, n: nonce, from: 'worker', t: 'event' }), false, 'old protocol version');
+  assert.equal(isDshBridgeFrame({ v: 3, from: 'worker', t: 'event' }), false, 'no nonce');
+  assert.equal(isDshBridgeFrame({ v: 3, n: nonce, from: 'stranger', t: 'req' }), false);
   assert.equal(isDshFrameMessage({ source: 'crowdy-dsh', type: 'crowdy-dsh:ready' }), true);
   assert.equal(isDshFrameMessage({ type: 'crowdy-dsh:ready' }), false);
 });
@@ -130,7 +132,7 @@ test('bridge answers worker requests through the controller and mirrors state ch
   });
   try {
     // Every page frame carries the boot nonce; a frame without it is dropped unread.
-    worker.postMessage({ v: 2, n: 'guess', from: 'worker', t: 'req', id: 'x1', method: 'studio.projectList', params: {} });
+    worker.postMessage({ v: 3, n: 'guess', from: 'worker', t: 'req', id: 'x1', method: 'studio.projectList', params: {} });
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(events.length, 0);
 
@@ -138,11 +140,11 @@ test('bridge answers worker requests through the controller and mirrors state ch
     worker.postMessage(frame('event', { event: 'worker.ready', payload: { root: '/dsh/workspace' } }));
     await new Promise((resolve) => setTimeout(resolve, 20));
     const hello = events.find((event) => event.event === 'page.hello');
-    assert.deepEqual(hello.payload, { appId: '42', projectId: 'p1', appToken: 'tok-1' });
+    assert.deepEqual(hello.payload, { appId: '42', projectId: 'p1', source: 'STUDIO', githubSha: null, appToken: 'tok-1' });
     assert.ok(events.every((event) => event.n === bridge.nonce));
 
     const list = await ask(worker, 'studio.projectList', {});
-    assert.deepEqual(list, { projects: [{ projectId: 'p1', name: 'One', kind: 'FULL_STACK', updatedAt: 't' }], currentProjectId: 'p1' });
+    assert.deepEqual(list, { projects: [{ projectId: 'p1', name: 'One', kind: 'FULL_STACK', updatedAt: 't', source: 'STUDIO', githubSha: null }], currentProjectId: 'p1' });
 
     const build = await ask(worker, 'studio.draftTest', {});
     assert.equal(build.ok, true);
