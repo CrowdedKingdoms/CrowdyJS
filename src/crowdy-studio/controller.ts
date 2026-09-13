@@ -10,12 +10,11 @@ import {
   sha256Digest,
 } from '../player-host/json-schema.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
-import type { CrowdyStudioGitHubStatus, CrowdyStudioGitHubTransport } from './github/transport.js';
-import {
-  mergeStudioFilesFromGitHub,
-  pullStudioFilesFromGitHub,
-  pushStudioFilesToGitHub,
-} from './github/sync.js';
+import type {
+  CrowdyStudioGitHubBindInitial,
+  CrowdyStudioGitHubStatus,
+  CrowdyStudioGitHubTransport,
+} from './github/transport.js';
 import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
@@ -187,9 +186,11 @@ export interface CrowdyStudioControllerOptions {
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
   /**
-   * GitHub repository loop (bring-your-own repo). Optional: without it the
+   * GitHub repository card (bring-your-own repo). Optional: without it the
    * card is hidden. Reads and writes are resolved server-side from the
-   * project's bind; autosave push happens only when the owner opted in.
+   * project's bind. Persistence of a bound project's files does NOT go
+   * through this option — the project provider commits them itself — so the
+   * card is purely bind / unbind / refresh / status.
    */
   github?: CrowdyStudioGitHubTransport;
   appId: string;
@@ -766,12 +767,11 @@ export class CrowdyStudioController {
     }
   }
 
-  // ----- GitHub repository loop ------------------------------------------
+  // ----- GitHub repository card ------------------------------------------
 
   private githubStatusGeneration = 0;
-  private suppressGitHubPush = false;
 
-  /** Re-read connection + bind for the open project. Never pulls on its own. */
+  /** Re-read connection + bind for the open project. Never changes files on its own. */
   async refreshGitHubStatus(): Promise<void> {
     if (!this.options.github) return;
     const generation = ++this.githubStatusGeneration;
@@ -802,11 +802,23 @@ export class CrowdyStudioController {
     return connectUrl;
   }
 
-  /** `owner/repo` or `owner/repo@branch`. */
-  async bindGitHubRepo(slug: string): Promise<void> {
+  /**
+   * Bind the open project to `owner/repo` or `owner/repo@branch`, choosing
+   * which side is the truth for the first commit. Refuses over unsaved edits
+   * so what is pushed (or replaced) is exactly what the server holds. The
+   * project is re-read afterwards: TAKE_REPOSITORY replaced its files, and
+   * both paths gave it a `github.sha`.
+   */
+  async bindGitHubRepo(
+    slug: string,
+    initial: CrowdyStudioGitHubBindInitial = 'PUSH_PROJECT',
+  ): Promise<void> {
     if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
     const scope = this.githubScope();
     if (!scope) throw new Error('Open a Studio project before binding a repository.');
+    if (this.editGeneration !== this.persistedGeneration) {
+      throw new Error('Save Studio edits before binding a repository.');
+    }
     const trimmed = slug.trim();
     const at = trimmed.lastIndexOf('@');
     const repoPath = at > 0 ? trimmed.slice(0, at) : trimmed;
@@ -822,94 +834,71 @@ export class CrowdyStudioController {
         owner: repoPath.slice(0, slash),
         repo: repoPath.slice(slash + 1),
         ...(branch ? { branch } : {}),
+        initial,
       });
-      this.update({ github, githubMessage: `Bound ${github.owner}/${github.repo}@${github.branch}. Autosave push is off until you turn it on.` });
+      await this.reloadProject();
+      this.update({
+        github,
+        githubMessage:
+          initial === 'PUSH_PROJECT'
+            ? `Pushed the project to ${github.owner}/${github.repo}@${github.branch}. It is the working tree now; edits commit as you save.`
+            : `Took ${github.owner}/${github.repo}@${github.branch} as the project. Edits commit as you save.`,
+      });
     } finally {
       this.update({ githubBusy: false });
     }
   }
 
+  /** Clear the bind. The files stay; the project is a Studio project again. */
   async unbindGitHub(): Promise<void> {
     if (!this.options.github) return;
     const scope = this.githubScope();
     if (!scope) return;
-    const github = await this.options.github.unbind(scope);
-    this.update({ github, githubMessage: 'Repository unbound. Files in Studio are unchanged.' });
-  }
-
-  /** Opt the open project into (or out of) pushing autosaves. Default off. */
-  async setGitHubAutosave(autosave: boolean): Promise<void> {
-    if (!this.options.github) return;
-    const scope = this.githubScope();
-    if (!scope) return;
-    const github = await this.options.github.setAutosave({ ...scope, autosave });
-    this.update({
-      github,
-      githubMessage: autosave ? 'Autosave now also pushes to GitHub.' : 'Autosave push is off.',
-    });
-  }
-
-  /** Explicit push of the current files (or a subset) to the bound repository. */
-  async pushToGitHub(
-    files?: readonly CrowdyStudioProjectFile[],
-    opts: { quiet?: boolean } = {},
-  ): Promise<number> {
-    if (!this.options.github) return 0;
-    const scope = this.githubScope();
-    if (!scope || !this.state.github?.owner) {
-      if (!opts.quiet) this.update({ githubMessage: 'Bind a repository first.' });
-      return 0;
+    if (this.editGeneration !== this.persistedGeneration) {
+      this.update({ githubMessage: 'Save edits before unbinding.' });
+      return;
     }
-    const toPush = files ?? this.state.project?.files ?? [];
     this.update({ githubBusy: true });
     try {
-      const pushed = await pushStudioFilesToGitHub(this.options.github, scope, toPush);
-      this.update({
-        githubMessage:
-          pushed > 0 ? `Pushed ${pushed} file${pushed === 1 ? '' : 's'} to GitHub.` : 'GitHub already has these files.',
-      });
-      return pushed;
-    } catch (error) {
-      this.update({ githubMessage: `GitHub push failed: ${errorMessage(error)}` });
-      return 0;
+      const github = await this.options.github.unbind(scope);
+      await this.reloadProject();
+      this.update({ github, githubMessage: 'Repository unbound. The files stay in Studio.' });
     } finally {
       this.update({ githubBusy: false });
     }
   }
 
-  /** Explicit pull: overlay the repository onto the project, then save. Refuses over unsaved edits. */
-  async pullFromGitHub(): Promise<boolean> {
+  /**
+   * Bring the project to the branch head after a push made outside Studio.
+   * Refuses over unsaved edits (they would be committed against the old head
+   * and refused anyway, less legibly).
+   */
+  async refreshFromGitHub(): Promise<boolean> {
     if (!this.options.github) return false;
     const scope = this.githubScope();
-    const project = this.state.project;
-    if (!scope || !project || !this.state.github?.owner) {
+    if (!scope || !this.state.project?.github) {
       this.update({ githubMessage: 'Bind a repository first.' });
       return false;
     }
     if (this.editGeneration !== this.persistedGeneration) {
-      this.update({ githubMessage: 'Save Studio edits before pulling from GitHub.' });
+      this.update({ githubMessage: 'Save Studio edits before refreshing from GitHub.' });
       return false;
     }
     this.update({ githubBusy: true });
     try {
-      const incoming = await pullStudioFilesFromGitHub(this.options.github, scope);
-      const { files, changed } = mergeStudioFilesFromGitHub(project.files, incoming.files);
-      if (!changed) {
-        this.update({ githubMessage: 'GitHub is in sync.' });
-        return true;
-      }
-      project.files = files;
-      this.editGeneration += 1;
-      this.update({ project, githubMessage: 'Pulled from GitHub.' });
-      this.suppressGitHubPush = true;
-      try {
-        await this.saveNow();
-      } finally {
-        this.suppressGitHubPush = false;
-      }
+      const before = this.state.project.github.sha;
+      const github = await this.options.github.refresh(scope);
+      await this.reloadProject();
+      this.update({
+        github,
+        githubMessage:
+          github.githubSha === before
+            ? 'Already at the branch head.'
+            : `Refreshed to ${github.githubSha?.slice(0, 7) ?? 'head'}.`,
+      });
       return true;
     } catch (error) {
-      this.update({ githubMessage: `GitHub pull failed: ${errorMessage(error)}` });
+      this.update({ githubMessage: `GitHub refresh failed: ${errorMessage(error)}` });
       return false;
     } finally {
       this.update({ githubBusy: false });
@@ -1327,18 +1316,15 @@ export class CrowdyStudioController {
       },
     });
 
-    // This is the sole project→legacy wire conversion. Project state, provider
-    // contracts, editors, and templates all use typed files.
-    const sourceFilesJson = JSON.stringify(
-      Object.fromEntries(files.map((file) => [file.path, file.content])),
-    );
+    // The server resolves the source from the project itself: the saved
+    // files at the project revision, or — for a GITHUB project — the rust at
+    // the commit the mirror is at. No file bodies travel with a deploy.
     const deployed = await this.options.playerCompute.deploy({
       ...this.scope(),
+      projectId: project.projectId,
       name,
       target: target as never,
-      sourceFilesJson,
-      sdkVersion: project.sdkVersion,
-      abiVersion: project.abiVersion,
+      ...(project.github?.sha ? { commitSha: project.github.sha } : {}),
       tickHz: target === 'SERVER' ? 1 : undefined,
       draft,
     });
@@ -1612,9 +1598,6 @@ export class CrowdyStudioController {
           // Preserve newer local edits while advancing the revision precondition.
           this.state.project.revision = { ...saved.revision };
           this.state.project.updatedAt = saved.updatedAt;
-        }
-        if (this.state.github?.autosave && !this.suppressGitHubPush) {
-          void this.pushToGitHub(snapshot.files, { quiet: true });
         }
         this.update({
           projects: upsertSummary(this.state.projects, summaryOf(saved)),
@@ -1915,6 +1898,11 @@ function summaryOf(project: CrowdyStudioProject): CrowdyStudioProjectSummary {
     name: project.metadata.name,
     kind: project.kind,
     revisionId: project.revision.id,
+    source: project.source,
+    ...(project.github
+      ? { github: `${project.github.owner}/${project.github.repo}@${project.github.branch}` }
+      : {}),
+    githubSha: project.github?.sha ?? null,
     ...(project.metadata.serverModuleName
       ? { serverModuleName: project.metadata.serverModuleName }
       : {}),

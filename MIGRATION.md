@@ -1,3 +1,82 @@
+# CrowdyJS v17.0 — a bound GitHub repository is the working tree; GitHub stays optional
+
+**Breaking.** `17.0.0` (2026-09-13). Tracks ck-api `v2.0.0`. A project is
+`source: 'STUDIO'` until its owner binds a repository and `'GITHUB'` while one
+is bound; `createProject` is unchanged and GitHub is never required. While
+bound, the project's `files` are the **server's mirror** of the rust under the
+repository's layout roots at `github.sha`, read exactly as before — and every
+save commits: `client.crowdyStudio.saveProject` sends each changed file as its
+own `crowdyStudioGitHubPutFile` (or `DeleteFile`) carrying
+`expectedCommitSha`, then metadata as a plain project save with no file
+bodies. A stale commit is the same `CrowdyStudioRevisionConflictError` the
+editor already recovers from. The controller does not know which path ran.
+
+Removed:
+
+- `CrowdyStudioGitHubTransport.setAutosave`, `CrowdyStudioGitHubStatus.autosave`
+  and the "Also push autosaves" toggle: there is nothing to opt into, saves
+  commit.
+- `CrowdyStudioController.pushToGitHub`, `pullFromGitHub`,
+  `setGitHubAutosave`, and the Push / Pull buttons on the card. Bind pushes
+  (or takes) once; after that the repository is the tree.
+- From `@crowdedkingdoms/crowdyjs/crowdy-studio` (the `github/sync` module):
+  `parseCrowdyJson`, `layoutFromTree`, `resolveGitHubLayout`,
+  `pullStudioFilesFromGitHub`, `pushStudioFilesToGitHub`,
+  `mergeStudioFilesFromGitHub`, `studioFilesMissingOnGitHub`,
+  `DEFAULT_FULL_STACK_CROWDY_JSON`, `GitHubLayout`, `GitHubFiles`. The SDK no
+  longer parses `crowdy.json`; `client.crowdyStudioGitHub.layout()` is the
+  only grammar. `studioFileToRepoPath` / `repoPathToStudioFile` remain, now
+  taking the API layout.
+- `DeployPlayerComputeInput.sourceFilesJson`, `sdkVersion`, `abiVersion`:
+  `client.playerCompute.deploy` takes `projectId` (+ `commitSha` for a GITHUB
+  project) and the server resolves the source. No client body is compiled.
+- `crowdyStudioGitHubTree` returns `{ commitSha, entries }` rather than a bare
+  list.
+
+Added:
+
+- `CrowdyStudioProject.source`, `.github` (`{ owner, repo, branch, sha }`);
+  `CrowdyStudioProjectSummary.source`, `.github`, `.githubSha`.
+- `CrowdyStudioGitHubTransport.bind({ …, initial })` — `'PUSH_PROJECT'`
+  commits the project into the branch (refused with `GITHUB_REPO_HAS_FILES`
+  when the branch already has rust under the roots), `'TAKE_REPOSITORY'`
+  adopts the branch (refused with `GITHUB_REPO_EMPTY`). `refresh()` brings the
+  mirror to the branch head after a push made elsewhere. `layout()`,
+  `deleteFile()`. `putFile` / `deleteFile` take `expectedCommitSha`; the blob
+  `sha` is optional (the server resolves it from that commit). `getFile` /
+  `tree` / `layout` accept `commitSha`.
+- `CrowdyStudioController.bindGitHubRepo(slug, initial)`, `refreshFromGitHub()`.
+- `createCrowdyStudioEmbed` / `mountCrowdyStudio` `github?:` option for a host
+  that holds an identity session (hosted first-party Studio). Games keep the
+  default, `client.crowdyStudioGitHub` — the app-token client that plays. The
+  API scopes every GitHub field to projects that token's user owns, so a game
+  needs no identity session to author against GitHub, and a third-party game
+  must never read one.
+- `PlayerWasmModuleVersion.projectId`, `.sourceRevision`, `.githubCommitSha`.
+- Bridge protocol **v3** (`CROWDY_DSH_PROTOCOL_VERSION = 3`): `DshProjectSummary`
+  carries `source` / `githubSha`; `page.hello`, `page.project` and
+  `page.saved` carry `source` / `githubSha`, and `page.project` fires whenever
+  a bound project's commit moves (bind, refresh, save) so the worker's next
+  write carries the current `expectedCommitSha`. `crowdy-dsh` `0.3.x` speaks
+  v3; a v2 worker is refused by the frame guard.
+
+Behaviour worth knowing:
+
+- **17.0.1:** a bound save whose `expectedRevisionId` is older than the project
+  the provider last returned is refused as `CrowdyStudioRevisionConflictError`
+  before any commit. 17.0.0 rode the provider's own commit onto the branch in
+  that case (found by the local end-to-end proof, not by a user).
+- Bind, unbind and refresh refuse over unsaved edits and re-read the project
+  afterwards (`reloadProject`), because `TAKE_REPOSITORY` and `refresh`
+  replace its files and every path gives it a new `github.sha`.
+- A multi-file save on a bound project is one commit per file. A stale race
+  part-way through leaves the earlier commits on the branch and the project
+  describing them; the conflict recovery re-reads and "keep my version"
+  re-applies the remaining diffs against the new commit.
+- `client.crowdyStudioGitHub` is `DATACENTER_ONLY` on the API: it must be the
+  client that adopted the app's datacenter endpoint (the one that plays), not
+  one pointed at the shared origin.
+
 # CrowdyJS v16.0 — the Crowdy Agent dock is replaced by the in-browser DeepSeek Harness
 
 **Breaking.** `16.0.0` (2026-09-11). Tracks the ck-api release that carries

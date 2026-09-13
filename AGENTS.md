@@ -4,12 +4,27 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **15.12.1**. Whether that is *published* is
+**Current package:** `package.json` is **17.0.1**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.0.0 tracks ck-api `v2.0.0`: a bound GitHub repository is the working tree, and
+GitHub stays optional.** `CrowdyStudioProject.source` is `STUDIO` until the owner
+binds a repository (`crowdyStudioGitHub.bind({ initial: 'PUSH_PROJECT' | 'TAKE_REPOSITORY' })`)
+and `GITHUB` while bound; `files` are then the server's mirror at `github.sha` and
+`client.crowdyStudio.saveProject` commits each changed file (`putFile` /
+`deleteFile` with `expectedCommitSha`) — the controller never learns which path
+ran. Push / Pull / autosave-push and the SDK's own `crowdy.json` parse are gone
+(`layout()` is the grammar). `playerCompute.deploy` takes `projectId` (+
+`commitSha` for GITHUB); `sourceFilesJson` is gone — no client body is compiled.
+Bridge protocol v3 carries `source` / `githubSha`. **Token rule for games:** the
+default `client.crowdyStudioGitHub` is the app-token client that plays; the API
+scopes every GitHub field to that user's own projects, so a game needs no identity
+session for GitHub and a third-party game must never read one. Only hosted
+first-party Studio passes the embed's `github:` option. [MIGRATION.md](MIGRATION.md).
 
 **16.2.0 completes the ck-api `v1.100.x` sync that 16.1.0 started:**
 `AppPlayerUsageRow.chargedMicrousd` is selected, `playerWallet.appMarkupAccruedMicrousd()`

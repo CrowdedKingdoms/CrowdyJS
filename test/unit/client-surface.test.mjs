@@ -68,7 +68,7 @@ test('client exposes the full management + game sub-client surface', async () =>
   // endpoint and the `crowdy-dsh` entry rather than a GraphQL sub-client.
   assert.equal(client.crowdyStudioAgent, undefined);
   assertMethods(client.crowdyStudioGitHub, 'crowdyStudioGitHub', [
-    'status', 'connectUrl', 'repos', 'bind', 'unbind', 'setAutosave', 'tree', 'getFile', 'putFile',
+    'status', 'connectUrl', 'repos', 'bind', 'unbind', 'refresh', 'layout', 'tree', 'getFile', 'putFile', 'deleteFile',
   ]);
   assert.equal(client[['player', 'Code', 'Projects'].join('')], undefined);
   // P4a marketplace (free mode): store + installs + consent + claim flows
@@ -364,8 +364,7 @@ test('player runtime and app-admission wrappers send the right variables on one 
   await client.gameApps.assignOwnership({ appId: '1', gridId: '2', ownerUserId: '3' });
   await client.gameApps.transferOwnership({ appId: '1', gridId: '2', newOwnerUserId: '4' });
   await client.playerCompute.deploy({
-    appId: '1', gridId: '2', name: 'weather', target: 'SERVER',
-    sourceFilesJson: '{}',
+    appId: '1', gridId: '2', projectId: 'p1', name: 'weather', target: 'SERVER',
   });
   await client.playerCompute.setEnabled({
     appId: '1', gridId: '2', name: 'weather', enabled: true,

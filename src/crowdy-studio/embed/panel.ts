@@ -89,6 +89,16 @@ export interface CrowdyStudioEmbedOptions {
   /** Studio agent pane (DeepSeek Harness in the browser); omission hides it. */
   dsh?: CrowdyStudioEmbedDshOptions;
   /**
+   * GitHub repository card transport. Defaults to `client.crowdyStudioGitHub`
+   * — the same app-token client that plays, which is what every game should
+   * use: the API scopes every GitHub field to projects that token's user owns
+   * and needs no identity session for them. Hosted first-party Studio, which
+   * does hold an identity session, may pass its own. Omit both to hide the
+   * card. Persistence of a bound project's files does not go through this;
+   * the project provider commits them.
+   */
+  github?: CrowdyStudioGitHubTransport;
+  /**
    * Suppress gameplay input and return a restoration callback. Used only by
    * the narrow-screen modal; the desktop dock remains non-modal.
    */
@@ -481,7 +491,9 @@ export class CrowdyStudioEmbed {
     const handle = await mountCrowdyStudio(element, {
       projectProvider: client.crowdyStudio,
       playerCompute: client.playerCompute,
-      ...(client.crowdyStudioGitHub ? { github: client.crowdyStudioGitHub } : {}),
+      ...((this.options.github ?? client.crowdyStudioGitHub)
+        ? { github: this.options.github ?? client.crowdyStudioGitHub }
+        : {}),
       playerWallet: client.playerWallet,
       appId,
       gridId: context.gridId,
