@@ -99,7 +99,7 @@ customer's domain that collects it is indistinguishable, to the platform and to
 the player, from a phishing page.
 
 **A game published to Crowdy Games takes the first row too, with one twist the SDK
-handles for you** (17.1.0). Such a game is reached at `https://<games host>/<slug>/`,
+handles for you** (17.2.0). Such a game is reached at `https://<games host>/<slug>/`,
 which is a first-party *shell* page, and runs inside that page's iframe on its own
 origin, `https://<slug>.<content host>`. The iframe cannot navigate the tab and
 Studio refuses to be framed, so `portal.signIn` asks the shell to navigate
@@ -221,7 +221,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.users` | `me`, `updateGamertag`, profile reads. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
-| `client.hosting` | Third-party hosting on Crowdy Games (17.1.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`; operator `all` / `setListing` / `takeDown`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
+| `client.hosting` | Third-party hosting on Crowdy Games (17.2.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`; operator `all` / `setListing` / `takeDown`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
 | `client.platform` | Public platform configuration (`config()`). |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
 | `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes: terrain/LODs, voxel edit + history/rollback, durable actors, avatars, per-user app state blobs. |
@@ -433,6 +433,19 @@ one is missing and wait for either a matching notification or
 `GenericErrorResponse`. `sendChannelMessage` broadcasts an opaque payload on a
 channel.
 
+### Bundled sends on the binary relay
+
+With `realtime: { binaryTransport: true }` the SDK signs each message itself
+and, since 17.1, packs the messages sent within `realtime.bundleWindowMs`
+(default 1 ms) into one `MESSAGE_BUNDLE` datagram — the same framing the
+server uses for its notifications, accepted on the uplink by Buddy v0.27.0+. A
+lone message goes out unwrapped. Call `client.udp.flushSends()` at the end of a
+frame to put that frame's sends on the wire without waiting for the window;
+the `...AndWait` variants and `disconnect()` flush on their own.
+`client.realtime.binaryRelayStats()` reports messages, frames, bundles and
+bytes. `realtime: { bundleSends: false }` restores one datagram per message;
+the GraphQL transport is unaffected either way.
+
 ### Actor-to-actor messages
 
 ```ts
@@ -637,7 +650,7 @@ See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/ga
 
 ## Hosting a game on Crowdy Games
 
-Since 17.1.0 (ck-api v2.1) a developer can publish a built static bundle to the
+Since 17.2.0 (ck-api v2.1) a developer can publish a built static bundle to the
 platform instead of hosting it: players reach it at
 `https://<games host>/<slug>/` and it executes on an origin of its own,
 `https://<slug>.<content host>`, behind the same security headers `the-construct`'s

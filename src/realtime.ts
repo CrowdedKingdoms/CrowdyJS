@@ -13,7 +13,10 @@ import {
   UdpNotificationsDocument,
   type UdpNotificationsSubscription,
 } from './generated/graphql.js';
-import { BinaryRelayTransport } from './binary-relay.js';
+import {
+  BinaryRelayTransport,
+  type BinaryRelaySendStats,
+} from './binary-relay.js';
 import type { RelaySignContext } from './binary-wire.js';
 import { CROWDY_DEFAULT_WS_ORIGIN } from './default-origin.js';
 
@@ -275,6 +278,25 @@ export interface RealtimeConfig {
    * `wsUrl` with its path replaced by `/realtime` (the game-api default).
    */
   binaryRelayUrl?: string;
+  /**
+   * Binary relay only: pack the messages sent within {@link bundleWindowMs}
+   * into one `MESSAGE_BUNDLE` datagram, the framing the server has always used
+   * on the downlink and that Buddy v0.27.0+ accepts on the uplink. A lone
+   * message goes out unwrapped, so a client sending one message per window
+   * puts the same bytes on the wire as before. Flushed early when the next
+   * message would not fit (1232 bytes), by {@link RealtimeClient.flushSends},
+   * after every `...AndWait` send, and on disconnect. Defaults to `true`;
+   * `false` is one datagram per message (CrowdyJS <= 17.0). The GraphQL
+   * transport is unaffected: the proxy signs one message per mutation.
+   */
+  bundleSends?: boolean;
+  /**
+   * How long a pending bundle waits for more messages before it is flushed, in
+   * **milliseconds**. Defaults to `1`. `0` flushes on the next macrotask, so
+   * sends made in one synchronous burst still share a datagram. Ignored when
+   * {@link bundleSends} is false.
+   */
+  bundleWindowMs?: number;
 }
 
 interface PendingWait {
@@ -324,6 +346,8 @@ export class RealtimeClient {
   private readonly lbCookieStore?: LbCookieStore;
   private readonly wsUplinkMutations: boolean;
   private readonly binaryTransport: boolean;
+  private readonly bundleSends: boolean;
+  private readonly bundleWindowMs: number;
   /** Mutable alongside wsUrl: re-discovery moves both. */
   private binaryRelayUrl: string;
   private binaryRelay: BinaryRelayTransport | null = null;
@@ -374,6 +398,8 @@ export class RealtimeClient {
     this.lbCookieStore = config.lbCookieStore;
     this.wsUplinkMutations = config.wsUplinkMutations === true;
     this.binaryTransport = config.binaryTransport === true;
+    this.bundleSends = config.bundleSends ?? true;
+    this.bundleWindowMs = config.bundleWindowMs ?? 1;
     this.binaryRelayUrl =
       config.binaryRelayUrl ?? deriveBinaryRelayUrl(this.wsUrl);
 
@@ -647,6 +673,25 @@ export class RealtimeClient {
   }
 
   /**
+   * Put the binary relay's pending `MESSAGE_BUNDLE` on the wire now instead of
+   * at the end of {@link RealtimeConfig.bundleWindowMs}. Call it at the end of
+   * a frame when that frame's sends should not wait. No-op on the GraphQL
+   * transport or when nothing is pending.
+   */
+  flushSends(): void {
+    this.binaryRelay?.flushSends();
+  }
+
+  /**
+   * Uplink counters of the binary relay (messages, frames, bundles, bytes,
+   * drops), or `null` when the relay has not been created. These are a local
+   * diagnostic, not a bill.
+   */
+  binaryRelayStats(): BinaryRelaySendStats | null {
+    return this.binaryRelay?.stats() ?? null;
+  }
+
+  /**
    * Serialize (with the session signing context) and send one datagram over
    * the binary relay. Throws `BINARY_RELAY_UNAVAILABLE` when the relay is not
    * connected — callers fall back to the GraphQL mutation.
@@ -903,6 +948,8 @@ export class RealtimeClient {
           retryInitialDelayMs: this.retryInitialDelayMs,
           retryMaxDelayMs: this.retryMaxDelayMs,
           logger: this.logger,
+          bundleSends: this.bundleSends,
+          bundleWindowMs: this.bundleWindowMs,
         },
         {
           getToken: () => this.session.getToken(),

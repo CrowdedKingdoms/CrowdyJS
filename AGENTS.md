@@ -11,7 +11,7 @@ not answerable from this page, and the paragraph this replaces proved it: it rea
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**17.1.0 adds third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-13):**
+**17.2.0 adds third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-14):**
 `client.hosting` (claim a slug, publish a bundle, list) plus the Node subpath
 `@crowdedkingdoms/crowdyjs/hosting` (`publishDirectory`), and `EmbeddedHost` -- the
 bridge `portal.signIn` uses when a hosted game runs inside the Crowdy Games shell's

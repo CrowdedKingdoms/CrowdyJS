@@ -1,6 +1,6 @@
-# CrowdyJS v17.1 — publish to Crowdy Games; sign-in under the shell
+# CrowdyJS v17.2 — publish to Crowdy Games; sign-in under the shell
 
-**Additive.** `17.1.0` (2026-09-13). Tracks ck-api `v2.1.0` (third-party game
+**Additive.** `17.2.0` (2026-09-14). Tracks ck-api `v2.1.0` (third-party game
 hosting). Nothing existing changes shape; two things are new.
 
 - **`client.hosting`** wraps the hosting surface: `claim({ appId, slug? })`,
@@ -27,6 +27,60 @@ hosting). Nothing existing changes shape; two things are new.
 No removals. Error codes added: `CONTENT_HOSTING_DISABLED`,
 `HOSTED_SLUG_UNAVAILABLE`, `HOSTED_MANIFEST_INVALID`, `HOSTED_PUBLISH_INCOMPLETE`,
 `HOSTED_GAME_TAKEN_DOWN`.
+# CrowdyJS v17.1 — binary-relay sends are bundled
+
+**Nothing removed.** `17.1.0` (2026-09-13). On the binary relay
+(`realtime.binaryTransport: true`) the SDK now packs the messages you send
+within a short window into one `MESSAGE_BUNDLE` datagram
+(`[2]{[u16 LE len][signed message]}…`) — the framing the server has always
+used for its notifications, accepted on the uplink by Buddy v0.27.0+. Every
+member is still a complete, individually HMAC-signed message; only the datagram
+boundary moved. The GraphQL transport is unchanged: the proxy signs one message
+per mutation and cannot bundle.
+
+What changes for you:
+
+- **Nothing in the send API.** `client.udp.sendActorUpdate` and friends resolve
+  as before. On the relay a send is now *accepted* rather than *transmitted*
+  when it resolves: the frame leaves when `realtime.bundleWindowMs` (default
+  `1`) has passed since the bundle opened, when the next message would not fit
+  in 1232 bytes or the 32-member cap, on `client.udp.flushSends()` (also
+  `client.realtime.flushSends()`), after every `...AndWait` send, and on
+  `disconnect()`. A lone message is sent unwrapped, so a client sending one
+  message per window puts the same bytes on the wire it always did. A message
+  too large to travel inside any bundle (> 1229 bytes) goes alone.
+- **Frame-end flush.** A game loop that sends several updates per frame gets
+  them in one datagram with no extra latency by calling
+  `client.udp.flushSends()` at the end of the frame; otherwise the window
+  timer flushes within ~1 ms. In a **hidden tab** (`document.visibilityState
+  === 'hidden'`) browsers clamp timers to a second or more, so the transport
+  flushes every send immediately there — a background heartbeat leaves as it
+  always did.
+- **Counters.** `client.realtime.binaryRelayStats()` returns
+  `{ messagesSent, framesSent, bundlesSent, bytesSent, messagesDropped }`
+  (`framesSent <= messagesSent`; `messagesDropped` counts members that were
+  pending when the socket went away inside the window). A local diagnostic,
+  not a bill.
+- **Server requirement.** The replication server must unpack client bundles
+  (Buddy v0.27.0+). Against an older server set `realtime.bundleSends: false`;
+  otherwise any two messages sent within a window are dropped together.
+- **Opt out.** `realtime: { bundleSends: false }` is exactly the 17.0
+  behaviour: one BINARY frame per message, sent synchronously.
+
+Added:
+
+- `RealtimeConfig.bundleSends` (default `true`), `RealtimeConfig.bundleWindowMs`
+  (default `1`).
+- `client.udp.flushSends()`, `client.realtime.flushSends()`,
+  `client.realtime.binaryRelayStats()`.
+- `BinaryRelayTransport.flushSends()` / `.stats()`; `BinaryRelayConfig.bundleSends`
+  / `.bundleWindowMs`; `BinaryRelaySendStats`.
+- Wire helpers: `packMessageBundle`, `bundleSizeOf`, `BUNDLE_HEADER_BYTES`,
+  `BUNDLE_LENGTH_PREFIX_BYTES`, `RELAY_MAX_BUNDLE_MEMBERS`,
+  `RELAY_MAX_BUNDLE_MEMBER_BYTES`.
+
+CrowdyCPP 0.36.0 ships the same behaviour natively (`Config::bundleSends`,
+`Config::bundleWindowMs`, `Connection::flushSends()`, `Stats::bundlesSent`).
 
 # CrowdyJS v17.0 — a bound GitHub repository is the working tree; GitHub stays optional
 

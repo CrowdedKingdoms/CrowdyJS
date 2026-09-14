@@ -92,3 +92,55 @@ test('serializers reject oversized datagrams', async () => {
     /exceeds maximum size/,
   );
 });
+
+test('packMessageBundle: lone member unwrapped, many wrapped as type 2', async () => {
+  assert.equal(wire.BUNDLE_HEADER_BYTES, 1);
+  assert.equal(wire.BUNDLE_LENGTH_PREFIX_BYTES, 2);
+  assert.equal(wire.RELAY_MAX_BUNDLE_MEMBERS, 32);
+  assert.equal(wire.RELAY_MAX_BUNDLE_MEMBER_BYTES, 1229);
+
+  const a = await wire.serializeActorUpdate(ctx, {
+    appId: '1',
+    chunk: { x: '0', y: '0', z: '0' },
+    uuid: 'u'.repeat(32),
+    state: Buffer.from('one').toString('base64'),
+    sequenceNumber: 1,
+  });
+  const b = Uint8Array.from([3, 9, 7]);
+
+  // One member: exactly the member, no wrapper.
+  assert.equal(wire.packMessageBundle([a]), a);
+
+  // Two members: [2][len a][a][len b][b], little-endian lengths.
+  const packed = wire.packMessageBundle([a, b]);
+  assert.equal(packed[0], 2);
+  assert.equal(packed.length, 1 + 2 + a.length + 2 + b.length);
+  assert.equal(wire.bundleSizeOf([a, b]), packed.length);
+  const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
+  assert.equal(view.getUint16(1, true), a.length);
+  assert.deepEqual(packed.subarray(3, 3 + a.length), a);
+  assert.equal(view.getUint16(3 + a.length, true), b.length);
+  assert.deepEqual(packed.subarray(5 + a.length), b);
+
+  // The downlink parser walks the same framing: the error member parses, the
+  // request member (an uplink opcode) is skipped, and nothing else is lost.
+  const parsed = wire.parseRelayFrame(packed);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].__typename, 'GenericErrorResponse');
+  assert.equal(parsed[0].sequenceNumber, 9);
+
+  // Limits.
+  assert.throws(() => wire.packMessageBundle([]), /at least one/);
+  assert.throws(() => wire.packMessageBundle([a, new Uint8Array(0)]), /cannot be empty/);
+  const many = Array.from({ length: 33 }, () => b);
+  assert.throws(() => wire.packMessageBundle(many), /at most 32/);
+  assert.equal(wire.packMessageBundle(many.slice(0, 32)).length, 1 + 32 * (2 + 3));
+  const big = new Uint8Array(wire.RELAY_MAX_BUNDLE_MEMBER_BYTES);
+  big[0] = 128;
+  assert.equal(wire.packMessageBundle([big]), big); // alone: fine, unwrapped
+  assert.throws(() => wire.packMessageBundle([big, b]), /exceeds 1232/);
+  // Exactly 1232 is legal: 1 + (2 + 1229 - 5) + (2 + 3) = 1232.
+  const fill = new Uint8Array(wire.RELAY_MAX_BUNDLE_MEMBER_BYTES - 5);
+  fill[0] = 128;
+  assert.equal(wire.packMessageBundle([fill, b]).length, wire.RELAY_MAX_DATAGRAM_BYTES);
+});
