@@ -5221,7 +5221,7 @@ export type HostedGame = {
   __typename?: 'HostedGame';
   /** The app this slug serves. */
   appId: Scalars['BigInt']['output'];
-  /** https://<slug>.<content host> -- the origin the game bundle runs on. The shell frames this; it is also registered as the app redirect URI so the API answers its CORS. */
+  /** https://<slug>.<content host> -- the origin the game bundle runs on. The shell frames this; it is also registered as the app redirect URI so the API answers its CORS. Empty for a TAKEN_DOWN game: its objects were removed from the edge and the origin is not advertised. */
   contentOrigin: Scalars['String']['output'];
   createdAt: Scalars['DateTime']['output'];
   /** The publish currently serving, if any. */
