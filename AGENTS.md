@@ -11,6 +11,26 @@ not answerable from this page, and the paragraph this replaces proved it: it rea
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
+**17.3.0 exposes the game-model session system (ck-api PR #319, 2026-09-14):**
+`client.gameModel` gains `leaveSession`, `setSessionAdmission`,
+`transferSessionHost`, `endSession`, `sessionSnapshot`, `sessionEvents`,
+`sessionInspect` and the `sessionChanged` subscription; `GmSession` carries
+`admission` / `maxParticipants` / `participantCount` / `hostUserId` / `hostTerm` /
+`revision` / `endedAt` / `endReason`, and the join result is the roster row
+(`state`, `incarnation`, `actorUuid`, ...). Two rules a caller must know:
+`leaveSession` REQUIRES the `incarnation` the join returned (a superseded client
+cannot remove the one that took over), and **presence is the player's Buddy
+actor** -- a participant with no fresh actor in the app after the join grace
+window is expired by the server, and an empty session is abandoned after its
+timeout. Pass `actorUuid` on join only with the uuid the client actually
+replicates with (`session.self.uuid`), never the match kit's channel-ping uuid;
+the kit itself is unchanged in 17.3.0. Wrappers are thin: branch on
+`CrowdyGraphQLError.code` (`SESSION_FULL`, `SESSION_LOCKED`, `SESSION_CLOSED`,
+`SESSION_ENDED`, `SESSION_NOT_PARTICIPANT`, `SESSION_INCARNATION_STALE`,
+`SESSION_HOST_TERM_STALE`). `schema.gql` on this branch is the committed schema
+plus the session delta from cks-game-api `michael/session-system-mvp`; re-sync
+from the published SDL once that PR is on dev. [MIGRATION.md](MIGRATION.md).
+
 **17.2.0 adds third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-14):**
 `client.hosting` (claim a slug, publish a bundle, list) plus the Node subpath
 `@crowdedkingdoms/crowdyjs/hosting` (`publishDirectory`), and `EmbeddedHost` -- the

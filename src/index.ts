@@ -548,6 +548,8 @@ export {
   GameModelAPI,
   type GmContainerChangeEvent,
   type ContainerChangedHandlers,
+  type GmSessionChangeEvent,
+  type SessionChangedHandlers,
   type GmActivePlayerCountSnapshot,
   type GmActivePlayerCountChangeEvent,
   type ActivePlayerCountChangedHandlers,

@@ -109,6 +109,11 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.gameModel, 'gameModel', [
     'activePlayerCount', 'activePlayerCountChanged',
     'scheduleInvoke', 'cancelTimer', 'timers',
+    // The session system (17.2.0): roster, admission, host, revisions.
+    'createSession', 'joinSession', 'leaveSession', 'setSessionTurn',
+    'setSessionAdmission', 'transferSessionHost', 'endSession',
+    'session', 'sessions', 'sessionSnapshot', 'sessionEvents', 'sessionInspect',
+    'sessionChanged',
   ]);
   assertMethods(client.gameApps, 'gameApps', [
     'ownership', 'assignOwnership', 'transferOwnership', 'userPermissions',

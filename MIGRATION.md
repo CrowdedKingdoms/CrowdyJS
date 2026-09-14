@@ -1,3 +1,47 @@
+# CrowdyJS v17.4 — the session system
+
+**Additive.** `17.4.0` (2026-09-14), on top of ck-api `v2.3.0`. Tracks cks-game-api
+PR #319 (the game-model session system). Every existing session method keeps its signature and every
+field it returned; the SDK adds what the server now knows about a session.
+
+- **Roster, admission, capacity, host.** `GmSession` gains `admission`
+  (`open | locked | closed`), `maxParticipants`, `participantCount`,
+  `hostUserId`, `hostTerm`, `revision`, `endedAt`, `endReason`, `createdAt`.
+  `createSession` accepts `maxParticipants`, `admission`, `emptyTimeoutSec` and
+  `idempotencyKey`; `sessions` filters by `admission` and `hostUserId` and
+  takes a `limit`.
+- **New methods on `client.gameModel`:** `leaveSession`, `setSessionAdmission`,
+  `transferSessionHost`, `endSession` (host or app admin; all accept
+  `expectedHostTerm` and `idempotencyKey`), `sessionSnapshot`, `sessionEvents`,
+  `sessionInspect` (`manage_apps`), and the `sessionChanged` subscription
+  (`{ appId, sessionId, afterRevision? }`; same handler shape as
+  `containerChanged`). The contract is the player-count feed's: pull the
+  snapshot, apply events above its revision, re-pull on a gap.
+- **Reconnection is a rejoin.** `joinSession` on a session you are in returns
+  your row with `incarnation + 1`; the join result is now the full roster row
+  (`state`, `incarnation`, `actorUuid`, `joinedAt`, `leftAt`, `leftReason`).
+  **`leaveSession` requires that `incarnation`** — there is no "leave
+  regardless", so a stale client can never remove the one that took over
+  (`SESSION_INCARNATION_STALE`).
+- **Presence is your actor — a behaviour change every consumer inherits from
+  the server, with no SDK call involved.** A joined participant with no fresh
+  Buddy actor in the app after the join grace window (60 s by default) is
+  marked `left` / `presence_expired`, and a session nobody has been joined to
+  for longer than its `emptyTimeoutSec` (5 min by default; `0` disables) is
+  ended as `abandoned`. A client that only speaks GraphQL therefore drops out
+  of a session it never replicates in. Pass `actorUuid` on join to bind
+  presence to one specific actor (your own; 32-hex, the uuid you send on
+  `udp.sendActorUpdate` / `session.self.uuid`). Do **not** pass the match kit's
+  channel-ping uuid — it never spawns in Buddy.
+- **Error codes added:** `SESSION_FULL`, `SESSION_LOCKED`, `SESSION_CLOSED`,
+  `SESSION_ENDED`, `SESSION_NOT_PARTICIPANT`, `SESSION_INCARNATION_STALE`,
+  `SESSION_HOST_TERM_STALE` — all on `CrowdyGraphQLError.code`.
+- `kit.matches` is unchanged in 17.3.0: it still keeps capacity in `MatchMeta`
+  and does not bind an actor on join. Moving it onto session capacity /
+  admission / host is a later, separate change.
+
+No removals.
+
 # CrowdyJS v17.3 — "Create repository on GitHub" (additive)
 
 `17.3.0` (2026-09-14), tracks ck-api `v2.3.0`. Nothing removed. (Written as 17.1 while two other trains — binary-relay bundles 17.1.0 and Crowdy Games hosting 17.2.0 — shipped ahead of it.)
