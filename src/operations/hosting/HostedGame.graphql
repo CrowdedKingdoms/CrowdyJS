@@ -1,0 +1,118 @@
+fragment HostedGameFields on HostedGame {
+  slug
+  appId
+  orgId
+  name
+  orgSlug
+  orgName
+  status
+  listed
+  contentOrigin
+  launchUrl
+  currentPublishId
+  publishedAt
+  createdAt
+  updatedAt
+}
+
+fragment HostedGamePublishFields on HostedGamePublish {
+  publishId
+  appId
+  slug
+  userId
+  state
+  fileCount
+  totalBytes
+  failureReason
+  createdAt
+  completedAt
+}
+
+query HostedGame($slug: String!) {
+  hostedGame(slug: $slug) {
+    ...HostedGameFields
+  }
+}
+
+query HostedGames {
+  hostedGames {
+    ...HostedGameFields
+  }
+}
+
+query AllHostedGames {
+  allHostedGames {
+    ...HostedGameFields
+  }
+}
+
+query MyHostedGames {
+  myHostedGames {
+    ...HostedGameFields
+  }
+}
+
+query HostedGamePublishes($slug: String!, $limit: Int) {
+  hostedGamePublishes(slug: $slug, limit: $limit) {
+    ...HostedGamePublishFields
+  }
+}
+
+mutation ClaimGameHosting($input: ClaimGameHostingInput!) {
+  claimGameHosting(input: $input) {
+    ...HostedGameFields
+  }
+}
+
+mutation BeginGamePublish($input: BeginGamePublishInput!) {
+  beginGamePublish(input: $input) {
+    publishId
+    slug
+    expiresAt
+    uploads {
+      path
+      url
+      method
+      headers {
+        name
+        value
+      }
+    }
+  }
+}
+
+mutation CompleteGamePublish($slug: String!, $publishId: BigInt!) {
+  completeGamePublish(slug: $slug, publishId: $publishId) {
+    invalidationId
+    game {
+      ...HostedGameFields
+    }
+    publish {
+      ...HostedGamePublishFields
+    }
+  }
+}
+
+mutation AbandonGamePublish($slug: String!, $publishId: BigInt!) {
+  abandonGamePublish(slug: $slug, publishId: $publishId) {
+    ...HostedGamePublishFields
+  }
+}
+
+mutation SetHostedGameEnabled($input: SetHostedGameEnabledInput!) {
+  setHostedGameEnabled(input: $input) {
+    ...HostedGameFields
+  }
+}
+
+mutation SetHostedGameListing($input: SetHostedGameListingInput!) {
+  setHostedGameListing(input: $input) {
+    ...HostedGameFields
+  }
+}
+
+mutation TakeDownHostedGame($slug: String!, $takenDown: Boolean) {
+  takeDownHostedGame(slug: $slug, takenDown: $takenDown) {
+    ...HostedGameFields
+  }
+}

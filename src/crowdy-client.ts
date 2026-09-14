@@ -40,6 +40,8 @@ import { GameKitClient, type GameKitOptions } from './kit/index.js';
 import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
 import { AppsAPI } from './domains/apps.js';
+import { EmbeddedHost } from './domains/embedded-host.js';
+import { HostingAPI } from './domains/hosting.js';
 import {
   PortalAPI,
   type AppTokenResponse,
@@ -115,6 +117,15 @@ export interface CrowdyClientConfig {
    * or tests where sessionStorage is unavailable.
    */
   pkceStore?: PkceStore;
+  /**
+   * The Crowdy Games shell bridge (third-party hosting, 2026-09-13). When a game
+   * published to Crowdy Games runs inside the first-party shell's iframe,
+   * `portal.signIn` must ask the shell to navigate to Studio and must use the shell's
+   * page as the redirect URI; this bridge is how it learns both. Default: detect in a
+   * browser (`new EmbeddedHost()`), nothing in Node. Pass `false` to never consult a
+   * framing page, or your own instance to control timeouts.
+   */
+  embeddedHost?: EmbeddedHost | false;
   /** Realtime (WebSocket) tuning for reconnect backoff and `...AndWait` timeouts. */
   realtime?: {
     /** Max reconnect attempts before giving up (default tuned for browsers). */
@@ -223,6 +234,15 @@ export class CrowdyClient {
    * app token.
    */
   readonly portal: PortalAPI;
+  /**
+   * Third-party game hosting on Crowdy Games: claim a slug, publish a bundle, list
+   * hosted games. Mutations need an identity session with manage_apps; the reads a
+   * page needs are public. `@crowdedkingdoms/crowdyjs/hosting` has the Node helper
+   * that publishes a directory.
+   */
+  readonly hosting: HostingAPI;
+  /** The Crowdy Games shell bridge (see `CrowdyClientConfig.embeddedHost`); null in Node or when opted out. */
+  readonly embeddedHost: EmbeddedHost | null;
   /**
    * Where each app lives. Unauthenticated, and meant to be called BEFORE login against
    * the shared origin, so the session and the app token are both written in the app's
@@ -443,7 +463,12 @@ export class CrowdyClient {
     this.auth = new AuthAPI(this.graphql, this.session);
     this.users = new UsersAPI(this.graphql);
     this.apps = new AppsAPI(this.graphql);
-    this.portal = new PortalAPI(this.graphql, this.session, config.pkceStore);
+    this.embeddedHost =
+      config.embeddedHost === false
+        ? null
+        : config.embeddedHost ?? (typeof (globalThis as { window?: unknown }).window !== 'undefined' ? new EmbeddedHost() : null);
+    this.portal = new PortalAPI(this.graphql, this.session, config.pkceStore, this.embeddedHost);
+    this.hosting = new HostingAPI(this.graphql);
     this.discovery = new DiscoveryDomain(this.graphql);
     this.platform = new PlatformAPI(this.graphql);
     this.organizations = new OrganizationsAPI(this.graphql);
@@ -616,6 +641,7 @@ export class CrowdyClient {
   close(): void {
     this.realtime.close();
     this.session.setToken(null);
+    this.embeddedHost?.close();
   }
 
   /** The configured or discovered GraphQL endpoint URL. */
