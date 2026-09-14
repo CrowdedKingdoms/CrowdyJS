@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.2.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.3.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
@@ -24,7 +24,7 @@ leaves the game origin and the shell never holds a token** -- keep it that way.
 identity-session only; `the-construct`'s `scripts/publish.mjs` is the reference
 caller. [MIGRATION.md](MIGRATION.md).
 
-**17.1.0 (ck-api v2.1.0) adds the guided "Create repository on GitHub" path:** `githubNewRepositoryUrl` / `githubRepositorySlug`, `controller.createGitHubRepository()` (prefilled `/new`, bind input prefilled, PUSH_PROJECT default), `status.repositorySelection`. The App still cannot create a repository itself. Additive.
+**17.3.0 (ck-api v2.3.0) adds the guided "Create repository on GitHub" path:** `githubNewRepositoryUrl` / `githubRepositorySlug`, `controller.createGitHubRepository()` (prefilled `/new`, bind input prefilled, PUSH_PROJECT default), `status.repositorySelection`. The App still cannot create a repository itself. Additive.
 
 **17.0.0 tracks ck-api `v2.0.0`: a bound GitHub repository is the working tree, and
 GitHub stays optional.** `CrowdyStudioProject.source` is `STUDIO` until the owner
