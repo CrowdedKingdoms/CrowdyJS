@@ -1,6 +1,6 @@
-# CrowdyJS v17.1 — "Create repository on GitHub" (additive)
+# CrowdyJS v17.3 — "Create repository on GitHub" (additive)
 
-`17.1.0` (2026-09-14), tracks ck-api `v2.1.0`. Nothing removed.
+`17.3.0` (2026-09-14), tracks ck-api `v2.3.0`. Nothing removed. (Written as 17.1 while two other trains — binary-relay bundles 17.1.0 and Crowdy Games hosting 17.2.0 — shipped ahead of it.)
 
 - `CrowdyStudioGitHubStatus.repositorySelection` (`'all' | 'selected' | null`):
   which repositories the installation covers. A repository created on GitHub
@@ -16,7 +16,7 @@
   sets `state.githubPendingRepo` to `owner/name`; the card's bind input is
   prefilled with it and defaults to PUSH_PROJECT. On a game's app token the
   bind itself still happens in hosted Studio; the message says so.
-- ck-api `v2.1.0`: a PUSH_PROJECT bind seeds a `README.md` (project name,
+- ck-api `v2.3.0`: a PUSH_PROJECT bind seeds a `README.md` (project name,
   description, layout) when the branch has none, and treats an empty-tree
   branch as empty rather than missing.
 
