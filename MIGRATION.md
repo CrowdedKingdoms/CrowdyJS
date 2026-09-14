@@ -61,8 +61,13 @@ field it returned; the SDK adds what the server now knows about a session.
   the one you pass) and leaves the match channel; **`finish()` now ends the
   backing session** (`endSession`, reason `completed`) after a successful
   `end_match`, so the roster is cleared and the session's events become
-  eligible for retention. An emptied session that was never finished is
-  abandoned by the empty timeout. Otherwise the kit is unchanged: capacity
+  eligible for retention; the result's `sessionEnd` says what happened to the
+  session (`'ended'`, `'already_ended'` for a replayed finish, `'forbidden'`
+  when `end_match` admitted the caller but the session did not -- the creator
+  who already left -- in which case the match is finished, the session is not,
+  and nothing is thrown). Host actions on the server now also admit the app's
+  elected host, so a host who is not the creator is not refused. An emptied
+  session that was never finished is abandoned by the empty timeout. Otherwise the kit is unchanged: capacity
   still lives in `MatchMeta` and join does not bind an actor. Moving it onto
   session capacity / admission / host is a later, separate change.
 

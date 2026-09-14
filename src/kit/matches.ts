@@ -12,6 +12,22 @@ import {
   type KitInvokeResult,
 } from './shared.js';
 
+/**
+ * What {@link MatchesKit.finish} did about the backing session after a
+ * successful `end_match`: `'ended'` (it ended it), `'already_ended'` (a
+ * replayed finish; the session was already ended), `'forbidden'` (the caller
+ * passed `end_match` but is neither the session host, the app's elected host
+ * nor an app admin -- the creator who already left, typically -- so the
+ * session is still active; an app admin can `gameModel.endSession` it).
+ * Absent when `end_match` itself was refused (`success: false`).
+ */
+export type KitMatchSessionEnd = 'ended' | 'already_ended' | 'forbidden';
+
+/** {@link MatchesKit.finish}'s result: the invoke result plus what happened to the session. */
+export type KitMatchFinishResult = KitInvokeResult<string> & {
+  sessionEnd?: KitMatchSessionEnd;
+};
+
 /** Options for {@link MatchesKit}. Must match the deployed matches blueprint. */
 export interface MatchesKitOptions {
   /**
@@ -413,15 +429,20 @@ export class MatchesKit {
    * When `end_match` succeeds the backing session is ended too
    * (`gameModelEndSession`, reason `completed`): every participant is marked
    * left, admission closes, and the session's events become eligible for
-   * retention. The game-authoritative step runs first; a session that is
-   * already ended (a replayed `finish`) is left as it is. Any other refusal
-   * of the session end propagates after the match itself has been finished.
+   * retention. The game-authoritative step runs first, so the match is
+   * decided whatever happens next; `sessionEnd` on the result says what
+   * happened to the session ({@link KitMatchSessionEnd}): `'ended'`, or
+   * `'already_ended'` for a replayed finish, or `'forbidden'` when the caller
+   * passed `end_match` (creator or the app's elected host) but is not admitted
+   * to the session end (the creator who already left) -- the match is
+   * finished, the session is not, and nothing is thrown. Any other refusal of
+   * the session end propagates.
    */
   async finish(
     match: KitMatch,
     winnerUserId: Scalars['BigInt']['input'],
-  ): Promise<KitInvokeResult<string>> {
-    const result = await kitInvoke<string>(this.gameModel, {
+  ): Promise<KitMatchFinishResult> {
+    const result: KitMatchFinishResult = await kitInvoke<string>(this.gameModel, {
       appId: String(this.appId),
       functionName: this.names.endFn,
       selfContainerId: match.metaId,
@@ -438,12 +459,17 @@ export class MatchesKit {
           sessionId: match.sessionId,
           reason: 'completed',
         });
+        result.sessionEnd = 'ended';
       } catch (error) {
-        if (!(error instanceof CrowdyGraphQLError) || error.code !== 'SESSION_ENDED') {
+        if (error instanceof CrowdyGraphQLError && error.code === 'SESSION_ENDED') {
+          result.sessionEnd = 'already_ended';
+        } else if (error instanceof CrowdyGraphQLError && error.code === 'FORBIDDEN') {
+          result.sessionEnd = 'forbidden';
+        } else {
           throw error;
         }
       }
-      this.incarnations.delete(match.sessionId);
+      if (result.sessionEnd !== 'forbidden') this.incarnations.delete(match.sessionId);
     }
     return result;
   }

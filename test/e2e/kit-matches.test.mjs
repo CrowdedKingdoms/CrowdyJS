@@ -68,6 +68,7 @@ test(
     await ownerKit.matches.start(match);
     const finished = await ownerKit.matches.finish(match, owner.userId);
     assert.equal(finished.success, true, finished.errorMessage);
+    assert.equal(finished.sessionEnd, 'ended');
     const meta = await ownerKit.matches.get(match.metaId);
     assert.equal(meta.state, 'finished');
     assert.equal(meta.winnerUserId, Number(owner.userId));

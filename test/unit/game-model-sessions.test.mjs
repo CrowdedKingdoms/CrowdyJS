@@ -231,7 +231,7 @@ test('kit.matches.leave sends the incarnation remembered from join and leaves th
   assert.equal(gameModel.calls.at(-1)[1].incarnation, 1);
 });
 
-test('kit.matches.finish ends the backing session after a successful end_match, and only then', async () => {
+test('kit.matches.finish ends the backing session after a successful end_match, and reports what happened to it', async () => {
   const { MatchesKit, CrowdyGraphQLError } = await loadSdk();
   CrowdyGraphQLErrorCtor = CrowdyGraphQLError;
 
@@ -239,6 +239,7 @@ test('kit.matches.finish ends the backing session after a successful end_match, 
   const kit = new MatchesKit('7', ok, undefined, undefined);
   const result = await kit.finish(kitMatch, '42');
   assert.equal(result.success, true);
+  assert.equal(result.sessionEnd, 'ended');
   assert.deepEqual(ok.calls.map((c) => c[0]), ['invoke', 'endSession']);
   assert.deepEqual(ok.calls[1][1], { appId: '7', sessionId: 'sid', reason: 'completed' });
 
@@ -246,21 +247,37 @@ test('kit.matches.finish ends the backing session after a successful end_match, 
   const denied = fakeKitGameModel({ invokeSucceeds: false });
   const deniedResult = await new MatchesKit('7', denied, undefined, undefined).finish(kitMatch, '42');
   assert.equal(deniedResult.success, false);
+  assert.equal(deniedResult.sessionEnd, undefined);
   assert.deepEqual(denied.calls.map((c) => c[0]), ['invoke']);
 
   // An already-ended session is a replayed finish: tolerated.
   const ended = fakeKitGameModel({ endSessionCode: 'SESSION_ENDED' });
   const replay = await new MatchesKit('7', ended, undefined, undefined).finish(kitMatch, '42');
   assert.equal(replay.success, true);
+  assert.equal(replay.sessionEnd, 'already_ended');
   assert.deepEqual(ended.calls.map((c) => c[0]), ['invoke', 'endSession']);
 
-  // Anything else propagates -- after the match itself was finished.
+  // end_match admitted the caller (creator or app host) but the session did
+  // not -- the creator who already left. The match is finished; the session
+  // end is reported, not thrown, and the kit still knows the incarnation.
   const forbidden = fakeKitGameModel({ endSessionCode: 'FORBIDDEN' });
+  const noChannels = { async join() { return true; }, async leave() { return true; } };
+  const forbiddenKit = new MatchesKit('7', forbidden, noChannels, undefined);
+  await forbiddenKit.join(kitMatch);
+  const notEnded = await forbiddenKit.finish(kitMatch, '42');
+  assert.equal(notEnded.success, true);
+  assert.equal(notEnded.sessionEnd, 'forbidden');
+  assert.deepEqual(forbidden.calls.map((c) => c[0]), ['joinSession', 'invoke', 'endSession']);
+  await forbiddenKit.leave(kitMatch); // still possible: the incarnation was kept
+  assert.equal(forbidden.calls.at(-1)[0], 'leaveSession');
+
+  // Anything else propagates -- after the match itself was finished.
+  const broken = fakeKitGameModel({ endSessionCode: 'INTERNAL_SERVER_ERROR' });
   await assert.rejects(
-    () => new MatchesKit('7', forbidden, undefined, undefined).finish(kitMatch, '42'),
-    (error) => error instanceof CrowdyGraphQLError && error.code === 'FORBIDDEN',
+    () => new MatchesKit('7', broken, undefined, undefined).finish(kitMatch, '42'),
+    (error) => error instanceof CrowdyGraphQLError && error.code === 'INTERNAL_SERVER_ERROR',
   );
-  assert.deepEqual(forbidden.calls.map((c) => c[0]), ['invoke', 'endSession']);
+  assert.deepEqual(broken.calls.map((c) => c[0]), ['invoke', 'endSession']);
 });
 
 test('the session reads pass their variables through and select the contract fields', async () => {
