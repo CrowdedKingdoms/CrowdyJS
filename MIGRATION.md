@@ -1,3 +1,33 @@
+# CrowdyJS v17.1 — publish to Crowdy Games; sign-in under the shell
+
+**Additive.** `17.1.0` (2026-09-13). Tracks ck-api `v2.1.0` (third-party game
+hosting). Nothing existing changes shape; two things are new.
+
+- **`client.hosting`** wraps the hosting surface: `claim({ appId, slug? })`,
+  `beginPublish({ slug, files })`, `completePublish(slug, publishId)`,
+  `abandonPublish`, `setEnabled`, `publishes`, `mine`; public `game(slug)` and
+  `listed()`; operator `all()`, `setListing`, `takeDown`. Every mutation needs an
+  identity session with `manage_apps` (a game's own app token is refused, so a
+  bundle can never publish a replacement for itself). The new subpath
+  `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir,
+  slug })` and `manifestForDirectory(dir)` for Node; the root exports
+  `uploadPublishFiles` for a browser tool.
+- **`EmbeddedHost`** (`client.embeddedHost`, `CrowdyClientConfig.embeddedHost`):
+  when a game published to Crowdy Games runs inside the first-party shell's
+  iframe, `portal.signIn` learns the shell's return URL and Studio origin from a
+  `crowdyjs:host-hello`, uses the shell's page as `redirect_uri`, and asks the
+  shell to navigate (`crowdyjs:navigate`) instead of `location.assign`. The PKCE
+  verifier stays in the game origin; `handleSignInCallback` is unchanged because
+  the shell relays `?code=&state=` into the iframe's `src`. Detection is a bounded
+  hello (1.5 s) and falls back to the ordinary flow, so a self-hosted or
+  top-level game behaves exactly as before. `SignInParams.embedded: false` or
+  `createCrowdyClient({ embeddedHost: false })` opts out. `portal.embeddedHostInfo()`
+  tells a game whether it is under a shell.
+
+No removals. Error codes added: `CONTENT_HOSTING_DISABLED`,
+`HOSTED_SLUG_UNAVAILABLE`, `HOSTED_MANIFEST_INVALID`, `HOSTED_PUBLISH_INCOMPLETE`,
+`HOSTED_GAME_TAKEN_DOWN`.
+
 # CrowdyJS v17.0 — a bound GitHub repository is the working tree; GitHub stays optional
 
 **Breaking.** `17.0.0` (2026-09-13). Tracks ck-api `v2.0.0`. A project is

@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
-  "version": "17.0.1",
+  "version": "17.1.0",
   "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
@@ -25,6 +25,10 @@
     "./crowdy-dsh": {
       "import": "./dist/crowdy-dsh/index.js",
       "types": "./dist/crowdy-dsh/index.d.ts"
+    },
+    "./hosting": {
+      "import": "./dist/hosting/index.js",
+      "types": "./dist/hosting/index.d.ts"
     },
     "./player-host": {
       "import": "./dist/player-host/index.js",

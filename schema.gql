@@ -1463,6 +1463,122 @@ type ServerVersionInfo {
   minimumClientVersion: VersionInfo!
 }
 
+"""
+A third-party game hosted on Crowdy Games (2026-09-13). Reached at launchUrl -- https://<games host>/<slug>/, a first-party shell page -- while its bundle executes on contentOrigin, https://<slug>.<content host>, an origin of its own. One row per app; the slug is global on the tier.
+"""
+type HostedGame {
+  """
+  The hosting slug: the path on the games host and the host label on the content domain. A DNS label (lower-case letters, digits, hyphens; 1-63 chars).
+  """
+  slug: String!
+  """The app this slug serves."""
+  appId: BigInt!
+  """The owning organization."""
+  orgId: BigInt!
+  """The app display name."""
+  name: String!
+  """The owning organization slug."""
+  orgSlug: String
+  """The owning organization name, for the shell chrome."""
+  orgName: String
+  status: HostedGameStatus!
+  """
+  Listed in the Overworld lobby and the management UI Games page. Operator-controlled (setHostedGameListing); publishing is self-serve, being listed is not.
+  """
+  listed: Boolean!
+  """
+  https://<slug>.<content host> -- the origin the game bundle runs on. The shell frames this; it is also registered as the app redirect URI so the API answers its CORS.
+  """
+  contentOrigin: String!
+  """
+  https://<games host>/<slug>/ -- the public URL players use; the first-party shell; the redirect URI hosted sign-in returns to.
+  """
+  launchUrl: String!
+  """The publish currently serving, if any."""
+  currentPublishId: BigInt
+  """When the current publish went live."""
+  publishedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""
+Whether a hosted game is served. LIVE: served at its launchUrl. DISABLED: switched off by its developer (setHostedGameEnabled). TAKEN_DOWN: removed by an operator; the developer cannot publish or re-enable until an operator restores it.
+"""
+enum HostedGameStatus {
+  LIVE
+  DISABLED
+  TAKEN_DOWN
+}
+
+"""
+One publish of a hosted game: the manifest the developer declared and what became of it.
+"""
+type HostedGamePublish {
+  publishId: BigInt!
+  appId: BigInt!
+  slug: String!
+  """Who published."""
+  userId: BigInt!
+  state: HostedGamePublishState!
+  fileCount: Int!
+  totalBytes: BigInt!
+  failureReason: String
+  createdAt: DateTime!
+  completedAt: DateTime
+}
+
+"""
+Lifecycle of one publish. STAGING: upload URLs issued, objects arriving. LIVE: promoted and serving. SUPERSEDED: a later publish went live. FAILED: completion refused. ABANDONED: the developer gave up (abandonGamePublish).
+"""
+enum HostedGamePublishState {
+  STAGING
+  LIVE
+  SUPERSEDED
+  FAILED
+  ABANDONED
+}
+
+"""
+How to upload one file of a publish: PUT the file bytes to url with exactly these headers.
+"""
+type HostedGameUpload {
+  """The manifest path this URL is for."""
+  path: String!
+  """Presigned S3 URL; valid until BeginGamePublishResult.expiresAt."""
+  url: String!
+  """Always PUT."""
+  method: String!
+  """
+  Headers the PUT must carry exactly (content type, SHA-256 checksum, staging tag, cache-control). S3 refuses a body whose digest differs.
+  """
+  headers: [HostedGameUploadHeader!]!
+}
+
+type HostedGameUploadHeader {
+  name: String!
+  value: String!
+}
+
+"""
+The result of beginGamePublish: a publish id and one upload per manifest file. Upload them all, then call completeGamePublish(publishId).
+"""
+type BeginGamePublishResult {
+  publishId: BigInt!
+  slug: String!
+  uploads: [HostedGameUpload!]!
+  """When the upload URLs stop working."""
+  expiresAt: DateTime!
+}
+
+"""The result of completeGamePublish."""
+type CompleteGamePublishResult {
+  game: HostedGame!
+  publish: HostedGamePublish!
+  """The CloudFront invalidation id, when one was created."""
+  invalidationId: String
+}
+
 type OrgWallet {
   """Unique wallet id (BigInt as a decimal string)."""
   walletId: BigInt!
@@ -8034,6 +8150,29 @@ type Query {
   """
   versionInfo: ServerVersionInfo!
   """
+  A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games.
+  """
+  hostedGame(
+    """The hosting slug (the first path segment on the games host)."""
+    slug: String!
+  ): HostedGame
+  """
+  The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames.
+  """
+  hostedGames: [HostedGame!]!
+  """
+  OPERATOR: every hosted game on the tier, whatever its status or listing.
+  """
+  allHostedGames: [HostedGame!]!
+  """
+  The hosted games the caller can manage (manage_apps on the app). Requires a SESSION token.
+  """
+  myHostedGames: [HostedGame!]!
+  """
+  Publish history for a hosted game, newest first. Requires manage_apps on the app and a SESSION token.
+  """
+  hostedGamePublishes(slug: String!, limit: Int = 20): [HostedGamePublish!]!
+  """
   Returns the organization's wallet, creating an empty zero-balance wallet on first access if one does not yet exist (so it never returns null). Use it to read the current balance and currency before charging usage or topping up. Requires the 'view_billing' org permission.
   """
   walletBalance(
@@ -8346,23 +8485,44 @@ type Query {
   """
   The lossless ledger's charge rows for one app: every (payer, meter, period) or request that has been priced, with what was billed, held and written off, in micro-USD. Requires 'view_billing' on the org.
   """
-  billingCharges(orgId: BigInt!, appId: BigInt!, limit: Int): [BillingCharge!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
+  billingCharges(
+    """Organisation whose ledger is read; the caller must administer it."""
+    orgId: BigInt!
+    """App the charges belong to (its org is the payer of record)."""
+    appId: BigInt!
+    """Newest-first page size; defaults to 50, capped server-side."""
+    limit: Int
+  ): [BillingCharge!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Amounts the platform could not bill this org for, with the reason (an exempt org, a provider with no generation record, a process that died with metered usage in memory). Requires 'view_billing' on the org.
   """
-  billingWriteOffs(orgId: BigInt!, limit: Int): [BillingWriteOff!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
+  billingWriteOffs(
+    """Organisation whose ledger is read; the caller must administer it."""
+    orgId: BigInt!
+    """Newest-first page size; defaults to 50, capped server-side."""
+    limit: Int
+  ): [BillingWriteOff!]! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Operator only (is_operator or is_super_admin). Every write-off, newest first.
   """
-  cpBillingWriteOffs(limit: Int): [BillingWriteOff!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  cpBillingWriteOffs(
+    """Newest-first page size; defaults to 50, capped server-side."""
+    limit: Int
+  ): [BillingWriteOff!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only. The ledger invariant runs, newest first: whether the sums closed and, when they did not, which check failed and by how much.
   """
-  cpBillingInvariantRuns(limit: Int): [BillingInvariantRun!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  cpBillingInvariantRuns(
+    """Newest-first page size; defaults to 50, capped server-side."""
+    limit: Int
+  ): [BillingInvariantRun!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Operator only. Ledger-versus-provider reconciliation, one row per provider per UTC day.
   """
-  cpBillingReconciliations(limit: Int): [BillingReconciliation!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  cpBillingReconciliations(
+    """Newest-first page size; defaults to 50, capped server-side."""
+    limit: Int
+  ): [BillingReconciliation!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   List an app's marketplace code listings (studio administration view), newest first. Requires 'view_compute_diagnostics'. includeDelisted adds delisted/killed rows for moderation history.
   """
@@ -10258,6 +10418,34 @@ type Mutation {
   """
   setAppClientSettings(input: SetAppClientSettingsInput!): PortalConsentState!
   """
+  Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN.
+  """
+  claimGameHosting(input: ClaimGameHostingInput!): HostedGame!
+  """
+  Declare a publish: the full manifest of the built bundle (path, size, SHA-256 per file; index.html at the root). Validates it as a whole (HOSTED_MANIFEST_INVALID names every problem), records a STAGING publish, and returns one presigned PUT per file. Upload every file with exactly the returned headers, then call completeGamePublish. Rate-limited per app. Requires manage_apps and a SESSION token.
+  """
+  beginGamePublish(input: BeginGamePublishInput!): BeginGamePublishResult!
+  """
+  Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token.
+  """
+  completeGamePublish(slug: String!, publishId: BigInt!): CompleteGamePublishResult!
+  """
+  Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token.
+  """
+  abandonGamePublish(slug: String!, publishId: BigInt!): HostedGamePublish!
+  """
+  Developer switch: DISABLED (the shell says "disabled by its developer") or back to LIVE. A TAKEN_DOWN game is refused (HOSTED_GAME_TAKEN_DOWN). Requires manage_apps and a SESSION token.
+  """
+  setHostedGameEnabled(input: SetHostedGameEnabledInput!): HostedGame!
+  """
+  OPERATOR: list or unlist a hosted game in the lobby and the management UI.
+  """
+  setHostedGameListing(input: SetHostedGameListingInput!): HostedGame!
+  """
+  OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false.
+  """
+  takeDownHostedGame(slug: String!, takenDown: Boolean = true): HostedGame!
+  """
   Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission.
   """
   setAppBudget(
@@ -10522,7 +10710,16 @@ type Mutation {
   """
   Operator only. Credit the payer of an over-billed charge (an I3 finding: an allowance or rate was raised after the charge landed) the difference, and close the charge row. Idempotent per charge state. SIDE EFFECT: a wallet credit and a CREDIT event.
   """
-  cpBillingCreditOverbill(appId: BigInt!, chargeId: String!, reason: String!): BillingCreditResult! @requiresPermission(scope: "operator", permission: "is_operator")
+  cpBillingCreditOverbill(
+    """App the charge was billed under."""
+    appId: BigInt!
+    """
+    The HELD or SETTLED charge to credit, from billingCharges / the invariant detail.
+    """
+    chargeId: String!
+    """Operator note recorded on the credit; visible in billingWriteOffs."""
+    reason: String!
+  ): BillingCreditResult! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Transfer a listing between personal and org ownership (DN-9). The caller must be the current owner (user-owned) or hold manage_compute in the owning org; transfers to an org require manage_compute in the receiving org. SIDE EFFECTS: append-only ownership audit row + replica sync to game-api. Ownership moves listing control and source-access rights; from P4b it also moves proceeds.
   """
@@ -12284,6 +12481,51 @@ input SetAppClientSettingsInput {
   clientType: String
   """Browser launch URL players are sent to when entering the app."""
   launchUrl: String
+}
+
+"""Claim (or re-assert) the hosting slug for an app."""
+input ClaimGameHostingInput {
+  """The app to host. Requires manage_apps on it."""
+  appId: BigInt!
+  """
+  The slug to claim. Defaults to the app slug when that is a valid DNS label. Once claimed, an app keeps its slug; pass a different one to MOVE (the old path stops serving).
+  """
+  slug: String
+}
+
+"""Declare a publish: every file of the built bundle."""
+input BeginGamePublishInput {
+  """The hosting slug (claimGameHosting first)."""
+  slug: String!
+  files: [PublishFileInput!]!
+}
+
+"""One file of a publish manifest."""
+input PublishFileInput {
+  """
+  Relative path inside dist/, forward slashes. index.html must be present at the root.
+  """
+  path: String!
+  """Size in bytes."""
+  size: Int!
+  """
+  Lower-case hex SHA-256 of the bytes. S3 verifies the upload against it and completeGamePublish verifies the stored object.
+  """
+  sha256: String!
+}
+
+"""
+Developer: switch a hosted game off (DISABLED) or back on (LIVE). A TAKEN_DOWN game cannot be re-enabled here.
+"""
+input SetHostedGameEnabledInput {
+  slug: String!
+  enabled: Boolean!
+}
+
+"""Operator: list or unlist a hosted game."""
+input SetHostedGameListingInput {
+  slug: String!
+  listed: Boolean!
 }
 
 input SetRateCardInput {

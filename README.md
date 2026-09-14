@@ -98,6 +98,19 @@ sign-in mutations are refused from a non-first-party browser origin with
 customer's domain that collects it is indistinguishable, to the platform and to
 the player, from a phishing page.
 
+**A game published to Crowdy Games takes the first row too, with one twist the SDK
+handles for you** (17.1.0). Such a game is reached at `https://<games host>/<slug>/`,
+which is a first-party *shell* page, and runs inside that page's iframe on its own
+origin, `https://<slug>.<content host>`. The iframe cannot navigate the tab and
+Studio refuses to be framed, so `portal.signIn` asks the shell to navigate
+(`crowdyjs:navigate`; the shell honours exactly the tier's Studio `/authorize`) and
+uses the shell's page as the `redirect_uri` -- the shell then hands the returned
+`?code=&state=` into the iframe, where `portal.handleSignInCallback` runs exactly as
+it does self-hosted. Nothing changes in your code: the bridge (`client.embeddedHost`,
+`EmbeddedHost`) detects the shell with a bounded hello and falls back to the
+top-level flow when nobody answers. Pass `embeddedHost: false` to `createCrowdyClient`
+to never consult a framing page.
+
 **Hosted sign-in** (browser game, own domain) is OAuth2 Authorization Code +
 PKCE; the verifier never leaves your origin and your page never sees a
 credential:
@@ -208,6 +221,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.users` | `me`, `updateGamertag`, profile reads. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
+| `client.hosting` | Third-party hosting on Crowdy Games (17.1.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`; operator `all` / `setListing` / `takeDown`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
 | `client.platform` | Public platform configuration (`config()`). |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
 | `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes: terrain/LODs, voxel edit + history/rollback, durable actors, avatars, per-user app state blobs. |
@@ -620,6 +634,38 @@ See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/ga
 (the underlying model + genre map) and [Game Kit](https://docs.crowdedkingdoms.com/crowdyjs/game-kit)
 (the SDK surface + the simulation-tier / notify-to-pull / timer / hidden-info
 / anti-cheat patterns).
+
+## Hosting a game on Crowdy Games
+
+Since 17.1.0 (ck-api v2.1) a developer can publish a built static bundle to the
+platform instead of hosting it: players reach it at
+`https://<games host>/<slug>/` and it executes on an origin of its own,
+`https://<slug>.<content host>`, behind the same security headers `the-construct`'s
+`docs/HOSTING.md` asks a self-hoster to serve. The API returns both URLs
+(`HostedGame.launchUrl`, `.contentOrigin`); nothing in your code names a host.
+
+From Node, with an identity session (never from a browser page, by design):
+
+```ts
+import { createCrowdyClient } from '@crowdedkingdoms/crowdyjs';
+import { publishDirectory } from '@crowdedkingdoms/crowdyjs/hosting';
+
+const client = createCrowdyClient();
+await client.auth.login({ email, password });               // identity session, Node only
+const game = await client.hosting.claim({ appId, slug: 'my-game' }); // once; idempotent
+const result = await publishDirectory(client, { dir: 'dist', slug: game.slug });
+console.log(result.game.launchUrl);                          // https://.../my-game/
+```
+
+`claim` registers the shell page and the game origin as the app's redirect URIs
+and sets `launch_url`; `publishDirectory` hashes `dist/`, declares the manifest
+(`beginGamePublish` validates it as a whole and returns one presigned PUT per file),
+uploads with the exact signed headers, and `completeGamePublish` verifies every
+object, promotes it and invalidates the CDN. The slug is a DNS label, global on the
+tier, and first-party names are reserved (`HOSTED_SLUG_UNAVAILABLE`); a tier without
+a content CDN answers `CONTENT_HOSTING_DISABLED`. Being *listed* in the lobby is an
+operator decision (`setListing`); publishing is self-serve. `the-construct`'s
+`npm run publish` is this section as a command.
 
 ## Crowdy Studio
 

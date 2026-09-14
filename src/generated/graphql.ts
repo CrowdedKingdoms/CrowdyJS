@@ -1479,6 +1479,23 @@ export type BatchActorLookupInput = {
   uuids: Array<Scalars['String']['input']>;
 };
 
+/** Declare a publish: every file of the built bundle. */
+export type BeginGamePublishInput = {
+  files: Array<PublishFileInput>;
+  /** The hosting slug (claimGameHosting first). */
+  slug: Scalars['String']['input'];
+};
+
+/** The result of beginGamePublish: a publish id and one upload per manifest file. Upload them all, then call completeGamePublish(publishId). */
+export type BeginGamePublishResult = {
+  __typename?: 'BeginGamePublishResult';
+  /** When the upload URLs stop working. */
+  expiresAt: Scalars['DateTime']['output'];
+  publishId: Scalars['BigInt']['output'];
+  slug: Scalars['String']['output'];
+  uploads: Array<HostedGameUpload>;
+};
+
 /** One settlement unit of the lossless ledger: a (payer, meter, period) for a continuous meter, or one request for a request-priced meter. Amounts in micro-USD; nothing is rounded. */
 export type BillingCharge = {
   __typename?: 'BillingCharge';
@@ -1867,6 +1884,14 @@ export type ChunksByDistanceResponse = {
   skip: Maybe<Scalars['Int']['output']>;
 };
 
+/** Claim (or re-assert) the hosting slug for an app. */
+export type ClaimGameHostingInput = {
+  /** The app to host. Requires manage_apps on it. */
+  appId: Scalars['BigInt']['input'];
+  /** The slug to claim. Defaults to the app slug when that is a valid DNS label. Once claimed, an app keeps its slug; pass a different one to MOVE (the old path stops serving). */
+  slug?: InputMaybe<Scalars['String']['input']>;
+};
+
 /** Notification received when another client sends an audio packet (voice chat). Received via the udpNotifications subscription. */
 export type ClientAudioNotification = {
   __typename?: 'ClientAudioNotification';
@@ -2055,6 +2080,15 @@ export enum CodeAdmissionSubjectKind {
   Code = 'CODE',
   Org = 'ORG'
 }
+
+/** The result of completeGamePublish. */
+export type CompleteGamePublishResult = {
+  __typename?: 'CompleteGamePublishResult';
+  game: HostedGame;
+  /** The CloudFront invalidation id, when one was created. */
+  invalidationId: Maybe<Scalars['String']['output']>;
+  publish: HostedGamePublish;
+};
 
 /** Complete a magic-link sign-in with the emailed token. */
 export type CompleteLoginLinkInput = {
@@ -5182,6 +5216,87 @@ export type GroupRole = {
   roleName: Scalars['String']['output'];
 };
 
+/** A third-party game hosted on Crowdy Games (2026-09-13). Reached at launchUrl -- https://<games host>/<slug>/, a first-party shell page -- while its bundle executes on contentOrigin, https://<slug>.<content host>, an origin of its own. One row per app; the slug is global on the tier. */
+export type HostedGame = {
+  __typename?: 'HostedGame';
+  /** The app this slug serves. */
+  appId: Scalars['BigInt']['output'];
+  /** https://<slug>.<content host> -- the origin the game bundle runs on. The shell frames this; it is also registered as the app redirect URI so the API answers its CORS. */
+  contentOrigin: Scalars['String']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  /** The publish currently serving, if any. */
+  currentPublishId: Maybe<Scalars['BigInt']['output']>;
+  /** https://<games host>/<slug>/ -- the public URL players use; the first-party shell; the redirect URI hosted sign-in returns to. */
+  launchUrl: Scalars['String']['output'];
+  /** Listed in the Overworld lobby and the management UI Games page. Operator-controlled (setHostedGameListing); publishing is self-serve, being listed is not. */
+  listed: Scalars['Boolean']['output'];
+  /** The app display name. */
+  name: Scalars['String']['output'];
+  /** The owning organization. */
+  orgId: Scalars['BigInt']['output'];
+  /** The owning organization name, for the shell chrome. */
+  orgName: Maybe<Scalars['String']['output']>;
+  /** The owning organization slug. */
+  orgSlug: Maybe<Scalars['String']['output']>;
+  /** When the current publish went live. */
+  publishedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The hosting slug: the path on the games host and the host label on the content domain. A DNS label (lower-case letters, digits, hyphens; 1-63 chars). */
+  slug: Scalars['String']['output'];
+  status: HostedGameStatus;
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** One publish of a hosted game: the manifest the developer declared and what became of it. */
+export type HostedGamePublish = {
+  __typename?: 'HostedGamePublish';
+  appId: Scalars['BigInt']['output'];
+  completedAt: Maybe<Scalars['DateTime']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  failureReason: Maybe<Scalars['String']['output']>;
+  fileCount: Scalars['Int']['output'];
+  publishId: Scalars['BigInt']['output'];
+  slug: Scalars['String']['output'];
+  state: HostedGamePublishState;
+  totalBytes: Scalars['BigInt']['output'];
+  /** Who published. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** Lifecycle of one publish. STAGING: upload URLs issued, objects arriving. LIVE: promoted and serving. SUPERSEDED: a later publish went live. FAILED: completion refused. ABANDONED: the developer gave up (abandonGamePublish). */
+export enum HostedGamePublishState {
+  Abandoned = 'ABANDONED',
+  Failed = 'FAILED',
+  Live = 'LIVE',
+  Staging = 'STAGING',
+  Superseded = 'SUPERSEDED'
+}
+
+/** Whether a hosted game is served. LIVE: served at its launchUrl. DISABLED: switched off by its developer (setHostedGameEnabled). TAKEN_DOWN: removed by an operator; the developer cannot publish or re-enable until an operator restores it. */
+export enum HostedGameStatus {
+  Disabled = 'DISABLED',
+  Live = 'LIVE',
+  TakenDown = 'TAKEN_DOWN'
+}
+
+/** How to upload one file of a publish: PUT the file bytes to url with exactly these headers. */
+export type HostedGameUpload = {
+  __typename?: 'HostedGameUpload';
+  /** Headers the PUT must carry exactly (content type, SHA-256 checksum, staging tag, cache-control). S3 refuses a body whose digest differs. */
+  headers: Array<HostedGameUploadHeader>;
+  /** Always PUT. */
+  method: Scalars['String']['output'];
+  /** The manifest path this URL is for. */
+  path: Scalars['String']['output'];
+  /** Presigned S3 URL; valid until BeginGamePublishResult.expiresAt. */
+  url: Scalars['String']['output'];
+};
+
+export type HostedGameUploadHeader = {
+  __typename?: 'HostedGameUploadHeader';
+  name: Scalars['String']['output'];
+  value: Scalars['String']['output'];
+};
+
 /** Copy a private library revision or immutable published common version into a project by value. */
 export type ImportCrowdyStudioProjectFileInput = {
   /** App tenant shared by the project and import source. */
@@ -5310,6 +5425,8 @@ export type MintAppTokenInput = {
 
 export type Mutation = {
   __typename?: 'Mutation';
+  /** Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token. */
+  abandonGamePublish: HostedGamePublish;
   /** Acquire a free listing: writes the entitlement row. Paid listings (price_cents > 0 or a non-free acquisition mode) are refused with FEATURE_DISABLED. Idempotent per (listing, caller). Allowed in any admission mode; in allow_list apps an unadmitted acquisition holds until the listing/author/org is admitted, at which point installPlayerCode proceeds. */
   acquirePlayerCode: PlayerCodeAcquisition;
   /** Application liveness heartbeat for the authenticated user's existing actor rows in an app. Refreshes actors.updated_at so the user stays host-eligible, then returns the freshly-elected host so a client can fold its poll and heartbeat into one round-trip. This is not proof of a live Buddy session and does not refresh the separate Buddy presence lease used by security-sensitive artifact/compute occupancy gates. */
@@ -5330,6 +5447,8 @@ export type Mutation = {
   assignGroupToGrid: Array<GridGroupGrant>;
   /** Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the Overworld consent screen before createPortalAuthorizationCode. Idempotent. Requires a SESSION token. */
   authorizeApp: AppAuthorizationGrant;
+  /** Declare a publish: the full manifest of the built bundle (path, size, SHA-256 per file; index.html at the root). Validates it as a whole (HOSTED_MANIFEST_INVALID names every problem), records a STAGING publish, and returns one presigned PUT per file. Upload every file with exactly the returned headers, then call completeGamePublish. Rate-limited per app. Requires manage_apps and a SESSION token. */
+  beginGamePublish: BeginGamePublishResult;
   /** Begin vaulting a card on the caller's player wallet (P4b): returns a Stripe SetupIntent client secret + publishable key for the browser to confirm. On success the card is saved for wallet auto-recharge and rent auto-renew. Closes the P2 gap where players had no card-setup path. */
   beginPlayerCardSetup: PlayerCardSetup;
   /** DESTRUCTIVE. Cancels an app's paid shared-environment subscription. The app loses its paid shared slot (typically at currentPeriodEnd) and may be denied runtime once the period lapses unless a free slot covers it. Returns the updated subscription. Requires the 'manage_billing' permission on the app's org. */
@@ -5340,12 +5459,16 @@ export type Mutation = {
   changePassword: Scalars['Boolean']['output'];
   /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
   claimFreeAppAccess: AppUserAccess;
+  /** Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN. */
+  claimGameHosting: HostedGame;
   /** Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus the player-code keys and use_video_chat where the caller's tier already carries them, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain. */
   claimGridChunk: ChunkClaimResult;
   /** Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses. The grid must exist and have no current owner; game rules gate who may attempt a claim. */
   claimGridOwnership: GridClaimResult;
   /** Remove an app's compute allowance, returning it to observation against the platform reference allowance. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
   clearAppComputeBudget: Scalars['Boolean']['output'];
+  /** Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token. */
+  completeGamePublish: CompleteGamePublishResult;
   /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   completeLoginLink: AuthResponse;
   /** Delete a compute module and (via cascade) its versions, triggers, and lease. Run history is retained for auditing. Returns true when a module was deleted. Requires the org 'manage_compute' permission. */
@@ -5694,6 +5817,10 @@ export type Mutation = {
   setEarlyAccessOverride: User;
   /** Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid. */
   setGridPermissionLimits: GridPermissionLimits;
+  /** Developer switch: DISABLED (the shell says "disabled by its developer") or back to LIVE. A TAKEN_DOWN game is refused (HOSTED_GAME_TAKEN_DOWN). Requires manage_apps and a SESSION token. */
+  setHostedGameEnabled: HostedGame;
+  /** OPERATOR: list or unlist a hosted game in the lobby and the management UI. */
+  setHostedGameListing: HostedGame;
   /** Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Refuses with extensions.code PASSWORD_ALREADY_SET (409) when a password is already set — use changePassword, which verifies the current one, or the reset flow if it is forgotten. (Before v1.60.0 that refusal reached clients as INTERNAL_SERVER_ERROR while this description said CONFLICT, so a client could only recognise it by the message text.) A security notification is emailed to the account address. Existing sessions are not revoked. */
   setInitialPassword: Scalars['Boolean']['output'];
   /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
@@ -5726,6 +5853,8 @@ export type Mutation = {
   socialLoginComplete: AuthResponse;
   /** Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   socialLoginStart: SocialLoginStart;
+  /** OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false. */
+  takeDownHostedGame: HostedGame;
   /** Checks whether the authenticated user is allowed to teleport an actor to a destination within an app and returns the authorization result. This is an authorization check only — it does NOT itself move the actor; the UDP runtime performs the actual movement. Requires a valid bearer game token plus the app-level "teleport" runtime permission. Returns success=false with errorCode INVALID_APP_ID (non-positive appId), UNAUTHORIZED (reserved sentinel destination -6,-6,-6 or missing permission), or success=true / NO_ERROR when allowed. */
   teleportRequest: TeleportResponse;
   /** Transfer grid title to another user. The current user owner or an app admin may transfer. DESTRUCTIVE/SECURITY-SENSITIVE: atomically disables every player module on the grid pending new-owner consent, wipes module state, removes the old owner direct grid grants, and closes the old title row. The new owner receives no implicit permissions. */
@@ -5785,6 +5914,12 @@ export type Mutation = {
 };
 
 
+export type MutationAbandonGamePublishArgs = {
+  publishId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+};
+
+
 export type MutationAcquirePlayerCodeArgs = {
   appId: Scalars['BigInt']['input'];
   listingId: Scalars['String']['input'];
@@ -5840,6 +5975,11 @@ export type MutationAuthorizeAppArgs = {
 };
 
 
+export type MutationBeginGamePublishArgs = {
+  input: BeginGamePublishInput;
+};
+
+
 export type MutationCancelSharedSubscriptionArgs = {
   appId: Scalars['BigInt']['input'];
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
@@ -5863,6 +6003,11 @@ export type MutationClaimFreeAppAccessArgs = {
 };
 
 
+export type MutationClaimGameHostingArgs = {
+  input: ClaimGameHostingInput;
+};
+
+
 export type MutationClaimGridChunkArgs = {
   appId: Scalars['BigInt']['input'];
   chunk: ChunkCoordinatesInput;
@@ -5877,6 +6022,12 @@ export type MutationClaimGridOwnershipArgs = {
 
 export type MutationClearAppComputeBudgetArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationCompleteGamePublishArgs = {
+  publishId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
 };
 
 
@@ -6815,6 +6966,16 @@ export type MutationSetGridPermissionLimitsArgs = {
 };
 
 
+export type MutationSetHostedGameEnabledArgs = {
+  input: SetHostedGameEnabledInput;
+};
+
+
+export type MutationSetHostedGameListingArgs = {
+  input: SetHostedGameListingInput;
+};
+
+
 export type MutationSetInitialPasswordArgs = {
   newPassword: Scalars['String']['input'];
 };
@@ -6907,6 +7068,12 @@ export type MutationSocialLoginCompleteArgs = {
 
 export type MutationSocialLoginStartArgs = {
   input: SocialLoginStartInput;
+};
+
+
+export type MutationTakeDownHostedGameArgs = {
+  slug: Scalars['String']['input'];
+  takenDown?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 
@@ -8310,6 +8477,16 @@ export type PublishCrowdyStudioCommonFileInput = {
   title: Scalars['String']['input'];
 };
 
+/** One file of a publish manifest. */
+export type PublishFileInput = {
+  /** Relative path inside dist/, forward slashes. index.html must be present at the root. */
+  path: Scalars['String']['input'];
+  /** Lower-case hex SHA-256 of the bytes. S3 verifies the upload against it and completeGamePublish verifies the stored object. */
+  sha256: Scalars['String']['input'];
+  /** Size in bytes. */
+  size: Scalars['Int']['input'];
+};
+
 export type PublishPlayerCodeInput = {
   /** App the listing belongs to. */
   appId: Scalars['BigInt']['input'];
@@ -8350,6 +8527,8 @@ export type Query = {
   actorsConnection: ActorsConnection;
   /** OPERATOR ONLY. The Crowdy Studio agent price list: every model card with its four per-million token prices and its lifecycle status. Separate from billingRateCard because agent pricing is per model rather than per metered dimension. Read-only. */
   agentRateCards: Array<AgentRateCardEntryType>;
+  /** OPERATOR: every hosted game on the tier, whatever its status or listing. */
+  allHostedGames: Array<HostedGame>;
   /** Convenience for UI: returns true when the authenticated caller is the currently elected host for the given app (same election as gameHost), otherwise false (including when no host is elected). Not authoritative for server-side mutations — use gameModelInvoke's is_host policy for that. Requires a valid bearer game token (same auth as gameHost). */
   amIGameHost: Scalars['Boolean']['output'];
   /** Fetch a single app by its numeric id. Requires authentication (any signed-in user); does NOT enforce org/app permissions, so it can read apps the caller does not own, of any visibility/status. Returns null if the id does not exist. Prefer appBySlug for slug-based marketplace lookups. */
@@ -8599,6 +8778,12 @@ export type Query = {
   gridPermissionLimits: GridPermissionLimits;
   /** Read one user's effective (materialized) runtime permission keys on a grid — the flattened union of direct and group-derived grants that Buddy enforces, with expired grants excluded. Use this to see what a user can actually do. To inspect the underlying inputs instead, use `gridGroupGrants` (group grants) and `gridPermissionLimits` (the whitelist). Requires app-admin ('manage_apps'). */
   gridUserPermissions: GridUserPermissions;
+  /** A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games. */
+  hostedGame: Maybe<HostedGame>;
+  /** Publish history for a hosted game, newest first. Requires manage_apps on the app and a SESSION token. */
+  hostedGamePublishes: Array<HostedGamePublish>;
+  /** The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
+  hostedGames: Array<HostedGame>;
   /** Lists recorded voxel edits for all chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance, paginated over chunks. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   /** Lists recorded voxel edits for a single chunk (optionally only those at/after `since`), newest first. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
@@ -8628,6 +8813,8 @@ export type Query = {
    * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
    */
   myDonationData: UserDonationData;
+  /** The hosted games the caller can manage (manage_apps on the app). Requires a SESSION token. */
+  myHostedGames: Array<HostedGame>;
   /** The signed-in user's linked sign-in identities. */
   myIdentities: Array<UserIdentity>;
   /** Lists the authenticated caller's organization memberships. Each entry bundles the org, the caller's effective permission keys, and assigned roles. Requires a valid session token. */
@@ -9474,6 +9661,17 @@ export type QueryGridUserPermissionsArgs = {
   appId: Scalars['BigInt']['input'];
   gridId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryHostedGameArgs = {
+  slug: Scalars['String']['input'];
+};
+
+
+export type QueryHostedGamePublishesArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  slug: Scalars['String']['input'];
 };
 
 
@@ -10690,6 +10888,18 @@ export type SetGridPermissionLimitsInput = {
   gridId: Scalars['BigInt']['input'];
   /** The whitelist of permission keys allowed on this grid. Empty array removes all limits (every active grid permission becomes grantable again). Each key must be a known runtime permission key, unique, and at most 64 chars. */
   permissionKeys: Array<Scalars['String']['input']>;
+};
+
+/** Developer: switch a hosted game off (DISABLED) or back on (LIVE). A TAKEN_DOWN game cannot be re-enabled here. */
+export type SetHostedGameEnabledInput = {
+  enabled: Scalars['Boolean']['input'];
+  slug: Scalars['String']['input'];
+};
+
+/** Operator: list or unlist a hosted game. */
+export type SetHostedGameListingInput = {
+  listed: Scalars['Boolean']['input'];
+  slug: Scalars['String']['input'];
 };
 
 /** Replace a member's roles in a group (the listed roles become their full set). */
@@ -13699,6 +13909,92 @@ export type ActorHeartbeatMutationVariables = Exact<{
 
 export type ActorHeartbeatMutation = { __typename?: 'Mutation', actorHeartbeat: { __typename?: 'GameHost', hostUserId: string, actorCount: number, earliestActorJoinedAt: string } | null };
 
+export type HostedGameFieldsFragment = { __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string };
+
+export type HostedGamePublishFieldsFragment = { __typename?: 'HostedGamePublish', publishId: string, appId: string, slug: string, userId: string, state: HostedGamePublishState, fileCount: number, totalBytes: string, failureReason: string | null, createdAt: string, completedAt: string | null };
+
+export type HostedGameQueryVariables = Exact<{
+  slug: Scalars['String']['input'];
+}>;
+
+
+export type HostedGameQuery = { __typename?: 'Query', hostedGame: { __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string } | null };
+
+export type HostedGamesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type HostedGamesQuery = { __typename?: 'Query', hostedGames: Array<{ __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string }> };
+
+export type AllHostedGamesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AllHostedGamesQuery = { __typename?: 'Query', allHostedGames: Array<{ __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string }> };
+
+export type MyHostedGamesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MyHostedGamesQuery = { __typename?: 'Query', myHostedGames: Array<{ __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string }> };
+
+export type HostedGamePublishesQueryVariables = Exact<{
+  slug: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type HostedGamePublishesQuery = { __typename?: 'Query', hostedGamePublishes: Array<{ __typename?: 'HostedGamePublish', publishId: string, appId: string, slug: string, userId: string, state: HostedGamePublishState, fileCount: number, totalBytes: string, failureReason: string | null, createdAt: string, completedAt: string | null }> };
+
+export type ClaimGameHostingMutationVariables = Exact<{
+  input: ClaimGameHostingInput;
+}>;
+
+
+export type ClaimGameHostingMutation = { __typename?: 'Mutation', claimGameHosting: { __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string } };
+
+export type BeginGamePublishMutationVariables = Exact<{
+  input: BeginGamePublishInput;
+}>;
+
+
+export type BeginGamePublishMutation = { __typename?: 'Mutation', beginGamePublish: { __typename?: 'BeginGamePublishResult', publishId: string, slug: string, expiresAt: string, uploads: Array<{ __typename?: 'HostedGameUpload', path: string, url: string, method: string, headers: Array<{ __typename?: 'HostedGameUploadHeader', name: string, value: string }> }> } };
+
+export type CompleteGamePublishMutationVariables = Exact<{
+  slug: Scalars['String']['input'];
+  publishId: Scalars['BigInt']['input'];
+}>;
+
+
+export type CompleteGamePublishMutation = { __typename?: 'Mutation', completeGamePublish: { __typename?: 'CompleteGamePublishResult', invalidationId: string | null, game: { __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string }, publish: { __typename?: 'HostedGamePublish', publishId: string, appId: string, slug: string, userId: string, state: HostedGamePublishState, fileCount: number, totalBytes: string, failureReason: string | null, createdAt: string, completedAt: string | null } } };
+
+export type AbandonGamePublishMutationVariables = Exact<{
+  slug: Scalars['String']['input'];
+  publishId: Scalars['BigInt']['input'];
+}>;
+
+
+export type AbandonGamePublishMutation = { __typename?: 'Mutation', abandonGamePublish: { __typename?: 'HostedGamePublish', publishId: string, appId: string, slug: string, userId: string, state: HostedGamePublishState, fileCount: number, totalBytes: string, failureReason: string | null, createdAt: string, completedAt: string | null } };
+
+export type SetHostedGameEnabledMutationVariables = Exact<{
+  input: SetHostedGameEnabledInput;
+}>;
+
+
+export type SetHostedGameEnabledMutation = { __typename?: 'Mutation', setHostedGameEnabled: { __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string } };
+
+export type SetHostedGameListingMutationVariables = Exact<{
+  input: SetHostedGameListingInput;
+}>;
+
+
+export type SetHostedGameListingMutation = { __typename?: 'Mutation', setHostedGameListing: { __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string } };
+
+export type TakeDownHostedGameMutationVariables = Exact<{
+  slug: Scalars['String']['input'];
+  takenDown?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type TakeDownHostedGameMutation = { __typename?: 'Mutation', takeDownHostedGame: { __typename?: 'HostedGame', slug: string, appId: string, orgId: string, name: string, orgSlug: string | null, orgName: string | null, status: HostedGameStatus, listed: boolean, contentOrigin: string, launchUrl: string, currentPublishId: string | null, publishedAt: string | null, createdAt: string, updatedAt: string } };
+
 export type PlayerCodeListingFieldsFragment = { __typename?: 'PlayerCodeListing', listingId: string, appId: string, ownerKind: PlayerCodeOwnerKind, ownerRef: string, name: string, description: string, mediaJson: string, licenseMode: PlayerCodeLicenseMode, acquisitionMode: PlayerCodeAcquisitionMode, priceCents: number | null, rentIntervalDays: number | null, windowDays: number | null, unitBudget: string | null, status: PlayerCodeListingStatus, createdAt: string };
 
 export type PlayerCodeListingVersionFieldsFragment = { __typename?: 'PlayerCodeListingVersion', versionId: string, listingId: string, versionNo: number, serverArtifactHashes: Array<string>, clientArtifactHashes: Array<string>, capabilitySummaryJson: string, capabilityHash: string, openSource: boolean, licenseText: string | null, createdAt: string | null, requirements: Array<{ __typename?: 'PlayerCodeRequirement', serverArtifactHash: string, clientArtifactHash: string }> };
@@ -15072,6 +15368,8 @@ export const GmContainerFieldsFragmentDoc = {"kind":"Document","definitions":[{"
 export const GmInvokeResultFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmInvokeResultFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmInvokeResult"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"policyBypassed"}},{"kind":"Field","name":{"kind":"Name","value":"returnValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"fault"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"code"}},{"kind":"Field","name":{"kind":"Name","value":"blame"}},{"kind":"Field","name":{"kind":"Name","value":"retryable"}}]}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"mutationsApplied"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"containerId"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"oldValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"newValueJson"}}]}}]}}]} as unknown as DocumentNode<GmInvokeResultFieldsFragment, unknown>;
 export const GmFunctionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmFunctionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmFunction"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"functionId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"returnType"}},{"kind":"Field","name":{"kind":"Name","value":"invokeScope"}},{"kind":"Field","name":{"kind":"Name","value":"invokePolicyJson"}},{"kind":"Field","name":{"kind":"Name","value":"autonomousInvocable"}},{"kind":"Field","name":{"kind":"Name","value":"returnExpression"}},{"kind":"Field","name":{"kind":"Name","value":"warnings"}},{"kind":"Field","name":{"kind":"Name","value":"parameters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"required"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}}]}},{"kind":"Field","name":{"kind":"Name","value":"mutations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"property"}},{"kind":"Field","name":{"kind":"Name","value":"expression"}}]}},{"kind":"Field","name":{"kind":"Name","value":"notifications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"emitAs"}},{"kind":"Field","name":{"kind":"Name","value":"args"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"expression"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"permissionEffects"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"action"}},{"kind":"Field","name":{"kind":"Name","value":"permissionKeys"}},{"kind":"Field","name":{"kind":"Name","value":"userExpression"}},{"kind":"Field","name":{"kind":"Name","value":"gridIdExpression"}},{"kind":"Field","name":{"kind":"Name","value":"ttlSecondsExpression"}}]}},{"kind":"Field","name":{"kind":"Name","value":"timers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"delayMsExpression"}},{"kind":"Field","name":{"kind":"Name","value":"dedupeKeyExpression"}},{"kind":"Field","name":{"kind":"Name","value":"params"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"expression"}}]}}]}}]}}]} as unknown as DocumentNode<GmFunctionFieldsFragment, unknown>;
 export const GmPropertyDefFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmPropertyDefFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmPropertyDef"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"defaultValueJson"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"writable"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]} as unknown as DocumentNode<GmPropertyDefFieldsFragment, unknown>;
+export const HostedGameFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<HostedGameFieldsFragment, unknown>;
+export const HostedGamePublishFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGamePublishFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGamePublish"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"failureReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]} as unknown as DocumentNode<HostedGamePublishFieldsFragment, unknown>;
 export const PlayerCodeListingFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeListingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeListing"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"mediaJson"}},{"kind":"Field","name":{"kind":"Name","value":"licenseMode"}},{"kind":"Field","name":{"kind":"Name","value":"acquisitionMode"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"rentIntervalDays"}},{"kind":"Field","name":{"kind":"Name","value":"windowDays"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerCodeListingFieldsFragment, unknown>;
 export const PlayerCodeListingVersionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeListingVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeListingVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"serverArtifactHashes"}},{"kind":"Field","name":{"kind":"Name","value":"clientArtifactHashes"}},{"kind":"Field","name":{"kind":"Name","value":"requirements"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverArtifactHash"}},{"kind":"Field","name":{"kind":"Name","value":"clientArtifactHash"}}]}},{"kind":"Field","name":{"kind":"Name","value":"capabilitySummaryJson"}},{"kind":"Field","name":{"kind":"Name","value":"capabilityHash"}},{"kind":"Field","name":{"kind":"Name","value":"openSource"}},{"kind":"Field","name":{"kind":"Name","value":"licenseText"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<PlayerCodeListingVersionFieldsFragment, unknown>;
 export const PlayerCodeAcquisitionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeAcquisitionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeAcquisition"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"acquisitionId"}},{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"unitsConsumed"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}}]}}]} as unknown as DocumentNode<PlayerCodeAcquisitionFieldsFragment, unknown>;
@@ -15274,6 +15572,18 @@ export const GameModelRevokeTierFeatureDocument = {"kind":"Document","definition
 export const GameHostDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GameHost"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gameHost"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hostUserId"}},{"kind":"Field","name":{"kind":"Name","value":"actorCount"}},{"kind":"Field","name":{"kind":"Name","value":"earliestActorJoinedAt"}}]}}]}}]} as unknown as DocumentNode<GameHostQuery, GameHostQueryVariables>;
 export const AmIGameHostDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AmIGameHost"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"amIGameHost"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}]}]}}]} as unknown as DocumentNode<AmIGameHostQuery, AmIGameHostQueryVariables>;
 export const ActorHeartbeatDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ActorHeartbeat"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"actorHeartbeat"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hostUserId"}},{"kind":"Field","name":{"kind":"Name","value":"actorCount"}},{"kind":"Field","name":{"kind":"Name","value":"earliestActorJoinedAt"}}]}}]}}]} as unknown as DocumentNode<ActorHeartbeatMutation, ActorHeartbeatMutationVariables>;
+export const HostedGameDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"HostedGame"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hostedGame"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<HostedGameQuery, HostedGameQueryVariables>;
+export const HostedGamesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"HostedGames"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hostedGames"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<HostedGamesQuery, HostedGamesQueryVariables>;
+export const AllHostedGamesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AllHostedGames"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"allHostedGames"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<AllHostedGamesQuery, AllHostedGamesQueryVariables>;
+export const MyHostedGamesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyHostedGames"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myHostedGames"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<MyHostedGamesQuery, MyHostedGamesQueryVariables>;
+export const HostedGamePublishesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"HostedGamePublishes"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hostedGamePublishes"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGamePublishFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGamePublishFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGamePublish"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"failureReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]} as unknown as DocumentNode<HostedGamePublishesQuery, HostedGamePublishesQueryVariables>;
+export const ClaimGameHostingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ClaimGameHosting"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ClaimGameHostingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"claimGameHosting"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ClaimGameHostingMutation, ClaimGameHostingMutationVariables>;
+export const BeginGamePublishDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"BeginGamePublish"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BeginGamePublishInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"beginGamePublish"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"uploads"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"method"}},{"kind":"Field","name":{"kind":"Name","value":"headers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"value"}}]}}]}}]}}]}}]} as unknown as DocumentNode<BeginGamePublishMutation, BeginGamePublishMutationVariables>;
+export const CompleteGamePublishDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CompleteGamePublish"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"publishId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"completeGamePublish"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}},{"kind":"Argument","name":{"kind":"Name","value":"publishId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"publishId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"invalidationId"}},{"kind":"Field","name":{"kind":"Name","value":"game"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"publish"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGamePublishFields"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGamePublishFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGamePublish"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"failureReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]} as unknown as DocumentNode<CompleteGamePublishMutation, CompleteGamePublishMutationVariables>;
+export const AbandonGamePublishDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AbandonGamePublish"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"publishId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"abandonGamePublish"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}},{"kind":"Argument","name":{"kind":"Name","value":"publishId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"publishId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGamePublishFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGamePublishFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGamePublish"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"failureReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]} as unknown as DocumentNode<AbandonGamePublishMutation, AbandonGamePublishMutationVariables>;
+export const SetHostedGameEnabledDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetHostedGameEnabled"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetHostedGameEnabledInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setHostedGameEnabled"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SetHostedGameEnabledMutation, SetHostedGameEnabledMutationVariables>;
+export const SetHostedGameListingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetHostedGameListing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetHostedGameListingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setHostedGameListing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SetHostedGameListingMutation, SetHostedGameListingMutationVariables>;
+export const TakeDownHostedGameDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"TakeDownHostedGame"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"takenDown"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"takeDownHostedGame"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}},{"kind":"Argument","name":{"kind":"Name","value":"takenDown"},"value":{"kind":"Variable","name":{"kind":"Name","value":"takenDown"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"HostedGameFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"HostedGameFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"HostedGame"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"orgId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"orgSlug"}},{"kind":"Field","name":{"kind":"Name","value":"orgName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"listed"}},{"kind":"Field","name":{"kind":"Name","value":"contentOrigin"}},{"kind":"Field","name":{"kind":"Name","value":"launchUrl"}},{"kind":"Field","name":{"kind":"Name","value":"currentPublishId"}},{"kind":"Field","name":{"kind":"Name","value":"publishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<TakeDownHostedGameMutation, TakeDownHostedGameMutationVariables>;
 export const MarketplaceListingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceListings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeListings"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeListingFields"}},{"kind":"Field","name":{"kind":"Name","value":"admissionState"}},{"kind":"Field","name":{"kind":"Name","value":"latestVersionId"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeListingFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeListing"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"mediaJson"}},{"kind":"Field","name":{"kind":"Name","value":"licenseMode"}},{"kind":"Field","name":{"kind":"Name","value":"acquisitionMode"}},{"kind":"Field","name":{"kind":"Name","value":"priceCents"}},{"kind":"Field","name":{"kind":"Name","value":"rentIntervalDays"}},{"kind":"Field","name":{"kind":"Name","value":"windowDays"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<MarketplaceListingsQuery, MarketplaceListingsQueryVariables>;
 export const MarketplaceListingVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceListingVersions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"listingId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"playerCodeListingVersions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"listingId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"listingId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeListingVersionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeListingVersionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeListingVersion"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"versionNo"}},{"kind":"Field","name":{"kind":"Name","value":"serverArtifactHashes"}},{"kind":"Field","name":{"kind":"Name","value":"clientArtifactHashes"}},{"kind":"Field","name":{"kind":"Name","value":"requirements"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverArtifactHash"}},{"kind":"Field","name":{"kind":"Name","value":"clientArtifactHash"}}]}},{"kind":"Field","name":{"kind":"Name","value":"capabilitySummaryJson"}},{"kind":"Field","name":{"kind":"Name","value":"capabilityHash"}},{"kind":"Field","name":{"kind":"Name","value":"openSource"}},{"kind":"Field","name":{"kind":"Name","value":"licenseText"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<MarketplaceListingVersionsQuery, MarketplaceListingVersionsQueryVariables>;
 export const MarketplaceMyAcquisitionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MarketplaceMyAcquisitions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myPlayerCodeAcquisitions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PlayerCodeAcquisitionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PlayerCodeAcquisitionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PlayerCodeAcquisition"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"acquisitionId"}},{"kind":"Field","name":{"kind":"Name","value":"listingId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"mode"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"unitBudget"}},{"kind":"Field","name":{"kind":"Name","value":"unitsConsumed"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}}]}}]} as unknown as DocumentNode<MarketplaceMyAcquisitionsQuery, MarketplaceMyAcquisitionsQueryVariables>;

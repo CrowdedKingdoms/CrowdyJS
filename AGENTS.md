@@ -4,12 +4,25 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.0.1**. Whether that is *published* is
+**Current package:** `package.json` is **17.1.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.1.0 adds third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-13):**
+`client.hosting` (claim a slug, publish a bundle, list) plus the Node subpath
+`@crowdedkingdoms/crowdyjs/hosting` (`publishDirectory`), and `EmbeddedHost` -- the
+bridge `portal.signIn` uses when a hosted game runs inside the Crowdy Games shell's
+iframe (`src/domains/embedded-host.ts`; the shell is Crowdy-Games `shell/`, protocol
+v1 mirrored in its `src/protocol.ts`). The bridge trusts only `window.parent`, only
+a `returnUrl` on the hello's own https origin, and posts `navigate` only to that
+origin; the shell in turn honours only Studio `/authorize`. **The verifier never
+leaves the game origin and the shell never holds a token** -- keep it that way.
+`test/unit/embedded-host.test.mjs` is the offline proof. Hosting mutations are
+identity-session only; `the-construct`'s `scripts/publish.mjs` is the reference
+caller. [MIGRATION.md](MIGRATION.md).
 
 **17.0.0 tracks ck-api `v2.0.0`: a bound GitHub repository is the working tree, and
 GitHub stays optional.** `CrowdyStudioProject.source` is `STUDIO` until the owner

@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '17.0.1';
+export const VERSION = '17.1.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -495,6 +495,25 @@ export {
   type BeginEntryParams,
   type SignInParams,
 } from './domains/portal.js';
+export {
+  EmbeddedHost,
+  EMBEDDED_HOST_PROTOCOL_VERSION,
+  type EmbeddedHostInfo,
+  type EmbeddedHostOptions,
+  type HostHelloMessage,
+  type HostHelloRequestMessage,
+  type NavigateMessage,
+} from './domains/embedded-host.js';
+export {
+  HostingAPI,
+  uploadPublishFiles,
+  type HostedGame,
+  type HostedGamePublish,
+  type HostedGameUpload,
+  type BeginGamePublishResult,
+  type CompleteGamePublishResult,
+  type PublishFileInput,
+} from './domains/hosting.js';
 export { generatePkcePair, generateState, type PkcePair } from './pkce.js';
 export { PlatformAPI, type PlatformConfig } from './domains/platform.js';
 export { OrganizationsAPI } from './domains/organizations.js';
