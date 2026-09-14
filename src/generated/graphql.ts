@@ -3353,6 +3353,8 @@ export type CrowdyStudioGitHubStatus = {
   /** Bound repository owner, when a project was named. */
   owner: Maybe<Scalars['String']['output']>;
   repo: Maybe<Scalars['String']['output']>;
+  /** Which repositories the installation covers: "all", or "selected" (a repository created on GitHub afterwards must be added to the installation at installUrl before it can be bound). Null when not connected. */
+  repositorySelection: Maybe<Scalars['String']['output']>;
 };
 
 /** Recursive listing of the bound repository at one commit. The commit is the one the paths were read at, so a follow-up file read can pin it. */

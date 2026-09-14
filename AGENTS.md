@@ -24,6 +24,8 @@ leaves the game origin and the shell never holds a token** -- keep it that way.
 identity-session only; `the-construct`'s `scripts/publish.mjs` is the reference
 caller. [MIGRATION.md](MIGRATION.md).
 
+**17.1.0 (ck-api v2.1.0) adds the guided "Create repository on GitHub" path:** `githubNewRepositoryUrl` / `githubRepositorySlug`, `controller.createGitHubRepository()` (prefilled `/new`, bind input prefilled, PUSH_PROJECT default), `status.repositorySelection`. The App still cannot create a repository itself. Additive.
+
 **17.0.0 tracks ck-api `v2.0.0`: a bound GitHub repository is the working tree, and
 GitHub stays optional.** `CrowdyStudioProject.source` is `STUDIO` until the owner
 binds a repository (`crowdyStudioGitHub.bind({ initial: 'PUSH_PROJECT' | 'TAKE_REPOSITORY' })`)

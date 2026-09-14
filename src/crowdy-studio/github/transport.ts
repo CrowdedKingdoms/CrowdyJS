@@ -32,6 +32,13 @@ export interface CrowdyStudioGitHubStatus {
   branch: string | null;
   /** Commit the project mirror is at; null when the project is not bound. */
   githubSha: string | null;
+  /**
+   * `all` or `selected`: which repositories the installation covers. A
+   * repository created on GitHub afterwards must be added to a `selected`
+   * installation (at `installUrl`) before it can be bound. Null when not
+   * connected.
+   */
+  repositorySelection: 'all' | 'selected' | null;
   installUrl: string | null;
 }
 
@@ -88,7 +95,7 @@ export interface CrowdyStudioGitHubProjectScope {
 }
 
 const STATUS_FIELDS = `
-  configured connected accountLogin accountType owner repo branch githubSha installUrl
+  configured connected accountLogin accountType owner repo branch githubSha repositorySelection installUrl
 `;
 
 const STATUS = `
