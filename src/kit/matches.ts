@@ -3,6 +3,7 @@ import type { EngineDetector } from './engine.js';
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { UdpAPI } from '../domains/udp.js';
 import type { Scalars } from '../generated/graphql.js';
+import { CrowdyGraphQLError } from '../errors.js';
 import { encodeBase64, generateCrowdyUuid } from '../utils.js';
 import { matchesNames, type MatchesNames } from './blueprints/index.js';
 import {
@@ -86,6 +87,12 @@ export class MatchesKit {
   private readonly names: MatchesNames;
   private readonly actorUuid: string;
   private readonly engineModuleName: string;
+  /**
+   * This client's participant incarnation per session, remembered from
+   * {@link create} (a creator starts at 1) and {@link join}, so {@link leave}
+   * can send the value the server requires without the caller carrying it.
+   */
+  private readonly incarnations = new Map<string, number>();
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -135,13 +142,14 @@ export class MatchesKit {
     // the channel-message sender id, never a replicated actor. Under the
     // default `presence: 'actor'` the server would expire every player after
     // the join grace window, so the roster is judged by nothing: players leave
-    // by `leave`, the match ends by `end`, and an emptied session is abandoned
-    // by the empty timeout.
+    // with `leave()`, `finish()` ends the session, and an emptied session is
+    // abandoned by the empty timeout.
     const session = await this.gameModel.createSession({
       appId: this.appId,
       name: input.displayName ?? `match-${input.mode ?? 'default'}`,
       presence: 'none',
     });
+    this.incarnations.set(session.sessionId, 1);
     const channel = await this.requireChannels().create({
       appId: this.appId,
       name: `match-${session.sessionId}`,
@@ -197,14 +205,51 @@ export class MatchesKit {
     );
   }
 
-  /** Join a match: session participation + the notification channel. */
+  /**
+   * Join a match: session participation + the notification channel. A rejoin
+   * (you are already in) returns your row with `incarnation + 1`. The
+   * incarnation is remembered on this kit instance for {@link leave}.
+   */
   async join(match: KitMatch) {
     const participant = await this.gameModel.joinSession({
       appId: this.appId,
       sessionId: match.sessionId,
     });
+    this.incarnations.set(match.sessionId, participant.incarnation);
     if (match.channelId !== '0' && match.channelId !== '') {
       await this.requireChannels().join(match.channelId);
+    }
+    return participant;
+  }
+
+  /**
+   * Leave a match: session departure + the notification channel. The server
+   * requires the incarnation {@link join} returned to *this* client, so a
+   * superseded client can never remove the one that took over; pass it, or
+   * let the kit use the one it remembered from `create` / `join` on this
+   * instance. A kit session is `presence: 'none'`, so this and {@link finish}
+   * are the roster's only exits.
+   *
+   * @throws {Error} when no incarnation is known for the match on this
+   *   instance and none was passed.
+   * @throws {CrowdyGraphQLError} `SESSION_INCARNATION_STALE` (a newer client
+   *   of yours rejoined), `SESSION_NOT_PARTICIPANT`, `NOT_FOUND`.
+   */
+  async leave(match: KitMatch, incarnation?: number) {
+    const known = incarnation ?? this.incarnations.get(match.sessionId);
+    if (known === undefined) {
+      throw new Error(
+        'kit.matches.leave needs the incarnation join() returned — pass it, or join through this kit instance',
+      );
+    }
+    const participant = await this.gameModel.leaveSession({
+      appId: this.appId,
+      sessionId: match.sessionId,
+      incarnation: known,
+    });
+    this.incarnations.delete(match.sessionId);
+    if (match.channelId !== '0' && match.channelId !== '') {
+      await this.requireChannels().leave(match.channelId);
     }
     return participant;
   }
@@ -364,6 +409,13 @@ export class MatchesKit {
    * Finish the match and record the winner (creator or host). Also drops the
    * pending turn deadline on a `turnTimer` match — `end_match` already
    * strands it, so this just saves the pointless fire and channel ping.
+   *
+   * When `end_match` succeeds the backing session is ended too
+   * (`gameModelEndSession`, reason `completed`): every participant is marked
+   * left, admission closes, and the session's events become eligible for
+   * retention. The game-authoritative step runs first; a session that is
+   * already ended (a replayed `finish`) is left as it is. Any other refusal
+   * of the session end propagates after the match itself has been finished.
    */
   async finish(
     match: KitMatch,
@@ -378,6 +430,20 @@ export class MatchesKit {
     });
     if (result.success && match.turnSeq !== undefined) {
       await this.cancelTurnDeadline(match);
+    }
+    if (result.success) {
+      try {
+        await this.gameModel.endSession({
+          appId: this.appId,
+          sessionId: match.sessionId,
+          reason: 'completed',
+        });
+      } catch (error) {
+        if (!(error instanceof CrowdyGraphQLError) || error.code !== 'SESSION_ENDED') {
+          throw error;
+        }
+      }
+      this.incarnations.delete(match.sessionId);
     }
     return result;
   }

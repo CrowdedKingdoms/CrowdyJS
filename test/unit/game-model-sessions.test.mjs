@@ -141,6 +141,128 @@ test("kit.matches creates its session with presence 'none' (a kit match never re
   assert.equal(created[0].appId, '7');
 });
 
+/**
+ * A fake gameModel for the kit's session exits: `leave` and `finish`. Records
+ * every call; `invoke` succeeds unless told otherwise; `endSession` can be made
+ * to refuse with a given GraphQL code.
+ */
+function fakeKitGameModel({ invokeSucceeds = true, endSessionCode = null } = {}) {
+  const calls = [];
+  const gql = (code) => new CrowdyGraphQLErrorCtor([{ message: code, extensions: { code } }]);
+  return {
+    calls,
+    async createSession(input) {
+      calls.push(['createSession', input]);
+      return { sessionId: 'sid', status: 'active', presence: 'none' };
+    },
+    async createContainer(input) {
+      calls.push(['createContainer', input]);
+      return { containerId: 'meta-1', displayName: input.displayName, sessionId: 'sid' };
+    },
+    async containerState() {
+      return { properties: [] };
+    },
+    async joinSession(input) {
+      calls.push(['joinSession', input]);
+      return { userId: '42', state: 'joined', incarnation: 3 };
+    },
+    async leaveSession(input) {
+      calls.push(['leaveSession', input]);
+      return { userId: '42', state: 'left', incarnation: input.incarnation, leftReason: 'left' };
+    },
+    async invoke(input) {
+      calls.push(['invoke', input]);
+      return {
+        eventId: 'e1',
+        functionName: input.functionName,
+        success: invokeSucceeds,
+        policyBypassed: null,
+        returnValueJson: invokeSucceeds ? '"finished"' : null,
+        fault: null,
+        errorMessage: invokeSucceeds ? null : 'denied',
+        mutationsApplied: [],
+      };
+    },
+    async endSession(input) {
+      calls.push(['endSession', input]);
+      if (endSessionCode) throw gql(endSessionCode);
+      return { sessionId: input.sessionId, status: 'completed' };
+    },
+  };
+}
+let CrowdyGraphQLErrorCtor;
+
+const kitMatch = {
+  sessionId: 'sid', metaId: 'meta-1', displayName: 'm', creatorUserId: 42, mode: 'duel',
+  state: 'active', round: 1, maxPlayers: 2, winnerUserId: 0, channelId: '77',
+};
+
+test('kit.matches.leave sends the incarnation remembered from join and leaves the channel', async () => {
+  const { MatchesKit, CrowdyGraphQLError } = await loadSdk();
+  CrowdyGraphQLErrorCtor = CrowdyGraphQLError;
+  const gameModel = fakeKitGameModel();
+  const channelCalls = [];
+  const channels = {
+    async join(id) { channelCalls.push(['join', id]); return true; },
+    async leave(id) { channelCalls.push(['leave', id]); return true; },
+  };
+  const kit = new MatchesKit('7', gameModel, channels, undefined);
+
+  // Nothing remembered yet: the caller must say which client is leaving.
+  await assert.rejects(() => kit.leave(kitMatch), /needs the incarnation/);
+
+  await kit.join(kitMatch);
+  const left = await kit.leave(kitMatch);
+  assert.deepEqual(gameModel.calls.at(-1), [
+    'leaveSession', { appId: '7', sessionId: 'sid', incarnation: 3 },
+  ]);
+  assert.equal(left.state, 'left');
+  assert.deepEqual(channelCalls, [['join', '77'], ['leave', '77']]);
+
+  // The memory is cleared by the leave; an explicit incarnation always wins.
+  await assert.rejects(() => kit.leave(kitMatch), /needs the incarnation/);
+  await kit.join(kitMatch);
+  await kit.leave(kitMatch, 9);
+  assert.equal(gameModel.calls.at(-1)[1].incarnation, 9);
+
+  // A creator starts at incarnation 1 and can leave without joining again.
+  await kit.create({ creatorUserId: '42' }).catch(() => undefined);
+  await kit.leave(kitMatch);
+  assert.equal(gameModel.calls.at(-1)[1].incarnation, 1);
+});
+
+test('kit.matches.finish ends the backing session after a successful end_match, and only then', async () => {
+  const { MatchesKit, CrowdyGraphQLError } = await loadSdk();
+  CrowdyGraphQLErrorCtor = CrowdyGraphQLError;
+
+  const ok = fakeKitGameModel();
+  const kit = new MatchesKit('7', ok, undefined, undefined);
+  const result = await kit.finish(kitMatch, '42');
+  assert.equal(result.success, true);
+  assert.deepEqual(ok.calls.map((c) => c[0]), ['invoke', 'endSession']);
+  assert.deepEqual(ok.calls[1][1], { appId: '7', sessionId: 'sid', reason: 'completed' });
+
+  // A denied end_match leaves the session alone.
+  const denied = fakeKitGameModel({ invokeSucceeds: false });
+  const deniedResult = await new MatchesKit('7', denied, undefined, undefined).finish(kitMatch, '42');
+  assert.equal(deniedResult.success, false);
+  assert.deepEqual(denied.calls.map((c) => c[0]), ['invoke']);
+
+  // An already-ended session is a replayed finish: tolerated.
+  const ended = fakeKitGameModel({ endSessionCode: 'SESSION_ENDED' });
+  const replay = await new MatchesKit('7', ended, undefined, undefined).finish(kitMatch, '42');
+  assert.equal(replay.success, true);
+  assert.deepEqual(ended.calls.map((c) => c[0]), ['invoke', 'endSession']);
+
+  // Anything else propagates -- after the match itself was finished.
+  const forbidden = fakeKitGameModel({ endSessionCode: 'FORBIDDEN' });
+  await assert.rejects(
+    () => new MatchesKit('7', forbidden, undefined, undefined).finish(kitMatch, '42'),
+    (error) => error instanceof CrowdyGraphQLError && error.code === 'FORBIDDEN',
+  );
+  assert.deepEqual(forbidden.calls.map((c) => c[0]), ['invoke', 'endSession']);
+});
+
 test('the session reads pass their variables through and select the contract fields', async () => {
   const { GameModelAPI } = await loadSdk();
   const calls = [];

@@ -26,7 +26,9 @@ timeout. Pass `actorUuid` on join only with the uuid the client actually
 replicates with (`session.self.uuid`), never the match kit's channel-ping uuid.
 A session created with `presence: 'none'` opts out of the rule (its exits are
 leave, end and the empty timeout); `kit.matches` creates with it, because a kit
-match never replicates an actor -- otherwise the kit is unchanged in 17.3.0.
+match never replicates an actor, and therefore owns those exits itself:
+`kit.matches.leave(match)` (incarnation remembered from create/join) and
+`finish()` ending the backing session are new in 17.3.0.
 Wrappers are thin: branch on `CrowdyGraphQLError.code` (`SESSION_FULL`,
 `SESSION_LOCKED`, `SESSION_CLOSED`, `SESSION_ENDED`, `SESSION_NOT_PARTICIPANT`,
 `SESSION_TARGET_NOT_PARTICIPANT`, `SESSION_INCARNATION_STALE`,

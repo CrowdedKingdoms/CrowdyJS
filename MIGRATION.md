@@ -51,14 +51,20 @@ field it returned; the SDK adds what the server now knows about a session.
   `SESSION_TARGET_NOT_PARTICIPANT` (the user named to `transferSessionHost` is
   not joined), `SESSION_INCARNATION_STALE`, `SESSION_HOST_TERM_STALE` — all on
   `CrowdyGraphQLError.code`.
-- **`kit.matches` creates its session with `presence: 'none'`.** A kit match is
-  GraphQL plus channel pings; its `actorUuid` is only the channel-message
-  sender id and never spawns in Buddy, so under the default mode every player
-  would be expired after the grace window. Players leave a match by `leave`,
-  a match ends by `end`, and an emptied session is abandoned by the empty
-  timeout. Otherwise the kit is unchanged: capacity still lives in `MatchMeta`
-  and join does not bind an actor. Moving it onto session capacity / admission
-  / host is a later, separate change.
+- **`kit.matches` creates its session with `presence: 'none'`, and now leaves
+  and ends it.** A kit match is GraphQL plus channel pings; its `actorUuid` is
+  only the channel-message sender id and never spawns in Buddy, so under the
+  default mode every player would be expired after the grace window. Because
+  nothing expires anybody, the kit owns the roster's exits: new
+  **`kit.matches.leave(match, incarnation?)`** calls `leaveSession` with the
+  incarnation the kit remembered from `create` / `join` on this instance (or
+  the one you pass) and leaves the match channel; **`finish()` now ends the
+  backing session** (`endSession`, reason `completed`) after a successful
+  `end_match`, so the roster is cleared and the session's events become
+  eligible for retention. An emptied session that was never finished is
+  abandoned by the empty timeout. Otherwise the kit is unchanged: capacity
+  still lives in `MatchMeta` and join does not bind an actor. Moving it onto
+  session capacity / admission / host is a later, separate change.
 
 No removals.
 

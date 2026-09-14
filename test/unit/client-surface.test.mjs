@@ -214,7 +214,7 @@ test('client exposes the full management + game sub-client surface', async () =>
     'revive', 'syncCombatant',
   ]);
   assertMethods(kit.matches, 'kit.matches', [
-    'create', 'open', 'get', 'join', 'start', 'advanceRound', 'myTurn', 'endTurn',
+    'create', 'open', 'get', 'join', 'leave', 'start', 'advanceRound', 'myTurn', 'endTurn',
     'ensureScore', 'score', 'standings', 'finish', 'notifyChanged', 'onMatchChanged',
   ]);
   assertMethods(kit.decks, 'kit.decks', [
