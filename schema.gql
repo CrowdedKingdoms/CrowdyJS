@@ -6854,6 +6854,10 @@ type GmSession {
   endReason: String
   """When the session was created."""
   createdAt: DateTime!
+  """
+  How the roster is judged: 'actor' (default) expires a joined participant with no fresh Buddy actor in the app after the join grace window; 'none' never expires anybody -- for turn-based play that never replicates an actor -- so the roster's only exits are leave, end, and the empty timeout once everyone has left.
+  """
+  presence: String!
 }
 
 """A user's participation in a session."""
@@ -6931,11 +6935,11 @@ type GmSessionParticipantInspection {
   """The roster row."""
   participant: GmSessionParticipant!
   """
-  'fresh' (a qualifying actor is present), 'grace' (inside the join grace window, not yet judged), 'stale' (no qualifying actor; the next presence sweep will expire this participant), 'legacy' (row predates presence tracking; never expired), 'left' (not joined).
+  'fresh' (a qualifying actor is present), 'grace' (inside the join grace window, not yet judged), 'stale' (no qualifying actor; the next presence sweep will expire this participant), 'none' (the session's presence mode is 'none'; never expired), 'legacy' (row predates presence tracking; never expired), 'left' (not joined).
   """
   presence: String!
   """
-  When the presence rule starts applying to this participant (join + grace), or null for a legacy row.
+  When the presence rule starts applying to this participant (join + grace), or null for a row the rule never applies to (a legacy row, or a session whose presence mode is 'none').
   """
   presenceFrom: DateTime
 }
@@ -14167,6 +14171,10 @@ input CreateSessionInput {
   Seconds a session may sit with nobody joined before the server ends it as abandoned. Omit for the platform default; 0 disables the timeout for this session.
   """
   emptyTimeoutSec: Int
+  """
+  How the roster is judged: 'actor' (default) expires a joined participant with no fresh Buddy actor in the app after the join grace window; 'none' never expires anybody. Use 'none' for turn-based play that talks GraphQL and channel pings and never replicates an actor (kit.matches does), where the roster's only exits are leave and end.
+  """
+  presence: String
   """
   Optional idempotency key. Replaying with the same key and identical input returns the first session instead of creating a second; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
   """

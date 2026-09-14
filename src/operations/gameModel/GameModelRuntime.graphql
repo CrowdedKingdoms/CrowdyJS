@@ -15,6 +15,7 @@ fragment GmSessionFields on GmSession {
   endedAt
   endReason
   createdAt
+  presence
 }
 
 fragment GmSessionParticipantFields on GmSessionParticipant {

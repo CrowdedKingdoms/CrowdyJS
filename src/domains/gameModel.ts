@@ -584,12 +584,21 @@ export class GameModelAPI {
    * session-creation policy ({@link setPolicy}); the caller becomes the creator
    * and a participant.
    *
+   * **Presence mode.** `presence: 'actor'` (the default) expires a joined
+   * participant with no fresh Buddy actor in the app after the join grace
+   * window. `presence: 'none'` never expires anybody: use it for turn-based
+   * play that talks GraphQL and channel pings and never replicates an actor
+   * (`kit.matches` does), where the roster's only exits are
+   * {@link leaveSession}, {@link endSession} and the empty timeout once
+   * everyone has left. The mode is fixed at creation.
+   *
    * @param input - {@link CreateSessionInput}: `appId` (decimal string), an
-   *   optional `name`, optional `metadataJson` (a JSON-object string), and
+   *   optional `name`, optional `metadataJson` (a JSON-object string),
    *   optional `participantUserIds` (decimal-string ids of initial participants
-   *   besides the creator).
+   *   besides the creator), optional `maxParticipants`, `admission`,
+   *   `emptyTimeoutSec`, `presence` and `idempotencyKey`.
    * @returns The created {@link GmSession} (`sessionId`, `status`, creator,
-   *   current turn, metadata, …).
+   *   host, admission, `presence`, revision, …).
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING` if the token
    *   is missing or not scoped to the app, `FORBIDDEN` if the session-creation
    *   policy disallows the caller, or `BAD_USER_INPUT` for malformed input.
@@ -608,10 +617,11 @@ export class GameModelAPI {
    * needs it. Pass `actorUuid` (your own Buddy actor, 32 hex chars — the uuid
    * you replicate with) to bind this participant's presence to that actor;
    * without it any fresh actor of yours in the app keeps you present.
-   * **Presence is your actor:** a participant with no fresh Buddy actor in the
-   * app after the join grace window is expired by the server
-   * (`participant_expired`); a client that only speaks GraphQL must rejoin to
-   * come back.
+   * **Presence is your actor** (in a `presence: 'actor'` session, the default):
+   * a participant with no fresh Buddy actor in the app after the join grace
+   * window is expired by the server (`participant_expired`); a client that only
+   * speaks GraphQL must rejoin to come back. In a `presence: 'none'` session
+   * nobody is expired and `actorUuid` is recorded but not judged.
    *
    * @param input - {@link JoinSessionInput}: `appId` (decimal string),
    *   `sessionId`, optional `role`, optional `actorUuid`, optional
@@ -704,7 +714,8 @@ export class GameModelAPI {
    *   `idempotencyKey`.
    * @returns The updated {@link GmSession} (`hostUserId`, `hostTerm`).
    * @throws {CrowdyGraphQLError} `FORBIDDEN`, `SESSION_HOST_TERM_STALE`,
-   *   `SESSION_NOT_PARTICIPANT` (the target is not joined), `SESSION_ENDED`.
+   *   `SESSION_TARGET_NOT_PARTICIPANT` (the user named is not joined; refetch
+   *   the snapshot and pick a participant), `SESSION_ENDED`.
    */
   async transferSessionHost(
     input: GameModelTransferSessionHostMutationVariables['input'],

@@ -111,6 +111,36 @@ test('the session mutations wrap their documents with { input } and unwrap the r
   }
 });
 
+test("kit.matches creates its session with presence 'none' (a kit match never replicates an actor)", async () => {
+  const { MatchesKit } = await loadSdk();
+  const created = [];
+  const gameModel = {
+    async createSession(input) {
+      created.push(input);
+      return { sessionId: 'sid', status: 'active', presence: input.presence ?? 'actor' };
+    },
+    async createContainer(input) {
+      return { containerId: 'meta-1', displayName: input.displayName, sessionId: 'sid' };
+    },
+    async container() {
+      return { containerId: 'meta-1', displayName: 'm', sessionId: 'sid', typeName: 'MatchMeta' };
+    },
+    async containerState() {
+      return { properties: [] };
+    },
+  };
+  const channels = {
+    async create() {
+      return { groupId: '77' };
+    },
+  };
+  const kit = new MatchesKit('7', gameModel, channels, undefined);
+  await kit.create({ creatorUserId: '42', mode: 'duel' }).catch(() => undefined);
+  assert.equal(created.length, 1, 'one createSession call');
+  assert.equal(created[0].presence, 'none');
+  assert.equal(created[0].appId, '7');
+});
+
 test('the session reads pass their variables through and select the contract fields', async () => {
   const { GameModelAPI } = await loadSdk();
   const calls = [];
@@ -129,7 +159,7 @@ test('the session reads pass their variables through and select the contract fie
   assert.deepEqual(fragmentFields(calls.at(-1).document, 'GmSessionFields'), [
     'sessionId', 'appId', 'name', 'status', 'createdByUserId', 'currentTurnUserId', 'metadataJson',
     'admission', 'maxParticipants', 'participantCount', 'hostUserId', 'hostTerm', 'revision',
-    'endedAt', 'endReason', 'createdAt',
+    'endedAt', 'endReason', 'createdAt', 'presence',
   ]);
 
   await api.sessionSnapshot({ appId, sessionId });

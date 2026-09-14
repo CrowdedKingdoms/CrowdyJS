@@ -63,6 +63,7 @@ test(
     assert.equal(created.hostUserId, String(owner.userId));
     assert.equal(created.hostTerm, 1);
     assert.equal(created.revision, '1');
+    assert.equal(created.presence, 'actor');
 
     // Stream from revision 0 so the retained history replays first.
     const received = [];
@@ -148,7 +149,7 @@ test(
       assert.equal(transferred.hostTerm, 3);
       await refused(
         clientC.gameModel.transferSessionHost({ appId, sessionId, toUserId: String(playerD.userId) }),
-        'SESSION_NOT_PARTICIPANT',
+        'SESSION_TARGET_NOT_PARTICIPANT',
       );
 
       // Snapshot and events agree, and the revision log is contiguous.
@@ -208,6 +209,23 @@ test(
       // Lobbies: the ended session is no longer listed as open + active.
       const open = await ownerClient.gameModel.sessions({ appId, status: 'active', admission: 'open' });
       assert.ok(!open.some((s) => s.sessionId === sessionId));
+
+      // A presence 'none' session (what kit.matches creates): the mode is on
+      // the row, inspection reports every joined participant as 'none', and
+      // nobody is ever judged by actor presence.
+      const turnBased = await ownerClient.gameModel.createSession({
+        appId, name: 'crowdyjs-e2e-turn-based', presence: 'none',
+      });
+      try {
+        assert.equal(turnBased.presence, 'none');
+        await clientB.gameModel.joinSession({ appId, sessionId: turnBased.sessionId });
+        const quiet = await ownerClient.gameModel.sessionInspect({ appId, sessionId: turnBased.sessionId });
+        assert.equal(quiet.session.presence, 'none');
+        assert.deepEqual(quiet.participants.map((p) => p.presence), ['none', 'none']);
+        assert.deepEqual(quiet.participants.map((p) => p.presenceFrom), [null, null]);
+      } finally {
+        await ownerClient.gameModel.endSession({ appId, sessionId: turnBased.sessionId }).catch(() => undefined);
+      }
     } finally {
       unsubscribe();
     }

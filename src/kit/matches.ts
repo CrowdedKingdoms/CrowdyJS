@@ -131,9 +131,16 @@ export class MatchesKit {
     maxPlayers?: number;
     displayName?: string;
   }): Promise<KitMatch> {
+    // A kit match talks GraphQL and channel pings; the `actorUuid` here is only
+    // the channel-message sender id, never a replicated actor. Under the
+    // default `presence: 'actor'` the server would expire every player after
+    // the join grace window, so the roster is judged by nothing: players leave
+    // by `leave`, the match ends by `end`, and an emptied session is abandoned
+    // by the empty timeout.
     const session = await this.gameModel.createSession({
       appId: this.appId,
       name: input.displayName ?? `match-${input.mode ?? 'default'}`,
+      presence: 'none',
     });
     const channel = await this.requireChannels().create({
       appId: this.appId,
