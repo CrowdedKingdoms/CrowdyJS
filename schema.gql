@@ -4956,6 +4956,10 @@ type CrowdyStudioGitHubStatus {
   Commit the project mirror is at. Every bound write presents it as expectedCommitSha; a stale value is refused with GITHUB_STALE_SHA. Null when the project is not bound.
   """
   githubSha: String
+  """
+  Which repositories the installation covers: "all", or "selected" (a repository created on GitHub afterwards must be added to the installation at installUrl before it can be bound). Null when not connected.
+  """
+  repositorySelection: String
   """Where to send the modder to install or manage the App."""
   installUrl: String
 }
