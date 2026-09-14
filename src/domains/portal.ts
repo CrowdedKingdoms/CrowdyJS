@@ -43,6 +43,7 @@ import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import type { GraphQLClient } from '../client.js';
 import type { SessionStore } from '../session.js';
 import { generatePkcePair, generateState } from '../pkce.js';
+import type { EmbeddedHost } from './embedded-host.js';
 
 export interface AppTokenResponse {
   /** Opaque app-scoped gameplay token. Send to the app's Game API as a Bearer. */
@@ -270,9 +271,15 @@ export interface SignInParams {
   /**
    * `false` to only compute and return the URL without navigating (tests,
    * SSR, a custom link). Default: navigate with `location.assign` when a
-   * browser `location` exists.
+   * browser `location` exists -- or, when a Crowdy Games shell frames this page,
+   * ask the shell to navigate (see `embedded-host.ts`).
    */
   navigate?: boolean;
+  /**
+   * `false` to ignore a framing Crowdy Games shell and run the top-level flow with
+   * the given `redirectUri` even when embedded. Default: consult the shell.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -327,7 +334,18 @@ export class PortalAPI {
     private readonly api: GraphQLClient,
     private readonly session: SessionStore,
     private readonly pkceStore: PkceStore = new BrowserSessionPkceStore(),
+    /**
+     * The Crowdy Games shell bridge, when this page may be framed by one
+     * (`createCrowdyClient` supplies it in a browser; `embeddedHost: false` opts out).
+     * See `embedded-host.ts` for what changes when a shell answers.
+     */
+    private readonly embeddedHost: EmbeddedHost | null = null,
   ) {}
+
+  /** The shell framing this game, if one has said hello. Null when top-level or self-hosted. */
+  embeddedHostInfo() {
+    return this.embeddedHost?.current() ?? null;
+  }
 
   /**
    * Native/direct mint: exchange the caller's identity session token for an
@@ -462,17 +480,30 @@ export class PortalAPI {
    * navigated to (useful when `navigate: false`).
    */
   async signIn(params: SignInParams): Promise<string> {
+    // EMBEDDED IN THE CROWDY GAMES SHELL? Ask (bounded) before deciding where the code
+    // returns and who navigates. A game that is top-level, self-hosted, or framed by a
+    // page that is not a shell gets a null here and the flow below is exactly what it
+    // was. See embedded-host.ts.
+    const host =
+      params.embedded === false ? null : await this.embeddedHost?.hello() ?? null;
     const authorizeUrl =
-      params.authorizeUrl ?? defaultHostedSignInUrl(this.api.getEndpoint());
+      params.authorizeUrl ??
+      (host ? `${host.authorizeOrigin}/authorize` : defaultHostedSignInUrl(this.api.getEndpoint()));
     const url = await this.beginEntry({
       appId: params.appId,
       authorizeUrl,
-      redirectUri: params.redirectUri,
+      // The shell's page is the registered return leg; the iframe's own URL is not.
+      redirectUri: host ? host.returnUrl : params.redirectUri,
       state: params.state,
     });
+    if (params.navigate === false) return url;
+    if (host) {
+      this.embeddedHost!.navigate(url);
+      return url;
+    }
     const loc = (globalThis as { location?: { assign?: (u: string) => void } })
       .location;
-    if (params.navigate !== false && typeof loc?.assign === 'function') {
+    if (typeof loc?.assign === 'function') {
       loc.assign(url);
     }
     return url;
