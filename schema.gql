@@ -8171,7 +8171,12 @@ type Query {
   """
   Publish history for a hosted game, newest first. Requires manage_apps on the app and a SESSION token.
   """
-  hostedGamePublishes(slug: String!, limit: Int = 20): [HostedGamePublish!]!
+  hostedGamePublishes(
+    """The hosting slug."""
+    slug: String!
+    """How many publishes to return, newest first (1-100, default 20)."""
+    limit: Int = 20
+  ): [HostedGamePublish!]!
   """
   Returns the organization's wallet, creating an empty zero-balance wallet on first access if one does not yet exist (so it never returns null). Use it to read the current balance and currency before charging usage or topping up. Requires the 'view_billing' org permission.
   """
@@ -10428,11 +10433,21 @@ type Mutation {
   """
   Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token.
   """
-  completeGamePublish(slug: String!, publishId: BigInt!): CompleteGamePublishResult!
+  completeGamePublish(
+    """The hosting slug the publish was begun for."""
+    slug: String!
+    """The publishId beginGamePublish returned."""
+    publishId: BigInt!
+  ): CompleteGamePublishResult!
   """
   Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token.
   """
-  abandonGamePublish(slug: String!, publishId: BigInt!): HostedGamePublish!
+  abandonGamePublish(
+    """The hosting slug the publish was begun for."""
+    slug: String!
+    """The STAGING publish to give up."""
+    publishId: BigInt!
+  ): HostedGamePublish!
   """
   Developer switch: DISABLED (the shell says "disabled by its developer") or back to LIVE. A TAKEN_DOWN game is refused (HOSTED_GAME_TAKEN_DOWN). Requires manage_apps and a SESSION token.
   """
@@ -10444,7 +10459,12 @@ type Mutation {
   """
   OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false.
   """
-  takeDownHostedGame(slug: String!, takenDown: Boolean = true): HostedGame!
+  takeDownHostedGame(
+    """The hosting slug."""
+    slug: String!
+    """true (default) takes the game down; false restores it to LIVE."""
+    takenDown: Boolean = true
+  ): HostedGame!
   """
   Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission.
   """
