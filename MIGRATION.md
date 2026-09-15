@@ -1,3 +1,100 @@
+# CrowdyJS v17.4 — the session system
+
+**Additive.** `17.4.0` (2026-09-14), on top of ck-api `v2.3.0`. Tracks cks-game-api
+PR #319 (the game-model session system). Every existing session method keeps its signature and every
+field it returned; the SDK adds what the server now knows about a session.
+
+- **Roster, admission, capacity, host.** `GmSession` gains `admission`
+  (`open | locked | closed`), `maxParticipants`, `participantCount`,
+  `hostUserId`, `hostTerm`, `revision`, `endedAt`, `endReason`, `createdAt`.
+  `createSession` accepts `maxParticipants`, `admission`, `emptyTimeoutSec`,
+  `presence` and `idempotencyKey`; `sessions` filters by `admission` and
+  `hostUserId` and takes a `limit`.
+- **New methods on `client.gameModel`:** `leaveSession`, `setSessionAdmission`,
+  `transferSessionHost`, `endSession` (host or app admin; all accept
+  `expectedHostTerm` and `idempotencyKey`), `sessionSnapshot`, `sessionEvents`,
+  `sessionInspect` (`manage_apps`), and the `sessionChanged` subscription
+  (`{ appId, sessionId, afterRevision? }`; same handler shape as
+  `containerChanged`). The contract is the player-count feed's: pull the
+  snapshot, apply events above its revision, re-pull on a gap.
+- **Reconnection is a rejoin.** `joinSession` on a session you are in returns
+  your row with `incarnation + 1`; the join result is now the full roster row
+  (`state`, `incarnation`, `actorUuid`, `joinedAt`, `leftAt`, `leftReason`).
+  **`leaveSession` requires that `incarnation`** — there is no "leave
+  regardless", so a stale client can never remove the one that took over
+  (`SESSION_INCARNATION_STALE`).
+- **Presence is your actor — a behaviour change every consumer inherits from
+  the server, with no SDK call involved.** A joined participant with no fresh
+  Buddy actor in the app after the join grace window (60 s by default) is
+  marked `left` / `presence_expired`, and a session nobody has been joined to
+  for longer than its `emptyTimeoutSec` (5 min by default; `0` disables) is
+  ended as `abandoned`. A client that only speaks GraphQL therefore drops out
+  of a session it never replicates in. Pass `actorUuid` on join to bind
+  presence to one specific actor (your own; 32-hex, the uuid you send on
+  `udp.sendActorUpdate` / `session.self.uuid`). Do **not** pass the match kit's
+  channel-ping uuid — it never spawns in Buddy.
+- **Opting out: `presence: 'none'`.** A session created with
+  `createSession({ ..., presence: 'none' })` is never judged by actor presence
+  (`GmSession.presence` reports the mode; `sessionInspect` shows its rows as
+  `presence: 'none'`). Its roster's only exits are `leaveSession`, `endSession`
+  and the empty timeout once everyone has left. Use it for turn-based play that
+  talks GraphQL and channel pings and never replicates an actor. The mode is
+  fixed at creation. A GraphQL-only session that does **not** opt out empties
+  after the grace window and is abandoned after the timeout.
+- **The `sessionChanged` push is per datacenter; the events table is the
+  record.** A revision committed in one region wakes subscribers on that
+  region's API replicas; `sessionEvents(afterRevision)` (and the replay the
+  subscription performs on connect) reads the durable rows, so a subscriber
+  reconnecting anywhere catches up from the revision it last saw.
+- **Error codes added:** `SESSION_FULL`, `SESSION_LOCKED`, `SESSION_CLOSED`,
+  `SESSION_ENDED`, `SESSION_NOT_PARTICIPANT` (the caller is not joined),
+  `SESSION_TARGET_NOT_PARTICIPANT` (the user named to `transferSessionHost` is
+  not joined), `SESSION_INCARNATION_STALE`, `SESSION_HOST_TERM_STALE` — all on
+  `CrowdyGraphQLError.code`.
+- **`kit.matches` creates its session with `presence: 'none'`, and now leaves
+  and ends it.** A kit match is GraphQL plus channel pings; its `actorUuid` is
+  only the channel-message sender id and never spawns in Buddy, so under the
+  default mode every player would be expired after the grace window. Because
+  nothing expires anybody, the kit owns the roster's exits: new
+  **`kit.matches.leave(match, incarnation?)`** calls `leaveSession` with the
+  incarnation the kit remembered from `create` / `join` on this instance (or
+  the one you pass) and leaves the match channel; **`finish()` now ends the
+  backing session** (`endSession`, reason `completed`) after a successful
+  `end_match`, so the roster is cleared and the session's events become
+  eligible for retention; the result's `sessionEnd` says what happened to the
+  session (`'ended'`, `'already_ended'` for a replayed finish, `'forbidden'`
+  when `end_match` admitted the caller but the session did not -- the creator
+  who already left, or the app's elected host who is not the session host -- in
+  which case the match is finished, the session is not, and nothing is thrown;
+  an app admin can `gameModel.endSession` it). An emptied
+  session that was never finished is abandoned by the empty timeout. Otherwise the kit is unchanged: capacity
+  still lives in `MatchMeta` and join does not bind an actor. Moving it onto
+  session capacity / admission / host is a later, separate change.
+
+No removals.
+
+# CrowdyJS v17.3 — "Create repository on GitHub" (additive)
+
+`17.3.0` (2026-09-14), tracks ck-api `v2.3.0`. Nothing removed. (Written as 17.1 while two other trains — binary-relay bundles 17.1.0 and Crowdy Games hosting 17.2.0 — shipped ahead of it.)
+
+- `CrowdyStudioGitHubStatus.repositorySelection` (`'all' | 'selected' | null`):
+  which repositories the installation covers. A repository created on GitHub
+  afterwards must be added to a `selected` installation (at `installUrl`)
+  before it can be bound.
+- `githubNewRepositoryUrl({ owner, name, description, visibility })` and
+  `githubRepositorySlug(name)` (from `@crowdedkingdoms/crowdyjs/crowdy-studio`):
+  GitHub's `/new` page prefilled for a mod. The App holds installation tokens
+  only and cannot create a repository; this makes the modder's own click a
+  short one.
+- `CrowdyStudioController.createGitHubRepository()` opens that page for the
+  open project (connected login as owner, project name slugged, private) and
+  sets `state.githubPendingRepo` to `owner/name`; the card's bind input is
+  prefilled with it and defaults to PUSH_PROJECT. On a game's app token the
+  bind itself still happens in hosted Studio; the message says so.
+- ck-api `v2.3.0`: a PUSH_PROJECT bind seeds a `README.md` (project name,
+  description, layout) when the branch has none, and treats an empty-tree
+  branch as empty rather than missing.
+
 # CrowdyJS v17.2 — publish to Crowdy Games; sign-in under the shell
 
 **Additive.** `17.2.0` (2026-09-14). Tracks ck-api `v2.1.0` (third-party game
