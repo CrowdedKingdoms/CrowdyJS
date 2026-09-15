@@ -68,7 +68,7 @@ console.log(me.email);
 Your game's origin must be registered under the app's **redirect URIs**
 (Studio > Apps > client settings); that one entry admits it to CORS and to the
 hosted sign-in return. Direct sign-in (`client.auth.login` / `register` / magic
-link / social) is served only to first-party pages (Studio, crowdy.games) and to
+link / social) is served only to first-party pages (Studio; the games host left this list on 2026-09-14 when the Overworld lobby stopped signing players in) and to
 non-browser callers (Node, CLI, tests); from any other browser origin the API
 answers `HOSTED_SIGN_IN_REQUIRED` (`isHostedSignInRequiredError`). See
 [Authentication](#authentication-session-token-vs-app-scoped-tokens).
@@ -89,7 +89,7 @@ game stack never receives the player's full session.
 | your code runs...                                   | sign in with                              | then                                  |
 |-----------------------------------------------------|-------------------------------------------|---------------------------------------|
 | in a browser, on your own domain (every customer game) | `portal.signIn` -> Studio -> `portal.handleSignInCallback` | the client already holds the app token |
-| in a browser, on a first-party host (Studio, crowdy.games) | `auth.login` / magic link / social       | `portal.mintAppToken(appId)`          |
+| in a browser, on the first-party host (Studio) | `auth.login` / magic link / social       | `portal.mintAppToken(appId)`          |
 | outside a browser (Node, CLI, CrowdyCPP, tests)        | `auth.login` / `auth.register`            | `portal.mintAppToken(appId)`          |
 
 The first row is the only one a game on its own domain can take: the direct

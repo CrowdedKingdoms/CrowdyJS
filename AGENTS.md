@@ -4,12 +4,42 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.2.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.4.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.4.0 exposes the game-model session system (ck-api PR #319 on top of v2.3.0, 2026-09-14):**
+`client.gameModel` gains `leaveSession`, `setSessionAdmission`,
+`transferSessionHost`, `endSession`, `sessionSnapshot`, `sessionEvents`,
+`sessionInspect` and the `sessionChanged` subscription; `GmSession` carries
+`admission` / `maxParticipants` / `participantCount` / `hostUserId` / `hostTerm` /
+`revision` / `endedAt` / `endReason`, and the join result is the roster row
+(`state`, `incarnation`, `actorUuid`, ...). Two rules a caller must know:
+`leaveSession` REQUIRES the `incarnation` the join returned (a superseded client
+cannot remove the one that took over), and **presence is the player's Buddy
+actor** -- a participant with no fresh actor in the app after the join grace
+window is expired by the server, and an empty session is abandoned after its
+timeout. Pass `actorUuid` on join only with the uuid the client actually
+replicates with (`session.self.uuid`), never the match kit's channel-ping uuid.
+A session created with `presence: 'none'` opts out of the rule (its exits are
+leave, end and the empty timeout); `kit.matches` creates with it, because a kit
+match never replicates an actor, and therefore owns those exits itself:
+`kit.matches.leave(match)` (incarnation remembered from create/join) and
+`finish()` ending the backing session are new in 17.4.0 (`finish()` reports the
+session end as `sessionEnd: 'ended' | 'already_ended' | 'forbidden'` rather than
+throwing on a caller `end_match` admitted but the session did not).
+Wrappers are thin: branch on `CrowdyGraphQLError.code` (`SESSION_FULL`,
+`SESSION_LOCKED`, `SESSION_CLOSED`, `SESSION_ENDED`, `SESSION_NOT_PARTICIPANT`,
+`SESSION_TARGET_NOT_PARTICIPANT`, `SESSION_INCARNATION_STALE`,
+`SESSION_HOST_TERM_STALE`). The `sessionChanged` push is per datacenter; the
+events table (`sessionEvents`) is the record. `schema.gql` on this branch is
+synced from cks-game-api `michael/session-system-mvp` rebased on `dev` (v2.3.0
+plus the session delta); re-sync from the published SDL once that PR is on dev.
+Numbered 17.4.0 because #158 took 17.3.0 while this was open.
+[MIGRATION.md](MIGRATION.md).
 
 **17.2.0 adds third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-14):**
 `client.hosting` (claim a slug, publish a bundle, list) plus the Node subpath
@@ -23,6 +53,8 @@ leaves the game origin and the shell never holds a token** -- keep it that way.
 `test/unit/embedded-host.test.mjs` is the offline proof. Hosting mutations are
 identity-session only; `the-construct`'s `scripts/publish.mjs` is the reference
 caller. [MIGRATION.md](MIGRATION.md).
+
+**17.3.0 (ck-api v2.3.0) adds the guided "Create repository on GitHub" path:** `githubNewRepositoryUrl` / `githubRepositorySlug`, `controller.createGitHubRepository()` (prefilled `/new`, bind input prefilled, PUSH_PROJECT default), `status.repositorySelection`. The App still cannot create a repository itself. Additive.
 
 **17.0.0 tracks ck-api `v2.0.0`: a bound GitHub repository is the working tree, and
 GitHub stays optional.** `CrowdyStudioProject.source` is `STUDIO` until the owner
