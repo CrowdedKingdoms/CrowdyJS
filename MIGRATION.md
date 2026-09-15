@@ -64,9 +64,9 @@ field it returned; the SDK adds what the server now knows about a session.
   eligible for retention; the result's `sessionEnd` says what happened to the
   session (`'ended'`, `'already_ended'` for a replayed finish, `'forbidden'`
   when `end_match` admitted the caller but the session did not -- the creator
-  who already left -- in which case the match is finished, the session is not,
-  and nothing is thrown). Host actions on the server now also admit the app's
-  elected host, so a host who is not the creator is not refused. An emptied
+  who already left, or the app's elected host who is not the session host -- in
+  which case the match is finished, the session is not, and nothing is thrown;
+  an app admin can `gameModel.endSession` it). An emptied
   session that was never finished is abandoned by the empty timeout. Otherwise the kit is unchanged: capacity
   still lives in `MatchMeta` and join does not bind an actor. Moving it onto
   session capacity / admission / host is a later, separate change.

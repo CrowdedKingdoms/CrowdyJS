@@ -16,9 +16,9 @@ import {
  * What {@link MatchesKit.finish} did about the backing session after a
  * successful `end_match`: `'ended'` (it ended it), `'already_ended'` (a
  * replayed finish; the session was already ended), `'forbidden'` (the caller
- * passed `end_match` but is neither the session host, the app's elected host
- * nor an app admin -- the creator who already left, typically -- so the
- * session is still active; an app admin can `gameModel.endSession` it).
+ * passed `end_match` -- creator or the app's elected host -- but is neither
+ * the session host nor an app admin, so the session is still active; an app
+ * admin can `gameModel.endSession` it).
  * Absent when `end_match` itself was refused (`success: false`).
  */
 export type KitMatchSessionEnd = 'ended' | 'already_ended' | 'forbidden';
@@ -434,7 +434,7 @@ export class MatchesKit {
    * happened to the session ({@link KitMatchSessionEnd}): `'ended'`, or
    * `'already_ended'` for a replayed finish, or `'forbidden'` when the caller
    * passed `end_match` (creator or the app's elected host) but is not admitted
-   * to the session end (the creator who already left) -- the match is
+   * to the session end (session host or app admin only) -- the match is
    * finished, the session is not, and nothing is thrown. Any other refusal of
    * the session end propagates.
    */

@@ -14230,7 +14230,7 @@ input SetSessionTurnInput {
 }
 
 """
-Change who may still join a session. Session host, the app's elected host, or app admin ('manage_apps').
+Change who may still join a session. Host or app admin ('manage_apps').
 """
 input SetSessionAdmissionInput {
   """The app (tenant) that owns the session."""
@@ -14250,7 +14250,7 @@ input SetSessionAdmissionInput {
 }
 
 """
-Hand the session host role to another joined participant. Session host, the app's elected host, or app admin ('manage_apps').
+Hand the session host role to another joined participant. Host or app admin ('manage_apps').
 """
 input TransferSessionHostInput {
   """The app (tenant) that owns the session."""
@@ -14267,9 +14267,7 @@ input TransferSessionHostInput {
   idempotencyKey: String
 }
 
-"""
-End a session. Session host, the app's elected host, or app admin ('manage_apps').
-"""
+"""End a session. Host or app admin ('manage_apps')."""
 input EndSessionInput {
   """The app (tenant) that owns the session."""
   appId: BigInt!

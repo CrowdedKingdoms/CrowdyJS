@@ -3729,7 +3729,7 @@ export type EmailStatusRecord = {
   status: Scalars['String']['output'];
 };
 
-/** End a session. Session host, the app's elected host, or app admin ('manage_apps'). */
+/** End a session. Host or app admin ('manage_apps'). */
 export type EndSessionInput = {
   /** The app (tenant) that owns the session. */
   appId: Scalars['BigInt']['input'];
@@ -11198,7 +11198,7 @@ export type SetRateCardResult = {
   entry: RateCardEntryType;
 };
 
-/** Change who may still join a session. Session host, the app's elected host, or app admin ('manage_apps'). */
+/** Change who may still join a session. Host or app admin ('manage_apps'). */
 export type SetSessionAdmissionInput = {
   /** 'open' (anyone the app admits), 'locked' (only participants who already joined may reconnect), 'closed' (nobody, not even by reconnection). */
   admission: Scalars['String']['input'];
@@ -11403,7 +11403,7 @@ export type TransferPlayerCodeListingInput = {
   toOwnerRef: Scalars['BigInt']['input'];
 };
 
-/** Hand the session host role to another joined participant. Session host, the app's elected host, or app admin ('manage_apps'). */
+/** Hand the session host role to another joined participant. Host or app admin ('manage_apps'). */
 export type TransferSessionHostInput = {
   /** The app (tenant) that owns the session. */
   appId: Scalars['BigInt']['input'];
