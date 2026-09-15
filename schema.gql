@@ -4956,6 +4956,10 @@ type CrowdyStudioGitHubStatus {
   Commit the project mirror is at. Every bound write presents it as expectedCommitSha; a stale value is refused with GITHUB_STALE_SHA. Null when the project is not bound.
   """
   githubSha: String
+  """
+  Which repositories the installation covers: "all", or "selected" (a repository created on GitHub afterwards must be added to the installation at installUrl before it can be bound). Null when not connected.
+  """
+  repositorySelection: String
   """Where to send the modder to install or manage the App."""
   installUrl: String
 }
@@ -6820,6 +6824,40 @@ type GmSession {
   currentTurnUserId: BigInt
   """JSON object of developer metadata."""
   metadataJson: String!
+  """
+  Who may still get in: 'open' (anyone the app admits), 'locked' (only a participant who already joined may reconnect), 'closed' (nobody; set automatically when the session ends).
+  """
+  admission: String!
+  """
+  Seat cap: the most participants that may be joined at once. Null means unbounded. A participant reconnecting never counts against it twice.
+  """
+  maxParticipants: Int
+  """How many participants are joined right now."""
+  participantCount: Int!
+  """
+  The current session host, or null while nobody is joined. The creator starts as host; when the host leaves or expires, the longest-joined present participant succeeds.
+  """
+  hostUserId: BigInt
+  """
+  Increments on every host change. Send it as expectedHostTerm on host actions to be refused (SESSION_HOST_TERM_STALE) instead of acting on a host change you have not seen.
+  """
+  hostTerm: Int!
+  """
+  Monotonic change counter. Every event in gameModelSessionChanged carries the revision that produced it; gameModelSessionSnapshot returns the revision it describes. Compare as integers.
+  """
+  revision: String!
+  """When the session ended, or null while active."""
+  endedAt: DateTime
+  """
+  Why it ended: 'completed' or 'abandoned' by the host/admin, 'empty_timeout' when the server ended a session nobody was in.
+  """
+  endReason: String
+  """When the session was created."""
+  createdAt: DateTime!
+  """
+  How the roster is judged: 'actor' (default) expires a joined participant with no fresh Buddy actor in the app after the join grace window; 'none' never expires anybody -- for turn-based play that never replicates an actor -- so the roster's only exits are leave, end, and the empty timeout once everyone has left.
+  """
+  presence: String!
 }
 
 """A user's participation in a session."""
@@ -6830,6 +6868,92 @@ type GmSessionParticipant {
   userId: BigInt!
   """The participant role within the session."""
   role: String!
+  """
+  'joined' while the user is in the session, 'left' after a leave, a presence expiry, or the session ending. Rows are kept so the roster history is answerable.
+  """
+  state: String!
+  """
+  Counts this user's joins to this session. A reconnect is the same row with incarnation + 1; a leave that names an older incarnation is a superseded client and is refused (SESSION_INCARNATION_STALE).
+  """
+  incarnation: Int!
+  """
+  The Buddy actor uuid the client bound at join, if any. When set, this participant's presence is that actor's; when null, any fresh actor of the user in the app counts.
+  """
+  actorUuid: String
+  """When the user first joined (kept across reconnects)."""
+  joinedAt: DateTime!
+  """When the participant last left, or null while joined."""
+  leftAt: DateTime
+  """
+  Why the participant left: 'left' (their own call), 'presence_expired' (no fresh actor past the grace window), 'session_ended', 'kicked'.
+  """
+  leftReason: String
+}
+
+"""
+One session revision: what changed, in order. The payload names the subject (user id, host, admission, ...) as a JSON object.
+"""
+type GmSessionEvent {
+  """The app (tenant)."""
+  appId: BigInt!
+  """The session this revision belongs to."""
+  sessionId: String!
+  """
+  The revision this event produced. Strictly increasing per session; a gap means a missed event -- pull gameModelSessionSnapshot or gameModelSessionEvents(afterRevision).
+  """
+  revision: String!
+  """
+  created | participant_joined | participant_rejoined | participant_left | participant_expired | host_changed | admission_changed | turn_changed | ended
+  """
+  kind: String!
+  """
+  JSON object describing the change (e.g. {"userId":"…","incarnation":2} for a join, {"hostUserId":"…","hostTerm":3,"previousHostUserId":"…","reason":"host_left"} for a host change).
+  """
+  payloadJson: String!
+  """When the revision was committed."""
+  createdAt: DateTime!
+}
+
+"""
+The authoritative state of one session at one revision: the session and every joined participant. The catch-up read after a subscription gap or a reconnect.
+"""
+type GmSessionSnapshot {
+  """The session row at this revision."""
+  session: GmSession!
+  """Every participant whose state is joined, oldest join first."""
+  participants: [GmSessionParticipant!]!
+  """
+  The revision this snapshot describes. Discard buffered events at or below it and apply the ones above it.
+  """
+  revision: String!
+}
+
+"""
+A joined participant with the platform's current presence verdict, for operators.
+"""
+type GmSessionParticipantInspection {
+  """The roster row."""
+  participant: GmSessionParticipant!
+  """
+  'fresh' (a qualifying actor is present), 'grace' (inside the join grace window, not yet judged), 'stale' (no qualifying actor; the next presence sweep will expire this participant), 'none' (the session's presence mode is 'none'; never expired), 'legacy' (row predates presence tracking; never expired), 'left' (not joined).
+  """
+  presence: String!
+  """
+  When the presence rule starts applying to this participant (join + grace), or null for a row the rule never applies to (a legacy row, or a session whose presence mode is 'none').
+  """
+  presenceFrom: DateTime
+}
+
+"""
+An operator's view of one session: the full roster including departed participants, each joined participant's live presence verdict, and the most recent events.
+"""
+type GmSessionInspection {
+  """The session row."""
+  session: GmSession!
+  """Every participant row, joined and left, oldest join first."""
+  participants: [GmSessionParticipantInspection!]!
+  """The most recent events, newest first."""
+  recentEvents: [GmSessionEvent!]!
 }
 
 """
@@ -9146,7 +9270,9 @@ type Query {
     """How many edge hops to follow from the root. Defaults to 1."""
     depth: Int = 1
   ): GmTraverseResult!
-  """Fetch one session by id. Requires a valid token."""
+  """
+  Fetch one session by id, with its joined-participant count, host, admission and revision. Requires a valid token.
+  """
   gameModelSession(
     """The app (tenant) that owns the session."""
     appId: BigInt!
@@ -9154,14 +9280,57 @@ type Query {
     sessionId: String!
   ): GmSession!
   """
-  List sessions in an app, optionally filtered by status. Requires a valid token.
+  List sessions in an app, newest first, optionally filtered by status, admission and/or host. Requires a valid token.
   """
   gameModelSessions(
     """The app (tenant) whose sessions to list."""
     appId: BigInt!
-    """Optional status filter (e.g. active). Omit for all statuses."""
+    """
+    Optional status filter (active | completed | abandoned). Omit for all statuses.
+    """
     status: String
+    """
+    Optional admission filter (open | locked | closed), e.g. open to list joinable lobbies.
+    """
+    admission: String
+    """Optional: only sessions hosted by this user."""
+    hostUserId: BigInt
+    """Most rows to return (default 200, max 1000)."""
+    limit: Int
   ): [GmSession!]!
+  """
+  The authoritative state of one session at one revision: the session row and every joined participant. Pull it when you subscribe, after a reconnect, or when gameModelSessionChanged shows a revision gap; then apply only events with a higher revision. Requires a valid token.
+  """
+  gameModelSessionSnapshot(
+    """The app (tenant) that owns the session."""
+    appId: BigInt!
+    """The session id."""
+    sessionId: String!
+  ): GmSessionSnapshot!
+  """
+  The session events with a revision greater than afterRevision, oldest first: the gap-fill read behind gameModelSessionChanged. Events of ended sessions are retained for a bounded period, then purged. Requires a valid token.
+  """
+  gameModelSessionEvents(
+    """The app (tenant) that owns the session."""
+    appId: BigInt!
+    """The session id."""
+    sessionId: String!
+    """
+    Return events with a revision strictly greater than this (0 for everything retained).
+    """
+    afterRevision: String!
+    """Most events to return (default 200, max 1000)."""
+    limit: Int
+  ): [GmSessionEvent!]!
+  """
+  Operator view of one session: the full roster including departed participants (with left reason and incarnation), each joined participant's live presence verdict, and the most recent events. Requires app-admin ('manage_apps').
+  """
+  gameModelSessionInspect(
+    """The app (tenant) that owns the session."""
+    appId: BigInt!
+    """The session id to inspect."""
+    sessionId: String!
+  ): GmSessionInspection! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Query the function-invocation event log (audit trail) with optional filters and pagination. Useful for debugging functions or showing recent activity. Requires a valid token.
   """
@@ -11304,29 +11473,65 @@ type Mutation {
     dedupeKey: String
   ): Int! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
-  Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save). Subject to the app's session creation policy. The caller becomes the creator and a participant. Requires a valid token.
+  Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save) with its own roster, host, admission and capacity. Subject to the app's session creation policy. The caller becomes creator, host (term 1) and a joined participant. Presence is actor presence: a participant with no fresh Buddy actor in the app after the join grace window is expired by the server. Requires a valid token.
   """
   gameModelCreateSession(
     """
-    The app, an optional name and metadata, and optional initial participant user ids.
+    The app, an optional name and metadata, optional initial participant user ids, and optional maxParticipants / admission / emptyTimeoutSec.
     """
     input: CreateSessionInput!
   ): GmSession!
   """
-  Join an existing session as a participant, optionally with a role. Requires a valid token and app access.
+  Join a session, or reconnect to one you are already in. Refused with SESSION_ENDED, SESSION_CLOSED, SESSION_LOCKED (unless you already joined) or SESSION_FULL. A rejoin returns the same row with incarnation + 1 and supersedes any older client of yours. Pass actorUuid to bind the participant's presence to that Buddy actor. Requires a valid token.
   """
   gameModelJoinSession(
-    """The app, the session id to join, and an optional participant role."""
+    """
+    The app, the session id to join, an optional participant role, and an optional actor uuid.
+    """
     input: JoinSessionInput!
   ): GmSessionParticipant!
   """
-  Set or clear the session's current-turn user, for turn-based play (authority enforced by the service). Pass userId null to clear the turn. Requires a valid token.
+  Leave a session you are joined to. Send the incarnation gameModelJoinSession gave you so a superseded client cannot remove the one that took over (SESSION_INCARNATION_STALE). Leaving an already-left row is a no-op. If you were host, the longest-joined present participant succeeds you (host_changed). Requires a valid token.
+  """
+  gameModelLeaveSession(
+    """The app, the session id, and your incarnation."""
+    input: LeaveSessionInput!
+  ): GmSessionParticipant!
+  """
+  Set or clear the session's current-turn user, for turn-based play. Allowed for an app admin, the app's elected host, the session host, or the current turn holder. Pass userId null to clear the turn; expectedHostTerm refuses a stale host. Requires a valid token.
   """
   gameModelSetSessionTurn(
     """
-    The app, the session id, and the user whose turn it now is (null clears it).
+    The app, the session id, the user whose turn it now is (null clears it), and optionally the host term you last read.
     """
     input: SetSessionTurnInput!
+  ): GmSession!
+  """
+  Change who may still join: 'open', 'locked' (participants who already joined may reconnect, nobody new), or 'closed' (nobody). Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. Emits admission_changed. Requires a valid token.
+  """
+  gameModelSetSessionAdmission(
+    """
+    The app, the session id, the new admission, and optionally the host term you last read.
+    """
+    input: SetSessionAdmissionInput!
+  ): GmSession!
+  """
+  Hand the session host role to another joined participant. Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. Increments hostTerm and emits host_changed. Requires a valid token.
+  """
+  gameModelTransferSessionHost(
+    """
+    The app, the session id, the joined participant who becomes host, and optionally the host term you last read.
+    """
+    input: TransferSessionHostInput!
+  ): GmSession!
+  """
+  End a session as 'completed' (default) or 'abandoned': every joined participant is marked left (session_ended), admission becomes closed, and an ended event closes the revision log. Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. The server also ends sessions nobody has been joined to for longer than their empty timeout. Requires a valid token.
+  """
+  gameModelEndSession(
+    """
+    The app, the session id, the terminal reason, and optionally the host term you last read.
+    """
+    input: EndSessionInput!
   ): GmSession!
   """
   Instantiate a container (a runtime entity of a given type), optionally within a session, with an owner and initial properties. Subject to the type's instantiableBy rule (admin | member | owner). Requires a valid token.
@@ -13954,9 +14159,29 @@ input CreateSessionInput {
   metadataJson: String
   """Initial participants besides the creator."""
   participantUserIds: [BigInt!]
+  """
+  Seat cap: the most participants that may be joined at once. Omit for unbounded. Initial participants count against it.
+  """
+  maxParticipants: Int
+  """
+  Initial admission: 'open' (default) or 'locked' (only the initial participants may join/reconnect until the host unlocks).
+  """
+  admission: String
+  """
+  Seconds a session may sit with nobody joined before the server ends it as abandoned. Omit for the platform default; 0 disables the timeout for this session.
+  """
+  emptyTimeoutSec: Int
+  """
+  How the roster is judged: 'actor' (default) expires a joined participant with no fresh Buddy actor in the app after the join grace window; 'none' never expires anybody. Use 'none' for turn-based play that talks GraphQL and channel pings and never replicates an actor (kit.matches does), where the roster's only exits are leave and end.
+  """
+  presence: String
+  """
+  Optional idempotency key. Replaying with the same key and identical input returns the first session instead of creating a second; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
+  """
+  idempotencyKey: String
 }
 
-"""Join an existing session."""
+"""Join an existing session, or reconnect to one you are already in."""
 input JoinSessionInput {
   """The app (tenant) that owns the session."""
   appId: BigInt!
@@ -13964,6 +14189,28 @@ input JoinSessionInput {
   sessionId: String!
   """Optional participant role to join as."""
   role: String
+  """
+  Optional: the Buddy actor uuid this client is playing as (32 hex characters, dashes accepted). It must be the caller's own actor. When given, the participant's presence is that actor's presence in the app; a new actor after a reconnect should rejoin with its uuid. When omitted, any fresh actor of this user in the app keeps the participant present.
+  """
+  actorUuid: String
+  """
+  Optional idempotency key. Replaying with the same key and identical input returns the first result (same incarnation) instead of joining again. Keys expire after 24h.
+  """
+  idempotencyKey: String
+}
+
+"""Leave a session you are joined to."""
+input LeaveSessionInput {
+  """The app (tenant) that owns the session."""
+  appId: BigInt!
+  """The session id to leave."""
+  sessionId: String!
+  """
+  The incarnation gameModelJoinSession returned to THIS client (a creator starts at 1; gameModelSessionSnapshot shows every participant's). Required: if a newer client has since rejoined as the same user, the call is refused with SESSION_INCARNATION_STALE and the newer client stays joined, so a superseded client can never remove the one that took over.
+  """
+  incarnation: Int!
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
 }
 
 """Set or clear the current-turn user of a session."""
@@ -13974,6 +14221,68 @@ input SetSessionTurnInput {
   sessionId: String!
   """The user whose turn it now is (NULL clears the turn)."""
   userId: BigInt
+  """
+  Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since, so a stale host never sets the turn.
+  """
+  expectedHostTerm: Int
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
+}
+
+"""
+Change who may still join a session. Host or app admin ('manage_apps').
+"""
+input SetSessionAdmissionInput {
+  """The app (tenant) that owns the session."""
+  appId: BigInt!
+  """The session id to update."""
+  sessionId: String!
+  """
+  'open' (anyone the app admits), 'locked' (only participants who already joined may reconnect), 'closed' (nobody, not even by reconnection).
+  """
+  admission: String!
+  """
+  Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since.
+  """
+  expectedHostTerm: Int
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
+}
+
+"""
+Hand the session host role to another joined participant. Host or app admin ('manage_apps').
+"""
+input TransferSessionHostInput {
+  """The app (tenant) that owns the session."""
+  appId: BigInt!
+  """The session id."""
+  sessionId: String!
+  """The joined participant who becomes host."""
+  toUserId: BigInt!
+  """
+  Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since.
+  """
+  expectedHostTerm: Int
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
+}
+
+"""End a session. Host or app admin ('manage_apps')."""
+input EndSessionInput {
+  """The app (tenant) that owns the session."""
+  appId: BigInt!
+  """The session id to end."""
+  sessionId: String!
+  """
+  Terminal status: 'completed' (default; the match ran its course) or 'abandoned'. Either way every joined participant is marked left (session_ended) and admission becomes closed.
+  """
+  reason: String
+  """
+  Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since.
+  """
+  expectedHostTerm: Int
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
 }
 
 """Instantiate a container (runtime entity)."""
@@ -15000,6 +15309,19 @@ type Subscription {
     """
     appId: BigInt!
   ): GameModelActivePlayerCountChange!
+  """
+  Stream the revisions of one session as they commit: joins, rejoins, leaves, presence expiries, host changes, admission changes, turn changes, and the end. There is no bootstrap event: pull gameModelSessionSnapshot first (or pass afterRevision to replay retained events from there). Revisions are strictly increasing; on a gap or after a reconnect, pull the snapshot again. Cross-replica, best-effort wakeup over a bounded oldest-drop buffer; the events table is the record. Requires a valid token.
+  """
+  gameModelSessionChanged(
+    """The app (tenant) that owns the session."""
+    appId: BigInt!
+    """The session to stream."""
+    sessionId: String!
+    """
+    Optional: replay retained events with a revision above this before streaming live ones. Omit to stream only what commits after you subscribe.
+    """
+    afterRevision: String
+  ): GmSessionEvent!
   """
   Push notification whenever a container in the app changes: an invoke mutated it, a direct gameModelSetProperty wrote it, or it was created/deleted. Metadata only (containerId, typeName, changedKeys — no property values); pull the visibility-filtered state with gameModelContainerState on receipt. Post-commit and best-effort (a dropped event costs one missed pull, never correctness) — durable reads remain the source of truth. Optional typeName/sessionId filters narrow delivery. Fans out across all API replicas. Requires a valid token. Replaces interval polling with pull-on-push.
   """

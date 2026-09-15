@@ -719,8 +719,44 @@ const CONNECTED_UNBOUND = {
   repo: null,
   branch: null,
   githubSha: null,
+  repositorySelection: 'selected',
   installUrl: 'https://github.com/settings/installations/1',
 };
+
+test('GitHub: "create repository" opens GitHub prefilled under the connected login and leaves owner/name for the bind', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const github = githubTransport(CONNECTED_UNBOUND);
+  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github }));
+  await controller.initialize();
+  await sleep(5);
+  const opened = [];
+  globalThis.window = { open: (url, target, features) => opened.push({ url, target, features }) };
+  try {
+    const url = new URL(controller.createGitHubRepository());
+    assert.equal(url.origin + url.pathname, 'https://github.com/new');
+    assert.equal(url.searchParams.get('owner'), 'modder');
+    assert.equal(url.searchParams.get('name'), 'weather-tools');
+    assert.equal(url.searchParams.get('visibility'), 'private');
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0].features, 'noopener,noreferrer');
+    const state = controller.getState();
+    assert.equal(state.githubPendingRepo, 'modder/weather-tools');
+    // A 'selected' installation is told to add the repository before binding.
+    assert.match(state.githubMessage, /add it to your Crowdy Studio installation/);
+    // Nothing was written anywhere.
+    assert.deepEqual(github.calls.map(([op]) => op), ['status']);
+  } finally {
+    delete globalThis.window;
+  }
+
+  // Not connected: refused before opening anything.
+  const github2 = githubTransport({ ...CONNECTED_UNBOUND, connected: false, accountLogin: null });
+  const c2 = new CrowdyStudioController(options(provider, playerCompute(), { github: github2 }));
+  await c2.initialize();
+  await sleep(5);
+  assert.throws(() => c2.createGitHubRepository(), /Connect GitHub first/);
+});
 
 test('GitHub: status is fetched on open, nothing else happens until asked', async () => {
   const { CrowdyStudioController } = await loadSdk();

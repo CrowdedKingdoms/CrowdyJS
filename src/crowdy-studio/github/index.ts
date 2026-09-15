@@ -17,3 +17,8 @@ export {
   trimSlash,
   underRoot,
 } from './layout.js';
+export {
+  githubNewRepositoryUrl,
+  githubRepositorySlug,
+  type GitHubNewRepositoryOptions,
+} from './new-repo.js';
