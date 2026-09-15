@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '17.3.0';
+export const VERSION = '17.4.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -329,6 +329,8 @@ export {
   type LootKitOptions,
   type LootNames,
   type LootTableSpec,
+  type KitMatchFinishResult,
+  type KitMatchSessionEnd,
   type MatchesBlueprintOptions,
   type MatchesKitOptions,
   type MatchesNames,
@@ -548,6 +550,8 @@ export {
   GameModelAPI,
   type GmContainerChangeEvent,
   type ContainerChangedHandlers,
+  type GmSessionChangeEvent,
+  type SessionChangedHandlers,
   type GmActivePlayerCountSnapshot,
   type GmActivePlayerCountChangeEvent,
   type ActivePlayerCountChangedHandlers,
