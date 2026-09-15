@@ -302,6 +302,13 @@ not a running service and is not a schema source; gameplay data lives in
   fix that; only `15.4.1` did. Do not read branch drift as harmless — a release
   cut during the drift window ships it.
 
+  **Promote with the tool:** `infra-control-plane/scripts/ops/promote.mjs --repo CrowdyJS --from <tier> --to <tier>`
+  regenerates this file for the destination tier (`--only crowdyjs`, so the
+  CrowdyCPP checkout is never touched), resyncs `schema.gql` from `cks-game-api`
+  at `origin/<to>`, runs codegen and `check:default-origin` as the PR will judge
+  it, and opens the PR. The paragraphs below explain what it does and why; they
+  stay true, and the gate stays the backstop.
+
   **THE PROMOTION THAT DOES NOT CONFLICT IS THE DANGEROUS ONE.** On 2026-09-02
   this hit CrowdyJS and CrowdyCPP on the same day, in the same release, both
   silently, both times putting `tier = 'test'` on `prod` — the tier where it costs
