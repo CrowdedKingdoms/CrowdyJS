@@ -35,10 +35,15 @@ Wrappers are thin: branch on `CrowdyGraphQLError.code` (`SESSION_FULL`,
 `SESSION_LOCKED`, `SESSION_CLOSED`, `SESSION_ENDED`, `SESSION_NOT_PARTICIPANT`,
 `SESSION_TARGET_NOT_PARTICIPANT`, `SESSION_INCARNATION_STALE`,
 `SESSION_HOST_TERM_STALE`). The `sessionChanged` push is per datacenter; the
-events table (`sessionEvents`) is the record. `schema.gql` on this branch is
-synced from cks-game-api `michael/session-system-mvp` rebased on `dev` (v2.3.0
-plus the session delta); re-sync from the published SDL once that PR is on dev.
-Numbered 17.4.0 because #158 took 17.3.0 while this was open.
+events table (`sessionEvents`) is the record. `schema.gql` matches ck-api
+v2.4.0, which is on all three tiers as of 2026-09-15 (published SDL on every
+docs host). Numbered 17.4.0 because #158 took 17.3.0 while this was open.
+**Known gap (2026-09-15):** `kit.matches.create` makes its match channel with
+no `membershipPolicy`, so it inherits the app's channel default, which is
+`invite`; a second player's `kit.matches.join` then fails at `channels.join`
+("This group is invite-only"). Pre-existing; the kit e2e only passes on an app
+whose channel default is `open` (the tier sandboxes were set so). Fix in the
+kit (`membershipPolicy: 'open'` on the match channel), mirrored in CrowdyCPP.
 [MIGRATION.md](MIGRATION.md).
 
 **17.2.0 adds third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-14):**
@@ -296,6 +301,13 @@ not a running service and is not a schema source; gameplay data lives in
   client with no explicit origin dialled production. Fixing the branches did not
   fix that; only `15.4.1` did. Do not read branch drift as harmless — a release
   cut during the drift window ships it.
+
+  **Promote with the tool:** `infra-control-plane/scripts/ops/promote.mjs --repo CrowdyJS --from <tier> --to <tier>`
+  regenerates this file for the destination tier (`--only crowdyjs`, so the
+  CrowdyCPP checkout is never touched), resyncs `schema.gql` from `cks-game-api`
+  at `origin/<to>`, runs codegen and `check:default-origin` as the PR will judge
+  it, and opens the PR. The paragraphs below explain what it does and why; they
+  stay true, and the gate stays the backstop.
 
   **THE PROMOTION THAT DOES NOT CONFLICT IS THE DANGEROUS ONE.** On 2026-09-02
   this hit CrowdyJS and CrowdyCPP on the same day, in the same release, both
