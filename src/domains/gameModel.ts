@@ -13,6 +13,30 @@ import {
   GameModelSetSessionTurnDocument,
   type GameModelSetSessionTurnMutation,
   type GameModelSetSessionTurnMutationVariables,
+  GameModelLeaveSessionDocument,
+  type GameModelLeaveSessionMutation,
+  type GameModelLeaveSessionMutationVariables,
+  GameModelSetSessionAdmissionDocument,
+  type GameModelSetSessionAdmissionMutation,
+  type GameModelSetSessionAdmissionMutationVariables,
+  GameModelTransferSessionHostDocument,
+  type GameModelTransferSessionHostMutation,
+  type GameModelTransferSessionHostMutationVariables,
+  GameModelEndSessionDocument,
+  type GameModelEndSessionMutation,
+  type GameModelEndSessionMutationVariables,
+  GameModelSessionSnapshotDocument,
+  type GameModelSessionSnapshotQuery,
+  type GameModelSessionSnapshotQueryVariables,
+  GameModelSessionEventsDocument,
+  type GameModelSessionEventsQuery,
+  type GameModelSessionEventsQueryVariables,
+  GameModelSessionInspectDocument,
+  type GameModelSessionInspectQuery,
+  type GameModelSessionInspectQueryVariables,
+  GameModelSessionChangedDocument,
+  type GameModelSessionChangedSubscription,
+  type GameModelSessionChangedSubscriptionVariables,
   GameModelCreateContainerDocument,
   type GameModelCreateContainerMutation,
   type GameModelCreateContainerMutationVariables,
@@ -267,6 +291,31 @@ import {
 export type GmContainerChangeEvent =
   GameModelContainerChangedSubscription['gameModelContainerChanged'];
 
+/** One session revision as streamed by {@link GameModelAPI.sessionChanged}. */
+export type GmSessionChangeEvent =
+  GameModelSessionChangedSubscription['gameModelSessionChanged'];
+
+/** Handlers for {@link GameModelAPI.sessionChanged}. */
+export interface SessionChangedHandlers {
+  /**
+   * One revision of the session. `revision` is a decimal string and strictly
+   * increasing; `kind` is one of `created | participant_joined |
+   * participant_rejoined | participant_left | participant_expired |
+   * host_changed | admission_changed | turn_changed | ended`; `payloadJson`
+   * names the subject (user id, host, admission, ...).
+   */
+  next: (event: GmSessionChangeEvent) => void;
+  /** Transport/GraphQL errors (the subscription retries on socket drops). */
+  error?: (error: unknown) => void;
+  /** The server ended the stream. */
+  complete?: () => void;
+  /**
+   * WebSocket constructor for runtimes without a global `WebSocket` (Node
+   * ≤ 21): pass `(await import('ws')).default`.
+   */
+  webSocketImpl?: unknown;
+}
+
 /** Handlers for {@link GameModelAPI.containerChanged}. */
 export interface ContainerChangedHandlers {
   /** A container changed (metadata only — pull state on receipt). */
@@ -468,6 +517,65 @@ export class GameModelAPI {
     };
   }
 
+  /**
+   * **Subscriptions** — stream the revisions of one session as they commit
+   * (`gameModelSessionChanged`): joins, rejoins, leaves, presence expiries,
+   * host changes, admission changes, turn changes and the end. There is no
+   * bootstrap event: pull {@link sessionSnapshot} first, or pass
+   * `afterRevision` to replay retained events from there. Revisions are
+   * strictly increasing; on a gap or after a reconnect, pull the snapshot
+   * again. Cross-replica and best-effort over a bounded buffer; the events
+   * table ({@link sessionEvents}) is the record. Requires a `wsUrl` in the
+   * client config.
+   *
+   * @param variables - `{ appId, sessionId, afterRevision? }`.
+   * @param handlers - `next` per revision; optional `error` / `complete` /
+   *   `webSocketImpl`.
+   * @returns An unsubscribe function (closes this subscription's socket).
+   * @throws {Error} Synchronously when the client config has no `wsUrl`.
+   */
+  sessionChanged(
+    variables: GameModelSessionChangedSubscriptionVariables,
+    handlers: SessionChangedHandlers,
+  ): () => void {
+    if (!this.ws?.wsUrl) {
+      throw new Error(
+        'sessionChanged requires a wsUrl in the client config (graphql-transport-ws endpoint)',
+      );
+    }
+    const client = createWsClient({
+      url: this.ws.wsUrl,
+      lazy: false,
+      retryAttempts: 8,
+      ...(handlers.webSocketImpl
+        ? { webSocketImpl: handlers.webSocketImpl as never }
+        : {}),
+      connectionParams: () => {
+        const token = this.ws?.getToken();
+        return token ? { Authorization: `Bearer ${token}` } : {};
+      },
+    });
+    const dispose = client.subscribe(
+      { query: print(GameModelSessionChangedDocument), variables },
+      {
+        next: (msg: { data?: unknown; errors?: unknown }) => {
+          const data = msg.data as GameModelSessionChangedSubscription | undefined;
+          if (data?.gameModelSessionChanged) {
+            handlers.next(data.gameModelSessionChanged);
+          } else if (msg.errors) {
+            handlers.error?.(msg.errors);
+          }
+        },
+        error: (err) => handlers.error?.(err),
+        complete: () => handlers.complete?.(),
+      },
+    );
+    return () => {
+      dispose();
+      void client.dispose();
+    };
+  }
+
   // -- Runtime (player) -------------------------------------------------------
 
   /**
@@ -476,12 +584,21 @@ export class GameModelAPI {
    * session-creation policy ({@link setPolicy}); the caller becomes the creator
    * and a participant.
    *
+   * **Presence mode.** `presence: 'actor'` (the default) expires a joined
+   * participant with no fresh Buddy actor in the app after the join grace
+   * window. `presence: 'none'` never expires anybody: use it for turn-based
+   * play that talks GraphQL and channel pings and never replicates an actor
+   * (`kit.matches` does), where the roster's only exits are
+   * {@link leaveSession}, {@link endSession} and the empty timeout once
+   * everyone has left. The mode is fixed at creation.
+   *
    * @param input - {@link CreateSessionInput}: `appId` (decimal string), an
-   *   optional `name`, optional `metadataJson` (a JSON-object string), and
+   *   optional `name`, optional `metadataJson` (a JSON-object string),
    *   optional `participantUserIds` (decimal-string ids of initial participants
-   *   besides the creator).
+   *   besides the creator), optional `maxParticipants`, `admission`,
+   *   `emptyTimeoutSec`, `presence` and `idempotencyKey`.
    * @returns The created {@link GmSession} (`sessionId`, `status`, creator,
-   *   current turn, metadata, …).
+   *   host, admission, `presence`, revision, …).
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING` if the token
    *   is missing or not scoped to the app, `FORBIDDEN` if the session-creation
    *   policy disallows the caller, or `BAD_USER_INPUT` for malformed input.
@@ -494,15 +611,28 @@ export class GameModelAPI {
   }
 
   /**
-   * **Sessions** — join an existing session as a participant, optionally with a
-   * role. Requires a valid token and access to the app.
+   * **Sessions** — join a session, or **reconnect** to one you are already in.
+   * A rejoin returns your row with `incarnation + 1` and supersedes any older
+   * client of yours; keep the returned `incarnation`, {@link leaveSession}
+   * needs it. Pass `actorUuid` (your own Buddy actor, 32 hex chars — the uuid
+   * you replicate with) to bind this participant's presence to that actor;
+   * without it any fresh actor of yours in the app keeps you present.
+   * **Presence is your actor** (in a `presence: 'actor'` session, the default):
+   * a participant with no fresh Buddy actor in the app after the join grace
+   * window is expired by the server (`participant_expired`); a client that only
+   * speaks GraphQL must rejoin to come back. In a `presence: 'none'` session
+   * nobody is expired and `actorUuid` is recorded but not judged.
    *
    * @param input - {@link JoinSessionInput}: `appId` (decimal string),
-   *   `sessionId`, and an optional participant `role`.
-   * @returns The {@link GmSessionParticipant} record (`sessionId`, `userId`,
-   *   `role`).
-   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`,
-   *   `NOT_FOUND` if no such session, or `FORBIDDEN` if joining isn't permitted.
+   *   `sessionId`, optional `role`, optional `actorUuid`, optional
+   *   `idempotencyKey` (replaying returns the same incarnation).
+   * @returns The {@link GmSessionParticipant} row (`state`, `incarnation`,
+   *   `actorUuid`, `joinedAt`, ...).
+   * @throws {CrowdyGraphQLError} `SESSION_FULL` (every seat taken),
+   *   `SESSION_LOCKED` (admission locked and you never joined),
+   *   `SESSION_CLOSED`, `SESSION_ENDED`, `FORBIDDEN` (the `actorUuid` is not
+   *   yours or is already bound by another participant), `NOT_FOUND`,
+   *   `UNAUTHENTICATED` / `SCOPE_MISSING`.
    */
   async joinSession(
     input: GameModelJoinSessionMutationVariables['input'],
@@ -529,6 +659,90 @@ export class GameModelAPI {
   ): Promise<GameModelSetSessionTurnMutation['gameModelSetSessionTurn']> {
     const data = await this.gql.request(GameModelSetSessionTurnDocument, { input });
     return data.gameModelSetSessionTurn;
+  }
+
+  /**
+   * **Sessions** — leave a session you are joined to. `incarnation` is
+   * **required**: it is the value {@link joinSession} returned to *this*
+   * client (a creator starts at 1), so a superseded client can never remove
+   * the one that took over. Leaving an already-left row is a no-op. If you
+   * were host, the longest-joined present participant succeeds you
+   * (`host_changed`).
+   *
+   * @param input - {@link LeaveSessionInput}: `appId`, `sessionId`,
+   *   `incarnation`, optional `idempotencyKey`.
+   * @returns Your {@link GmSessionParticipant} row, now `state: 'left'` with
+   *   `leftReason: 'left'`.
+   * @throws {CrowdyGraphQLError} `SESSION_INCARNATION_STALE` (a newer client
+   *   rejoined as you — stop acting from this one, or rejoin),
+   *   `SESSION_NOT_PARTICIPANT`, `NOT_FOUND`.
+   */
+  async leaveSession(
+    input: GameModelLeaveSessionMutationVariables['input'],
+  ): Promise<GameModelLeaveSessionMutation['gameModelLeaveSession']> {
+    const data = await this.gql.request(GameModelLeaveSessionDocument, { input });
+    return data.gameModelLeaveSession;
+  }
+
+  /**
+   * **Sessions** — change who may still join: `'open'` (anyone the app
+   * admits), `'locked'` (only participants who already joined may reconnect —
+   * set it when the match starts), `'closed'` (nobody). Session host or app
+   * admin (`manage_apps`). Emits `admission_changed`.
+   *
+   * @param input - {@link SetSessionAdmissionInput}: `appId`, `sessionId`,
+   *   `admission`, optional `expectedHostTerm` (the `hostTerm` you last read:
+   *   refused if the host changed since), optional `idempotencyKey`.
+   * @returns The updated {@link GmSession}.
+   * @throws {CrowdyGraphQLError} `FORBIDDEN` (not host / admin),
+   *   `SESSION_HOST_TERM_STALE`, `SESSION_ENDED`, `NOT_FOUND`.
+   */
+  async setSessionAdmission(
+    input: GameModelSetSessionAdmissionMutationVariables['input'],
+  ): Promise<GameModelSetSessionAdmissionMutation['gameModelSetSessionAdmission']> {
+    const data = await this.gql.request(GameModelSetSessionAdmissionDocument, { input });
+    return data.gameModelSetSessionAdmission;
+  }
+
+  /**
+   * **Sessions** — hand the host role to another *joined* participant.
+   * Session host or app admin. Increments `hostTerm` and emits
+   * `host_changed` (reason `transferred`).
+   *
+   * @param input - {@link TransferSessionHostInput}: `appId`, `sessionId`,
+   *   `toUserId` (decimal string), optional `expectedHostTerm`, optional
+   *   `idempotencyKey`.
+   * @returns The updated {@link GmSession} (`hostUserId`, `hostTerm`).
+   * @throws {CrowdyGraphQLError} `FORBIDDEN`, `SESSION_HOST_TERM_STALE`,
+   *   `SESSION_TARGET_NOT_PARTICIPANT` (the user named is not joined; refetch
+   *   the snapshot and pick a participant), `SESSION_ENDED`.
+   */
+  async transferSessionHost(
+    input: GameModelTransferSessionHostMutationVariables['input'],
+  ): Promise<GameModelTransferSessionHostMutation['gameModelTransferSessionHost']> {
+    const data = await this.gql.request(GameModelTransferSessionHostDocument, { input });
+    return data.gameModelTransferSessionHost;
+  }
+
+  /**
+   * **Sessions** — end a session as `'completed'` (default) or `'abandoned'`.
+   * Every joined participant is marked left (`session_ended`), admission
+   * becomes `closed`, `endedAt` / `endReason` are set and an `ended` event
+   * closes the revision log. Session host or app admin. (The server also ends a
+   * session nobody has been joined to for longer than its `emptyTimeoutSec` as
+   * `abandoned` / `empty_timeout`.)
+   *
+   * @param input - {@link EndSessionInput}: `appId`, `sessionId`, optional
+   *   `reason`, optional `expectedHostTerm`, optional `idempotencyKey`.
+   * @returns The ended {@link GmSession}.
+   * @throws {CrowdyGraphQLError} `FORBIDDEN`, `SESSION_HOST_TERM_STALE`,
+   *   `SESSION_ENDED` (already ended), `NOT_FOUND`.
+   */
+  async endSession(
+    input: GameModelEndSessionMutationVariables['input'],
+  ): Promise<GameModelEndSessionMutation['gameModelEndSession']> {
+    const data = await this.gql.request(GameModelEndSessionDocument, { input });
+    return data.gameModelEndSession;
   }
 
   /**
@@ -779,10 +993,13 @@ export class GameModelAPI {
   }
 
   /**
-   * **Sessions** — list sessions in an app, optionally filtered by status.
+   * **Sessions** — list sessions in an app, newest first, optionally filtered
+   * by `status` (`active | completed | abandoned`), `admission`
+   * (`open | locked | closed` — `'open'` lists joinable lobbies) and/or
+   * `hostUserId`.
    *
-   * @param variables - `{ appId, status? }`: `appId` (decimal string) and an
-   *   optional `status` filter (e.g. `'active'`; omit for all statuses).
+   * @param variables - `{ appId, status?, admission?, hostUserId?, limit? }`
+   *   (`limit` defaults to 200, max 1000).
    * @returns The matching {@link GmSession}s.
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`.
    */
@@ -791,6 +1008,57 @@ export class GameModelAPI {
   ): Promise<GameModelSessionsQuery['gameModelSessions']> {
     const data = await this.gql.request(GameModelSessionsDocument, variables);
     return data.gameModelSessions;
+  }
+
+  /**
+   * **Sessions** — the authoritative state of one session at one revision: the
+   * session row and every *joined* participant. Pull it when you subscribe
+   * with {@link sessionChanged}, after a reconnect, or when the stream shows a
+   * revision gap; then apply only events whose `revision` is above
+   * `snapshot.revision`.
+   *
+   * @param variables - `{ appId, sessionId }`.
+   * @returns `{ revision, session, participants }`.
+   * @throws {CrowdyGraphQLError} `NOT_FOUND`, `UNAUTHENTICATED` / `SCOPE_MISSING`.
+   */
+  async sessionSnapshot(
+    variables: GameModelSessionSnapshotQueryVariables,
+  ): Promise<GameModelSessionSnapshotQuery['gameModelSessionSnapshot']> {
+    const data = await this.gql.request(GameModelSessionSnapshotDocument, variables);
+    return data.gameModelSessionSnapshot;
+  }
+
+  /**
+   * **Sessions** — the events of a session with a revision strictly greater
+   * than `afterRevision`, oldest first: the gap-fill read behind
+   * {@link sessionChanged}. Events of ended sessions are retained for a bounded
+   * period, then purged.
+   *
+   * @param variables - `{ appId, sessionId, afterRevision, limit? }`;
+   *   `afterRevision` is a decimal string (`'0'` for everything retained).
+   * @returns The matching {@link GmSessionEvent}s.
+   */
+  async sessionEvents(
+    variables: GameModelSessionEventsQueryVariables,
+  ): Promise<GameModelSessionEventsQuery['gameModelSessionEvents']> {
+    const data = await this.gql.request(GameModelSessionEventsDocument, variables);
+    return data.gameModelSessionEvents;
+  }
+
+  /**
+   * **Sessions (operators)** — the full roster including departed participants
+   * (with `leftReason` and `incarnation`), each joined participant's live
+   * presence verdict (`fresh | grace | stale | legacy | left`), and the most
+   * recent events. Requires app-admin (`manage_apps`).
+   *
+   * @param variables - `{ appId, sessionId }`.
+   * @throws {CrowdyGraphQLError} `FORBIDDEN` without `manage_apps`.
+   */
+  async sessionInspect(
+    variables: GameModelSessionInspectQueryVariables,
+  ): Promise<GameModelSessionInspectQuery['gameModelSessionInspect']> {
+    const data = await this.gql.request(GameModelSessionInspectDocument, variables);
+    return data.gameModelSessionInspect;
   }
 
   /**
