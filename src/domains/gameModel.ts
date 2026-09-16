@@ -609,9 +609,11 @@ export class GameModelAPI {
    *   rows' current properties). At most 2,000 rows per session; above that the
    *   creation is refused and no session exists. The count is on the create
    *   response as `seededContainerCount` (null on later reads) and on the
-   *   session's `created` event as `containersSeeded`. Containers of an ended
-   *   session are dropped by the server after its retention window (7 days by
-   *   default).
+   *   session's `created` event as `containersSeeded`. An `'app'`-scoped type
+   *   is refused. The copies are marked, and on a tier whose operator has
+   *   enabled retention (`GM_SESSION_CONTAINER_RETENTION_DAYS`; off by default)
+   *   they -- and only they -- are dropped once the session has been ended that
+   *   long; hand-made rows in the session are never purged.
    * @returns The created {@link GmSession} (`sessionId`, `status`, creator,
    *   host, admission, `presence`, revision, `seededContainerCount`, …).
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING` if the token
@@ -1206,7 +1208,10 @@ export class GameModelAPI {
    *   (`fromTempId`/`toTempId`). A container may name its own `bindingKey`
    *   (on a type that is `instantiableBy: 'admin'` or carries a `bindPolicyJson`,
    *   and not beginning with `seed:`) so a runtime `gameModelEnsureContainer` later
-   *   resolves the same row; otherwise it binds as `seed:` + `tempId`. At most
+   *   resolves the same row; otherwise it binds as `seed:` + `tempId`. A
+   *   caller-keyed row that already exists is adopted only if its `ownerUserId`
+   *   matches (a re-seed); a row a player claimed first is refused and nothing
+   *   is written. At most
    *   **1,000 containers per call**, all-or-nothing; the same key on two types
    *   is two rows. A container type may declare `scope: 'app'` (one row per key
    *   for the whole app) or `'session'` (default). Seeded rows fire no

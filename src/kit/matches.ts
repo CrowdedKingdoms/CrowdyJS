@@ -152,7 +152,9 @@ export class MatchesKit {
    *   session at creation, inside the same transaction, so the match starts
    *   with its world rows present (chests, spawners, turrets). Same shape as
    *   `CreateSessionInput.seedFromApp`: `{ typeNames, initialState? }`. At most
-   *   2,000 rows; above that the create is refused and no session exists.
+   *   2,000 rows; above that the create is refused and no session exists. Only
+   *   `'session'`-scoped types; the copies are the only rows the tier's
+   *   (opt-in) ended-session retention may drop.
    */
   async create(input: {
     creatorUserId: Scalars['BigInt']['input'];

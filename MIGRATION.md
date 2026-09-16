@@ -18,15 +18,21 @@ container-type `scope`). Every existing method keeps its signature.
 - **`seed`: a container may name its own `bindingKey`** (on a type that is
   `instantiableBy: 'admin'` or carries a `bindPolicyJson`; not beginning with
   `seed:`), so a runtime `gameModelEnsureContainer` later resolves the same
-  row; at most **1,000 containers per call**, all-or-nothing. A container type
+  row; a caller-keyed row that already exists is adopted only if its owner
+  matches, so a player who claimed the key first is never written onto; at
+  most **1,000 containers per call**, all-or-nothing. A container type
   may declare **`scope: 'app' | 'session'`**.
 - **`createSession({ seedFromApp: { typeNames, initialState? } })`** stamps
   the app's keyed template rows of those types into the new session in the
   creation transaction (at most 2,000 rows; refused above). `GmSession` gains
   `seededContainerCount` (create response only; null on later reads); the
-  `created` event payload carries `containersSeeded`. **Containers of an ended
-  session are now dropped by the server after its retention window** (7 days
-  by default) — copy what a finished match needs out before then.
+  `created` event payload carries `containersSeeded`. An `'app'`-scoped type is
+  refused. **Retention is opt-in and touches only the stamped copies:** on a
+  tier whose operator sets `GM_SESSION_CONTAINER_RETENTION_DAYS` (default 0,
+  off), the copies of a session ended that long ago are dropped; rows a player
+  ensured or an admin created in the session are never purged, so a session
+  used as a save keeps its hand-made state either way. A tier that runs
+  `seedFromApp` with retention off keeps every copy of every match.
 - **`kit.matches.create({ seedFromApp })`** forwards the same option.
 - **`GmContainerType.scope`** is read back; on an `'app'`-scoped type,
   `createContainer` / `gameModelEnsureContainer` with a `sessionId` are refused
