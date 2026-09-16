@@ -1,6 +1,6 @@
-# Unreleased — bulk containers (on top of 17.4.0)
+# CrowdyJS v17.5 — bulk containers
 
-**Additive.** Tracks the cks-game-api bulk-container changes of 2026-09-16
+**Additive.** `17.5.0` (2026-09-16), on top of ck-api `v2.6.0`. Tracks the cks-game-api bulk-container changes of 2026-09-16
 (paging in SQL, seed `bindingKey`, `gameModelContainerStates`, `seedFromApp`,
 container-type `scope`). Every existing method keeps its signature.
 

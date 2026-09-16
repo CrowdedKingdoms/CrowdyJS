@@ -4,12 +4,26 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.4.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.5.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.5.0 tracks the bulk-container release (ck-api v2.6.0, PRs #346–#349, 2026-09-16):**
+`containers()` pages for real (omitted `limit` = 200, max 1,000, `BAD_REQUEST`
+above; the document now forwards `bindingKey`), `containerStates({ appId,
+containerIds })` is the bulk twin of `containerState` (max 500), `seed` carries a
+per-container `bindingKey` (admin-instantiable or bind-policied types; an existing
+row is adopted only if its owner matches) and a per-type `scope: 'session' | 'app'`,
+`createSession({ seedFromApp })` stamps the app's keyed template rows into the new
+session (template types must be admin-instantiable or bind-policied; max 2,000
+rows; `GmSession.seededContainerCount` on the create response only), and
+`kit.matches.create({ seedFromApp })` forwards it. Seeded copies of an ended
+session are dropped by the server after the tier's retention window (7 days on
+every tier since 2026-09-16; only the stamped copies, never hand-made rows).
+[MIGRATION.md](MIGRATION.md).
 
 **17.4.0 exposes the game-model session system (ck-api PR #319 on top of v2.3.0, 2026-09-14):**
 `client.gameModel` gains `leaveSession`, `setSessionAdmission`,
