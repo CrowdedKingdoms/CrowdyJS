@@ -298,7 +298,7 @@ test('the session reads pass their variables through and select the contract fie
   assert.deepEqual(fragmentFields(calls.at(-1).document, 'GmSessionFields'), [
     'sessionId', 'appId', 'name', 'status', 'createdByUserId', 'currentTurnUserId', 'metadataJson',
     'admission', 'maxParticipants', 'participantCount', 'hostUserId', 'hostTerm', 'revision',
-    'endedAt', 'endReason', 'createdAt', 'presence',
+    'endedAt', 'endReason', 'createdAt', 'presence', 'seededContainerCount',
   ]);
 
   await api.sessionSnapshot({ appId, sessionId });
