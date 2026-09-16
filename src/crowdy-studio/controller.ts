@@ -38,6 +38,7 @@ import {
   type CrowdyStudioTarget,
   type CrowdyStudioProjectSynchronization,
 } from './models.js';
+import { parseClientTickIntervalMs } from './client-tick-interval.js';
 import {
   createCrowdyStudioStarterProject,
   type CrowdyStudioNewProjectOptions,
@@ -212,6 +213,11 @@ export interface CrowdyStudioControllerOptions {
    * {@link PlayerCodeBrokerOptions.tickIntervalMs}. The host only ticks
    * when this is set (or when this default of 1000 ms applies). Omit/0 on
    * a raw {@link PlayerCodeBroker} is invoke-only.
+   */
+  /**
+   * Override CLIENT tick cadence. When omitted, Studio reads
+   * `[package.metadata.crowdy] tick_interval_ms` from the project's CLIENT
+   * Cargo.toml (default 1000, clamped 16–1000).
    */
   clientTickIntervalMs?: number;
   autosaveMs?: number;
@@ -1428,7 +1434,13 @@ export class CrowdyStudioController {
       artifactHash: artifact.artifactHash,
       fuelPerDispatch: artifact.fuelPerDispatch,
       onPresentation: this.options.onPresentation,
-      tickIntervalMs: this.options.clientTickIntervalMs ?? 1_000,
+      tickIntervalMs:
+        this.options.clientTickIntervalMs ??
+        parseClientTickIntervalMs(
+          this.requireProject().files.find(
+            (file) => file.target === 'CLIENT' && file.path === 'Cargo.toml',
+          )?.content,
+        ),
     };
     const broker =
       this.options.brokerFactory?.(brokerOptions) ??
