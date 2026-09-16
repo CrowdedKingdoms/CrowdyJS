@@ -1,3 +1,38 @@
+# Unreleased — bulk containers (on top of 17.4.0)
+
+**Additive.** Tracks the cks-game-api bulk-container changes of 2026-09-16
+(paging in SQL, seed `bindingKey`, `gameModelContainerStates`, `seedFromApp`,
+container-type `scope`). Every existing method keeps its signature.
+
+- **`containers` pages for real, and the page has bounds.** An omitted `limit`
+  now returns **200 rows** (it used to return every row of the type) and the
+  maximum is **1,000** (`BAD_REQUEST` above). Without `where` the page is read
+  in SQL; with `where` the predicates are evaluated after a bounded read
+  (10,000 rows of the type; larger is refused). **A caller that relied on an
+  unbounded list must page.** `bindingKey` is now forwarded by the SDK's
+  document — before this the get-by-key read documented on `containers` was
+  silently a full list.
+- **New: `containerStates({ appId, containerIds })`** — the bulk twin of
+  `containerState`, up to 500 ids, same per-row visibility, missing ids
+  omitted, input order kept.
+- **`seed`: a container may name its own `bindingKey`** (on a type that is
+  `instantiableBy: 'admin'` or carries a `bindPolicyJson`; not beginning with
+  `seed:`), so a runtime `gameModelEnsureContainer` later resolves the same
+  row; at most **1,000 containers per call**, all-or-nothing. A container type
+  may declare **`scope: 'app' | 'session'`**.
+- **`createSession({ seedFromApp: { typeNames, initialState? } })`** stamps
+  the app's keyed template rows of those types into the new session in the
+  creation transaction (at most 2,000 rows; refused above). `GmSession` gains
+  `seededContainerCount` (create response only; null on later reads); the
+  `created` event payload carries `containersSeeded`. **Containers of an ended
+  session are now dropped by the server after its retention window** (7 days
+  by default) — copy what a finished match needs out before then.
+- **`kit.matches.create({ seedFromApp })`** forwards the same option.
+- **`GmContainerType.scope`** is read back; on an `'app'`-scoped type,
+  `createContainer` / `gameModelEnsureContainer` with a `sessionId` are refused
+  with `CONTAINER_TYPE_APP_SCOPED`; flipping a type to `'app'` is refused while
+  it holds session-scoped rows.
+
 # CrowdyJS v17.4 — the session system
 
 **Additive.** `17.4.0` (2026-09-14), on top of ck-api `v2.3.0`. Tracks cks-game-api
