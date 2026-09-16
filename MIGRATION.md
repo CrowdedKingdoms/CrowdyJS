@@ -26,8 +26,9 @@ container-type `scope`). Every existing method keeps its signature.
   the app's keyed template rows of those types into the new session in the
   creation transaction (at most 2,000 rows; refused above). `GmSession` gains
   `seededContainerCount` (create response only; null on later reads); the
-  `created` event payload carries `containersSeeded`. An `'app'`-scoped type is
-  refused. **Retention is opt-in and touches only the stamped copies:** on a
+  `created` event payload carries `containersSeeded`. Template types must be
+  `instantiableBy: 'admin'` or carry a `bindPolicyJson`; a plain member type
+  and an `'app'`-scoped type are refused. **Retention is opt-in and touches only the stamped copies:** on a
   tier whose operator sets `GM_SESSION_CONTAINER_RETENTION_DAYS` (default 0,
   off), the copies of a session ended that long ago are dropped; rows a player
   ensured or an admin created in the session are never purged, so a session

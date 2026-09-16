@@ -10835,7 +10835,7 @@ export type ServiceQuota = {
 export type SessionSeedInput = {
   /** 'defaults' (default): the copies start at the type's property defaults, no property rows written. 'app': each app row's current property rows are copied onto its copy, raw (not visibility-filtered; the copy is server-side and the source is admin-authored). */
   initialState?: InputMaybe<Scalars['String']['input']>;
-  /** Container types whose app-scoped keyed rows are copied into the new session. Types with no app-scoped keyed rows contribute nothing; an undefined type is BAD_REQUEST. */
+  /** Container types whose app-scoped keyed rows are copied into the new session. Each must be instantiableBy 'admin' or carry a bindPolicy (the same rule gameModelSeed applies to a caller bindingKey: no player may have claimed one of its keys); a plain member type is BAD_REQUEST, as is an undefined type. Types with no app-scoped keyed rows contribute nothing. */
   typeNames: Array<Scalars['String']['input']>;
 };
 

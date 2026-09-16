@@ -14225,7 +14225,7 @@ Stamp a new session's world rows from the app's template rows at creation. For e
 """
 input SessionSeedInput {
   """
-  Container types whose app-scoped keyed rows are copied into the new session. Types with no app-scoped keyed rows contribute nothing; an undefined type is BAD_REQUEST.
+  Container types whose app-scoped keyed rows are copied into the new session. Each must be instantiableBy 'admin' or carry a bindPolicy (the same rule gameModelSeed applies to a caller bindingKey: no player may have claimed one of its keys); a plain member type is BAD_REQUEST, as is an undefined type. Types with no app-scoped keyed rows contribute nothing.
   """
   typeNames: [String!]!
   """

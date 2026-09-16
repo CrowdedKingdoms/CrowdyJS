@@ -609,8 +609,10 @@ export class GameModelAPI {
    *   rows' current properties). At most 2,000 rows per session; above that the
    *   creation is refused and no session exists. The count is on the create
    *   response as `seededContainerCount` (null on later reads) and on the
-   *   session's `created` event as `containersSeeded`. An `'app'`-scoped type
-   *   is refused. The copies are marked, and on a tier whose operator has
+   *   session's `created` event as `containersSeeded`. A template type must be
+   *   `instantiableBy: 'admin'` or carry a `bindPolicyJson` (a plain member
+   *   type is refused: a player may own one of its app keys); an `'app'`-scoped
+   *   type is refused. The copies are marked, and on a tier whose operator has
    *   enabled retention (`GM_SESSION_CONTAINER_RETENTION_DAYS`; off by default)
    *   they -- and only they -- are dropped once the session has been ended that
    *   long; hand-made rows in the session are never purged.
