@@ -16,6 +16,7 @@ fragment GmSessionFields on GmSession {
   endReason
   createdAt
   presence
+  seededContainerCount
 }
 
 fragment GmSessionParticipantFields on GmSessionParticipant {
@@ -159,6 +160,7 @@ query GameModelContainers(
   $appId: BigInt!
   $typeName: String
   $sessionId: String
+  $bindingKey: String
   $where: [GmPropertyPredicateInput!]
   $limit: Int
   $offset: Int
@@ -167,6 +169,7 @@ query GameModelContainers(
     appId: $appId
     typeName: $typeName
     sessionId: $sessionId
+    bindingKey: $bindingKey
     where: $where
     limit: $limit
     offset: $offset
@@ -198,6 +201,18 @@ subscription GameModelContainerChanged(
 
 query GameModelContainerState($appId: BigInt!, $containerId: String!) {
   gameModelContainerState(appId: $appId, containerId: $containerId) {
+    containerId
+    appId
+    sessionId
+    typeName
+    displayName
+    ownerUserId
+    propertiesJson
+  }
+}
+
+query GameModelContainerStates($appId: BigInt!, $containerIds: [String!]!) {
+  gameModelContainerStates(appId: $appId, containerIds: $containerIds) {
     containerId
     appId
     sessionId

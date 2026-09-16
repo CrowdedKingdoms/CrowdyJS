@@ -73,6 +73,9 @@ import {
   GameModelContainerStateDocument,
   type GameModelContainerStateQuery,
   type GameModelContainerStateQueryVariables,
+  GameModelContainerStatesDocument,
+  type GameModelContainerStatesQuery,
+  type GameModelContainerStatesQueryVariables,
   GameModelTraverseDocument,
   type GameModelTraverseQuery,
   type GameModelTraverseQueryVariables,
@@ -597,11 +600,28 @@ export class GameModelAPI {
    *   optional `participantUserIds` (decimal-string ids of initial participants
    *   besides the creator), optional `maxParticipants`, `admission`,
    *   `emptyTimeoutSec`, `presence` and `idempotencyKey`.
+   *   Pass `seedFromApp: { typeNames, initialState? }` to stamp the app's keyed
+   *   template rows of those types (the rows a {@link seed} with `bindingKey`
+   *   wrote) into the new session inside the creation transaction: same
+   *   `bindingKey`, `displayName`, `metadataJson` and `ownerUserId` per row, so a
+   *   later `gameModelEnsureContainer` in the session finds every key present.
+   *   `initialState` is `'defaults'` (type defaults) or `'app'` (copy the app
+   *   rows' current properties). At most 2,000 rows per session; above that the
+   *   creation is refused and no session exists. The count is on the create
+   *   response as `seededContainerCount` (null on later reads) and on the
+   *   session's `created` event as `containersSeeded`. A template type must be
+   *   `instantiableBy: 'admin'` or carry a `bindPolicyJson` (a plain member
+   *   type is refused: a player may own one of its app keys); an `'app'`-scoped
+   *   type is refused. The copies are marked, and on a tier whose operator has
+   *   enabled retention (`GM_SESSION_CONTAINER_RETENTION_DAYS`; off by default)
+   *   they -- and only they -- are dropped once the session has been ended that
+   *   long; hand-made rows in the session are never purged.
    * @returns The created {@link GmSession} (`sessionId`, `status`, creator,
-   *   host, admission, `presence`, revision, …).
+   *   host, admission, `presence`, revision, `seededContainerCount`, …).
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING` if the token
    *   is missing or not scoped to the app, `FORBIDDEN` if the session-creation
-   *   policy disallows the caller, or `BAD_USER_INPUT` for malformed input.
+   *   policy disallows the caller, or `BAD_USER_INPUT` for malformed input, an
+   *   undefined `seedFromApp` type, or more than 2,000 template rows.
    */
   async createSession(
     input: GameModelCreateSessionMutationVariables['input'],
@@ -922,8 +942,14 @@ export class GameModelAPI {
    *   `>=`; requires `typeName`; missing properties fall back to the type
    *   default — the same predicate shape automation selectors use); optional
    *   `limit`/`offset` paging applied after filtering over the stable
-   *   created-at ordering. Requires game-api with container predicates
-   *   (2026-07 or later); older servers reject the new arguments.
+   *   created-at ordering. `bindingKey` narrows to the one row ensured (or
+   *   seeded) under that key — with `typeName` and `sessionId` it is the
+   *   get-by-key read. **An omitted `limit` returns 200 rows and the
+   *   maximum is 1,000** (`BAD_REQUEST` above it); without `where` the page is
+   *   read in SQL, with `where` the predicates are evaluated after reading at
+   *   most 10,000 rows of the type and a larger type is refused. Requires
+   *   game-api with container predicates (2026-07 or later); older servers
+   *   reject the new arguments.
    * @returns The matching {@link GmContainer}s.
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`, or
    *   `BAD_USER_INPUT` for `where` without `typeName` / unsupported ops.
@@ -953,6 +979,29 @@ export class GameModelAPI {
   ): Promise<GameModelContainerStateQuery['gameModelContainerState']> {
     const data = await this.gql.request(GameModelContainerStateDocument, variables);
     return data.gameModelContainerState;
+  }
+
+  /**
+   * **Containers** — the bulk twin of {@link containerState}: identity plus the
+   * property state visible to the **calling** user for up to **500** containers
+   * in one call, with the same per-row visibility rules. Ids the app does not
+   * hold are omitted rather than errors, duplicates come back once, and the
+   * order follows the input. After paging {@link containers} (default 200, max
+   * 1,000 per page), two of these pull a page's state — a level of thousands of
+   * placed objects loads in a handful of calls instead of one per object.
+   *
+   * @param variables - `{ appId, containerIds }`: `appId` (decimal string) and
+   *   up to 500 container UUIDs.
+   * @returns An array of {@link GmContainerState}; each `propertiesJson` is a
+   *   JSON-object string of the properties visible to the caller.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`, or
+   *   `BAD_REQUEST` for more than 500 ids or a non-UUID id.
+   */
+  async containerStates(
+    variables: GameModelContainerStatesQueryVariables,
+  ): Promise<GameModelContainerStatesQuery['gameModelContainerStates']> {
+    const data = await this.gql.request(GameModelContainerStatesDocument, variables);
+    return data.gameModelContainerStates;
   }
 
   /**
@@ -1158,7 +1207,17 @@ export class GameModelAPI {
    *   and arrays of `containerTypes`, `propertyDefinitions`, `functions`,
    *   `containers`, and `edges` to create. Seed containers carry a developer
    *   `tempId`; seed edges reference containers by those temp ids
-   *   (`fromTempId`/`toTempId`).
+   *   (`fromTempId`/`toTempId`). A container may name its own `bindingKey`
+   *   (on a type that is `instantiableBy: 'admin'` or carries a `bindPolicyJson`,
+   *   and not beginning with `seed:`) so a runtime `gameModelEnsureContainer` later
+   *   resolves the same row; otherwise it binds as `seed:` + `tempId`. A
+   *   caller-keyed row that already exists is adopted only if its `ownerUserId`
+   *   matches (a re-seed); a row a player claimed first is refused and nothing
+   *   is written. At most
+   *   **1,000 containers per call**, all-or-nothing; the same key on two types
+   *   is two rows. A container type may declare `scope: 'app'` (one row per key
+   *   for the whole app) or `'session'` (default). Seeded rows fire no
+   *   `container_created` automation triggers or change-feed events.
    * @returns A {@link GmSeedResult}: the counts created, non-fatal `warnings`,
    *   and `idMapJson` — a JSON-object string mapping each seed `tempId` to the
    *   created container UUID (`JSON.parse` it to wire up follow-up calls).
@@ -1185,8 +1244,13 @@ export class GameModelAPI {
    *   optional `description`; optional `instantiableBy` (`admin | member |
    *   owner`); optional `defaultPropertyVisibility` (`public | owner | hidden`);
    *   optional `bindPolicyJson` (who may claim a `bindingKey` on
-   *   `ensureContainer`; omit to leave the type unbound); and optional
-   *   `metadataJson` (JSON-object string).
+   *   `ensureContainer`; omit to leave the type unbound); optional `scope`
+   *   (`'session'` default — one row per key per session; `'app'` — one row
+   *   per key for the whole app, on which `ensureContainer` /
+   *   `createContainer` with a `sessionId` are refused with
+   *   `CONTAINER_TYPE_APP_SCOPED`; changing to `'app'` is refused while the
+   *   type holds session-scoped rows); and optional `metadataJson`
+   *   (JSON-object string).
    * @returns The upserted {@link GmContainerType}.
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `SCOPE_MISSING`,
    *   `FORBIDDEN` (`requiredPermission === 'manage_apps'`), or `BAD_USER_INPUT`.

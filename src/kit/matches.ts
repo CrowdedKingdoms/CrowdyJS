@@ -147,12 +147,21 @@ export class MatchesKit {
    *
    * @param input.creatorUserId - The calling player's user id (stored so the
    *   creator may start/advance/end the match).
+   * @param input.seedFromApp - Optional: container types whose app-scoped keyed
+   *   rows (a `gameModelSeed` with `bindingKey`) are stamped into the match's
+   *   session at creation, inside the same transaction, so the match starts
+   *   with its world rows present (chests, spawners, turrets). Same shape as
+   *   `CreateSessionInput.seedFromApp`: `{ typeNames, initialState? }`. At most
+   *   2,000 rows; above that the create is refused and no session exists. Only
+   *   `'session'`-scoped types; the copies are the only rows the tier's
+   *   (opt-in) ended-session retention may drop.
    */
   async create(input: {
     creatorUserId: Scalars['BigInt']['input'];
     mode?: string;
     maxPlayers?: number;
     displayName?: string;
+    seedFromApp?: { typeNames: string[]; initialState?: 'defaults' | 'app' };
   }): Promise<KitMatch> {
     // A kit match talks GraphQL and channel pings; the `actorUuid` here is only
     // the channel-message sender id, never a replicated actor. Under the
@@ -164,6 +173,7 @@ export class MatchesKit {
       appId: this.appId,
       name: input.displayName ?? `match-${input.mode ?? 'default'}`,
       presence: 'none',
+      ...(input.seedFromApp ? { seedFromApp: input.seedFromApp } : {}),
     });
     this.incarnations.set(session.sessionId, 1);
     const channel = await this.requireChannels().create({
