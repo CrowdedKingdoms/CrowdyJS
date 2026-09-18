@@ -40,6 +40,7 @@ export const GLUE_HOST_FUNCTIONS = [
   'emit_spatial',
   'hud_set',
   'overlay_draw',
+  'pointer_clicks',
   'grid_permission_check',
 ] as const;
 
