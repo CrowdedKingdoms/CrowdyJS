@@ -461,9 +461,9 @@ are **`dev`**, **`test`**, **`prod`**, and nothing else. Work lands on `dev`.
 
 **You cannot push to any of the three.** A branch policy applied on 2026-08-22
 requires a pull request everywhere, for every identity including the admin's.
-Push a branch, open the PR and merge it yourself — no approval is required on
-`dev` or `test`. `prod` needs an admin to perform the merge, and a PR touching
-`/.github/` or `/scripts/` needs the code owner. `GH013: Repository rule
+Push a branch, open the PR and merge it yourself on `dev` — no approval is
+required there. `test` and `prod` need an admin to perform the merge, and a PR
+touching `/.github/` or `/scripts/` needs the code owner. `GH013: Repository rule
 violations found` is the rule working, not a credential problem.
 
 Publishing is an environment-prefixed tag (`dev/v15.0.0`, `test/v15.0.0`,
