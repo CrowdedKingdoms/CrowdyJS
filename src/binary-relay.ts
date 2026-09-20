@@ -26,6 +26,7 @@ import {
   RELAY_MAX_BUNDLE_MEMBERS,
   RELAY_MAX_DATAGRAM_BYTES,
   type RelaySignContext,
+  serializeClientCapabilities,
 } from './binary-wire.js';
 
 export const RELAY_SUBPROTOCOL = 'crowdy-relay-v1';
@@ -131,6 +132,15 @@ export interface BinaryRelayConfig {
    * frame. Ignored when {@link bundleSends} is false.
    */
   bundleWindowMs?: number;
+  /**
+   * Tell the server what this client can read (`CLIENT_CAPABILITIES`, Buddy
+   * v0.30.0) on every `ready` and every {@link capabilitiesIntervalMs} after,
+   * so its bundles arrive signed once instead of per member. Default true; a
+   * server older than v0.30.0 ignores the message.
+   */
+  advertiseCapabilities?: boolean;
+  /** Re-advertise period in ms (default 15 000). */
+  capabilitiesIntervalMs?: number;
 }
 
 /** Uplink counters kept by the relay transport (see {@link BinaryRelayTransport.stats}). */
@@ -186,6 +196,9 @@ export class BinaryRelayTransport {
   // when the next message would not fit, on flushSends(), and on disconnect.
   private readonly bundleSends: boolean;
   private readonly bundleWindowMs: number;
+  private readonly advertiseCapabilities: boolean;
+  private readonly capabilitiesIntervalMs: number;
+  private capsTimer: ReturnType<typeof setInterval> | null = null;
   private pendingMembers: Uint8Array[] = [];
   private pendingBytes = 0;
   private bundleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -208,6 +221,8 @@ export class BinaryRelayTransport {
     this.retryMaxDelayMs = config.retryMaxDelayMs ?? 5000;
     this.bundleSends = config.bundleSends ?? true;
     this.bundleWindowMs = Math.max(0, config.bundleWindowMs ?? 1);
+    this.advertiseCapabilities = config.advertiseCapabilities ?? true;
+    this.capabilitiesIntervalMs = Math.max(1000, config.capabilitiesIntervalMs ?? 15_000);
   }
 
   /** Snapshot of the uplink counters. */
@@ -245,9 +260,11 @@ export class BinaryRelayTransport {
       this.retryTimer = null;
     }
     this.generation += 1;
+    this.stopCapabilities();
     const ws = this.ws;
     this.ws = null;
     this.signContext = null;
+    this.stopCapabilities();
     if (ws) {
       try {
         ws.close(1000, 'client-disconnect');
@@ -393,6 +410,7 @@ export class BinaryRelayTransport {
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
     this.signContext = null;
+    this.stopCapabilities();
 
     let sawReady = false;
 
@@ -423,6 +441,8 @@ export class BinaryRelayTransport {
       this.ws = null;
       const hadReady = this.signContext != null || sawReady;
       this.signContext = null;
+      this.stopCapabilities();
+    this.stopCapabilities();
 
       if (!this.desired) {
         this.callbacks.onStatus('disconnected');
@@ -504,6 +524,46 @@ export class BinaryRelayTransport {
     this.preReadyFailures = 0;
     this.retries = 0;
     this.callbacks.onStatus('connected');
+    this.startCapabilities();
+  }
+
+  /**
+   * Advertise this build's capabilities now and on a timer while ready. The
+   * server binds them to the router serving our flow; a token refresh or a
+   * relay-side Buddy migration silently resets that, and until the next
+   * advertisement we are served in the older per-member form, which we parse too.
+   */
+  private startCapabilities(): void {
+    this.stopCapabilities();
+    if (!this.advertiseCapabilities) return;
+    void this.sendCapabilities();
+    const timer = setInterval(() => {
+      void this.sendCapabilities();
+    }, this.capabilitiesIntervalMs);
+    // Node: never keep a process alive for this timer (tests, tools).
+    (timer as unknown as { unref?: () => void }).unref?.();
+    this.capsTimer = timer;
+  }
+
+  private stopCapabilities(): void {
+    if (this.capsTimer) {
+      clearInterval(this.capsTimer);
+      this.capsTimer = null;
+    }
+  }
+
+  private async sendCapabilities(): Promise<void> {
+    const ctx = this.signContext;
+    if (!ctx || this.appId == null || !this.isReady()) return;
+    try {
+      const frame = await serializeClientCapabilities(ctx, this.appId);
+      if (this.signContext !== ctx) return;
+      this.sendFrame(frame);
+      // The bundler would hold it for the window; nothing else is due right now.
+      this.flushSends();
+    } catch (error) {
+      this.logger.debug?.(`capabilities not sent: ${String(error)}`);
+    }
   }
 
   /**
