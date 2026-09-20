@@ -329,6 +329,7 @@ test('C4: every host-call family is independently rate-capped under deterministi
     ['world_write', 200, 'voxel_set', { chunkX: 1, chunkY: 1, chunkZ: 1 }],
     ['egress', 60, 'emit_spatial', { chunkX: 1, chunkY: 1, chunkZ: 1 }],
     ['present', 120, 'hud_set', { payload: 'bounded' }],
+    ['input', 400, 'pointer_clicks', {}],
     ['meta', 100, 'grid_permission_check', {}],
   ];
 

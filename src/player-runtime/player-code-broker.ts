@@ -105,6 +105,8 @@ const ALLOWED_HOST_CALLS: Record<string, ReadonlySet<string>> = {
   world_write: new Set(['voxel_set']),
   egress: new Set(['emit_spatial']),
   present: new Set(['hud_set', 'overlay_draw']),
+  // Local input the host game drains each tick (Construct: holodeck canvas).
+  input: new Set(['pointer_clicks']),
   // grid_info is answered by the broker itself (the mod's own clamped bounds),
   // so a client mod can address its grid without a server round-trip.
   meta: new Set(['grid_permission_check', 'grid_info']),
@@ -118,6 +120,7 @@ const RATE_CAPS: Record<string, number> = {
   world_write: 200,
   egress: 60,
   present: 120,
+  input: 400,
   meta: 100,
 };
 

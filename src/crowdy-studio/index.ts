@@ -66,6 +66,12 @@ export {
   type CrowdyStudioNewProjectOptions,
 } from './starter-projects.js';
 export {
+  DEFAULT_CLIENT_TICK_INTERVAL_MS,
+  MAX_CLIENT_TICK_INTERVAL_MS,
+  MIN_CLIENT_TICK_INTERVAL_MS,
+  parseClientTickIntervalMs,
+} from './client-tick-interval.js';
+export {
   parseRustcDiagnostics,
   type CrowdyStudioDiagnostic,
   type CrowdyStudioDiagnosticSeverity,
