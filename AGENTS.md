@@ -4,12 +4,24 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.5.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.6.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.6.0 tracks Buddy `v0.30.0` (2026-09-20): one HMAC per downlink bundle, opt-in.**
+The binary relay sends `CLIENT_CAPABILITIES` (29; `serializeClientCapabilities`, the
+long-spatial layout with a `u32` flags word at offset 68) on every `ready` and every
+15 s after (`advertiseCapabilities` / `capabilitiesIntervalMs` on `BinaryRelayConfig`;
+the repeat covers a token refresh or a relay-side Buddy migration, both of which reset
+the server's per-slot record silently). A Buddy at v0.30.0+ then sends
+`MESSAGE_BUNDLE_SIGNED` (30): the bundle framing, members with `containsAuth = 0`, and
+one trailing 32-byte HMAC over the datagram. `parseRelayFrame` strips the tail and
+walks; this SDK does not verify downlink HMACs (it never did). Older Buddies ignore 29
+and keep sending per-member forms, which still parse. Tests count frames: the
+bundling tests set `advertiseCapabilities: false`; the capability frame has its own.
 
 **17.5.0 tracks the bulk-container release (ck-api v2.6.0, PRs #346–#349, 2026-09-16):**
 `containers()` pages for real (omitted `limit` = 200, max 1,000, `BAD_REQUEST`
