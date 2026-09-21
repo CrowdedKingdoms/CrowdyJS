@@ -10589,7 +10589,7 @@ type Mutation {
   """
   exchangePortalCode(input: ExchangePortalCodeInput!): AppTokenResponse!
   """
-  Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients.
+  Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients.
   """
   refreshAppToken(
     """
