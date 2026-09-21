@@ -56,6 +56,9 @@ async function readyTransport(config = {}) {
       retryInitialDelayMs: 0,
       retryMaxDelayMs: 0,
       logger: { warn: () => {}, error: () => {}, debug: () => {}, info: () => {} },
+      // These tests count frames; the capability advertisement (Buddy v0.30.0,
+      // one frame on ready) is covered by its own test below.
+      advertiseCapabilities: false,
       ...config,
     },
     {
@@ -283,4 +286,19 @@ test('sendFrame still refuses when the relay is not ready', async () => {
   );
   assert.throws(() => transport.sendFrame(msg(128)), /not connected/);
   assert.equal(transport.stats().messagesSent, 0);
+});
+
+test('capabilities: one CLIENT_CAPABILITIES frame goes out on ready, none when disabled', async () => {
+  const { transport, ws } = await readyTransport({ advertiseCapabilities: true });
+  await settle();
+  assert.equal(ws.sent.length, 1, 'exactly one frame right after ready');
+  const frame = new Uint8Array(ws.sent[0]);
+  assert.equal(frame[0], 29, 'CLIENT_CAPABILITIES, unwrapped (flushed, lone)');
+  assert.equal(new DataView(frame.buffer, frame.byteOffset).getUint32(68, true), 1, 'BUNDLE_SIGNED');
+  transport.disconnect();
+
+  const off = await readyTransport({ advertiseCapabilities: false });
+  await settle();
+  assert.equal(off.ws.sent.length, 0);
+  off.transport.disconnect();
 });

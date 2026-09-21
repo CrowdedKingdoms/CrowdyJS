@@ -144,3 +144,77 @@ test('packMessageBundle: lone member unwrapped, many wrapped as type 2', async (
   fill[0] = 128;
   assert.equal(wire.packMessageBundle([fill, b]).length, wire.RELAY_MAX_DATAGRAM_BYTES);
 });
+
+// ---------------------------------------------------------------------------
+// Buddy v0.30.0: CLIENT_CAPABILITIES and MESSAGE_BUNDLE_SIGNED
+// ---------------------------------------------------------------------------
+
+test('serializeClientCapabilities: long-spatial layout, flags at offset 68, signed tail', async () => {
+  const bytes = await wire.serializeClientCapabilities(ctx, '7', wire.ClientCapability.BUNDLE_SIGNED, 9);
+  assert.equal(bytes[0], wire.WireMessageType.CLIENT_CAPABILITIES);
+  assert.equal(bytes[0], 29);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  assert.equal(view.getBigInt64(1, true), 7n); // appId
+  assert.equal(bytes[33], 0); // distance
+  assert.equal(bytes[34], 0); // decay
+  assert.equal(bytes[35], 1); // containsAuth
+  assert.equal(view.getUint32(68, true), 1); // flags word = BUNDLE_SIGNED
+  // 68 header + 4 flags + 32 HMAC + 8 gameTokenId + 1 seq
+  assert.equal(bytes.length, 68 + 4 + 32 + 8 + 1);
+  assert.equal(bytes[bytes.length - 1], 9);
+  // The HMAC is the same scheme as every client request: HMAC(token, prefix || token).
+  const tokenBytes = ctx.tokenBytes;
+  const prefix = bytes.subarray(0, 72);
+  const signed = new Uint8Array(prefix.length + tokenBytes.length);
+  signed.set(prefix, 0);
+  signed.set(tokenBytes, prefix.length);
+  const mac = new Uint8Array(await webcrypto.subtle.sign('HMAC', ctx.key, signed));
+  assert.deepEqual(Array.from(bytes.subarray(72, 104)), Array.from(mac));
+});
+
+test('parseRelayFrame: MESSAGE_BUNDLE_SIGNED strips the trailing HMAC and walks unsigned members', () => {
+  // Two GENERIC_ERROR_MESSAGE members (small, unsigned) plus 32 HMAC bytes.
+  const a = Buffer.from([3, 5, 7]);
+  const b = Buffer.from([3, 6, 7]);
+  const body = Buffer.concat([
+    Buffer.from([30]),
+    Buffer.from([a.length, 0]), a,
+    Buffer.from([b.length, 0]), b,
+  ]);
+  const mac = Buffer.alloc(32, 0xab);
+  const parsed = wire.parseRelayFrame(Uint8Array.from(Buffer.concat([body, mac])));
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].__typename, 'GenericErrorResponse');
+  assert.equal(parsed[1].__typename, 'GenericErrorResponse');
+  // The tail is never read as a member: a short signed bundle yields nothing.
+  assert.deepEqual(wire.parseRelayFrame(Uint8Array.from([30, 1, 2, 3])), []);
+  // And a plain MESSAGE_BUNDLE of the same members parses identically.
+  const plain = Buffer.concat([Buffer.from([2]), body.subarray(1)]);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(wire.parseRelayFrame(Uint8Array.from(plain)))),
+    JSON.parse(JSON.stringify(parsed)),
+  );
+});
+
+test('parseRelayFrame: a signed bundle member with containsAuth = 0 parses as a notification', async () => {
+  // Build a signed actor update, then strip its per-member HMAC and clear
+  // containsAuth: that is exactly what a MESSAGE_BUNDLE_SIGNED member looks like.
+  const signedMsg = await wire.serializeActorUpdate(ctx, {
+    appId: '7', chunk: { x: '1', y: '2', z: '3' }, uuid: 'u', distance: 8,
+    sequenceNumber: 4, state: Buffer.alloc(88).toString('base64'),
+  });
+  const prefixLen = signedMsg.length - (32 + 8 + 1);
+  const member = new Uint8Array(prefixLen + 9);
+  member.set(signedMsg.subarray(0, prefixLen), 0);
+  member.set(signedMsg.subarray(prefixLen + 32), prefixLen);
+  member[0] = wire.WireMessageType.ACTOR_UPDATE_NOTIFICATION_2;
+  member[35] = 0;
+  const dg = Buffer.concat([
+    Buffer.from([30]), Buffer.from([member.length & 0xff, member.length >> 8]), Buffer.from(member),
+    Buffer.alloc(32, 0xcd),
+  ]);
+  const parsed = wire.parseRelayFrame(Uint8Array.from(dg));
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].__typename, 'ActorUpdateNotification');
+  assert.equal(parsed[0].sequenceNumber, 4);
+});
