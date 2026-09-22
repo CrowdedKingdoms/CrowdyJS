@@ -37,6 +37,10 @@
     "./player-glue-worker": {
       "import": "./dist/player-runtime/player-glue-worker.js",
       "types": "./dist/player-runtime/player-glue-worker.d.ts"
+    },
+    "./grid-program": {
+      "import": "./dist/grid-program/index.js",
+      "types": "./dist/grid-program/index.d.ts"
     }
   },
   "sideEffects": false,
