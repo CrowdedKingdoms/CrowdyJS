@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '17.6.0';
+export const VERSION = '17.7.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -584,6 +584,15 @@ export {
   type ClientGridEvent,
   type ClientGridEventSubscriber,
 } from './player-runtime/client-grid-event-bus.js';
+export * from './grid-mods/index.js';
+export {
+  GridScope,
+  GridScopeError,
+  type GridBox,
+  type GridChunk,
+  type GridScopeClients,
+} from './grid-scope.js';
+export { GridsAPI, type GridToken, type GridChannel } from './domains/grids.js';
 export {
   GENERATED_HOST_CATALOG,
   type HostCatalog,

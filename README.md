@@ -482,6 +482,39 @@ The world helpers are thin wrappers over `client.udp.*` with the appId
 pre-bound — convenient for browser games. Advanced callers can always use
 `client.udp.*` with the generated GraphQL input types directly.
 
+## Grids: player code inside one grid
+
+A grid is a box of chunks a player can own. Everything an app-scoped Studio
+module can do, code running in a grid can do too, confined to that grid:
+spatial messages that originate in it, the grid's own channels, a grid event
+bus, sessions hosted in it, and the player-tier Game Model.
+
+```ts
+const plot = client.grid(appId, gridId);
+await plot.mintToken();                        // learns the box; a grid-scoped token
+await plot.channels.create('plot-chat');       // a grid channel (owner only)
+await plot.sessions.create({ name: 'race' });  // a game within the game
+await plot.send.text({ chunk: { x: 4, y: 0, z: 0 }, uuid, text: 'hi', distance: 2 });
+plot.send.text({ chunk: { x: 9, y: 0, z: 0 }, uuid, text: 'x' }); // throws GridScopeError
+```
+
+**JS grid programs** run the full SDK in a network-less sandbox; the page
+relays them with a grid token they never see:
+
+```ts
+// sandbox (iframe / worker)
+import { createGridProgramClient } from '@crowdedkingdoms/crowdyjs/grid-program';
+const { client, grid } = await createGridProgramClient(port);
+
+// page
+import { hostGridProgram } from '@crowdedkingdoms/crowdyjs/grid-program';
+await hostGridProgram({ port, scope: client.grid(appId, gridId), graphqlUrl, graphqlWsUrl });
+```
+
+`startGridMod` runs either a Rust CLIENT mod (WASM) or a JS grid program
+behind one interface; `createGridHostCalls` answers every CLIENT host call in
+the platform catalog through CrowdyJS for a mod's broker.
+
 ## World Stores
 
 The core client is a thin transport; the **World Stores** layer
