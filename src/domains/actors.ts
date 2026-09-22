@@ -56,8 +56,9 @@ export class ActorsAPI {
    *
    * @param uuid - The actor's 32-ASCII-character id.
    * @returns The {@link Actor}, or `null` if no actor with that id exists.
-   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN` if the caller
-   *   isn't entitled to the actor's app.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` if the caller has no token;
+   *   `NOT_FOUND` if the uuid does not exist in the caller's app (a session
+   *   token or another app's token gets the same answer).
    */
   async get(uuid: ActorQueryVariables['uuid']): Promise<ActorQuery['actor']> {
     const data = await this.gql.request(ActorDocument, { uuid });
