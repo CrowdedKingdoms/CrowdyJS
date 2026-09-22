@@ -256,6 +256,12 @@ export interface RealtimeConfig {
    */
   lbCookieStore?: LbCookieStore;
   /**
+   * WebSocket constructor for the graphql-ws connection. Defaults to the
+   * platform's (with the sticky-LB cookie in Node). A grid program passes one
+   * that relays over a MessagePort.
+   */
+  webSocketImpl?: unknown;
+  /**
    * When true, spatial `sendActorUpdate` mutations are sent over the existing
    * graphql-transport-ws connection instead of HTTP POST. Requires an active
    * `udpNotifications` subscription on the same socket. Falls back to HTTP when
@@ -344,6 +350,7 @@ export class RealtimeClient {
   private readonly retryMaxDelayMs: number;
   private readonly waitTimeoutMs: number;
   private readonly lbCookieStore?: LbCookieStore;
+  private readonly webSocketImplOverride?: unknown;
   private readonly wsUplinkMutations: boolean;
   private readonly binaryTransport: boolean;
   private readonly bundleSends: boolean;
@@ -396,6 +403,7 @@ export class RealtimeClient {
     this.retryMaxDelayMs = config.retryMaxDelayMs ?? 5000;
     this.waitTimeoutMs = config.waitTimeoutMs ?? 5000;
     this.lbCookieStore = config.lbCookieStore;
+    this.webSocketImplOverride = config.webSocketImpl;
     this.wsUplinkMutations = config.wsUplinkMutations === true;
     this.binaryTransport = config.binaryTransport === true;
     this.bundleSends = config.bundleSends ?? true;
@@ -801,7 +809,9 @@ export class RealtimeClient {
     }
 
     this.setStatus('connecting');
-    const webSocketImpl = createStickyWebSocketImpl(this.lbCookieStore);
+    const webSocketImpl =
+      this.webSocketImplOverride ??
+      createStickyWebSocketImpl(this.lbCookieStore);
     this.client = createClient({
       // A function, not a string: graphql-ws calls it on every connect, so a
       // re-discovered address is picked up by the reconnect already in

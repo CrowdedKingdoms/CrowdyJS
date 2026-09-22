@@ -38,6 +38,8 @@ import {
   type DshBridgeRequestMap,
   type DshBuildResult,
   type DshDiagnostic,
+  type DshGridContext,
+  type DshGridProgramStatus,
   type DshPageEventMap,
   type DshProjectSummary,
   type DshRuntimeStatus,
@@ -65,6 +67,29 @@ export interface CrowdyStudioDshHost {
   playerHost?: Pick<PlayerHostAdapterV1, 'observe'>;
   /** Recent `crowdy::log` lines from the CLIENT module and browser runtime errors. */
   clientLogs?(): readonly string[];
+  /**
+   * Grid capability (bridge v4, DN-10). With it the agent can read the grid
+   * the open project is bound to and run a JS grid program from a project
+   * file inside it; without it the grid requests fail with a clear message.
+   */
+  grid?: CrowdyStudioDshGridHost;
+}
+
+/** What a game offers the agent for the grid the open project is bound to. */
+export interface CrowdyStudioDshGridHost {
+  context(gridId: string): Promise<DshGridContext | null>;
+  /**
+   * Run (or with `stop`, stop) the program at `path` inside the grid. The page
+   * hands over the file's current content; how it sandboxes it is the game's
+   * (the construct package uses a network-less iframe and `hostGridProgram`).
+   */
+  runProgram(input: {
+    gridId: string;
+    path: string;
+    source: string;
+    stop?: boolean;
+  }): Promise<DshGridProgramStatus>;
+  programs(): DshGridProgramStatus[];
 }
 
 export interface StudioDshBridgeOptions {
@@ -435,9 +460,38 @@ export class StudioDshBridge {
         this.emit('page.context', { observation });
         return { observation, capturedAt: new Date().toISOString() } as never;
       }
+      case 'grid.context': {
+        const grid = this.gridHost();
+        const project = controller.getState().project;
+        if (!project) throw new Error('No project is open in Crowdy Studio.');
+        return { grid: await grid.context(project.gridId) } as never;
+      }
+      case 'grid.programRun': {
+        const grid = this.gridHost();
+        const project = controller.getState().project;
+        if (!project) throw new Error('No project is open in Crowdy Studio.');
+        const { path, stop } = params as { path: string; stop?: boolean };
+        const file = project.files.find((f) => f.path === path);
+        if (!file && !stop) throw new Error(`No file ${path} in the open project.`);
+        const program = await grid.runProgram({
+          gridId: project.gridId,
+          path,
+          source: file?.content ?? '',
+          stop: stop === true,
+        });
+        return { program } as never;
+      }
+      case 'grid.programStatus':
+        return { programs: this.gridHost().programs() } as never;
       default:
         throw new Error(`Unsupported bridge method ${String(method)}`);
     }
+  }
+
+  private gridHost(): CrowdyStudioDshGridHost {
+    const grid = this.options.host?.grid;
+    if (!grid) throw new Error('This game does not run grid programs from the agent.');
+    return grid;
   }
 
   private async build(mode: 'draft' | 'live'): Promise<DshBuildResult> {

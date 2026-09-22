@@ -5,18 +5,20 @@ const { StudioDshBridge, renderSettingsYaml } = await import('../../dist/crowdy-
 const { isDshBridgeFrame, isDshFrameMessage } = await import('../../dist/crowdy-dsh/protocol.js');
 
 let nonce = 'unset';
-const frame = (t, extra) => ({ v: 3, n: nonce, from: 'worker', t, ...extra });
+const frame = (t, extra) => ({ v: 4, n: nonce, from: 'worker', t, ...extra });
 
 function fakeController(overrides = {}) {
   let state = {
     projects: [{ projectId: 'p1', name: 'One', kind: 'FULL_STACK', revisionId: 'r1', source: 'STUDIO', githubSha: null, updatedAt: 't' }],
     project: {
       projectId: 'p1',
+      gridId: '9',
       kind: 'FULL_STACK',
       metadata: { name: 'One', serverModuleName: 'one_server', clientModuleName: 'one_client' },
       files: [
         { target: 'SERVER', path: 'src/lib.rs', content: '' },
         { target: 'CLIENT', path: 'src/lib.rs', content: '' },
+        { target: 'CLIENT', path: 'programs/fountain.js', content: 'export default 1' },
       ],
       revision: { id: 'r1', savedAt: 't' },
       source: 'STUDIO',
@@ -100,9 +102,9 @@ test('protocol guards accept page/worker frames and iframe messages only', () =>
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} })), true);
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} }), nonce), true);
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} }), 'other'), false, 'wrong nonce');
-  assert.equal(isDshBridgeFrame({ v: 2, n: nonce, from: 'worker', t: 'event' }), false, 'old protocol version');
-  assert.equal(isDshBridgeFrame({ v: 3, from: 'worker', t: 'event' }), false, 'no nonce');
-  assert.equal(isDshBridgeFrame({ v: 3, n: nonce, from: 'stranger', t: 'req' }), false);
+  assert.equal(isDshBridgeFrame({ v: 3, n: nonce, from: 'worker', t: 'event' }), false, 'old protocol version');
+  assert.equal(isDshBridgeFrame({ v: 4, from: 'worker', t: 'event' }), false, 'no nonce');
+  assert.equal(isDshBridgeFrame({ v: 4, n: nonce, from: 'stranger', t: 'req' }), false);
   assert.equal(isDshFrameMessage({ source: 'crowdy-dsh', type: 'crowdy-dsh:ready' }), true);
   assert.equal(isDshFrameMessage({ type: 'crowdy-dsh:ready' }), false);
 });
@@ -132,7 +134,7 @@ test('bridge answers worker requests through the controller and mirrors state ch
   });
   try {
     // Every page frame carries the boot nonce; a frame without it is dropped unread.
-    worker.postMessage({ v: 3, n: 'guess', from: 'worker', t: 'req', id: 'x1', method: 'studio.projectList', params: {} });
+    worker.postMessage({ v: 4, n: 'guess', from: 'worker', t: 'req', id: 'x1', method: 'studio.projectList', params: {} });
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(events.length, 0);
 
@@ -291,5 +293,48 @@ test('the boot seed files carry the channel name and nonce but never the app tok
     bridge.detach();
     globalThis.window = savedWindow;
     globalThis.location = savedLocation;
+  }
+});
+
+test('v4 grid requests reach the host grid capability with the open project grid and file', async () => {
+  const controller = fakeController();
+  const runs = [];
+  const bridge = bridgeFor(controller, {
+    grid: {
+      async context(gridId) {
+        return { appId: '42', gridId, low: { x: '0', y: '0', z: '0' }, high: { x: '1', y: '0', z: '1' }, owned: true, channels: [], sessions: [] };
+      },
+      async runProgram(input) {
+        runs.push(input);
+        return { path: input.path, running: !input.stop, log: [] };
+      },
+      programs: () => [{ path: 'programs/fountain.js', running: true, log: ['hi'] }],
+    },
+  });
+  bridge.connect();
+  nonce = bridge.nonce;
+  const worker = new BroadcastChannel(bridge.channelName);
+  try {
+    const context = await ask(worker, 'grid.context', {});
+    assert.equal(context.grid.gridId, '9');
+    const run = await ask(worker, 'grid.programRun', { path: 'programs/fountain.js' });
+    assert.deepEqual(run.program, { path: 'programs/fountain.js', running: true, log: [] });
+    assert.deepEqual(runs[0], { gridId: '9', path: 'programs/fountain.js', source: 'export default 1', stop: false });
+    await assert.rejects(ask(worker, 'grid.programRun', { path: 'nope.js' }), /No file nope\.js/);
+    const status = await ask(worker, 'grid.programStatus', {});
+    assert.equal(status.programs[0].log[0], 'hi');
+  } finally {
+    bridge.detach();
+    worker.close();
+  }
+  const plain = bridgeFor(fakeController(), {});
+  plain.connect();
+  nonce = plain.nonce;
+  const w2 = new BroadcastChannel(plain.channelName);
+  try {
+    await assert.rejects(ask(w2, 'grid.context', {}), /does not run grid programs/);
+  } finally {
+    plain.detach();
+    w2.close();
   }
 });

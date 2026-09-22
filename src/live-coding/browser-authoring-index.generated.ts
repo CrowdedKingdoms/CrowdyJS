@@ -2,9 +2,9 @@
 export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "schemaVersion": 2,
   "rustVersion": "1.97.1",
-  "sdkVersion": "0.1.5",
+  "sdkVersion": "0.1.6",
   "abiVersion": 0,
-  "contentHash": "3f5f39d46f732a346033aaf2435528a183e2ab0d0e3691f29c3fa3ecada18ffb",
+  "contentHash": "403558606363e0ed9227513fb31aacacad18d4215843321f7d7874370ff8702e",
   "crates": [
     {
       "name": "alloc",
@@ -18,8 +18,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "crowdy-compute-sdk",
-      "version": "0.1.5",
-      "sourceHash": "a43147b89a4ec0ca03cc1e7d15a7cc858df36faa2f1f486cb536342155615852"
+      "version": "0.1.6",
+      "sourceHash": "33e063cbb758695b01ea2cce6f9d1b7b12878d939b231f3b9cb4905bb8b879b0"
     },
     {
       "name": "crowdy-game-kit-ai",
@@ -29,7 +29,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     {
       "name": "crowdy-game-kit-core",
       "version": "0.1.0",
-      "sourceHash": "9750b5294348076d2b75cc67229cdb9e198ed6c2fbc4d76adc063e7124c9e84d"
+      "sourceHash": "25e6bd39c2fe668915f58af556e5346fac46a4bff4c512cab76f6f54176ae988"
     },
     {
       "name": "crowdy-game-kit-econ",
@@ -508,7 +508,14 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "emit_event",
       "kind": "function",
       "signature": "pub fn emit_event(name: &str, payload: Value) -> Result<Value, HostError>",
-      "docs": "Emit a compute event other modules (or this one) can subscribe to via an on_event=compute_event trigger. Cascade depth is host-bounded."
+      "docs": "Emit a compute event. Studio modules publish on the app event bus (on_event=compute_event triggers); player modules publish on their grid's bus, which reaches the other modules on the same grid (on_event=grid_event) and Studio modules that opted in with a grid_event trigger. Cascade depth is host-bounded; nothing reaches a client."
+    },
+    {
+      "module": "crowdy_compute_sdk::api",
+      "name": "emit_event_to",
+      "kind": "function",
+      "signature": "pub fn emit_event_to(target: &str, name: &str, payload: Value) -> Result<Value, HostError>",
+      "docs": "Address one module by name on the same bus (on a grid: a module on the same grid, itself included). Delivered through its `on_event` whether or not it subscribed to `name`."
     },
     {
       "module": "crowdy_compute_sdk::api",
@@ -551,6 +558,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "function",
       "signature": "pub fn model_invoke_with_world( function_name: &str, self_container_id: &str, params: Value, session_id: Option<&str>, caller_user_id: Option<&str>, world_writes: &[WorldWrite], ) -> Result<Value, HostError>",
       "docs": "`model_invoke` with atomic world writes: the voxel writes and the Model function's mutations commit in ONE transaction — if either side fails, both roll back. Use for referee actions that change the world and the ledger together (mine/place). Up to 16 writes per call; each write charges a db op. Requires SDK 0.1.4+ on the host."
+    },
+    {
+      "module": "crowdy_compute_sdk::api",
+      "name": "pointer_clicks",
+      "kind": "function",
+      "signature": "pub fn pointer_clicks() -> Result<Value, HostError>",
+      "docs": "Drain queued holodeck mouse clicks since the last call (CLIENT). Returns `{ nowMs, buttons, holdingMs, clicks }`. `buttons` is the live `MouseEvent.buttons` bitfield (1 = left held). `holdingMs` maps button index → milliseconds already held (`\"0\"` = left). `clicks` is drained: `{ t: \"down\"|\"up\", button, atMs, heldMs?, nx, ny }` with canvas NDC (`nx`/`ny` in −1..1, +ny up). Studio chrome is omitted. Call every `on_tick`. Click-to-charge: start on left `down`, read `holdingMs[\"0\"]` for the power bar, fire on left `up` using `heldMs`."
     },
     {
       "module": "crowdy_compute_sdk::api",
@@ -1198,6 +1212,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_game_kit_core",
+      "name": "grid",
+      "kind": "module",
+      "signature": "pub mod grid;",
+      "docs": ""
+    },
+    {
+      "module": "crowdy_game_kit_core",
       "name": "invoke",
       "kind": "module",
       "signature": "pub mod invoke;",
@@ -1468,6 +1489,97 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "function",
       "signature": "pub fn encode_event(event_type: u16, state: &[u8]) -> Vec<u8>",
       "docs": ""
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "GridEvent",
+      "kind": "struct",
+      "signature": "pub struct GridEvent { /// The grid whose bus carried it (`None` on a grid: it is always your own). pub grid_id: Option<String>, /// The grid's owner (Studio side only). pub owner_user_id: Option<String>, pub event_name: String, /// Module that published it, when the platform names one. pub source_module: Option<String>, /// Set when the publisher addressed one module by name. pub target: Option<String>, pub payload: Value, pub cascade_depth: u32, }",
+      "docs": "A grid-bus event as a module's `on_event` receives it."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "GridEvent::cascade_depth",
+      "kind": "field",
+      "signature": "pub cascade_depth: u32",
+      "docs": ""
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "GridEvent::event_name",
+      "kind": "field",
+      "signature": "pub event_name: String",
+      "docs": ""
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "GridEvent::grid_id",
+      "kind": "field",
+      "signature": "pub grid_id: Option<String>",
+      "docs": "The grid whose bus carried it (`None` on a grid: it is always your own)."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "GridEvent::owner_user_id",
+      "kind": "field",
+      "signature": "pub owner_user_id: Option<String>",
+      "docs": "The grid's owner (Studio side only)."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "GridEvent::payload",
+      "kind": "field",
+      "signature": "pub payload: Value",
+      "docs": ""
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "GridEvent::source_module",
+      "kind": "field",
+      "signature": "pub source_module: Option<String>",
+      "docs": "Module that published it, when the platform names one."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "GridEvent::target",
+      "kind": "field",
+      "signature": "pub target: Option<String>",
+      "docs": "Set when the publisher addressed one module by name."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "decode",
+      "kind": "function",
+      "signature": "pub fn decode(body: &[u8]) -> Option<GridEvent>",
+      "docs": "Decode an `on_event` body. Returns `None` for any other event kind. Two shapes carry grid events: a player module gets the player-plane event (`kind: \"grid_event\"`, with `eventName`, `sourceModuleName`, `targetModuleName`, `payload`), and a Studio module gets the app-plane one (`event: \"grid_event\"`, `eventName`, and `payload: { gridId, ownerUserId, sourceModule, payload }`)."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "post",
+      "kind": "function",
+      "signature": "pub fn post(channel_id: &str, bytes: &[u8]) -> Result<Value, HostError>",
+      "docs": "Post raw bytes into a grid channel. The platform stamps the sender uuid as `grid:<gridId>`; a channel of another grid is `unavailable`."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "post_json",
+      "kind": "function",
+      "signature": "pub fn post_json(channel_id: &str, message: &Value) -> Result<Value, HostError>",
+      "docs": "Post a JSON message into a grid channel."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "publish",
+      "kind": "function",
+      "signature": "pub fn publish(name: &str, payload: Value) -> Result<Value, HostError>",
+      "docs": "Publish `name` on this grid's bus: every other module on the grid with a `grid_event` subscription to it (or to `*`), and any Studio module that opted in. Never another grid, never a client."
+    },
+    {
+      "module": "crowdy_game_kit_core::grid",
+      "name": "send_to",
+      "kind": "function",
+      "signature": "pub fn send_to(module: &str, name: &str, payload: Value) -> Result<Value, HostError>",
+      "docs": "Deliver `name` to one module on this grid (itself included), whether or not it subscribed to `name`."
     },
     {
       "module": "crowdy_game_kit_core::invoke",
