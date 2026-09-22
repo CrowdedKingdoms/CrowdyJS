@@ -8577,6 +8577,8 @@ export type PlayerWasmPolicy = {
   __typename?: 'PlayerWasmPolicy';
   /** The app. */
   appId: Scalars['BigInt']['output'];
+  /** DN-10: which channels this scope's player modules may emit_channel into: 'grid' (default, the grid's own channels), 'send_messages' (also channels the grid owner may post to), or 'none'. */
+  channelEgress: Scalars['String']['output'];
   /** Client-target fuel budget per browser dispatch (04 §3). */
   clientFuelPerDispatch: Scalars['BigInt']['output'];
   /** Whether this row is applied. */
@@ -8585,6 +8587,8 @@ export type PlayerWasmPolicy = {
   fuelPerInvoke: Scalars['BigInt']['output'];
   /** Fuel budget per tick. */
   fuelPerTick: Scalars['BigInt']['output'];
+  /** DN-10: whether player modules may publish on the grid event bus (emit_event). Default true. */
+  gridEventEgress: Scalars['Boolean']['output'];
   /** Deploys (compiles) allowed per player per hour. */
   maxCompilesPerHour: Scalars['Int']['output'];
   /** Player model containers created per player per day. */
@@ -8611,6 +8615,8 @@ export type PlayerWasmPolicy = {
   scope: Scalars['String']['output'];
   /** Tier/grid/user id; null for app_default. */
   scopeRef: Maybe<Scalars['BigInt']['output']>;
+  /** DN-10: most chunks a player module's spatial message may reach from its in-grid origin (0-8, default 8). 0 keeps grid messages inside the origin chunk. */
+  spatialMaxDistance: Scalars['Int']['output'];
   /** Daily compute-unit quota; null = uncapped. */
   unitsPerDay: Maybe<Scalars['BigInt']['output']>;
   /** Hourly compute-unit quota (PLAYER_QUOTA_EXHAUSTED pause); null = uncapped. */
@@ -11225,10 +11231,14 @@ export type SetPlayerModelPropertyInput = {
 export type SetPlayerWasmPolicyInput = {
   /** The app. */
   appId: Scalars['BigInt']['input'];
+  /** DN-10 channel egress: 'none' | 'grid' | 'send_messages'. */
+  channelEgress?: InputMaybe<Scalars['String']['input']>;
   clientFuelPerDispatch?: InputMaybe<Scalars['BigInt']['input']>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   fuelPerInvoke?: InputMaybe<Scalars['BigInt']['input']>;
   fuelPerTick?: InputMaybe<Scalars['BigInt']['input']>;
+  /** DN-10 grid event bus on/off. */
+  gridEventEgress?: InputMaybe<Scalars['Boolean']['input']>;
   maxCompilesPerHour?: InputMaybe<Scalars['Int']['input']>;
   maxContainerCreatesDay?: InputMaybe<Scalars['Int']['input']>;
   maxDbOpsPerTick?: InputMaybe<Scalars['Int']['input']>;
@@ -11243,6 +11253,8 @@ export type SetPlayerWasmPolicyInput = {
   scope: Scalars['String']['input'];
   /** Tier/grid/user id; required unless scope is app_default. */
   scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
+  /** DN-10 spatial reach cap in chunks (0-8). */
+  spatialMaxDistance?: InputMaybe<Scalars['Int']['input']>;
   unitsPerDay?: InputMaybe<Scalars['BigInt']['input']>;
   unitsPerHour?: InputMaybe<Scalars['BigInt']['input']>;
 };

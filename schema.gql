@@ -2579,6 +2579,18 @@ type PlayerWasmPolicy {
   maxContainerCreatesDay: Int!
   """Client-target fuel budget per browser dispatch (04 §3)."""
   clientFuelPerDispatch: BigInt!
+  """
+  DN-10: which channels this scope's player modules may emit_channel into: 'grid' (default, the grid's own channels), 'send_messages' (also channels the grid owner may post to), or 'none'.
+  """
+  channelEgress: String!
+  """
+  DN-10: most chunks a player module's spatial message may reach from its in-grid origin (0-8, default 8). 0 keeps grid messages inside the origin chunk.
+  """
+  spatialMaxDistance: Int!
+  """
+  DN-10: whether player modules may publish on the grid event bus (emit_event). Default true.
+  """
+  gridEventEgress: Boolean!
 }
 
 """
@@ -12994,6 +13006,12 @@ input SetPlayerWasmPolicyInput {
   maxCompilesPerHour: Int
   maxContainerCreatesDay: Int
   clientFuelPerDispatch: BigInt
+  """DN-10 channel egress: 'none' | 'grid' | 'send_messages'."""
+  channelEgress: String
+  """DN-10 spatial reach cap in chunks (0-8)."""
+  spatialMaxDistance: Int
+  """DN-10 grid event bus on/off."""
+  gridEventEgress: Boolean
 }
 
 input TransferPlayerCodeListingInput {
