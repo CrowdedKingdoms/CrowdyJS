@@ -570,12 +570,25 @@ export { MarketplaceAPI } from './domains/marketplace.js';
 export { PlayerModelAPI } from './domains/playerModel.js';
 export {
   PlayerCodeBroker,
+  ALLOWED_HOST_CALLS,
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
   type PlayerCodeHostCall,
   type PlayerCodeWorkerLike,
   type PlayerCodePresentation,
 } from './player-runtime/player-code-broker.js';
+export {
+  ClientGridEventBus,
+  defaultClientGridEventBus,
+  CLIENT_GRID_EVENT_MAX_CASCADE,
+  type ClientGridEvent,
+  type ClientGridEventSubscriber,
+} from './player-runtime/client-grid-event-bus.js';
+export {
+  GENERATED_HOST_CATALOG,
+  type HostCatalog,
+  type HostCatalogFunction,
+} from './player-runtime/host-catalog.generated.js';
 export {
   GLUE_HOST_FUNCTIONS,
   parseFuelBudget,

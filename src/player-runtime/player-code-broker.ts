@@ -4,10 +4,22 @@ import {
   wrapGlueSab,
   writeGlueResult,
 } from './glue-sab.js';
+import { GENERATED_HOST_CATALOG } from './host-catalog.generated.js';
+import {
+  ClientGridEvent,
+  ClientGridEventBus,
+  defaultClientGridEventBus,
+} from './client-grid-event-bus.js';
 
 export interface PlayerCodeGridBounds {
   low: { x: bigint; y: bigint; z: bigint };
   high: { x: bigint; y: bigint; z: bigint };
+  /**
+   * The grid's id. Required for the grid event bus (`emit_event` /
+   * `on_event`) and for self-grid checks on `grid_state_*`; a broker without
+   * it refuses those calls.
+   */
+  gridId?: string;
 }
 
 export interface PlayerCodeHostCall {
@@ -73,49 +85,42 @@ export interface PlayerCodeBrokerOptions {
    * mod typically ticks ~1 Hz; the per-dispatch watchdog still bounds each.
    */
   tickIntervalMs?: number;
+  /**
+   * The mod's name on the grid event bus: the value `emit_event`'s `target`
+   * matches, and the `sourceModule` other mods see.
+   */
+  moduleName?: string;
+  /**
+   * Page-local grid event bus. Defaults to one bus shared by every broker on
+   * the page; pass `null` to keep this mod off the bus entirely.
+   */
+  eventBus?: ClientGridEventBus | null;
 }
 
 /**
- * Deny-by-default host-call allowlist, grouped by capability (04 §4). Only
- * owner-lawful reads and effects cross the bridge; auth, admin, authoring,
- * grid mutation, raw UDP pose, voice, teams, and any network fetch are
- * absent by construction, not by a denylist.
+ * Deny-by-default host-call allowlist, grouped by capability (04 §4), built
+ * from the platform host catalog (DN-10: the same list the server dispatchers
+ * and the capability summary are checked against). Only owner-lawful reads and
+ * effects cross the bridge; auth, admin, authoring, grid mutation, raw UDP
+ * pose, voice, teams, and any network fetch are absent by construction, not
+ * by a denylist. `grid_info` and `emit_event` are answered by the broker
+ * itself (the mod's own bounds; the page-local grid event bus).
  */
-const ALLOWED_HOST_CALLS: Record<string, ReadonlySet<string>> = {
-  model: new Set([
-    'container_create',
-    'container_get',
-    'containers_list',
-    'container_delete',
-    'property_set',
-    'model_invoke',
-  ]),
-  state: new Set([
-    'user_state_get',
-    'user_state_set',
-    'grid_state_get',
-    'grid_state_set',
-  ]),
-  world_read: new Set([
-    'chunk_get',
-    'voxels_list',
-    'actors_list',
-    'actors_list_radius',
-  ]),
-  world_write: new Set(['voxel_set']),
-  egress: new Set(['emit_spatial']),
-  present: new Set(['hud_set', 'overlay_draw']),
-  // Local input the host game drains each tick (Construct: holodeck canvas).
-  input: new Set(['pointer_clicks']),
-  // grid_info is answered by the broker itself (the mod's own clamped bounds),
-  // so a client mod can address its grid without a server round-trip.
-  meta: new Set(['grid_permission_check', 'grid_info']),
-};
+export const ALLOWED_HOST_CALLS: Readonly<Record<string, ReadonlySet<string>>> =
+  (() => {
+    const groups: Record<string, Set<string>> = {};
+    for (const fn of GENERATED_HOST_CATALOG.functions) {
+      if (!fn.targets.includes('client')) continue;
+      (groups[fn.group] ??= new Set()).add(fn.name);
+    }
+    return groups;
+  })();
 
 /** Per-call-family rate caps (calls per rolling second); flood one, others hold. */
 const RATE_CAPS: Record<string, number> = {
   model: 100,
   state: 100,
+  sessions: 20,
   world_read: 400,
   world_write: 200,
   egress: 60,
@@ -123,6 +128,13 @@ const RATE_CAPS: Record<string, number> = {
   input: 400,
   meta: 100,
 };
+
+/** Grid-addressed functions whose `gridId` argument must be the mod's own grid. */
+const SELF_GRID_FUNCTIONS = new Set([
+  'grid_state_get',
+  'grid_state_set',
+  'grid_permission_check',
+]);
 
 const CHUNK_FUNCTIONS = new Set([
   'chunk_get',
@@ -198,7 +210,87 @@ export class PlayerCodeBroker {
     | { generation: number; id: number; kind: string }
     | null = null;
 
+  private busUnsubscribe: (() => void) | null = null;
+  private deliveringEventDepth = 0;
+  private readonly busSubscriber = {
+    moduleName: this.options.moduleName ?? null,
+    deliver: (event: ClientGridEvent) => this.deliverEvent(event),
+  };
+
   constructor(private readonly options: PlayerCodeBrokerOptions) {}
+
+  /**
+   * Hand a grid event to the running mod's `on_event`. Returns false when the
+   * mod is not running (not ready, circuit open) so the bus does not count it.
+   */
+  deliverEvent(event: ClientGridEvent): boolean {
+    const worker = this.worker;
+    if (!worker || !this.workerReady || this.circuitOpen) return false;
+    if (event.gridId !== this.options.grid.gridId) return false;
+    let payload: Uint8Array;
+    try {
+      payload = utf8Encoder.encode(JSON.stringify(event));
+    } catch {
+      return false;
+    }
+    if (payload.length > MAX_HOST_CALL_ARGS_BYTES) return false;
+    this.deliveringEventDepth = event.cascadeDepth;
+    try {
+      worker.postMessage({ type: 'event', payload });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private joinEventBus(): void {
+    const gridId = this.options.grid.gridId;
+    const bus =
+      this.options.eventBus === undefined
+        ? defaultClientGridEventBus
+        : this.options.eventBus;
+    if (!gridId || !bus || this.busUnsubscribe) return;
+    this.busUnsubscribe = bus.subscribe(gridId, this.busSubscriber);
+  }
+
+  private leaveEventBus(): void {
+    this.busUnsubscribe?.();
+    this.busUnsubscribe = null;
+  }
+
+  private emitGridEvent(args: Record<string, unknown>): { delivered: number } {
+    const gridId = this.options.grid.gridId;
+    const bus =
+      this.options.eventBus === undefined
+        ? defaultClientGridEventBus
+        : this.options.eventBus;
+    if (!gridId || !bus) {
+      throw new Error('emit_event needs a grid event bus (broker has no gridId)');
+    }
+    const name = args.name;
+    if (
+      typeof name !== 'string' ||
+      name.length === 0 ||
+      utf8Encoder.encode(name).length > MAX_HOST_CALL_FN_BYTES
+    ) {
+      throw new Error('emit_event name must be a non-empty string');
+    }
+    const target = args.target;
+    if (target != null && (typeof target !== 'string' || target.length === 0)) {
+      throw new Error('emit_event target must be a module name');
+    }
+    const inEvent = this.activeDispatch?.kind === 'event';
+    const event: ClientGridEvent = {
+      kind: 'grid_event',
+      gridId,
+      eventName: name,
+      payload: args.payload ?? null,
+      sourceModule: this.options.moduleName ?? null,
+      target: (target as string | undefined) ?? null,
+      cascadeDepth: inEvent ? this.deliveringEventDepth + 1 : 1,
+    };
+    return { delivered: bus.publish(event, this.busSubscriber) };
+  }
 
   /**
    * Start the worker on a platform-fetched artifact. Verifies the artifact
@@ -228,6 +320,7 @@ export class PlayerCodeBroker {
       }
       this.artifact = artifact.slice(0);
       this.spawnWorker();
+      this.joinEventBus();
     } finally {
       if (lifecycleVersion === this.lifecycleVersion) this.starting = false;
     }
@@ -242,6 +335,7 @@ export class PlayerCodeBroker {
   stop(): void {
     this.lifecycleVersion += 1;
     this.starting = false;
+    this.leaveEventBus();
     this.stopWorker();
     this.artifact = null;
   }
@@ -379,7 +473,9 @@ export class PlayerCodeBroker {
         });
         return;
       }
-      if (PRESENTATION_FUNCTIONS.has(raw.fn)) {
+      if (raw.fn === 'emit_event') {
+        data = this.emitGridEvent(args);
+      } else if (PRESENTATION_FUNCTIONS.has(raw.fn)) {
         // Presentation never reaches the SDK/server: it goes only to the
         // game-declared channel. A game that offers no sink silently drops it.
         this.options.onPresentation?.({
@@ -635,6 +731,12 @@ export class PlayerCodeBroker {
       this.assertChunk(args.x, args.y, args.z);
     } else if (fn === 'voxel_set' || fn === 'emit_spatial') {
       this.assertChunk(args.chunkX, args.chunkY, args.chunkZ);
+    } else if (SELF_GRID_FUNCTIONS.has(fn)) {
+      // Hosts that predate grid ids leave the check to their onHostCall.
+      const own = this.options.grid.gridId;
+      if (own && String(args.gridId ?? '') !== own) {
+        throw new Error('target is outside the player grid');
+      }
     }
   }
 
