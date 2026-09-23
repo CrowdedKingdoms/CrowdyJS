@@ -2,9 +2,9 @@
 export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "schemaVersion": 2,
   "rustVersion": "1.97.1",
-  "sdkVersion": "0.1.6",
+  "sdkVersion": "0.1.7",
   "abiVersion": 0,
-  "contentHash": "403558606363e0ed9227513fb31aacacad18d4215843321f7d7874370ff8702e",
+  "contentHash": "20322f33fbb9dea597572e29f2427b56057602da8edca5f3c9feb8bcceca4698",
   "crates": [
     {
       "name": "alloc",
@@ -18,8 +18,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "crowdy-compute-sdk",
-      "version": "0.1.6",
-      "sourceHash": "33e063cbb758695b01ea2cce6f9d1b7b12878d939b231f3b9cb4905bb8b879b0"
+      "version": "0.1.7",
+      "sourceHash": "f0fd8e0b13326bef1dcc4caec12f055057dc7268571529d5544727a3b4efafea"
     },
     {
       "name": "crowdy-game-kit-ai",
@@ -29,7 +29,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     {
       "name": "crowdy-game-kit-core",
       "version": "0.1.0",
-      "sourceHash": "25e6bd39c2fe668915f58af556e5346fac46a4bff4c512cab76f6f54176ae988"
+      "sourceHash": "b6b4f7ee86c33898f87792668b9201f807d11dc19c2b6bbd579c8d22fe41e4b1"
     },
     {
       "name": "crowdy-game-kit-econ",
@@ -466,7 +466,14 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "container_get_batch",
       "kind": "function",
       "signature": "pub fn container_get_batch(container_ids: &[&str]) -> Result<Value, HostError>",
-      "docs": "Batched container_get: up to 32 ids -> [{container, properties}] in one db-op. Requires SDK 0.1.2+ on the host."
+      "docs": "Batched container_get: up to 32 ids -> [{container, properties}] in one db-op. Requires SDK 0.1.2+ on the host. Each container includes `bindingKey` and `sessionId` (SDK 0.1.7+; older hosts omit the key)."
+    },
+    {
+      "module": "crowdy_compute_sdk::api",
+      "name": "container_get_by_key",
+      "kind": "function",
+      "signature": "pub fn container_get_by_key( type_name: &str, session_id: Option<&str>, binding_key: &str, ) -> Result<Value, HostError>",
+      "docs": "One container by `(type_name, session_id, binding_key)`, plus its property map. `session_id` null matches an app-scoped row. Requires SDK 0.1.7+ on the host. Server only."
     },
     {
       "module": "crowdy_compute_sdk::api",
@@ -1683,8 +1690,15 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "crowdy_game_kit_core::model",
       "name": "Container",
       "kind": "struct",
-      "signature": "pub struct Container { pub id: String, pub type_name: String, pub display_name: String, pub owner_user_id: Option<String>, pub properties: Value, }",
+      "signature": "pub struct Container { pub id: String, pub type_name: String, pub display_name: String, pub owner_user_id: Option<String>, pub session_id: Option<String>, pub binding_key: Option<String>, pub properties: Value, }",
       "docs": "A container with its property map (the `container_get_batch` shape)."
+    },
+    {
+      "module": "crowdy_game_kit_core::model",
+      "name": "Container::binding_key",
+      "kind": "field",
+      "signature": "pub binding_key: Option<String>",
+      "docs": ""
     },
     {
       "module": "crowdy_game_kit_core::model",
@@ -1716,10 +1730,24 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_game_kit_core::model",
+      "name": "Container::session_id",
+      "kind": "field",
+      "signature": "pub session_id: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "crowdy_game_kit_core::model",
       "name": "Container::type_name",
       "kind": "field",
       "signature": "pub type_name: String",
       "docs": ""
+    },
+    {
+      "module": "crowdy_game_kit_core::model",
+      "name": "load_by_key",
+      "kind": "function",
+      "signature": "pub fn load_by_key( type_name: &str, session_id: Option<&str>, binding_key: &str, ) -> Result<Container, HostError>",
+      "docs": "One container by binding key, the `container_get` shape. Server only."
     },
     {
       "module": "crowdy_game_kit_core::model",

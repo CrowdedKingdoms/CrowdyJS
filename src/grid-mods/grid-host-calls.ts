@@ -195,6 +195,9 @@ export function createGridHostCalls(
         });
       case 'container_get':
         return scope.model.container(String(args.containerId));
+      case 'container_get_by_key':
+        // Binding keys are a server game-model concept. Grid containers have none.
+        throw new GridHostCallRefused(fn, 'server-only');
       case 'container_get_batch': {
         const ids = Array.isArray(args.containerIds) ? args.containerIds.slice(0, 32) : [];
         const found = await Promise.all(

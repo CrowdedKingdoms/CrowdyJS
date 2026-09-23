@@ -16,6 +16,7 @@
     { "name": "container_create", "group": "model", "targets": ["server", "client"], "app": "Any container in the app", "grid": "Created on the player tier, owned by the executing identity and tagged with the grid" },
     { "name": "container_get", "group": "model", "targets": ["server", "client"], "app": "Any container in the app", "grid": "Only containers the executing identity owns on this grid; others are unavailable" },
     { "name": "container_get_batch", "group": "model", "targets": ["server", "client"], "app": "Up to 32 containers in the app", "grid": "Up to 32 owned containers on this grid; foreign ids are silently absent" },
+    { "name": "container_get_by_key", "group": "model", "targets": ["server"], "app": "One container by type, session and binding key", "grid": "Not offered; player grids have no binding keys" },
     { "name": "containers_list", "group": "model", "targets": ["server", "client"], "app": "Filtered list over the app", "grid": "Owned containers on this grid" },
     { "name": "container_delete", "group": "model", "targets": ["server", "client"], "app": "Any container in the app", "grid": "Owned containers on this grid" },
     { "name": "property_set", "group": "model", "targets": ["server", "client"], "app": "Any container in the app", "grid": "Owned containers on this grid" },
