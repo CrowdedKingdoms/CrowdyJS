@@ -6530,7 +6530,13 @@ enum PlayerFaultCode {
   QUOTA_EXHAUSTED
   WALLET_EMPTY
   SPEND_CAP_REACHED
-  """A breaker is open or an operator switch is off for this subject."""
+  """
+  The app's own circuit is open after repeated failures. Retry after extensions.retryAfterMs. extensions.cause is watchdog_timeout when those failures were watchdog kills. This is not PLATFORM_BUSY and not a rate limit.
+  """
+  CIRCUIT_OPEN
+  """
+  An operator switch, a latch, or a platform hold. An open author circuit is CIRCUIT_OPEN, not this code.
+  """
   TEMPORARILY_DISABLED
   """The arguments did not satisfy the function's contract."""
   INVALID_REQUEST
@@ -15072,9 +15078,9 @@ input CreateCrowdyStudioProjectInput {
   """Optional editor pairing preference; defaults to PAIRED."""
   pairingPreference: CrowdyStudioPairingPreference = PAIRED
   """
-  Supported crowdy-compute-sdk pin; defaults to the current 0.1.6 authoring pin.
+  Supported crowdy-compute-sdk pin; defaults to the current 0.1.8 authoring pin.
   """
-  sdkVersion: String = "0.1.6"
+  sdkVersion: String = "0.1.8"
   """Supported guest ABI pin; defaults to ABI 0."""
   abiVersion: Int = 0
   """

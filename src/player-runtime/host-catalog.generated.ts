@@ -61,6 +61,15 @@ export const GENERATED_HOST_CATALOG: HostCatalog = {
       "grid": "Up to 32 owned containers on this grid; foreign ids are silently absent"
     },
     {
+      "name": "container_get_by_key",
+      "group": "model",
+      "targets": [
+        "server"
+      ],
+      "app": "One container by type, session and binding key",
+      "grid": "Not offered; player grids have no binding keys"
+    },
+    {
       "name": "containers_list",
       "group": "model",
       "targets": [
