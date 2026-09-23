@@ -2343,7 +2343,7 @@ export type CreateCrowdyStudioProjectInput = {
   name: Scalars['String']['input'];
   /** Optional editor pairing preference; defaults to PAIRED. */
   pairingPreference?: InputMaybe<CrowdyStudioPairingPreference>;
-  /** Supported crowdy-compute-sdk pin; defaults to the current 0.1.6 authoring pin. */
+  /** Supported crowdy-compute-sdk pin; defaults to the current 0.1.8 authoring pin. */
   sdkVersion?: InputMaybe<Scalars['String']['input']>;
   /** Optional stable crate-style SERVER module name. Deployment rechecks current authority. */
   serverModuleName?: InputMaybe<Scalars['String']['input']>;
@@ -8260,6 +8260,8 @@ export enum PlayerFaultCode {
   AppUnavailable = 'APP_UNAVAILABLE',
   /** A per-minute allowance for this app is spent; it returns on the next window. */
   BudgetExceeded = 'BUDGET_EXCEEDED',
+  /** The app's own circuit is open after repeated failures. Retry after extensions.retryAfterMs. extensions.cause is watchdog_timeout when those failures were watchdog kills. This is not PLATFORM_BUSY and not a rate limit. */
+  CircuitOpen = 'CIRCUIT_OPEN',
   /** The arguments did not satisfy the function's contract. */
   InvalidRequest = 'INVALID_REQUEST',
   /** An invoke policy or permission refused this caller. */
@@ -8275,7 +8277,7 @@ export enum PlayerFaultCode {
   /** This caller is asking too often. It arrives ONLY as a thrown error, never in band on a result, and `extensions.retryAfterMs` carries the wait. That number is the milliseconds REMAINING in the current fixed window at the moment the refusal was built, not a fixed backoff, so a second refusal inside the same window carries a smaller number: treat it as a deadline from receipt and do not reuse a cached one. */
   RateLimited = 'RATE_LIMITED',
   SpendCapReached = 'SPEND_CAP_REACHED',
-  /** A breaker is open or an operator switch is off for this subject. */
+  /** An operator switch, a latch, or a platform hold. An open author circuit is CIRCUIT_OPEN, not this code. */
   TemporarilyDisabled = 'TEMPORARILY_DISABLED',
   /** No valid credential was presented. */
   Unauthenticated = 'UNAUTHENTICATED',
