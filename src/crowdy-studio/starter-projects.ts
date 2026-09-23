@@ -7,7 +7,7 @@ import {
   type CrowdyStudioTarget,
 } from './models.js';
 
-const SDK_VERSION = '0.1.6';
+const SDK_VERSION = '0.1.7';
 
 export interface CrowdyStudioNewProjectOptions {
   appId: string;
