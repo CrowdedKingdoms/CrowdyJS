@@ -13,7 +13,7 @@ test('starter Cargo.toml pins crowdy-compute-sdk and serde_json', async () => {
   });
   const cargo = project.files.find((file) => file.path === 'Cargo.toml');
   assert.ok(cargo, 'starter includes Cargo.toml');
-  assert.match(cargo.content, /crowdy-compute-sdk = "0\.1\.7"/u);
+  assert.match(cargo.content, /crowdy-compute-sdk = "0\.1\.8"/u);
   assert.match(cargo.content, /serde_json = "1"/u);
   assert.match(cargo.content, /\[package\.metadata\.crowdy\]/u);
   assert.match(cargo.content, /tick_interval_ms = 1000/u);

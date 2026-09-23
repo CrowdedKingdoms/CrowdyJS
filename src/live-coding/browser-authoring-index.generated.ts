@@ -2,9 +2,9 @@
 export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "schemaVersion": 2,
   "rustVersion": "1.97.1",
-  "sdkVersion": "0.1.7",
+  "sdkVersion": "0.1.8",
   "abiVersion": 0,
-  "contentHash": "20322f33fbb9dea597572e29f2427b56057602da8edca5f3c9feb8bcceca4698",
+  "contentHash": "5540301f69ad5ee2566e142227c2cc9730b45e6b3710189a7e1900d0877af114",
   "crates": [
     {
       "name": "alloc",
@@ -18,8 +18,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "crowdy-compute-sdk",
-      "version": "0.1.7",
-      "sourceHash": "f0fd8e0b13326bef1dcc4caec12f055057dc7268571529d5544727a3b4efafea"
+      "version": "0.1.8",
+      "sourceHash": "bbd0a38014a0b390750f78f9797b4dff34387122301a1bed207c997126a688c8"
     },
     {
       "name": "crowdy-game-kit-ai",
@@ -220,8 +220,15 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "crowdy_compute_sdk",
       "name": "HostError",
       "kind": "struct",
-      "signature": "pub struct HostError { pub kind: String, #[serde(default)] pub message: Option<String>, }",
-      "docs": "A structured error from the host API."
+      "signature": "pub struct HostError { pub kind: String, #[serde(default)] pub message: Option<String>, #[serde(default)] pub blame: Option<String>, #[serde(default)] pub retryable: Option<bool>, #[serde(default, rename = \"retryAfterMs\")] pub retry_after_ms: Option<u64>, }",
+      "docs": "A structured error from the host API. `blame` and `retryable` match the GraphQL fault extensions (`PLATFORM` / `AUTHOR` / `BUDGET`). Older hosts omit them; a module treats a missing `retryable` as \"not told\", and branches on `kind` (`platform_busy` means retry)."
+    },
+    {
+      "module": "crowdy_compute_sdk",
+      "name": "HostError::blame",
+      "kind": "field",
+      "signature": "pub blame: Option<String>",
+      "docs": ""
     },
     {
       "module": "crowdy_compute_sdk",
@@ -242,6 +249,20 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "HostError::message",
       "kind": "field",
       "signature": "pub message: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "crowdy_compute_sdk",
+      "name": "HostError::retry_after_ms",
+      "kind": "field",
+      "signature": "pub retry_after_ms: Option<u64>",
+      "docs": ""
+    },
+    {
+      "module": "crowdy_compute_sdk",
+      "name": "HostError::retryable",
+      "kind": "field",
+      "signature": "pub retryable: Option<bool>",
       "docs": ""
     },
     {
@@ -466,14 +487,14 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "container_get_batch",
       "kind": "function",
       "signature": "pub fn container_get_batch(container_ids: &[&str]) -> Result<Value, HostError>",
-      "docs": "Batched container_get: up to 32 ids -> [{container, properties}] in one db-op. Requires SDK 0.1.2+ on the host. Each container includes `bindingKey` and `sessionId` (SDK 0.1.7+; older hosts omit the key)."
+      "docs": "Batched container_get: up to 32 ids -> [{container, properties}] in one db-op. Requires SDK 0.1.2+ on the host. Each container includes `bindingKey` and `sessionId` (SDK 0.1.8+; older hosts omit the key)."
     },
     {
       "module": "crowdy_compute_sdk::api",
       "name": "container_get_by_key",
       "kind": "function",
       "signature": "pub fn container_get_by_key( type_name: &str, session_id: Option<&str>, binding_key: &str, ) -> Result<Value, HostError>",
-      "docs": "One container by `(type_name, session_id, binding_key)`, plus its property map. `session_id` null matches an app-scoped row. Requires SDK 0.1.7+ on the host. Server only."
+      "docs": "One container by `(type_name, session_id, binding_key)`, plus its property map. `session_id` null matches an app-scoped row. Requires SDK 0.1.8+ on the host. Server only."
     },
     {
       "module": "crowdy_compute_sdk::api",

@@ -15078,9 +15078,9 @@ input CreateCrowdyStudioProjectInput {
   """Optional editor pairing preference; defaults to PAIRED."""
   pairingPreference: CrowdyStudioPairingPreference = PAIRED
   """
-  Supported crowdy-compute-sdk pin; defaults to the current 0.1.7 authoring pin.
+  Supported crowdy-compute-sdk pin; defaults to the current 0.1.8 authoring pin.
   """
-  sdkVersion: String = "0.1.7"
+  sdkVersion: String = "0.1.8"
   """Supported guest ABI pin; defaults to ABI 0."""
   abiVersion: Int = 0
   """

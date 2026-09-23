@@ -111,7 +111,7 @@ export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
         serverModuleName: input.metadata.serverModuleName ?? null,
         clientModuleName: input.metadata.clientModuleName ?? null,
         pairingPreference: toApiPairing(input.kind, input.metadata.pairingPreference),
-        sdkVersion: '0.1.7',
+        sdkVersion: '0.1.8',
         abiVersion: 0,
         initialFiles: input.files.map(toApiFile),
       },

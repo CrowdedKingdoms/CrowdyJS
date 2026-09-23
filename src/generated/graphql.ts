@@ -2343,7 +2343,7 @@ export type CreateCrowdyStudioProjectInput = {
   name: Scalars['String']['input'];
   /** Optional editor pairing preference; defaults to PAIRED. */
   pairingPreference?: InputMaybe<CrowdyStudioPairingPreference>;
-  /** Supported crowdy-compute-sdk pin; defaults to the current 0.1.7 authoring pin. */
+  /** Supported crowdy-compute-sdk pin; defaults to the current 0.1.8 authoring pin. */
   sdkVersion?: InputMaybe<Scalars['String']['input']>;
   /** Optional stable crate-style SERVER module name. Deployment rechecks current authority. */
   serverModuleName?: InputMaybe<Scalars['String']['input']>;
