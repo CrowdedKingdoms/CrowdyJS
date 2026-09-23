@@ -1,3 +1,44 @@
+# CrowdyJS v17.7 — grid-scoped parity (DN-10)
+
+**Additive, plus one coordinated break.** `17.7.0` (2026-09-22), on top of the
+ck-api grid-parity release (grid channels, the grid event bus, grid sessions,
+grid-scoped tokens). Everything that worked keeps its signature, with one
+exception: **the crowdy-dsh bridge protocol is now v4**, so this CrowdyJS
+pairs with `@crowdedkingdoms/crowdy-dsh` 0.4 and later (a v3 worker's frames
+are dropped, as every version bump does).
+
+- **`client.grid(appId, gridId, box?)`** returns a `GridScope`: one grid,
+  bound once. `channels` (list/create/join/leave/send grid channels),
+  `sessions` (games hosted inside the grid), `model` (the player-tier Game
+  Model), `compute` (deploy/invoke/client mods) and `send` (replication whose
+  ORIGIN is in the grid; reach follows `distance`). World helpers check the
+  chunk locally and throw `GridScopeError` before any request.
+- **`client.grids`**: `mintToken` (a grid-scoped token: an app token narrowed
+  to one grid, deny-by-default on the server), `createChannel`, `channels`.
+- **New subpath `@crowdedkingdoms/crowdyjs/grid-program`**: run
+  player-authored JS with the full SDK inside a grid. The program calls
+  `createGridProgramClient(port)` in a network-less sandbox; the page calls
+  `hostGridProgram({ port, scope, graphqlUrl, graphqlWsUrl })`, which relays
+  HTTP and realtime with a grid token the program never sees.
+- **`startGridMod` / `createGridHostCalls`**: one runtime for Rust CLIENT
+  mods and JS grid programs. `createGridHostCalls` answers every CLIENT host
+  call in the platform catalog through CrowdyJS, confined to the grid, with
+  optional game-local fast paths.
+- **Player runtime.** The broker allowlist is built from the platform host
+  catalog (`GENERATED_HOST_CATALOG`, drift-checked against ck-api's
+  `compute-toolchain/host-catalog.json`). New client host calls:
+  `emit_channel`, `emit_event` (a page-local grid event bus; `on_event`
+  delivery), `container_get_batch`, `edge_add`/`edge_delete`,
+  `sessions_list`, `avatar_state_get`. `PlayerCodeGridBounds` takes an
+  optional `gridId` (the event bus and self-grid checks need it), and the
+  broker takes `moduleName` and `eventBus`.
+- **Sessions**: `GmSession.gridId`; `gameModel.sessions({ gridId })`;
+  `createSession({ gridId })` (grid owner only).
+- **Transport seams**: `createCrowdyClient({ fetch, realtime: { webSocketImpl } })`.
+- **crowdy-dsh bridge v4**: `grid.context`, `grid.programRun`,
+  `grid.programStatus`, answered through a new optional
+  `CrowdyStudioDshHost.grid` capability.
+
 # CrowdyJS v17.5 — bulk containers
 
 **Additive.** `17.5.0` (2026-09-16), on top of ck-api `v2.6.0`. Tracks the cks-game-api bulk-container changes of 2026-09-16

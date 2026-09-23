@@ -43,10 +43,14 @@ import {
  * `BigInt` values (`appId`, `avatarId`, `userId`) are sent and received as
  * decimal strings.
  *
- * Every method requires an authenticated session (a Bearer token set via
- * `client.auth.login()` or `client.setToken()`) and that the caller is
- * entitled to the target app, or it throws {@link CrowdyGraphQLError}
- * (`UNAUTHENTICATED` / `FORBIDDEN`).
+ * Actors are **game-plane** objects: every method wants an **app token for the
+ * actor's app** (minted with `client.portal.mintAppToken()` and set via
+ * `client.setToken()`), and the by-id methods ({@link get}, {@link update},
+ * {@link updateState}, {@link delete}) answer `NOT_FOUND` — the same as a
+ * missing id — for a session token or another app's token. {@link list} /
+ * {@link listConnection} are the caller's own actors and, under an app token,
+ * only the ones in that app. No token at all throws {@link CrowdyGraphQLError}
+ * `UNAUTHENTICATED`.
  */
 export class ActorsAPI {
   constructor(private gql: GraphQLClient) {}
@@ -55,9 +59,11 @@ export class ActorsAPI {
    * Fetch a single persisted actor by its 32-character actor id.
    *
    * @param uuid - The actor's 32-ASCII-character id.
-   * @returns The {@link Actor}, or `null` if no actor with that id exists.
-   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN` if the caller
-   *   isn't entitled to the actor's app.
+   * @returns The {@link Actor}. The owner sees `privateState`; anyone else in
+   *   the app gets a public copy with `privateState` `null`.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` if the caller has no token;
+   *   `NOT_FOUND` if the uuid does not exist in the caller's app (a session
+   *   token or another app's token gets the same answer).
    */
   async get(uuid: ActorQueryVariables['uuid']): Promise<ActorQuery['actor']> {
     const data = await this.gql.request(ActorDocument, { uuid });
@@ -65,11 +71,14 @@ export class ActorsAPI {
   }
 
   /**
-   * List persisted actors, optionally narrowed by an {@link ActorFilterInput}
-   * (e.g. by app, owning user, or avatar). Omit the filter to use its defaults.
+   * List the **caller's own** persisted actors, optionally narrowed by an
+   * {@link ActorFilterInput} (app, avatar, uuid, chunk). Under an app token the
+   * list is confined to that token's app whether or not `filter.appId` is
+   * given; a `filter.appId` naming another app is refused (`SCOPE_MISSING`).
+   * A session token lists the caller's actors across every app.
    *
    * @param filter - Optional filter; fields are ANDed together.
-   * @returns The matching actors.
+   * @returns The matching actors (full state; they are all the caller's).
    * @throws {CrowdyGraphQLError} on auth/validation failures.
    */
   async list(filter?: ActorsQueryVariables['filter']): Promise<ActorsQuery['actors']> {
@@ -86,7 +95,8 @@ export class ActorsAPI {
    * @param args - Optional `first` (default 50, max 200), `after` cursor, and
    *   {@link ActorFilterInput}.
    * @returns An {@link ActorsConnection} (`edges { cursor node }`, `pageInfo`,
-   *   `totalCount`).
+   *   `totalCount`). Same scoping as {@link list}: under an app token, only
+   *   that app's actors.
    */
   async listConnection(
     args: ActorsConnectionQueryVariables = {}
@@ -101,7 +111,11 @@ export class ActorsAPI {
    * {@link get} in a loop — it avoids N requests and N auth checks.
    *
    * @param input - The batch lookup keys.
-   * @returns The actors that were found (missing ids are simply omitted).
+   * @returns The actors that were found, public state only (`privateState` is
+   *   `null` for every result). Unknown ids **and ids in other apps** are
+   *   simply omitted.
+   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` if the caller has no token;
+   *   `NOT_FOUND` for a session token (this is an app-token-only field).
    */
   async batchLookup(
     input: BatchLookupActorsQueryVariables['input']
@@ -135,8 +149,10 @@ export class ActorsAPI {
    * @param uuid - The actor's 32-character id.
    * @param input - Fields to change ({@link UpdateActorInput}).
    * @returns The updated {@link Actor}.
-   * @throws {CrowdyGraphQLError} if the actor doesn't exist or the caller lacks
-   *   access.
+   * @throws {CrowdyGraphQLError} `NOT_FOUND` if the uuid does not exist in the
+   *   caller's app (a session token or another app's token gets the same
+   *   answer); `UNAUTHENTICATED` if the caller is not the actor's owner (the
+   *   owner-only rule surfaces as a 401).
    */
   async update(
     uuid: UpdateActorMutationVariables['uuid'],
@@ -158,8 +174,10 @@ export class ActorsAPI {
    * @param uuid - The actor's 32-character id.
    * @param idempotencyKey - Optional client-supplied key for safe retries.
    * @returns The deleted {@link Actor} (its identifying fields).
-   * @throws {CrowdyGraphQLError} `IDEMPOTENCY_CONFLICT`, `FORBIDDEN`, or
-   *   `UNAUTHENTICATED`.
+   * @throws {CrowdyGraphQLError} `IDEMPOTENCY_CONFLICT`; `NOT_FOUND` if the
+   *   uuid does not exist in the caller's app (a session token or another
+   *   app's token gets the same answer); `UNAUTHENTICATED` with no token or
+   *   when the caller is not the owner (the owner-only rule surfaces as a 401).
    */
   async delete(
     uuid: DeleteActorMutationVariables['uuid'],
@@ -177,7 +195,10 @@ export class ActorsAPI {
    * @param uuid - The actor's 32-character id.
    * @param input - {@link UpdateActorStateInput}.
    * @returns The updated {@link Actor}.
-   * @throws {CrowdyGraphQLError} on auth/validation failures.
+   * @throws {CrowdyGraphQLError} `NOT_FOUND` if the uuid does not exist in the
+   *   caller's app (a session token or another app's token gets the same
+   *   answer); `UNAUTHENTICATED` if the caller is not the owner (the
+   *   owner-only rule surfaces as a 401); `BAD_USER_INPUT` for a malformed blob.
    */
   async updateState(
     uuid: UpdateActorStateMutationVariables['uuid'],

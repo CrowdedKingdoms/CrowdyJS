@@ -93,7 +93,7 @@ export function startGlueWorker(port: {
     return waitAndReadGlueReply(sab, id, hostCallTimeoutMs);
   };
 
-  const beginDispatch = (kind: 'init' | 'tick' | 'invoke'): number => {
+  const beginDispatch = (kind: 'init' | 'tick' | 'invoke' | 'event'): number => {
     dispatchId = (dispatchId % 0x7ffffffe) + 1;
     post({ type: 'dispatch-start', id: dispatchId, kind });
     return dispatchId;
@@ -101,7 +101,7 @@ export function startGlueWorker(port: {
 
   const report = (
     id: number,
-    kind: 'init' | 'tick' | 'invoke',
+    kind: 'init' | 'tick' | 'invoke' | 'event',
     result: GlueDispatchResult,
   ) => {
     if (result.ok) post({ type: 'dispatch-ok', id, kind });
@@ -196,6 +196,13 @@ export function startGlueWorker(port: {
           });
         }
       });
+    } else if (msg.type === 'event' && runtime) {
+      const payload =
+        msg.payload instanceof Uint8Array ? msg.payload : new Uint8Array(0);
+      const id = beginDispatch('event');
+      void runDispatch(() => runtime!.event(payload)).then((result) =>
+        report(id, 'event', result),
+      );
     } else if (msg.type === 'stop') {
       ticking = false;
     }

@@ -16,6 +16,7 @@ fragment GmSessionFields on GmSession {
   endReason
   createdAt
   presence
+  gridId
   seededContainerCount
 }
 
@@ -261,6 +262,7 @@ query GameModelSessions(
   $admission: String
   $hostUserId: BigInt
   $limit: Int
+  $gridId: BigInt
 ) {
   gameModelSessions(
     appId: $appId
@@ -268,6 +270,7 @@ query GameModelSessions(
     admission: $admission
     hostUserId: $hostUserId
     limit: $limit
+    gridId: $gridId
   ) {
     ...GmSessionFields
   }

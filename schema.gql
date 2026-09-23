@@ -2579,6 +2579,18 @@ type PlayerWasmPolicy {
   maxContainerCreatesDay: Int!
   """Client-target fuel budget per browser dispatch (04 §3)."""
   clientFuelPerDispatch: BigInt!
+  """
+  DN-10: which channels this scope's player modules may emit_channel into: 'grid' (default, the grid's own channels), 'send_messages' (also channels the grid owner may post to), or 'none'.
+  """
+  channelEgress: String!
+  """
+  DN-10: most chunks a player module's spatial message may reach from its in-grid origin (0-8, default 8). 0 keeps grid messages inside the origin chunk.
+  """
+  spatialMaxDistance: Int!
+  """
+  DN-10: whether player modules may publish on the grid event bus (emit_event). Default true.
+  """
+  gridEventEgress: Boolean!
 }
 
 """
@@ -5466,6 +5478,28 @@ type GridGroupGrant {
 }
 
 """
+A grid-scoped token: an app token narrowed to one grid. Hand it to code that should act inside the grid and nowhere else (a JS grid program, a mod host adapter, an agent).
+"""
+type GridTokenResponse {
+  """
+  Bearer token. It admits only the root fields the grid-token policy lists, each confined to the grid, and it is refused by the binary realtime relay (realtime runs over GraphQL).
+  """
+  token: String!
+  """The underlying game_token id, as a BigInt."""
+  gameTokenId: BigInt!
+  """The app it is confined to."""
+  appId: BigInt!
+  """The grid it is confined to."""
+  gridId: BigInt!
+  """Low corner of the grid box, copied at mint."""
+  lowChunk: ChunkCoordinates!
+  """High corner of the grid box, copied at mint."""
+  highChunk: ChunkCoordinates!
+  """When the token stops working."""
+  expiresAt: DateTime!
+}
+
+"""
 A role within a group (team/channel). Carries the group-management permission keys it grants (e.g. manage_members), NOT world/runtime grid permissions.
 """
 type GroupRole {
@@ -5511,6 +5545,10 @@ type Group {
   membershipPolicy: String!
   """Lifecycle status, e.g. 'active'."""
   status: String!
+  """
+  Channels only: the grid this channel belongs to (a grid channel, DN-10). Player modules on that grid may emit_channel into it; null for an ordinary channel.
+  """
+  gridId: BigInt
   """
   Optional role auto-assigned to every new member (e.g. a channel "member" role granting send_messages). Null means new members get no role by default.
   """
@@ -6865,6 +6903,10 @@ type GmSession {
   """
   presence: String!
   """
+  The grid this session is hosted in, when its creator hosted it inside a grid they own (a game within the game); null for an app-level session. Player modules on that grid see it through sessions_list.
+  """
+  gridId: BigInt
+  """
   On the gameModelCreateSession response only: how many container rows seedFromApp stamped into the session (0 when seedFromApp was given and matched nothing). Null on every other read; the durable record is the containersSeeded field of the created event.
   """
   seededContainerCount: Int
@@ -7950,7 +7992,7 @@ type Query {
     id: BigInt!
   ): Avatar!
   """
-  Fetches a single actor by its 32-character ASCII `uuid`. Requires a valid game token. Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null). Throws NotFound if the uuid does not exist.
+  Fetches a single actor by its 32-character ASCII `uuid`. Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound, the same as a missing id). Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null).
   """
   actor(
     """
@@ -7959,7 +8001,7 @@ type Query {
     uuid: String!
   ): Actor!
   """
-  Lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Requires a valid game token; only the caller’s own actors are returned (full state included). For other users’ actors use `actor` or `batchLookupActors`.
+  Lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Requires a valid game token; only the caller’s own actors are returned (full state included). Under an app token the list is confined to that token’s app (a `filter.appId` naming another app is refused). For other users’ actors use `actor` or `batchLookupActors`.
   """
   actors(
     """
@@ -7968,7 +8010,7 @@ type Query {
     filter: ActorFilterInput
   ): [Actor!]!
   """
-  Relay-style cursor-paginated version of `actors`: lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); `totalCount` is the full number of matching actors. Requires a valid game token; only the caller’s own actors are returned (full state included).
+  Relay-style cursor-paginated version of `actors`: lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); `totalCount` is the full number of matching actors. Requires a valid game token; only the caller’s own actors are returned (full state included). Under an app token the list is confined to that token’s app.
   """
   actorsConnection(
     """Return the first N edges after `after`. Default 50; clamped to 1..200."""
@@ -7983,7 +8025,7 @@ type Query {
     filter: ActorFilterInput
   ): ActorsConnection!
   """
-  Bulk-fetches actors by a list of 32-character ASCII uuids in one round-trip. Requires a valid game token. PUBLIC-STATE ONLY: `privateState` is stripped (null) for every result regardless of ownership. Unknown uuids are silently omitted. Use this to resolve many actors at once; use `actor` for a single owner-scoped fetch.
+  Bulk-fetches actors by a list of 32-character ASCII uuids in one round-trip. Game-plane: requires an app token; only actors in that token’s app are returned (uuids in other apps are omitted, the same as unknown ids). A session token is answered NotFound. PUBLIC-STATE ONLY: `privateState` is stripped (null) for every result regardless of ownership. Use this to resolve many actors at once; use `actor` for a single owner-scoped fetch.
   """
   batchLookupActors(
     """List of actor uuids to look up (see BatchActorLookupInput)."""
@@ -9022,6 +9064,15 @@ type Query {
     appId: BigInt!
   ): AppGroupPolicy!
   """
+  The active grid channels of one grid (DN-10), oldest first. Any caller with a token for the app may list them, the same visibility as the app's channel list; joining still follows each channel's membership policy.
+  """
+  gridChannels(
+    """The app (tenant) the grid belongs to."""
+    appId: BigInt!
+    """The grid whose channels to list."""
+    gridId: BigInt!
+  ): [Group!]!
+  """
   Failures of code this app's users wrote, newest first, across all three engines (model expressions, studio WASM, player WASM). Each row carries what ran, what went wrong, whose problem it is, whether retrying could help, and what the run cost against what it was allowed. Requires the org 'view_compute_diagnostics' permission.
   """
   userCodeFaults(
@@ -9303,7 +9354,7 @@ type Query {
     sessionId: String!
   ): GmSession!
   """
-  List sessions in an app, newest first, optionally filtered by status, admission and/or host. Requires a valid token.
+  List sessions in an app, newest first, optionally filtered by status, admission, host and/or grid. Requires a valid token.
   """
   gameModelSessions(
     """The app (tenant) whose sessions to list."""
@@ -9320,6 +9371,10 @@ type Query {
     hostUserId: BigInt
     """Most rows to return (default 200, max 1000)."""
     limit: Int
+    """
+    Optional: only sessions hosted inside this grid (a game within the game). A grid-scoped token must pass its own grid here.
+    """
+    gridId: BigInt
   ): [GmSession!]!
   """
   The authoritative state of one session at one revision: the session row and every joined participant. Pull it when you subscribe, after a reconnect, or when gameModelSessionChanged shows a revision gap; then apply only events with a higher revision. Requires a valid token.
@@ -10150,7 +10205,7 @@ type Mutation {
     input: CreateActorInput!
   ): Actor!
   """
-  Partially updates an actor (appId, avatarId, chunk, publicState, privateState); fields omitted from `input` are left unchanged. OWNER-EXCLUSIVE: only the actor’s owner may update (throws Unauthorized otherwise). Requires a valid game token. `uuid` is the 32-character ASCII actor id.
+  Partially updates an actor (appId, avatarId, chunk, publicState, privateState); fields omitted from `input` are left unchanged. OWNER-EXCLUSIVE: only the actor’s owner may update (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id.
   """
   updateActor(
     """
@@ -10161,7 +10216,7 @@ type Mutation {
     input: UpdateActorInput!
   ): Actor!
   """
-  DESTRUCTIVE: permanently deletes the actor identified by `uuid` and returns a copy of the now-deleted row. OWNER-EXCLUSIVE: only the owner may delete (throws Unauthorized otherwise). Requires a valid game token. `uuid` is the 32-character ASCII actor id.
+  DESTRUCTIVE: permanently deletes the actor identified by `uuid` and returns a copy of the now-deleted row. OWNER-EXCLUSIVE: only the owner may delete (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id.
   """
   deleteActor(
     """
@@ -10199,7 +10254,7 @@ type Mutation {
     input: UpdateAvatarAppStateInput!
   ): AppAvatarState!
   """
-  Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Requires a valid game token. `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary.
+  Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary.
   """
   updateActorState(
     """
@@ -11102,6 +11157,13 @@ type Mutation {
     input: RevokeGroupFromGridInput!
   ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
+  Mint a grid-scoped token from the app token you hold (DN-10). The result can call only a short, fixed list of gameplay fields, and each is confined to the grid: world reads and replication sends must address a chunk inside it (a send's origin; its reach follows distance), channels must be the grid's own, sessions must be hosted in it, and player-model / player-compute calls must name it. refreshAppToken and logout are refused, so the token cannot widen or tear down its parent. Requires an app token (not a session token, not another grid token), and the caller must own the grid or hold run_client_code on it.
+  """
+  mintGridToken(
+    """The app, the grid, and an optional lifetime."""
+    input: MintGridTokenInput!
+  ): GridTokenResponse!
+  """
   Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams.
   """
   setTeamPolicy(
@@ -11229,6 +11291,15 @@ type Mutation {
     The app, the channel name, optional description / membership policy, and the membersCanSend flag.
     """
     input: CreateChannelInput!
+  ): Group!
+  """
+  Create a grid channel (DN-10): an ordinary channel bound to one grid, owned by the caller, so the grid's player modules may emit_channel into it (their messages carry the sender uuid 'grid:<gridId>'). Only the grid's current owner may create one, whatever the app's channel creation policy says, and a grid holds at most 8 active channels. Membership works like any channel: membershipPolicy defaults to 'open' so visitors can join it, and members get send_messages unless membersCanSend is false.
+  """
+  createGridChannel(
+    """
+    The app, the grid, the channel name, optional description / membership policy, and the membersCanSend flag.
+    """
+    input: CreateGridChannelInput!
   ): Group!
   """
   Update a channel's name, description, and/or membership policy. Requires the 'manage_group' channel permission (app admins bypass).
@@ -12935,6 +13006,12 @@ input SetPlayerWasmPolicyInput {
   maxCompilesPerHour: Int
   maxContainerCreatesDay: Int
   clientFuelPerDispatch: BigInt
+  """DN-10 channel egress: 'none' | 'grid' | 'send_messages'."""
+  channelEgress: String
+  """DN-10 spatial reach cap in chunks (0-8)."""
+  spatialMaxDistance: Int
+  """DN-10 grid event bus on/off."""
+  gridEventEgress: Boolean
 }
 
 input TransferPlayerCodeListingInput {
@@ -13500,6 +13577,20 @@ input RevokeGroupFromGridInput {
   permissionKeys: [String!]
 }
 
+"""Narrow the app token you hold to one grid (DN-10 grid-scoped token)."""
+input MintGridTokenInput {
+  """The app; must be the calling app token’s app."""
+  appId: BigInt!
+  """
+  The grid to confine the token to. The caller must own it or hold its run_client_code permission.
+  """
+  gridId: BigInt!
+  """
+  Lifetime in seconds (60-3600, default 900). Never outlives the app token it was minted from.
+  """
+  ttlSeconds: Int
+}
+
 """Set the per-app team creation/membership policy (app-admin only)."""
 input SetTeamPolicyInput {
   """The app (tenant) whose team policy to set."""
@@ -13622,6 +13713,26 @@ input CreateChannelInput {
   When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel).
   """
   membersCanSend: Boolean
+}
+
+"""
+Create a grid channel (DN-10): a channel that belongs to one grid, so that grid's player modules may emit_channel into it. Only the grid's current owner may create one.
+"""
+input CreateGridChannelInput {
+  """The app (tenant) the channel belongs to."""
+  appId: BigInt!
+  """Display name for the channel (max 128 chars; unique per app+type)."""
+  name: String!
+  """Optional free-text description of the channel."""
+  description: String
+  """open | request | invite | admin. Defaults to the app policy."""
+  membershipPolicy: String
+  """
+  When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel).
+  """
+  membersCanSend: Boolean
+  """The grid the channel belongs to. The caller must own it."""
+  gridId: BigInt!
 }
 
 """Update an existing channel. Omitted fields are left unchanged."""
@@ -14214,6 +14325,10 @@ input CreateSessionInput {
   Optional: copy the app's template rows of the listed container types into the new session at creation (see SessionSeedInput). At most 2,000 rows per session; above that the creation is refused with the count and no session exists. The count of rows stamped is on the session's `created` event (containersSeeded) and on GmSession.seededContainerCount of the create response.
   """
   seedFromApp: SessionSeedInput
+  """
+  Optional: host the session inside a grid (a game within the game). Only the grid's current owner may do this, and the app's session creation policy still applies. Player modules on that grid list it through sessions_list; everyone else sees it as an ordinary session carrying gridId.
+  """
+  gridId: BigInt
   """
   Optional idempotency key. Replaying with the same key and identical input returns the first session instead of creating a second; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
   """
@@ -14829,6 +14944,10 @@ input DeployPlayerComputeInput {
   """
   tickHz: Float
   """
+  SERVER only (DN-10): grid event bus subscriptions. Each entry is an event name this module's on_event receives when another module on the same grid calls emit_event with it; '*' subscribes to every name. Omit to keep the module's current subscriptions; pass [] to clear them. Addressed events (emit_event with target = this module's name) arrive either way.
+  """
+  gridEvents: [String!]
+  """
   Deploy in draft mode (live-coding iteration): the module runs for its author but its spatial egress is suppressed server-side, so no other session in the grid observes its world effects. Omit or false for a normal deploy.
   """
   draft: Boolean
@@ -14953,9 +15072,9 @@ input CreateCrowdyStudioProjectInput {
   """Optional editor pairing preference; defaults to PAIRED."""
   pairingPreference: CrowdyStudioPairingPreference = PAIRED
   """
-  Supported crowdy-compute-sdk pin; defaults to the current 0.1.5 authoring pin.
+  Supported crowdy-compute-sdk pin; defaults to the current 0.1.6 authoring pin.
   """
-  sdkVersion: String = "0.1.5"
+  sdkVersion: String = "0.1.6"
   """Supported guest ABI pin; defaults to ABI 0."""
   abiVersion: Int = 0
   """
