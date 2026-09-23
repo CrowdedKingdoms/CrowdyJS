@@ -20,29 +20,13 @@
  * the reply back). Everything else here is pure.
  */
 
-/** The host-call names surfaced to a guest (mirrors the broker allowlist). */
-export const GLUE_HOST_FUNCTIONS = [
-  'container_create',
-  'container_get',
-  'containers_list',
-  'container_delete',
-  'property_set',
-  'model_invoke',
-  'user_state_get',
-  'user_state_set',
-  'grid_state_get',
-  'grid_state_set',
-  'chunk_get',
-  'voxels_list',
-  'actors_list',
-  'actors_list_radius',
-  'voxel_set',
-  'emit_spatial',
-  'hud_set',
-  'overlay_draw',
-  'pointer_clicks',
-  'grid_permission_check',
-] as const;
+import { GENERATED_HOST_CATALOG } from './host-catalog.generated.js';
+
+/** The host-call names surfaced to a guest: the client half of the host catalog (the broker allowlist). */
+export const GLUE_HOST_FUNCTIONS: readonly string[] =
+  GENERATED_HOST_CATALOG.functions
+    .filter((fn) => fn.targets.includes('client'))
+    .map((fn) => fn.name);
 
 export interface GlueInitMessage {
   type: 'init';
@@ -292,6 +276,21 @@ export class GlueRuntime {
   tick(dtMs: number): void {
     this.resetFuel();
     this.exports?.tick?.(dtMs);
+  }
+
+  /** Deliver one grid event to `on_event`; a module without the export ignores it. */
+  event(payload: Uint8Array): void {
+    const ex = this.exports;
+    if (!ex || typeof ex.on_event !== 'function') return;
+    const ptr = ex.ck_alloc(payload.length);
+    if (payload.length > 0 && ptr === 0) {
+      throw new RangeError('ck_alloc returned a null event pointer');
+    }
+    assertMemoryRange(ex.memory.buffer, ptr, payload.length, 'event write');
+    new Uint8Array(ex.memory.buffer, ptr, payload.length).set(payload);
+    this.resetFuel();
+    ex.on_event(ptr, payload.length);
+    ex.ck_free?.(ptr, payload.length);
   }
 
   /** Invoke the module with an opaque payload; returns the reply bytes (copied out). */

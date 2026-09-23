@@ -9,6 +9,7 @@ export {
   StudioDshBridge,
   renderSettingsYaml,
   type CrowdyStudioDshHost,
+  type CrowdyStudioDshGridHost,
   type StudioDshBridgeOptions,
   type StudioDshBridgeStatus,
 } from './bridge.js';

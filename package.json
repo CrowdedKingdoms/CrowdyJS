@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
-  "version": "17.6.0",
+  "version": "17.7.0",
   "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
@@ -37,6 +37,10 @@
     "./player-glue-worker": {
       "import": "./dist/player-runtime/player-glue-worker.js",
       "types": "./dist/player-runtime/player-glue-worker.d.ts"
+    },
+    "./grid-program": {
+      "import": "./dist/grid-program/index.js",
+      "types": "./dist/grid-program/index.d.ts"
     }
   },
   "sideEffects": false,
@@ -57,7 +61,7 @@
     "authoring-index:generate": "node scripts/generate-browser-authoring-index.mjs --write",
     "authoring-index:drift": "node scripts/sync-browser-authoring-index.mjs",
     "check:authoring-index": "node scripts/validate-browser-authoring-index.mjs && node scripts/generate-browser-authoring-index.mjs",
-    "build": "npm run check:authoring-index && tsc && node scripts/copy-live-coding-assets.mjs",
+    "build": "npm run check:authoring-index && npm run check:host-catalog && tsc && node scripts/copy-live-coding-assets.mjs",
     "test": "npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/e2e/*.test.mjs",
     "test:unit": "npm run build && node --test test/unit/*.test.mjs",
     "test:e2e": "npm run build && node --test --test-concurrency=1 test/e2e/*.test.mjs",
@@ -68,7 +72,10 @@
     "check:content-policy": "node scripts/check-content-policy.mjs",
     "check:content-policy:self-test": "node scripts/check-content-policy.mjs --self-test",
     "check:default-origin": "node scripts/check-default-origin.mjs",
-    "check:default-origin:self-test": "node scripts/check-default-origin.mjs --self-test"
+    "check:default-origin:self-test": "node scripts/check-default-origin.mjs --self-test",
+    "host-catalog:generate": "node scripts/generate-host-catalog.mjs --write",
+    "host-catalog:drift": "node scripts/sync-host-catalog.mjs",
+    "check:host-catalog": "node scripts/generate-host-catalog.mjs"
   },
   "publishConfig": {
     "access": "public"

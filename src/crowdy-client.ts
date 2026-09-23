@@ -67,6 +67,8 @@ import { TeleportAPI } from './domains/teleport.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
 import { ChannelsAPI } from './domains/channels.js';
+import { GridsAPI } from './domains/grids.js';
+import { GridScope, type GridBox } from './grid-scope.js';
 import { TeamsAPI } from './domains/teams.js';
 import { UdpAPI } from './domains/udp.js';
 import { GameModelAPI } from './domains/gameModel.js';
@@ -126,8 +128,18 @@ export interface CrowdyClientConfig {
    * framing page, or your own instance to control timeouts.
    */
   embeddedHost?: EmbeddedHost | false;
+  /**
+   * The `fetch` GraphQL requests go through; defaults to the global. See
+   * `createGridProgramClient` for the one case that needs another.
+   */
+  fetch?: typeof fetch;
   /** Realtime (WebSocket) tuning for reconnect backoff and `...AndWait` timeouts. */
   realtime?: {
+    /**
+     * WebSocket constructor for the realtime subscription; defaults to the
+     * platform's. See `createGridProgramClient`.
+     */
+    webSocketImpl?: unknown;
     /** Max reconnect attempts before giving up (default tuned for browsers). */
     retryAttempts?: number;
     /** Initial reconnect backoff in milliseconds. */
@@ -289,6 +301,8 @@ export class CrowdyClient {
   readonly serverStatus: ServerStatusAPI;
   /** Channels: location-independent pub/sub messaging groups. */
   readonly channels: ChannelsAPI;
+  /** Grid tokens and grid channels (DN-10); see also {@link CrowdyClient.grid}. */
+  readonly grids: GridsAPI;
   /** Teams: app-scoped player groups with roles and delegated management. */
   readonly teams: TeamsAPI;
   /** UDP proxy: spatial sends + the shared realtime notification subscription. */
@@ -371,6 +385,7 @@ export class CrowdyClient {
         timeout: config.timeout,
         logger: config.logger,
         lbCookieStore,
+        ...(config.fetch ? { fetch: config.fetch } : {}),
       },
       this.session,
     );
@@ -487,6 +502,7 @@ export class CrowdyClient {
     this.state = new StateAPI(this.graphql);
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);
+    this.grids = new GridsAPI(this.graphql);
     this.teams = new TeamsAPI(this.graphql);
     this.udp = new UdpAPI(
       this.graphql,
@@ -613,6 +629,19 @@ export class CrowdyClient {
    */
   world(appId: string): WorldClient {
     return new WorldClient(appId, this.udp);
+  }
+
+  /**
+   * One grid, bound once: its channels, sessions, player-tier model, player
+   * compute and origin-checked replication, all with the app and grid filled
+   * in (DN-10: grid scope is app scope intersected with grid confinement).
+   * Pass the box if you know it; otherwise `mintToken()` learns it.
+   *
+   * @param appId - The app (BigInt as a decimal string).
+   * @param gridId - The grid (BigInt as a decimal string).
+   */
+  grid(appId: string, gridId: string, box?: GridBox): GridScope {
+    return new GridScope(this, appId, gridId, box);
   }
 
   /**
