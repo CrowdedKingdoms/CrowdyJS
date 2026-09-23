@@ -106,6 +106,7 @@ query MarketplaceGridClientMods($appId: BigInt!, $gridId: BigInt!) {
     serverVersionId
     clientVersionId
     clientArtifactHash
+    clientTickIntervalMs
     gridId
     capabilitySummaryJson
     capabilityHash

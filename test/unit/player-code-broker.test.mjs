@@ -78,6 +78,57 @@ test('PlayerCodeBroker keeps a host allowlist and grid clamp', async () => {
   assert.equal(worker.sent.at(-1).ok, false);
   assert.match(worker.sent.at(-1).error.message, /not allowed/);
 
+  worker.receive({
+    type: 'hostcall',
+    id: 4,
+    fn: 'send_client_event',
+    args: { x: 1, y: 1, z: 1, eventType: 1, payloadBase64: '' },
+  });
+  worker.receive({
+    type: 'hostcall',
+    id: 5,
+    fn: 'send_client_event',
+    args: { x: 9, y: 0, z: 0 },
+  });
+  worker.receive({
+    type: 'hostcall',
+    id: 6,
+    fn: 'teleport_request',
+    args: { destChunkX: 9, destChunkY: 0, destChunkZ: 0, uuid: 'self' },
+  });
+  worker.receive({
+    type: 'hostcall',
+    id: 7,
+    fn: 'login',
+    args: {},
+  });
+  worker.receive({
+    type: 'hostcall',
+    id: 8,
+    fn: 'pose_set',
+    args: { chunkX: 9, chunkY: 0, chunkZ: 0, x: 1, y: 0, z: 0 },
+  });
+  worker.receive({
+    type: 'hostcall',
+    id: 9,
+    fn: 'inventory_transfer',
+    args: { targetChunkX: 9, targetChunkY: 0, targetChunkZ: 0, targetUuid: 'bob' },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].fn, 'send_client_event');
+  const byId = Object.fromEntries(worker.sent.map((message) => [message.id, message]));
+  assert.equal(byId[5].ok, false);
+  assert.match(byId[5].error.message, /outside/);
+  assert.equal(byId[6].ok, false);
+  assert.match(byId[6].error.message, /outside/);
+  assert.equal(byId[7].ok, false);
+  assert.match(byId[7].error.message, /not allowed/);
+  assert.equal(byId[8].ok, false);
+  assert.match(byId[8].error.message, /outside/);
+  assert.equal(byId[9].ok, false);
+  assert.match(byId[9].error.message, /outside/);
+
   broker.stop();
   assert.equal(worker.terminated, true);
 });

@@ -76,35 +76,124 @@ export interface PlayerCodeBrokerOptions {
 }
 
 /**
- * Deny-by-default host-call allowlist, grouped by capability (04 §4). Only
- * owner-lawful reads and effects cross the bridge; auth, admin, authoring,
- * grid mutation, raw UDP pose, voice, teams, and any network fetch are
- * absent by construction, not by a denylist.
+ * Deny-by-default host-call allowlist, grouped by capability. Chunk gameplay
+ * crosses the bridge. The token, auth, admin, billing, authoring, claiming a
+ * grid, and any network fetch stay absent by construction, not by a denylist.
+ * The worker never builds a UDP datagram; these names are typed calls the
+ * page performs on the signed-in session.
  */
 const ALLOWED_HOST_CALLS: Record<string, ReadonlySet<string>> = {
   model: new Set([
     'container_create',
     'container_get',
+    'container_get_batch',
     'containers_list',
     'container_delete',
     'property_set',
     'model_invoke',
+    'edge_add',
+    'edge_delete',
+    'sessions_list',
+    'session_create',
+    'session_join',
+    'session_turn',
+    'model_traverse',
+    'model_flow',
+    'model_seed',
+    'timer_schedule',
+    'timer_cancel',
+    'server_module_invoke',
   ]),
   state: new Set([
     'user_state_get',
     'user_state_set',
     'grid_state_get',
     'grid_state_set',
+    'avatar_state_get',
+    'avatar_state_set',
+    'avatar_appearance',
   ]),
   world_read: new Set([
     'chunk_get',
     'voxels_list',
     'actors_list',
     'actors_list_radius',
+    'chunk_lods',
+    'voxels_history',
   ]),
-  world_write: new Set(['voxel_set']),
-  egress: new Set(['emit_spatial']),
+  world_write: new Set([
+    'voxel_set',
+    'chunk_update',
+    'chunk_update_state',
+    'voxels_rollback',
+  ]),
+  egress: new Set([
+    'emit_spatial',
+    'emit_channel',
+    'emit_event',
+    'send_client_event',
+    'send_text',
+    'send_actor_message',
+    'send_channel_message',
+  ]),
   present: new Set(['hud_set', 'overlay_draw']),
+  input: new Set(['pointer_clicks', 'input_axes', 'input_look']),
+  pose: new Set([
+    'pose_get',
+    'pose_set',
+    'pose_release',
+    'actor_spawn',
+    'actor_pose',
+    'actor_despawn',
+    'actors_create',
+    'actors_update',
+    'actors_delete',
+    'actors_update_state',
+    'teleport_request',
+  ]),
+  media: new Set(['voice_set', 'video_set']),
+  inbox: new Set(['events_poll']),
+  social: new Set([
+    'channel_list',
+    'channel_get',
+    'channel_join',
+    'channel_leave',
+    'channel_create',
+    'channel_update',
+    'channel_remove',
+    'channel_set_policy',
+    'channel_members',
+    'channel_add_member',
+    'channel_remove_member',
+    'channel_set_roles',
+    'team_list',
+    'team_get',
+    'team_join',
+    'team_leave',
+    'team_create',
+    'team_update',
+    'team_remove',
+    'team_set_policy',
+  ]),
+  player_model: new Set([
+    'player_containers_list',
+    'player_container_create',
+    'player_container_delete',
+    'player_automations_list',
+    'player_automation_create',
+    'player_automation_set_enabled',
+    'player_automation_delete',
+  ]),
+  inventory: new Set([
+    'inventory_ensure',
+    'inventory_stacks',
+    'inventory_grant',
+    'inventory_consume',
+    'inventory_move',
+    'inventory_transfer',
+    'inventory_craft',
+    'inventory_barter',
+  ]),
   // grid_info is answered by the broker itself (the mod's own clamped bounds),
   // so a client mod can address its grid without a server round-trip.
   meta: new Set(['grid_permission_check', 'grid_info']),
@@ -118,14 +207,43 @@ const RATE_CAPS: Record<string, number> = {
   world_write: 200,
   egress: 60,
   present: 120,
+  input: 400,
+  pose: 60,
+  media: 10,
+  inbox: 60,
+  social: 20,
+  player_model: 40,
+  inventory: 40,
   meta: 100,
 };
 
+/** Chunk address in args.x / args.y / args.z. */
 const CHUNK_FUNCTIONS = new Set([
   'chunk_get',
   'voxels_list',
   'actors_list',
   'actors_list_radius',
+  'chunk_lods',
+  'voxels_history',
+  'chunk_update',
+  'chunk_update_state',
+  'voxels_rollback',
+  'send_client_event',
+  'send_text',
+  'actors_create',
+  'actors_update',
+  'actors_delete',
+  'actors_update_state',
+]);
+
+/** Chunk address in args.chunkX / chunkY / chunkZ. */
+const CHUNK_XYZ_FUNCTIONS = new Set([
+  'voxel_set',
+  'emit_spatial',
+  'pose_set',
+  'actor_spawn',
+  'actor_pose',
+  'actor_despawn',
 ]);
 
 const PRESENTATION_FUNCTIONS = new Set(['hud_set', 'overlay_draw']);
@@ -169,10 +287,10 @@ const utf8Encoder = new TextEncoder();
  *  - a local circuit breaker + per-dispatch watchdog recover the page from a
  *    hung or abusive worker.
  *
- * Tokens, DOM, admin/authoring domains, and the network are never reachable
- * from the worker: the broker only ever calls the injected onHostCall (which
- * routes to the ordinary server-authorized SDK path) and the presentation
- * sink the host game opted into.
+ * Tokens, the DOM, admin/authoring domains, and raw network fetch are never
+ * reachable from the worker: the broker only ever calls the injected
+ * onHostCall (which routes to the ordinary server-authorized SDK path) and
+ * the presentation sink the host game opted into.
  */
 export class PlayerCodeBroker {
   private worker: PlayerCodeWorkerLike | null = null;
@@ -630,8 +748,22 @@ export class PlayerCodeBroker {
   private assertGridScope(fn: string, args: Record<string, unknown>): void {
     if (CHUNK_FUNCTIONS.has(fn)) {
       this.assertChunk(args.x, args.y, args.z);
-    } else if (fn === 'voxel_set' || fn === 'emit_spatial') {
+    } else if (CHUNK_XYZ_FUNCTIONS.has(fn)) {
       this.assertChunk(args.chunkX, args.chunkY, args.chunkZ);
+    } else if (fn === 'teleport_request') {
+      this.assertChunk(args.destChunkX, args.destChunkY, args.destChunkZ);
+    } else if (fn === 'send_actor_message') {
+      this.assertChunk(
+        args.targetChunkX ?? args.chunkX,
+        args.targetChunkY ?? args.chunkY,
+        args.targetChunkZ ?? args.chunkZ,
+      );
+    } else if (fn === 'inventory_transfer' || fn === 'inventory_barter') {
+      this.assertChunk(
+        args.targetChunkX ?? args.chunkX,
+        args.targetChunkY ?? args.chunkY,
+        args.targetChunkZ ?? args.chunkZ,
+      );
     }
   }
 
