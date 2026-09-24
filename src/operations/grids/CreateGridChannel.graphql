@@ -1,0 +1,15 @@
+mutation CreateGridChannel($input: CreateGridChannelInput!) {
+  createGridChannel(input: $input) {
+    groupId
+    appId
+    groupType
+    name
+    description
+    ownerUserId
+    membershipPolicy
+    status
+    defaultRoleId
+    gridId
+    createdAt
+  }
+}

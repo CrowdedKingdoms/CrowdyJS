@@ -82,6 +82,11 @@ export function packMessageBundle(members: readonly Uint8Array[]): Uint8Array {
 /** Wire opcodes (mirror of game-api / Buddy `UdpMessageType`). */
 export const WireMessageType = {
   MESSAGE_BUNDLE: 2,
+  // Buddy v0.30.0: the client advertises what it can read; a session that
+  // advertised BUNDLE_SIGNED receives its bundles with ONE trailing HMAC over the
+  // datagram and members without per-member HMACs (containsAuth = 0).
+  CLIENT_CAPABILITIES: 29,
+  MESSAGE_BUNDLE_SIGNED: 30,
   GENERIC_ERROR_MESSAGE: 3,
   CHANNEL_MESSAGE_REQUEST: 17,
   CHANNEL_MESSAGE_NOTIFICATION: 18,
@@ -281,6 +286,44 @@ async function serializeSpatial(
   tailView.setBigInt64(dataLen + HMAC_SIZE, ctx.gameTokenId, true);
   tailView.setUint8(dataLen + HMAC_SIZE + 8, sequenceNumber & 0xff);
   return out;
+}
+
+/** CLIENT_CAPABILITIES flags word (Buddy v0.30.0). */
+export const ClientCapability = {
+  /** This client parses MESSAGE_BUNDLE_SIGNED (one HMAC per downlink bundle). */
+  BUNDLE_SIGNED: 1,
+} as const;
+
+/** Every capability this SDK build understands. */
+export const SDK_CAPABILITIES: number = ClientCapability.BUNDLE_SIGNED;
+
+/**
+ * Build a `CLIENT_CAPABILITIES` (29) datagram: the long-spatial layout the
+ * server already gates by session and HMAC, chunk (0,0,0), distance 0, no
+ * actor uuid, and a little-endian u32 of {@link ClientCapability} flags as the
+ * app payload. Buddy binds the flags to the router serving this flow and
+ * clears them when the slot goes, so the relay sends it on every `ready` and
+ * again every few seconds (a relay-side Buddy migration is silent to us).
+ */
+export function serializeClientCapabilities(
+  ctx: RelaySignContext,
+  appId: string | number | bigint,
+  flags: number = SDK_CAPABILITIES,
+  sequenceNumber = 0,
+): Promise<Uint8Array> {
+  const payload = new Uint8Array(4);
+  new DataView(payload.buffer).setUint32(0, flags >>> 0, true);
+  return serializeSpatial(
+    ctx,
+    WireMessageType.CLIENT_CAPABILITIES,
+    appId,
+    { x: 0, y: 0, z: 0 },
+    0,
+    0,
+    '',
+    payload,
+    sequenceNumber,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -734,22 +777,17 @@ export function parseRelayFrame(bytes: Uint8Array): UdpNotification[] {
   if (bytes.length < 1) return [];
 
   if (bytes[0] === WireMessageType.MESSAGE_BUNDLE) {
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const out: UdpNotification[] = [];
-    let off = 1;
-    while (off + 2 <= bytes.length) {
-      const len = view.getUint16(off, true);
-      off += 2;
-      if (off + len > bytes.length) break;
-      try {
-        const parsed = parseOne(bytes.subarray(off, off + len));
-        if (parsed) out.push(parsed);
-      } catch {
-        // skip unparseable bundle member
-      }
-      off += len;
-    }
-    return out;
+    return walkBundleMembers(bytes, bytes.length);
+  }
+
+  // MESSAGE_BUNDLE_SIGNED (Buddy v0.30.0): the same framing, then 32 trailing
+  // HMAC bytes over everything before them, keyed like a per-message client HMAC.
+  // Members carry containsAuth = 0 and parseOne reads them as such. This SDK does
+  // not verify downlink HMACs (it never did for per-member ones either); it strips
+  // the tail and walks. Only a session that advertised BUNDLE_SIGNED receives these.
+  if (bytes[0] === WireMessageType.MESSAGE_BUNDLE_SIGNED) {
+    if (bytes.length <= 1 + HMAC_SIZE) return [];
+    return walkBundleMembers(bytes, bytes.length - HMAC_SIZE);
   }
 
   try {
@@ -758,4 +796,25 @@ export function parseRelayFrame(bytes: Uint8Array): UdpNotification[] {
   } catch {
     return [];
   }
+}
+
+
+/** Walk `[u16 LE len][member]…` from offset 1 up to `end`, parsing each member. */
+function walkBundleMembers(bytes: Uint8Array, end: number): UdpNotification[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const out: UdpNotification[] = [];
+  let off = 1;
+  while (off + 2 <= end) {
+    const len = view.getUint16(off, true);
+    off += 2;
+    if (off + len > end) break;
+    try {
+      const parsed = parseOne(bytes.subarray(off, off + len));
+      if (parsed) out.push(parsed);
+    } catch {
+      // skip unparseable bundle member
+    }
+    off += len;
+  }
+  return out;
 }

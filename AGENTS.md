@@ -4,12 +4,73 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.2.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.6.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.6.0 tracks Buddy `v0.30.0` (2026-09-20): one HMAC per downlink bundle, opt-in.**
+The binary relay sends `CLIENT_CAPABILITIES` (29; `serializeClientCapabilities`, the
+long-spatial layout with a `u32` flags word at offset 68) on every `ready` and every
+15 s after (`advertiseCapabilities` / `capabilitiesIntervalMs` on `BinaryRelayConfig`;
+the repeat covers a token refresh or a relay-side Buddy migration, both of which reset
+the server's per-slot record silently). A Buddy at v0.30.0+ then sends
+`MESSAGE_BUNDLE_SIGNED` (30): the bundle framing, members with `containsAuth = 0`, and
+one trailing 32-byte HMAC over the datagram. `parseRelayFrame` strips the tail and
+walks; this SDK does not verify downlink HMACs (it never did). Older Buddies ignore 29
+and keep sending per-member forms, which still parse. Tests count frames: the
+bundling tests set `advertiseCapabilities: false`; the capability frame has its own.
+
+**17.5.0 tracks the bulk-container release (ck-api v2.6.0, PRs #346–#349, 2026-09-16):**
+`containers()` pages for real (omitted `limit` = 200, max 1,000, `BAD_REQUEST`
+above; the document now forwards `bindingKey`), `containerStates({ appId,
+containerIds })` is the bulk twin of `containerState` (max 500), `seed` carries a
+per-container `bindingKey` (admin-instantiable or bind-policied types; an existing
+row is adopted only if its owner matches) and a per-type `scope: 'session' | 'app'`,
+`createSession({ seedFromApp })` stamps the app's keyed template rows into the new
+session (template types must be admin-instantiable or bind-policied; max 2,000
+rows; `GmSession.seededContainerCount` on the create response only), and
+`kit.matches.create({ seedFromApp })` forwards it. Seeded copies of an ended
+session are dropped by the server after the tier's retention window (7 days on
+every tier since 2026-09-16; only the stamped copies, never hand-made rows).
+[MIGRATION.md](MIGRATION.md).
+
+**17.4.0 exposes the game-model session system (ck-api PR #319 on top of v2.3.0, 2026-09-14):**
+`client.gameModel` gains `leaveSession`, `setSessionAdmission`,
+`transferSessionHost`, `endSession`, `sessionSnapshot`, `sessionEvents`,
+`sessionInspect` and the `sessionChanged` subscription; `GmSession` carries
+`admission` / `maxParticipants` / `participantCount` / `hostUserId` / `hostTerm` /
+`revision` / `endedAt` / `endReason`, and the join result is the roster row
+(`state`, `incarnation`, `actorUuid`, ...). Two rules a caller must know:
+`leaveSession` REQUIRES the `incarnation` the join returned (a superseded client
+cannot remove the one that took over), and **presence is the player's Buddy
+actor** -- a participant with no fresh actor in the app after the join grace
+window is expired by the server, and an empty session is abandoned after its
+timeout. Pass `actorUuid` on join only with the uuid the client actually
+replicates with (`session.self.uuid`), never the match kit's channel-ping uuid.
+A session created with `presence: 'none'` opts out of the rule (its exits are
+leave, end and the empty timeout); `kit.matches` creates with it, because a kit
+match never replicates an actor, and therefore owns those exits itself:
+`kit.matches.leave(match)` (incarnation remembered from create/join) and
+`finish()` ending the backing session are new in 17.4.0 (`finish()` reports the
+session end as `sessionEnd: 'ended' | 'already_ended' | 'forbidden'` rather than
+throwing on a caller `end_match` admitted but the session did not).
+Wrappers are thin: branch on `CrowdyGraphQLError.code` (`SESSION_FULL`,
+`SESSION_LOCKED`, `SESSION_CLOSED`, `SESSION_ENDED`, `SESSION_NOT_PARTICIPANT`,
+`SESSION_TARGET_NOT_PARTICIPANT`, `SESSION_INCARNATION_STALE`,
+`SESSION_HOST_TERM_STALE`). The `sessionChanged` push is per datacenter; the
+events table (`sessionEvents`) is the record. `schema.gql` matches ck-api
+v2.4.0, which is on all three tiers as of 2026-09-15 (published SDL on every
+docs host). Numbered 17.4.0 because #158 took 17.3.0 while this was open.
+**Known gap (2026-09-15):** `kit.matches.create` makes its match channel with
+no `membershipPolicy`, so it inherits the app's channel default, which is
+`invite`; a second player's `kit.matches.join` then fails at `channels.join`
+("This group is invite-only"). Pre-existing; the kit e2e only passes on an app
+whose channel default is `open` (the tier sandboxes were set so). Fix in the
+kit (`membershipPolicy: 'open'` on the match channel), mirrored in CrowdyCPP.
+[MIGRATION.md](MIGRATION.md).
 
 **17.2.0 adds third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-14):**
 `client.hosting` (claim a slug, publish a bundle, list) plus the Node subpath
@@ -23,6 +84,8 @@ leaves the game origin and the shell never holds a token** -- keep it that way.
 `test/unit/embedded-host.test.mjs` is the offline proof. Hosting mutations are
 identity-session only; `the-construct`'s `scripts/publish.mjs` is the reference
 caller. [MIGRATION.md](MIGRATION.md).
+
+**17.3.0 (ck-api v2.3.0) adds the guided "Create repository on GitHub" path:** `githubNewRepositoryUrl` / `githubRepositorySlug`, `controller.createGitHubRepository()` (prefilled `/new`, bind input prefilled, PUSH_PROJECT default), `status.repositorySelection`. The App still cannot create a repository itself. Additive.
 
 **17.0.0 tracks ck-api `v2.0.0`: a bound GitHub repository is the working tree, and
 GitHub stays optional.** `CrowdyStudioProject.source` is `STUDIO` until the owner
@@ -265,6 +328,13 @@ not a running service and is not a schema source; gameplay data lives in
   fix that; only `15.4.1` did. Do not read branch drift as harmless — a release
   cut during the drift window ships it.
 
+  **Promote with the tool:** `infra-control-plane/scripts/ops/promote.mjs --repo CrowdyJS --from <tier> --to <tier>`
+  regenerates this file for the destination tier (`--only crowdyjs`, so the
+  CrowdyCPP checkout is never touched), resyncs `schema.gql` from `cks-game-api`
+  at `origin/<to>`, runs codegen and `check:default-origin` as the PR will judge
+  it, and opens the PR. The paragraphs below explain what it does and why; they
+  stay true, and the gate stays the backstop.
+
   **THE PROMOTION THAT DOES NOT CONFLICT IS THE DANGEROUS ONE.** On 2026-09-02
   this hit CrowdyJS and CrowdyCPP on the same day, in the same release, both
   silently, both times putting `tier = 'test'` on `prod` — the tier where it costs
@@ -403,9 +473,9 @@ are **`dev`**, **`test`**, **`prod`**, and nothing else. Work lands on `dev`.
 
 **You cannot push to any of the three.** A branch policy applied on 2026-08-22
 requires a pull request everywhere, for every identity including the admin's.
-Push a branch, open the PR and merge it yourself — no approval is required on
-`dev` or `test`. `prod` needs an admin to perform the merge, and a PR touching
-`/.github/` or `/scripts/` needs the code owner. `GH013: Repository rule
+Push a branch, open the PR and merge it yourself on `dev` — no approval is
+required there. `test` and `prod` need an admin to perform the merge, and a PR
+touching `/.github/` or `/scripts/` needs the code owner. `GH013: Repository rule
 violations found` is the rule working, not a credential problem.
 
 Publishing is an environment-prefixed tag (`dev/v15.0.0`, `test/v15.0.0`,

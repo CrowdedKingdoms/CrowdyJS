@@ -20,108 +20,13 @@
  * the reply back). Everything else here is pure.
  */
 
-/** The host-call names surfaced to a guest (mirrors the broker allowlist). */
-export const GLUE_HOST_FUNCTIONS = [
-  'container_create',
-  'container_get',
-  'container_get_batch',
-  'containers_list',
-  'container_delete',
-  'property_set',
-  'model_invoke',
-  'edge_add',
-  'edge_delete',
-  'sessions_list',
-  'session_create',
-  'session_join',
-  'session_turn',
-  'model_traverse',
-  'model_flow',
-  'model_seed',
-  'timer_schedule',
-  'timer_cancel',
-  'server_module_invoke',
-  'user_state_get',
-  'user_state_set',
-  'grid_state_get',
-  'grid_state_set',
-  'avatar_state_get',
-  'avatar_state_set',
-  'avatar_appearance',
-  'chunk_get',
-  'voxels_list',
-  'actors_list',
-  'actors_list_radius',
-  'chunk_lods',
-  'voxels_history',
-  'voxel_set',
-  'chunk_update',
-  'chunk_update_state',
-  'voxels_rollback',
-  'emit_spatial',
-  'emit_channel',
-  'emit_event',
-  'send_client_event',
-  'send_text',
-  'send_actor_message',
-  'send_channel_message',
-  'hud_set',
-  'overlay_draw',
-  'pointer_clicks',
-  'input_axes',
-  'input_look',
-  'pose_get',
-  'pose_set',
-  'pose_release',
-  'actor_spawn',
-  'actor_pose',
-  'actor_despawn',
-  'actors_create',
-  'actors_update',
-  'actors_delete',
-  'actors_update_state',
-  'teleport_request',
-  'voice_set',
-  'video_set',
-  'events_poll',
-  'channel_list',
-  'channel_get',
-  'channel_join',
-  'channel_leave',
-  'channel_create',
-  'channel_update',
-  'channel_remove',
-  'channel_set_policy',
-  'channel_members',
-  'channel_add_member',
-  'channel_remove_member',
-  'channel_set_roles',
-  'team_list',
-  'team_get',
-  'team_join',
-  'team_leave',
-  'team_create',
-  'team_update',
-  'team_remove',
-  'team_set_policy',
-  'player_containers_list',
-  'player_container_create',
-  'player_container_delete',
-  'player_automations_list',
-  'player_automation_create',
-  'player_automation_set_enabled',
-  'player_automation_delete',
-  'inventory_ensure',
-  'inventory_stacks',
-  'inventory_grant',
-  'inventory_consume',
-  'inventory_move',
-  'inventory_transfer',
-  'inventory_craft',
-  'inventory_barter',
-  'grid_permission_check',
-  'grid_info',
-] as const;
+import { GENERATED_HOST_CATALOG } from './host-catalog.generated.js';
+
+/** The host-call names surfaced to a guest: the client half of the host catalog (the broker allowlist). */
+export const GLUE_HOST_FUNCTIONS: readonly string[] =
+  GENERATED_HOST_CATALOG.functions
+    .filter((fn) => fn.targets.includes('client'))
+    .map((fn) => fn.name);
 
 export interface GlueInitMessage {
   type: 'init';
@@ -371,6 +276,21 @@ export class GlueRuntime {
   tick(dtMs: number): void {
     this.resetFuel();
     this.exports?.tick?.(dtMs);
+  }
+
+  /** Deliver one grid event to `on_event`; a module without the export ignores it. */
+  event(payload: Uint8Array): void {
+    const ex = this.exports;
+    if (!ex || typeof ex.on_event !== 'function') return;
+    const ptr = ex.ck_alloc(payload.length);
+    if (payload.length > 0 && ptr === 0) {
+      throw new RangeError('ck_alloc returned a null event pointer');
+    }
+    assertMemoryRange(ex.memory.buffer, ptr, payload.length, 'event write');
+    new Uint8Array(ex.memory.buffer, ptr, payload.length).set(payload);
+    this.resetFuel();
+    ex.on_event(ptr, payload.length);
+    ex.ck_free?.(ptr, payload.length);
   }
 
   /** Invoke the module with an opaque payload; returns the reply bytes (copied out). */

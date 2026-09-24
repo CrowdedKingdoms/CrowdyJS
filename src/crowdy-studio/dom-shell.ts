@@ -104,6 +104,7 @@ export class CrowdyStudioDomShell {
   private readonly github: HTMLElement;
   private readonly githubStatus: HTMLElement;
   private readonly githubConnect: HTMLButtonElement;
+  private readonly githubCreateRepo: HTMLButtonElement;
   private readonly githubBindInput: HTMLInputElement;
   private readonly githubBind: HTMLButtonElement;
   private readonly githubUnbind: HTMLButtonElement;
@@ -286,6 +287,22 @@ export class CrowdyStudioDomShell {
     this.githubConnect.addEventListener('click', () => {
       void this.controller.connectGitHub().catch((error: unknown) => this.githubNote(error));
     });
+    // No repository yet? The App cannot create one (installation tokens only),
+    // but GitHub's own form can arrive prefilled; the bind input then carries
+    // the same owner/name.
+    this.githubCreateRepo = button('Create repository on GitHub');
+    this.githubCreateRepo.addEventListener('click', () => {
+      try {
+        this.controller.createGitHubRepository();
+        const pending = this.controller.getState().githubPendingRepo;
+        if (pending) {
+          this.githubBindInput.value = pending;
+          this.githubInitial.value = 'PUSH_PROJECT';
+        }
+      } catch (error) {
+        this.githubNote(error);
+      }
+    });
     this.githubBindInput = input('owner/repo or owner/repo@branch');
     this.githubInitial = document.createElement('select');
     this.githubInitial.className = 'ck-crowdy-studio-github-initial';
@@ -324,7 +341,7 @@ export class CrowdyStudioDomShell {
     });
     this.githubMessage = element('p', 'ck-crowdy-studio-github-message');
     const bindRow = element('div', 'ck-crowdy-studio-github-row');
-    bindRow.append(this.githubBindInput, this.githubInitial, this.githubBind, this.githubUnbind);
+    bindRow.append(this.githubCreateRepo, this.githubBindInput, this.githubInitial, this.githubBind, this.githubUnbind);
     const syncRow = element('div', 'ck-crowdy-studio-github-row');
     syncRow.append(this.githubPull, this.githubRefresh);
     this.github.append(githubTitle, this.githubStatus, this.githubConnect, bindRow, syncRow, this.githubMessage);
@@ -1126,6 +1143,8 @@ export class CrowdyStudioDomShell {
     this.githubConnect.disabled = state.githubBusy;
     const canBind =
       github.connected && Boolean(state.project) && !bound && !state.githubBusy && state.saveState === 'SAVED';
+    this.githubCreateRepo.hidden = bound || !github.connected;
+    this.githubCreateRepo.disabled = !state.project || state.githubBusy;
     this.githubBindInput.hidden = bound;
     this.githubInitial.hidden = bound;
     this.githubBind.hidden = bound;

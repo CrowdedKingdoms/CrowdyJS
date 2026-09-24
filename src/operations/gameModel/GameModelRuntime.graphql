@@ -6,6 +6,39 @@ fragment GmSessionFields on GmSession {
   createdByUserId
   currentTurnUserId
   metadataJson
+  admission
+  maxParticipants
+  participantCount
+  hostUserId
+  hostTerm
+  revision
+  endedAt
+  endReason
+  createdAt
+  presence
+  gridId
+  seededContainerCount
+}
+
+fragment GmSessionParticipantFields on GmSessionParticipant {
+  sessionId
+  userId
+  role
+  state
+  incarnation
+  actorUuid
+  joinedAt
+  leftAt
+  leftReason
+}
+
+fragment GmSessionEventFields on GmSessionEvent {
+  appId
+  sessionId
+  revision
+  kind
+  payloadJson
+  createdAt
 }
 
 fragment GmContainerFields on GmContainer {
@@ -48,14 +81,36 @@ mutation GameModelCreateSession($input: CreateSessionInput!) {
 
 mutation GameModelJoinSession($input: JoinSessionInput!) {
   gameModelJoinSession(input: $input) {
-    sessionId
-    userId
-    role
+    ...GmSessionParticipantFields
+  }
+}
+
+mutation GameModelLeaveSession($input: LeaveSessionInput!) {
+  gameModelLeaveSession(input: $input) {
+    ...GmSessionParticipantFields
   }
 }
 
 mutation GameModelSetSessionTurn($input: SetSessionTurnInput!) {
   gameModelSetSessionTurn(input: $input) {
+    ...GmSessionFields
+  }
+}
+
+mutation GameModelSetSessionAdmission($input: SetSessionAdmissionInput!) {
+  gameModelSetSessionAdmission(input: $input) {
+    ...GmSessionFields
+  }
+}
+
+mutation GameModelTransferSessionHost($input: TransferSessionHostInput!) {
+  gameModelTransferSessionHost(input: $input) {
+    ...GmSessionFields
+  }
+}
+
+mutation GameModelEndSession($input: EndSessionInput!) {
+  gameModelEndSession(input: $input) {
     ...GmSessionFields
   }
 }
@@ -106,6 +161,7 @@ query GameModelContainers(
   $appId: BigInt!
   $typeName: String
   $sessionId: String
+  $bindingKey: String
   $where: [GmPropertyPredicateInput!]
   $limit: Int
   $offset: Int
@@ -114,6 +170,7 @@ query GameModelContainers(
     appId: $appId
     typeName: $typeName
     sessionId: $sessionId
+    bindingKey: $bindingKey
     where: $where
     limit: $limit
     offset: $offset
@@ -145,6 +202,18 @@ subscription GameModelContainerChanged(
 
 query GameModelContainerState($appId: BigInt!, $containerId: String!) {
   gameModelContainerState(appId: $appId, containerId: $containerId) {
+    containerId
+    appId
+    sessionId
+    typeName
+    displayName
+    ownerUserId
+    propertiesJson
+  }
+}
+
+query GameModelContainerStates($appId: BigInt!, $containerIds: [String!]!) {
+  gameModelContainerStates(appId: $appId, containerIds: $containerIds) {
     containerId
     appId
     sessionId
@@ -187,9 +256,83 @@ query GameModelSession($appId: BigInt!, $sessionId: String!) {
   }
 }
 
-query GameModelSessions($appId: BigInt!, $status: String) {
-  gameModelSessions(appId: $appId, status: $status) {
+query GameModelSessions(
+  $appId: BigInt!
+  $status: String
+  $admission: String
+  $hostUserId: BigInt
+  $limit: Int
+  $gridId: BigInt
+) {
+  gameModelSessions(
+    appId: $appId
+    status: $status
+    admission: $admission
+    hostUserId: $hostUserId
+    limit: $limit
+    gridId: $gridId
+  ) {
     ...GmSessionFields
+  }
+}
+
+query GameModelSessionSnapshot($appId: BigInt!, $sessionId: String!) {
+  gameModelSessionSnapshot(appId: $appId, sessionId: $sessionId) {
+    revision
+    session {
+      ...GmSessionFields
+    }
+    participants {
+      ...GmSessionParticipantFields
+    }
+  }
+}
+
+query GameModelSessionEvents(
+  $appId: BigInt!
+  $sessionId: String!
+  $afterRevision: String!
+  $limit: Int
+) {
+  gameModelSessionEvents(
+    appId: $appId
+    sessionId: $sessionId
+    afterRevision: $afterRevision
+    limit: $limit
+  ) {
+    ...GmSessionEventFields
+  }
+}
+
+query GameModelSessionInspect($appId: BigInt!, $sessionId: String!) {
+  gameModelSessionInspect(appId: $appId, sessionId: $sessionId) {
+    session {
+      ...GmSessionFields
+    }
+    participants {
+      presence
+      presenceFrom
+      participant {
+        ...GmSessionParticipantFields
+      }
+    }
+    recentEvents {
+      ...GmSessionEventFields
+    }
+  }
+}
+
+subscription GameModelSessionChanged(
+  $appId: BigInt!
+  $sessionId: String!
+  $afterRevision: String
+) {
+  gameModelSessionChanged(
+    appId: $appId
+    sessionId: $sessionId
+    afterRevision: $afterRevision
+  ) {
+    ...GmSessionEventFields
   }
 }
 

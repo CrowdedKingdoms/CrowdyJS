@@ -22,6 +22,182 @@ directive @requiresPermission(
   scopeArg: String
 ) on FIELD_DEFINITION
 
+"""
+Live status and load/telemetry for one UDP game server (Buddy) in the fleet. Returned by serverWithLeastClients (which picks a low-load ReadyForClients server). Throughput metrics are per-second samples from the last reporting window and are null until first reported.
+"""
+type ServerStatus {
+  """
+  Unique id of this game-server row in the fleet registry (the Buddy instance uuid).
+  """
+  serverId: ID!
+  """
+  IPv4 address native clients send spatial UDP datagrams to (paired with clientPort). Preferred over ip6 for inter-host UDP in current deployments.
+  """
+  ip4: String!
+  """
+  IPv6 address of the UDP game server. Global IPv6 between hosts can be unroutable in some deployments, so native clients generally use ip4 + clientPort.
+  """
+  ip6: String!
+  """
+  UDP port that native clients send spatial datagrams to (typically 9091). Browser clients do not use this directly — they reach the server through the UDP proxy / udpNotifications.
+  """
+  clientPort: Int!
+  """
+  Current lifecycle state of this server (see ServerState). Only ReadyForClients servers accept new clients.
+  """
+  status: ServerState!
+  """
+  Number of peer (server-to-server P2P) connections this server currently holds.
+  """
+  peers: Int!
+  """
+  Number of game clients currently connected to this server. serverWithLeastClients balances on this DIVIDED BY routerThreads, not on the raw count, so that a server with four fan-out workers takes roughly four times the clients of a server with one.
+  """
+  clients: Int!
+  """
+  True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself.
+  """
+  drainRequested: Boolean!
+  """
+  Peak CPU utilization percentage (0-100) observed in the last reporting window. Null until reported.
+  """
+  cpuPeakPct: Float
+  """
+  CPU cores available to this server. Reported by the server itself; null on a build that predates capacity reporting. Informational — client balancing divides by routerThreads, not by cores.
+  """
+  cpuCount: Int
+  """
+  Independent fan-out workers (RouterWorkers) on this server, which is how much of it there is for the purpose of placing a client. serverWithLeastClients divides the client count by this value. Null on a build that predates capacity reporting, and treated as 1, which balances every server equally as before.
+  """
+  routerThreads: Int
+  """
+  Messages per second received from clients in the last reporting window. Null until reported.
+  """
+  clientRecvMsgsPerSec: Float
+  """
+  Bytes per second received from clients in the last reporting window. Null until reported.
+  """
+  clientRecvBytesPerSec: Float
+  """
+  Messages per second sent to clients in the last reporting window. Null until reported.
+  """
+  clientSendMsgsPerSec: Float
+  """
+  Bytes per second sent to clients in the last reporting window. Null until reported.
+  """
+  clientSendBytesPerSec: Float
+  """
+  Messages per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerRecvMsgsPerSec: Float
+  """
+  Bytes per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerRecvBytesPerSec: Float
+  """
+  Messages per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerSendMsgsPerSec: Float
+  """
+  Bytes per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
+  """
+  peerSendBytesPerSec: Float
+  """
+  Per-second rate of individually-addressed (single-actor) messages sent to clients in the last window, as opposed to spatial fan-out. Null until reported.
+  """
+  clientSendIndividualMsgsPerSec: Float
+  """
+  When this status row was last updated (server heartbeat). Use to judge how fresh the metrics/state are.
+  """
+  updatedAt: DateTime!
+  """When this server was first registered in the fleet."""
+  createdAt: DateTime!
+}
+
+"""
+Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers.
+"""
+enum ServerState {
+  """
+  The server is booting and not yet accepting clients. Do not route new connections here; wait for ReadyForClients.
+  """
+  Starting
+  """
+  The server is healthy and accepting clients. This is the only state safe to route new connections to.
+  """
+  ReadyForClients
+  """
+  The server is draining and shutting down: existing sessions may continue briefly but no new clients should be routed here.
+  """
+  Stopping
+  """
+  The server is down or unreachable (failed health checks). Do not route any traffic here.
+  """
+  Offline
+  """
+  Soft resource overload (a CPU core or system memory has been high for several seconds). Existing sessions continue, but the server is excluded from serverWithLeastClients so no new clients are routed here until it recovers.
+  """
+  NearCapacity
+  """
+  Hard resource overload. Like NearCapacity (excluded from new-client selection), and the server is also actively shedding clients: it sends each affected client a reconnect command and drops their session after a short grace period so they migrate to another server.
+  """
+  Full
+}
+
+"""
+A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy.
+"""
+type GraphQLServer {
+  """Unique id of this GraphQL server registration."""
+  graphqlServerId: ID!
+  """
+  Logical kind of GraphQL service. Every current server is 'game-api', which serves both the management and game surfaces; 'management-api' appears only on rows predating their unification.
+  """
+  kind: String
+  """
+  Internal/private IPv4 address of this server. Use publicIp4 for external reachability.
+  """
+  ip4: String
+  """
+  Internal/private IPv6 address of this server. Use publicIp6 for external reachability.
+  """
+  ip6: String
+  """
+  UUID of the Buddy realtime runtime instance this API server is paired with, if any.
+  """
+  runtimeServerId: String
+  """Cloud provider instance id of the underlying host, if known."""
+  providerInstanceId: String
+  """Public IPv4 address clients use to reach this server, if assigned."""
+  publicIp4: String
+  """Public IPv6 address clients use to reach this server, if assigned."""
+  publicIp6: String
+  """TCP port the GraphQL/HTTP API listens on (default 4000)."""
+  apiPort: Int!
+  """
+  Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.crowdedkingdoms.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you.
+  """
+  publicHostname: String
+  """
+  Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients.
+  """
+  status: ServerState!
+  """Current CPU utilization percentage (0-100) of the host, if reported."""
+  cpuUsagePct: Float
+  """
+  Current memory utilization percentage (0-100) of the host, if reported.
+  """
+  memoryUsagePct: Float
+  """1-minute load average of the host, if reported."""
+  loadAverage1m: Float
+  """When this server was first registered in the fleet."""
+  createdAt: DateTime!
+  """
+  When this server row was last updated (heartbeat). Use to judge freshness.
+  """
+  updatedAt: DateTime!
+}
+
 """The signed-in identity behind a bearer token."""
 type ActorType {
   """
@@ -732,128 +908,6 @@ type AppDiscovery {
 }
 
 """
-Live status and load/telemetry for one UDP game server (Buddy) in the fleet. Returned by serverWithLeastClients (which picks a low-load ReadyForClients server). Throughput metrics are per-second samples from the last reporting window and are null until first reported.
-"""
-type ServerStatus {
-  """
-  Unique id of this game-server row in the fleet registry (the Buddy instance uuid).
-  """
-  serverId: ID!
-  """
-  IPv4 address native clients send spatial UDP datagrams to (paired with clientPort). Preferred over ip6 for inter-host UDP in current deployments.
-  """
-  ip4: String!
-  """
-  IPv6 address of the UDP game server. Global IPv6 between hosts can be unroutable in some deployments, so native clients generally use ip4 + clientPort.
-  """
-  ip6: String!
-  """
-  UDP port that native clients send spatial datagrams to (typically 9091). Browser clients do not use this directly — they reach the server through the UDP proxy / udpNotifications.
-  """
-  clientPort: Int!
-  """
-  Current lifecycle state of this server (see ServerState). Only ReadyForClients servers accept new clients.
-  """
-  status: ServerState!
-  """
-  Number of peer (server-to-server P2P) connections this server currently holds.
-  """
-  peers: Int!
-  """
-  Number of game clients currently connected to this server. serverWithLeastClients balances on this DIVIDED BY routerThreads, not on the raw count, so that a server with four fan-out workers takes roughly four times the clients of a server with one.
-  """
-  clients: Int!
-  """
-  True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself.
-  """
-  drainRequested: Boolean!
-  """
-  Peak CPU utilization percentage (0-100) observed in the last reporting window. Null until reported.
-  """
-  cpuPeakPct: Float
-  """
-  CPU cores available to this server. Reported by the server itself; null on a build that predates capacity reporting. Informational — client balancing divides by routerThreads, not by cores.
-  """
-  cpuCount: Int
-  """
-  Independent fan-out workers (RouterWorkers) on this server, which is how much of it there is for the purpose of placing a client. serverWithLeastClients divides the client count by this value. Null on a build that predates capacity reporting, and treated as 1, which balances every server equally as before.
-  """
-  routerThreads: Int
-  """
-  Messages per second received from clients in the last reporting window. Null until reported.
-  """
-  clientRecvMsgsPerSec: Float
-  """
-  Bytes per second received from clients in the last reporting window. Null until reported.
-  """
-  clientRecvBytesPerSec: Float
-  """
-  Messages per second sent to clients in the last reporting window. Null until reported.
-  """
-  clientSendMsgsPerSec: Float
-  """
-  Bytes per second sent to clients in the last reporting window. Null until reported.
-  """
-  clientSendBytesPerSec: Float
-  """
-  Messages per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerRecvMsgsPerSec: Float
-  """
-  Bytes per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerRecvBytesPerSec: Float
-  """
-  Messages per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerSendMsgsPerSec: Float
-  """
-  Bytes per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported.
-  """
-  peerSendBytesPerSec: Float
-  """
-  Per-second rate of individually-addressed (single-actor) messages sent to clients in the last window, as opposed to spatial fan-out. Null until reported.
-  """
-  clientSendIndividualMsgsPerSec: Float
-  """
-  When this status row was last updated (server heartbeat). Use to judge how fresh the metrics/state are.
-  """
-  updatedAt: DateTime!
-  """When this server was first registered in the fleet."""
-  createdAt: DateTime!
-}
-
-"""
-Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers.
-"""
-enum ServerState {
-  """
-  The server is booting and not yet accepting clients. Do not route new connections here; wait for ReadyForClients.
-  """
-  Starting
-  """
-  The server is healthy and accepting clients. This is the only state safe to route new connections to.
-  """
-  ReadyForClients
-  """
-  The server is draining and shutting down: existing sessions may continue briefly but no new clients should be routed here.
-  """
-  Stopping
-  """
-  The server is down or unreachable (failed health checks). Do not route any traffic here.
-  """
-  Offline
-  """
-  Soft resource overload (a CPU core or system memory has been high for several seconds). Existing sessions continue, but the server is excluded from serverWithLeastClients so no new clients are routed here until it recovers.
-  """
-  NearCapacity
-  """
-  Hard resource overload. Like NearCapacity (excluded from new-client selection), and the server is also actively shedding clients: it sends each affected client a reconnect command and drops their session after a short grace period so they migrate to another server.
-  """
-  Full
-}
-
-"""
 One datacenter an app can be created in. The `code` is exactly what createApp takes as input.datacenter.
 """
 type PlaceableDatacenter {
@@ -1040,7 +1094,9 @@ type OrgTokenWithSecret {
   orgTokenId: BigInt!
   """Organization that owns this token (BigInt as string)."""
   orgId: BigInt!
-  """The plaintext token. Save it now; it is not stored."""
+  """
+  The plaintext token, returned exactly once. Save it now: only its hash is stored and it cannot be shown again.
+  """
   token: String!
   """Optional human-readable label."""
   label: String
@@ -1297,60 +1353,6 @@ enum CodeAdmissionSubjectKind {
   CODE
   AUTHOR
   ORG
-}
-
-"""
-A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy.
-"""
-type GraphQLServer {
-  """Unique id of this GraphQL server registration."""
-  graphqlServerId: ID!
-  """
-  Logical kind of GraphQL service. Every current server is 'game-api', which serves both the management and game surfaces; 'management-api' appears only on rows predating their unification.
-  """
-  kind: String
-  """
-  Internal/private IPv4 address of this server. Use publicIp4 for external reachability.
-  """
-  ip4: String
-  """
-  Internal/private IPv6 address of this server. Use publicIp6 for external reachability.
-  """
-  ip6: String
-  """
-  UUID of the Buddy realtime runtime instance this API server is paired with, if any.
-  """
-  runtimeServerId: String
-  """Cloud provider instance id of the underlying host, if known."""
-  providerInstanceId: String
-  """Public IPv4 address clients use to reach this server, if assigned."""
-  publicIp4: String
-  """Public IPv6 address clients use to reach this server, if assigned."""
-  publicIp6: String
-  """TCP port the GraphQL/HTTP API listens on (default 4000)."""
-  apiPort: Int!
-  """
-  Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.crowdedkingdoms.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you.
-  """
-  publicHostname: String
-  """
-  Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients.
-  """
-  status: ServerState!
-  """Current CPU utilization percentage (0-100) of the host, if reported."""
-  cpuUsagePct: Float
-  """
-  Current memory utilization percentage (0-100) of the host, if reported.
-  """
-  memoryUsagePct: Float
-  """1-minute load average of the host, if reported."""
-  loadAverage1m: Float
-  """When this server was first registered in the fleet."""
-  createdAt: DateTime!
-  """
-  When this server row was last updated (heartbeat). Use to judge freshness.
-  """
-  updatedAt: DateTime!
 }
 
 """
@@ -2577,6 +2579,18 @@ type PlayerWasmPolicy {
   maxContainerCreatesDay: Int!
   """Client-target fuel budget per browser dispatch (04 §3)."""
   clientFuelPerDispatch: BigInt!
+  """
+  DN-10: which channels this scope's player modules may emit_channel into: 'grid' (default, the grid's own channels), 'send_messages' (also channels the grid owner may post to), or 'none'.
+  """
+  channelEgress: String!
+  """
+  DN-10: most chunks a player module's spatial message may reach from its in-grid origin (0-8, default 8). 0 keeps grid messages inside the origin chunk.
+  """
+  spatialMaxDistance: Int!
+  """
+  DN-10: whether player modules may publish on the grid event bus (emit_event). Default true.
+  """
+  gridEventEgress: Boolean!
 }
 
 """
@@ -4960,6 +4974,10 @@ type CrowdyStudioGitHubStatus {
   Commit the project mirror is at. Every bound write presents it as expectedCommitSha; a stale value is refused with GITHUB_STALE_SHA. Null when the project is not bound.
   """
   githubSha: String
+  """
+  Which repositories the installation covers: "all", or "selected" (a repository created on GitHub afterwards must be added to the installation at installUrl before it can be bound). Null when not connected.
+  """
+  repositorySelection: String
   """Where to send the modder to install or manage the App."""
   installUrl: String
 }
@@ -5464,6 +5482,28 @@ type GridGroupGrant {
 }
 
 """
+A grid-scoped token: an app token narrowed to one grid. Hand it to code that should act inside the grid and nowhere else (a JS grid program, a mod host adapter, an agent).
+"""
+type GridTokenResponse {
+  """
+  Bearer token. It admits only the root fields the grid-token policy lists, each confined to the grid, and it is refused by the binary realtime relay (realtime runs over GraphQL).
+  """
+  token: String!
+  """The underlying game_token id, as a BigInt."""
+  gameTokenId: BigInt!
+  """The app it is confined to."""
+  appId: BigInt!
+  """The grid it is confined to."""
+  gridId: BigInt!
+  """Low corner of the grid box, copied at mint."""
+  lowChunk: ChunkCoordinates!
+  """High corner of the grid box, copied at mint."""
+  highChunk: ChunkCoordinates!
+  """When the token stops working."""
+  expiresAt: DateTime!
+}
+
+"""
 A role within a group (team/channel). Carries the group-management permission keys it grants (e.g. manage_members), NOT world/runtime grid permissions.
 """
 type GroupRole {
@@ -5509,6 +5549,10 @@ type Group {
   membershipPolicy: String!
   """Lifecycle status, e.g. 'active'."""
   status: String!
+  """
+  Channels only: the grid this channel belongs to (a grid channel, DN-10). Player modules on that grid may emit_channel into it; null for an ordinary channel.
+  """
+  gridId: BigInt
   """
   Optional role auto-assigned to every new member (e.g. a channel "member" role granting send_messages). Null means new members get no role by default.
   """
@@ -6490,7 +6534,13 @@ enum PlayerFaultCode {
   QUOTA_EXHAUSTED
   WALLET_EMPTY
   SPEND_CAP_REACHED
-  """A breaker is open or an operator switch is off for this subject."""
+  """
+  The app's own circuit is open after repeated failures. Retry after extensions.retryAfterMs. extensions.cause is watchdog_timeout when those failures were watchdog kills. This is not PLATFORM_BUSY and not a rate limit.
+  """
+  CIRCUIT_OPEN
+  """
+  An operator switch, a latch, or a platform hold. An open author circuit is CIRCUIT_OPEN, not this code.
+  """
   TEMPORARILY_DISABLED
   """The arguments did not satisfy the function's contract."""
   INVALID_REQUEST
@@ -6550,6 +6600,10 @@ type GmContainerType {
   Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
   """
   bindPolicyJson: String
+  """
+  Where this type's rows live. 'session' (default): one row per bindingKey per session, and a client inside a session binds the session's row. 'app': one row per bindingKey for the whole app, shared by every session (state that outlives matches: territory, landmarks, a persistent world). On an app-scoped type, gameModelEnsureContainer / gameModelCreateContainer with a sessionId are refused (CONTAINER_TYPE_APP_SCOPED); bind at app scope and pass the session on gameModelInvoke, where is_participant / is_current_turn are judged against the call's session. Changing 'session' to 'app' is refused while the type holds session-scoped rows.
+  """
+  scope: String!
 }
 
 """A typed property (field) defined on a container type."""
@@ -6824,6 +6878,48 @@ type GmSession {
   currentTurnUserId: BigInt
   """JSON object of developer metadata."""
   metadataJson: String!
+  """
+  Who may still get in: 'open' (anyone the app admits), 'locked' (only a participant who already joined may reconnect), 'closed' (nobody; set automatically when the session ends).
+  """
+  admission: String!
+  """
+  Seat cap: the most participants that may be joined at once. Null means unbounded. A participant reconnecting never counts against it twice.
+  """
+  maxParticipants: Int
+  """How many participants are joined right now."""
+  participantCount: Int!
+  """
+  The current session host, or null while nobody is joined. The creator starts as host; when the host leaves or expires, the longest-joined present participant succeeds.
+  """
+  hostUserId: BigInt
+  """
+  Increments on every host change. Send it as expectedHostTerm on host actions to be refused (SESSION_HOST_TERM_STALE) instead of acting on a host change you have not seen.
+  """
+  hostTerm: Int!
+  """
+  Monotonic change counter. Every event in gameModelSessionChanged carries the revision that produced it; gameModelSessionSnapshot returns the revision it describes. Compare as integers.
+  """
+  revision: String!
+  """When the session ended, or null while active."""
+  endedAt: DateTime
+  """
+  Why it ended: 'completed' or 'abandoned' by the host/admin, 'empty_timeout' when the server ended a session nobody was in.
+  """
+  endReason: String
+  """When the session was created."""
+  createdAt: DateTime!
+  """
+  How the roster is judged: 'actor' (default) expires a joined participant with no fresh Buddy actor in the app after the join grace window; 'none' never expires anybody -- for turn-based play that never replicates an actor -- so the roster's only exits are leave, end, and the empty timeout once everyone has left.
+  """
+  presence: String!
+  """
+  The grid this session is hosted in, when its creator hosted it inside a grid they own (a game within the game); null for an app-level session. Player modules on that grid see it through sessions_list.
+  """
+  gridId: BigInt
+  """
+  On the gameModelCreateSession response only: how many container rows seedFromApp stamped into the session (0 when seedFromApp was given and matched nothing). Null on every other read; the durable record is the containersSeeded field of the created event.
+  """
+  seededContainerCount: Int
 }
 
 """A user's participation in a session."""
@@ -6834,6 +6930,92 @@ type GmSessionParticipant {
   userId: BigInt!
   """The participant role within the session."""
   role: String!
+  """
+  'joined' while the user is in the session, 'left' after a leave, a presence expiry, or the session ending. Rows are kept so the roster history is answerable.
+  """
+  state: String!
+  """
+  Counts this user's joins to this session. A reconnect is the same row with incarnation + 1; a leave that names an older incarnation is a superseded client and is refused (SESSION_INCARNATION_STALE).
+  """
+  incarnation: Int!
+  """
+  The Buddy actor uuid the client bound at join, if any. When set, this participant's presence is that actor's; when null, any fresh actor of the user in the app counts.
+  """
+  actorUuid: String
+  """When the user first joined (kept across reconnects)."""
+  joinedAt: DateTime!
+  """When the participant last left, or null while joined."""
+  leftAt: DateTime
+  """
+  Why the participant left: 'left' (their own call), 'presence_expired' (no fresh actor past the grace window), 'session_ended', 'kicked'.
+  """
+  leftReason: String
+}
+
+"""
+One session revision: what changed, in order. The payload names the subject (user id, host, admission, ...) as a JSON object.
+"""
+type GmSessionEvent {
+  """The app (tenant)."""
+  appId: BigInt!
+  """The session this revision belongs to."""
+  sessionId: String!
+  """
+  The revision this event produced. Strictly increasing per session; a gap means a missed event -- pull gameModelSessionSnapshot or gameModelSessionEvents(afterRevision).
+  """
+  revision: String!
+  """
+  created | participant_joined | participant_rejoined | participant_left | participant_expired | host_changed | admission_changed | turn_changed | ended
+  """
+  kind: String!
+  """
+  JSON object describing the change (e.g. {"userId":"…","incarnation":2} for a join, {"hostUserId":"…","hostTerm":3,"previousHostUserId":"…","reason":"host_left"} for a host change).
+  """
+  payloadJson: String!
+  """When the revision was committed."""
+  createdAt: DateTime!
+}
+
+"""
+The authoritative state of one session at one revision: the session and every joined participant. The catch-up read after a subscription gap or a reconnect.
+"""
+type GmSessionSnapshot {
+  """The session row at this revision."""
+  session: GmSession!
+  """Every participant whose state is joined, oldest join first."""
+  participants: [GmSessionParticipant!]!
+  """
+  The revision this snapshot describes. Discard buffered events at or below it and apply the ones above it.
+  """
+  revision: String!
+}
+
+"""
+A joined participant with the platform's current presence verdict, for operators.
+"""
+type GmSessionParticipantInspection {
+  """The roster row."""
+  participant: GmSessionParticipant!
+  """
+  'fresh' (a qualifying actor is present), 'grace' (inside the join grace window, not yet judged), 'stale' (no qualifying actor; the next presence sweep will expire this participant), 'none' (the session's presence mode is 'none'; never expired), 'legacy' (row predates presence tracking; never expired), 'left' (not joined).
+  """
+  presence: String!
+  """
+  When the presence rule starts applying to this participant (join + grace), or null for a row the rule never applies to (a legacy row, or a session whose presence mode is 'none').
+  """
+  presenceFrom: DateTime
+}
+
+"""
+An operator's view of one session: the full roster including departed participants, each joined participant's live presence verdict, and the most recent events.
+"""
+type GmSessionInspection {
+  """The session row."""
+  session: GmSession!
+  """Every participant row, joined and left, oldest join first."""
+  participants: [GmSessionParticipantInspection!]!
+  """The most recent events, newest first."""
+  recentEvents: [GmSessionEvent!]!
 }
 
 """
@@ -7820,7 +8002,7 @@ type Query {
     id: BigInt!
   ): Avatar!
   """
-  Fetches a single actor by its 32-character ASCII `uuid`. Requires a valid game token. Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null). Throws NotFound if the uuid does not exist.
+  Fetches a single actor by its 32-character ASCII `uuid`. Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound, the same as a missing id). Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null).
   """
   actor(
     """
@@ -7829,7 +8011,7 @@ type Query {
     uuid: String!
   ): Actor!
   """
-  Lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Requires a valid game token; only the caller’s own actors are returned (full state included). For other users’ actors use `actor` or `batchLookupActors`.
+  Lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Requires a valid game token; only the caller’s own actors are returned (full state included). Under an app token the list is confined to that token’s app (a `filter.appId` naming another app is refused). For other users’ actors use `actor` or `batchLookupActors`.
   """
   actors(
     """
@@ -7838,7 +8020,7 @@ type Query {
     filter: ActorFilterInput
   ): [Actor!]!
   """
-  Relay-style cursor-paginated version of `actors`: lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); `totalCount` is the full number of matching actors. Requires a valid game token; only the caller’s own actors are returned (full state included).
+  Relay-style cursor-paginated version of `actors`: lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); `totalCount` is the full number of matching actors. Requires a valid game token; only the caller’s own actors are returned (full state included). Under an app token the list is confined to that token’s app.
   """
   actorsConnection(
     """Return the first N edges after `after`. Default 50; clamped to 1..200."""
@@ -7853,7 +8035,7 @@ type Query {
     filter: ActorFilterInput
   ): ActorsConnection!
   """
-  Bulk-fetches actors by a list of 32-character ASCII uuids in one round-trip. Requires a valid game token. PUBLIC-STATE ONLY: `privateState` is stripped (null) for every result regardless of ownership. Unknown uuids are silently omitted. Use this to resolve many actors at once; use `actor` for a single owner-scoped fetch.
+  Bulk-fetches actors by a list of 32-character ASCII uuids in one round-trip. Game-plane: requires an app token; only actors in that token’s app are returned (uuids in other apps are omitted, the same as unknown ids). A session token is answered NotFound. PUBLIC-STATE ONLY: `privateState` is stripped (null) for every result regardless of ownership. Use this to resolve many actors at once; use `actor` for a single owner-scoped fetch.
   """
   batchLookupActors(
     """List of actor uuids to look up (see BatchActorLookupInput)."""
@@ -8892,6 +9074,15 @@ type Query {
     appId: BigInt!
   ): AppGroupPolicy!
   """
+  The active grid channels of one grid (DN-10), oldest first. Any caller with a token for the app may list them, the same visibility as the app's channel list; joining still follows each channel's membership policy.
+  """
+  gridChannels(
+    """The app (tenant) the grid belongs to."""
+    appId: BigInt!
+    """The grid whose channels to list."""
+    gridId: BigInt!
+  ): [Group!]!
+  """
   Failures of code this app's users wrote, newest first, across all three engines (model expressions, studio WASM, player WASM). Each row carries what ran, what went wrong, whose problem it is, whether retrying could help, and what the run cost against what it was allowed. Requires the org 'view_compute_diagnostics' permission.
   """
   userCodeFaults(
@@ -9104,7 +9295,7 @@ type Query {
     containerId: String!
   ): GmContainer!
   """
-  List containers in an app, optionally filtered by container type and/or session, by bindingKey (get-by-key read of an ensured container), by property predicates (`where`, requires typeName; the same predicate shape automation selectors use — missing properties fall back to the type default), and paged with offset/limit over the stable created-at ordering. Requires a valid token.
+  List containers in an app, optionally filtered by container type and/or session, by bindingKey (get-by-key read of an ensured container), by property predicates (`where`, requires typeName; the same predicate shape automation selectors use — missing properties fall back to the type default), and paged with offset/limit over the stable (createdAt, containerId) ordering. Pages: an omitted limit returns 200 rows; the maximum is 1000 (BAD_REQUEST above it). Without `where` the page is read in SQL; with `where` the predicates are evaluated after reading up to 10000 rows of the type, and a larger type is refused (narrow with sessionId / bindingKey, or page without where). Requires a valid token.
   """
   gameModelContainers(
     """The app (tenant) whose containers to list."""
@@ -9123,9 +9314,13 @@ type Query {
     Optional property predicates (max 8, AND-combined). Requires typeName. Ops: '==', '!=', '<', '>', '<=', '>='. Values are JSON-encoded.
     """
     where: [GmPropertyPredicateInput!]
-    """Optional page size (applied after `where` filtering)."""
+    """
+    Page size. Default 200, maximum 1000 (BAD_REQUEST above). Applied in SQL without `where`; after `where` filtering otherwise.
+    """
     limit: Int
-    """Optional page offset (applied after `where` filtering)."""
+    """
+    Page offset (default 0) over the stable (createdAt, containerId) ordering. Applied in SQL without `where`; after `where` filtering otherwise.
+    """
     offset: Int
   ): [GmContainer!]!
   """
@@ -9137,6 +9332,15 @@ type Query {
     """The container UUID whose visible state to fetch."""
     containerId: String!
   ): GmContainerState!
+  """
+  Bulk twin of gameModelContainerState: identity plus visible property state for up to 500 containers in one call (BAD_REQUEST above). The same visibility rules apply per row (public always; owner/hidden depend on the CALLER's relationship to each container). Ids the app does not hold are omitted rather than errors; duplicates are returned once; order follows the input. Use it after paging gameModelContainers to pull a level's state in a few calls instead of one per object. Requires a valid token.
+  """
+  gameModelContainerStates(
+    """The app (tenant) that owns the containers."""
+    appId: BigInt!
+    """Container UUIDs to resolve (max 500)."""
+    containerIds: [String!]!
+  ): [GmContainerState!]!
   """
   Traverse the container graph from a root container along a relationship type up to a depth, returning the reachable nodes and edges. Requires a valid token.
   """
@@ -9150,7 +9354,9 @@ type Query {
     """How many edge hops to follow from the root. Defaults to 1."""
     depth: Int = 1
   ): GmTraverseResult!
-  """Fetch one session by id. Requires a valid token."""
+  """
+  Fetch one session by id, with its joined-participant count, host, admission and revision. Requires a valid token.
+  """
   gameModelSession(
     """The app (tenant) that owns the session."""
     appId: BigInt!
@@ -9158,14 +9364,61 @@ type Query {
     sessionId: String!
   ): GmSession!
   """
-  List sessions in an app, optionally filtered by status. Requires a valid token.
+  List sessions in an app, newest first, optionally filtered by status, admission, host and/or grid. Requires a valid token.
   """
   gameModelSessions(
     """The app (tenant) whose sessions to list."""
     appId: BigInt!
-    """Optional status filter (e.g. active). Omit for all statuses."""
+    """
+    Optional status filter (active | completed | abandoned). Omit for all statuses.
+    """
     status: String
+    """
+    Optional admission filter (open | locked | closed), e.g. open to list joinable lobbies.
+    """
+    admission: String
+    """Optional: only sessions hosted by this user."""
+    hostUserId: BigInt
+    """Most rows to return (default 200, max 1000)."""
+    limit: Int
+    """
+    Optional: only sessions hosted inside this grid (a game within the game). A grid-scoped token must pass its own grid here.
+    """
+    gridId: BigInt
   ): [GmSession!]!
+  """
+  The authoritative state of one session at one revision: the session row and every joined participant. Pull it when you subscribe, after a reconnect, or when gameModelSessionChanged shows a revision gap; then apply only events with a higher revision. Requires a valid token.
+  """
+  gameModelSessionSnapshot(
+    """The app (tenant) that owns the session."""
+    appId: BigInt!
+    """The session id."""
+    sessionId: String!
+  ): GmSessionSnapshot!
+  """
+  The session events with a revision greater than afterRevision, oldest first: the gap-fill read behind gameModelSessionChanged. Events of ended sessions are retained for a bounded period, then purged. Requires a valid token.
+  """
+  gameModelSessionEvents(
+    """The app (tenant) that owns the session."""
+    appId: BigInt!
+    """The session id."""
+    sessionId: String!
+    """
+    Return events with a revision strictly greater than this (0 for everything retained).
+    """
+    afterRevision: String!
+    """Most events to return (default 200, max 1000)."""
+    limit: Int
+  ): [GmSessionEvent!]!
+  """
+  Operator view of one session: the full roster including departed participants (with left reason and incarnation), each joined participant's live presence verdict, and the most recent events. Requires app-admin ('manage_apps').
+  """
+  gameModelSessionInspect(
+    """The app (tenant) that owns the session."""
+    appId: BigInt!
+    """The session id to inspect."""
+    sessionId: String!
+  ): GmSessionInspection! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   Query the function-invocation event log (audit trail) with optional filters and pagination. Useful for debugging functions or showing recent activity. Requires a valid token.
   """
@@ -9962,7 +10215,7 @@ type Mutation {
     input: CreateActorInput!
   ): Actor!
   """
-  Partially updates an actor (appId, avatarId, chunk, publicState, privateState); fields omitted from `input` are left unchanged. OWNER-EXCLUSIVE: only the actor’s owner may update (throws Unauthorized otherwise). Requires a valid game token. `uuid` is the 32-character ASCII actor id.
+  Partially updates an actor (appId, avatarId, chunk, publicState, privateState); fields omitted from `input` are left unchanged. OWNER-EXCLUSIVE: only the actor’s owner may update (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id.
   """
   updateActor(
     """
@@ -9973,7 +10226,7 @@ type Mutation {
     input: UpdateActorInput!
   ): Actor!
   """
-  DESTRUCTIVE: permanently deletes the actor identified by `uuid` and returns a copy of the now-deleted row. OWNER-EXCLUSIVE: only the owner may delete (throws Unauthorized otherwise). Requires a valid game token. `uuid` is the 32-character ASCII actor id.
+  DESTRUCTIVE: permanently deletes the actor identified by `uuid` and returns a copy of the now-deleted row. OWNER-EXCLUSIVE: only the owner may delete (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id.
   """
   deleteActor(
     """
@@ -10011,7 +10264,7 @@ type Mutation {
     input: UpdateAvatarAppStateInput!
   ): AppAvatarState!
   """
-  Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Requires a valid game token. `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary.
+  Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary.
   """
   updateActorState(
     """
@@ -10401,7 +10654,7 @@ type Mutation {
   """
   exchangePortalCode(input: ExchangePortalCodeInput!): AppTokenResponse!
   """
-  Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients.
+  Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients.
   """
   refreshAppToken(
     """
@@ -10914,6 +11167,13 @@ type Mutation {
     input: RevokeGroupFromGridInput!
   ): [GridGroupGrant!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
+  Mint a grid-scoped token from the app token you hold (DN-10). The result can call only a short, fixed list of gameplay fields, and each is confined to the grid: world reads and replication sends must address a chunk inside it (a send's origin; its reach follows distance), channels must be the grid's own, sessions must be hosted in it, and player-model / player-compute calls must name it. refreshAppToken and logout are refused, so the token cannot widen or tear down its parent. Requires an app token (not a session token, not another grid token), and the caller must own the grid or hold run_client_code on it.
+  """
+  mintGridToken(
+    """The app, the grid, and an optional lifetime."""
+    input: MintGridTokenInput!
+  ): GridTokenResponse!
+  """
   Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams.
   """
   setTeamPolicy(
@@ -11041,6 +11301,15 @@ type Mutation {
     The app, the channel name, optional description / membership policy, and the membersCanSend flag.
     """
     input: CreateChannelInput!
+  ): Group!
+  """
+  Create a grid channel (DN-10): an ordinary channel bound to one grid, owned by the caller, so the grid's player modules may emit_channel into it (their messages carry the sender uuid 'grid:<gridId>'). Only the grid's current owner may create one, whatever the app's channel creation policy says, and a grid holds at most 8 active channels. Membership works like any channel: membershipPolicy defaults to 'open' so visitors can join it, and members get send_messages unless membersCanSend is false.
+  """
+  createGridChannel(
+    """
+    The app, the grid, the channel name, optional description / membership policy, and the membersCanSend flag.
+    """
+    input: CreateGridChannelInput!
   ): Group!
   """
   Update a channel's name, description, and/or membership policy. Requires the 'manage_group' channel permission (app admins bypass).
@@ -11186,7 +11455,7 @@ type Mutation {
     name: String!
   ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
-  Bulk-create game-model definitions (container types, property defs, functions) and upsert instances (containers + edges) in one transaction — used to initialize or import a model. Seed containers bind as `seed:` + tempId and re-seed maps tempId to the existing id (containersCreated increments only on insert). Requires app-admin ('manage_apps').
+  Bulk-create game-model definitions (container types, property defs, functions) and upsert instances (containers + edges) in one transaction — used to initialize or import a model. Seed containers bind as `seed:` + tempId, or as the row's own bindingKey when given (admin-instantiable or bind-policied types only, so a runtime gameModelEnsureContainer later resolves the same row; an existing row is adopted only if its owner matches, so a player who claimed the key first is never written onto); re-seed maps tempId to the existing id and containersCreated increments only on insert. At most 1000 containers per call (BAD_REQUEST above, nothing written); the call is all-or-nothing. Seeded rows fire no container_created automation or change-feed events. Requires app-admin ('manage_apps').
   """
   gameModelSeed(
     """
@@ -11308,29 +11577,65 @@ type Mutation {
     dedupeKey: String
   ): Int! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
-  Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save). Subject to the app's session creation policy. The caller becomes the creator and a participant. Requires a valid token.
+  Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save) with its own roster, host, admission and capacity. Subject to the app's session creation policy. The caller becomes creator, host (term 1) and a joined participant. Presence is actor presence: a participant with no fresh Buddy actor in the app after the join grace window is expired by the server. With seedFromApp, the app's keyed template rows of the listed types are copied into the new session in the same transaction (max 2000 rows, refused above; no per-row events; count on the created event and on seededContainerCount). The copies seedFromApp stamps are dropped by the retention sweep once the session has been ended for GM_SESSION_CONTAINER_RETENTION_DAYS, when the tier's operator has set it (default 0, disabled); hand-made rows are never purged. Requires a valid token.
   """
   gameModelCreateSession(
     """
-    The app, an optional name and metadata, and optional initial participant user ids.
+    The app, an optional name and metadata, optional initial participant user ids, and optional maxParticipants / admission / emptyTimeoutSec.
     """
     input: CreateSessionInput!
   ): GmSession!
   """
-  Join an existing session as a participant, optionally with a role. Requires a valid token and app access.
+  Join a session, or reconnect to one you are already in. Refused with SESSION_ENDED, SESSION_CLOSED, SESSION_LOCKED (unless you already joined) or SESSION_FULL. A rejoin returns the same row with incarnation + 1 and supersedes any older client of yours. Pass actorUuid to bind the participant's presence to that Buddy actor. Requires a valid token.
   """
   gameModelJoinSession(
-    """The app, the session id to join, and an optional participant role."""
+    """
+    The app, the session id to join, an optional participant role, and an optional actor uuid.
+    """
     input: JoinSessionInput!
   ): GmSessionParticipant!
   """
-  Set or clear the session's current-turn user, for turn-based play (authority enforced by the service). Pass userId null to clear the turn. Requires a valid token.
+  Leave a session you are joined to. Send the incarnation gameModelJoinSession gave you so a superseded client cannot remove the one that took over (SESSION_INCARNATION_STALE). Leaving an already-left row is a no-op. If you were host, the longest-joined present participant succeeds you (host_changed). Requires a valid token.
+  """
+  gameModelLeaveSession(
+    """The app, the session id, and your incarnation."""
+    input: LeaveSessionInput!
+  ): GmSessionParticipant!
+  """
+  Set or clear the session's current-turn user, for turn-based play. Allowed for an app admin, the app's elected host, the session host, or the current turn holder. Pass userId null to clear the turn; expectedHostTerm refuses a stale host. Requires a valid token.
   """
   gameModelSetSessionTurn(
     """
-    The app, the session id, and the user whose turn it now is (null clears it).
+    The app, the session id, the user whose turn it now is (null clears it), and optionally the host term you last read.
     """
     input: SetSessionTurnInput!
+  ): GmSession!
+  """
+  Change who may still join: 'open', 'locked' (participants who already joined may reconnect, nobody new), or 'closed' (nobody). Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. Emits admission_changed. Requires a valid token.
+  """
+  gameModelSetSessionAdmission(
+    """
+    The app, the session id, the new admission, and optionally the host term you last read.
+    """
+    input: SetSessionAdmissionInput!
+  ): GmSession!
+  """
+  Hand the session host role to another joined participant. Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. Increments hostTerm and emits host_changed. Requires a valid token.
+  """
+  gameModelTransferSessionHost(
+    """
+    The app, the session id, the joined participant who becomes host, and optionally the host term you last read.
+    """
+    input: TransferSessionHostInput!
+  ): GmSession!
+  """
+  End a session as 'completed' (default) or 'abandoned': every joined participant is marked left (session_ended), admission becomes closed, and an ended event closes the revision log. Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. The server also ends sessions nobody has been joined to for longer than their empty timeout. Requires a valid token.
+  """
+  gameModelEndSession(
+    """
+    The app, the session id, the terminal reason, and optionally the host term you last read.
+    """
+    input: EndSessionInput!
   ): GmSession!
   """
   Instantiate a container (a runtime entity of a given type), optionally within a session, with an owner and initial properties. Subject to the type's instantiableBy rule (admin | member | owner). Requires a valid token.
@@ -12711,6 +13016,12 @@ input SetPlayerWasmPolicyInput {
   maxCompilesPerHour: Int
   maxContainerCreatesDay: Int
   clientFuelPerDispatch: BigInt
+  """DN-10 channel egress: 'none' | 'grid' | 'send_messages'."""
+  channelEgress: String
+  """DN-10 spatial reach cap in chunks (0-8)."""
+  spatialMaxDistance: Int
+  """DN-10 grid event bus on/off."""
+  gridEventEgress: Boolean
 }
 
 input TransferPlayerCodeListingInput {
@@ -13276,6 +13587,20 @@ input RevokeGroupFromGridInput {
   permissionKeys: [String!]
 }
 
+"""Narrow the app token you hold to one grid (DN-10 grid-scoped token)."""
+input MintGridTokenInput {
+  """The app; must be the calling app token’s app."""
+  appId: BigInt!
+  """
+  The grid to confine the token to. The caller must own it or hold its run_client_code permission.
+  """
+  gridId: BigInt!
+  """
+  Lifetime in seconds (60-3600, default 900). Never outlives the app token it was minted from.
+  """
+  ttlSeconds: Int
+}
+
 """Set the per-app team creation/membership policy (app-admin only)."""
 input SetTeamPolicyInput {
   """The app (tenant) whose team policy to set."""
@@ -13400,6 +13725,26 @@ input CreateChannelInput {
   membersCanSend: Boolean
 }
 
+"""
+Create a grid channel (DN-10): a channel that belongs to one grid, so that grid's player modules may emit_channel into it. Only the grid's current owner may create one.
+"""
+input CreateGridChannelInput {
+  """The app (tenant) the channel belongs to."""
+  appId: BigInt!
+  """Display name for the channel (max 128 chars; unique per app+type)."""
+  name: String!
+  """Optional free-text description of the channel."""
+  description: String
+  """open | request | invite | admin. Defaults to the app policy."""
+  membershipPolicy: String
+  """
+  When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel).
+  """
+  membersCanSend: Boolean
+  """The grid the channel belongs to. The caller must own it."""
+  gridId: BigInt!
+}
+
 """Update an existing channel. Omitted fields are left unchanged."""
 input UpdateChannelInput {
   """The channel (group) id to update."""
@@ -13432,6 +13777,10 @@ input UpsertContainerTypeInput {
   Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
   """
   bindPolicyJson: String
+  """
+  Where this type's rows live. 'session' (default): one row per bindingKey per session, and a client inside a session binds the session's row. 'app': one row per bindingKey for the whole app, shared by every session (state that outlives matches: territory, landmarks, a persistent world). On an app-scoped type, gameModelEnsureContainer / gameModelCreateContainer with a sessionId are refused (CONTAINER_TYPE_APP_SCOPED); bind at app scope and pass the session on gameModelInvoke, where is_participant / is_current_turn are judged against the call's session. Changing 'session' to 'app' is refused while the type holds session-scoped rows.
+  """
+  scope: String
 }
 
 """Create or update a typed property on a container type."""
@@ -13654,6 +14003,10 @@ input SeedContainerTypeInput {
   Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner.
   """
   bindPolicyJson: String
+  """
+  Where this type's rows live. 'session' (default): one row per bindingKey per session, and a client inside a session binds the session's row. 'app': one row per bindingKey for the whole app, shared by every session (state that outlives matches: territory, landmarks, a persistent world). On an app-scoped type, gameModelEnsureContainer / gameModelCreateContainer with a sessionId are refused (CONTAINER_TYPE_APP_SCOPED); bind at app scope and pass the session on gameModelInvoke, where is_participant / is_current_turn are judged against the call's session. Changing 'session' to 'app' is refused while the type holds session-scoped rows.
+  """
+  scope: String
 }
 
 """A property definition to create as part of a seed."""
@@ -13717,11 +14070,15 @@ A container (instance) to upsert as part of a seed. Re-seed matches on binding_k
 """
 input SeedContainerInput {
   """
-  Developer-assigned id used for edge references and as the seed binding key (`seed:` + tempId). Re-seed maps this tempId to the existing container id.
+  Developer-assigned id used for edge references and, when bindingKey is omitted, as the seed binding key (`seed:` + tempId). Re-seed maps this tempId to the existing container id.
   """
   tempId: String!
   """The container type to instantiate."""
   typeName: String!
+  """
+  Optional caller-supplied binding key (max 128 chars, opaque) the row upserts on INSTEAD of `seed:` + tempId, on the same unique index gameModelEnsureContainer uses (unique per app + type + the batch sessionId). Lets a deploy tool pre-create the exact rows a runtime gameModelEnsureContainer will later ask for, e.g. a placement-id digest per level object. Allowed only on a type that is admin-instantiable or carries a bindPolicy, so a player cannot have squatted the key first (BAD_REQUEST naming the tempId otherwise). May not begin with `seed:`. A row that already exists under this key is adopted only when its ownerUserId equals this row's (a re-seed); a row with a different owner -- one a player claimed first under a permissive or shadow-mode bind policy -- is a per-row BAD_REQUEST and nothing is written. On adoption properties are upserted onto it and idMapJson maps the tempId to it; containersCreated does not count it.
+  """
+  bindingKey: String
   """Human-friendly display name."""
   displayName: String!
   """Optional description."""
@@ -13958,9 +14315,51 @@ input CreateSessionInput {
   metadataJson: String
   """Initial participants besides the creator."""
   participantUserIds: [BigInt!]
+  """
+  Seat cap: the most participants that may be joined at once. Omit for unbounded. Initial participants count against it.
+  """
+  maxParticipants: Int
+  """
+  Initial admission: 'open' (default) or 'locked' (only the initial participants may join/reconnect until the host unlocks).
+  """
+  admission: String
+  """
+  Seconds a session may sit with nobody joined before the server ends it as abandoned. Omit for the platform default; 0 disables the timeout for this session.
+  """
+  emptyTimeoutSec: Int
+  """
+  How the roster is judged: 'actor' (default) expires a joined participant with no fresh Buddy actor in the app after the join grace window; 'none' never expires anybody. Use 'none' for turn-based play that talks GraphQL and channel pings and never replicates an actor (kit.matches does), where the roster's only exits are leave and end.
+  """
+  presence: String
+  """
+  Optional: copy the app's template rows of the listed container types into the new session at creation (see SessionSeedInput). At most 2,000 rows per session; above that the creation is refused with the count and no session exists. The count of rows stamped is on the session's `created` event (containersSeeded) and on GmSession.seededContainerCount of the create response.
+  """
+  seedFromApp: SessionSeedInput
+  """
+  Optional: host the session inside a grid (a game within the game). Only the grid's current owner may do this, and the app's session creation policy still applies. Player modules on that grid list it through sessions_list; everyone else sees it as an ordinary session carrying gridId.
+  """
+  gridId: BigInt
+  """
+  Optional idempotency key. Replaying with the same key and identical input returns the first session instead of creating a second; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
+  """
+  idempotencyKey: String
 }
 
-"""Join an existing session."""
+"""
+Stamp a new session's world rows from the app's template rows at creation. For every app-scoped (sessionId null) container of each listed type that carries a bindingKey, one row is created in the new session with the same bindingKey, displayName, description, metadata and ownerUserId, inside the session creation transaction: the session exists with its rows or does not exist. The template rows were written by an admin (gameModelSeed), so the copy is not subject to the creator's instantiableBy or bindPolicy. Later changes to an app row do not propagate and a session row never writes back. Copies are marked (seeded_from_container_id) and are the only rows the ended-session retention sweep may drop, on a tier that has enabled it.
+"""
+input SessionSeedInput {
+  """
+  Container types whose app-scoped keyed rows are copied into the new session. Each must be instantiableBy 'admin' or carry a bindPolicy (the same rule gameModelSeed applies to a caller bindingKey: no player may have claimed one of its keys); a plain member type is BAD_REQUEST, as is an undefined type. Types with no app-scoped keyed rows contribute nothing.
+  """
+  typeNames: [String!]!
+  """
+  'defaults' (default): the copies start at the type's property defaults, no property rows written. 'app': each app row's current property rows are copied onto its copy, raw (not visibility-filtered; the copy is server-side and the source is admin-authored).
+  """
+  initialState: String
+}
+
+"""Join an existing session, or reconnect to one you are already in."""
 input JoinSessionInput {
   """The app (tenant) that owns the session."""
   appId: BigInt!
@@ -13968,6 +14367,28 @@ input JoinSessionInput {
   sessionId: String!
   """Optional participant role to join as."""
   role: String
+  """
+  Optional: the Buddy actor uuid this client is playing as (32 hex characters, dashes accepted). It must be the caller's own actor. When given, the participant's presence is that actor's presence in the app; a new actor after a reconnect should rejoin with its uuid. When omitted, any fresh actor of this user in the app keeps the participant present.
+  """
+  actorUuid: String
+  """
+  Optional idempotency key. Replaying with the same key and identical input returns the first result (same incarnation) instead of joining again. Keys expire after 24h.
+  """
+  idempotencyKey: String
+}
+
+"""Leave a session you are joined to."""
+input LeaveSessionInput {
+  """The app (tenant) that owns the session."""
+  appId: BigInt!
+  """The session id to leave."""
+  sessionId: String!
+  """
+  The incarnation gameModelJoinSession returned to THIS client (a creator starts at 1; gameModelSessionSnapshot shows every participant's). Required: if a newer client has since rejoined as the same user, the call is refused with SESSION_INCARNATION_STALE and the newer client stays joined, so a superseded client can never remove the one that took over.
+  """
+  incarnation: Int!
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
 }
 
 """Set or clear the current-turn user of a session."""
@@ -13978,6 +14399,68 @@ input SetSessionTurnInput {
   sessionId: String!
   """The user whose turn it now is (NULL clears the turn)."""
   userId: BigInt
+  """
+  Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since, so a stale host never sets the turn.
+  """
+  expectedHostTerm: Int
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
+}
+
+"""
+Change who may still join a session. Host or app admin ('manage_apps').
+"""
+input SetSessionAdmissionInput {
+  """The app (tenant) that owns the session."""
+  appId: BigInt!
+  """The session id to update."""
+  sessionId: String!
+  """
+  'open' (anyone the app admits), 'locked' (only participants who already joined may reconnect), 'closed' (nobody, not even by reconnection).
+  """
+  admission: String!
+  """
+  Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since.
+  """
+  expectedHostTerm: Int
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
+}
+
+"""
+Hand the session host role to another joined participant. Host or app admin ('manage_apps').
+"""
+input TransferSessionHostInput {
+  """The app (tenant) that owns the session."""
+  appId: BigInt!
+  """The session id."""
+  sessionId: String!
+  """The joined participant who becomes host."""
+  toUserId: BigInt!
+  """
+  Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since.
+  """
+  expectedHostTerm: Int
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
+}
+
+"""End a session. Host or app admin ('manage_apps')."""
+input EndSessionInput {
+  """The app (tenant) that owns the session."""
+  appId: BigInt!
+  """The session id to end."""
+  sessionId: String!
+  """
+  Terminal status: 'completed' (default; the match ran its course) or 'abandoned'. Either way every joined participant is marked left (session_ended) and admission becomes closed.
+  """
+  reason: String
+  """
+  Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since.
+  """
+  expectedHostTerm: Int
+  """Optional idempotency key (24h)."""
+  idempotencyKey: String
 }
 
 """Instantiate a container (runtime entity)."""
@@ -14471,6 +14954,10 @@ input DeployPlayerComputeInput {
   """
   tickHz: Float
   """
+  SERVER only (DN-10): grid event bus subscriptions. Each entry is an event name this module's on_event receives when another module on the same grid calls emit_event with it; '*' subscribes to every name. Omit to keep the module's current subscriptions; pass [] to clear them. Addressed events (emit_event with target = this module's name) arrive either way.
+  """
+  gridEvents: [String!]
+  """
   Deploy in draft mode (live-coding iteration): the module runs for its author but its spatial egress is suppressed server-side, so no other session in the grid observes its world effects. Omit or false for a normal deploy.
   """
   draft: Boolean
@@ -14595,9 +15082,9 @@ input CreateCrowdyStudioProjectInput {
   """Optional editor pairing preference; defaults to PAIRED."""
   pairingPreference: CrowdyStudioPairingPreference = PAIRED
   """
-  Supported crowdy-compute-sdk pin; defaults to the current 0.1.5 authoring pin.
+  Supported crowdy-compute-sdk pin; defaults to the current 0.1.8 authoring pin.
   """
-  sdkVersion: String = "0.1.5"
+  sdkVersion: String = "0.1.8"
   """Supported guest ABI pin; defaults to ABI 0."""
   abiVersion: Int = 0
   """
@@ -15004,6 +15491,19 @@ type Subscription {
     """
     appId: BigInt!
   ): GameModelActivePlayerCountChange!
+  """
+  Stream the revisions of one session as they commit: joins, rejoins, leaves, presence expiries, host changes, admission changes, turn changes, and the end. There is no bootstrap event: pull gameModelSessionSnapshot first (or pass afterRevision to replay retained events from there). Revisions are strictly increasing; on a gap or after a reconnect, pull the snapshot again. Cross-replica, best-effort wakeup over a bounded oldest-drop buffer; the events table is the record. Requires a valid token.
+  """
+  gameModelSessionChanged(
+    """The app (tenant) that owns the session."""
+    appId: BigInt!
+    """The session to stream."""
+    sessionId: String!
+    """
+    Optional: replay retained events with a revision above this before streaming live ones. Omit to stream only what commits after you subscribe.
+    """
+    afterRevision: String
+  ): GmSessionEvent!
   """
   Push notification whenever a container in the app changes: an invoke mutated it, a direct gameModelSetProperty wrote it, or it was created/deleted. Metadata only (containerId, typeName, changedKeys — no property values); pull the visibility-filtered state with gameModelContainerState on receipt. Post-commit and best-effort (a dropped event costs one missed pull, never correctness) — durable reads remain the source of truth. Optional typeName/sessionId filters narrow delivery. Fans out across all API replicas. Requires a valid token. Replaces interval polling with pull-on-push.
   """

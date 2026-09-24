@@ -88,9 +88,9 @@ test('completion and hover merge workspace and generated platform symbols', () =
     vfs.documents(),
   );
   assert.match(hover.contents.value, /Wires user functions to the ABI exports/u);
-  assert.match(hover.contents.value, /Crate crowdy-compute-sdk 0\.1\.5/u);
-  assert.match(hover.contents.value, /source a43147b89a4e/u);
-  assert.match(hover.contents.value, /SDK 0\.1\.5/u);
+  assert.match(hover.contents.value, /Crate crowdy-compute-sdk 0\.1\.8/u);
+  assert.match(hover.contents.value, /source bbd0a38014a0/u);
+  assert.match(hover.contents.value, /SDK 0\.1\.8/u);
 
   const fieldDocument = open(
     vfs,
@@ -105,7 +105,7 @@ test('completion and hover merge workspace and generated platform symbols', () =
     )
     .find((item) => item.label === 'message');
   assert.equal(fieldCompletion?.kind, 5);
-  assert.match(fieldCompletion?.detail ?? '', /crowdy-compute-sdk@0\.1\.5/u);
+  assert.match(fieldCompletion?.detail ?? '', /crowdy-compute-sdk@0\.1\.8/u);
   const fieldHover = analysis.hover(
     fieldDocument,
     { line: 0, character: 12 },
@@ -155,7 +155,7 @@ test('target-prefixed workspaces expose cross-file symbols and lifecycle guidanc
 });
 
 test('platform index loader is strict and bounded', () => {
-  assert.equal(loadPlatformIndex(EMBEDDED_PLATFORM_INDEX).symbols.length, 725);
+  assert.equal(loadPlatformIndex(EMBEDDED_PLATFORM_INDEX).symbols.length, 748);
   assert.equal(EMBEDDED_PLATFORM_INDEX.schemaVersion, 2);
   assert.equal(EMBEDDED_PLATFORM_INDEX.crates.length, 8);
   assert.deepEqual(
@@ -178,7 +178,7 @@ test('platform index loader is strict and bounded', () => {
   );
   assert.equal(
     EMBEDDED_PLATFORM_INDEX.contentHash,
-    '3f5f39d46f732a346033aaf2435528a183e2ab0d0e3691f29c3fa3ecada18ffb',
+    '5540301f69ad5ee2566e142227c2cc9730b45e6b3710189a7e1900d0877af114',
   );
   assert.throws(
     () => loadPlatformIndex({ ...EMBEDDED_PLATFORM_INDEX, token: 'secret' }),

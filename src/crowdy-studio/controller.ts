@@ -15,6 +15,7 @@ import type {
   CrowdyStudioGitHubStatus,
   CrowdyStudioGitHubTransport,
 } from './github/transport.js';
+import { githubNewRepositoryUrl, githubRepositorySlug } from './github/new-repo.js';
 import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
@@ -38,6 +39,7 @@ import {
   type CrowdyStudioTarget,
   type CrowdyStudioProjectSynchronization,
 } from './models.js';
+import { parseClientTickIntervalMs } from './client-tick-interval.js';
 import {
   createCrowdyStudioStarterProject,
   type CrowdyStudioNewProjectOptions,
@@ -147,6 +149,8 @@ export interface CrowdyStudioState {
   github: CrowdyStudioGitHubStatus | null;
   githubMessage?: string;
   githubBusy: boolean;
+  /** `owner/name` the modder was sent to create on GitHub; the bind input is prefilled with it. */
+  githubPendingRepo?: string;
   runtime: CrowdyStudioRuntimeStatus;
   runtimeSync: CrowdyStudioRuntimeSync;
   agentActivity: 'IDLE' | 'PREPARING' | 'WORKING' | 'PAUSED';
@@ -212,6 +216,11 @@ export interface CrowdyStudioControllerOptions {
    * {@link PlayerCodeBrokerOptions.tickIntervalMs}. The host only ticks
    * when this is set (or when this default of 1000 ms applies). Omit/0 on
    * a raw {@link PlayerCodeBroker} is invoke-only.
+   */
+  /**
+   * Override CLIENT tick cadence. When omitted, Studio reads
+   * `[package.metadata.crowdy] tick_interval_ms` from the project's CLIENT
+   * Cargo.toml (default 1000, clamped 16–1000).
    */
   clientTickIntervalMs?: number;
   autosaveMs?: number;
@@ -552,6 +561,7 @@ export class CrowdyStudioController {
       github: null,
       githubMessage: undefined,
       githubBusy: false,
+      githubPendingRepo: undefined,
     });
     this.restartVisibleSurfacePolling();
     // Status only; a pull is always the modder's explicit action.
@@ -803,6 +813,44 @@ export class CrowdyStudioController {
   }
 
   /**
+   * Open GitHub's "new repository" page prefilled for the open project
+   * (connected login as owner, project name as the repository name, private).
+   * The App cannot create the repository itself — it holds installation
+   * tokens only — so this is the modder's click; what comes back is a
+   * repository the bind form already names. Returns the URL it opened.
+   *
+   * The card's bind input is prefilled with `owner/name` so that, on a host
+   * whose GitHub transport carries the identity session (hosted Studio), Bind
+   * is the next click. A game's app token cannot bind; there the message says
+   * to finish in Crowdy Studio.
+   */
+  createGitHubRepository(): string {
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    const project = this.requireProject();
+    const github = this.state.github;
+    if (!github?.connected) {
+      throw new Error('Connect GitHub first; the repository is created under your GitHub account.');
+    }
+    const owner = github.accountLogin ?? undefined;
+    const name = githubRepositorySlug(project.metadata.name);
+    const url = githubNewRepositoryUrl({
+      owner,
+      name,
+      description: project.metadata.description ?? `Crowdy Studio mod: ${project.metadata.name}`,
+    });
+    if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer');
+    const slug = owner ? `${owner}/${name}` : name;
+    this.update({
+      githubPendingRepo: slug,
+      githubMessage:
+        github.repositorySelection === 'selected'
+          ? `Create ${slug} on GitHub, add it to your Crowdy Studio installation, then bind it (Push this project).`
+          : `Create ${slug} on GitHub, then bind it (Push this project).`,
+    });
+    return url;
+  }
+
+  /**
    * Bind the open project to `owner/repo` or `owner/repo@branch`, choosing
    * which side is the truth for the first commit. Refuses over unsaved edits
    * so what is pushed (or replaced) is exactly what the server holds. The
@@ -839,6 +887,7 @@ export class CrowdyStudioController {
       await this.reloadProject();
       this.update({
         github,
+        githubPendingRepo: undefined,
         githubMessage:
           initial === 'PUSH_PROJECT'
             ? `Pushed the project to ${github.owner}/${github.repo}@${github.branch}. It is the working tree now; edits commit as you save.`
@@ -1428,7 +1477,13 @@ export class CrowdyStudioController {
       artifactHash: artifact.artifactHash,
       fuelPerDispatch: artifact.fuelPerDispatch,
       onPresentation: this.options.onPresentation,
-      tickIntervalMs: this.options.clientTickIntervalMs ?? 1_000,
+      tickIntervalMs:
+        this.options.clientTickIntervalMs ??
+        parseClientTickIntervalMs(
+          this.requireProject().files.find(
+            (file) => file.target === 'CLIENT' && file.path === 'Cargo.toml',
+          )?.content,
+        ),
     };
     const broker =
       this.options.brokerFactory?.(brokerOptions) ??

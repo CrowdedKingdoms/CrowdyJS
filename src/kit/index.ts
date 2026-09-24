@@ -110,7 +110,9 @@ export {
   MatchesKit,
   turnExpired,
   type KitMatch,
+  type KitMatchFinishResult,
   type KitMatchScore,
+  type KitMatchSessionEnd,
   type MatchesKitOptions,
 } from './matches.js';
 export { InventoryKit, type InventoryKitOptions, type KitItemStack } from './inventory.js';

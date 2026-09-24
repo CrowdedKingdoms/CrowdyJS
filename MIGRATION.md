@@ -1,3 +1,183 @@
+# CrowdyJS v17.7 — grid-scoped parity (DN-10)
+
+**Additive, plus one coordinated break.** `17.7.0` (2026-09-22), on top of the
+ck-api grid-parity release (grid channels, the grid event bus, grid sessions,
+grid-scoped tokens). Everything that worked keeps its signature, with one
+exception: **the crowdy-dsh bridge protocol is now v4**, so this CrowdyJS
+pairs with `@crowdedkingdoms/crowdy-dsh` 0.4 and later (a v3 worker's frames
+are dropped, as every version bump does).
+
+- **`client.grid(appId, gridId, box?)`** returns a `GridScope`: one grid,
+  bound once. `channels` (list/create/join/leave/send grid channels),
+  `sessions` (games hosted inside the grid), `model` (the player-tier Game
+  Model), `compute` (deploy/invoke/client mods) and `send` (replication whose
+  ORIGIN is in the grid; reach follows `distance`). World helpers check the
+  chunk locally and throw `GridScopeError` before any request.
+- **`client.grids`**: `mintToken` (a grid-scoped token: an app token narrowed
+  to one grid, deny-by-default on the server), `createChannel`, `channels`.
+- **New subpath `@crowdedkingdoms/crowdyjs/grid-program`**: run
+  player-authored JS with the full SDK inside a grid. The program calls
+  `createGridProgramClient(port)` in a network-less sandbox; the page calls
+  `hostGridProgram({ port, scope, graphqlUrl, graphqlWsUrl })`, which relays
+  HTTP and realtime with a grid token the program never sees.
+- **`startGridMod` / `createGridHostCalls`**: one runtime for Rust CLIENT
+  mods and JS grid programs. `createGridHostCalls` answers every CLIENT host
+  call in the platform catalog through CrowdyJS, confined to the grid, with
+  optional game-local fast paths.
+- **Player runtime.** The broker allowlist is built from the platform host
+  catalog (`GENERATED_HOST_CATALOG`, drift-checked against ck-api's
+  `compute-toolchain/host-catalog.json`). New client host calls:
+  `emit_channel`, `emit_event` (a page-local grid event bus; `on_event`
+  delivery), `container_get_batch`, `edge_add`/`edge_delete`,
+  `sessions_list`, `avatar_state_get`. `PlayerCodeGridBounds` takes an
+  optional `gridId` (the event bus and self-grid checks need it), and the
+  broker takes `moduleName` and `eventBus`.
+- **Sessions**: `GmSession.gridId`; `gameModel.sessions({ gridId })`;
+  `createSession({ gridId })` (grid owner only).
+- **Transport seams**: `createCrowdyClient({ fetch, realtime: { webSocketImpl } })`.
+- **crowdy-dsh bridge v4**: `grid.context`, `grid.programRun`,
+  `grid.programStatus`, answered through a new optional
+  `CrowdyStudioDshHost.grid` capability.
+
+# CrowdyJS v17.5 — bulk containers
+
+**Additive.** `17.5.0` (2026-09-16), on top of ck-api `v2.6.0`. Tracks the cks-game-api bulk-container changes of 2026-09-16
+(paging in SQL, seed `bindingKey`, `gameModelContainerStates`, `seedFromApp`,
+container-type `scope`). Every existing method keeps its signature.
+
+- **`containers` pages for real, and the page has bounds.** An omitted `limit`
+  now returns **200 rows** (it used to return every row of the type) and the
+  maximum is **1,000** (`BAD_REQUEST` above). Without `where` the page is read
+  in SQL; with `where` the predicates are evaluated after a bounded read
+  (10,000 rows of the type; larger is refused). **A caller that relied on an
+  unbounded list must page.** `bindingKey` is now forwarded by the SDK's
+  document — before this the get-by-key read documented on `containers` was
+  silently a full list.
+- **New: `containerStates({ appId, containerIds })`** — the bulk twin of
+  `containerState`, up to 500 ids, same per-row visibility, missing ids
+  omitted, input order kept.
+- **`seed`: a container may name its own `bindingKey`** (on a type that is
+  `instantiableBy: 'admin'` or carries a `bindPolicyJson`; not beginning with
+  `seed:`), so a runtime `gameModelEnsureContainer` later resolves the same
+  row; a caller-keyed row that already exists is adopted only if its owner
+  matches, so a player who claimed the key first is never written onto; at
+  most **1,000 containers per call**, all-or-nothing. A container type
+  may declare **`scope: 'app' | 'session'`**.
+- **`createSession({ seedFromApp: { typeNames, initialState? } })`** stamps
+  the app's keyed template rows of those types into the new session in the
+  creation transaction (at most 2,000 rows; refused above). `GmSession` gains
+  `seededContainerCount` (create response only; null on later reads); the
+  `created` event payload carries `containersSeeded`. Template types must be
+  `instantiableBy: 'admin'` or carry a `bindPolicyJson`; a plain member type
+  and an `'app'`-scoped type are refused. **Retention is opt-in and touches only the stamped copies:** on a
+  tier whose operator sets `GM_SESSION_CONTAINER_RETENTION_DAYS` (default 0,
+  off), the copies of a session ended that long ago are dropped; rows a player
+  ensured or an admin created in the session are never purged, so a session
+  used as a save keeps its hand-made state either way. A tier that runs
+  `seedFromApp` with retention off keeps every copy of every match.
+- **`kit.matches.create({ seedFromApp })`** forwards the same option.
+- **`GmContainerType.scope`** is read back; on an `'app'`-scoped type,
+  `createContainer` / `gameModelEnsureContainer` with a `sessionId` are refused
+  with `CONTAINER_TYPE_APP_SCOPED`; flipping a type to `'app'` is refused while
+  it holds session-scoped rows.
+
+# CrowdyJS v17.4 — the session system
+
+**Additive.** `17.4.0` (2026-09-14), on top of ck-api `v2.3.0`. Tracks cks-game-api
+PR #319 (the game-model session system). Every existing session method keeps its signature and every
+field it returned; the SDK adds what the server now knows about a session.
+
+- **Roster, admission, capacity, host.** `GmSession` gains `admission`
+  (`open | locked | closed`), `maxParticipants`, `participantCount`,
+  `hostUserId`, `hostTerm`, `revision`, `endedAt`, `endReason`, `createdAt`.
+  `createSession` accepts `maxParticipants`, `admission`, `emptyTimeoutSec`,
+  `presence` and `idempotencyKey`; `sessions` filters by `admission` and
+  `hostUserId` and takes a `limit`.
+- **New methods on `client.gameModel`:** `leaveSession`, `setSessionAdmission`,
+  `transferSessionHost`, `endSession` (host or app admin; all accept
+  `expectedHostTerm` and `idempotencyKey`), `sessionSnapshot`, `sessionEvents`,
+  `sessionInspect` (`manage_apps`), and the `sessionChanged` subscription
+  (`{ appId, sessionId, afterRevision? }`; same handler shape as
+  `containerChanged`). The contract is the player-count feed's: pull the
+  snapshot, apply events above its revision, re-pull on a gap.
+- **Reconnection is a rejoin.** `joinSession` on a session you are in returns
+  your row with `incarnation + 1`; the join result is now the full roster row
+  (`state`, `incarnation`, `actorUuid`, `joinedAt`, `leftAt`, `leftReason`).
+  **`leaveSession` requires that `incarnation`** — there is no "leave
+  regardless", so a stale client can never remove the one that took over
+  (`SESSION_INCARNATION_STALE`).
+- **Presence is your actor — a behaviour change every consumer inherits from
+  the server, with no SDK call involved.** A joined participant with no fresh
+  Buddy actor in the app after the join grace window (60 s by default) is
+  marked `left` / `presence_expired`, and a session nobody has been joined to
+  for longer than its `emptyTimeoutSec` (5 min by default; `0` disables) is
+  ended as `abandoned`. A client that only speaks GraphQL therefore drops out
+  of a session it never replicates in. Pass `actorUuid` on join to bind
+  presence to one specific actor (your own; 32-hex, the uuid you send on
+  `udp.sendActorUpdate` / `session.self.uuid`). Do **not** pass the match kit's
+  channel-ping uuid — it never spawns in Buddy.
+- **Opting out: `presence: 'none'`.** A session created with
+  `createSession({ ..., presence: 'none' })` is never judged by actor presence
+  (`GmSession.presence` reports the mode; `sessionInspect` shows its rows as
+  `presence: 'none'`). Its roster's only exits are `leaveSession`, `endSession`
+  and the empty timeout once everyone has left. Use it for turn-based play that
+  talks GraphQL and channel pings and never replicates an actor. The mode is
+  fixed at creation. A GraphQL-only session that does **not** opt out empties
+  after the grace window and is abandoned after the timeout.
+- **The `sessionChanged` push is per datacenter; the events table is the
+  record.** A revision committed in one region wakes subscribers on that
+  region's API replicas; `sessionEvents(afterRevision)` (and the replay the
+  subscription performs on connect) reads the durable rows, so a subscriber
+  reconnecting anywhere catches up from the revision it last saw.
+- **Error codes added:** `SESSION_FULL`, `SESSION_LOCKED`, `SESSION_CLOSED`,
+  `SESSION_ENDED`, `SESSION_NOT_PARTICIPANT` (the caller is not joined),
+  `SESSION_TARGET_NOT_PARTICIPANT` (the user named to `transferSessionHost` is
+  not joined), `SESSION_INCARNATION_STALE`, `SESSION_HOST_TERM_STALE` — all on
+  `CrowdyGraphQLError.code`.
+- **`kit.matches` creates its session with `presence: 'none'`, and now leaves
+  and ends it.** A kit match is GraphQL plus channel pings; its `actorUuid` is
+  only the channel-message sender id and never spawns in Buddy, so under the
+  default mode every player would be expired after the grace window. Because
+  nothing expires anybody, the kit owns the roster's exits: new
+  **`kit.matches.leave(match, incarnation?)`** calls `leaveSession` with the
+  incarnation the kit remembered from `create` / `join` on this instance (or
+  the one you pass) and leaves the match channel; **`finish()` now ends the
+  backing session** (`endSession`, reason `completed`) after a successful
+  `end_match`, so the roster is cleared and the session's events become
+  eligible for retention; the result's `sessionEnd` says what happened to the
+  session (`'ended'`, `'already_ended'` for a replayed finish, `'forbidden'`
+  when `end_match` admitted the caller but the session did not -- the creator
+  who already left, or the app's elected host who is not the session host -- in
+  which case the match is finished, the session is not, and nothing is thrown;
+  an app admin can `gameModel.endSession` it). An emptied
+  session that was never finished is abandoned by the empty timeout. Otherwise the kit is unchanged: capacity
+  still lives in `MatchMeta` and join does not bind an actor. Moving it onto
+  session capacity / admission / host is a later, separate change.
+
+No removals.
+
+# CrowdyJS v17.3 — "Create repository on GitHub" (additive)
+
+`17.3.0` (2026-09-14), tracks ck-api `v2.3.0`. Nothing removed. (Written as 17.1 while two other trains — binary-relay bundles 17.1.0 and Crowdy Games hosting 17.2.0 — shipped ahead of it.)
+
+- `CrowdyStudioGitHubStatus.repositorySelection` (`'all' | 'selected' | null`):
+  which repositories the installation covers. A repository created on GitHub
+  afterwards must be added to a `selected` installation (at `installUrl`)
+  before it can be bound.
+- `githubNewRepositoryUrl({ owner, name, description, visibility })` and
+  `githubRepositorySlug(name)` (from `@crowdedkingdoms/crowdyjs/crowdy-studio`):
+  GitHub's `/new` page prefilled for a mod. The App holds installation tokens
+  only and cannot create a repository; this makes the modder's own click a
+  short one.
+- `CrowdyStudioController.createGitHubRepository()` opens that page for the
+  open project (connected login as owner, project name slugged, private) and
+  sets `state.githubPendingRepo` to `owner/name`; the card's bind input is
+  prefilled with it and defaults to PUSH_PROJECT. On a game's app token the
+  bind itself still happens in hosted Studio; the message says so.
+- ck-api `v2.3.0`: a PUSH_PROJECT bind seeds a `README.md` (project name,
+  description, layout) when the branch has none, and treats an empty-tree
+  branch as empty rather than missing.
+
 # CrowdyJS v17.2 — publish to Crowdy Games; sign-in under the shell
 
 **Additive.** `17.2.0` (2026-09-14). Tracks ck-api `v2.1.0` (third-party game

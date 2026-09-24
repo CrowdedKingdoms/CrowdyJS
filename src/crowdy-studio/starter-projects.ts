@@ -7,7 +7,7 @@ import {
   type CrowdyStudioTarget,
 } from './models.js';
 
-const SDK_VERSION = '0.1.5';
+const SDK_VERSION = '0.1.8';
 
 export interface CrowdyStudioNewProjectOptions {
   appId: string;
@@ -57,18 +57,7 @@ function starterFiles(
     {
       target,
       path: 'Cargo.toml',
-      content: `[package]
-name = "${name}"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-crowdy-compute-sdk = "${SDK_VERSION}"
-serde_json = "1"
-`,
+      content: cargoToml(target, name),
     },
     {
       target,
@@ -76,6 +65,30 @@ serde_json = "1"
       content: target === 'SERVER' ? serverSource() : clientSource(),
     },
   ];
+}
+
+function cargoToml(target: CrowdyStudioTarget, name: string): string {
+  const clientTick =
+    target === 'CLIENT'
+      ? `
+# How often the browser calls CLIENT on_tick (clamped 16–1000 ms).
+# 1000 = HUD/text. 50 = physics minigames (pool). 16 = shooters, if a tick stays cheap.
+[package.metadata.crowdy]
+tick_interval_ms = 1000
+`
+      : '';
+  return `[package]
+name = "${name}"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+${clientTick}
+[dependencies]
+crowdy-compute-sdk = "${SDK_VERSION}"
+serde_json = "1"
+`;
 }
 
 function serverSource(): string {
@@ -108,11 +121,18 @@ fn on_init() {
 }
 
 fn on_tick(_dt_ms: u32) {
-    // The host only ticks when PlayerCodeBroker.tickIntervalMs is set
-    // (omit/0 = invoke-only). Client host calls are allow-listed by
-    // PlayerCodeBroker. Presentation effects (for example HUD updates)
-    // never receive the page's app token. Type "crowdy::" for lifecycle
-    // and host-call completions.
+    // dt_ms is wall time since the last tick. The host interval comes from
+    // Cargo.toml [package.metadata.crowdy] tick_interval_ms (default 1000).
+    // Client host calls are allow-listed by PlayerCodeBroker. Presentation
+    // effects (for example HUD updates) never receive the page's app token.
+    // Type "crowdy::" for lifecycle and host-call completions.
+    //
+    // Mouse (holodeck canvas only; Studio chrome is omitted). Drain every tick:
+    //   let data = crowdy::api::pointer_clicks().unwrap_or(serde_json::json!({}));
+    // data["clicks"] = [{ "t": "down"|"up", "button": 0, "atMs", "heldMs", "nx", "ny" }]
+    // data["buttons"] is MouseEvent.buttons (1 = left held).
+    // data["holdingMs"]["0"] is ms the left button has been down (power meter).
+    // Click-to-charge: start on left down, read holdingMs while held, fire on up.
 }
 
 fn on_invoke(payload: &[u8]) -> Vec<u8> {
