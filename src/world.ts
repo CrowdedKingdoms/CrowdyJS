@@ -222,8 +222,10 @@ export class ActorClient {
       throw new Error('Actor must join a chunk before sending voxel updates');
     }
     validateChunkCoordinates(chunk);
+    const { voxelState, ...rest } = input;
     return this.udp.sendVoxelUpdateAndWait({
-      ...input,
+      ...rest,
+      ...(voxelState != null && voxelState !== '' ? { voxelState } : {}),
       appId: this.appId,
       chunk,
       uuid: this.uuid,

@@ -19,9 +19,74 @@ import type { UdpNotification } from './realtime.js';
 
 export const RELAY_MAX_DATAGRAM_BYTES = 1232;
 
+/**
+ * MESSAGE_BUNDLE framing: `[1B type=2]{[2B u16 LE len][full message]}...` in
+ * both directions. No count field, every member is a complete signed message,
+ * the wrapper carries no auth of its own, and bundles never nest. The server
+ * has always bundled notifications; Buddy v0.27.0+ accepts client bundles too
+ * ({@link packMessageBundle}, sent by the binary relay transport).
+ */
+export const BUNDLE_HEADER_BYTES = 1;
+export const BUNDLE_LENGTH_PREFIX_BYTES = 2;
+/** Cap on members per datagram, matching Buddy's reader and writer. */
+export const RELAY_MAX_BUNDLE_MEMBERS = 32;
+/** Largest single message that can travel inside a bundle at all. */
+export const RELAY_MAX_BUNDLE_MEMBER_BYTES =
+  RELAY_MAX_DATAGRAM_BYTES - BUNDLE_HEADER_BYTES - BUNDLE_LENGTH_PREFIX_BYTES; // 1229
+
+/**
+ * Bytes a type-2 datagram carrying `members` would occupy (header included).
+ */
+export function bundleSizeOf(members: readonly Uint8Array[]): number {
+  let size = BUNDLE_HEADER_BYTES;
+  for (const m of members) size += BUNDLE_LENGTH_PREFIX_BYTES + m.length;
+  return size;
+}
+
+/**
+ * Pack complete signed messages into one datagram. One member is returned
+ * unwrapped — the 3-byte wrapper buys nothing for a lone message, and the
+ * server does the same on the downlink. Two or more become a MESSAGE_BUNDLE.
+ *
+ * Throws on an empty list, a zero-length member, more than
+ * {@link RELAY_MAX_BUNDLE_MEMBERS} members, or a frame that would exceed
+ * {@link RELAY_MAX_DATAGRAM_BYTES}: callers decide what to flush before they
+ * get here (see `BinaryRelayTransport`).
+ */
+export function packMessageBundle(members: readonly Uint8Array[]): Uint8Array {
+  if (members.length === 0) throw new Error('MESSAGE_BUNDLE needs at least one member');
+  if (members.length > RELAY_MAX_BUNDLE_MEMBERS) {
+    throw new Error(`MESSAGE_BUNDLE holds at most ${RELAY_MAX_BUNDLE_MEMBERS} members`);
+  }
+  for (const m of members) {
+    if (m.length === 0) throw new Error('MESSAGE_BUNDLE member cannot be empty');
+  }
+  if (members.length === 1) return members[0];
+  const size = bundleSizeOf(members);
+  if (size > RELAY_MAX_DATAGRAM_BYTES) {
+    throw new Error(`MESSAGE_BUNDLE of ${size} bytes exceeds ${RELAY_MAX_DATAGRAM_BYTES}`);
+  }
+  const out = new Uint8Array(size);
+  const view = new DataView(out.buffer);
+  out[0] = WireMessageType.MESSAGE_BUNDLE;
+  let off = BUNDLE_HEADER_BYTES;
+  for (const m of members) {
+    view.setUint16(off, m.length, true);
+    off += BUNDLE_LENGTH_PREFIX_BYTES;
+    out.set(m, off);
+    off += m.length;
+  }
+  return out;
+}
+
 /** Wire opcodes (mirror of game-api / Buddy `UdpMessageType`). */
 export const WireMessageType = {
   MESSAGE_BUNDLE: 2,
+  // Buddy v0.30.0: the client advertises what it can read; a session that
+  // advertised BUNDLE_SIGNED receives its bundles with ONE trailing HMAC over the
+  // datagram and members without per-member HMACs (containsAuth = 0).
+  CLIENT_CAPABILITIES: 29,
+  MESSAGE_BUNDLE_SIGNED: 30,
   GENERIC_ERROR_MESSAGE: 3,
   CHANNEL_MESSAGE_REQUEST: 17,
   CHANNEL_MESSAGE_NOTIFICATION: 18,
@@ -38,6 +103,11 @@ export const WireMessageType = {
   CLIENT_EVENT_NOTIFICATION_2: 138,
   SERVER_EVENT_NOTIFICATION_2: 139,
   SINGLE_ACTOR_MESSAGE: 142,
+  // Buddy v0.25.0: webcam video pair (audio's shape, payload = one SDK
+  // fragment, see media/video-frames.ts) and the server-only actor-left downlink.
+  CLIENT_VIDEO_PACKET_2: 143,
+  CLIENT_VIDEO_NOTIFICATION_2: 144,
+  ACTOR_LEFT_NOTIFICATION_2: 145,
 } as const;
 
 const SPATIAL_HEADER_SIZE = 68;
@@ -218,6 +288,44 @@ async function serializeSpatial(
   return out;
 }
 
+/** CLIENT_CAPABILITIES flags word (Buddy v0.30.0). */
+export const ClientCapability = {
+  /** This client parses MESSAGE_BUNDLE_SIGNED (one HMAC per downlink bundle). */
+  BUNDLE_SIGNED: 1,
+} as const;
+
+/** Every capability this SDK build understands. */
+export const SDK_CAPABILITIES: number = ClientCapability.BUNDLE_SIGNED;
+
+/**
+ * Build a `CLIENT_CAPABILITIES` (29) datagram: the long-spatial layout the
+ * server already gates by session and HMAC, chunk (0,0,0), distance 0, no
+ * actor uuid, and a little-endian u32 of {@link ClientCapability} flags as the
+ * app payload. Buddy binds the flags to the router serving this flow and
+ * clears them when the slot goes, so the relay sends it on every `ready` and
+ * again every few seconds (a relay-side Buddy migration is silent to us).
+ */
+export function serializeClientCapabilities(
+  ctx: RelaySignContext,
+  appId: string | number | bigint,
+  flags: number = SDK_CAPABILITIES,
+  sequenceNumber = 0,
+): Promise<Uint8Array> {
+  const payload = new Uint8Array(4);
+  new DataView(payload.buffer).setUint32(0, flags >>> 0, true);
+  return serializeSpatial(
+    ctx,
+    WireMessageType.CLIENT_CAPABILITIES,
+    appId,
+    { x: 0, y: 0, z: 0 },
+    0,
+    0,
+    '',
+    payload,
+    sequenceNumber,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Uplink serializers (one per send* input shape)
 // ---------------------------------------------------------------------------
@@ -253,7 +361,7 @@ export function serializeVoxelUpdate(
   input: SpatialSendBase & {
     voxel: { x: number; y: number; z: number };
     voxelType: number;
-    voxelState: string;
+    voxelState?: string;
   },
 ): Promise<Uint8Array> {
   const voxelState = decodeBase64(input.voxelState ?? '');
@@ -291,6 +399,27 @@ export function serializeAudioPacket(
     input.decayRate ?? 0,
     input.uuid,
     decodeBase64(input.audioData ?? ''),
+    input.sequenceNumber ?? 0,
+  );
+}
+
+/**
+ * One video FRAGMENT (header + body slice from `fragmentFrame`) as a 143 datagram.
+ * Defaults match audio: `distance` 1, `decayRate` 0.
+ */
+export function serializeVideoPacket(
+  ctx: RelaySignContext,
+  input: SpatialSendBase & { videoData: string },
+): Promise<Uint8Array> {
+  return serializeSpatial(
+    ctx,
+    WireMessageType.CLIENT_VIDEO_PACKET_2,
+    input.appId,
+    input.chunk,
+    input.distance ?? 1,
+    input.decayRate ?? 0,
+    input.uuid,
+    decodeBase64(input.videoData ?? ''),
     input.sequenceNumber ?? 0,
   );
 }
@@ -587,6 +716,21 @@ function parseOne(bytes: Uint8Array): UdpNotification | null {
         ...spatialCommon(p),
         audioData: encodeBase64(p.payload),
       } as UdpNotification;
+    case WireMessageType.CLIENT_VIDEO_NOTIFICATION_2:
+      return {
+        __typename: 'ClientVideoNotification',
+        ...spatialCommon(p),
+        videoData: encodeBase64(p.payload),
+      } as UdpNotification;
+    case WireMessageType.ACTOR_LEFT_NOTIFICATION_2: {
+      // [1B reason]; anything but 1 reads as STALE (0) per the contract.
+      const { decayRate: _r, ...rest } = spatialCommon(p);
+      return {
+        __typename: 'ActorLeftNotification',
+        ...rest,
+        leftReason: p.payload.length >= 1 && p.payload[0] === 1 ? 1 : 0,
+      } as UdpNotification;
+    }
     case WireMessageType.CLIENT_TEXT_NOTIFICATION_2:
       return {
         __typename: 'ClientTextNotification',
@@ -633,22 +777,17 @@ export function parseRelayFrame(bytes: Uint8Array): UdpNotification[] {
   if (bytes.length < 1) return [];
 
   if (bytes[0] === WireMessageType.MESSAGE_BUNDLE) {
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const out: UdpNotification[] = [];
-    let off = 1;
-    while (off + 2 <= bytes.length) {
-      const len = view.getUint16(off, true);
-      off += 2;
-      if (off + len > bytes.length) break;
-      try {
-        const parsed = parseOne(bytes.subarray(off, off + len));
-        if (parsed) out.push(parsed);
-      } catch {
-        // skip unparseable bundle member
-      }
-      off += len;
-    }
-    return out;
+    return walkBundleMembers(bytes, bytes.length);
+  }
+
+  // MESSAGE_BUNDLE_SIGNED (Buddy v0.30.0): the same framing, then 32 trailing
+  // HMAC bytes over everything before them, keyed like a per-message client HMAC.
+  // Members carry containsAuth = 0 and parseOne reads them as such. This SDK does
+  // not verify downlink HMACs (it never did for per-member ones either); it strips
+  // the tail and walks. Only a session that advertised BUNDLE_SIGNED receives these.
+  if (bytes[0] === WireMessageType.MESSAGE_BUNDLE_SIGNED) {
+    if (bytes.length <= 1 + HMAC_SIZE) return [];
+    return walkBundleMembers(bytes, bytes.length - HMAC_SIZE);
   }
 
   try {
@@ -657,4 +796,25 @@ export function parseRelayFrame(bytes: Uint8Array): UdpNotification[] {
   } catch {
     return [];
   }
+}
+
+
+/** Walk `[u16 LE len][member]…` from offset 1 up to `end`, parsing each member. */
+function walkBundleMembers(bytes: Uint8Array, end: number): UdpNotification[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const out: UdpNotification[] = [];
+  let off = 1;
+  while (off + 2 <= end) {
+    const len = view.getUint16(off, true);
+    off += 2;
+    if (off + len > end) break;
+    try {
+      const parsed = parseOne(bytes.subarray(off, off + len));
+      if (parsed) out.push(parsed);
+    } catch {
+      // skip unparseable bundle member
+    }
+    off += len;
+  }
+  return out;
 }

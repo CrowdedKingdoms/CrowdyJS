@@ -24,7 +24,7 @@ export {
 export {
   mountCrowdyStudio,
   type CrowdyStudioHandle,
-  type MountCrowdyStudioAgentOptions,
+  type MountCrowdyStudioDshOptions,
   type MountCrowdyStudioOptions,
 } from './mount.js';
 export {
@@ -68,11 +68,30 @@ export {
   type CrowdyStudioNewProjectOptions,
 } from './starter-projects.js';
 export {
+  DEFAULT_CLIENT_TICK_INTERVAL_MS,
+  MAX_CLIENT_TICK_INTERVAL_MS,
+  MIN_CLIENT_TICK_INTERVAL_MS,
+  parseClientTickIntervalMs,
+} from './client-tick-interval.js';
+export {
   parseRustcDiagnostics,
   type CrowdyStudioDiagnostic,
   type CrowdyStudioDiagnosticSeverity,
   type CrowdyStudioDiagnosticSource,
 } from './diagnostics.js';
+export {
+  MODEL_LINT_QUERY,
+  modelLintDiagnostics,
+  modelLintSubjectPath,
+  type CrowdyModelLintFinding,
+  type CrowdyModelLintResult,
+} from './model-lint.js';
+export {
+  CrowdyModelLintLog,
+  MODEL_REFUSAL_CODES,
+  modelRefusalFrom,
+  type CrowdyModelRefusal,
+} from './model-lint-log.js';
 export {
   isCurrentDiagnosticVersion,
   type MonacoCrowdyStudioEditorOptions,
@@ -106,10 +125,6 @@ export {
   type WorkerLanguageClientOptions,
 } from '../live-coding/worker-transport.js';
 export {
-  CrowdyStudioAgentDomShell,
-  type CrowdyStudioAgentDomShellOptions,
-} from './agent-dom-shell.js';
-export {
   STUDIO_LAYOUT_STORAGE_KEY,
   STUDIO_PANE_IDS,
   StudioLayoutController,
@@ -129,5 +144,6 @@ export {
   type PaneSplitterRange,
 } from './splitter.js';
 export * from './embed/index.js';
-export * from '../crowdy-agent/index.js';
+export * from '../crowdy-dsh/index.js';
 export * from '../player-host/index.js';
+export * from './github/index.js';

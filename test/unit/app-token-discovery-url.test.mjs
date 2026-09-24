@@ -61,9 +61,9 @@ test('AppTokenResponse declares discoveryUrl as nullable', () => {
 });
 
 test('no dead per-environment origin is used as an example anywhere', () => {
-  // `ck.pgc.prod.cp.cks-env.com` was the old per-environment origin; that environment is
-  // shelved and the name resolves to nothing. An example hostname gets copied, so a dead
-  // one in the SDK becomes a dead one in somebody's client.
+  // `ck.pgc.prod…` was the old per-environment origin; that environment is shelved and
+  // the name resolves to nothing. An example hostname gets copied, so a dead one in the
+  // SDK becomes a dead one in somebody's client.
   const files = [
     '../../src/binary-relay.ts',
     '../../src/rediscover.ts',
@@ -77,9 +77,12 @@ test('no dead per-environment origin is used as an example anywhere', () => {
       `${rel} still references the shelved pgc-prod origin`,
     );
     // The dotted per-datacenter form cannot be covered by the one-label wildcard the
-    // shared name requires, so it is never a valid endpoint.
+    // shared name requires, so it is never a valid endpoint. Matched on the TIER label
+    // rather than on a domain suffix: the previous pattern ended in `.cp`, and the
+    // brand-root migration would have made it unmatchable — a negative assertion that
+    // passes because its subject cannot occur is not a check.
     assert.ok(
-      !/ck\.(or|va)\.prod\.cp/.test(text),
+      !/ck\.(or|va)\.(dev|test|prod)\./.test(text),
       `${rel} uses the dotted per-datacenter form; it is ck-<dc>.<tier>… with a dash`,
     );
   }

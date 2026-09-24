@@ -12,10 +12,9 @@
  * Black-box: the app + its default tier + the players are all created through the
  * public management API; the test never calls grantAppAccess. Point it at an env:
  *
- *   CROWDY_HTTP_URL='https://api.dev-1.dev.cks-env.com' \
- *   CROWDY_HTTP_URL='https://game.dev-1.dev.cks-env.com/graphql' \
- *   CROWDY_WS_URL='wss://game.dev-1.dev.cks-env.com/graphql' \
- *   CROWDY_OWNER_EMAIL='admin@dev-1.dev.cks-env.com' \
+ *   CROWDY_HTTP_URL='https://ck.dev.crowdedkingdoms.com' \
+ *   CROWDY_WS_URL='wss://ck.dev.crowdedkingdoms.com/graphql' \
+ *   CROWDY_OWNER_EMAIL='owner@example.com' \
  *   npm test
  */
 import test from 'node:test';

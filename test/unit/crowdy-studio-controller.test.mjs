@@ -32,6 +32,8 @@ function project(kind = 'FULL_STACK', revision = 'r1') {
     sdkVersion: '0.1.5',
     abiVersion: 0,
     revision: { id: revision, savedAt: '2026-07-23T00:00:00Z' },
+    source: 'STUDIO',
+    github: null,
     createdAt: '2026-07-23T00:00:00Z',
     updatedAt: '2026-07-23T00:00:00Z',
   };
@@ -43,10 +45,12 @@ function providerFor(initial = project()) {
   const saves = [];
   const imports = [];
   const librarySaves = [];
+  const reads = [];
   return {
     saves,
     imports,
     librarySaves,
+    reads,
     async listProjects() {
       return [{
         projectId: current.projectId,
@@ -55,10 +59,13 @@ function providerFor(initial = project()) {
         revisionId: current.revision.id,
         serverModuleName: current.metadata.serverModuleName,
         clientModuleName: current.metadata.clientModuleName,
+        source: current.source ?? 'STUDIO',
+        githubSha: current.github?.sha ?? null,
         updatedAt: current.updatedAt,
       }];
     },
     async getProject() {
+      reads.push(current.projectId);
       return structuredClone(current);
     },
     async createProject(input) {
@@ -344,8 +351,10 @@ test('full-stack deploy saves once and orders client, server, pairing, enable, r
   const compute = playerCompute({
     async deploy(input) {
       calls.push(`deploy:${input.target}:${input.draft}`);
-      const files = JSON.parse(input.sourceFilesJson);
-      assert.deepEqual(Object.keys(files).sort(), ['Cargo.toml', 'src/lib.rs']);
+      // The server resolves the source from the project; no bodies travel.
+      assert.equal(input.projectId, 'project-1');
+      assert.equal('sourceFilesJson' in input, false);
+      assert.equal('commitSha' in input, false, 'a STUDIO project pins no commit');
       return {
         versionId: input.target === 'CLIENT' ? 'client-v1' : 'server-v1',
       };
@@ -640,4 +649,198 @@ test('usage, wallet, logs, runs, and invoke feed the monitoring surfaces', async
     },
   ]);
   controller.destroy();
+});
+
+// ----- GitHub repository card -------------------------------------------------
+
+const SHA_A = 'a'.repeat(40);
+const SHA_B = 'b'.repeat(40);
+
+function githubTransport(initialStatus) {
+  let status = { ...initialStatus };
+  const calls = [];
+  return {
+    calls,
+    setStatus(next) {
+      status = { ...status, ...next };
+    },
+    async status(input) {
+      calls.push(['status', input]);
+      return { ...status };
+    },
+    async connectUrl() {
+      calls.push(['connectUrl']);
+      return { connectUrl: 'https://github.com/apps/x/installations/new?state=s' };
+    },
+    async repos() {
+      return [];
+    },
+    async bind(input) {
+      calls.push(['bind', input]);
+      status = { ...status, owner: input.owner, repo: input.repo, branch: input.branch ?? 'main', githubSha: SHA_A };
+      return { ...status };
+    },
+    async unbind(input) {
+      calls.push(['unbind', input]);
+      status = { ...status, owner: null, repo: null, branch: null, githubSha: null };
+      return { ...status };
+    },
+    async refresh(input) {
+      calls.push(['refresh', input]);
+      status = { ...status, githubSha: SHA_B };
+      return { ...status };
+    },
+    async layout(input) {
+      calls.push(['layout', input]);
+      return { commitSha: input.commitSha ?? SHA_A, server: 'server', client: 'client', assets: 'assets', fromFile: true };
+    },
+    async tree() {
+      throw new Error('the card never lists the tree');
+    },
+    async getFile() {
+      throw new Error('the card never reads files');
+    },
+    async putFile(input) {
+      calls.push(['putFile', input]);
+      throw new Error('the card never writes files; the provider does');
+    },
+    async deleteFile(input) {
+      calls.push(['deleteFile', input]);
+      throw new Error('the card never writes files; the provider does');
+    },
+  };
+}
+
+const CONNECTED_UNBOUND = {
+  configured: true,
+  connected: true,
+  accountLogin: 'modder',
+  accountType: 'User',
+  owner: null,
+  repo: null,
+  branch: null,
+  githubSha: null,
+  repositorySelection: 'selected',
+  installUrl: 'https://github.com/settings/installations/1',
+};
+
+test('GitHub: "create repository" opens GitHub prefilled under the connected login and leaves owner/name for the bind', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const github = githubTransport(CONNECTED_UNBOUND);
+  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github }));
+  await controller.initialize();
+  await sleep(5);
+  const opened = [];
+  globalThis.window = { open: (url, target, features) => opened.push({ url, target, features }) };
+  try {
+    const url = new URL(controller.createGitHubRepository());
+    assert.equal(url.origin + url.pathname, 'https://github.com/new');
+    assert.equal(url.searchParams.get('owner'), 'modder');
+    assert.equal(url.searchParams.get('name'), 'weather-tools');
+    assert.equal(url.searchParams.get('visibility'), 'private');
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0].features, 'noopener,noreferrer');
+    const state = controller.getState();
+    assert.equal(state.githubPendingRepo, 'modder/weather-tools');
+    // A 'selected' installation is told to add the repository before binding.
+    assert.match(state.githubMessage, /add it to your Crowdy Studio installation/);
+    // Nothing was written anywhere.
+    assert.deepEqual(github.calls.map(([op]) => op), ['status']);
+  } finally {
+    delete globalThis.window;
+  }
+
+  // Not connected: refused before opening anything.
+  const github2 = githubTransport({ ...CONNECTED_UNBOUND, connected: false, accountLogin: null });
+  const c2 = new CrowdyStudioController(options(provider, playerCompute(), { github: github2 }));
+  await c2.initialize();
+  await sleep(5);
+  assert.throws(() => c2.createGitHubRepository(), /Connect GitHub first/);
+});
+
+test('GitHub: status is fetched on open, nothing else happens until asked', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const github = githubTransport(CONNECTED_UNBOUND);
+  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github }));
+  await controller.initialize();
+  await sleep(5);
+  assert.equal(controller.getState().github?.connected, true);
+  assert.deepEqual(github.calls.map(([op]) => op), ['status']);
+  assert.deepEqual(github.calls[0][1], { appId: '42', projectId: 'project-1' });
+});
+
+test('GitHub: bind names which side is the truth, is scoped to the project, refuses over unsaved edits, and re-reads the project', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor();
+  const github = githubTransport(CONNECTED_UNBOUND);
+  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github, autosaveMs: 10_000 }));
+  await controller.initialize();
+  await sleep(5);
+
+  await assert.rejects(() => controller.bindGitHubRepo('nonsense'), /owner\/repo/);
+  controller.updateFile('SERVER', 'src/lib.rs', 'fn dirty() {}');
+  await assert.rejects(() => controller.bindGitHubRepo('modder/my-mod'), /Save Studio edits/);
+  await controller.saveNow();
+
+  const reads = provider.reads.length;
+  await controller.bindGitHubRepo('modder/my-mod@trunk', 'TAKE_REPOSITORY');
+  const bind = github.calls.find(([op]) => op === 'bind')[1];
+  assert.deepEqual(bind, { appId: '42', projectId: 'project-1', owner: 'modder', repo: 'my-mod', branch: 'trunk', initial: 'TAKE_REPOSITORY' });
+  assert.equal(controller.getState().github.githubSha, SHA_A);
+  assert.ok(provider.reads.length > reads, 'the project is re-read after a bind (TAKE_REPOSITORY replaced its files)');
+  assert.match(controller.getState().githubMessage, /Took modder\/my-mod@trunk/);
+  // Files are never written through the card.
+  assert.equal(github.calls.some(([op]) => op === 'putFile'), false);
+});
+
+test('GitHub: refresh brings the project to the branch head and refuses over unsaved edits', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const bound = { ...project(), source: 'GITHUB', github: { owner: 'modder', repo: 'my-mod', branch: 'main', sha: SHA_A } };
+  const provider = providerFor(bound);
+  const github = githubTransport({ ...CONNECTED_UNBOUND, owner: 'modder', repo: 'my-mod', branch: 'main', githubSha: SHA_A });
+  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github, autosaveMs: 10_000 }));
+  await controller.initialize();
+  await sleep(5);
+
+  controller.updateFile('SERVER', 'src/lib.rs', 'fn dirty() {}');
+  assert.equal(await controller.refreshFromGitHub(), false);
+  assert.match(controller.getState().githubMessage, /Save Studio edits/);
+  await controller.saveNow();
+
+  assert.equal(await controller.refreshFromGitHub(), true);
+  assert.equal(github.calls.filter(([op]) => op === 'refresh').length, 1);
+  assert.equal(controller.getState().github.githubSha, SHA_B);
+  assert.match(controller.getState().githubMessage, /Refreshed to bbbbbbb/);
+});
+
+test('GitHub: a bound project deploys the commit the mirror is at, and its files reach the provider as a normal save', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const bound = { ...project(), source: 'GITHUB', github: { owner: 'modder', repo: 'my-mod', branch: 'main', sha: SHA_A } };
+  const provider = providerFor(bound);
+  const deploys = [];
+  const compute = playerCompute({
+    async deploy(input) {
+      deploys.push(input);
+      return { versionId: `${input.target}-v1` };
+    },
+  });
+  const github = githubTransport({ ...CONNECTED_UNBOUND, owner: 'modder', repo: 'my-mod', branch: 'main', githubSha: SHA_A });
+  const controller = new CrowdyStudioController(options(provider, compute, { github }));
+  await controller.initialize();
+  await sleep(5);
+  controller.updateFile('SERVER', 'src/lib.rs', 'fn committed() {}');
+  await controller.saveNow();
+  // The controller does not know how a bound project persists: it hands the
+  // snapshot to the provider, which commits it. No putFile through the card.
+  assert.equal(provider.saves.length, 1);
+  assert.equal(github.calls.some(([op]) => op === 'putFile'), false);
+  await controller.deployLive();
+  assert.ok(deploys.length >= 1);
+  for (const d of deploys) {
+    assert.equal(d.projectId, 'project-1');
+    assert.equal(d.commitSha, SHA_A);
+    assert.equal('sourceFilesJson' in d, false);
+  }
 });

@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '15.2.0';
+export const VERSION = '17.8.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -90,14 +90,22 @@ export {
   RELAY_SUBPROTOCOL,
   type BinaryRelayCallbacks,
   type BinaryRelayConfig,
+  type BinaryRelaySendStats,
 } from './binary-relay.js';
 export {
+  BUNDLE_HEADER_BYTES,
+  BUNDLE_LENGTH_PREFIX_BYTES,
+  RELAY_MAX_BUNDLE_MEMBERS,
+  RELAY_MAX_BUNDLE_MEMBER_BYTES,
   RELAY_MAX_DATAGRAM_BYTES,
   WireMessageType,
+  bundleSizeOf,
   createSignContext,
+  packMessageBundle,
   parseRelayFrame,
   serializeActorUpdate,
   serializeAudioPacket,
+  serializeVideoPacket,
   serializeChannelMessage,
   serializeClientEvent,
   serializeSingleActorMessage,
@@ -105,6 +113,20 @@ export {
   serializeVoxelUpdate,
   type RelaySignContext,
 } from './binary-wire.js';
+export {
+  VIDEO_FRAGMENT_HEADER_BYTES,
+  MAX_VIDEO_FRAGMENT_BODY_BYTES,
+  MAX_VIDEO_FRAGMENTS,
+  VIDEO_FRAME_TIMEOUT_MS,
+  VIDEO_FRAGMENT_VERSION,
+  VideoCodec,
+  fragmentFrame,
+  parseVideoFragmentHeader,
+  isNewerFrameId,
+  VideoFrameAssembler,
+  type VideoFragmentHeader,
+  type AssembledVideoFrame,
+} from './media/video-frames.js';
 export {
   RealtimeMetrics,
   payloadBytesOf,
@@ -307,6 +329,8 @@ export {
   type LootKitOptions,
   type LootNames,
   type LootTableSpec,
+  type KitMatchFinishResult,
+  type KitMatchSessionEnd,
   type MatchesBlueprintOptions,
   type MatchesKitOptions,
   type MatchesNames,
@@ -426,6 +450,8 @@ export type {
   VoxelUpdateNotification,
   VoxelUpdateResponse,
   ClientAudioNotification,
+  ClientVideoNotification,
+  ActorLeftNotification,
   ClientTextNotification,
   ClientEventNotification,
   ServerEventNotification,
@@ -435,6 +461,8 @@ export type {
   VoxelUpdateHandler,
   VoxelUpdateResponseHandler,
   ClientAudioHandler,
+  ClientVideoHandler,
+  ActorLeftHandler,
   ClientTextHandler,
   ClientEventHandler,
   ServerEventHandler,
@@ -465,13 +493,36 @@ export {
   PortalAPI,
   BrowserSessionPkceStore,
   PortalConsentRequiredError,
+  defaultHostedSignInUrl,
+  isHostedSignInRequiredError,
   type AppTokenResponse,
+  type CurrentServer,
   type PortalAuthorizationCode,
   type PortalConsentState,
   type AppAuthorizationGrant,
   type PkceStore,
   type BeginEntryParams,
+  type SignInParams,
 } from './domains/portal.js';
+export {
+  EmbeddedHost,
+  EMBEDDED_HOST_PROTOCOL_VERSION,
+  type EmbeddedHostInfo,
+  type EmbeddedHostOptions,
+  type HostHelloMessage,
+  type HostHelloRequestMessage,
+  type NavigateMessage,
+} from './domains/embedded-host.js';
+export {
+  HostingAPI,
+  uploadPublishFiles,
+  type HostedGame,
+  type HostedGamePublish,
+  type HostedGameUpload,
+  type BeginGamePublishResult,
+  type CompleteGamePublishResult,
+  type PublishFileInput,
+} from './domains/hosting.js';
 export { generatePkcePair, generateState, type PkcePair } from './pkce.js';
 export { PlatformAPI, type PlatformConfig } from './domains/platform.js';
 export { OrganizationsAPI } from './domains/organizations.js';
@@ -499,6 +550,8 @@ export {
   GameModelAPI,
   type GmContainerChangeEvent,
   type ContainerChangedHandlers,
+  type GmSessionChangeEvent,
+  type SessionChangedHandlers,
   type GmActivePlayerCountSnapshot,
   type GmActivePlayerCountChangeEvent,
   type ActivePlayerCountChangedHandlers,
@@ -521,6 +574,7 @@ export { MarketplaceAPI } from './domains/marketplace.js';
 export { PlayerModelAPI } from './domains/playerModel.js';
 export {
   PlayerCodeBroker,
+  ALLOWED_HOST_CALLS,
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
   type PlayerCodeHostCall,
@@ -536,6 +590,27 @@ export {
   type PluginHostFunction,
   type PluginPresentationChannel,
 } from './player-runtime/plugin-host.js';
+export {
+  ClientGridEventBus,
+  defaultClientGridEventBus,
+  CLIENT_GRID_EVENT_MAX_CASCADE,
+  type ClientGridEvent,
+  type ClientGridEventSubscriber,
+} from './player-runtime/client-grid-event-bus.js';
+export * from './grid-mods/index.js';
+export {
+  GridScope,
+  GridScopeError,
+  type GridBox,
+  type GridChunk,
+  type GridScopeClients,
+} from './grid-scope.js';
+export { GridsAPI, type GridToken, type GridChannel } from './domains/grids.js';
+export {
+  GENERATED_HOST_CATALOG,
+  type HostCatalog,
+  type HostCatalogFunction,
+} from './player-runtime/host-catalog.generated.js';
 export {
   GLUE_HOST_FUNCTIONS,
   parseFuelBudget,
@@ -581,6 +656,7 @@ export type {
   ActorUpdateRequestInput,
   VoxelUpdateRequestInput,
   ClientAudioPacketInput,
+  ClientVideoPacketInput,
   ClientTextPacketInput,
   ClientEventNotificationInput,
   UdpProxyConnectionStatus,

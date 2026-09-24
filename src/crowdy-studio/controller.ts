@@ -9,8 +9,14 @@ import type { PlayerWalletAPI } from '../domains/playerWallet.js';
 import {
   digestCanonicalJson,
   sha256Digest,
-} from '../crowdy-agent/schema.js';
+} from '../player-host/json-schema.js';
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
+import type {
+  CrowdyStudioGitHubBindInitial,
+  CrowdyStudioGitHubStatus,
+  CrowdyStudioGitHubTransport,
+} from './github/transport.js';
+import { githubNewRepositoryUrl, githubRepositorySlug } from './github/new-repo.js';
 import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
@@ -34,6 +40,7 @@ import {
   type CrowdyStudioTarget,
   type CrowdyStudioProjectSynchronization,
 } from './models.js';
+import { parseClientTickIntervalMs } from './client-tick-interval.js';
 import {
   createCrowdyStudioStarterProject,
   type CrowdyStudioNewProjectOptions,
@@ -139,6 +146,12 @@ export interface CrowdyStudioState {
   activeFile: CrowdyStudioFileRef | null;
   saveState: CrowdyStudioSaveState;
   saveMessage?: string;
+  /** GitHub repository bound to the open project; null until fetched or when the SDK has no GitHub transport. */
+  github: CrowdyStudioGitHubStatus | null;
+  githubMessage?: string;
+  githubBusy: boolean;
+  /** `owner/name` the modder was sent to create on GitHub; the bind input is prefilled with it. */
+  githubPendingRepo?: string;
   runtime: CrowdyStudioRuntimeStatus;
   runtimeSync: CrowdyStudioRuntimeSync;
   agentActivity: 'IDLE' | 'PREPARING' | 'WORKING' | 'PAUSED';
@@ -193,6 +206,14 @@ export interface CrowdyStudioControllerOptions {
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
   meshArtifacts?: CrowdyStudioMeshArtifacts;
+  /**
+   * GitHub repository card (bring-your-own repo). Optional: without it the
+   * card is hidden. Reads and writes are resolved server-side from the
+   * project's bind. Persistence of a bound project's files does NOT go
+   * through this option — the project provider commits them itself — so the
+   * card is purely bind / unbind / refresh / status.
+   */
+  github?: CrowdyStudioGitHubTransport;
   appId: string;
   gridId: string;
   initialProjectId?: string;
@@ -207,6 +228,17 @@ export interface CrowdyStudioControllerOptions {
   targetPermissions?: Partial<
     Record<CrowdyStudioTarget, { canWrite: boolean; canRun: boolean }>
   >;
+  /**
+   * Local CLIENT tick cadence in ms, forwarded to
+   * {@link PlayerCodeBrokerOptions.tickIntervalMs}. The host only ticks
+   * when this is set (or when this default of 1000 ms applies). Omit/0 on
+   * a raw {@link PlayerCodeBroker} is invoke-only.
+   */
+  /**
+   * Override CLIENT tick cadence. When omitted, Studio reads
+   * `[package.metadata.crowdy] tick_interval_ms` from the project's CLIENT
+   * Cargo.toml (default 1000, clamped 16–1000).
+   */
   clientTickIntervalMs?: number;
   autosaveMs?: number;
   retryMs?: number;
@@ -253,6 +285,8 @@ export class CrowdyStudioController {
     openFiles: [],
     activeFile: null,
     saveState: 'SAVED',
+    github: null,
+    githubBusy: false,
     runtime: { phase: 'IDLE' },
     runtimeSync: { state: 'NEVER_RUN' },
     agentActivity: 'IDLE',
@@ -470,6 +504,39 @@ export class CrowdyStudioController {
     await this.loadProject(projectId);
   }
 
+  /**
+   * Re-fetch the open project after another writer changed it (the Studio
+   * agent writes through the game API, not through this editor). Open files
+   * and the active file survive when their paths still exist. Refused while
+   * local edits are unsaved: the human's keystrokes win over a reload, and the
+   * ordinary conflict recovery reconciles on the next save.
+   */
+  async reloadProject(): Promise<void> {
+    this.ensureAlive();
+    const current = this.state.project;
+    if (!current) return;
+    if (this.state.saveState !== 'SAVED') {
+      throw new Error('Unsaved local edits; the reload waits for the next save');
+    }
+    const project = await this.options.projectProvider.getProject({
+      ...this.scope(),
+      projectId: current.projectId,
+    });
+    const openFiles = this.state.openFiles;
+    const activeFile = this.state.activeFile;
+    this.installProject(project);
+    const stillThere = (ref: CrowdyStudioFileRef): boolean =>
+      ref.source !== 'PROJECT' ||
+      project.files.some((file) => file.target === ref.target && file.path === ref.path);
+    const keptOpen = openFiles.filter(stillThere);
+    if (keptOpen.length > 0) {
+      this.update({
+        openFiles: keptOpen,
+        activeFile: activeFile && stillThere(activeFile) ? activeFile : keptOpen[0]!,
+      });
+    }
+  }
+
   private async loadProject(projectId: string): Promise<void> {
     const project = await this.options.projectProvider.getProject({
       ...this.scope(),
@@ -515,9 +582,15 @@ export class CrowdyStudioController {
       invokeResult: null,
       meshArtifacts: [],
       meshArtifactMessage: undefined,
+      github: null,
+      githubMessage: undefined,
+      githubBusy: false,
+      githubPendingRepo: undefined,
     });
     this.restartVisibleSurfacePolling();
     void this.refreshMeshArtifacts();
+    // Status only; a pull is always the modder's explicit action.
+    void this.refreshGitHubStatus();
   }
 
   openFile(ref: CrowdyStudioFileRef): void {
@@ -778,6 +851,183 @@ export class CrowdyStudioController {
       return await this.savePromise;
     } finally {
       this.savePromise = null;
+    }
+  }
+
+  // ----- GitHub repository card ------------------------------------------
+
+  private githubStatusGeneration = 0;
+
+  /** Re-read connection + bind for the open project. Never changes files on its own. */
+  async refreshGitHubStatus(): Promise<void> {
+    if (!this.options.github) return;
+    const generation = ++this.githubStatusGeneration;
+    try {
+      const github = await this.options.github.status({
+        appId: this.options.appId,
+        projectId: this.state.project?.projectId,
+      });
+      if (generation !== this.githubStatusGeneration) return;
+      this.update({ github, githubMessage: undefined });
+    } catch (error) {
+      if (generation !== this.githubStatusGeneration) return;
+      this.update({ githubMessage: errorMessage(error) });
+    }
+  }
+
+  private githubScope(): { appId: string; projectId: string } | null {
+    const projectId = this.state.project?.projectId;
+    return projectId ? { appId: this.options.appId, projectId } : null;
+  }
+
+  /** Opens the install page in a new tab; identity comes back through the signed state, never the browser. */
+  async connectGitHub(): Promise<string> {
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    const { connectUrl } = await this.options.github.connectUrl();
+    if (typeof window !== 'undefined') window.open(connectUrl, '_blank', 'noopener,noreferrer');
+    this.update({ githubMessage: 'Finish installing on GitHub in the new tab, then Refresh.' });
+    return connectUrl;
+  }
+
+  /**
+   * Open GitHub's "new repository" page prefilled for the open project
+   * (connected login as owner, project name as the repository name, private).
+   * The App cannot create the repository itself — it holds installation
+   * tokens only — so this is the modder's click; what comes back is a
+   * repository the bind form already names. Returns the URL it opened.
+   *
+   * The card's bind input is prefilled with `owner/name` so that, on a host
+   * whose GitHub transport carries the identity session (hosted Studio), Bind
+   * is the next click. A game's app token cannot bind; there the message says
+   * to finish in Crowdy Studio.
+   */
+  createGitHubRepository(): string {
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    const project = this.requireProject();
+    const github = this.state.github;
+    if (!github?.connected) {
+      throw new Error('Connect GitHub first; the repository is created under your GitHub account.');
+    }
+    const owner = github.accountLogin ?? undefined;
+    const name = githubRepositorySlug(project.metadata.name);
+    const url = githubNewRepositoryUrl({
+      owner,
+      name,
+      description: project.metadata.description ?? `Crowdy Studio mod: ${project.metadata.name}`,
+    });
+    if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer');
+    const slug = owner ? `${owner}/${name}` : name;
+    this.update({
+      githubPendingRepo: slug,
+      githubMessage:
+        github.repositorySelection === 'selected'
+          ? `Create ${slug} on GitHub, add it to your Crowdy Studio installation, then bind it (Push this project).`
+          : `Create ${slug} on GitHub, then bind it (Push this project).`,
+    });
+    return url;
+  }
+
+  /**
+   * Bind the open project to `owner/repo` or `owner/repo@branch`, choosing
+   * which side is the truth for the first commit. Refuses over unsaved edits
+   * so what is pushed (or replaced) is exactly what the server holds. The
+   * project is re-read afterwards: TAKE_REPOSITORY replaced its files, and
+   * both paths gave it a `github.sha`.
+   */
+  async bindGitHubRepo(
+    slug: string,
+    initial: CrowdyStudioGitHubBindInitial = 'PUSH_PROJECT',
+  ): Promise<void> {
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    const scope = this.githubScope();
+    if (!scope) throw new Error('Open a Studio project before binding a repository.');
+    if (this.editGeneration !== this.persistedGeneration) {
+      throw new Error('Save Studio edits before binding a repository.');
+    }
+    const trimmed = slug.trim();
+    const at = trimmed.lastIndexOf('@');
+    const repoPath = at > 0 ? trimmed.slice(0, at) : trimmed;
+    const branch = at > 0 ? trimmed.slice(at + 1).trim() : '';
+    const slash = repoPath.indexOf('/');
+    if (slash <= 0 || slash === repoPath.length - 1) {
+      throw new Error('Use owner/repo or owner/repo@branch');
+    }
+    this.update({ githubBusy: true });
+    try {
+      const github = await this.options.github.bind({
+        ...scope,
+        owner: repoPath.slice(0, slash),
+        repo: repoPath.slice(slash + 1),
+        ...(branch ? { branch } : {}),
+        initial,
+      });
+      await this.reloadProject();
+      this.update({
+        github,
+        githubPendingRepo: undefined,
+        githubMessage:
+          initial === 'PUSH_PROJECT'
+            ? `Pushed the project to ${github.owner}/${github.repo}@${github.branch}. It is the working tree now; edits commit as you save.`
+            : `Took ${github.owner}/${github.repo}@${github.branch} as the project. Edits commit as you save.`,
+      });
+    } finally {
+      this.update({ githubBusy: false });
+    }
+  }
+
+  /** Clear the bind. The files stay; the project is a Studio project again. */
+  async unbindGitHub(): Promise<void> {
+    if (!this.options.github) return;
+    const scope = this.githubScope();
+    if (!scope) return;
+    if (this.editGeneration !== this.persistedGeneration) {
+      this.update({ githubMessage: 'Save edits before unbinding.' });
+      return;
+    }
+    this.update({ githubBusy: true });
+    try {
+      const github = await this.options.github.unbind(scope);
+      await this.reloadProject();
+      this.update({ github, githubMessage: 'Repository unbound. The files stay in Studio.' });
+    } finally {
+      this.update({ githubBusy: false });
+    }
+  }
+
+  /**
+   * Bring the project to the branch head after a push made outside Studio.
+   * Refuses over unsaved edits (they would be committed against the old head
+   * and refused anyway, less legibly).
+   */
+  async refreshFromGitHub(): Promise<boolean> {
+    if (!this.options.github) return false;
+    const scope = this.githubScope();
+    if (!scope || !this.state.project?.github) {
+      this.update({ githubMessage: 'Bind a repository first.' });
+      return false;
+    }
+    if (this.editGeneration !== this.persistedGeneration) {
+      this.update({ githubMessage: 'Save Studio edits before refreshing from GitHub.' });
+      return false;
+    }
+    this.update({ githubBusy: true });
+    try {
+      const before = this.state.project.github.sha;
+      const github = await this.options.github.refresh(scope);
+      await this.reloadProject();
+      this.update({
+        github,
+        githubMessage:
+          github.githubSha === before
+            ? 'Already at the branch head.'
+            : `Refreshed to ${github.githubSha?.slice(0, 7) ?? 'head'}.`,
+      });
+      return true;
+    } catch (error) {
+      this.update({ githubMessage: `GitHub refresh failed: ${errorMessage(error)}` });
+      return false;
+    } finally {
+      this.update({ githubBusy: false });
     }
   }
 
@@ -1194,18 +1444,15 @@ export class CrowdyStudioController {
       },
     });
 
-    // This is the sole project→legacy wire conversion. Project state, provider
-    // contracts, editors, and templates all use typed files.
-    const sourceFilesJson = JSON.stringify(
-      Object.fromEntries(files.map((file) => [file.path, file.content])),
-    );
+    // The server resolves the source from the project itself: the saved
+    // files at the project revision, or — for a GITHUB project — the rust at
+    // the commit the mirror is at. No file bodies travel with a deploy.
     const deployed = await this.options.playerCompute.deploy({
       ...this.scope(),
+      projectId: project.projectId,
       name,
       target: target as never,
-      sourceFilesJson,
-      sdkVersion: project.sdkVersion,
-      abiVersion: project.abiVersion,
+      ...(project.github?.sha ? { commitSha: project.github.sha } : {}),
       tickHz: target === 'SERVER' ? 1 : undefined,
       draft,
     });
@@ -1326,7 +1573,13 @@ export class CrowdyStudioController {
       artifactHash: artifact.artifactHash,
       fuelPerDispatch: artifact.fuelPerDispatch,
       onPresentation: this.options.onPresentation,
-      tickIntervalMs: this.options.clientTickIntervalMs ?? 1_000,
+      tickIntervalMs:
+        this.options.clientTickIntervalMs ??
+        parseClientTickIntervalMs(
+          this.requireProject().files.find(
+            (file) => file.target === 'CLIENT' && file.path === 'Cargo.toml',
+          )?.content,
+        ),
     };
     const broker =
       this.options.brokerFactory?.(brokerOptions) ??
@@ -1805,6 +2058,11 @@ function summaryOf(project: CrowdyStudioProject): CrowdyStudioProjectSummary {
     name: project.metadata.name,
     kind: project.kind,
     revisionId: project.revision.id,
+    source: project.source,
+    ...(project.github
+      ? { github: `${project.github.owner}/${project.github.repo}@${project.github.branch}` }
+      : {}),
+    githubSha: project.github?.sha ?? null,
     ...(project.metadata.serverModuleName
       ? { serverModuleName: project.metadata.serverModuleName }
       : {}),

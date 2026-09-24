@@ -32,8 +32,15 @@ export interface BootstrapRediscoverOptions {
 }
 
 function graphqlEndpoint(origin: string): string {
-  const trimmed = origin.replace(/\/+$/, '');
+  const trimmed = stripTrailingSlashes(origin);
   return trimmed.endsWith('/graphql') ? trimmed : `${trimmed}/graphql`;
+}
+
+/** Drop trailing `/`. Same span as `/\/+$/`, linear scan. */
+function stripTrailingSlashes(origin: string): string {
+  let end = origin.length;
+  while (end > 0 && origin.charCodeAt(end - 1) === 47) end -= 1;
+  return end === origin.length ? origin : origin.slice(0, end);
 }
 
 export function createBootstrapRediscover(

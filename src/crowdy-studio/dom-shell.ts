@@ -2,11 +2,7 @@ import {
   type CrowdyStudioController,
   type CrowdyStudioState,
 } from './controller.js';
-import type { CrowdyStudioAgentController } from '../crowdy-agent/controller.js';
-import {
-  CrowdyStudioAgentDomShell,
-  type CrowdyStudioAgentDomShellOptions,
-} from './agent-dom-shell.js';
+import type { CrowdyStudioDiagnostic } from './diagnostics.js';
 import {
   StudioLayoutController,
   studioPaneSizeRange,
@@ -59,6 +55,24 @@ const FAILURE_PHASES = new Set([
  * activity rail, resized with accessible splitters, and persisted through
  * {@link StudioLayoutController}.
  */
+/**
+ * A pane docked to the right of the editor (the Studio agent). The shell owns
+ * the rail button, the splitter and visibility; the pane owns its content.
+ */
+export interface StudioDockPane {
+  readonly root: HTMLElement;
+  /** Called when the pane first becomes visible. */
+  start?(): Promise<void> | void;
+  dispose(): void;
+}
+
+export interface CrowdyStudioDomShellOptions {
+  /** Build the dock pane inside the workspace element; omit for no dock. */
+  dock?: (workspace: HTMLElement) => StudioDockPane;
+  /** Show a "Fix with AI" action on each problem and route it here. */
+  onFixWithAi?: (diagnostic: CrowdyStudioDiagnostic) => void;
+}
+
 export class CrowdyStudioDomShell {
   readonly root: HTMLElement;
   readonly editorHost: HTMLElement;
@@ -87,6 +101,17 @@ export class CrowdyStudioDomShell {
   private readonly bottom: HTMLElement;
   private readonly tabs: HTMLElement;
   private readonly settingsName: HTMLInputElement;
+  private readonly github: HTMLElement;
+  private readonly githubStatus: HTMLElement;
+  private readonly githubConnect: HTMLButtonElement;
+  private readonly githubCreateRepo: HTMLButtonElement;
+  private readonly githubBindInput: HTMLInputElement;
+  private readonly githubBind: HTMLButtonElement;
+  private readonly githubUnbind: HTMLButtonElement;
+  private readonly githubInitial: HTMLSelectElement;
+  private readonly githubPull: HTMLButtonElement;
+  private readonly githubRefresh: HTMLButtonElement;
+  private readonly githubMessage: HTMLElement;
   private readonly settingsDescription: HTMLInputElement;
   private readonly serverModuleName: HTMLInputElement;
   private readonly clientModuleName: HTMLInputElement;
@@ -103,7 +128,8 @@ export class CrowdyStudioDomShell {
   private readonly panels = new Map<PanelName, HTMLElement>();
   private readonly railButtons = new Map<StudioPaneId, HTMLButtonElement>();
   private readonly splitters = new Map<StudioPaneId, PaneSplitterHandle>();
-  private readonly agentShell: CrowdyStudioAgentDomShell | null;
+  private readonly dock: StudioDockPane | null;
+  private dockStarted = false;
   private readonly unsubscribeLayout: () => void;
   private activePanel: PanelName = 'problems';
   private explorerForm: ExplorerFormState | null = null;
@@ -114,8 +140,7 @@ export class CrowdyStudioDomShell {
   constructor(
     host: HTMLElement,
     private readonly controller: CrowdyStudioController,
-    agentController?: CrowdyStudioAgentController,
-    agentOptions: CrowdyStudioAgentDomShellOptions = {},
+    private readonly shellOptions: CrowdyStudioDomShellOptions = {},
   ) {
     const style = document.createElement('style');
     style.textContent = CROWDY_STUDIO_STYLES;
@@ -247,6 +272,82 @@ export class CrowdyStudioDomShell {
       labeled('Pairing', this.pairing),
     );
 
+    // ----- GitHub repository card -------------------------------------------
+    // Bring-your-own repo, never required. The repository is resolved
+    // server-side from the project's bind; the card never learns a token.
+    // Once bound the repository IS the working tree: every save commits, so
+    // there is no push, no pull and no autosave toggle here — only bind (with
+    // a choice of which side is the truth on day one), unbind, and a refresh
+    // that brings the project to the branch head after a push made elsewhere.
+    this.github = element('section', 'ck-crowdy-studio-github');
+    const githubTitle = element('h3');
+    githubTitle.textContent = 'GitHub repository';
+    this.githubStatus = element('p', 'ck-crowdy-studio-github-status');
+    this.githubConnect = button('Connect GitHub');
+    this.githubConnect.addEventListener('click', () => {
+      void this.controller.connectGitHub().catch((error: unknown) => this.githubNote(error));
+    });
+    // No repository yet? The App cannot create one (installation tokens only),
+    // but GitHub's own form can arrive prefilled; the bind input then carries
+    // the same owner/name.
+    this.githubCreateRepo = button('Create repository on GitHub');
+    this.githubCreateRepo.addEventListener('click', () => {
+      try {
+        this.controller.createGitHubRepository();
+        const pending = this.controller.getState().githubPendingRepo;
+        if (pending) {
+          this.githubBindInput.value = pending;
+          this.githubInitial.value = 'PUSH_PROJECT';
+        }
+      } catch (error) {
+        this.githubNote(error);
+      }
+    });
+    this.githubBindInput = input('owner/repo or owner/repo@branch');
+    this.githubInitial = document.createElement('select');
+    this.githubInitial.className = 'ck-crowdy-studio-github-initial';
+    for (const [value, label] of [
+      ['PUSH_PROJECT', 'Push this project into the repository'],
+      ['TAKE_REPOSITORY', 'Take the repository as this project'],
+    ] as const) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      this.githubInitial.append(option);
+    }
+    this.githubBind = button('Bind');
+    this.githubBind.addEventListener('click', () => {
+      void this.controller
+        .bindGitHubRepo(
+          this.githubBindInput.value,
+          this.githubInitial.value === 'TAKE_REPOSITORY' ? 'TAKE_REPOSITORY' : 'PUSH_PROJECT',
+        )
+        .then(() => {
+          this.githubBindInput.value = '';
+        })
+        .catch((error: unknown) => this.githubNote(error));
+    });
+    this.githubUnbind = button('Unbind');
+    this.githubUnbind.addEventListener('click', () => {
+      void this.controller.unbindGitHub().catch((error: unknown) => this.githubNote(error));
+    });
+    this.githubPull = button('Refresh from GitHub');
+    this.githubPull.addEventListener('click', () => {
+      void this.controller.refreshFromGitHub();
+    });
+    this.githubRefresh = button('Refresh status');
+    this.githubRefresh.addEventListener('click', () => {
+      void this.controller.refreshGitHubStatus();
+    });
+    this.githubMessage = element('p', 'ck-crowdy-studio-github-message');
+    const bindRow = element('div', 'ck-crowdy-studio-github-row');
+    bindRow.append(this.githubCreateRepo, this.githubBindInput, this.githubInitial, this.githubBind, this.githubUnbind);
+    const syncRow = element('div', 'ck-crowdy-studio-github-row');
+    syncRow.append(this.githubPull, this.githubRefresh);
+    this.github.append(githubTitle, this.githubStatus, this.githubConnect, bindRow, syncRow, this.githubMessage);
+    this.github.hidden = true;
+    this.settings.append(this.github);
+
     this.workspace.append(
       rail,
       this.explorer,
@@ -281,21 +382,17 @@ export class CrowdyStudioDomShell {
     host.appendChild(this.root);
 
     // ----- Agent dock ----------------------------------------------------
-    if (agentController) {
+    if (shellOptions.dock) {
       rail.append(
-        this.railButton('agent', 'Agent', 'Show or hide the Crowdy Agent dock'),
+        this.railButton('agent', 'Agent', 'Show or hide the Studio agent'),
       );
       this.workspace.append(
-        this.paneSplitter('agent', 'vertical', 'after', 'Resize the agent dock'),
+        this.paneSplitter('agent', 'vertical', 'after', 'Resize the agent pane'),
       );
-      this.agentShell = new CrowdyStudioAgentDomShell(
-        this.workspace,
-        agentController,
-        { ...agentOptions, layout: agentOptions.layout ?? this.layout },
-      );
+      this.dock = shellOptions.dock(this.workspace);
       this.root.dataset.agent = 'true';
     } else {
-      this.agentShell = null;
+      this.dock = null;
     }
 
     // ----- Wiring ---------------------------------------------------------
@@ -397,6 +494,7 @@ export class CrowdyStudioDomShell {
     this.renderExplorer(state);
     this.renderTabs(state);
     this.renderSettings(state);
+    this.renderGitHub(state);
     const projectTargetsAvailable = state.project
       ? projectTargets(state.project.kind).every((target) =>
           this.controller.canTarget(target, 'write'),
@@ -431,7 +529,7 @@ export class CrowdyStudioDomShell {
     this.projectMenu.dispose();
     this.saveMenu.dispose();
     this.runMenu.dispose();
-    this.agentShell?.dispose();
+    this.dock?.dispose();
     this.root.remove();
   }
 
@@ -501,8 +599,14 @@ export class CrowdyStudioDomShell {
       explorer: this.explorer,
       settings: this.settings,
       bottom: this.bottom,
-      agent: this.agentShell?.root ?? null,
+      agent: this.dock?.root ?? null,
     };
+    if (this.dock && state.visible.agent && !this.dockStarted) {
+      this.dockStarted = true;
+      void Promise.resolve(this.dock.start?.()).catch((error) => {
+        console.warn('Crowdy Studio agent pane failed to start', error);
+      });
+    }
     for (const pane of ['explorer', 'settings', 'bottom', 'agent'] as const) {
       const paneElement = paneElements[pane];
       const visible = state.visible[pane] && paneElement !== null;
@@ -1066,6 +1170,45 @@ export class CrowdyStudioDomShell {
     }
   }
 
+  private githubNote(error: unknown): void {
+    this.githubMessage.textContent = error instanceof Error ? error.message : String(error);
+  }
+
+  private renderGitHub(state: CrowdyStudioState): void {
+    const github = state.github;
+    // No transport (status never fetched) or the tier has no App: hide the card.
+    if (!github || !github.configured) {
+      this.github.hidden = true;
+      return;
+    }
+    this.github.hidden = false;
+    const bound = Boolean(github.owner && github.repo);
+    const sha = github.githubSha ? ` @ ${github.githubSha.slice(0, 7)}` : '';
+    this.githubStatus.textContent = !github.connected
+      ? 'Not connected. Install the Crowdy Studio app on your GitHub account to bind a repository you own. GitHub is optional; the project saves in Studio either way.'
+      : bound
+        ? `${github.accountLogin ?? 'GitHub'} · ${github.owner}/${github.repo}@${github.branch}${sha} is the working tree; saves commit to it.`
+        : `${github.accountLogin ?? 'GitHub'} connected · no repository bound`;
+    this.githubConnect.hidden = github.connected;
+    this.githubConnect.disabled = state.githubBusy;
+    const canBind =
+      github.connected && Boolean(state.project) && !bound && !state.githubBusy && state.saveState === 'SAVED';
+    this.githubCreateRepo.hidden = bound || !github.connected;
+    this.githubCreateRepo.disabled = !state.project || state.githubBusy;
+    this.githubBindInput.hidden = bound;
+    this.githubInitial.hidden = bound;
+    this.githubBind.hidden = bound;
+    this.githubBindInput.disabled = !canBind;
+    this.githubInitial.disabled = !canBind;
+    this.githubBind.disabled = !canBind;
+    this.githubUnbind.hidden = !bound;
+    this.githubUnbind.disabled = state.githubBusy || state.saveState !== 'SAVED';
+    this.githubPull.hidden = !bound;
+    this.githubPull.disabled = state.githubBusy || state.saveState !== 'SAVED';
+    this.githubRefresh.disabled = state.githubBusy;
+    this.githubMessage.textContent = state.githubMessage ?? '';
+  }
+
   private renderSettings(state: CrowdyStudioState): void {
     const project = state.project;
     const disabled = !project;
@@ -1131,6 +1274,22 @@ export class CrowdyStudioDomShell {
           path: diagnostic.path,
         }),
       );
+      const fix = this.shellOptions.onFixWithAi;
+      if (fix) {
+        const wrapper = element('div', 'ck-crowdy-studio-problem-row');
+        const fixButton = element('button', 'ck-crowdy-studio-problem-fix');
+        fixButton.type = 'button';
+        fixButton.textContent = 'Fix with AI';
+        fixButton.title = 'Ask the Studio agent to fix this problem';
+        fixButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          this.layout.setVisible('agent', true);
+          fix(diagnostic);
+        });
+        wrapper.append(row, fixButton);
+        this.problemsPanel.append(wrapper);
+        continue;
+      }
       this.problemsPanel.append(row);
     }
   }

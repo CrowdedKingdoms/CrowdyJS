@@ -172,6 +172,15 @@ test('presentation calls route to the host sink, never to the SDK host path', as
   assert.deepEqual(presented.map((p) => p.channel), ['hud', 'overlay']);
 });
 
+test('pointer_clicks is allowlisted input and reaches onHostCall', async () => {
+  const { broker, worker, calls } = await makeBroker();
+  await broker.start(new ArrayBuffer(8));
+  worker.receive({ type: 'hostcall', id: 1, fn: 'pointer_clicks', args: {} });
+  await flush();
+  assert.deepEqual(calls, [{ fn: 'pointer_clicks', args: {} }]);
+  assert.equal(worker.lastResult().ok, true);
+});
+
 test('glue helpers: fuel budget parsing and watchdog classification', async () => {
   const { parseFuelBudget, runWithWatchdog } = await loadSdk();
   assert.equal(parseFuelBudget(undefined), null);

@@ -25,6 +25,16 @@ import { LogoutAllDevicesDocument, LogoutDocument } from '../generated/graphql.j
  *
  * Part of the management surface.
  *
+ * **FIRST-PARTY AND NON-BROWSER ONLY (ck-api v1.88.0, 2026-09-08).** Every
+ * public method here is served only to first-party browser origins (Studio,
+ * the Crowdy Games host) and to callers that send no `Origin` header at all
+ * (Node, CLI, tests, CrowdyCPP). From a browser game on its OWN domain they are
+ * refused with `HOSTED_SIGN_IN_REQUIRED` (`isHostedSignInRequiredError`), and
+ * that game signs its players in with `client.portal.signIn()` instead: the
+ * player types their password into Studio, never into the game, and the game
+ * comes back with an app-scoped token. If you are building a browser game, you
+ * want `client.portal`, not this namespace.
+ *
  * **Public (no session):** {@link register}, {@link login},
  * {@link requestLoginLink}, {@link completeLoginLink}, {@link socialLoginStart},
  * {@link socialLoginComplete}, {@link availableLoginProviders},
@@ -379,10 +389,16 @@ export class AuthAPI {
   /**
    * Sign in with email + password; stores the session token on success.
    *
+   * First-party and non-browser callers only: from a browser game on its own
+   * domain this is refused with `HOSTED_SIGN_IN_REQUIRED`; use
+   * `client.portal.signIn()` there (see the namespace comment).
+   *
    * Throws when the credentials are wrong, and — separately — when the account
    * has another verified sign-in method and the password has not yet been
    * confirmed by email. {@link isPasswordUnconfirmedError} tells those apart,
-   * because they need different things from the user.
+   * because they need different things from the user. Ten wrong passwords for
+   * one address inside fifteen minutes answer `RATE_LIMITED`; the reset email
+   * is the way out.
    */
   async login(input: { email: string; password: string }): Promise<AuthResponse> {
     const data = await this.graphql.request(LoginDocument, {
@@ -395,12 +411,18 @@ export class AuthAPI {
   /**
    * Create an email + password account; stores the session token on success.
    *
+   * First-party and non-browser callers only (`HOSTED_SIGN_IN_REQUIRED`
+   * otherwise; a browser game uses `client.portal.signIn()`, and Studio's
+   * hosted page offers sign-up).
+   *
    * **A brand-new address gets a session immediately.** An address that already
-   * has an account does NOT: the password is attached pending email
-   * confirmation and the server throws instead of returning a token, so the
-   * caller cannot treat "registered" and "signed in" as one outcome. Use
-   * {@link isAlreadyRegisteredError} to detect it and fall back to
-   * {@link login} or {@link requestLoginLink}.
+   * has an account does NOT, and the server throws instead of returning a
+   * token, so the caller cannot treat "registered" and "signed in" as one
+   * outcome: an account that already has a password is left exactly as it was
+   * (ck-api v1.87.2; before that the password was overwritten, a takeover), and
+   * a password-less magic-link/social account gets the password attached
+   * pending email confirmation. Use {@link isAlreadyRegisteredError} to detect
+   * either and fall back to {@link login} or {@link requestLoginLink}.
    */
   async register(input: {
     email: string;

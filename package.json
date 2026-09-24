@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
-  "version": "15.2.0",
+  "version": "17.8.0",
   "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
@@ -22,9 +22,13 @@
       "import": "./dist/crowdy-studio/index.js",
       "types": "./dist/crowdy-studio/index.d.ts"
     },
-    "./agent": {
-      "import": "./dist/crowdy-agent/index.js",
-      "types": "./dist/crowdy-agent/index.d.ts"
+    "./crowdy-dsh": {
+      "import": "./dist/crowdy-dsh/index.js",
+      "types": "./dist/crowdy-dsh/index.d.ts"
+    },
+    "./hosting": {
+      "import": "./dist/hosting/index.js",
+      "types": "./dist/hosting/index.d.ts"
     },
     "./player-host": {
       "import": "./dist/player-host/index.js",
@@ -33,6 +37,10 @@
     "./player-glue-worker": {
       "import": "./dist/player-runtime/player-glue-worker.js",
       "types": "./dist/player-runtime/player-glue-worker.d.ts"
+    },
+    "./grid-program": {
+      "import": "./dist/grid-program/index.js",
+      "types": "./dist/grid-program/index.d.ts"
     }
   },
   "sideEffects": false,
@@ -53,9 +61,7 @@
     "authoring-index:generate": "node scripts/generate-browser-authoring-index.mjs --write",
     "authoring-index:drift": "node scripts/sync-browser-authoring-index.mjs",
     "check:authoring-index": "node scripts/validate-browser-authoring-index.mjs && node scripts/generate-browser-authoring-index.mjs",
-    "agent-descriptors:drift": "node scripts/sync-agent-descriptor-fixture.mjs",
-    "check:agent-descriptors": "node scripts/validate-agent-descriptor-fixture.mjs",
-    "build": "npm run check:authoring-index && tsc && npm run check:agent-descriptors && node scripts/copy-live-coding-assets.mjs",
+    "build": "npm run check:authoring-index && npm run check:host-catalog && tsc && node scripts/copy-live-coding-assets.mjs",
     "test": "npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/e2e/*.test.mjs",
     "test:unit": "npm run build && node --test test/unit/*.test.mjs",
     "test:e2e": "npm run build && node --test --test-concurrency=1 test/e2e/*.test.mjs",
@@ -64,7 +70,12 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
     "check:content-policy": "node scripts/check-content-policy.mjs",
-    "check:content-policy:self-test": "node scripts/check-content-policy.mjs --self-test"
+    "check:content-policy:self-test": "node scripts/check-content-policy.mjs --self-test",
+    "check:default-origin": "node scripts/check-default-origin.mjs",
+    "check:default-origin:self-test": "node scripts/check-default-origin.mjs --self-test",
+    "host-catalog:generate": "node scripts/generate-host-catalog.mjs --write",
+    "host-catalog:drift": "node scripts/sync-host-catalog.mjs",
+    "check:host-catalog": "node scripts/generate-host-catalog.mjs"
   },
   "publishConfig": {
     "access": "public"
@@ -97,16 +108,16 @@
     "@types/node": "^22.10.7",
     "happy-dom": "^20.11.1",
     "typescript": "^5.7.3",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "dependencies": {
     "@codingame/monaco-vscode-api": "25.1.2",
     "@codingame/monaco-vscode-editor-api": "25.1.2",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@vscode/tree-sitter-wasm": "0.3.1",
-    "dompurify": "3.4.12",
+    "dompurify": "3.4.15",
     "graphql": "^16.13.2",
-    "graphql-ws": "^6.0.8",
+    "graphql-ws": "^6.2.1",
     "vscode-jsonrpc": "8.2.0",
     "vscode-languageserver-protocol": "3.17.5",
     "web-tree-sitter": "0.26.11"

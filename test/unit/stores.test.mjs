@@ -446,6 +446,56 @@ test('RemoteActorStore: registry, self-echo filter, history, staleness, events',
   assert.deepEqual(actors.list().map((a) => a.uuid), [u1]);
   assert.ok(actors.revision > rev);
 
+  // Server-announced departure (ActorLeftNotification, Buddy v0.25.0): u1 is
+  // fresh and would not be reaped for another second, but the server says it is
+  // gone -- drop it now and fire onLeave exactly once.
+  events.length = 0;
+  net.handlers.actorLeft({
+    __typename: 'ActorLeftNotification',
+    appId: '42',
+    chunkX: '0',
+    chunkY: '0',
+    chunkZ: '0',
+    distance: 1,
+    uuid: u1,
+    leftReason: 0,
+    sequenceNumber: 0,
+    epochMillis: '2000',
+  });
+  assert.deepEqual(events, [['leave', u1]]);
+  assert.equal(actors.count, 0);
+  // A second leave for an actor already gone is a no-op, not a second onLeave.
+  net.handlers.actorLeft({
+    __typename: 'ActorLeftNotification',
+    appId: '42',
+    chunkX: '0',
+    chunkY: '0',
+    chunkZ: '0',
+    distance: 1,
+    uuid: u1,
+    leftReason: 0,
+    sequenceNumber: 0,
+    epochMillis: '2001',
+  });
+  assert.deepEqual(events, [['leave', u1]]);
+  // ...and a later update is a rejoin.
+  net.handlers.actorUpdate(actorNote(u1, codec.encode({ x: 7 })));
+  assert.deepEqual(events, [['leave', u1], ['join', u1], ['update', u1, 7]]);
+  // Our own uuid on a leave is ignored (the self store owns our presence).
+  net.handlers.actorLeft({
+    __typename: 'ActorLeftNotification',
+    appId: '42',
+    chunkX: '0',
+    chunkY: '0',
+    chunkZ: '0',
+    distance: 1,
+    uuid: session.self.uuid,
+    leftReason: 0,
+    sequenceNumber: 0,
+    epochMillis: '2002',
+  });
+  assert.equal(actors.count, 1);
+
   session.dispose();
 });
 
@@ -695,6 +745,18 @@ test('ChunkStore: bulk load + hydration, realtime merge, optimistic edits, world
   const sent = net.sent.find((s) => s.kind === 'voxelUpdate');
   assert.equal(sent.input.voxelType, 4);
   assert.deepEqual(voxelStateCodec.decode(sent.input.voxelState), { growth: 0 });
+
+  // setVoxel without `state` must omit voxelState (not send '').
+  await store.setVoxel({
+    chunk: { x: 0, y: 0, z: 0 }, x: 8, y: 8, z: 8, voxelType: 2,
+  });
+  const sentBare = net.sent.filter((s) => s.kind === 'voxelUpdate').at(-1);
+  assert.equal(sentBare.input.voxelType, 2);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(sentBare.input, 'voxelState'),
+    false,
+    'setVoxel without state must not send voxelState: \'\'',
+  );
 
   // Write-back: one throttled chunk per tick, then flush drains the rest.
   ticker.advance(100);

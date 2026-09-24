@@ -49,30 +49,32 @@ const client = createCrowdyClient({
   },
 });
 
-// Restore a previous session if there is one, otherwise sign in.
+// A browser game on its own domain signs players in through Crowded Kingdoms'
+// HOSTED sign-in: the player types their password into Studio, never into your
+// page, and your client comes back holding a token confined to your app.
 await client.session.restore();
-if (!client.session.getToken()) {
-  // Email + password:
-  await client.auth.login({ email: 'player@example.com', password });
-  // ...or create the account: client.auth.register({ email, password })
-  // Or magic link: email a one-time link, then complete with the token from it.
-  await client.auth.requestLoginLink({ email: 'player@example.com', redirectUri });
-  await client.auth.completeLoginLink(tokenFromLink);
-  // Or social/OIDC: socialLoginStart('google', redirectUri) -> socialLoginComplete({ provider, code, state })
+const entered = await client.portal.handleSignInCallback(); // no-op without ?code=
+if (!entered && !client.session.getToken()) {
+  // On your "Sign in with Crowded Kingdoms" button:
+  await client.portal.signIn({ appId, redirectUri: `${location.origin}/auth/callback` });
+  return; // the browser is navigating to Studio
 }
 
-// Every sign-in returns an identity SESSION token (rejected for gameplay).
-// Identity reads run on it:
+// The client now holds an app-scoped token: gameplay reads and the UDP proxy run on it.
 const me = await client.users.me();
 console.log(me.email);
 ```
 
+Your game's origin must be registered under the app's **redirect URIs**
+(Studio > Apps > client settings); that one entry admits it to CORS and to the
+hosted sign-in return. Direct sign-in (`client.auth.login` / `register` / magic
+link / social) is served only to first-party pages (Studio; the games host left this list on 2026-09-14 when the Overworld lobby stopped signing players in) and to
+non-browser callers (Node, CLI, tests); from any other browser origin the API
+answers `HOSTED_SIGN_IN_REQUIRED` (`isHostedSignInRequiredError`). See
+[Authentication](#authentication-session-token-vs-app-scoped-tokens).
+
 There is one endpoint. `managementUrl` was removed in v14 — see
 [MIGRATION.md](MIGRATION.md).
-
-**Gameplay needs an app-scoped token, not the session token.** Mint one per
-app and drive the world/UDP surface from a per-game client — see
-[Authentication](#authentication-session-token-vs-app-scoped-tokens).
 
 ## Authentication: session token vs app-scoped tokens
 
@@ -81,23 +83,70 @@ studio admin and token minting, and **rejected for gameplay**. Each game is
 entered with a short-lived **app-scoped token** confined to that one app, so a
 game stack never receives the player's full session.
 
-Use two clients: an Overworld/identity client (session token) and a per-game
-client (app token). They never share a token store, and they need not share a
-URL — `mintAppToken` returns the endpoint for the app's own datacenter.
+**Which flow you use depends on where your code runs** (ck-api v1.88.0,
+2026-09-08):
+
+| your code runs...                                   | sign in with                              | then                                  |
+|-----------------------------------------------------|-------------------------------------------|---------------------------------------|
+| in a browser, on your own domain (every customer game) | `portal.signIn` -> Studio -> `portal.handleSignInCallback` | the client already holds the app token |
+| in a browser, on the first-party host (Studio) | `auth.login` / magic link / social       | `portal.mintAppToken(appId)`          |
+| outside a browser (Node, CLI, CrowdyCPP, tests)        | `auth.login` / `auth.register`            | `portal.mintAppToken(appId)`          |
+
+The first row is the only one a game on its own domain can take: the direct
+sign-in mutations are refused from a non-first-party browser origin with
+`HOSTED_SIGN_IN_REQUIRED`. The reason is the player's password: a form on a
+customer's domain that collects it is indistinguishable, to the platform and to
+the player, from a phishing page.
+
+**A game published to Crowdy Games takes the first row too, with one twist the SDK
+handles for you** (17.2.0). Such a game is reached at `https://<games host>/<slug>/`,
+which is a first-party *shell* page, and runs inside that page's iframe on its own
+origin, `https://<slug>.<content host>`. The iframe cannot navigate the tab and
+Studio refuses to be framed, so `portal.signIn` asks the shell to navigate
+(`crowdyjs:navigate`; the shell honours exactly the tier's Studio `/authorize`) and
+uses the shell's page as the `redirect_uri` -- the shell then hands the returned
+`?code=&state=` into the iframe, where `portal.handleSignInCallback` runs exactly as
+it does self-hosted. Nothing changes in your code: the bridge (`client.embeddedHost`,
+`EmbeddedHost`) detects the shell with a bounded hello and falls back to the
+top-level flow when nobody answers. Pass `embeddedHost: false` to `createCrowdyClient`
+to never consult a framing page.
+
+**Hosted sign-in** (browser game, own domain) is OAuth2 Authorization Code +
+PKCE; the verifier never leaves your origin and your page never sees a
+credential:
 
 ```ts
-// Overworld/identity client
-const overworld = createCrowdyClient({
+const game = createCrowdyClient({ httpUrl: apiUrl, wsUrl,
+  tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:app:' + appId) });
+
+// Boot: finish a sign-in we are returning from (no-op without ?code=).
+const entered = await game.portal.handleSignInCallback();
+
+// "Sign in with Crowded Kingdoms" button: go to Studio's hosted page and come back.
+await game.portal.signIn({ appId, redirectUri: `${location.origin}/auth/callback` });
+// -> Studio /authorize (the player signs in there, consents if the app is not trusted)
+// -> back to redirectUri?code=...&state=...  -> handleSignInCallback() above
+```
+
+`signIn` derives the hosted page from the API host you configured
+(`ck.<tier>.crowdedkingdoms.com` -> `studio.<tier>.crowdedkingdoms.com/authorize`,
+`localhost:3000` -> `localhost:3001`); pass `authorizeUrl` to override. Your
+`redirectUri`'s origin must be one of the app's registered redirect URIs.
+`beginEntry` / `completeEntry` are the same steps without the defaults.
+
+**Direct sign-in + mint** (first-party page or non-browser). Use two clients: an
+identity client (session token) and a per-game client (app token). They never
+share a token store, and they need not share a URL — `mintAppToken` returns the
+endpoint for the app's own datacenter.
+
+```ts
+const identity = createCrowdyClient({
   httpUrl: apiUrl,
   tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:session'),
 });
-// Sign-in (email + password via auth.login / auth.register, magic link, or social/OIDC)
-// yields the session token. There is no dev bypass: devLogin was removed in 15.0.0.
-await overworld.auth.requestLoginLink({ email, redirectUri });
-await overworld.auth.completeLoginLink(tokenFromLink);
+await identity.auth.login({ email, password }); // or register / magic link / social
 
-// Native / same-origin: mint directly, then build a game client.
-const t = await overworld.portal.mintAppToken(appId);
+const t = await identity.portal.mintAppToken(appId);
 const game = createCrowdyClient({
   httpUrl: t.gameApiUrl!,
   wsUrl: t.gameApiWsUrl!,
@@ -107,24 +156,7 @@ game.setToken(t.token);
 game.world(appId).subscribe({ actorUpdate: (n) => { /* ... */ } });
 ```
 
-Browser cross-origin handoff is OAuth2 Authorization Code + PKCE — the
-verifier never leaves the game origin:
-
-```ts
-// Game origin, on "enter": redirect to the Overworld authorize page.
-location.assign(await game.portal.beginEntry({
-  appId, authorizeUrl: 'https://overworld.example.com/authorize',
-  redirectUri: location.origin + location.pathname,
-}));
-
-// Overworld /authorize page (holds the session token):
-location.assign(await overworld.portal.handleAuthorizeRequest());
-
-// Game origin, on callback boot: exchange code+verifier -> app token (stored).
-const entered = await game.portal.completeEntry();
-```
-
-Game-to-game routes through the Overworld for a fresh per-game token.
+Game-to-game routes through Studio's hosted page for a fresh per-game token.
 
 Notes:
 
@@ -153,7 +185,13 @@ retained; if the new proxy connect fails, the fresh token remains stored —
 surface the error and retry `game.udp.connect()` instead of rotating again.
 
 `game.portal.refresh()` remains available for clients with no active UDP
-lifecycle to preserve.
+lifecycle to preserve. A **native (direct-UDP) client** should pass the server it
+is connected to — `game.portal.refresh({ ip4, clientPort })`, the pair
+`serverWithLeastClients` handed it — so the Game API (v1.83.7+) authorizes the
+new token on that same Buddy and answers `authorizedServer`: when it is set,
+keep the socket and sign with the new token; when it is null, place again with
+`serverWithLeastClients`. A Buddy silently drops datagrams for a token it was
+never told about, so a native refresh without it is a re-placement.
 
 ## Game-loop lifecycle
 
@@ -168,7 +206,7 @@ lifecycle to preserve.
    — `appId` is **required** (the SDK opens the realtime socket on demand and
    scopes it to that app).
 4. Join a chunk by sending an initial actor update.
-5. Send actor, voxel, text, audio, and client-event updates through `game.udp`
+5. Send actor, voxel, text, audio, video, and client-event updates through `game.udp`
    or the higher-level `game.world(appId)` helpers.
 6. Before the app token expires, call `game.refreshGameplayToken()`.
 7. Call `client.close()` (and `game.close()`) when disposing the SDK instances.
@@ -183,6 +221,7 @@ lifecycle to preserve.
 | `client.users` | `me`, `updateGamertag`, profile reads. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
+| `client.hosting` | Third-party hosting on Crowdy Games (17.2.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`; operator `all` / `setListing` / `takeDown`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
 | `client.platform` | Public platform configuration (`config()`). |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
 | `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes: terrain/LODs, voxel edit + history/rollback, durable actors, avatars, per-user app state blobs. |
@@ -196,8 +235,8 @@ lifecycle to preserve.
 | `client.playerWallet` | Player spend: balance, spend caps, card setup, policy, charges. |
 | `client.marketplace` | Player-code store/install/consent flows plus player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`) and client-mod artifact fetches. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
-| `client.crowdyStudioAgent` | Generated, app-token Game API transport for durable agent sessions: history/session pages, descriptors/budgets, approvals, tool results, heartbeat, control mutations, ordered event subscriptions. |
-| `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`). |
+| `client.crowdyStudioGitHub` | Optional GitHub repository for a Crowdy Studio project: status, `bind` (push the project in, or take the repository), `unbind`, `refresh`, `layout`, `tree`, `getFile`, commit-guarded `putFile` / `deleteFile`. While bound the repository is the working tree and every Studio save commits; the project's `files` are the server's mirror at `github.sha`. Never required. |
+| `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendVideoPacket` / `sendVideoFrame`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token (see [Token refresh](#token-refresh-during-gameplay)). |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`, `actor.sendToActor`). |
@@ -281,6 +320,16 @@ const unsubscribe = client.udp.subscribe(
     voxelUpdate: (event) => { /* ... */ },
     text: (event) => { /* ... */ },
     audio: (event) => { /* ... */ },
+    video: (event) => {
+      // One webcam fragment; feed a VideoFrameAssembler to get whole frames.
+      const frame = assembler.ingest(event.uuid, decodeBase64(event.videoData));
+      if (frame) drawJpeg(event.uuid, frame.bytes);
+    },
+    actorLeft: (event) => {
+      // The server says this actor is gone (about 5 s after its last update).
+      // World Stores do this for you: `session.actors.onLeave` fires at once.
+      removeAvatar(event.uuid);
+    },
     clientEvent: (event) => { /* ... */ },
     serverEvent: (event) => { /* ... */ },
     singleActorMessage: (event) => {
@@ -384,6 +433,19 @@ one is missing and wait for either a matching notification or
 `GenericErrorResponse`. `sendChannelMessage` broadcasts an opaque payload on a
 channel.
 
+### Bundled sends on the binary relay
+
+With `realtime: { binaryTransport: true }` the SDK signs each message itself
+and, since 17.1, packs the messages sent within `realtime.bundleWindowMs`
+(default 1 ms) into one `MESSAGE_BUNDLE` datagram — the same framing the
+server uses for its notifications, accepted on the uplink by Buddy v0.27.0+. A
+lone message goes out unwrapped. Call `client.udp.flushSends()` at the end of a
+frame to put that frame's sends on the wire without waiting for the window;
+the `...AndWait` variants and `disconnect()` flush on their own.
+`client.realtime.binaryRelayStats()` reports messages, frames, bundles and
+bytes. `realtime: { bundleSends: false }` restores one datagram per message;
+the GraphQL transport is unaffected either way.
+
 ### Actor-to-actor messages
 
 ```ts
@@ -420,6 +482,39 @@ The world helpers are thin wrappers over `client.udp.*` with the appId
 pre-bound — convenient for browser games. Advanced callers can always use
 `client.udp.*` with the generated GraphQL input types directly.
 
+## Grids: player code inside one grid
+
+A grid is a box of chunks a player can own. Everything an app-scoped Studio
+module can do, code running in a grid can do too, confined to that grid:
+spatial messages that originate in it, the grid's own channels, a grid event
+bus, sessions hosted in it, and the player-tier Game Model.
+
+```ts
+const plot = client.grid(appId, gridId);
+await plot.mintToken();                        // learns the box; a grid-scoped token
+await plot.channels.create('plot-chat');       // a grid channel (owner only)
+await plot.sessions.create({ name: 'race' });  // a game within the game
+await plot.send.text({ chunk: { x: 4, y: 0, z: 0 }, uuid, text: 'hi', distance: 2 });
+plot.send.text({ chunk: { x: 9, y: 0, z: 0 }, uuid, text: 'x' }); // throws GridScopeError
+```
+
+**JS grid programs** run the full SDK in a network-less sandbox; the page
+relays them with a grid token they never see:
+
+```ts
+// sandbox (iframe / worker)
+import { createGridProgramClient } from '@crowdedkingdoms/crowdyjs/grid-program';
+const { client, grid } = await createGridProgramClient(port);
+
+// page
+import { hostGridProgram } from '@crowdedkingdoms/crowdyjs/grid-program';
+await hostGridProgram({ port, scope: client.grid(appId, gridId), graphqlUrl, graphqlWsUrl });
+```
+
+`startGridMod` runs either a Rust CLIENT mod (WASM) or a JS grid program
+behind one interface; `createGridHostCalls` answers every CLIENT host call in
+the platform catalog through CrowdyJS for a mod's broker.
+
 ## World Stores
 
 The core client is a thin transport; the **World Stores** layer
@@ -454,6 +549,9 @@ session.self.patchState({ x: 12.5, yaw: 1.57 });
 console.log(session.self.status, session.self.lastAck?.state);
 
 // Everyone else: typed, self-filtered, staleness-managed — render from it.
+// A departure the server announces (ActorLeftNotification, Buddy v0.25.0)
+// removes the actor and fires `onLeave` immediately; the 12 s reaper is the
+// fallback for a lost datagram. A later update for the same uuid is a rejoin.
 for (const actor of session.actors.list()) {
   render(actor.uuid, actor.state, actor.samples); // samples → interpolation
 }
@@ -583,6 +681,38 @@ See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/ga
 (the SDK surface + the simulation-tier / notify-to-pull / timer / hidden-info
 / anti-cheat patterns).
 
+## Hosting a game on Crowdy Games
+
+Since 17.2.0 (ck-api v2.1) a developer can publish a built static bundle to the
+platform instead of hosting it: players reach it at
+`https://<games host>/<slug>/` and it executes on an origin of its own,
+`https://<slug>.<content host>`, behind the same security headers `the-construct`'s
+`docs/HOSTING.md` asks a self-hoster to serve. The API returns both URLs
+(`HostedGame.launchUrl`, `.contentOrigin`); nothing in your code names a host.
+
+From Node, with an identity session (never from a browser page, by design):
+
+```ts
+import { createCrowdyClient } from '@crowdedkingdoms/crowdyjs';
+import { publishDirectory } from '@crowdedkingdoms/crowdyjs/hosting';
+
+const client = createCrowdyClient();
+await client.auth.login({ email, password });               // identity session, Node only
+const game = await client.hosting.claim({ appId, slug: 'my-game' }); // once; idempotent
+const result = await publishDirectory(client, { dir: 'dist', slug: game.slug });
+console.log(result.game.launchUrl);                          // https://.../my-game/
+```
+
+`claim` registers the shell page and the game origin as the app's redirect URIs
+and sets `launch_url`; `publishDirectory` hashes `dist/`, declares the manifest
+(`beginGamePublish` validates it as a whole and returns one presigned PUT per file),
+uploads with the exact signed headers, and `completeGamePublish` verifies every
+object, promotes it and invalidates the CDN. The slug is a DNS label, global on the
+tier, and first-party names are reserved (`HOSTED_SLUG_UNAVAILABLE`); a tier without
+a content CDN answers `CONTENT_HOSTING_DISABLED`. Being *listed* in the lobby is an
+operator decision (`setListing`); publishing is self-serve. `the-construct`'s
+`npm run publish` is this section as a command.
+
 ## Crowdy Studio
 
 Crowdy Studio is the in-game SERVER/CLIENT Rust authoring surface for player
@@ -593,6 +723,23 @@ platform index only — never a credential and never a server connection.
 Compiled CLIENT artifacts run through `PlayerCodeBroker`, which keeps tokens
 on the page, allow-lists host calls, and locally clamps chunk-targeted effects
 to the owned grid before the normal SDK path reaches server authorization.
+The host only ticks a CLIENT mod when `tickIntervalMs` is set (omit or `0`
+is invoke-only):
+
+```ts
+import { PlayerCodeBroker } from '@crowdedkingdoms/crowdyjs';
+
+const broker = new PlayerCodeBroker({
+  workerUrl,
+  grid,
+  onHostCall,
+  tickIntervalMs: 1000, // required for on_tick; omit for invoke-only
+});
+await broker.start(artifactBytes);
+```
+
+The Studio embed defaults `clientTickIntervalMs` to `1000` when you do not
+pass one; a raw `PlayerCodeBroker` does not.
 
 Most games embed the ready-made shell rather than hand-rolling window chrome
 around `mountCrowdyStudio`:
@@ -604,7 +751,7 @@ import { createCrowdyStudioEmbed } from '@crowdedkingdoms/crowdyjs/crowdy-studio
 import workerUrl from '@crowdedkingdoms/crowdyjs/player-glue-worker?worker&url';
 
 const studio = createCrowdyStudioEmbed({
-  client: game, // CrowdyClient: crowdyStudio, playerCompute, playerWallet, crowdyStudioAgent
+  client: game, // CrowdyClient: crowdyStudio, playerCompute, playerWallet, crowdyStudioGitHub
   appId,
   gameName: 'My Game',
   suppressGameplayInput: () => pauseInput(),
@@ -622,55 +769,81 @@ studio.toggle({
 ```
 
 The embed renders a resizable right dock on desktop and a focus-trapped
-fullscreen modal on narrow screens, and mounts the agent dock automatically
-when the client exposes `crowdyStudioAgent` and the game passes a
-`playerHost`. For custom chrome, call `mountCrowdyStudio(host, options)`
-directly; for a headless integration, use `new CrowdyStudioController(options)`.
-New games should start SERVER-only. Untrusted HUD payloads always render as
-text, never HTML.
+fullscreen modal on narrow screens. For custom chrome, call
+`mountCrowdyStudio(host, options)` directly; for a headless integration, use
+`new CrowdyStudioController(options)`. New games should start SERVER-only.
+Untrusted HUD payloads always render as text, never HTML.
 
 See [Crowdy Studio & player client mods](https://docs.crowdedkingdoms.com/crowdyjs/player-client-mods)
 and [Embed Crowdy Studio in your game](https://docs.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).
 
-### Agentic Crowdy Studio
+### The Studio agent (DeepSeek Harness in the browser)
 
-The agent surface adds an Ask/Build/Play AI dock on top of Crowdy Studio,
-built from three browser contracts (`crowdy.studio-agent/1`,
-`crowdy.agent-tools/1`, `crowdy.player-host/1`):
+The agent pane docks beside the editor and runs the
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) entirely
+in the player's browser: the stock harness web UI in a same-origin iframe, the
+harness plugin tree in a Web Worker, and a filesystem whose files are the open
+Crowdy Studio project (the bound GitHub repository when the project has one).
+The model is reached through the tier's metered endpoint
+(`POST /v1/model/chat/completions`) with the player's own app token, so usage
+is priced per request at the app's rate card and billed to the player's wallet
+by default (or the app's org wallet when its billing admin chose that). The
+harness worker holds that token in memory to call the API as the player; it is
+sent over the page/worker channel, never written to a seed file, the worker's
+virtual filesystem or OPFS, and no tool exposes it to the model. The model has
+no shell and no network of its own; what it can do in the game runs through
+this SDK on the page, and a live deploy additionally waits for the player to
+confirm in the pane.
 
-- `@crowdedkingdoms/crowdyjs/agent` exports `CrowdyStudioAgentController` (the
-  durable session client: contiguous event ordering, replay/gap fill,
-  attach-epoch fencing, exact approval hashes, budgets, pause/resume/stop) and
-  `CROWDY_AGENT_TOOL_REGISTRY_V1`, an immutable digest-pinned registry of
-  bounded, schema-validated tools. There is deliberately no raw GraphQL
-  executor, DOM driver, `fetch`, shell, or unrestricted SDK bridge in these
-  surfaces.
-- `client.crowdyStudioAgent` is the production GraphQL transport for durable
-  agent sessions; pass it (plus a `playerHost` adapter) to the Studio mount's
-  `agent` option to get the integrated dock.
-- `@crowdedkingdoms/crowdyjs/player-host` exports the generic game
-  observation/control contract: implement `PlayerHostAdapterV1` over your
-  game's typed intent methods, and the exported `AgentControlLeaseManager`,
-  `PlayerControlGate`, and `AgentControlBanner` enforce scoped leases, TTLs,
-  synchronous human preemption, and always-visible Pause/Stop chrome.
+A game enables the pane with the `dsh` option and ships the packed harness from
+the published `@crowdedkingdoms/crowdy-dsh` npm package (`dist/dsh-web/`,
+stamped with `BUILD.json`) under a same-origin path, usually by copying it into
+`public/dsh/` at build time:
 
 ```ts
-import { CrowdyStudioAgentController } from '@crowdedkingdoms/crowdyjs/agent';
-
-const agent = new CrowdyStudioAgentController({
-  transport: game.crowdyStudioAgent,
-  createSession: {
-    appId, projectId, gridId,
-    mode: 'BUILD',
-    providerDataConsent: true,
-    idempotencyKey: crypto.randomUUID(),
+const studio = createCrowdyStudioEmbed({
+  client: game,
+  appId,
+  dsh: {
+    graphql: game.graphql,
+    webBase: '/dsh/',                       // where dist/dsh-web is served
+    graphqlUrl: `${apiOrigin}/graphql`,
+    apiOrigin,
+    getToken: () => game.getToken(),
+    persistScope: `${appId}/${userId}`,     // browser-side session persistence key
+    studioOrigin: 'https://studio.crowdedkingdoms.com',
   },
 });
-await agent.initialize(); // attach epoch → durable replay/gap fill → live tail
+
+// Per open: what the model may see.
+studio.toggle({
+  gridId,
+  targetPermissions,
+  playerHost,                               // PlayerHostAdapterV1 → game_observe
+  dshHost: {
+    captureFrame: () => renderer.captureFrame(),   // screenshot tool + auto-capture after draft tests
+    describeView: () => hud.summary(),
+    clientLogs: () => modLogs.tail(200),
+  },
+});
 ```
 
-See [Agentic Crowdy Studio](https://docs.crowdedkingdoms.com/crowdyjs/agentic-crowdy-studio)
-for the full session, lease, and approval model.
+The pane shows a provider-data notice once per app (recorded with
+`crowdyStudioSetProviderConsent`), a Screenshot button, and today's spend
+against the policy ceiling. "Fix with AI" on any problem queues a prompt into
+the agent. `@crowdedkingdoms/crowdyjs/crowdy-dsh` exports the pieces
+(`CrowdyStudioDshPane`, `StudioDshBridge`, `CrowdyStudioDshTransport`, the
+bridge protocol) for custom chrome; `@crowdedkingdoms/crowdyjs/player-host`
+keeps the `PlayerHostAdapterV1` observation contract and its schemas.
+
+The host document must allow the iframe (`frame-src 'self'`) and serve the
+harness path with `script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:`,
+`connect-src 'self' blob:`, `worker-src 'self' blob:` and
+`frame-ancestors 'self'`; the game page's own policy stays strict. The iframe
+is same-origin by design (`BroadcastChannel` and OPFS are origin-scoped), so
+its `sandbox="allow-scripts allow-same-origin"` does not isolate it from the
+page; that CSP is the control. See the
+[`@crowdedkingdoms/crowdy-dsh` README on npm](https://www.npmjs.com/package/@crowdedkingdoms/crowdy-dsh).
 
 ## Errors
 
@@ -728,8 +901,8 @@ endpoint; `client.graphql` reaches every surface.)
 the environment is not configured, so they are safe to leave in `npm test`.
 
 ```bash
-CROWDY_HTTP_URL='https://ck.<tier>.v7.cks-env.com' \
-CROWDY_WS_URL='wss://ck.<tier>.v7.cks-env.com/graphql' \
+CROWDY_HTTP_URL='https://ck.<tier>.crowdedkingdoms.com' \
+CROWDY_WS_URL='wss://ck.<tier>.crowdedkingdoms.com/graphql' \
 CROWDY_OWNER_EMAIL='owner@example.com' \
 CROWDY_TEST_APP_ID='78221653114368' \
   npm run test:e2e

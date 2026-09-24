@@ -56,6 +56,23 @@ query NearbyGridPermissions($input: NearbyGridPermissionsInput!) {
   }
 }
 
+query NearbyGrids($input: NearbyGridsInput!) {
+  nearbyGrids(input: $input) {
+    appId
+    gridId
+    lowChunk {
+      x
+      y
+      z
+    }
+    highChunk {
+      x
+      y
+      z
+    }
+  }
+}
+
 query GridPermissionLimits($appId: BigInt!, $gridId: BigInt!) {
   gridPermissionLimits(appId: $appId, gridId: $gridId) {
     appId

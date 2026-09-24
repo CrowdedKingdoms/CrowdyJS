@@ -40,6 +40,8 @@ import { GameKitClient, type GameKitOptions } from './kit/index.js';
 import { AuthAPI } from './domains/auth.js';
 import { UsersAPI } from './domains/users.js';
 import { AppsAPI } from './domains/apps.js';
+import { EmbeddedHost } from './domains/embedded-host.js';
+import { HostingAPI } from './domains/hosting.js';
 import {
   PortalAPI,
   type AppTokenResponse,
@@ -65,6 +67,8 @@ import { TeleportAPI } from './domains/teleport.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
 import { ChannelsAPI } from './domains/channels.js';
+import { GridsAPI } from './domains/grids.js';
+import { GridScope, type GridBox } from './grid-scope.js';
 import { TeamsAPI } from './domains/teams.js';
 import { UdpAPI } from './domains/udp.js';
 import { GameModelAPI } from './domains/gameModel.js';
@@ -72,7 +76,7 @@ import { ComputeAPI } from './domains/compute.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
 import { MeshArtifactsAPI } from './domains/meshArtifacts.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
-import { CrowdyAgentGraphQLTransport } from './crowdy-agent/graphql-transport.js';
+import { CrowdyStudioGitHubTransport } from './crowdy-studio/github/transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { MarketplaceAPI } from './domains/marketplace.js';
 import { PlayerModelAPI } from './domains/playerModel.js';
@@ -116,8 +120,27 @@ export interface CrowdyClientConfig {
    * or tests where sessionStorage is unavailable.
    */
   pkceStore?: PkceStore;
+  /**
+   * The Crowdy Games shell bridge (third-party hosting, 2026-09-13). When a game
+   * published to Crowdy Games runs inside the first-party shell's iframe,
+   * `portal.signIn` must ask the shell to navigate to Studio and must use the shell's
+   * page as the redirect URI; this bridge is how it learns both. Default: detect in a
+   * browser (`new EmbeddedHost()`), nothing in Node. Pass `false` to never consult a
+   * framing page, or your own instance to control timeouts.
+   */
+  embeddedHost?: EmbeddedHost | false;
+  /**
+   * The `fetch` GraphQL requests go through; defaults to the global. See
+   * `createGridProgramClient` for the one case that needs another.
+   */
+  fetch?: typeof fetch;
   /** Realtime (WebSocket) tuning for reconnect backoff and `...AndWait` timeouts. */
   realtime?: {
+    /**
+     * WebSocket constructor for the realtime subscription; defaults to the
+     * platform's. See `createGridProgramClient`.
+     */
+    webSocketImpl?: unknown;
     /** Max reconnect attempts before giving up (default tuned for browsers). */
     retryAttempts?: number;
     /** Initial reconnect backoff in milliseconds. */
@@ -225,6 +248,15 @@ export class CrowdyClient {
    */
   readonly portal: PortalAPI;
   /**
+   * Third-party game hosting on Crowdy Games: claim a slug, publish a bundle, list
+   * hosted games. Mutations need an identity session with manage_apps; the reads a
+   * page needs are public. `@crowdedkingdoms/crowdyjs/hosting` has the Node helper
+   * that publishes a directory.
+   */
+  readonly hosting: HostingAPI;
+  /** The Crowdy Games shell bridge (see `CrowdyClientConfig.embeddedHost`); null in Node or when opted out. */
+  readonly embeddedHost: EmbeddedHost | null;
+  /**
    * Where each app lives. Unauthenticated, and meant to be called BEFORE login against
    * the shared origin, so the session and the app token are both written in the app's
    * own datacenter rather than wherever DNS happened to point.
@@ -270,6 +302,8 @@ export class CrowdyClient {
   readonly serverStatus: ServerStatusAPI;
   /** Channels: location-independent pub/sub messaging groups. */
   readonly channels: ChannelsAPI;
+  /** Grid tokens and grid channels (DN-10); see also {@link CrowdyClient.grid}. */
+  readonly grids: GridsAPI;
   /** Teams: app-scoped player groups with roles and delegated management. */
   readonly teams: TeamsAPI;
   /** UDP proxy: spatial sends + the shared realtime notification subscription. */
@@ -284,8 +318,8 @@ export class CrowdyClient {
   readonly meshArtifacts: MeshArtifactsAPI;
   /** Crowdy Studio cloud projects, libraries, and common source files. */
   readonly crowdyStudio: CrowdyStudioAPI;
-  /** Durable typed Agentic Crowdy Studio GraphQL transport. */
-  readonly crowdyStudioAgent: CrowdyAgentGraphQLTransport;
+  /** GitHub repository loop for Crowdy Studio projects (same session; the API resolves the repo from the bind). */
+  readonly crowdyStudioGitHub: CrowdyStudioGitHubTransport;
 
   /** P4a marketplace (free mode): store, installs, consent, claim flows. */
   readonly marketplace: MarketplaceAPI;
@@ -325,13 +359,13 @@ export class CrowdyClient {
     // invented around it, because the alternative is worse than having no
     // default: `createCrowdyClient({ httpUrl: 'https://my-host' })` would get
     // HTTP on their host and the WEBSOCKET on the tier default, splitting one
-    // session across two origins while looking connected. `gameModel` and
-    // `crowdyStudioAgent` refuse a missing wsUrl loudly today and must go on
-    // doing so — a refusal replaced by a silent wrong answer is a bad trade even
-    // when the wrong answer is a live host.
+    // session across two origins while looking connected. `gameModel` refuses
+    // a missing wsUrl loudly today and must go on doing so — a refusal
+    // replaced by a silent wrong answer is a bad trade even when the wrong
+    // answer is a live host.
     //
     // Resolved ONCE here so every sub-client below agrees. Applied per-transport
-    // it reached two of five: `gameModel` and `crowdyStudioAgent` were handed
+    // it reached some transports and not others: `gameModel` was handed
     // `undefined` while the two transports had an answer, and a default that
     // reaches some members of a set and not others is a third configuration
     // nothing was designed for.
@@ -354,6 +388,7 @@ export class CrowdyClient {
         timeout: config.timeout,
         logger: config.logger,
         lbCookieStore,
+        ...(config.fetch ? { fetch: config.fetch } : {}),
       },
       this.session,
     );
@@ -446,7 +481,12 @@ export class CrowdyClient {
     this.auth = new AuthAPI(this.graphql, this.session);
     this.users = new UsersAPI(this.graphql);
     this.apps = new AppsAPI(this.graphql);
-    this.portal = new PortalAPI(this.graphql, this.session, config.pkceStore);
+    this.embeddedHost =
+      config.embeddedHost === false
+        ? null
+        : config.embeddedHost ?? (typeof (globalThis as { window?: unknown }).window !== 'undefined' ? new EmbeddedHost() : null);
+    this.portal = new PortalAPI(this.graphql, this.session, config.pkceStore, this.embeddedHost);
+    this.hosting = new HostingAPI(this.graphql);
     this.discovery = new DiscoveryDomain(this.graphql);
     this.platform = new PlatformAPI(this.graphql);
     this.organizations = new OrganizationsAPI(this.graphql);
@@ -465,8 +505,14 @@ export class CrowdyClient {
     this.state = new StateAPI(this.graphql);
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);
+    this.grids = new GridsAPI(this.graphql);
     this.teams = new TeamsAPI(this.graphql);
-    this.udp = new UdpAPI(this.graphql, this.realtime, this.metrics);
+    this.udp = new UdpAPI(
+      this.graphql,
+      this.realtime,
+      this.metrics,
+      () => this.gameplayTokenRefresh,
+    );
     this.gameModel = new GameModelAPI(this.graphql, {
       wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
       getToken: () => this.session.getToken(),
@@ -475,10 +521,7 @@ export class CrowdyClient {
     this.playerCompute = new PlayerComputeAPI(this.graphql);
     this.meshArtifacts = new MeshArtifactsAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
-    this.crowdyStudioAgent = new CrowdyAgentGraphQLTransport(this.graphql, {
-      wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
-      getToken: () => this.session.getToken(),
-    });
+    this.crowdyStudioGitHub = new CrowdyStudioGitHubTransport(this.graphql);
     this.playerWallet = new PlayerWalletAPI(this.graphql);
     this.marketplace = new MarketplaceAPI(this.graphql);
     this.playerModel = new PlayerModelAPI(this.graphql);
@@ -518,7 +561,10 @@ export class CrowdyClient {
    * then opens a proxy authenticated by the new token. The session token
    * listener restarts the existing realtime subscription in place, so its
    * registered notification handlers are retained rather than duplicated.
-   * Concurrent calls share one in-flight rotation.
+   * Concurrent calls share one in-flight rotation. In-flight
+   * {@link UdpAPI.sendActorUpdate} calls are allowed to settle before the
+   * old proxy is disconnected; new UDP sends wait for this rotation via
+   * {@link waitForGameplayTokenRefresh} so they use the fresh token.
    *
    * Failure semantics:
    * - If the old proxy disconnect rejects or does not confirm closure, rotation
@@ -549,6 +595,7 @@ export class CrowdyClient {
   }
 
   private async performGameplayTokenRefresh(): Promise<AppTokenResponse> {
+    await this.udp.waitForInFlightActorUpdates();
     const disconnected = await this.udp.disconnect();
     if (!disconnected) {
       throw new CrowdyProtocolError({
@@ -563,6 +610,20 @@ export class CrowdyClient {
   }
 
   /**
+   * Wait while a {@link refreshGameplayToken} rotation is in flight.
+   * Resolves immediately when none is running. UDP sends use this so a
+   * packet that starts during rotation waits for the new token.
+   */
+  async waitForGameplayTokenRefresh(): Promise<void> {
+    if (!this.gameplayTokenRefresh) return;
+    try {
+      await this.gameplayTokenRefresh;
+    } catch {
+      // Rotation failed; callers still proceed against the current token.
+    }
+  }
+
+  /**
    * Ergonomic, app-scoped realtime facade. `client.world(appId)` returns a
    * {@link WorldClient} whose `actor()` and `subscribe()` helpers pass `appId`
    * for you and manage chunk/sequence bookkeeping — the recommended entry point
@@ -572,6 +633,19 @@ export class CrowdyClient {
    */
   world(appId: string): WorldClient {
     return new WorldClient(appId, this.udp);
+  }
+
+  /**
+   * One grid, bound once: its channels, sessions, player-tier model, player
+   * compute and origin-checked replication, all with the app and grid filled
+   * in (DN-10: grid scope is app scope intersected with grid confinement).
+   * Pass the box if you know it; otherwise `mintToken()` learns it.
+   *
+   * @param appId - The app (BigInt as a decimal string).
+   * @param gridId - The grid (BigInt as a decimal string).
+   */
+  grid(appId: string, gridId: string, box?: GridBox): GridScope {
+    return new GridScope(this, appId, gridId, box);
   }
 
   /**
@@ -598,9 +672,14 @@ export class CrowdyClient {
 
   /** Closes the WebSocket and clears the in-memory auth token. */
   close(): void {
-    this.crowdyStudioAgent.close();
     this.realtime.close();
     this.session.setToken(null);
+    this.embeddedHost?.close();
+  }
+
+  /** The configured or discovered GraphQL endpoint URL. */
+  get graphqlEndpoint(): string {
+    return this.graphql.endpoint;
   }
 }
 

@@ -39,7 +39,7 @@ test('client exposes the full management + game sub-client surface', async () =>
     httpUrl: 'https://game.invalid',
     wsUrl: 'wss://game.invalid',
   });
-  assertMethods(client, 'client', ['refreshGameplayToken']);
+  assertMethods(client, 'client', ['refreshGameplayToken', 'waitForGameplayTokenRefresh']);
 
   // Existing client-facing sub-clients still present.
   for (const k of [
@@ -63,12 +63,12 @@ test('client exposes the full management + game sub-client surface', async () =>
     'listProjects', 'getProject', 'createProject', 'saveProject',
     'listPersonalLibraryFiles', 'listCommonFiles',
   ]);
-  assertMethods(client.crowdyStudioAgent, 'crowdyStudioAgent', [
-    'getSession', 'listSessions', 'history', 'toolDescriptors', 'budget',
-    'createSession', 'attachClient', 'setMode', 'acknowledgeEvents',
-    'heartbeat', 'sendMessage', 'approveTool', 'rejectTool', 'toolResult',
-    'grantLease', 'revokeLease', 'pause', 'resume', 'cancelRun',
-    'closeSession', 'subscribeEvents', 'close',
+  // The Crowdy Agent transport left with the orchestrator; the Studio agent is
+  // the DeepSeek Harness pane, reached through `crowdyStudioGitHub`, the model
+  // endpoint and the `crowdy-dsh` entry rather than a GraphQL sub-client.
+  assert.equal(client.crowdyStudioAgent, undefined);
+  assertMethods(client.crowdyStudioGitHub, 'crowdyStudioGitHub', [
+    'status', 'connectUrl', 'repos', 'bind', 'unbind', 'refresh', 'layout', 'tree', 'getFile', 'putFile', 'deleteFile',
   ]);
   assert.equal(client[['player', 'Code', 'Projects'].join('')], undefined);
   // P4a marketplace (free mode): store + installs + consent + claim flows
@@ -109,11 +109,26 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.gameModel, 'gameModel', [
     'activePlayerCount', 'activePlayerCountChanged',
     'scheduleInvoke', 'cancelTimer', 'timers',
+    // The session system (17.2.0): roster, admission, host, revisions.
+    'createSession', 'joinSession', 'leaveSession', 'setSessionTurn',
+    'setSessionAdmission', 'transferSessionHost', 'endSession',
+    'session', 'sessions', 'sessionSnapshot', 'sessionEvents', 'sessionInspect',
+    'sessionChanged',
   ]);
   assertMethods(client.gameApps, 'gameApps', [
     'ownership', 'assignOwnership', 'transferOwnership', 'userPermissions',
     'nearbyPermissions', 'permissionLimits', 'createGrid', 'grantPermissions',
     'assignGroup',
+  ]);
+  assertMethods(client.udp, 'udp', [
+    'connect', 'disconnect', 'connectionStatus', 'subscribe',
+    'sendActorUpdate', 'sendActorUpdateAndWait',
+    'sendVoxelUpdate', 'sendVoxelUpdateAndWait',
+    'sendAudioPacket', 'sendAudioPacketAndWait',
+    'sendVideoPacket', 'sendVideoFrame',
+    'sendTextPacket', 'sendTextPacketAndWait',
+    'sendClientEvent', 'sendClientEventAndWait',
+    'sendSingleActorMessage', 'sendChannelMessage',
   ]);
   assertMethods(client.apps, 'apps', [
     'codeAdmissionMode', 'codeAdmissions', 'setCodeAdmissionMode', 'admitCode',
@@ -161,6 +176,8 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.portal, 'portal', [
     'mintAppToken', 'createAuthorizationCode', 'exchangeCode', 'refresh',
     'beginEntry', 'handleAuthorizeRequest', 'completeEntry',
+    // Hosted sign-in (ck-api v1.88.0): the browser game's whole flow.
+    'signIn', 'handleSignInCallback',
     'getConsent', 'authorizeApp', 'revokeAppAuthorization',
     'myAuthorizedApps', 'setAppClientSettings',
   ]);
@@ -207,7 +224,7 @@ test('client exposes the full management + game sub-client surface', async () =>
     'revive', 'syncCombatant',
   ]);
   assertMethods(kit.matches, 'kit.matches', [
-    'create', 'open', 'get', 'join', 'start', 'advanceRound', 'myTurn', 'endTurn',
+    'create', 'open', 'get', 'join', 'leave', 'start', 'advanceRound', 'myTurn', 'endTurn',
     'ensureScore', 'score', 'standings', 'finish', 'notifyChanged', 'onMatchChanged',
   ]);
   assertMethods(kit.decks, 'kit.decks', [
@@ -362,8 +379,7 @@ test('player runtime and app-admission wrappers send the right variables on one 
   await client.gameApps.assignOwnership({ appId: '1', gridId: '2', ownerUserId: '3' });
   await client.gameApps.transferOwnership({ appId: '1', gridId: '2', newOwnerUserId: '4' });
   await client.playerCompute.deploy({
-    appId: '1', gridId: '2', name: 'weather', target: 'SERVER',
-    sourceFilesJson: '{}',
+    appId: '1', gridId: '2', projectId: 'p1', name: 'weather', target: 'SERVER',
   });
   await client.playerCompute.setEnabled({
     appId: '1', gridId: '2', name: 'weather', enabled: true,

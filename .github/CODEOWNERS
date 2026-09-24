@@ -34,3 +34,12 @@
 
 /.github/ @michaelmarshall
 /scripts/ @michaelmarshall
+
+# Identity / sign-in / token surface (security-hardening program, 2026-09-08).
+# A PR touching these requests the code owner AND, per AGENTS.md, runs the
+# security-review subagent with its findings pasted into the PR body.
+/src/domains/auth.ts @michaelmarshall
+/src/domains/portal.ts @michaelmarshall
+/src/pkce.ts @michaelmarshall
+/src/session.ts @michaelmarshall
+/src/auth-state.ts @michaelmarshall

@@ -569,6 +569,23 @@ export class RemoteActorLane<T> {
     for (const listener of [...this.updateListeners]) listener(actor);
   }
 
+  /**
+   * The server said this actor is gone (`ActorLeftNotification`, Buddy v0.25.0):
+   * drop it now and fire `onLeave` once. A no-op for a uuid this lane does not
+   * hold, so a leave that arrives after the reaper already acted, or for a lane
+   * the actor never matched, fires nothing twice. A later `actorUpdate` for the
+   * same uuid re-adds it and fires `onJoin` again -- a rejoin, per the contract.
+   * @returns whether an actor was removed.
+   */
+  remove(uuid: string): boolean {
+    const actor = this.actors.get(uuid);
+    if (!actor) return false;
+    this.actors.delete(uuid);
+    this.revisionValue += 1;
+    for (const listener of [...this.leaveListeners]) listener(actor);
+    return true;
+  }
+
   /** Physically delete stale records, firing `onLeave` for each. */
   reap(): void {
     for (const [uuid, actor] of this.actors) {
@@ -668,6 +685,20 @@ export class RemoteActorStore<T> {
       }),
     );
 
+    // The server announces departures since Buddy v0.25.0: drop the actor the
+    // moment the notification lands rather than up to `staleAfterMs` later. The
+    // reaper below stays as the fallback for a lost datagram.
+    ctx.onDispose(
+      ctx.on('actorLeft', (notification) => {
+        const selfUuid =
+          typeof this.config.selfUuid === 'function'
+            ? this.config.selfUuid()
+            : this.config.selfUuid;
+        if (selfUuid && notification.uuid === selfUuid) return;
+        this.remove(notification.uuid);
+      }),
+    );
+
     const reapInterval = config.reapIntervalMs ?? 1000;
     if (reapInterval !== false && reapInterval > 0 && staleAfterMs !== false) {
       ctx.onDispose(ctx.ticker.every(reapInterval, () => this.reap()));
@@ -737,6 +768,18 @@ export class RemoteActorStore<T> {
   }
 
   /** Physically delete stale records in every lane. */
+  /**
+   * Remove one actor from whichever lane holds it, firing that lane's `onLeave`.
+   * Wired to `actorLeft` automatically; public so a game can force a departure
+   * (e.g. on its own disconnect signal). @returns whether an actor was removed.
+   */
+  remove(uuid: string): boolean {
+    for (const lane of this.lanes.values()) {
+      if (lane.remove(uuid)) return true;
+    }
+    return false;
+  }
+
   reap(): void {
     for (const lane of this.lanes.values()) lane.reap();
   }

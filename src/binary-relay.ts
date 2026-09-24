@@ -17,9 +17,16 @@ import { silentLogger } from './logger.js';
 import { CrowdyRealtimeError } from './errors.js';
 import type { UdpNotification } from './realtime.js';
 import {
+  BUNDLE_LENGTH_PREFIX_BYTES,
+  bundleSizeOf,
   createSignContext,
+  packMessageBundle,
   parseRelayFrame,
+  RELAY_MAX_BUNDLE_MEMBER_BYTES,
+  RELAY_MAX_BUNDLE_MEMBERS,
+  RELAY_MAX_DATAGRAM_BYTES,
   type RelaySignContext,
+  serializeClientCapabilities,
 } from './binary-wire.js';
 
 export const RELAY_SUBPROTOCOL = 'crowdy-relay-v1';
@@ -73,8 +80,19 @@ export interface BinaryRelayCallbacks {
  * walk an entire fleet's clients somewhere else, which is a much worse outcome
  * than an unbalanced fleet.
  *
- * Compares the last two labels, so `ck-api-4.pgc.prod.cp.cks-env.com` and
- * `ck.prod.cp.cks-env.com` match, and `evil.example.com` does not.
+ * Compares the last two labels, so `ck-api-or-4.prod.crowdedkingdoms.com` and
+ * `ck.prod.crowdedkingdoms.com` match, and `evil.example.com` does not.
+ *
+ * TWO LABELS IS COARSER THAN IT LOOKS, AND IT GOT MORE VISIBLE RATHER THAN WORSE.
+ * Every tier now sits under one brand root, so "the last two labels" is
+ * `crowdedkingdoms.com` for all of them and a redirect could in principle move a prod
+ * client onto a dev host. That was equally true before the 2026-08 root migration --
+ * the tiers shared a single root then too -- so this is a long-standing property the
+ * rename exposed, not one it introduced. It still does the job it was written for:
+ * stopping a compromised instance walking clients to an unrelated domain. Narrowing
+ * it to the tier is a deliberate change with its own blast radius (it would refuse
+ * legitimate cross-datacenter redirects if a tier ever spans roots) and belongs in
+ * its own reviewed diff, not in a rename.
  */
 export function isSameEstate(current: string, candidate: string): boolean {
   const host = (raw: string): string | null => {
@@ -99,6 +117,57 @@ export interface BinaryRelayConfig {
   retryInitialDelayMs?: number;
   retryMaxDelayMs?: number;
   logger?: CrowdyLogger;
+  /**
+   * Pack the datagrams sent within {@link bundleWindowMs} into one
+   * MESSAGE_BUNDLE frame (the server does the same on the downlink). A lone
+   * message goes out unwrapped. Requires a replication server that accepts
+   * client bundles (Buddy v0.27.0+). Defaults to `true`; `false` sends every
+   * message as its own frame, as CrowdyJS did before 17.1.
+   */
+  bundleSends?: boolean;
+  /**
+   * How long a pending bundle waits for more messages before it is flushed, in
+   * milliseconds. Defaults to `1`. `0` flushes on the next macrotask with no
+   * deliberate wait, so sends made in one synchronous burst still share a
+   * frame. Ignored when {@link bundleSends} is false.
+   */
+  bundleWindowMs?: number;
+  /**
+   * Tell the server what this client can read (`CLIENT_CAPABILITIES`, Buddy
+   * v0.30.0) on every `ready` and every {@link capabilitiesIntervalMs} after,
+   * so its bundles arrive signed once instead of per member. Default true; a
+   * server older than v0.30.0 ignores the message.
+   */
+  advertiseCapabilities?: boolean;
+  /** Re-advertise period in ms (default 15 000). */
+  capabilitiesIntervalMs?: number;
+}
+
+/** Uplink counters kept by the relay transport (see {@link BinaryRelayTransport.stats}). */
+export interface BinaryRelaySendStats {
+  /** Messages accepted for sending (each `sendFrame` call). */
+  messagesSent: number;
+  /** BINARY frames handed to the socket; at most `messagesSent`. */
+  framesSent: number;
+  /** Frames that were MESSAGE_BUNDLE wrappers (two or more members). */
+  bundlesSent: number;
+  /** Bytes handed to the socket, framing included. */
+  bytesSent: number;
+  /**
+   * Messages that were pending in a bundle when the socket went away before
+   * the window closed. UDP would have lost them too; the count says how often.
+   */
+  messagesDropped: number;
+}
+
+/**
+ * True in a browser whose document is hidden (background tab). Browsers clamp
+ * timers there, so the bundle window cannot be honoured; the transport flushes
+ * each send immediately instead. False outside a document (Node, workers).
+ */
+function documentIsHidden(): boolean {
+  const doc = (globalThis as { document?: { visibilityState?: string } }).document;
+  return doc?.visibilityState === 'hidden';
 }
 
 function base64UrlEncode(value: string): string {
@@ -122,6 +191,25 @@ export class BinaryRelayTransport {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private generation = 0;
 
+  // Outbound MESSAGE_BUNDLE (config.bundleSends). sendFrame() appends the
+  // signed datagram it is given; the bundle leaves when the window timer fires,
+  // when the next message would not fit, on flushSends(), and on disconnect.
+  private readonly bundleSends: boolean;
+  private readonly bundleWindowMs: number;
+  private readonly advertiseCapabilities: boolean;
+  private readonly capabilitiesIntervalMs: number;
+  private capsTimer: ReturnType<typeof setInterval> | null = null;
+  private pendingMembers: Uint8Array[] = [];
+  private pendingBytes = 0;
+  private bundleTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly sendStats: BinaryRelaySendStats = {
+    messagesSent: 0,
+    framesSent: 0,
+    bundlesSent: 0,
+    bytesSent: 0,
+    messagesDropped: 0,
+  };
+
   constructor(
     config: BinaryRelayConfig,
     private readonly callbacks: BinaryRelayCallbacks,
@@ -131,6 +219,15 @@ export class BinaryRelayTransport {
     this.retryAttempts = config.retryAttempts ?? 8;
     this.retryInitialDelayMs = config.retryInitialDelayMs ?? 250;
     this.retryMaxDelayMs = config.retryMaxDelayMs ?? 5000;
+    this.bundleSends = config.bundleSends ?? true;
+    this.bundleWindowMs = Math.max(0, config.bundleWindowMs ?? 1);
+    this.advertiseCapabilities = config.advertiseCapabilities ?? true;
+    this.capabilitiesIntervalMs = Math.max(1000, config.capabilitiesIntervalMs ?? 15_000);
+  }
+
+  /** Snapshot of the uplink counters. */
+  stats(): BinaryRelaySendStats {
+    return { ...this.sendStats };
   }
 
   /** True when the socket is open and the `ready` handshake completed. */
@@ -156,14 +253,18 @@ export class BinaryRelayTransport {
 
   disconnect(): void {
     this.desired = false;
+    // Whatever the last frame queued goes out before the socket does.
+    this.flushSends();
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
     this.generation += 1;
+    this.stopCapabilities();
     const ws = this.ws;
     this.ws = null;
     this.signContext = null;
+    this.stopCapabilities();
     if (ws) {
       try {
         ws.close(1000, 'client-disconnect');
@@ -184,7 +285,11 @@ export class BinaryRelayTransport {
     this.open();
   }
 
-  /** Send one pre-serialized Buddy datagram as a BINARY frame. */
+  /**
+   * Send one pre-serialized, signed Buddy message. With `bundleSends` it joins
+   * the pending MESSAGE_BUNDLE and leaves with it (see {@link flushSends});
+   * otherwise it is one BINARY frame right now.
+   */
   sendFrame(frame: Uint8Array): void {
     if (!this.isReady() || !this.ws) {
       throw new CrowdyRealtimeError('Binary relay is not connected', {
@@ -192,7 +297,78 @@ export class BinaryRelayTransport {
         retryable: true,
       });
     }
+    if (frame.length === 0) return;
+    this.sendStats.messagesSent += 1;
+
+    if (!this.bundleSends) {
+      this.transmit(frame, false);
+      return;
+    }
+
+    // Too big to travel inside any bundle: what is pending goes first, then
+    // this one alone (the server does the same with an oversize notification).
+    if (frame.length > RELAY_MAX_BUNDLE_MEMBER_BYTES) {
+      this.flushSends();
+      this.transmit(frame, false);
+      return;
+    }
+
+    const wouldBe = this.pendingBytes + BUNDLE_LENGTH_PREFIX_BYTES + frame.length;
+    if (
+      this.pendingMembers.length > 0 &&
+      (wouldBe > RELAY_MAX_DATAGRAM_BYTES ||
+        this.pendingMembers.length >= RELAY_MAX_BUNDLE_MEMBERS)
+    ) {
+      this.flushSends();
+    }
+
+    if (this.pendingMembers.length === 0) {
+      this.pendingBytes = bundleSizeOf([]);
+      this.bundleTimer = setTimeout(() => {
+        this.bundleTimer = null;
+        this.flushSends();
+      }, this.bundleWindowMs);
+    }
+    this.pendingMembers.push(frame);
+    this.pendingBytes += BUNDLE_LENGTH_PREFIX_BYTES + frame.length;
+
+    // A hidden tab has no frame loop and its timers are throttled to a second
+    // or more, so a heartbeat sent from one would sit in the bundle far longer
+    // than the window says. Nothing else is coming: send it now.
+    if (documentIsHidden()) this.flushSends();
+  }
+
+  /**
+   * Put the pending bundle on the wire now instead of at the end of the
+   * window. Call it at the end of a frame when that frame's sends should not
+   * wait. No-op when nothing is pending.
+   */
+  flushSends(): void {
+    if (this.bundleTimer) {
+      clearTimeout(this.bundleTimer);
+      this.bundleTimer = null;
+    }
+    const members = this.pendingMembers;
+    if (members.length === 0) return;
+    this.pendingMembers = [];
+    this.pendingBytes = 0;
+
+    if (!this.isReady() || !this.ws) {
+      // The socket went away inside the window. These were fire-and-forget
+      // datagrams; UDP would have lost them too. Count, do not throw: the
+      // caller that queued them has long since returned.
+      this.sendStats.messagesDropped += members.length;
+      return;
+    }
+    this.transmit(packMessageBundle(members), members.length > 1);
+  }
+
+  private transmit(frame: Uint8Array, wrapped: boolean): void {
+    if (!this.ws) return;
     this.ws.send(frame);
+    this.sendStats.framesSent += 1;
+    this.sendStats.bytesSent += frame.length;
+    if (wrapped) this.sendStats.bundlesSent += 1;
   }
 
   private open(): void {
@@ -234,6 +410,7 @@ export class BinaryRelayTransport {
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
     this.signContext = null;
+    this.stopCapabilities();
 
     let sawReady = false;
 
@@ -264,6 +441,8 @@ export class BinaryRelayTransport {
       this.ws = null;
       const hadReady = this.signContext != null || sawReady;
       this.signContext = null;
+      this.stopCapabilities();
+    this.stopCapabilities();
 
       if (!this.desired) {
         this.callbacks.onStatus('disconnected');
@@ -345,6 +524,46 @@ export class BinaryRelayTransport {
     this.preReadyFailures = 0;
     this.retries = 0;
     this.callbacks.onStatus('connected');
+    this.startCapabilities();
+  }
+
+  /**
+   * Advertise this build's capabilities now and on a timer while ready. The
+   * server binds them to the router serving our flow; a token refresh or a
+   * relay-side Buddy migration silently resets that, and until the next
+   * advertisement we are served in the older per-member form, which we parse too.
+   */
+  private startCapabilities(): void {
+    this.stopCapabilities();
+    if (!this.advertiseCapabilities) return;
+    void this.sendCapabilities();
+    const timer = setInterval(() => {
+      void this.sendCapabilities();
+    }, this.capabilitiesIntervalMs);
+    // Node: never keep a process alive for this timer (tests, tools).
+    (timer as unknown as { unref?: () => void }).unref?.();
+    this.capsTimer = timer;
+  }
+
+  private stopCapabilities(): void {
+    if (this.capsTimer) {
+      clearInterval(this.capsTimer);
+      this.capsTimer = null;
+    }
+  }
+
+  private async sendCapabilities(): Promise<void> {
+    const ctx = this.signContext;
+    if (!ctx || this.appId == null || !this.isReady()) return;
+    try {
+      const frame = await serializeClientCapabilities(ctx, this.appId);
+      if (this.signContext !== ctx) return;
+      this.sendFrame(frame);
+      // The bundler would hold it for the window; nothing else is due right now.
+      this.flushSends();
+    } catch (error) {
+      this.logger.debug?.(`capabilities not sent: ${String(error)}`);
+    }
   }
 
   /**

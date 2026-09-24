@@ -110,7 +110,9 @@ export {
   MatchesKit,
   turnExpired,
   type KitMatch,
+  type KitMatchFinishResult,
   type KitMatchScore,
+  type KitMatchSessionEnd,
   type MatchesKitOptions,
 } from './matches.js';
 export { InventoryKit, type InventoryKitOptions, type KitItemStack } from './inventory.js';
@@ -293,3 +295,8 @@ export {
   type KitInvokeResult,
   type RawInvokeResult,
 } from './shared.js';
+export {
+  sessionChannelNotification,
+  namedChannelNotification,
+  channelIdNotification,
+} from './notifications.js';

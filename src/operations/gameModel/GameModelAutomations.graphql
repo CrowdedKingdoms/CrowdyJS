@@ -201,6 +201,8 @@ query GameModelAppDiagnostics($appId: BigInt!) {
     events24h
     failedEvents24h
     automationEvents24h
+    notificationsEmitted24h
+    notificationsUndeliverable24h
     topFunctions {
       functionName
       invocations

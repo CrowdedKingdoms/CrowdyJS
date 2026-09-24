@@ -16,10 +16,9 @@
  * update to drive that provisioning, then the owner (app admin) creates a grid.
  *
  * Black-box: app + player created through the public management API. Point at an env:
- *   CROWDY_HTTP_URL='https://api.dev-2.dev.cks-env.com' \
- *   CROWDY_HTTP_URL='https://game.dev-2.dev.cks-env.com/graphql' \
- *   CROWDY_WS_URL='wss://game.dev-2.dev.cks-env.com/graphql' \
- *   CROWDY_OWNER_EMAIL='admin@dev-2.dev.cks-env.com' \
+ *   CROWDY_HTTP_URL='https://ck.dev.crowdedkingdoms.com' \
+ *   CROWDY_WS_URL='wss://ck.dev.crowdedkingdoms.com/graphql' \
+ *   CROWDY_OWNER_EMAIL='owner@example.com' \
  *   npm test
  */
 import test from 'node:test';

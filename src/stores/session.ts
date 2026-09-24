@@ -47,6 +47,7 @@ export type SentPacketKind =
   | 'text'
   | 'clientEvent'
   | 'audio'
+  | 'video'
   | 'singleActorMessage'
   | 'channelMessage';
 
@@ -99,6 +100,8 @@ const BUS_KEYS: BusKey[] = [
   'voxelUpdate',
   'voxelUpdateResponse',
   'audio',
+  'video',
+  'actorLeft',
   'text',
   'clientEvent',
   'serverEvent',

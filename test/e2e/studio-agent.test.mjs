@@ -8,9 +8,9 @@
  * passed over the v7 outage.
  *
  * When CROWDY_HTTP_URL + CROWDY_OWNER_EMAIL are set, a killed or empty
- * platform is a FAILURE, not a skip. Session create needs an app token with
- * use_studio_agent; that is also a failure if the policy claims to be live
- * and the runtime still refuses.
+ * platform is a FAILURE, not a skip. The metered model endpoint needs an app
+ * token with use_studio_agent plus the provider-data consent; that is also a
+ * failure if the policy claims to be live and the runtime still refuses.
  *
  * Public API only — no SQL. Auto-skips only when the management e2e env is
  * absent (local `npm test` without a fleet).
@@ -97,7 +97,83 @@ test('studio agent: effective policy on CROWDY_TEST_APP_ID is not killed', { ski
   assert.ok((e.allowedModes ?? []).includes('ASK'));
 });
 
-test('studio agent: ASK session create succeeds', { skip, timeout: 120_000 }, async () => {
+/**
+ * EVERY APP MUST HAVE A DEFAULT TIER, and that is all this asserts about its contents.
+ *
+ * It is deliberately NOT "the default tier grants use_studio_agent". That assertion was
+ * written on 2026-08-26 and removed the same hour, because measuring first showed it was
+ * a guess dressed as a rule: NO app on dev grants it there, including the flagship
+ * blocks-with-friends. `ASK session create succeeds` below finds-or-creates a tier
+ * carrying the permission precisely because the default is not expected to have it --
+ * the agent entitlement is opt-in per tier by design.
+ *
+ * What the default tier DOES vary in is worth knowing and is not this suite's to
+ * legislate. On dev, blocks-with-friends grants eight runtime permissions including
+ * run_server_code and run_client_code; titan-assault grants four and neither. A game
+ * whose automations run server code will behave completely differently on those two
+ * tiers, and no test here can say which is intended -- that is a product decision about
+ * one app, not an invariant of the platform.
+ *
+ * So this checks the structural thing that IS invariant: a player who has bought nothing
+ * lands on the default tier, and an app without one has nowhere to put them.
+ */
+test('studio agent: the app has a default access tier for ordinary players', { skip, timeout: 60_000 }, async () => {
+  const owner = await provisionOwner();
+  const id = appId();
+  const tiers = (await gqlManagement(
+    `query($a: BigInt!){ appAccessTiers(appId:$a){ tierId name isDefault status permissionKeys } }`,
+    { a: id },
+    owner.token,
+  )).appAccessTiers ?? [];
+
+  const live = tiers.filter((t) => t.status !== 'archived');
+  assert.ok(live.length > 0, `app ${id} has no active access tier at all`);
+
+  const dflt = live.find((t) => t.isDefault);
+  assert.ok(
+    dflt,
+    `app ${id} has ${live.length} active tier(s) and none is the default. ` +
+      'A player who has not bought anything lands on the default tier; without one ' +
+      'there is nothing for grantAppAccess to put them on.',
+  );
+  assert.ok(
+    (dflt.permissionKeys ?? []).includes('access'),
+    `app ${id}'s default tier "${dflt.name}" (${dflt.tierId}) does not grant even ` +
+      `'access'. It grants: ${JSON.stringify(dflt.permissionKeys ?? [])}. Nobody ` +
+      'arriving on it can connect at all.',
+  );
+});
+
+/**
+ * THE WALLET IS A THIRD GATE, and it fails with its own vocabulary.
+ *
+ * `enable-studio-agent.sh` checks it and this suite did not: platform policy, app
+ * policy and the ORG'S RUNTIME STATUS are three independent reasons the agent stops,
+ * and knowing which one is out is most of the diagnosis. A denied wallet does not say
+ * AGENT_APP_KILLED -- so with only the policy assertions above, that failure arrives as
+ * an unexplained refusal at session create, which is where it is most expensive to read.
+ */
+test('studio agent: the org\'s runtime wallet is active', { skip, timeout: 60_000 }, async () => {
+  const owner = await provisionOwner();
+  const id = appId();
+  const app = (await gqlManagement(
+    `query($a: BigInt!){ app(appId:$a){ appId orgId runtimeStatus runtimeDenialReason } }`,
+    { a: id },
+    owner.token,
+  )).app;
+  assert.ok(app, `app ${id} did not resolve`);
+  assert.equal(
+    app.runtimeStatus,
+    'active',
+    `app ${id} (org ${app.orgId}) has runtimeStatus=${app.runtimeStatus} ` +
+      `reason=${app.runtimeDenialReason}. Server code and agent automations are gated ` +
+      'on this independently of the agent policies, so the policy tests can be green ' +
+      'while nothing runs.',
+  );
+  assert.equal(app.runtimeDenialReason, null, `runtimeDenialReason=${app.runtimeDenialReason}`);
+});
+
+test('studio agent: the metered model endpoint admits a consenting player', { skip, timeout: 120_000 }, async () => {
   const owner = await provisionOwner();
   const id = appId();
   const perms = await gqlManagement(`query { runtimePermissions }`, {}, owner.token);
@@ -127,37 +203,51 @@ test('studio agent: ASK session create succeeds', { skip, timeout: 120_000 }, as
     owner.token,
   );
   const access = await mintAppAccess(id, player.token);
-  // createSession is app-resident. The shared entry name may land in the
-  // other datacenter and answer WRONG_DATACENTER — the mint already named
-  // the app's own origin.
-  const gameGraphql = `${String(access.gameApiUrl ?? process.env.CROWDY_HTTP_URL).replace(/\/$/, '')}/graphql`;
-  const mutation = `mutation($i: CreateAgentSessionInput!){ crowdyStudioAgentCreateSession(input:$i){
-      sessionId status mode
-    } }`;
-  const vars = {
-    i: {
-      appId: id,
-      mode: 'ASK',
-      requestedModel: 'openai/gpt-oss-120b',
-      idempotencyKey: `crowdyjs-e2e-agent-${rid()}`,
-    },
-  };
-  // Runtime pulls crowdy.studio-agent-policy/1; a just-unkilled platform
-  // reaches an existing replica in about a minute (refreshAfter is 2/3 of 60s).
+  // Both calls are app-resident. The shared entry name may land in the other
+  // datacenter and answer WRONG_DATACENTER; the mint already named the app's
+  // own origin.
+  const gameOrigin = String(access.gameApiUrl ?? process.env.CROWDY_HTTP_URL).replace(/\/$/, '');
+  const gameGraphql = `${gameOrigin}/graphql`;
+
+  // 1. Consent (what the pane's notice records), idempotent.
+  const consent = await gqlAt(
+    gameGraphql,
+    `mutation($i: SetCrowdyStudioProviderConsentInput!){ crowdyStudioSetProviderConsent(input:$i){ appId consented } }`,
+    { i: { appId: id, consented: true } },
+    access.token,
+  );
+  assert.equal(consent.crowdyStudioSetProviderConsent.consented, true);
+
+  // 2. The model catalog the harness boots with. Runtime pulls
+  // crowdy.studio-agent-policy/1; a just-unkilled platform reaches an existing
+  // replica in about a minute (refreshAfter is 2/3 of 60s).
   const deadline = Date.now() + 90_000;
-  let created;
+  let models;
   for (;;) {
-    try {
-      created = await gqlAt(gameGraphql, mutation, vars, access.token);
+    const res = await fetch(`${gameOrigin}/v1/model/models`, {
+      headers: { authorization: `Bearer ${access.token}` },
+    });
+    const json = await res.json();
+    if (res.ok) {
+      models = json;
       break;
-    } catch (err) {
-      const msg = String(err?.message ?? err);
-      const stale = /AGENT_OPERATOR_KILLED|AGENT_DISABLED|AGENT_APP_KILLED/.test(msg);
-      if (!stale || Date.now() >= deadline) throw err;
-      await new Promise((r) => setTimeout(r, 5000));
     }
+    const code = json?.error?.code ?? '';
+    const stale = /AGENT_OPERATOR_KILLED|AGENT_DISABLED|AGENT_APP_KILLED/.test(code);
+    if (!stale || Date.now() >= deadline) {
+      throw new Error(`GET /v1/model/models ${res.status}: ${JSON.stringify(json)}`);
+    }
+    await new Promise((r) => setTimeout(r, 5000));
   }
-  const session = created.crowdyStudioAgentCreateSession;
-  assert.ok(session?.sessionId, `createSession returned ${JSON.stringify(created)}`);
-  assert.equal(session.mode, 'ASK');
+  const ids = (models.data ?? []).map((m) => m.id);
+  assert.ok(ids.includes('openai/gpt-oss-120b'), `catalog must include openai/gpt-oss-120b, got ${JSON.stringify(ids)}`);
+
+  // 3. Usage is readable and names the payer; nothing has been spent.
+  const usage = await gqlAt(
+    gameGraphql,
+    `query($a: BigInt!){ crowdyStudioModelUsage(appId:$a){ payerKind todayRequests } }`,
+    { a: id },
+    access.token,
+  );
+  assert.ok(['PLAYER', 'ORG', 'PLATFORM'].includes(usage.crowdyStudioModelUsage.payerKind));
 });

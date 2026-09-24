@@ -6,7 +6,7 @@
  *
  * Exposed as `client.metrics`; call {@link RealtimeMetrics.snapshot} from a
  * HUD/diagnostics loop. Byte counts measure the app-defined **payload** field
- * of each message (`state` / `audioData` / `text` / `payload` / `voxelState`),
+ * of each message (`state` / `audioData` / `videoData` / `text` / `payload` / `voxelState`),
  * not wire framing or GraphQL envelope overhead.
  */
 
@@ -210,7 +210,7 @@ export class RealtimeMetrics {
  * approximated by its UTF-16 length.
  */
 export function payloadBytesOf(record: Record<string, unknown>): number {
-  for (const key of ['state', 'audioData', 'text', 'payload', 'voxelState']) {
+  for (const key of ['state', 'audioData', 'videoData', 'text', 'payload', 'voxelState']) {
     const value = record[key];
     if (typeof value === 'string') return value.length;
   }

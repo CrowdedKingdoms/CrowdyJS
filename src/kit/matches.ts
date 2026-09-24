@@ -3,6 +3,7 @@ import type { EngineDetector } from './engine.js';
 import type { GameModelAPI } from '../domains/gameModel.js';
 import type { UdpAPI } from '../domains/udp.js';
 import type { Scalars } from '../generated/graphql.js';
+import { CrowdyGraphQLError } from '../errors.js';
 import { encodeBase64, generateCrowdyUuid } from '../utils.js';
 import { matchesNames, type MatchesNames } from './blueprints/index.js';
 import {
@@ -10,6 +11,22 @@ import {
   kitInvoke,
   type KitInvokeResult,
 } from './shared.js';
+
+/**
+ * What {@link MatchesKit.finish} did about the backing session after a
+ * successful `end_match`: `'ended'` (it ended it), `'already_ended'` (a
+ * replayed finish; the session was already ended), `'forbidden'` (the caller
+ * passed `end_match` -- creator or the app's elected host -- but is neither
+ * the session host nor an app admin, so the session is still active; an app
+ * admin can `gameModel.endSession` it).
+ * Absent when `end_match` itself was refused (`success: false`).
+ */
+export type KitMatchSessionEnd = 'ended' | 'already_ended' | 'forbidden';
+
+/** {@link MatchesKit.finish}'s result: the invoke result plus what happened to the session. */
+export type KitMatchFinishResult = KitInvokeResult<string> & {
+  sessionEnd?: KitMatchSessionEnd;
+};
 
 /** Options for {@link MatchesKit}. Must match the deployed matches blueprint. */
 export interface MatchesKitOptions {
@@ -86,6 +103,12 @@ export class MatchesKit {
   private readonly names: MatchesNames;
   private readonly actorUuid: string;
   private readonly engineModuleName: string;
+  /**
+   * This client's participant incarnation per session, remembered from
+   * {@link create} (a creator starts at 1) and {@link join}, so {@link leave}
+   * can send the value the server requires without the caller carrying it.
+   */
+  private readonly incarnations = new Map<string, number>();
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -124,17 +147,35 @@ export class MatchesKit {
    *
    * @param input.creatorUserId - The calling player's user id (stored so the
    *   creator may start/advance/end the match).
+   * @param input.seedFromApp - Optional: container types whose app-scoped keyed
+   *   rows (a `gameModelSeed` with `bindingKey`) are stamped into the match's
+   *   session at creation, inside the same transaction, so the match starts
+   *   with its world rows present (chests, spawners, turrets). Same shape as
+   *   `CreateSessionInput.seedFromApp`: `{ typeNames, initialState? }`. At most
+   *   2,000 rows; above that the create is refused and no session exists. Only
+   *   `'session'`-scoped types; the copies are the only rows the tier's
+   *   (opt-in) ended-session retention may drop.
    */
   async create(input: {
     creatorUserId: Scalars['BigInt']['input'];
     mode?: string;
     maxPlayers?: number;
     displayName?: string;
+    seedFromApp?: { typeNames: string[]; initialState?: 'defaults' | 'app' };
   }): Promise<KitMatch> {
+    // A kit match talks GraphQL and channel pings; the `actorUuid` here is only
+    // the channel-message sender id, never a replicated actor. Under the
+    // default `presence: 'actor'` the server would expire every player after
+    // the join grace window, so the roster is judged by nothing: players leave
+    // with `leave()`, `finish()` ends the session, and an emptied session is
+    // abandoned by the empty timeout.
     const session = await this.gameModel.createSession({
       appId: this.appId,
       name: input.displayName ?? `match-${input.mode ?? 'default'}`,
+      presence: 'none',
+      ...(input.seedFromApp ? { seedFromApp: input.seedFromApp } : {}),
     });
+    this.incarnations.set(session.sessionId, 1);
     const channel = await this.requireChannels().create({
       appId: this.appId,
       name: `match-${session.sessionId}`,
@@ -190,14 +231,51 @@ export class MatchesKit {
     );
   }
 
-  /** Join a match: session participation + the notification channel. */
+  /**
+   * Join a match: session participation + the notification channel. A rejoin
+   * (you are already in) returns your row with `incarnation + 1`. The
+   * incarnation is remembered on this kit instance for {@link leave}.
+   */
   async join(match: KitMatch) {
     const participant = await this.gameModel.joinSession({
       appId: this.appId,
       sessionId: match.sessionId,
     });
+    this.incarnations.set(match.sessionId, participant.incarnation);
     if (match.channelId !== '0' && match.channelId !== '') {
       await this.requireChannels().join(match.channelId);
+    }
+    return participant;
+  }
+
+  /**
+   * Leave a match: session departure + the notification channel. The server
+   * requires the incarnation {@link join} returned to *this* client, so a
+   * superseded client can never remove the one that took over; pass it, or
+   * let the kit use the one it remembered from `create` / `join` on this
+   * instance. A kit session is `presence: 'none'`, so this and {@link finish}
+   * are the roster's only exits.
+   *
+   * @throws {Error} when no incarnation is known for the match on this
+   *   instance and none was passed.
+   * @throws {CrowdyGraphQLError} `SESSION_INCARNATION_STALE` (a newer client
+   *   of yours rejoined), `SESSION_NOT_PARTICIPANT`, `NOT_FOUND`.
+   */
+  async leave(match: KitMatch, incarnation?: number) {
+    const known = incarnation ?? this.incarnations.get(match.sessionId);
+    if (known === undefined) {
+      throw new Error(
+        'kit.matches.leave needs the incarnation join() returned — pass it, or join through this kit instance',
+      );
+    }
+    const participant = await this.gameModel.leaveSession({
+      appId: this.appId,
+      sessionId: match.sessionId,
+      incarnation: known,
+    });
+    this.incarnations.delete(match.sessionId);
+    if (match.channelId !== '0' && match.channelId !== '') {
+      await this.requireChannels().leave(match.channelId);
     }
     return participant;
   }
@@ -357,12 +435,24 @@ export class MatchesKit {
    * Finish the match and record the winner (creator or host). Also drops the
    * pending turn deadline on a `turnTimer` match — `end_match` already
    * strands it, so this just saves the pointless fire and channel ping.
+   *
+   * When `end_match` succeeds the backing session is ended too
+   * (`gameModelEndSession`, reason `completed`): every participant is marked
+   * left, admission closes, and the session's events become eligible for
+   * retention. The game-authoritative step runs first, so the match is
+   * decided whatever happens next; `sessionEnd` on the result says what
+   * happened to the session ({@link KitMatchSessionEnd}): `'ended'`, or
+   * `'already_ended'` for a replayed finish, or `'forbidden'` when the caller
+   * passed `end_match` (creator or the app's elected host) but is not admitted
+   * to the session end (session host or app admin only) -- the match is
+   * finished, the session is not, and nothing is thrown. Any other refusal of
+   * the session end propagates.
    */
   async finish(
     match: KitMatch,
     winnerUserId: Scalars['BigInt']['input'],
-  ): Promise<KitInvokeResult<string>> {
-    const result = await kitInvoke<string>(this.gameModel, {
+  ): Promise<KitMatchFinishResult> {
+    const result: KitMatchFinishResult = await kitInvoke<string>(this.gameModel, {
       appId: String(this.appId),
       functionName: this.names.endFn,
       selfContainerId: match.metaId,
@@ -371,6 +461,25 @@ export class MatchesKit {
     });
     if (result.success && match.turnSeq !== undefined) {
       await this.cancelTurnDeadline(match);
+    }
+    if (result.success) {
+      try {
+        await this.gameModel.endSession({
+          appId: this.appId,
+          sessionId: match.sessionId,
+          reason: 'completed',
+        });
+        result.sessionEnd = 'ended';
+      } catch (error) {
+        if (error instanceof CrowdyGraphQLError && error.code === 'SESSION_ENDED') {
+          result.sessionEnd = 'already_ended';
+        } else if (error instanceof CrowdyGraphQLError && error.code === 'FORBIDDEN') {
+          result.sessionEnd = 'forbidden';
+        } else {
+          throw error;
+        }
+      }
+      if (result.sessionEnd !== 'forbidden') this.incarnations.delete(match.sessionId);
     }
     return result;
   }

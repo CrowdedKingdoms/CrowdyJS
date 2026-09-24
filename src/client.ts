@@ -77,6 +77,12 @@ export interface GraphQLClientConfig {
    * so mutations stay pinned to the same upstream as the WS subscription.
    */
   lbCookieStore?: LbCookieStore;
+  /**
+   * The `fetch` to POST with. Defaults to the global. A grid program (the
+   * sandboxed JS runtime of `@crowdedkingdoms/crowdyjs/grid-program`) passes one
+   * that relays over a MessagePort, because its sandbox has no network.
+   */
+  fetch?: typeof fetch;
 }
 
 /**
@@ -107,9 +113,14 @@ export class GraphQLClient {
   private readonly session: SessionStore;
   private readonly logger: CrowdyLogger;
   private readonly lbCookieStore?: LbCookieStore;
+  private readonly fetchImpl?: typeof fetch;
   private onWrongDatacenter?: (
     move: DatacenterMove,
   ) => boolean | Promise<boolean>;
+
+  get endpoint(): string {
+    return this.graphqlEndpoint;
+  }
 
   /**
    * @param config - Endpoint, timeout, and logger options; see
@@ -133,6 +144,7 @@ export class GraphQLClient {
     this.session = session;
     this.logger = config.logger ?? silentLogger;
     this.lbCookieStore = config.lbCookieStore;
+    this.fetchImpl = config.fetch;
     this.onWrongDatacenter = config.onWrongDatacenter;
   }
 
@@ -289,7 +301,7 @@ export class GraphQLClient {
 
     try {
       const requestBody = { query, variables };
-      const response = await fetch(this.graphqlEndpoint, {
+      const response = await (this.fetchImpl ?? fetch)(this.graphqlEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

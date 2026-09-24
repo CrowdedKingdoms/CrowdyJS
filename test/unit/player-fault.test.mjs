@@ -85,6 +85,24 @@ test('an unattributed error is not turned into one', () => {
  * default in the whole feature where guessing wrong costs the platform rather than the
  * player.
  */
+test('an open circuit carries why it opened when the server knows', () => {
+  const error = new CrowdyUserCodeFaultError([
+    {
+      message: 'This action is paused because it kept failing.',
+      extensions: {
+        code: 'CIRCUIT_OPEN',
+        blame: 'AUTHOR',
+        retryable: true,
+        cause: 'watchdog_timeout',
+        retryAfterMs: 60000,
+      },
+    },
+  ]);
+  assert.equal(playerFaultOf(error).code, 'CIRCUIT_OPEN');
+  assert.equal(playerFaultOf(error).cause, 'watchdog_timeout');
+  assert.equal(error.fault.cause, 'watchdog_timeout');
+});
+
 test('a missing retryable reads as false, not as permission to retry', () => {
   const error = new CrowdyUserCodeFaultError([
     { message: 'x', extensions: { code: 'PLATFORM_ERROR', blame: 'PLATFORM' } },

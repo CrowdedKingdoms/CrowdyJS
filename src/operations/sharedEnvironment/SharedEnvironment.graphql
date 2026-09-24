@@ -173,3 +173,24 @@ mutation RemoveSharedPaymentMethod(
     idempotencyKey: $idempotencyKey
   )
 }
+
+# Reserved capacity. A reservation is a FLOOR the platform provisions and holds,
+# not a ceiling and not a rate-limit bypass -- see the SDK docs on
+# `setReservedThroughput`. Split by traffic type on 2026-09-01, so the App fields
+# read back both dimensions while the mutation still sets the UDP one.
+mutation SetAppReservedThroughput(
+  $input: SetAppReservedThroughputInput!
+  $idempotencyKey: String
+) {
+  setAppReservedThroughput(input: $input, idempotencyKey: $idempotencyKey) {
+    app {
+      appId
+      deploymentTarget
+      reservedUdpBytesPerSec
+      reservedGraphqlOpsPerSec
+      runtimeStatus
+      runtimeDenialReason
+    }
+    chargedCents
+  }
+}

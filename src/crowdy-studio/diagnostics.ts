@@ -4,7 +4,25 @@ import {
 } from './models.js';
 
 export type CrowdyStudioDiagnosticSeverity = 'error' | 'warning' | 'info' | 'hint';
-export type CrowdyStudioDiagnosticSource = 'rustc' | 'local-advisory';
+
+/**
+ * Where a diagnostic came from, which is what an editor filters on.
+ *
+ * `'runtime'` was already in CrowdyCPP's enum and missing here, so the two SDKs disagreed
+ * about the shape they both claim to share; adding `'model-lint'` was the moment to close
+ * that rather than widen it.
+ *
+ * `'model-lint'` is the server's `gameModelLint`, and it is a different kind of answer from
+ * the other three. Those describe code the developer is editing. This describes whether the
+ * app's game model hangs together at all — a container naming a type nobody defined, a
+ * function calling one that does not exist — which has no file and no line, and which no
+ * amount of reading the open document would reveal.
+ */
+export type CrowdyStudioDiagnosticSource =
+  | 'rustc'
+  | 'local-advisory'
+  | 'runtime'
+  | 'model-lint';
 
 export interface CrowdyStudioDiagnostic {
   target: CrowdyStudioTarget;
