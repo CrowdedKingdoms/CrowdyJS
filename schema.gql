@@ -2927,6 +2927,10 @@ type GridClientMod {
   Compile artifact hash of the client half. Clients use it as an immutable cache and lifecycle key.
   """
   clientArtifactHash: String!
+  """
+  CLIENT Cargo.toml tick_interval_ms for this attachment, clamped to 16..1000. 1000 when the crate does not set it.
+  """
+  clientTickIntervalMs: Int!
   """The grid the client mod is attached to."""
   gridId: BigInt!
   """JSON derived capability summary of the pinned version."""
