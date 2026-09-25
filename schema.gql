@@ -7565,6 +7565,85 @@ type ExecDeployResult {
 }
 
 """
+One guest log line from an app’s ck-exec instances (`ctx.log`), kept for 24 hours (dev-tier preview).
+"""
+type ExecLogLine {
+  """
+  The line’s id, time-ordered: pass the oldest one you have as `before` to page back.
+  """
+  id: String!
+  """
+  The node type that logged it; empty for a platform note (lines dropped over a rate).
+  """
+  nodeType: String!
+  """The instance key."""
+  key: String!
+  """0 error, 1 warn, 2 info, 3 debug."""
+  level: Int!
+  """The execution host it ran on."""
+  host: String!
+  """When the instance logged it."""
+  at: DateTime!
+  """The line, at most 1 KiB."""
+  text: String!
+}
+
+"""
+An instance the execution manager has placed for an app (dev-tier preview).
+"""
+type ExecInstance {
+  """The instance id."""
+  instanceId: String!
+  nodeType: String!
+  """The instance key; empty for the root hub."""
+  key: String!
+  """`hub` or `spoke`."""
+  kind: String!
+  """`idle`, `starting`, `running` or `stopping`."""
+  phase: String!
+  """The execution host it runs on; null while idle."""
+  host: String
+  """
+  Rises each time it is placed; snapshots from an older epoch are refused.
+  """
+  epoch: Int!
+  """Milliseconds since it entered this phase."""
+  sinceMs: Float!
+  """
+  Why the manager will not place it right now (a crash loop, a failed start), when it will not.
+  """
+  heldBack: String
+}
+
+"""A deployed version of an app’s ck-exec topology."""
+type ExecVersion {
+  version: Int!
+  """Who deployed it, e.g. `user:<id>`."""
+  createdBy: String
+  createdAt: DateTime!
+  """Node types in its manifest."""
+  types: Int!
+  """Whether it is the active version."""
+  active: Boolean!
+}
+
+"""
+Whether an app’s ck-exec code may run: its active version and its switches (dev-tier preview).
+"""
+type ExecAppStatus {
+  """The active version; null before the first deploy."""
+  activeVersion: Int
+  """The whole app is switched off (`execSetEnabled` without a node type)."""
+  disabled: Boolean!
+  """Node types switched off one by one."""
+  disabledTypes: [String!]!
+  """
+  Paused while the app is over its compute budget; it resumes by itself once a minute is back under it.
+  """
+  budgetPaused: Boolean!
+}
+
+"""
 One model the answering ck-api instance carries, with the pinned price it will meter against.
 """
 type CrowdyStudioAgentCatalogModel {
@@ -9792,6 +9871,36 @@ type Query {
   One UTF-8 file from the bound repository at one commit (default: githubSha), with its blob SHA.
   """
   crowdyStudioGitHubFile(input: CrowdyStudioGitHubFileInput!): CrowdyStudioGitHubFile!
+  """
+  Guest log lines from an app's ck-exec instances (`ctx.log`), newest first, kept for 24 hours (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  """
+  execLogs(
+    appId: BigInt!
+    """Only lines from this node type."""
+    nodeType: String
+    """Only lines from the instance with this key."""
+    key: String
+    """
+    The least severe level included: 0 errors only, 1 warnings too, 2 info, 3 everything (the default).
+    """
+    maxLevel: Int
+    """Only lines older than this line id, to page back."""
+    before: String
+    """At most this many lines (default 100, at most 500)."""
+    limit: Int
+  ): [ExecLogLine!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  What the execution manager has placed for an app: every instance, its phase and host (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  """
+  execInstances(appId: BigInt!): [ExecInstance!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  An app's deployed ck-exec versions, newest first, and which is active (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  """
+  execVersions(appId: BigInt!): [ExecVersion!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Whether an app's ck-exec code may run: its active version, kill switches and budget pause (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  """
+  execAppStatus(appId: BigInt!): ExecAppStatus! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
   List the authenticated player’s private Crowdy Studio projects in one app, newest first. Requires an app-scoped token for appId; every row and source-file read is filtered by both app and caller ownership. The bounded result defaults to 25 and never grants grid deployment authority.
   """
@@ -12186,6 +12295,31 @@ type Mutation {
     """The app, its manifest and new modules."""
     input: ExecDeployInput!
   ): ExecDeployResult! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
+  Make an earlier ck-exec version active again, a rollback (dev-tier preview). Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission.
+  """
+  execActivateVersion(appId: BigInt!, version: Int!): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  The kill switch for an app's ck-exec code, or one node type of it (dev-tier preview). Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. Requires the org 'manage_compute' permission.
+  """
+  execSetEnabled(
+    appId: BigInt!
+    enabled: Boolean!
+    """Only this node type; the whole app when omitted."""
+    nodeType: String
+  ): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints (dev-tier preview). The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token.
+  """
+  execConnectAsDeveloper(
+    appId: BigInt!
+    """
+    Put the session on the host running an instance of this type (with `key`).
+    """
+    nodeType: String
+    """The instance key within `nodeType`."""
+    key: String
+  ): ExecConnection! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
   Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
   """
@@ -15102,7 +15236,7 @@ input ExecDeployInput {
   """The app to deploy."""
   appId: BigInt!
   """
-  The manifest as JSON: `{ "root": "<hub type>", "types": { "<name>": { "kind": "hub"|"spoke", "parent", "digest", "client", "calls", ... } } }`. See the ck-exec repo’s `ckx-control` crate for every field and its platform bounds.
+  The manifest as JSON: `{ "root": "<hub type>", "types": { "<name>": { "kind": "hub"|"spoke", "parent", "digest", "client", "calls", "scopes", ... } } }`. Every field and its platform bounds: https://docs.dev.crowdedkingdoms.com/exec/intro#the-manifest.
   """
   manifestJson: String!
   """

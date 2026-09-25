@@ -12,3 +12,87 @@ mutation ExecDeploy($input: ExecDeployInput!) {
     version
   }
 }
+
+mutation ExecConnectAsDeveloper($appId: BigInt!, $nodeType: String, $key: String) {
+  execConnectAsDeveloper(appId: $appId, nodeType: $nodeType, key: $key) {
+    gatewayUrl
+    token
+    host
+    expiresAt
+  }
+}
+
+query ExecLogs(
+  $appId: BigInt!
+  $nodeType: String
+  $key: String
+  $maxLevel: Int
+  $before: String
+  $limit: Int
+) {
+  execLogs(
+    appId: $appId
+    nodeType: $nodeType
+    key: $key
+    maxLevel: $maxLevel
+    before: $before
+    limit: $limit
+  ) {
+    id
+    nodeType
+    key
+    level
+    host
+    at
+    text
+  }
+}
+
+query ExecInstances($appId: BigInt!) {
+  execInstances(appId: $appId) {
+    instanceId
+    nodeType
+    key
+    kind
+    phase
+    host
+    epoch
+    sinceMs
+    heldBack
+  }
+}
+
+query ExecVersions($appId: BigInt!) {
+  execVersions(appId: $appId) {
+    version
+    createdBy
+    createdAt
+    types
+    active
+  }
+}
+
+fragment ExecAppStatusFields on ExecAppStatus {
+  activeVersion
+  disabled
+  disabledTypes
+  budgetPaused
+}
+
+query ExecAppStatus($appId: BigInt!) {
+  execAppStatus(appId: $appId) {
+    ...ExecAppStatusFields
+  }
+}
+
+mutation ExecActivateVersion($appId: BigInt!, $version: Int!) {
+  execActivateVersion(appId: $appId, version: $version) {
+    ...ExecAppStatusFields
+  }
+}
+
+mutation ExecSetEnabled($appId: BigInt!, $enabled: Boolean!, $nodeType: String) {
+  execSetEnabled(appId: $appId, enabled: $enabled, nodeType: $nodeType) {
+    ...ExecAppStatusFields
+  }
+}

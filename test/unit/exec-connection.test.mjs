@@ -205,3 +205,67 @@ test('deploy sends the manifest with digests and each distinct module once', asy
   });
   assert.deepEqual(input.artifacts, [{ digest, wasmBase64: Buffer.from(wasm).toString('base64') }]);
 });
+
+test('connectAsDeveloper dials execConnectAsDeveloper, and reconnects with a fresh developer token', async (t) => {
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  const docs = [];
+  const exec = new ExecAPI({
+    request: async (doc, vars) => {
+      docs.push(doc.definitions[0].name.value);
+      return {
+        execConnectAsDeveloper: {
+          gatewayUrl: gw.url,
+          token: `dev-${docs.length}`,
+          host: `host-${docs.length}`,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        },
+        vars,
+      };
+    },
+  });
+  const c = await exec.connectAsDeveloper('77', { ...opts, nodeType: 'bare', key: 'k' });
+  t.after(() => c.close());
+  assert.deepEqual(docs, ['ExecConnectAsDeveloper']);
+  assert.equal(gw.sockets[0].token, 'dev-1');
+  assert.deepEqual(await c.call('bare', 'k', 'whoami'), { method: 'whoami', args: null });
+  gw.sockets[0].ws.terminate();
+  await until('a second developer dial', () => docs.length === 2 && gw.sockets.length === 2);
+  assert.equal(gw.sockets[1].token, 'dev-2');
+});
+
+test('operations pass their arguments through and drop __typename', async () => {
+  const seen = [];
+  const status = { __typename: 'ExecAppStatus', activeVersion: 2, disabled: false, disabledTypes: ['bare'], budgetPaused: false };
+  const answers = {
+    ExecLogs: { execLogs: [{ __typename: 'ExecLogLine', id: '9', nodeType: 'arena', key: 'm1', level: 2, host: 'h', at: '2026-09-25T00:00:00.000Z', text: 'hi' }] },
+    ExecInstances: { execInstances: [{ __typename: 'ExecInstance', instanceId: '1', nodeType: 'lobby', key: '', kind: 'hub', phase: 'running', host: 'h', epoch: 3, sinceMs: 5, heldBack: null }] },
+    ExecVersions: { execVersions: [{ __typename: 'ExecVersion', version: 2, createdBy: 'user:1', createdAt: '2026-09-25T00:00:00.000Z', types: 4, active: true }] },
+    ExecAppStatus: { execAppStatus: status },
+    ExecActivateVersion: { execActivateVersion: status },
+    ExecSetEnabled: { execSetEnabled: status },
+  };
+  const exec = new ExecAPI({
+    request: async (doc, vars) => {
+      const name = doc.definitions.find((d) => d.kind === 'OperationDefinition').name.value;
+      seen.push([name, vars]);
+      return answers[name];
+    },
+  });
+  const [line] = await exec.logs('77', { nodeType: 'arena', maxLevel: 1, limit: 10 });
+  assert.deepEqual(line, { id: '9', nodeType: 'arena', key: 'm1', level: 2, host: 'h', at: '2026-09-25T00:00:00.000Z', text: 'hi' });
+  assert.equal((await exec.instances('77'))[0].phase, 'running');
+  assert.equal((await exec.versions('77'))[0].active, true);
+  const { __typename, ...plain } = status;
+  assert.deepEqual(await exec.status('77'), plain);
+  assert.deepEqual(await exec.activateVersion('77', 1), plain);
+  assert.deepEqual(await exec.setEnabled('77', false, 'bare'), plain);
+  assert.deepEqual(seen, [
+    ['ExecLogs', { appId: '77', nodeType: 'arena', maxLevel: 1, limit: 10 }],
+    ['ExecInstances', { appId: '77' }],
+    ['ExecVersions', { appId: '77' }],
+    ['ExecAppStatus', { appId: '77' }],
+    ['ExecActivateVersion', { appId: '77', version: 1 }],
+    ['ExecSetEnabled', { appId: '77', enabled: false, nodeType: 'bare' }],
+  ]);
+});
