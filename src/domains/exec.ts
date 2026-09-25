@@ -19,11 +19,32 @@ import {
   type ExecInstancesQuery,
   ExecLogsDocument,
   type ExecLogsQuery,
+  ExecAppModsDocument,
+  ExecModBuildDocument,
+  ExecModBuildStatusDocument,
+  ExecModDeleteDocument,
+  ExecModDeployDocument,
+  type ExecModFieldsFragment,
+  ExecModInstallDocument,
+  type ExecModListingFieldsFragment,
+  ExecModListingsDocument,
+  ExecModLogsDocument,
+  ExecModPublishDocument,
+  ExecModScope,
+  ExecModSetEnabledDocument,
+  ExecModSetSwitchDocument,
+  type ExecModSwitchFieldsFragment,
+  ExecModSwitchesDocument,
+  ExecModUnpublishDocument,
+  ExecModsDocument,
+  ExecMyModsDocument,
   ExecSetEnabledDocument,
   ExecStartersDocument,
   ExecVersionsDocument,
   type ExecVersionsQuery,
 } from '../generated/graphql.js';
+
+export { ExecModScope };
 
 /**
  * ck-exec, the hub-and-spoke execution service (dev-tier preview).
@@ -737,6 +758,20 @@ export type ExecInstance = Omit<ExecInstancesQuery['execInstances'][number], '__
 export type ExecVersion = Omit<ExecVersionsQuery['execVersions'][number], '__typename'>;
 /** An app's active version, kill switches and budget pause. */
 export type ExecAppStatus = Omit<ExecAppStatusFieldsFragment, '__typename'>;
+/**
+ * A mod: a player's code on a grid they own, the node type `mod:<name>` keyed by the grid id
+ * (call it with {@link execModType}). It runs as its owner while `enabled` and `blocked` is null.
+ */
+export type ExecMod = Omit<ExecModFieldsFragment, '__typename'>;
+/** A published mod other grid owners may install (no payments). */
+export type ExecModListing = Omit<ExecModListingFieldsFragment, '__typename'>;
+/** A rung of the app's mods kill ladder that is off. */
+export type ExecModSwitch = Omit<ExecModSwitchFieldsFragment, '__typename'>;
+
+/** The node type players call a mod by: `mod:<name>`, keyed by its grid id. */
+export function execModType(name: string): string {
+  return `mod:${name}`;
+}
 
 export interface ExecLogsOptions {
   nodeType?: string;
@@ -903,6 +938,150 @@ export class ExecAPI {
       if (Date.now() > until) throw new CrowdyError({ message: `build ${buildId} is still ${b.status}` });
       await new Promise((r) => setTimeout(r, options.intervalMs ?? 2_000));
     }
+  }
+
+  // ---- mods: players' code on grids they own ----
+
+  /**
+   * Builds a mod from one `ckx-sdk` crate, as {@link build} does a developer's. Returns at
+   * once; wait with {@link waitForModBuild}, then {@link modDeploy}. One build at a time per
+   * player. Requires `write_server_code` in the app.
+   */
+  async modBuild(appId: string, crate: ExecCrate): Promise<ExecBuild> {
+    const files = Array.isArray(crate.files)
+      ? crate.files
+      : Object.entries(crate.files).map(([path, content]) => ({ path, content }));
+    const data = await this.graphql.request(ExecModBuildDocument, {
+      appId,
+      crate: { name: crate.name, files },
+    });
+    return build(data.execModBuild);
+  }
+
+  /** A mod build of yours. */
+  async modBuildStatus(appId: string, buildId: string): Promise<ExecBuild> {
+    const data = await this.graphql.request(ExecModBuildStatusDocument, { appId, buildId });
+    return build(data.execModBuildStatus);
+  }
+
+  /** Polls a mod build until it succeeds or fails, like {@link waitForBuild}. */
+  async waitForModBuild(
+    appId: string,
+    buildId: string,
+    options: { intervalMs?: number; timeoutMs?: number } = {},
+  ): Promise<ExecBuild> {
+    const until = Date.now() + (options.timeoutMs ?? 600_000);
+    for (;;) {
+      const b = await this.modBuildStatus(appId, buildId);
+      if (b.status === 'succeeded' || b.status === 'failed') return b;
+      if (Date.now() > until) throw new CrowdyError({ message: `build ${buildId} is still ${b.status}` });
+      await new Promise((r) => setTimeout(r, options.intervalMs ?? 2_000));
+    }
+  }
+
+  /**
+   * Deploys a mod build of yours to a grid you own: a new mod starts switched off, and a
+   * running one restarts on the new version. Requires being the grid's owner and
+   * `write_server_code` on the app tier and the grid.
+   */
+  async modDeploy(appId: string, gridId: string, name: string, buildId: string): Promise<ExecMod> {
+    const data = await this.graphql.request(ExecModDeployDocument, { appId, gridId, name, buildId });
+    return strip(data.execModDeploy);
+  }
+
+  /**
+   * Switches a mod on your grid on or off. On, it runs as you once the app's code admission
+   * admits it. Requires `run_server_code` on the app tier and the grid.
+   */
+  async modSetEnabled(appId: string, gridId: string, name: string, enabled: boolean): Promise<ExecMod> {
+    const data = await this.graphql.request(ExecModSetEnabledDocument, { appId, gridId, name, enabled });
+    return strip(data.execModSetEnabled);
+  }
+
+  /** Stops and removes a mod on your grid, with its state. */
+  async modDelete(appId: string, gridId: string, name: string): Promise<boolean> {
+    const data = await this.graphql.request(ExecModDeleteDocument, { appId, gridId, name });
+    return data.execModDelete;
+  }
+
+  /** A grid's mods, which players in it call as `mod:<name>` with the grid id as key. */
+  async mods(appId: string, gridId: string): Promise<ExecMod[]> {
+    const data = await this.graphql.request(ExecModsDocument, { appId, gridId });
+    return data.execMods.map(strip);
+  }
+
+  /** Your mods in the app, on every grid. */
+  async myMods(appId: string): Promise<ExecMod[]> {
+    const data = await this.graphql.request(ExecMyModsDocument, { appId });
+    return data.execMyMods.map(strip);
+  }
+
+  /** A mod of yours' guest log lines, newest first. */
+  async modLogs(
+    appId: string,
+    gridId: string,
+    name: string,
+    options: Omit<ExecLogsOptions, 'nodeType' | 'key'> = {},
+  ): Promise<ExecLogLine[]> {
+    const data = await this.graphql.request(ExecModLogsDocument, { appId, gridId, name, ...options });
+    return data.execModLogs.map(strip);
+  }
+
+  /** Publishes a mod of yours, at its current version, for other grid owners to install. */
+  async modPublish(
+    appId: string,
+    gridId: string,
+    name: string,
+    title: string,
+    description?: string,
+  ): Promise<ExecModListing> {
+    const data = await this.graphql.request(ExecModPublishDocument, { appId, gridId, name, title, description });
+    return strip(data.execModPublish);
+  }
+
+  /** The app's listed mods, most installed first. */
+  async modListings(appId: string): Promise<ExecModListing[]> {
+    const data = await this.graphql.request(ExecModListingsDocument, { appId });
+    return data.execModListings.map(strip);
+  }
+
+  /** Delists a listing you published; installed copies keep running. */
+  async modUnpublish(appId: string, listingId: string): Promise<boolean> {
+    const data = await this.graphql.request(ExecModUnpublishDocument, { appId, listingId });
+    return data.execModUnpublish;
+  }
+
+  /** Installs a listing onto a grid you own as your own mod, switched off. */
+  async modInstall(appId: string, gridId: string, name: string, listingId: string): Promise<ExecMod> {
+    const data = await this.graphql.request(ExecModInstallDocument, { appId, gridId, name, listingId });
+    return strip(data.execModInstall);
+  }
+
+  /** The app's mods by grid or owner, or all of them. Requires `view_compute_diagnostics`. */
+  async appMods(appId: string, options: { gridId?: string; ownerId?: string } = {}): Promise<ExecMod[]> {
+    const data = await this.graphql.request(ExecAppModsDocument, { appId, ...options });
+    return data.execAppMods.map(strip);
+  }
+
+  /** The app's mod switches that are off. Requires `view_compute_diagnostics`. */
+  async modSwitches(appId: string): Promise<ExecModSwitch[]> {
+    const data = await this.graphql.request(ExecModSwitchesDocument, { appId });
+    return data.execModSwitches.map(strip);
+  }
+
+  /**
+   * The mods kill ladder: switch off (or on) one mod (`target`: its mod id), a player's mods
+   * (their user id), a grid's (its id), a listing's installs (its id), or every mod in the
+   * app (no target). Returns the switches that are off. Requires `manage_compute`.
+   */
+  async modSetSwitch(
+    appId: string,
+    scope: ExecModScope,
+    off: boolean,
+    options: { target?: string; reason?: string } = {},
+  ): Promise<ExecModSwitch[]> {
+    const data = await this.graphql.request(ExecModSetSwitchDocument, { appId, scope, off, ...options });
+    return data.execModSetSwitch.map(strip);
   }
 
   /** A host for this player and its connect token (valid for about a minute). */

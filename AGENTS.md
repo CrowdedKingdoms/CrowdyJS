@@ -4,12 +4,23 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.11.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.12.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.12.0 adds ck-exec mods to `client.exec` (dev-tier preview, 2026-09-25, P2 W7).** A mod is
+a player's code on a grid they own, the node type `mod:<name>` (`execModType`) keyed by the
+grid id, which players call through an `ExecConnection` like any node. `modBuild` /
+`modBuildStatus` / `waitForModBuild` build one crate (one build at a time per player,
+`write_server_code` in the app); `modDeploy`, `modSetEnabled` (on needs `run_server_code` and
+the app's code admission), `modDelete`, `mods(appId, gridId)`, `myMods` and `modLogs` are the
+owner's; `modPublish`, `modListings`, `modUnpublish` and `modInstall` are the marketplace
+without payments. For developers: `appMods`, `modSwitches` and `modSetSwitch` (the kill
+ladder, `ExecModScope`). The schema came from the game API's mods branch (`schema:sync:local`,
+cks-game-api #406).
 
 **17.11.0 adds ck-exec builds to `client.exec` (dev-tier preview, 2026-09-25, P2 W6).**
 `starters(appId)` wraps `execStarters`: the four starter crates (world tick, matchmaker,

@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '17.11.0';
+export const VERSION = '17.12.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -586,6 +586,11 @@ export {
   type ExecBuild,
   type ExecStarter,
   type ExecStarterPack,
+  ExecModScope,
+  execModType,
+  type ExecMod,
+  type ExecModListing,
+  type ExecModSwitch,
 } from './domains/exec.js';
 export { PlayerComputeAPI } from './domains/playerCompute.js';
 export { CrowdyStudioAPI } from './domains/crowdyStudio.js';

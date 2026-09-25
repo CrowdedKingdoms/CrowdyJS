@@ -137,3 +137,177 @@ query ExecBuildStatus($appId: BigInt!, $buildId: String!) {
     ...ExecBuildFields
   }
 }
+
+fragment ExecModFields on ExecMod {
+  modId
+  gridId
+  name
+  ownerId
+  version
+  digest
+  enabled
+  listingId
+  blocked
+  running
+  updatedAt
+}
+
+fragment ExecModListingFields on ExecModListing {
+  listingId
+  title
+  description
+  publisherId
+  sourceModId
+  sourceVersion
+  digest
+  installs
+  createdAt
+  delistedAt
+}
+
+fragment ExecModSwitchFields on ExecModSwitch {
+  scope
+  target
+  reason
+  createdBy
+  createdAt
+}
+
+mutation ExecModBuild($appId: BigInt!, $crate: ExecBuildCrateInput!) {
+  execModBuild(appId: $appId, crate: $crate) {
+    ...ExecBuildFields
+  }
+}
+
+query ExecModBuildStatus($appId: BigInt!, $buildId: String!) {
+  execModBuildStatus(appId: $appId, buildId: $buildId) {
+    ...ExecBuildFields
+  }
+}
+
+mutation ExecModDeploy(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+  $buildId: String!
+) {
+  execModDeploy(appId: $appId, gridId: $gridId, name: $name, buildId: $buildId) {
+    ...ExecModFields
+  }
+}
+
+mutation ExecModSetEnabled(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+  $enabled: Boolean!
+) {
+  execModSetEnabled(appId: $appId, gridId: $gridId, name: $name, enabled: $enabled) {
+    ...ExecModFields
+  }
+}
+
+mutation ExecModDelete($appId: BigInt!, $gridId: BigInt!, $name: String!) {
+  execModDelete(appId: $appId, gridId: $gridId, name: $name)
+}
+
+query ExecMods($appId: BigInt!, $gridId: BigInt!) {
+  execMods(appId: $appId, gridId: $gridId) {
+    ...ExecModFields
+  }
+}
+
+query ExecMyMods($appId: BigInt!) {
+  execMyMods(appId: $appId) {
+    ...ExecModFields
+  }
+}
+
+query ExecModLogs(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+  $maxLevel: Int
+  $before: String
+  $limit: Int
+) {
+  execModLogs(
+    appId: $appId
+    gridId: $gridId
+    name: $name
+    maxLevel: $maxLevel
+    before: $before
+    limit: $limit
+  ) {
+    id
+    nodeType
+    key
+    level
+    host
+    at
+    text
+  }
+}
+
+mutation ExecModPublish(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+  $title: String!
+  $description: String
+) {
+  execModPublish(
+    appId: $appId
+    gridId: $gridId
+    name: $name
+    title: $title
+    description: $description
+  ) {
+    ...ExecModListingFields
+  }
+}
+
+query ExecModListings($appId: BigInt!) {
+  execModListings(appId: $appId) {
+    ...ExecModListingFields
+  }
+}
+
+mutation ExecModUnpublish($appId: BigInt!, $listingId: BigInt!) {
+  execModUnpublish(appId: $appId, listingId: $listingId)
+}
+
+mutation ExecModInstall(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+  $listingId: BigInt!
+) {
+  execModInstall(appId: $appId, gridId: $gridId, name: $name, listingId: $listingId) {
+    ...ExecModFields
+  }
+}
+
+query ExecAppMods($appId: BigInt!, $gridId: BigInt, $ownerId: BigInt) {
+  execAppMods(appId: $appId, gridId: $gridId, ownerId: $ownerId) {
+    ...ExecModFields
+  }
+}
+
+query ExecModSwitches($appId: BigInt!) {
+  execModSwitches(appId: $appId) {
+    ...ExecModSwitchFields
+  }
+}
+
+mutation ExecModSetSwitch(
+  $appId: BigInt!
+  $scope: ExecModScope!
+  $off: Boolean!
+  $target: String
+  $reason: String
+) {
+  execModSetSwitch(appId: $appId, scope: $scope, off: $off, target: $target, reason: $reason) {
+    ...ExecModSwitchFields
+  }
+}

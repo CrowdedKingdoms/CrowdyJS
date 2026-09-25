@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { WebSocket, WebSocketServer } from 'ws';
 import { decode, encode } from '@msgpack/msgpack';
 
-import { CrowdyExecError, ExecAPI } from '../../dist/index.js';
+import { CrowdyExecError, ExecAPI, ExecModScope, execModType } from '../../dist/index.js';
 
 function readClientFrame(buf) {
   const b = new Uint8Array(buf);
@@ -315,6 +315,46 @@ test('starters, build and waitForBuild pass their arguments through and drop __t
     ['ExecBuildStatus', { appId: '77', buildId: 'b1' }],
     ['ExecBuildStatus', { appId: '77', buildId: 'b1' }],
     ['ExecBuildStatus', { appId: '77', buildId: 'b1' }],
+  ]);
+});
+
+test('mods: a build, deploy, switch and install pass their arguments through and drop __typename', async () => {
+  const seen = [];
+  const mod = { __typename: 'ExecMod', modId: '900', gridId: '5', name: 'turret', ownerId: '42', version: 1, digest: 'ab'.repeat(32), enabled: false, listingId: null, blocked: null, running: false, updatedAt: 't' };
+  const fields = { __typename: 'ExecBuild', buildId: 'b1', log: null, createdAt: 't', startedAt: null, finishedAt: null, artifacts: [] };
+  const statuses = ['building', 'succeeded'];
+  const answers = {
+    ExecModBuild: () => ({ execModBuild: { ...fields, status: 'queued' } }),
+    ExecModBuildStatus: () => ({ execModBuildStatus: { ...fields, status: statuses.shift() } }),
+    ExecModDeploy: () => ({ execModDeploy: mod }),
+    ExecModSetEnabled: () => ({ execModSetEnabled: { ...mod, enabled: true } }),
+    ExecModInstall: () => ({ execModInstall: { ...mod, name: 'shop', listingId: '555' } }),
+    ExecModSetSwitch: () => ({ execModSetSwitch: [{ __typename: 'ExecModSwitch', scope: 'GRID', target: '5', reason: null, createdBy: 'user:1', createdAt: 't' }] }),
+  };
+  const exec = new ExecAPI({
+    request: async (doc, vars) => {
+      const name = doc.definitions.find((d) => d.kind === 'OperationDefinition').name.value;
+      seen.push([name, vars]);
+      return answers[name]();
+    },
+  });
+  await exec.modBuild('77', { name: 'turret', files: { 'Cargo.toml': 'c', 'src/lib.rs': 'l' } });
+  assert.equal((await exec.waitForModBuild('77', 'b1', { intervalMs: 1 })).status, 'succeeded');
+  const { __typename: _, ...plain } = mod;
+  assert.deepEqual(await exec.modDeploy('77', '5', 'turret', 'b1'), plain);
+  assert.equal((await exec.modSetEnabled('77', '5', 'turret', true)).enabled, true);
+  assert.equal((await exec.modInstall('77', '5', 'shop', '555')).listingId, '555');
+  const off = await exec.modSetSwitch('77', ExecModScope.Grid, true, { target: '5' });
+  assert.deepEqual(off, [{ scope: 'GRID', target: '5', reason: null, createdBy: 'user:1', createdAt: 't' }]);
+  assert.equal(execModType('turret'), 'mod:turret');
+  assert.deepEqual(seen.map(([n, v]) => [n, v]), [
+    ['ExecModBuild', { appId: '77', crate: { name: 'turret', files: [{ path: 'Cargo.toml', content: 'c' }, { path: 'src/lib.rs', content: 'l' }] } }],
+    ['ExecModBuildStatus', { appId: '77', buildId: 'b1' }],
+    ['ExecModBuildStatus', { appId: '77', buildId: 'b1' }],
+    ['ExecModDeploy', { appId: '77', gridId: '5', name: 'turret', buildId: 'b1' }],
+    ['ExecModSetEnabled', { appId: '77', gridId: '5', name: 'turret', enabled: true }],
+    ['ExecModInstall', { appId: '77', gridId: '5', name: 'shop', listingId: '555' }],
+    ['ExecModSetSwitch', { appId: '77', scope: 'GRID', off: true, target: '5' }],
   ]);
 });
 

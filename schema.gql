@@ -7710,6 +7710,75 @@ type ExecAppStatus {
 }
 
 """
+A mod: a player’s code on a grid they own, run by ck-exec as the hub `mod:<name>` keyed by the grid id, in its owner’s own sandbox (dev-tier preview).
+"""
+type ExecMod {
+  modId: String!
+  gridId: BigInt!
+  """1-48 lowercase letters, digits, `-` or `_`."""
+  name: String!
+  """
+  The player it runs as: the grid’s owner when it was deployed, or when the grid last changed hands.
+  """
+  ownerId: BigInt!
+  version: Int!
+  """SHA-256 of its module, hex."""
+  digest: String!
+  """
+  Its owner switched it on. It runs only while this holds and `blocked` is null.
+  """
+  enabled: Boolean!
+  """The marketplace listing it was installed from."""
+  listingId: BigInt
+  """
+  Why an enabled mod will not run: a switch of the app’s kill ladder, or the app’s own switch.
+  """
+  blocked: String
+  """Whether an instance of it runs now."""
+  running: Boolean!
+  updatedAt: DateTime!
+}
+
+"""A rung of the mods kill ladder that is off (dev-tier preview)."""
+type ExecModSwitch {
+  scope: ExecModScope!
+  """The id it names; empty for `ALL`."""
+  target: String!
+  reason: String
+  """Who switched it off, e.g. `user:<id>`."""
+  createdBy: String
+  createdAt: DateTime!
+}
+
+"""
+A rung of the mods kill ladder: one mod (target: its mod id), a player’s mods (their user id), a grid’s mods (its grid id), the installs of a marketplace listing (its listing id), or every mod in the app (no target).
+"""
+enum ExecModScope {
+  MOD
+  PLAYER
+  GRID
+  LISTING
+  ALL
+}
+
+"""
+A mod version its owner published, which any grid owner in the app may install as a mod of their own (dev-tier preview; no payments).
+"""
+type ExecModListing {
+  listingId: BigInt!
+  title: String!
+  description: String
+  publisherId: BigInt!
+  sourceModId: String!
+  sourceVersion: Int!
+  """SHA-256 of its module, hex."""
+  digest: String!
+  installs: Int!
+  createdAt: DateTime!
+  delistedAt: DateTime
+}
+
+"""
 One model the answering ck-api instance carries, with the pinned price it will meter against.
 """
 type CrowdyStudioAgentCatalogModel {
@@ -9993,6 +10062,71 @@ type Query {
     """The id `execBuild` returned."""
     buildId: String!
   ): ExecBuild @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  A mod build of yours: its status, compiler log and module (dev-tier preview). Builds are kept for 7 days.
+  """
+  execModBuildStatus(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The id `execModBuild` returned."""
+    buildId: String!
+  ): ExecBuild!
+  """
+  A grid's mods (dev-tier preview), which players in the grid call by name as the node type `mod:<name>` with the grid id as key. Requires access to the app.
+  """
+  execMods(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+  ): [ExecMod!]!
+  """Your mods in an app, on every grid (dev-tier preview)."""
+  execMyMods(
+    """The app the grid is in."""
+    appId: BigInt!
+  ): [ExecMod!]!
+  """
+  A mod of yours' guest log lines (`ctx.log`), newest first, kept for 24 hours (dev-tier preview).
+  """
+  execModLogs(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+    """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
+    name: String!
+    """
+    The least severe level included: 0 errors only, 1 warnings too, 2 info, 3 everything (the default).
+    """
+    maxLevel: Int
+    """Only lines older than this line id, to page back."""
+    before: String
+    """At most this many lines (default 100, at most 500)."""
+    limit: Int
+  ): [ExecLogLine!]!
+  """
+  The app's mod marketplace: listed mods, most installed first (dev-tier preview). Requires access to the app.
+  """
+  execModListings(
+    """The app the grid is in."""
+    appId: BigInt!
+  ): [ExecModListing!]!
+  """
+  An app's mods, by grid or by owner, or all of them (at most 1000) (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  """
+  execAppMods(
+    """The app the grid is in."""
+    appId: BigInt!
+    gridId: BigInt
+    ownerId: BigInt
+  ): [ExecMod!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  The app's mod switches that are off (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  """
+  execModSwitches(
+    """The app the grid is in."""
+    appId: BigInt!
+  ): [ExecModSwitch!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
   List the authenticated player’s private Crowdy Studio projects in one app, newest first. Requires an app-scoped token for appId; every row and source-file read is filtered by both app and caller ownership. The bounded result defaults to 25 and never grants grid deployment authority.
   """
@@ -12427,6 +12561,97 @@ type Mutation {
     """The app and the crates to build."""
     input: ExecBuildInput!
   ): ExecBuild! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
+  Build a mod from one ckx-sdk crate (dev-tier preview), as `execBuild` builds a developer's crates. Returns at once with the build queued; poll `execModBuildStatus`, then pass its id to `execModDeploy`. One build at a time per player. Requires the 'write_server_code' permission in the app.
+  """
+  execModBuild(
+    """The app the grid is in."""
+    appId: BigInt!
+    crate: ExecBuildCrateInput!
+  ): ExecBuild!
+  """
+  Deploy a mod build of yours to a grid you own (dev-tier preview): a new mod starts switched off; a running one restarts on the new version. Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
+  """
+  execModDeploy(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+    """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
+    name: String!
+    """A succeeded `execModBuild` of yours."""
+    buildId: String!
+  ): ExecMod!
+  """
+  Switch a mod on your grid on or off (dev-tier preview). On, it runs as you once the app's code admission admits it. Requires being the grid's current owner and 'run_server_code' on both the app tier and the grid.
+  """
+  execModSetEnabled(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+    """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
+    name: String!
+    enabled: Boolean!
+  ): ExecMod!
+  """
+  Stop and remove a mod on your grid, with its state and versions (dev-tier preview). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
+  """
+  execModDelete(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+    """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
+    name: String!
+  ): Boolean!
+  """
+  Publish a mod of yours, at its current version, for other grid owners in the app to install (dev-tier preview; no payments). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
+  """
+  execModPublish(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+    """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
+    name: String!
+    """1-80 characters."""
+    title: String!
+    """At most 2000 characters."""
+    description: String
+  ): ExecModListing!
+  """
+  Delist a listing you published (dev-tier preview): nobody installs it any more; installed copies keep running.
+  """
+  execModUnpublish(
+    """The app the grid is in."""
+    appId: BigInt!
+    listingId: BigInt!
+  ): Boolean!
+  """
+  Install a listing onto a grid you own as your own mod, switched off (dev-tier preview; no payments). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
+  """
+  execModInstall(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+    """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
+    name: String!
+    listingId: BigInt!
+  ): ExecMod!
+  """
+  The mods kill ladder (dev-tier preview): switch off one mod, a player's mods, a grid's mods, a listing's installs or every mod in the app, or back on. Off stops what runs at once and refuses calls. Returns the switches that are off. Requires the org 'manage_compute' permission.
+  """
+  execModSetSwitch(
+    """The app the grid is in."""
+    appId: BigInt!
+    scope: ExecModScope!
+    off: Boolean!
+    """The id the scope names; none for ALL."""
+    target: String
+    reason: String
+  ): [ExecModSwitch!]! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
   Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
   """
