@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '17.8.0';
+export const VERSION = '17.10.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -563,6 +563,25 @@ export {
   type DeployVersionOptions,
   type WaitForCompileOptions,
 } from './domains/compute.js';
+export {
+  ExecAPI,
+  ExecConnection,
+  CrowdyExecError,
+  EXEC_STATUSES,
+  execStatus,
+  encodeExecFrame,
+  decodeExecFrame,
+  type ExecStatus,
+  type ExecClientFrame,
+  type ExecServerFrame,
+  type ExecPush,
+  type ExecPushHandler,
+  type ExecEndpoint,
+  type ExecConnectOptions,
+  type ExecWebSocketCtor,
+  type ExecNodeTypeInput,
+  type ExecDeployOptions,
+} from './domains/exec.js';
 export { PlayerComputeAPI } from './domains/playerCompute.js';
 export { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 export { PlayerWalletAPI } from './domains/playerWallet.js';
