@@ -1,0 +1,14 @@
+mutation ExecConnect($appId: BigInt!, $nodeType: String, $key: String) {
+  execConnect(appId: $appId, nodeType: $nodeType, key: $key) {
+    gatewayUrl
+    token
+    host
+    expiresAt
+  }
+}
+
+mutation ExecDeploy($input: ExecDeployInput!) {
+  execDeploy(input: $input) {
+    version
+  }
+}

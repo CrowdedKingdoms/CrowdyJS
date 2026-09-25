@@ -1,0 +1,207 @@
+/**
+ * `client.exec` against a fake gateway: a `ws` server speaking the ck-exec client protocol,
+ * and a fake `execConnect` that hands out its address. Covers calls, errors, pushes,
+ * reconnecting after the host goes away (subscriptions renewed), and redialing on `Moved`.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { WebSocket, WebSocketServer } from 'ws';
+import { decode, encode } from '@msgpack/msgpack';
+
+import { CrowdyExecError, ExecAPI } from '../../dist/index.js';
+
+function readClientFrame(buf) {
+  const b = new Uint8Array(buf);
+  let at = 0;
+  const u8 = () => b[at++];
+  const u16 = () => (at += 2, b[at - 2] | (b[at - 1] << 8));
+  const u32 = () => (at += 4, (b[at - 4] | (b[at - 3] << 8) | (b[at - 2] << 16) | (b[at - 1] << 24)) >>> 0);
+  const str = (n) => Buffer.from(b.subarray(at, (at += n))).toString('utf8');
+  const tag = u8();
+  if (tag === 0x04) return { kind: 'ping', nonce: u32() };
+  const rid = u32();
+  const nodeType = str(u8());
+  const key = str(u16());
+  if (tag === 0x01) {
+    const method = str(u8());
+    return { kind: 'call', rid, nodeType, key, method, payload: b.slice(at) };
+  }
+  return { kind: tag === 0x02 ? 'subscribe' : 'unsubscribe', rid, nodeType, key, topic: str(u8()) };
+}
+
+const u32le = (v) => {
+  const b = Buffer.alloc(4);
+  b.writeUInt32LE(v);
+  return b;
+};
+const s8 = (s) => Buffer.concat([Buffer.from([Buffer.byteLength(s)]), Buffer.from(s)]);
+const s16 = (s) => {
+  const b = Buffer.alloc(2);
+  b.writeUInt16LE(Buffer.byteLength(s));
+  return Buffer.concat([b, Buffer.from(s)]);
+};
+const reply = (rid, status, payload = new Uint8Array()) =>
+  Buffer.concat([Buffer.from([0x81]), u32le(rid), Buffer.from([status]), Buffer.from(payload)]);
+const push = (nodeType, key, topic, payload) =>
+  Buffer.concat([Buffer.from([0x82]), s8(nodeType), s16(key), s8(topic), Buffer.from(payload)]);
+const pong = (nonce) => Buffer.concat([Buffer.from([0x84]), u32le(nonce)]);
+
+/** A gateway whose behaviour a test scripts per connection. */
+async function fakeGateway(onFrame) {
+  const wss = new WebSocketServer({ port: 0 });
+  await new Promise((r) => wss.once('listening', r));
+  const gw = { wss, sockets: [], frames: [], url: `ws://127.0.0.1:${wss.address().port}` };
+  wss.on('connection', (ws, req) => {
+    const conn = { ws, n: gw.sockets.length, token: new URL(req.url, 'http://x').searchParams.get('token') };
+    gw.sockets.push(conn);
+    ws.on('message', (data) => {
+      const f = readClientFrame(data);
+      gw.frames.push({ conn: conn.n, ...f });
+      onFrame(f, conn, gw);
+    });
+  });
+  return gw;
+}
+
+function api(gw) {
+  const dials = [];
+  const graphql = {
+    request: async (_doc, vars) => {
+      dials.push(vars);
+      return {
+        execConnect: {
+          gatewayUrl: gw.url,
+          token: `token-${dials.length}`,
+          host: `host-${dials.length}`,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        },
+      };
+    },
+  };
+  return { exec: new ExecAPI(graphql), dials };
+}
+
+const opts = { WebSocket, callTimeoutMs: 2_000 };
+
+/** Answers every call with `{ method, args }` and every subscribe with Ok. */
+function echo(f, conn) {
+  if (f.kind === 'call') conn.ws.send(reply(f.rid, 0, encode({ method: f.method, args: decode(f.payload) })));
+  if (f.kind === 'subscribe' || f.kind === 'unsubscribe') conn.ws.send(reply(f.rid, 0));
+  if (f.kind === 'ping') conn.ws.send(pong(f.nonce));
+}
+
+const until = async (what, check, ms = 3_000) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (check()) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.fail(`timed out waiting for ${what}`);
+};
+
+test('connect asks for a host with the placement it wants, and calls round-trip as MessagePack', async (t) => {
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  const { exec, dials } = api(gw);
+  const c = await exec.connect('77', { ...opts, nodeType: 'arena', key: 'm1' });
+  t.after(() => c.close());
+  assert.deepEqual(dials, [{ appId: '77', nodeType: 'arena', key: 'm1' }]);
+  assert.equal(gw.sockets[0].token, 'token-1');
+  assert.equal(c.host, 'host-1');
+  assert.deepEqual(await c.call('arena', 'm1', 'hit', { weapon: 2 }), { method: 'hit', args: { weapon: 2 } });
+  assert.ok((await c.ping()) >= 0);
+});
+
+test('a refused call is a CrowdyExecError with the platform status and the handler message', async (t) => {
+  const gw = await fakeGateway((f, conn) => {
+    if (f.kind === 'call') conn.ws.send(reply(f.rid, f.method === 'fail' ? 1 : 6, Buffer.from('no such thing')));
+  });
+  t.after(() => gw.wss.close());
+  const c = await api(gw).exec.connect('77', opts);
+  t.after(() => c.close());
+  await assert.rejects(c.call('arena', 'm1', 'fail'), (e) => {
+    assert.ok(e instanceof CrowdyExecError);
+    assert.equal(e.status, 'AppError');
+    assert.equal(e.retryable, false);
+    assert.match(e.message, /no such thing/);
+    return true;
+  });
+  await assert.rejects(c.call('arena', 'm1', 'apply_damage'), (e) => e.status === 'Denied');
+});
+
+test('pushes reach their handlers decoded, and the last unsubscribe tells the gateway', async (t) => {
+  const gw = await fakeGateway((f, conn) => {
+    echo(f, conn);
+    if (f.kind === 'subscribe') setTimeout(() => conn.ws.send(push(f.nodeType, f.key, f.topic, encode({ hp: 9 }))), 5);
+  });
+  t.after(() => gw.wss.close());
+  const c = await api(gw).exec.connect('77', opts);
+  t.after(() => c.close());
+  const got = [];
+  const stop = await c.subscribe('arena', 'm1', 'hp', (p) => got.push(p));
+  await until('a push', () => got.length === 1);
+  assert.deepEqual({ ...got[0], payload: undefined }, { nodeType: 'arena', key: 'm1', topic: 'hp', value: { hp: 9 }, payload: undefined });
+  await stop();
+  await until('the unsubscribe', () => gw.frames.some((f) => f.kind === 'unsubscribe'));
+});
+
+test('when the host goes away the connection comes back on a fresh host, subscriptions and all', async (t) => {
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  const { exec, dials } = api(gw);
+  const c = await exec.connect('77', { ...opts, nodeType: 'arena', key: 'm1' });
+  t.after(() => c.close());
+  const hosts = [];
+  c.onReconnect((h) => hosts.push(h));
+  await c.subscribe('arena', 'm1', 'hp', () => {});
+
+  gw.sockets[0].ws.terminate();
+  await until('the reconnect', () => hosts.length === 1);
+  assert.deepEqual(hosts, ['host-2']);
+  assert.equal(dials.length, 2, 'a fresh execConnect');
+  assert.ok(
+    gw.frames.some((f) => f.conn === 1 && f.kind === 'subscribe' && f.topic === 'hp'),
+    'the subscription is renewed on the new connection',
+  );
+  assert.deepEqual(await c.call('arena', 'm1', 'state'), { method: 'state', args: null });
+});
+
+test('a call answered Moved is tried once more on a fresh connection', async (t) => {
+  const gw = await fakeGateway((f, conn) => {
+    if (f.kind === 'call' && conn.n === 0) return conn.ws.send(reply(f.rid, 3, Buffer.from('moved')));
+    echo(f, conn);
+  });
+  t.after(() => gw.wss.close());
+  const { exec, dials } = api(gw);
+  const c = await exec.connect('77', opts);
+  t.after(() => c.close());
+  assert.deepEqual(await c.call('arena', 'm1', 'state'), { method: 'state', args: null });
+  assert.equal(dials.length, 2);
+  assert.equal(c.host, 'host-2');
+});
+
+test('deploy sends the manifest with digests and each distinct module once', async () => {
+  const sent = [];
+  const exec = new ExecAPI({ request: async (_doc, vars) => (sent.push(vars), { execDeploy: { version: 4 } }) });
+  const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
+  const r = await exec.deploy({
+    appId: '77',
+    root: 'lobby',
+    types: {
+      lobby: { kind: 'hub', wasm, client: true },
+      arena: { kind: 'hub', parent: 'lobby', wasm, persist_every_ms: 5000 },
+    },
+  });
+  assert.deepEqual(r, { version: 4 });
+  const { input } = sent[0];
+  const manifest = JSON.parse(input.manifestJson);
+  const digest = '93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476';
+  assert.deepEqual(manifest, {
+    root: 'lobby',
+    types: {
+      lobby: { kind: 'hub', client: true, digest },
+      arena: { kind: 'hub', parent: 'lobby', persist_every_ms: 5000, digest },
+    },
+  });
+  assert.deepEqual(input.artifacts, [{ digest, wasmBase64: Buffer.from(wasm).toString('base64') }]);
+});
