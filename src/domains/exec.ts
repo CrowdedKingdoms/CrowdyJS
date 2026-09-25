@@ -7,6 +7,9 @@ import {
   ExecActivateVersionDocument,
   ExecAppStatusDocument,
   type ExecAppStatusFieldsFragment,
+  ExecBuildDocument,
+  type ExecBuildFieldsFragment,
+  ExecBuildStatusDocument,
   ExecConnectAsDeveloperDocument,
   type ExecConnectAsDeveloperMutation,
   ExecConnectDocument,
@@ -17,6 +20,7 @@ import {
   ExecLogsDocument,
   type ExecLogsQuery,
   ExecSetEnabledDocument,
+  ExecStartersDocument,
   ExecVersionsDocument,
   type ExecVersionsQuery,
 } from '../generated/graphql.js';
@@ -660,7 +664,9 @@ function fromUtf8Lossy(b: Uint8Array): string {
 export interface ExecNodeTypeInput {
   kind: 'hub' | 'spoke';
   /** The compiled module (`wasm32-unknown-unknown`, built with `ckx-sdk`). */
-  wasm: Uint8Array;
+  wasm?: Uint8Array;
+  /** Instead of `wasm`: a crate of the deploy's `buildId`. */
+  crate?: string;
   /** The type that owns this one; none for the root. */
   parent?: string;
   /** Clients may call it through the gateway. */
@@ -676,6 +682,38 @@ export interface ExecDeployOptions {
   /** The root hub's type name. */
   root: string;
   types: Record<string, ExecNodeTypeInput>;
+  /** A succeeded {@link ExecAPI.build} of this app whose crates the types may name. */
+  buildId?: string;
+}
+
+/** One crate for {@link ExecAPI.build}: its files by path (`Cargo.toml`, `src/lib.rs`, ...). */
+export interface ExecCrate {
+  name: string;
+  files: Record<string, string> | ExecSourceFile[];
+}
+
+export interface ExecSourceFile {
+  path: string;
+  content: string;
+}
+
+/** A build: `queued`, `building`, `succeeded` or `failed`, its log, and one module per crate. */
+export type ExecBuild = Omit<ExecBuildFieldsFragment, '__typename' | 'artifacts'> & {
+  artifacts: Array<{ crate: string; digest: string; sizeBytes: number }>;
+};
+
+/** A starter crate, with its files ready for {@link ExecAPI.build}. */
+export interface ExecStarter {
+  crate: string;
+  nodeType: string;
+  description: string;
+  files: ExecSourceFile[];
+}
+
+/** The starter packs, and the manifest that deploys them as one app, its types naming their crates. */
+export interface ExecStarterPack {
+  manifest: { root: string; types: Record<string, ExecNodeTypeInput> };
+  starters: ExecStarter[];
 }
 
 function base64(bytes: Uint8Array): string {
@@ -716,9 +754,15 @@ function strip<T extends { __typename?: string }>(v: T): Omit<T, '__typename'> {
   return rest;
 }
 
+function build(b: ExecBuildFieldsFragment): ExecBuild {
+  const { __typename: _, artifacts, ...rest } = b;
+  return { ...rest, artifacts: artifacts.map(strip) };
+}
+
 /**
- * `client.exec`: connecting players to ck-exec, deploying an app's nodes, and operating
- * them (logs, instances, versions, rollback, the kill switch, developer connections).
+ * `client.exec`: connecting players to ck-exec, building and deploying an app's nodes (and
+ * the starter packs), and operating them (logs, instances, versions, rollback, the kill
+ * switch, developer connections).
  */
 export class ExecAPI {
   constructor(private readonly graphql: GraphQLClient) {}
@@ -798,6 +842,69 @@ export class ExecAPI {
     return strip(data.execSetEnabled);
   }
 
+  /**
+   * The starter packs, which replace the compute templates: a world tick (the root hub), a
+   * matchmaker, game sessions and an NPC and mob engine. Build them with {@link build} and
+   * deploy the build with `manifest`. Requires `manage_compute`.
+   */
+  async starters(appId: string): Promise<ExecStarterPack> {
+    const data = await this.graphql.request(ExecStartersDocument, { appId });
+    return {
+      manifest: JSON.parse(data.execStarters.manifestJson) as ExecStarterPack['manifest'],
+      starters: data.execStarters.starters.map((s) => ({
+        crate: s.crate,
+        nodeType: s.nodeType,
+        description: s.description,
+        files: s.files.map(strip),
+      })),
+    };
+  }
+
+  /**
+   * Builds crates into modules on the platform (`ckx-sdk`, `wasm32-unknown-unknown`), so you
+   * need no Rust toolchain. Returns at once with the build queued; wait with
+   * {@link waitForBuild}, then {@link deploy} with its `buildId`. Requires `manage_compute`.
+   */
+  async build(appId: string, crates: ExecCrate[]): Promise<ExecBuild> {
+    const data = await this.graphql.request(ExecBuildDocument, {
+      input: {
+        appId,
+        crates: crates.map((c) => ({
+          name: c.name,
+          files: Array.isArray(c.files)
+            ? c.files
+            : Object.entries(c.files).map(([path, content]) => ({ path, content })),
+        })),
+      },
+    });
+    return build(data.execBuild);
+  }
+
+  /** A build's status, log and modules, or null. Requires `view_compute_diagnostics`. */
+  async buildStatus(appId: string, buildId: string): Promise<ExecBuild | null> {
+    const data = await this.graphql.request(ExecBuildStatusDocument, { appId, buildId });
+    return data.execBuildStatus ? build(data.execBuildStatus) : null;
+  }
+
+  /**
+   * Polls a build until it succeeds or fails, and returns it either way; a failed build's
+   * `log` says why. Throws when it is not done in `timeoutMs` (default 10 minutes).
+   */
+  async waitForBuild(
+    appId: string,
+    buildId: string,
+    options: { intervalMs?: number; timeoutMs?: number } = {},
+  ): Promise<ExecBuild> {
+    const until = Date.now() + (options.timeoutMs ?? 600_000);
+    for (;;) {
+      const b = await this.buildStatus(appId, buildId);
+      if (!b) throw new CrowdyError({ message: `no build ${buildId} in app ${appId}` });
+      if (b.status === 'succeeded' || b.status === 'failed') return b;
+      if (Date.now() > until) throw new CrowdyError({ message: `build ${buildId} is still ${b.status}` });
+      await new Promise((r) => setTimeout(r, options.intervalMs ?? 2_000));
+    }
+  }
+
   /** A host for this player and its connect token (valid for about a minute). */
   async endpoint(
     appId: string,
@@ -827,14 +934,22 @@ export class ExecAPI {
 
   /**
    * Deploys a new version of the app's nodes and makes it active: the manifest, and
-   * each distinct module once. Running instances pick it up when they next start.
-   * Requires the org `manage_compute` permission.
+   * each distinct module once. A type gives its module as `wasm`, or names a `crate` of
+   * `buildId`, whose modules the platform already holds. Running instances pick it up
+   * when they next start. Requires the org `manage_compute` permission.
    */
   async deploy(options: ExecDeployOptions): Promise<{ version: number }> {
     const types: Record<string, unknown> = {};
     const artifacts = new Map<string, string>();
     for (const [name, t] of Object.entries(options.types)) {
       const { wasm, ...spec } = t;
+      if (!wasm) {
+        if (!spec.crate || !options.buildId) {
+          throw new CrowdyError({ message: `type '${name}' needs its wasm, or a crate of the deploy's buildId` });
+        }
+        types[name] = spec;
+        continue;
+      }
       const digest = await sha256Hex(wasm);
       if (!artifacts.has(digest)) artifacts.set(digest, base64(wasm));
       types[name] = { ...spec, digest };
@@ -844,6 +959,7 @@ export class ExecAPI {
         appId: options.appId,
         manifestJson: JSON.stringify({ root: options.root, types }),
         artifacts: [...artifacts].map(([digest, wasmBase64]) => ({ digest, wasmBase64 })),
+        buildId: options.buildId,
       },
     });
     return data.execDeploy;

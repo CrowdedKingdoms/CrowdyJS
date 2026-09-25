@@ -7558,6 +7558,72 @@ type ExecConnection {
   expiresAt: DateTime!
 }
 
+"""One module a ck-exec build produced."""
+type ExecBuildArtifact {
+  """The crate it was built from."""
+  crate: String!
+  """SHA-256 of the WASM: the `digest` a manifest names it by."""
+  digest: String!
+  """The module’s size in bytes."""
+  sizeBytes: Int!
+}
+
+"""
+A ck-exec build (dev-tier preview): queued, building, succeeded or failed, with the compiler’s log and, once it succeeds, one module per crate.
+"""
+type ExecBuild {
+  """The build’s id, for `execBuildStatus` and `execDeploy`."""
+  buildId: String!
+  """`queued`, `building`, `succeeded` or `failed`."""
+  status: String!
+  """
+  The compiler’s output once the build finishes, at most 64 KB (the end is kept).
+  """
+  log: String
+  """When the build was requested."""
+  createdAt: DateTime!
+  """When it started compiling."""
+  startedAt: DateTime
+  """When it finished."""
+  finishedAt: DateTime
+  """The modules built so far, one per crate."""
+  artifacts: [ExecBuildArtifact!]!
+}
+
+"""One source file of a starter crate."""
+type ExecStarterFile {
+  """The path within the crate, as `execBuild` takes it."""
+  path: String!
+  """The file’s contents."""
+  content: String!
+}
+
+"""
+A starter crate: a ckx-sdk hub to build with `execBuild` as it is, or to change first.
+"""
+type ExecStarter {
+  """The crate’s name, which the pack’s manifest names it by."""
+  crate: String!
+  """The node type the pack’s manifest deploys it as."""
+  nodeType: String!
+  """What it does."""
+  description: String!
+  """Its Cargo.toml and sources."""
+  files: [ExecStarterFile!]!
+}
+
+"""
+The starter packs (dev-tier preview): four crates and a manifest that deploys them as one app.
+"""
+type ExecStarterPack {
+  """
+  The manifest for `execDeploy` with the build’s id: the root `world` hub, and `matchmaker`, `session` and `npcs` under it, each naming its crate.
+  """
+  manifestJson: String!
+  """The crates."""
+  starters: [ExecStarter!]!
+}
+
 """The result of a ck-exec deploy."""
 type ExecDeployResult {
   """The version now active for the app."""
@@ -9875,6 +9941,7 @@ type Query {
   Guest log lines from an app's ck-exec instances (`ctx.log`), newest first, kept for 24 hours (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
   """
   execLogs(
+    """The app whose ck-exec code this is about."""
     appId: BigInt!
     """Only lines from this node type."""
     nodeType: String
@@ -9892,15 +9959,40 @@ type Query {
   """
   What the execution manager has placed for an app: every instance, its phase and host (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
   """
-  execInstances(appId: BigInt!): [ExecInstance!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  execInstances(
+    """The app whose ck-exec code this is about."""
+    appId: BigInt!
+  ): [ExecInstance!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
   An app's deployed ck-exec versions, newest first, and which is active (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
   """
-  execVersions(appId: BigInt!): [ExecVersion!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  execVersions(
+    """The app whose ck-exec code this is about."""
+    appId: BigInt!
+  ): [ExecVersion!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
   Whether an app's ck-exec code may run: its active version, kill switches and budget pause (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
   """
-  execAppStatus(appId: BigInt!): ExecAppStatus! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  execAppStatus(
+    """The app whose ck-exec code this is about."""
+    appId: BigInt!
+  ): ExecAppStatus! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  The starter packs (dev-tier preview), which replace the compute templates: a world tick (the root hub: clock, weather, resource nodes, liveops events), a matchmaker, game sessions (lobby, host, turns, scores) and an NPC and mob engine, as ckx-sdk crates to pass to `execBuild` and a manifest for `execDeploy`. Requires the org 'manage_compute' permission.
+  """
+  execStarters(
+    """The app they are for."""
+    appId: BigInt!
+  ): ExecStarterPack! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  A ck-exec build's status, compiler log and modules (dev-tier preview); null when this app has no such build. Builds are kept for 7 days. Requires the org 'view_compute_diagnostics' permission.
+  """
+  execBuildStatus(
+    """The app the build is for."""
+    appId: BigInt!
+    """The id `execBuild` returned."""
+    buildId: String!
+  ): ExecBuild @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
   List the authenticated player’s private Crowdy Studio projects in one app, newest first. Requires an app-scoped token for appId; every row and source-file read is filtered by both app and caller ownership. The bounded result defaults to 25 and never grants grid deployment authority.
   """
@@ -12298,12 +12390,19 @@ type Mutation {
   """
   Make an earlier ck-exec version active again, a rollback (dev-tier preview). Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission.
   """
-  execActivateVersion(appId: BigInt!, version: Int!): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  execActivateVersion(
+    """The app whose ck-exec code this is about."""
+    appId: BigInt!
+    """A version `execVersions` lists; it becomes the active one."""
+    version: Int!
+  ): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
   The kill switch for an app's ck-exec code, or one node type of it (dev-tier preview). Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. Requires the org 'manage_compute' permission.
   """
   execSetEnabled(
+    """The app whose ck-exec code this is about."""
     appId: BigInt!
+    """false switches it off; true switches it on again."""
     enabled: Boolean!
     """Only this node type; the whole app when omitted."""
     nodeType: String
@@ -12312,6 +12411,7 @@ type Mutation {
   Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints (dev-tier preview). The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token.
   """
   execConnectAsDeveloper(
+    """The app whose ck-exec code this is about."""
     appId: BigInt!
     """
     Put the session on the host running an instance of this type (with `key`).
@@ -12320,6 +12420,13 @@ type Mutation {
     """The instance key within `nodeType`."""
     key: String
   ): ExecConnection! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Build ck-exec modules from Rust source (dev-tier preview): each crate is compiled with the platform's pinned toolchain and `ckx-sdk`, for wasm32-unknown-unknown, and checked against the guest ABI. Returns at once with the build queued; poll `execBuildStatus`, then pass its id to `execDeploy`. Requires the org 'manage_compute' permission.
+  """
+  execBuild(
+    """The app and the crates to build."""
+    input: ExecBuildInput!
+  ): ExecBuild! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
   """
   Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
   """
@@ -15236,13 +15343,17 @@ input ExecDeployInput {
   """The app to deploy."""
   appId: BigInt!
   """
-  The manifest as JSON: `{ "root": "<hub type>", "types": { "<name>": { "kind": "hub"|"spoke", "parent", "digest", "client", "calls", "scopes", ... } } }`. Every field and its platform bounds: https://docs.dev.crowdedkingdoms.com/exec/intro#the-manifest.
+  The manifest as JSON: `{ "root": "<hub type>", "types": { "<name>": { "kind": "hub"|"spoke", "parent", "digest", "client", "calls", "scopes", ... } } }`; with `buildId`, a type may give `"crate": "<name>"` instead of `digest`. Every field and its platform bounds: https://docs.dev.crowdedkingdoms.com/exec/intro#the-manifest.
   """
   manifestJson: String!
   """
   Modules the manifest names that this app has not uploaded before (at most 64). A request body is limited to 10 MB, so about 7 MB of modules per call.
   """
   artifacts: [ExecArtifactInput!]
+  """
+  A succeeded `execBuild` of this app whose modules to include, so a manifest can name them by digest without uploading them.
+  """
+  buildId: String
 }
 
 """One compiled module for a ck-exec deploy."""
@@ -15251,6 +15362,40 @@ input ExecArtifactInput {
   digest: String!
   """The WASM module (wasm32-unknown-unknown, built with ckx-sdk), base64."""
   wasmBase64: String!
+}
+
+"""Sources to build into ck-exec modules."""
+input ExecBuildInput {
+  """The app to build for."""
+  appId: BigInt!
+  """
+  The crates, at most 16, 2 MB of source in all; each becomes one module.
+  """
+  crates: [ExecBuildCrateInput!]!
+}
+
+"""
+One crate of a ck-exec build: a `ckx-sdk` library with `[lib] crate-type = ["cdylib"]`, built into one module.
+"""
+input ExecBuildCrateInput {
+  """
+  The crate’s name: lowercase letters, digits, `-` or `_`, at most 64 characters. The build reports each module under it.
+  """
+  name: String!
+  """
+  Its files, at most 64. `Cargo.toml` may have only [package], [lib] and [dependencies] from `ckx-sdk`, `serde` and `serde_json`.
+  """
+  files: [ExecBuildFileInput!]!
+}
+
+"""One source file of a ck-exec crate."""
+input ExecBuildFileInput {
+  """
+  The path within the crate: `Cargo.toml`, `README.md`, or a `.rs` file under `src/`.
+  """
+  path: String!
+  """The file’s contents, UTF-8."""
+  content: String!
 }
 
 """

@@ -96,3 +96,44 @@ mutation ExecSetEnabled($appId: BigInt!, $enabled: Boolean!, $nodeType: String) 
     ...ExecAppStatusFields
   }
 }
+
+query ExecStarters($appId: BigInt!) {
+  execStarters(appId: $appId) {
+    manifestJson
+    starters {
+      crate
+      nodeType
+      description
+      files {
+        path
+        content
+      }
+    }
+  }
+}
+
+fragment ExecBuildFields on ExecBuild {
+  buildId
+  status
+  log
+  createdAt
+  startedAt
+  finishedAt
+  artifacts {
+    crate
+    digest
+    sizeBytes
+  }
+}
+
+mutation ExecBuild($input: ExecBuildInput!) {
+  execBuild(input: $input) {
+    ...ExecBuildFields
+  }
+}
+
+query ExecBuildStatus($appId: BigInt!, $buildId: String!) {
+  execBuildStatus(appId: $appId, buildId: $buildId) {
+    ...ExecBuildFields
+  }
+}
