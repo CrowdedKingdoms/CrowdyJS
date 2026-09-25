@@ -4,12 +4,22 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.10.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.11.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.11.0 adds ck-exec builds to `client.exec` (dev-tier preview, 2026-09-25, P2 W6).**
+`starters(appId)` wraps `execStarters`: the four starter crates (world tick, matchmaker,
+sessions, NPCs and mobs) and a parsed `manifest` whose types name their crate. `build(appId,
+crates)` wraps `execBuild` (each crate's `files` as a path map or the starters' file list),
+`buildStatus` wraps `execBuildStatus`, and `waitForBuild` polls it until the build succeeds or
+fails. `deploy` takes a `buildId`, and a type may name a `crate` of it instead of passing
+`wasm`. `starters` and `build` need `manage_compute`; `buildStatus` needs
+`view_compute_diagnostics`. The schema came from the dev game API (`schema:sync:local`, ck-api
+`v2.18.0`).
 
 **17.10.0 adds ck-exec operations to `client.exec` (dev-tier preview, 2026-09-25, P2 W5).**
 `connectAsDeveloper(appId, { nodeType, key })` (and `developerEndpoint`) wraps

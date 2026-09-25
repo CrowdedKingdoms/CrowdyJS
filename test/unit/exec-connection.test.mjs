@@ -269,3 +269,77 @@ test('operations pass their arguments through and drop __typename', async () => 
     ['ExecSetEnabled', { appId: '77', enabled: false, nodeType: 'bare' }],
   ]);
 });
+
+test('starters, build and waitForBuild pass their arguments through and drop __typename', async () => {
+  const seen = [];
+  const artifacts = [{ __typename: 'ExecBuildArtifact', crate: 'world-tick', digest: 'ab'.repeat(32), sizeBytes: 9 }];
+  const fields = { __typename: 'ExecBuild', buildId: 'b1', log: null, createdAt: 't', startedAt: null, finishedAt: null };
+  const statuses = ['queued', 'building', 'succeeded'];
+  const answers = {
+    ExecStarters: () => ({
+      execStarters: {
+        __typename: 'ExecStarterPack',
+        manifestJson: '{"root":"world","types":{"world":{"kind":"hub","crate":"world-tick","client":true}}}',
+        starters: [{ __typename: 'ExecStarter', crate: 'world-tick', nodeType: 'world', description: 'd', files: [{ __typename: 'ExecStarterFile', path: 'Cargo.toml', content: 'c' }] }],
+      },
+    }),
+    ExecBuild: () => ({ execBuild: { ...fields, status: 'queued', artifacts: [] } }),
+    ExecBuildStatus: () => ({ execBuildStatus: { ...fields, status: statuses.shift(), artifacts } }),
+  };
+  const exec = new ExecAPI({
+    request: async (doc, vars) => {
+      const name = doc.definitions.find((d) => d.kind === 'OperationDefinition').name.value;
+      seen.push([name, vars]);
+      return answers[name]();
+    },
+  });
+  const pack = await exec.starters('77');
+  assert.deepEqual(pack.manifest, { root: 'world', types: { world: { kind: 'hub', crate: 'world-tick', client: true } } });
+  assert.deepEqual(pack.starters[0], { crate: 'world-tick', nodeType: 'world', description: 'd', files: [{ path: 'Cargo.toml', content: 'c' }] });
+  const queued = await exec.build('77', [
+    { name: pack.starters[0].crate, files: pack.starters[0].files },
+    { name: 'mine', files: { 'Cargo.toml': 'm', 'src/lib.rs': 'l' } },
+  ]);
+  assert.deepEqual(queued, { buildId: 'b1', status: 'queued', log: null, createdAt: 't', startedAt: null, finishedAt: null, artifacts: [] });
+  const done = await exec.waitForBuild('77', 'b1', { intervalMs: 1 });
+  assert.equal(done.status, 'succeeded');
+  assert.deepEqual(done.artifacts, [{ crate: 'world-tick', digest: 'ab'.repeat(32), sizeBytes: 9 }]);
+  assert.deepEqual(seen.slice(0, 2), [
+    ['ExecStarters', { appId: '77' }],
+    ['ExecBuild', { input: { appId: '77', crates: [
+      { name: 'world-tick', files: [{ path: 'Cargo.toml', content: 'c' }] },
+      { name: 'mine', files: [{ path: 'Cargo.toml', content: 'm' }, { path: 'src/lib.rs', content: 'l' }] },
+    ] } }],
+  ]);
+  assert.deepEqual(seen.slice(2).map(([n, v]) => [n, v]), [
+    ['ExecBuildStatus', { appId: '77', buildId: 'b1' }],
+    ['ExecBuildStatus', { appId: '77', buildId: 'b1' }],
+    ['ExecBuildStatus', { appId: '77', buildId: 'b1' }],
+  ]);
+});
+
+test('deploy with a build names crates and uploads only the modules it was given', async () => {
+  const sent = [];
+  const exec = new ExecAPI({ request: async (_doc, vars) => (sent.push(vars), { execDeploy: { version: 5 } }) });
+  const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
+  await exec.deploy({
+    appId: '77',
+    root: 'world',
+    buildId: 'b1',
+    types: {
+      world: { kind: 'hub', crate: 'world-tick', client: true },
+      extra: { kind: 'spoke', parent: 'world', wasm },
+    },
+  });
+  const { input } = sent[0];
+  assert.equal(input.buildId, 'b1');
+  const manifest = JSON.parse(input.manifestJson);
+  assert.deepEqual(manifest.types.world, { kind: 'hub', crate: 'world-tick', client: true });
+  assert.equal(manifest.types.extra.digest.length, 64);
+  assert.equal(input.artifacts.length, 1);
+  await assert.rejects(
+    exec.deploy({ appId: '77', root: 'world', types: { world: { kind: 'hub', crate: 'world-tick' } } }),
+    /needs its wasm, or a crate of the deploy's buildId/,
+  );
+  assert.equal(sent.length, 1, 'refused before any request');
+});
