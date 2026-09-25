@@ -173,6 +173,18 @@ fragment ExecModSwitchFields on ExecModSwitch {
   createdAt
 }
 
+query ExecModStarter($appId: BigInt!) {
+  execModStarter(appId: $appId) {
+    crate
+    nodeType
+    description
+    files {
+      path
+      content
+    }
+  }
+}
+
 mutation ExecModBuild($appId: BigInt!, $crate: ExecBuildCrateInput!) {
   execModBuild(appId: $appId, crate: $crate) {
     ...ExecBuildFields

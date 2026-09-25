@@ -33,6 +33,7 @@ import {
   ExecModScope,
   ExecModSetEnabledDocument,
   ExecModSetSwitchDocument,
+  ExecModStarterDocument,
   type ExecModSwitchFieldsFragment,
   ExecModSwitchesDocument,
   ExecModUnpublishDocument,
@@ -941,6 +942,13 @@ export class ExecAPI {
   }
 
   // ---- mods: players' code on grids they own ----
+
+  /** The mod starter (`grid-mod`), a crate to build with {@link modBuild}. Requires access to the app. */
+  async modStarter(appId: string): Promise<ExecStarter> {
+    const data = await this.graphql.request(ExecModStarterDocument, { appId });
+    const s = data.execModStarter;
+    return { crate: s.crate, nodeType: s.nodeType, description: s.description, files: s.files.map(strip) };
+  }
 
   /**
    * Builds a mod from one `ckx-sdk` crate, as {@link build} does a developer's. Returns at

@@ -7622,6 +7622,10 @@ type ExecStarterPack {
   manifestJson: String!
   """The crates."""
   starters: [ExecStarter!]!
+  """
+  The mod starter: a player’s code on a grid they own, built with `execModBuild` and deployed with `execModDeploy` rather than in the manifest. Null on a toolchain without it.
+  """
+  mod: ExecStarter
 }
 
 """The result of a ck-exec deploy."""
@@ -10062,6 +10066,13 @@ type Query {
     """The id `execBuild` returned."""
     buildId: String!
   ): ExecBuild @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  The mod starter (dev-tier preview): a ckx-sdk crate that greets visitors and follows what happens in its grid (`Hub::on_world`), to pass to `execModBuild`. Requires access to the app.
+  """
+  execModStarter(
+    """The app the grid is in."""
+    appId: BigInt!
+  ): ExecStarter!
   """
   A mod build of yours: its status, compiler log and module (dev-tier preview). Builds are kept for 7 days.
   """
