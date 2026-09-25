@@ -10128,7 +10128,9 @@ type Query {
   execAppMods(
     """The app the grid is in."""
     appId: BigInt!
+    """Only this grid’s mods."""
     gridId: BigInt
+    """Only the mods this player owns."""
     ownerId: BigInt
   ): [ExecMod!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
@@ -12578,6 +12580,7 @@ type Mutation {
   execModBuild(
     """The app the grid is in."""
     appId: BigInt!
+    """The mod’s one ckx-sdk crate, e.g. `execModStarter`’s files."""
     crate: ExecBuildCrateInput!
   ): ExecBuild!
   """
@@ -12603,6 +12606,7 @@ type Mutation {
     gridId: BigInt!
     """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
     name: String!
+    """On (true) or off (false)."""
     enabled: Boolean!
   ): ExecMod!
   """
@@ -12637,6 +12641,7 @@ type Mutation {
   execModUnpublish(
     """The app the grid is in."""
     appId: BigInt!
+    """A listing you published."""
     listingId: BigInt!
   ): Boolean!
   """
@@ -12649,6 +12654,7 @@ type Mutation {
     gridId: BigInt!
     """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
     name: String!
+    """A listed mod (`execModListings`)."""
     listingId: BigInt!
   ): ExecMod!
   """
@@ -12657,10 +12663,13 @@ type Mutation {
   execModSetSwitch(
     """The app the grid is in."""
     appId: BigInt!
+    """The rung of the ladder."""
     scope: ExecModScope!
+    """Off (true) stops what it names; false switches it back on."""
     off: Boolean!
     """The id the scope names; none for ALL."""
     target: String
+    """Why, at most 200 characters; refused calls carry it to players."""
     reason: String
   ): [ExecModSwitch!]! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
