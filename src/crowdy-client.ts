@@ -73,6 +73,7 @@ import { TeamsAPI } from './domains/teams.js';
 import { UdpAPI } from './domains/udp.js';
 import { GameModelAPI } from './domains/gameModel.js';
 import { ComputeAPI } from './domains/compute.js';
+import { ExecAPI } from './domains/exec.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
 import { MeshArtifactsAPI } from './domains/meshArtifacts.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
@@ -312,6 +313,8 @@ export class CrowdyClient {
   readonly gameModel: GameModelAPI;
   /** Compute Modules: server-side Rust/WASM logic (manage, invoke, observe). */
   readonly compute: ComputeAPI;
+  /** ck-exec (dev-tier preview): connect players to an app's hubs and spokes; deploy them. */
+  readonly exec: ExecAPI;
   /** Player-authored Rust/WASM bound to player-owned grids. */
   readonly playerCompute: PlayerComputeAPI;
   /** Player-uploaded glTF meshes stored by SHA-256 on an owned grid. */
@@ -518,6 +521,7 @@ export class CrowdyClient {
       getToken: () => this.session.getToken(),
     });
     this.compute = new ComputeAPI(this.graphql);
+    this.exec = new ExecAPI(this.graphql);
     this.playerCompute = new PlayerComputeAPI(this.graphql);
     this.meshArtifacts = new MeshArtifactsAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
