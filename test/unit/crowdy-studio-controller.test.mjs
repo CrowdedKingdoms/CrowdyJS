@@ -415,6 +415,73 @@ test('full-stack deploy saves once and orders client, server, pairing, enable, r
   controller.destroy();
 });
 
+test('with mods, the SERVER target builds the crate, deploys it as the grid\u2019s mod, enables and stops it', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const provider = providerFor(project('SERVER'));
+  const calls = [];
+  const compute = playerCompute({
+    async deploy() {
+      throw new Error('legacy player compute is not used with mods');
+    },
+    async setEnabled() {
+      throw new Error('legacy player compute is not used with mods');
+    },
+  });
+  const statuses = ['building', 'succeeded'];
+  const mods = {
+    async modBuild(appId, crate) {
+      calls.push(['build', appId, crate]);
+      return { buildId: 'b1', status: 'queued', log: null, artifacts: [] };
+    },
+    async modBuildStatus(appId, buildId) {
+      calls.push(['status', appId, buildId]);
+      return { buildId, status: statuses.shift(), log: 'Finished release', artifacts: [] };
+    },
+    async modDeploy(appId, gridId, name, buildId) {
+      calls.push(['deploy', appId, gridId, name, buildId]);
+      return { version: 3, name };
+    },
+    async modSetEnabled(appId, gridId, name, enabled) {
+      calls.push(['enabled', appId, gridId, name, enabled]);
+      return { enabled };
+    },
+  };
+  const controller = new CrowdyStudioController(options(provider, compute, { mods }));
+  await controller.initialize();
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'RUNNING', result.message);
+  const stopped = await controller.stopProject();
+  assert.equal(stopped.serverStopped, true);
+  assert.deepEqual(calls, [
+    ['build', '42', {
+      name: 'weather-server',
+      files: [
+        { path: 'Cargo.toml', content: '[package]\nname="server"' },
+        { path: 'src/lib.rs', content: 'fn server() {}' },
+      ],
+    }],
+    ['status', '42', 'b1'],
+    ['status', '42', 'b1'],
+    ['deploy', '42', '500', 'weather-server', 'b1'],
+    ['enabled', '42', '500', 'weather-server', true],
+    ['enabled', '42', '500', 'weather-server', false],
+  ]);
+  assert.match(controller.getState().buildOutput, /Finished release/);
+
+  // A name that cannot be a mod's is refused before anything is built.
+  const bad = project('SERVER');
+  bad.metadata.serverModuleName = 'Weather Server';
+  const refused = new CrowdyStudioController(options(providerFor(bad), compute, { mods }));
+  await refused.initialize();
+  calls.length = 0;
+  const r = await refused.deployLive();
+  assert.equal(r.status, 'FAILED');
+  assert.match(r.message, /lowercase/);
+  assert.deepEqual(calls, []);
+  controller.destroy();
+  refused.destroy();
+});
+
 test('full-stack partial compile never mutates pairing or enables either target', async () => {
   const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();

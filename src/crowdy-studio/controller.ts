@@ -3,6 +3,7 @@ import {
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
 } from '../player-runtime/player-code-broker.js';
+import type { ExecAPI } from '../domains/exec.js';
 import type { PlayerComputeAPI } from '../domains/playerCompute.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
 import {
@@ -180,6 +181,16 @@ export type CrowdyStudioPlayerCompute = Pick<
 
 export type CrowdyStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
 
+/**
+ * ck-exec mods (`client.exec`): given, the SERVER target builds the project's server crate
+ * (a `ckx-sdk` crate, like the `grid-mod` starter) and runs it as the grid's mod, in place of
+ * legacy player compute. The CLIENT target is unchanged.
+ */
+export type CrowdyStudioMods = Pick<ExecAPI, 'modBuild' | 'modBuildStatus' | 'modDeploy' | 'modSetEnabled'>;
+
+/** As ck-exec's mod names. */
+const MOD_NAME = /^[a-z0-9_-]{1,48}$/;
+
 export interface CrowdyStudioBroker {
   start(bytes: ArrayBuffer): Promise<void>;
   stop(): void;
@@ -188,6 +199,8 @@ export interface CrowdyStudioBroker {
 export interface CrowdyStudioControllerOptions {
   projectProvider: CrowdyStudioProjectProvider;
   playerCompute: CrowdyStudioPlayerCompute;
+  /** Run the SERVER target as a ck-exec mod (see {@link CrowdyStudioMods}). */
+  mods?: CrowdyStudioMods;
   playerWallet?: CrowdyStudioPlayerWallet;
   /**
    * GitHub repository card (bring-your-own repo). Optional: without it the
@@ -1286,16 +1299,19 @@ export class CrowdyStudioController {
           };
         }
         this.checkOperation(operation);
-        const requiredClientName =
-          project.metadata.pairingPreference === 'REQUIRED'
-            ? client.name
-            : null;
-        await this.options.playerCompute.setRequires({
-          ...this.scope(),
-          serverName: server.name,
-          requiredClientName,
-        });
-        this.checkOperation(operation);
+        // A mod has no client pairing: its players call it by name.
+        if (!this.options.mods) {
+          const requiredClientName =
+            project.metadata.pairingPreference === 'REQUIRED'
+              ? client.name
+              : null;
+          await this.options.playerCompute.setRequires({
+            ...this.scope(),
+            serverName: server.name,
+            requiredClientName,
+          });
+          this.checkOperation(operation);
+        }
         await this.enableServer(server.name, operation);
         await this.runClient(client, operation);
       }
@@ -1364,6 +1380,9 @@ export class CrowdyStudioController {
         message: `Submitting ${name}`,
       },
     });
+    if (target === 'SERVER' && this.options.mods) {
+      return this.buildMod(name, files, operation);
+    }
 
     // The server resolves the source from the project itself: the saved
     // files at the project revision, or — for a GITHUB project — the rust at
@@ -1418,6 +1437,60 @@ export class CrowdyStudioController {
     return null;
   }
 
+  /**
+   * The SERVER target as a ck-exec mod: the project's server files are the crate, built on
+   * the platform, then deployed to this grid (switched off until {@link enableServer}).
+   */
+  private async buildMod(
+    name: string,
+    files: readonly { path: string; content: string }[],
+    operation: number,
+  ): Promise<CompiledTarget | null> {
+    const mods = this.options.mods!;
+    if (!MOD_NAME.test(name)) {
+      throw new Error(
+        `The server module name '${name}' must be 1-48 lowercase letters, digits, - or _ to run as a mod`,
+      );
+    }
+    const { appId, gridId } = this.scope();
+    const queued = await mods.modBuild(appId, {
+      name,
+      files: files.map((file) => ({ path: file.path, content: file.content })),
+    });
+    this.checkOperation(operation);
+    const limit = this.options.compilePollLimit ?? 60;
+    const pollMs = this.options.compilePollMs ?? 1_500;
+    for (let attempt = 0; attempt < limit; attempt++) {
+      const b = await mods.modBuildStatus(appId, queued.buildId);
+      this.checkOperation(operation);
+      if (b.status === 'succeeded') {
+        this.recordBuild('SERVER', b.log ?? '');
+        const mod = await mods.modDeploy(appId, gridId, name, b.buildId);
+        this.checkOperation(operation);
+        return { target: 'SERVER', name, versionId: String(mod.version) };
+      }
+      if (b.status === 'failed') {
+        this.recordBuild('SERVER', b.log ?? 'Compilation failed without output');
+        this.update({
+          runtime: {
+            phase: 'COMPILE_FAILED',
+            target: 'SERVER',
+            message: `${name} failed to compile`,
+          },
+        });
+        return null;
+      }
+      await this.sleep(pollMs);
+      this.checkOperation(operation);
+    }
+    const timeout = `Compilation timed out after ${limit} polls`;
+    this.recordBuild('SERVER', timeout);
+    this.update({
+      runtime: { phase: 'COMPILE_FAILED', target: 'SERVER', message: timeout },
+    });
+    return null;
+  }
+
   private recordBuild(target: CrowdyStudioTarget, log: string): void {
     const section = `## ${target}\n${log || 'Compiled successfully.'}`;
     const authoritativeDiagnostics = [
@@ -1441,12 +1514,21 @@ export class CrowdyStudioController {
     this.update({
       runtime: { phase: 'ENABLING', target: 'SERVER', message: `Enabling ${name}` },
     });
+    await this.setServerEnabled(name, true);
+    this.checkOperation(operation);
+  }
+
+  private async setServerEnabled(name: string, enabled: boolean): Promise<void> {
+    if (this.options.mods) {
+      const { appId, gridId } = this.scope();
+      await this.options.mods.modSetEnabled(appId, gridId, name, enabled);
+      return;
+    }
     await this.options.playerCompute.setEnabled({
       ...this.scope(),
       name,
-      enabled: true,
+      enabled,
     });
-    this.checkOperation(operation);
   }
 
   private async runClient(
@@ -1519,11 +1601,7 @@ export class CrowdyStudioController {
     if (projectTargets(project.kind).includes('SERVER')) {
       serverStopped = false;
       try {
-        await this.options.playerCompute.setEnabled({
-          ...this.scope(),
-          name: moduleNameFor(project, 'SERVER'),
-          enabled: false,
-        });
+        await this.setServerEnabled(moduleNameFor(project, 'SERVER'), false);
         serverStopped = true;
       } catch (error) {
         failures.push(`Server: ${errorMessage(error)}`);

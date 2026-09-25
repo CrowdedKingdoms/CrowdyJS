@@ -20,7 +20,11 @@ the app's code admission), `modDelete`, `mods(appId, gridId)`, `myMods` and `mod
 owner's; `modPublish`, `modListings`, `modUnpublish` and `modInstall` are the marketplace
 without payments. For developers: `appMods`, `modSwitches` and `modSetSwitch` (the kill
 ladder, `ExecModScope`). The schema came from the game API's mods branch (`schema:sync:local`,
-cks-game-api #406).
+cks-game-api #406). Crowdy Studio's SERVER target can run as a mod: the controller's `mods`
+option (the embed's `serverEngine: 'ck-exec'`, which passes `client.exec`) builds the project's
+server crate with `modBuild`, deploys it to the grid and enables it, with no client pairing;
+the server module name must be a mod name. Without it the SERVER target stays on legacy player
+compute (the default until W9 switches it off); the CLIENT target is unchanged.
 
 **17.11.0 adds ck-exec builds to `client.exec` (dev-tier preview, 2026-09-25, P2 W6).**
 `starters(appId)` wraps `execStarters`: the four starter crates (world tick, matchmaker,
