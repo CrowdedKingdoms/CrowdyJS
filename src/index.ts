@@ -583,6 +583,10 @@ export {
   type ExecDeployOptions,
 } from './domains/exec.js';
 export { PlayerComputeAPI } from './domains/playerCompute.js';
+export {
+  MeshArtifactsAPI,
+  type PlayerMeshArtifactMeta,
+} from './domains/meshArtifacts.js';
 export { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 export { PlayerWalletAPI } from './domains/playerWallet.js';
 export { MarketplaceAPI } from './domains/marketplace.js';
@@ -596,6 +600,15 @@ export {
   type PlayerCodeWorkerLike,
   type PlayerCodePresentation,
 } from './player-runtime/player-code-broker.js';
+export {
+  PLUGIN_HOST_FUNCTIONS,
+  PLUGIN_PRESENT_FUNCTIONS,
+  assertPluginHostArgs,
+  pluginChannelFor,
+  isPluginHostFunction,
+  type PluginHostFunction,
+  type PluginPresentationChannel,
+} from './player-runtime/plugin-host.js';
 export {
   ClientGridEventBus,
   defaultClientGridEventBus,

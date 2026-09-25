@@ -310,6 +310,69 @@ export const GENERATED_HOST_CATALOG: HostCatalog = {
       "grid": "The player's own overlay"
     },
     {
+      "name": "grid_skin_set",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Not offered",
+      "grid": "The player's own grid appearance"
+    },
+    {
+      "name": "grid_skin_clear",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Not offered",
+      "grid": "The player's own grid appearance"
+    },
+    {
+      "name": "mesh_asset_register",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Not offered",
+      "grid": "The player's own mesh library"
+    },
+    {
+      "name": "mesh_asset_attach",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Not offered",
+      "grid": "The player's own mesh attachments"
+    },
+    {
+      "name": "mesh_asset_spawn",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Not offered",
+      "grid": "The player's own mesh instances"
+    },
+    {
+      "name": "mesh_asset_clear",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Not offered",
+      "grid": "The player's own mesh instances"
+    },
+    {
+      "name": "mechanics_emit",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Not offered",
+      "grid": "The player's own mechanics channel"
+    },
+    {
       "name": "pointer_clicks",
       "group": "input",
       "targets": [

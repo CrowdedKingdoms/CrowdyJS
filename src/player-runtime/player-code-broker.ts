@@ -6,6 +6,12 @@ import {
 } from './glue-sab.js';
 import { GENERATED_HOST_CATALOG } from './host-catalog.generated.js';
 import {
+  PLUGIN_HOST_FUNCTIONS,
+  PLUGIN_PRESENT_FUNCTIONS,
+  assertPluginHostArgs,
+  pluginChannelFor,
+} from './plugin-host.js';
+import {
   ClientGridEvent,
   ClientGridEventBus,
   defaultClientGridEventBus,
@@ -45,10 +51,14 @@ export interface PlayerCodeWorkerLike {
  * render. The broker forwards these to the game-declared channel; the mod
  * never touches the DOM (04 §4 presentation hooks).
  */
-export interface PlayerCodePresentation {
-  channel: 'hud' | 'overlay';
-  payload: unknown;
-}
+export type PlayerCodePresentation =
+  | { channel: 'hud'; payload: unknown }
+  | { channel: 'overlay'; payload: unknown }
+  | {
+      channel: 'appearance' | 'mesh' | 'mechanics';
+      fn: string;
+      args: Record<string, unknown>;
+    };
 
 export interface PlayerCodeBrokerOptions {
   /** Platform-owned glue worker URL; the worker never receives auth tokens. */
@@ -143,7 +153,11 @@ const CHUNK_FUNCTIONS = new Set([
   'actors_list_radius',
 ]);
 
-const PRESENTATION_FUNCTIONS = new Set(['hud_set', 'overlay_draw']);
+const PRESENTATION_FUNCTIONS = new Set([
+  'hud_set',
+  'overlay_draw',
+  ...PLUGIN_HOST_FUNCTIONS,
+]);
 
 const FN_TO_GROUP = new Map<string, string>();
 for (const [group, fns] of Object.entries(ALLOWED_HOST_CALLS)) {
@@ -478,10 +492,17 @@ export class PlayerCodeBroker {
       } else if (PRESENTATION_FUNCTIONS.has(raw.fn)) {
         // Presentation never reaches the SDK/server: it goes only to the
         // game-declared channel. A game that offers no sink silently drops it.
-        this.options.onPresentation?.({
-          channel: raw.fn === 'hud_set' ? 'hud' : 'overlay',
-          payload: args.payload,
-        });
+        if (PLUGIN_PRESENT_FUNCTIONS.has(raw.fn)) {
+          assertPluginHostArgs(raw.fn, args);
+          const channel = pluginChannelFor(raw.fn);
+          if (!channel) throw new Error(`unknown plugin host function '${raw.fn}'`);
+          this.options.onPresentation?.({ channel, fn: raw.fn, args });
+        } else {
+          this.options.onPresentation?.({
+            channel: raw.fn === 'hud_set' ? 'hud' : 'overlay',
+            payload: args.payload,
+          });
+        }
         data = { delivered: !!this.options.onPresentation };
       } else {
         data = await this.options.onHostCall({ fn: raw.fn, args });

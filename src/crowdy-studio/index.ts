@@ -14,6 +14,8 @@ export {
   type CrowdyStudioRuntimeSyncState,
   type CrowdyStudioPlayerCompute,
   type CrowdyStudioPlayerWallet,
+  type CrowdyStudioMeshArtifact,
+  type CrowdyStudioMeshArtifacts,
   type CrowdyStudioState,
   type CrowdyStudioStopResult,
   type CrowdyStudioUsageSnapshot,
