@@ -4,9 +4,21 @@ import type { DecoderOptions } from '@msgpack/msgpack';
 import type { GraphQLClient } from '../client.js';
 import { CrowdyError } from '../errors.js';
 import {
+  ExecActivateVersionDocument,
+  ExecAppStatusDocument,
+  type ExecAppStatusFieldsFragment,
+  ExecConnectAsDeveloperDocument,
+  type ExecConnectAsDeveloperMutation,
   ExecConnectDocument,
   type ExecConnectMutation,
   ExecDeployDocument,
+  ExecInstancesDocument,
+  type ExecInstancesQuery,
+  ExecLogsDocument,
+  type ExecLogsQuery,
+  ExecSetEnabledDocument,
+  ExecVersionsDocument,
+  type ExecVersionsQuery,
 } from '../generated/graphql.js';
 
 /**
@@ -679,9 +691,112 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return Array.from(d, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** `client.exec`: connecting players to ck-exec, and deploying an app's nodes. */
+/** One guest log line (`ctx.log`); `level` is 0 error, 1 warn, 2 info, 3 debug. */
+export type ExecLogLine = Omit<ExecLogsQuery['execLogs'][number], '__typename'>;
+/** An instance the execution manager has placed. */
+export type ExecInstance = Omit<ExecInstancesQuery['execInstances'][number], '__typename'>;
+/** A deployed version. */
+export type ExecVersion = Omit<ExecVersionsQuery['execVersions'][number], '__typename'>;
+/** An app's active version, kill switches and budget pause. */
+export type ExecAppStatus = Omit<ExecAppStatusFieldsFragment, '__typename'>;
+
+export interface ExecLogsOptions {
+  nodeType?: string;
+  key?: string;
+  /** The least severe level included: 0 errors only … 3 everything (the default). */
+  maxLevel?: number;
+  /** Only lines older than this line id, to page back. */
+  before?: string;
+  /** At most this many lines (default 100, at most 500). */
+  limit?: number;
+}
+
+function strip<T extends { __typename?: string }>(v: T): Omit<T, '__typename'> {
+  const { __typename: _, ...rest } = v;
+  return rest;
+}
+
+/**
+ * `client.exec`: connecting players to ck-exec, deploying an app's nodes, and operating
+ * them (logs, instances, versions, rollback, the kill switch, developer connections).
+ */
 export class ExecAPI {
   constructor(private readonly graphql: GraphQLClient) {}
+
+  /**
+   * A host and a developer connect token for `appId` (valid for about a minute). The
+   * session's calls arrive as `Caller::Developer` with your user id and may reach any
+   * node type, not only `client` ones. Requires the org `manage_compute` permission and
+   * your own session token, not an app token.
+   */
+  async developerEndpoint(
+    appId: string,
+    options: { nodeType?: string; key?: string } = {},
+  ): Promise<ExecEndpoint & { expiresAt: string }> {
+    const data: ExecConnectAsDeveloperMutation = await this.graphql.request(ExecConnectAsDeveloperDocument, {
+      appId,
+      nodeType: options.nodeType,
+      key: options.key,
+    });
+    return data.execConnectAsDeveloper;
+  }
+
+  /**
+   * Connects as one of the app's developers, for studio tools, manual runs and admin
+   * endpoints. The same connection as {@link connect}, reconnecting with a fresh
+   * developer token.
+   */
+  async connectAsDeveloper(appId: string, options: ExecConnectOptions = {}): Promise<ExecConnection> {
+    const c = new ExecConnection(
+      () => this.developerEndpoint(appId, { nodeType: options.nodeType, key: options.key }),
+      options,
+    );
+    await c.connect();
+    return c;
+  }
+
+  /** Guest log lines, newest first, kept for 24 hours. Requires `view_compute_diagnostics`. */
+  async logs(appId: string, options: ExecLogsOptions = {}): Promise<ExecLogLine[]> {
+    const data = await this.graphql.request(ExecLogsDocument, { appId, ...options });
+    return data.execLogs.map(strip);
+  }
+
+  /** What the manager has placed for the app. Requires `view_compute_diagnostics`. */
+  async instances(appId: string): Promise<ExecInstance[]> {
+    const data = await this.graphql.request(ExecInstancesDocument, { appId });
+    return data.execInstances.map(strip);
+  }
+
+  /** The app's versions, newest first. Requires `view_compute_diagnostics`. */
+  async versions(appId: string): Promise<ExecVersion[]> {
+    const data = await this.graphql.request(ExecVersionsDocument, { appId });
+    return data.execVersions.map(strip);
+  }
+
+  /** The active version and the switches. Requires `view_compute_diagnostics`. */
+  async status(appId: string): Promise<ExecAppStatus> {
+    const data = await this.graphql.request(ExecAppStatusDocument, { appId });
+    return strip(data.execAppStatus);
+  }
+
+  /**
+   * Makes an earlier version active again, a rollback; instances pick it up when they
+   * next start. Requires `manage_compute`.
+   */
+  async activateVersion(appId: string, version: number): Promise<ExecAppStatus> {
+    const data = await this.graphql.request(ExecActivateVersionDocument, { appId, version });
+    return strip(data.execActivateVersion);
+  }
+
+  /**
+   * The kill switch, for the whole app or one node type. Off: nothing of it is placed,
+   * what runs is persisted and stopped, and calls are refused with `Denied`. Requires
+   * `manage_compute`.
+   */
+  async setEnabled(appId: string, enabled: boolean, nodeType?: string): Promise<ExecAppStatus> {
+    const data = await this.graphql.request(ExecSetEnabledDocument, { appId, enabled, nodeType });
+    return strip(data.execSetEnabled);
+  }
 
   /** A host for this player and its connect token (valid for about a minute). */
   async endpoint(

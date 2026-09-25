@@ -4,12 +4,21 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.9.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.10.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.10.0 adds ck-exec operations to `client.exec` (dev-tier preview, 2026-09-25, P2 W5).**
+`connectAsDeveloper(appId, { nodeType, key })` (and `developerEndpoint`) wraps
+`execConnectAsDeveloper`. It needs your own session with the org's `manage_compute`, not an app
+token, and its calls reach any node type as `Caller::Developer`; it reconnects like `connect`.
+Also `logs(appId, { nodeType, key, maxLevel, before, limit })`, `instances`, `versions` and
+`status` (`view_compute_diagnostics`), and `activateVersion(appId, version)` and
+`setEnabled(appId, enabled, nodeType?)` (`manage_compute`). The schema came from the dev game
+API again (`schema:sync:local`, ck-api `v2.17.0`).
 
 **17.9.0 adds `client.exec`, ck-exec's client (dev-tier preview, 2026-09-25).**
 `src/domains/exec.ts`: `connect(appId, { nodeType, key })` calls `execConnect` with the app

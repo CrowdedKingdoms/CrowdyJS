@@ -3804,6 +3804,19 @@ export type ExchangePortalCodeInput = {
   codeVerifier?: InputMaybe<Scalars['String']['input']>;
 };
 
+/** Whether an app’s ck-exec code may run: its active version and its switches (dev-tier preview). */
+export type ExecAppStatus = {
+  __typename?: 'ExecAppStatus';
+  /** The active version; null before the first deploy. */
+  activeVersion: Maybe<Scalars['Int']['output']>;
+  /** Paused while the app is over its compute budget; it resumes by itself once a minute is back under it. */
+  budgetPaused: Scalars['Boolean']['output'];
+  /** The whole app is switched off (`execSetEnabled` without a node type). */
+  disabled: Scalars['Boolean']['output'];
+  /** Node types switched off one by one. */
+  disabledTypes: Array<Scalars['String']['output']>;
+};
+
 /** One compiled module for a ck-exec deploy. */
 export type ExecArtifactInput = {
   /** SHA-256 of the WASM, 64 hex characters; the manager checks it. */
@@ -3831,7 +3844,7 @@ export type ExecDeployInput = {
   appId: Scalars['BigInt']['input'];
   /** Modules the manifest names that this app has not uploaded before (at most 64). A request body is limited to 10 MB, so about 7 MB of modules per call. */
   artifacts?: InputMaybe<Array<ExecArtifactInput>>;
-  /** The manifest as JSON: `{ "root": "<hub type>", "types": { "<name>": { "kind": "hub"|"spoke", "parent", "digest", "client", "calls", ... } } }`. See the ck-exec repo’s `ckx-control` crate for every field and its platform bounds. */
+  /** The manifest as JSON: `{ "root": "<hub type>", "types": { "<name>": { "kind": "hub"|"spoke", "parent", "digest", "client", "calls", "scopes", ... } } }`. Every field and its platform bounds: https://docs.dev.crowdedkingdoms.com/exec/intro#the-manifest. */
   manifestJson: Scalars['String']['input'];
 };
 
@@ -3839,6 +3852,60 @@ export type ExecDeployInput = {
 export type ExecDeployResult = {
   __typename?: 'ExecDeployResult';
   /** The version now active for the app. */
+  version: Scalars['Int']['output'];
+};
+
+/** An instance the execution manager has placed for an app (dev-tier preview). */
+export type ExecInstance = {
+  __typename?: 'ExecInstance';
+  /** Rises each time it is placed; snapshots from an older epoch are refused. */
+  epoch: Scalars['Int']['output'];
+  /** Why the manager will not place it right now (a crash loop, a failed start), when it will not. */
+  heldBack: Maybe<Scalars['String']['output']>;
+  /** The execution host it runs on; null while idle. */
+  host: Maybe<Scalars['String']['output']>;
+  /** The instance id. */
+  instanceId: Scalars['String']['output'];
+  /** The instance key; empty for the root hub. */
+  key: Scalars['String']['output'];
+  /** `hub` or `spoke`. */
+  kind: Scalars['String']['output'];
+  nodeType: Scalars['String']['output'];
+  /** `idle`, `starting`, `running` or `stopping`. */
+  phase: Scalars['String']['output'];
+  /** Milliseconds since it entered this phase. */
+  sinceMs: Scalars['Float']['output'];
+};
+
+/** One guest log line from an app’s ck-exec instances (`ctx.log`), kept for 24 hours (dev-tier preview). */
+export type ExecLogLine = {
+  __typename?: 'ExecLogLine';
+  /** When the instance logged it. */
+  at: Scalars['DateTime']['output'];
+  /** The execution host it ran on. */
+  host: Scalars['String']['output'];
+  /** The line’s id, time-ordered: pass the oldest one you have as `before` to page back. */
+  id: Scalars['String']['output'];
+  /** The instance key. */
+  key: Scalars['String']['output'];
+  /** 0 error, 1 warn, 2 info, 3 debug. */
+  level: Scalars['Int']['output'];
+  /** The node type that logged it; empty for a platform note (lines dropped over a rate). */
+  nodeType: Scalars['String']['output'];
+  /** The line, at most 1 KiB. */
+  text: Scalars['String']['output'];
+};
+
+/** A deployed version of an app’s ck-exec topology. */
+export type ExecVersion = {
+  __typename?: 'ExecVersion';
+  /** Whether it is the active version. */
+  active: Scalars['Boolean']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  /** Who deployed it, e.g. `user:<id>`. */
+  createdBy: Maybe<Scalars['String']['output']>;
+  /** Node types in its manifest. */
+  types: Scalars['Int']['output'];
   version: Scalars['Int']['output'];
 };
 
@@ -5822,10 +5889,16 @@ export type Mutation = {
   disconnectUdpProxy: Scalars['Boolean']['output'];
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
   exchangePortalCode: AppTokenResponse;
+  /** Make an earlier ck-exec version active again, a rollback (dev-tier preview). Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission. */
+  execActivateVersion: ExecAppStatus;
   /** Connect a player to ck-exec (dev-tier preview): the execution manager picks a host (the one running `nodeType`/`key` when given, placing it if needed) and this returns its gateway and a 60-second connect token bound to this player, this app and that host. Requires the app-scoped token of the app named. */
   execConnect: ExecConnection;
+  /** Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints (dev-tier preview). The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token. */
+  execConnectAsDeveloper: ExecConnection;
   /** Deploy a new version of an app's ck-exec topology (dev-tier preview): the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active; running instances pick it up when they next start. Requires the org 'manage_compute' permission. */
   execDeploy: ExecDeployResult;
+  /** The kill switch for an app's ck-exec code, or one node type of it (dev-tier preview). Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. Requires the org 'manage_compute' permission. */
+  execSetEnabled: ExecAppStatus;
   /** ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). */
   forceLogoutUser: Scalars['Boolean']['output'];
   /** Operator only (is_operator). Deletes the stored deliverability rows for one address (email_status and email_events) and returns how many rows went. Exists so a verification run is not reading the previous run's events, and so an address suppressed by a bounce that has since been fixed can be given another chance. Returns 0 when there was nothing stored. */
@@ -6605,7 +6678,20 @@ export type MutationExchangePortalCodeArgs = {
 };
 
 
+export type MutationExecActivateVersionArgs = {
+  appId: Scalars['BigInt']['input'];
+  version: Scalars['Int']['input'];
+};
+
+
 export type MutationExecConnectArgs = {
+  appId: Scalars['BigInt']['input'];
+  key?: InputMaybe<Scalars['String']['input']>;
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationExecConnectAsDeveloperArgs = {
   appId: Scalars['BigInt']['input'];
   key?: InputMaybe<Scalars['String']['input']>;
   nodeType?: InputMaybe<Scalars['String']['input']>;
@@ -6614,6 +6700,13 @@ export type MutationExecConnectArgs = {
 
 export type MutationExecDeployArgs = {
   input: ExecDeployInput;
+};
+
+
+export type MutationExecSetEnabledArgs = {
+  appId: Scalars['BigInt']['input'];
+  enabled: Scalars['Boolean']['input'];
+  nodeType?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -8979,6 +9072,14 @@ export type Query = {
   emailDeliverability: EmailDeliverability;
   /** Operator only (is_operator). How THIS API instance is configured to send mail: whether sending is on, the From address, the SES configuration set, the region and the suppressed domains. Answers 'why did no email arrive' without an SSH session, and reports the instance that served the query rather than the fleet. */
   emailDeliveryConfig: EmailDeliveryConfig;
+  /** Whether an app's ck-exec code may run: its active version, kill switches and budget pause (dev-tier preview). Requires the org 'view_compute_diagnostics' permission. */
+  execAppStatus: ExecAppStatus;
+  /** What the execution manager has placed for an app: every instance, its phase and host (dev-tier preview). Requires the org 'view_compute_diagnostics' permission. */
+  execInstances: Array<ExecInstance>;
+  /** Guest log lines from an app's ck-exec instances (`ctx.log`), newest first, kept for 24 hours (dev-tier preview). Requires the org 'view_compute_diagnostics' permission. */
+  execLogs: Array<ExecLogLine>;
+  /** An app's deployed ck-exec versions, newest first, and which is active (dev-tier preview). Requires the org 'view_compute_diagnostics' permission. */
+  execVersions: Array<ExecVersion>;
   /** Reports whether a free-play window is active now, a human-readable schedule description, and the ISO-8601 start of the next window. PUBLIC: no authentication required. Takes no arguments; computed from server config and the current clock. */
   freePlayWindowInfo: FreePlayWindowInfo;
   /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
@@ -9704,6 +9805,31 @@ export type QueryEffectiveQuotaArgs = {
 export type QueryEmailDeliverabilityArgs = {
   email: Scalars['String']['input'];
   eventLimit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryExecAppStatusArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecInstancesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecLogsArgs = {
+  appId: Scalars['BigInt']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  key?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  maxLevel?: InputMaybe<Scalars['Int']['input']>;
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryExecVersionsArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -13705,6 +13831,67 @@ export type ExecDeployMutationVariables = Exact<{
 
 export type ExecDeployMutation = { __typename?: 'Mutation', execDeploy: { __typename?: 'ExecDeployResult', version: number } };
 
+export type ExecConnectAsDeveloperMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+  key?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ExecConnectAsDeveloperMutation = { __typename?: 'Mutation', execConnectAsDeveloper: { __typename?: 'ExecConnection', gatewayUrl: string, token: string, host: string, expiresAt: string } };
+
+export type ExecLogsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+  key?: InputMaybe<Scalars['String']['input']>;
+  maxLevel?: InputMaybe<Scalars['Int']['input']>;
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ExecLogsQuery = { __typename?: 'Query', execLogs: Array<{ __typename?: 'ExecLogLine', id: string, nodeType: string, key: string, level: number, host: string, at: string, text: string }> };
+
+export type ExecInstancesQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type ExecInstancesQuery = { __typename?: 'Query', execInstances: Array<{ __typename?: 'ExecInstance', instanceId: string, nodeType: string, key: string, kind: string, phase: string, host: string | null, epoch: number, sinceMs: number, heldBack: string | null }> };
+
+export type ExecVersionsQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type ExecVersionsQuery = { __typename?: 'Query', execVersions: Array<{ __typename?: 'ExecVersion', version: number, createdBy: string | null, createdAt: string, types: number, active: boolean }> };
+
+export type ExecAppStatusFieldsFragment = { __typename?: 'ExecAppStatus', activeVersion: number | null, disabled: boolean, disabledTypes: Array<string>, budgetPaused: boolean };
+
+export type ExecAppStatusQueryVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+}>;
+
+
+export type ExecAppStatusQuery = { __typename?: 'Query', execAppStatus: { __typename?: 'ExecAppStatus', activeVersion: number | null, disabled: boolean, disabledTypes: Array<string>, budgetPaused: boolean } };
+
+export type ExecActivateVersionMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  version: Scalars['Int']['input'];
+}>;
+
+
+export type ExecActivateVersionMutation = { __typename?: 'Mutation', execActivateVersion: { __typename?: 'ExecAppStatus', activeVersion: number | null, disabled: boolean, disabledTypes: Array<string>, budgetPaused: boolean } };
+
+export type ExecSetEnabledMutationVariables = Exact<{
+  appId: Scalars['BigInt']['input'];
+  enabled: Scalars['Boolean']['input'];
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ExecSetEnabledMutation = { __typename?: 'Mutation', execSetEnabled: { __typename?: 'ExecAppStatus', activeVersion: number | null, disabled: boolean, disabledTypes: Array<string>, budgetPaused: boolean } };
+
 export type GridOwnershipFieldsFragment = { __typename?: 'GridOwnership', gridOwnershipId: string, gridId: string, appId: string, ownerKind: GridOwnerKind, ownerRef: string, tenure: GridTenure, acquiredVia: string, acquiredAt: string, expiresAt: string | null };
 
 export type GridOwnershipQueryVariables = Exact<{
@@ -15869,6 +16056,7 @@ export const ComputeTriggerFieldsFragmentDoc = {"kind":"Document","definitions":
 export const ComputePolicyFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputePolicyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModulePolicy"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxModules"}},{"kind":"Field","name":{"kind":"Name","value":"maxTickHz"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"fuelPerInvoke"}},{"kind":"Field","name":{"kind":"Name","value":"maxMemoryMb"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxDbOpsPerTick"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressMsgsPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxEgressBytesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}},{"kind":"Field","name":{"kind":"Name","value":"statePersistMinIntervalMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxStateWritesPerMin"}},{"kind":"Field","name":{"kind":"Name","value":"maxStateBytesPerMin"}}]}}]} as unknown as DocumentNode<ComputePolicyFieldsFragment, unknown>;
 export const ComputeRunFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ComputeRunFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WasmModuleRun"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"flowId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleId"}},{"kind":"Field","name":{"kind":"Name","value":"moduleName"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"entry"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"durationUs"}},{"kind":"Field","name":{"kind":"Name","value":"fuelUsed"}},{"kind":"Field","name":{"kind":"Name","value":"dbReads"}},{"kind":"Field","name":{"kind":"Name","value":"dbWrites"}},{"kind":"Field","name":{"kind":"Name","value":"egressMsgs"}},{"kind":"Field","name":{"kind":"Name","value":"egressBytes"}},{"kind":"Field","name":{"kind":"Name","value":"success"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"circuitAction"}}]}}]} as unknown as DocumentNode<ComputeRunFieldsFragment, unknown>;
 export const CrowdyStudioProjectFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyStudioProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"githubOwner"}},{"kind":"Field","name":{"kind":"Name","value":"githubRepo"}},{"kind":"Field","name":{"kind":"Name","value":"githubBranch"}},{"kind":"Field","name":{"kind":"Name","value":"githubSha"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioProjectFieldsFragment, unknown>;
+export const ExecAppStatusFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ExecAppStatusFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ExecAppStatus"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activeVersion"}},{"kind":"Field","name":{"kind":"Name","value":"disabled"}},{"kind":"Field","name":{"kind":"Name","value":"disabledTypes"}},{"kind":"Field","name":{"kind":"Name","value":"budgetPaused"}}]}}]} as unknown as DocumentNode<ExecAppStatusFieldsFragment, unknown>;
 export const GridOwnershipFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridOwnershipFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridOwnership"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]} as unknown as DocumentNode<GridOwnershipFieldsFragment, unknown>;
 export const GmAutomationFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomation"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"actionKind"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"computeModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"computeExport"}},{"kind":"Field","name":{"kind":"Name","value":"targetMode"}},{"kind":"Field","name":{"kind":"Name","value":"selfContainerId"}},{"kind":"Field","name":{"kind":"Name","value":"targetTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"sessionId"}},{"kind":"Field","name":{"kind":"Name","value":"paramsJson"}},{"kind":"Field","name":{"kind":"Name","value":"selectorJson"}},{"kind":"Field","name":{"kind":"Name","value":"runAsUserId"}},{"kind":"Field","name":{"kind":"Name","value":"triggerType"}},{"kind":"Field","name":{"kind":"Name","value":"scheduleKind"}},{"kind":"Field","name":{"kind":"Name","value":"intervalMs"}},{"kind":"Field","name":{"kind":"Name","value":"cronExpr"}},{"kind":"Field","name":{"kind":"Name","value":"maxTargets"}},{"kind":"Field","name":{"kind":"Name","value":"maxFnDepth"}},{"kind":"Field","name":{"kind":"Name","value":"gasLimit"}},{"kind":"Field","name":{"kind":"Name","value":"runTimeoutMs"}},{"kind":"Field","name":{"kind":"Name","value":"maxRunsPerMinute"}},{"kind":"Field","name":{"kind":"Name","value":"failureThreshold"}},{"kind":"Field","name":{"kind":"Name","value":"cooldownMs"}},{"kind":"Field","name":{"kind":"Name","value":"circuitState"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailures"}},{"kind":"Field","name":{"kind":"Name","value":"pausedUntil"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}}]}}]} as unknown as DocumentNode<GmAutomationFieldsFragment, unknown>;
 export const GmAutomationTriggerFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GmAutomationTriggerFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GmAutomationTrigger"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"triggerId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"automationId"}},{"kind":"Field","name":{"kind":"Name","value":"onEvent"}},{"kind":"Field","name":{"kind":"Name","value":"functionName"}},{"kind":"Field","name":{"kind":"Name","value":"containerTypeName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyKey"}},{"kind":"Field","name":{"kind":"Name","value":"writeSource"}},{"kind":"Field","name":{"kind":"Name","value":"debounceMs"}},{"kind":"Field","name":{"kind":"Name","value":"lastMatchedAt"}},{"kind":"Field","name":{"kind":"Name","value":"matchCount24h"}},{"kind":"Field","name":{"kind":"Name","value":"warnings"}}]}}]} as unknown as DocumentNode<GmAutomationTriggerFieldsFragment, unknown>;
@@ -16012,6 +16200,13 @@ export const CrowdyStudioCommonFilesDocument = {"kind":"Document","definitions":
 export const CrowdyStudioProjectImportFileDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CrowdyStudioProjectImportFile"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ImportCrowdyStudioProjectFileInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"crowdyStudioProjectImportFile"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CrowdyStudioProjectFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CrowdyStudioProjectFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CrowdyStudioProject"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"projectId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"serverModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"clientModuleName"}},{"kind":"Field","name":{"kind":"Name","value":"pairingPreference"}},{"kind":"Field","name":{"kind":"Name","value":"sdkVersion"}},{"kind":"Field","name":{"kind":"Name","value":"abiVersion"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"archived"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fileCount"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"githubOwner"}},{"kind":"Field","name":{"kind":"Name","value":"githubRepo"}},{"kind":"Field","name":{"kind":"Name","value":"githubBranch"}},{"kind":"Field","name":{"kind":"Name","value":"githubSha"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryFileId"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceLibraryRevision"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceCommonVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CrowdyStudioProjectImportFileMutation, CrowdyStudioProjectImportFileMutationVariables>;
 export const ExecConnectDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ExecConnect"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"nodeType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"key"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execConnect"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"nodeType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"nodeType"}}},{"kind":"Argument","name":{"kind":"Name","value":"key"},"value":{"kind":"Variable","name":{"kind":"Name","value":"key"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gatewayUrl"}},{"kind":"Field","name":{"kind":"Name","value":"token"}},{"kind":"Field","name":{"kind":"Name","value":"host"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]} as unknown as DocumentNode<ExecConnectMutation, ExecConnectMutationVariables>;
 export const ExecDeployDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ExecDeploy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ExecDeployInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execDeploy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}}]}}]}}]} as unknown as DocumentNode<ExecDeployMutation, ExecDeployMutationVariables>;
+export const ExecConnectAsDeveloperDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ExecConnectAsDeveloper"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"nodeType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"key"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execConnectAsDeveloper"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"nodeType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"nodeType"}}},{"kind":"Argument","name":{"kind":"Name","value":"key"},"value":{"kind":"Variable","name":{"kind":"Name","value":"key"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gatewayUrl"}},{"kind":"Field","name":{"kind":"Name","value":"token"}},{"kind":"Field","name":{"kind":"Name","value":"host"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]} as unknown as DocumentNode<ExecConnectAsDeveloperMutation, ExecConnectAsDeveloperMutationVariables>;
+export const ExecLogsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ExecLogs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"nodeType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"key"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"maxLevel"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"before"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execLogs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"nodeType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"nodeType"}}},{"kind":"Argument","name":{"kind":"Name","value":"key"},"value":{"kind":"Variable","name":{"kind":"Name","value":"key"}}},{"kind":"Argument","name":{"kind":"Name","value":"maxLevel"},"value":{"kind":"Variable","name":{"kind":"Name","value":"maxLevel"}}},{"kind":"Argument","name":{"kind":"Name","value":"before"},"value":{"kind":"Variable","name":{"kind":"Name","value":"before"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"nodeType"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"host"}},{"kind":"Field","name":{"kind":"Name","value":"at"}},{"kind":"Field","name":{"kind":"Name","value":"text"}}]}}]}}]} as unknown as DocumentNode<ExecLogsQuery, ExecLogsQueryVariables>;
+export const ExecInstancesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ExecInstances"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execInstances"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"instanceId"}},{"kind":"Field","name":{"kind":"Name","value":"nodeType"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"phase"}},{"kind":"Field","name":{"kind":"Name","value":"host"}},{"kind":"Field","name":{"kind":"Name","value":"epoch"}},{"kind":"Field","name":{"kind":"Name","value":"sinceMs"}},{"kind":"Field","name":{"kind":"Name","value":"heldBack"}}]}}]}}]} as unknown as DocumentNode<ExecInstancesQuery, ExecInstancesQueryVariables>;
+export const ExecVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ExecVersions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execVersions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"types"}},{"kind":"Field","name":{"kind":"Name","value":"active"}}]}}]}}]} as unknown as DocumentNode<ExecVersionsQuery, ExecVersionsQueryVariables>;
+export const ExecAppStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ExecAppStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execAppStatus"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ExecAppStatusFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ExecAppStatusFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ExecAppStatus"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activeVersion"}},{"kind":"Field","name":{"kind":"Name","value":"disabled"}},{"kind":"Field","name":{"kind":"Name","value":"disabledTypes"}},{"kind":"Field","name":{"kind":"Name","value":"budgetPaused"}}]}}]} as unknown as DocumentNode<ExecAppStatusQuery, ExecAppStatusQueryVariables>;
+export const ExecActivateVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ExecActivateVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"version"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execActivateVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"version"},"value":{"kind":"Variable","name":{"kind":"Name","value":"version"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ExecAppStatusFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ExecAppStatusFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ExecAppStatus"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activeVersion"}},{"kind":"Field","name":{"kind":"Name","value":"disabled"}},{"kind":"Field","name":{"kind":"Name","value":"disabledTypes"}},{"kind":"Field","name":{"kind":"Name","value":"budgetPaused"}}]}}]} as unknown as DocumentNode<ExecActivateVersionMutation, ExecActivateVersionMutationVariables>;
+export const ExecSetEnabledDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ExecSetEnabled"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"nodeType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execSetEnabled"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}},{"kind":"Argument","name":{"kind":"Name","value":"nodeType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"nodeType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"ExecAppStatusFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ExecAppStatusFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ExecAppStatus"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activeVersion"}},{"kind":"Field","name":{"kind":"Name","value":"disabled"}},{"kind":"Field","name":{"kind":"Name","value":"disabledTypes"}},{"kind":"Field","name":{"kind":"Name","value":"budgetPaused"}}]}}]} as unknown as DocumentNode<ExecSetEnabledMutation, ExecSetEnabledMutationVariables>;
 export const GridOwnershipDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GridOwnership"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnership"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"gridId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"gridId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GridOwnershipFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridOwnershipFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridOwnership"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]} as unknown as DocumentNode<GridOwnershipQuery, GridOwnershipQueryVariables>;
 export const AssignGridOwnershipDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AssignGridOwnership"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AssignGridOwnershipInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"assignGridOwnership"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GridOwnershipFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridOwnershipFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridOwnership"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]} as unknown as DocumentNode<AssignGridOwnershipMutation, AssignGridOwnershipMutationVariables>;
 export const TransferGridOwnershipDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"TransferGridOwnership"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"TransferGridOwnershipInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"transferGridOwnership"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"GridOwnershipFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"GridOwnershipFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"GridOwnership"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gridOwnershipId"}},{"kind":"Field","name":{"kind":"Name","value":"gridId"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerKind"}},{"kind":"Field","name":{"kind":"Name","value":"ownerRef"}},{"kind":"Field","name":{"kind":"Name","value":"tenure"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredVia"}},{"kind":"Field","name":{"kind":"Name","value":"acquiredAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]} as unknown as DocumentNode<TransferGridOwnershipMutation, TransferGridOwnershipMutationVariables>;
