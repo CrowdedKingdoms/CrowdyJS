@@ -12,6 +12,7 @@ export {
   type CrowdyStudioRuntimeStatus,
   type CrowdyStudioRuntimeSync,
   type CrowdyStudioRuntimeSyncState,
+  type CrowdyStudioMods,
   type CrowdyStudioPlayerCompute,
   type CrowdyStudioPlayerWallet,
   type CrowdyStudioState,
