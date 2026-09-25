@@ -7539,6 +7539,32 @@ type PlayerComputeInvokeResult {
 }
 
 """
+Where and how a game client connects to ck-exec, the hub-and-spoke execution service (dev-tier preview). Open a WebSocket to `{gatewayUrl}/v1/connect?token={token}` before `expiresAt`.
+"""
+type ExecConnection {
+  """
+  The execution host’s gateway, e.g. wss://ckx-or-1.exec.dev.crowdedkingdoms.com.
+  """
+  gatewayUrl: String!
+  """
+  Short-lived Ed25519 connect token for this player, this app and this host only.
+  """
+  token: String!
+  """The execution host id the token is bound to."""
+  host: String!
+  """
+  When the token stops being accepted; the open socket is not closed then.
+  """
+  expiresAt: DateTime!
+}
+
+"""The result of a ck-exec deploy."""
+type ExecDeployResult {
+  """The version now active for the app."""
+  version: Int!
+}
+
+"""
 One model the answering ck-api instance carries, with the pinned price it will meter against.
 """
 type CrowdyStudioAgentCatalogModel {
@@ -12141,6 +12167,26 @@ type Mutation {
   """
   crowdyStudioGitHubDeleteFile(input: CrowdyStudioGitHubDeleteFileInput!): CrowdyStudioGitHubStatus!
   """
+  Connect a player to ck-exec (dev-tier preview): the execution manager picks a host (the one running `nodeType`/`key` when given, placing it if needed) and this returns its gateway and a 60-second connect token bound to this player, this app and that host. Requires the app-scoped token of the app named.
+  """
+  execConnect(
+    """The app to connect to; must match the app token."""
+    appId: BigInt!
+    """
+    Put the player on the host running an instance of this type (with `key`).
+    """
+    nodeType: String
+    """The instance key within `nodeType`; empty for the root hub or a spoke."""
+    key: String
+  ): ExecConnection!
+  """
+  Deploy a new version of an app's ck-exec topology (dev-tier preview): the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active; running instances pick it up when they next start. Requires the org 'manage_compute' permission.
+  """
+  execDeploy(
+    """The app, its manifest and new modules."""
+    input: ExecDeployInput!
+  ): ExecDeployResult! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
+  """
   Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
   """
   crowdyStudioProjectCreate(
@@ -15049,6 +15095,28 @@ input CrowdyStudioGitHubDeleteFileInput {
   The project githubSha the writer read; stale is refused with GITHUB_STALE_SHA.
   """
   expectedCommitSha: String!
+}
+
+"""A new version of an app’s ck-exec topology."""
+input ExecDeployInput {
+  """The app to deploy."""
+  appId: BigInt!
+  """
+  The manifest as JSON: `{ "root": "<hub type>", "types": { "<name>": { "kind": "hub"|"spoke", "parent", "digest", "client", "calls", ... } } }`. See the ck-exec repo’s `ckx-control` crate for every field and its platform bounds.
+  """
+  manifestJson: String!
+  """
+  Modules the manifest names that this app has not uploaded before (at most 64). A request body is limited to 10 MB, so about 7 MB of modules per call.
+  """
+  artifacts: [ExecArtifactInput!]
+}
+
+"""One compiled module for a ck-exec deploy."""
+input ExecArtifactInput {
+  """SHA-256 of the WASM, 64 hex characters; the manager checks it."""
+  digest: String!
+  """The WASM module (wasm32-unknown-unknown, built with ckx-sdk), base64."""
+  wasmBase64: String!
 }
 
 """

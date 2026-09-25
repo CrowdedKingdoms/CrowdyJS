@@ -230,6 +230,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
 | `client.gameModel` | Abstract game model: containers, properties, functions (incl. model-driven `notify_*` effects), sessions, app-scoped active-session counts (`activePlayerCount`, `activePlayerCountChanged`), container-change push (`containerChanged`), flow-correlation timelines (`flow`), automations / NPCs (`upsertAutomation`, `runAutomation`, `automationRuns`, `automationStats`, …), and one-shot timers (`scheduleInvoke`, `cancelTimer`, `timers`). |
 | `client.compute` | Compute Modules — server-side Rust/WASM logic: author + deploy source (`upsertModule`, `deployVersion`, `deployTemplate`, `waitForCompile`), triggers + policy, synchronous `invoke`, and monitoring (`moduleRuns`, `moduleStats`, `moduleLogs`, `appDiagnostics`). See [Compute Modules](https://docs.crowdedkingdoms.com/game-api/compute-modules). |
+| `client.exec` | **ck-exec (dev-tier preview, 17.9.0):** `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `deploy({ appId, root, types })` deploys an app's hubs and spokes (`manage_compute`). See [ck-exec](#ck-exec-dev-tier-preview). |
 | `client.playerCompute` | Player-authored SERVER/CLIENT Rust/WASM bound to player-owned grids: deploy source, activate/deactivate, list modules/versions, delete self-authored modules. |
 | `client.playerModel` | Player-owned flexible model containers and grid-confined automations (`containers`, `createContainer`, `setProperty`, `automations`, `createAutomation`, …). |
 | `client.playerWallet` | Player spend: balance, spend caps, card setup, policy, charges. |
@@ -680,6 +681,40 @@ See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/ga
 (the underlying model + genre map) and [Game Kit](https://docs.crowdedkingdoms.com/crowdyjs/game-kit)
 (the SDK surface + the simulation-tier / notify-to-pull / timer / hidden-info
 / anti-cheat patterns).
+
+## ck-exec (dev-tier preview)
+
+ck-exec runs an app's server code as **hubs** (stateful, one instance per key) and **spokes**
+(stateless, replicated) on execution hosts, on the dev environment only for now. A player
+connects to one host and calls any node of the app through it:
+
+```ts
+// The session token is the app's app-scoped token (client.portal.mintAppToken).
+const exec = await client.exec.connect(appId, { nodeType: 'arena', key: 'm1' });
+
+const state = await exec.call('arena', 'm1', 'state');            // MessagePack both ways
+const stop = await exec.subscribe('arena', 'm1', 'hp', (push) => {
+  render(push.value);                                            // decoded payload
+});
+exec.onReconnect((host) => console.log('moved to', host));
+```
+
+- `connect` asks the game API for a host (`execConnect`) and opens a WebSocket to its gateway.
+  With `nodeType` and `key`, the player lands on the host that runs that instance. On runtimes
+  without a global `WebSocket` (Node before 22), pass one: `{ WebSocket }` from the `ws` package.
+- A refused call throws `CrowdyExecError`: `status` is the platform's (`AppError` carries the
+  handler's own message; `Busy`, `Moved`, `Unavailable` and `RateLimited` are `retryable`).
+- When the host goes away, the connection asks for a host again, reconnects and renews every
+  subscription; a call caught by it, or answered `Moved`, is tried once more.
+- `ExecConnection.open(gatewayUrl, token)` connects with a connect token you already have
+  (tools and tests), without reconnecting.
+- `client.exec.deploy({ appId, root, types })` takes each node type's compiled module
+  (`wasm: Uint8Array`) with its manifest fields, sends each distinct module once, and makes
+  the version active.
+
+Integers above 2^53 decode as `number` and lose precision unless you pass
+`{ decode: { useBigInt64: true } }`. The wire format is in the
+[ck-exec docs](https://docs.dev.crowdedkingdoms.com/exec/intro).
 
 ## Hosting a game on Crowdy Games
 
