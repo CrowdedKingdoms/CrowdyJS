@@ -4,15 +4,25 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.12.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.13.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**Unreleased (after 17.12.0): Crowdy Studio's SERVER target runs on ck-exec by default
-(2026-09-26, P2 W9).** The embed's `serverEngine` defaults to `'ck-exec'` when the client has
+**17.13.0 adds ck-exec observability to `client.exec` (ck-api `v2.22.0`, 2026-09-26).**
+`endpointStats(appId, { nodeType, sinceMinutes })` (`execEndpointStats`: calls per endpoint by
+outcome, latency over `timedCalls`), the `flow` filter on `logs` and `flow` on each
+`ExecLogLine` (32 lowercase hex, null outside a call), and `manifestJson` plus a parsed
+`manifest` on `versions`. `CrowdyExecError` gained `rateLimited` and `retryAfterMs`: a gateway
+refuses a player's calls over 120 per 10 s per app and host as `Busy` with "rate limited: …;
+retry in N ms". The SDK retries only a closed connection or `Moved`, never `Busy`. The
+schema came from the dev game API (`schema:sync:paths` with cks-game-api `dev`'s
+`schema.gql`), so these fields exist only in a `-dev.N` build until ck-api promotes them.
+
+**17.13.0 also runs Crowdy Studio's SERVER target on ck-exec by default
+(2026-09-26, P2 W9, #186).** The embed's `serverEngine` defaults to `'ck-exec'` when the client has
 `exec`; the controller and `mountCrowdyStudio` take `serverEngine` too (default `'ck-exec'`
 with `mods`, else `'player-compute'`, which stays selectable until the legacy deletion).
 On ck-exec, `createProject` starts the SERVER target from `mods.modStarter` (`execModStarter`)

@@ -15,6 +15,8 @@ import {
   ExecConnectDocument,
   type ExecConnectMutation,
   ExecDeployDocument,
+  ExecEndpointStatsDocument,
+  type ExecEndpointStatsQuery,
   ExecInstancesDocument,
   type ExecInstancesQuery,
   ExecLogsDocument,
@@ -97,19 +99,34 @@ const RETRYABLE: ReadonlySet<ExecStatus> = new Set([
   'RateLimited',
 ]);
 
+const RETRY_IN = /retry in (\d+) ms/;
+
 /**
  * A call, subscription or connection that ck-exec refused or could not complete.
  * `status` is the platform's (`AppError` carries the handler's own message);
  * `retryable` says whether trying again later can succeed.
+ *
+ * The SDK never retries a `Busy` reply. A gateway refuses a player's call over its
+ * limit (120 calls per 10 s per player and app on a host) as `Busy` with a message
+ * starting `rate limited`: `rateLimited` is then true and `retryAfterMs` says how long
+ * to wait. Calling again sooner is refused again and does not shorten the wait.
  */
 export class CrowdyExecError extends CrowdyError {
   readonly status: ExecStatus;
   readonly retryable: boolean;
+  /** The caller's call limit refused it (`Busy` "rate limited …", or `RateLimited`). */
+  readonly rateLimited: boolean;
+  /** How long to wait before calling again, when the refusal says (`retry in N ms`). */
+  readonly retryAfterMs: number | undefined;
 
   constructor(status: ExecStatus, message: string, cause?: unknown) {
     super({ message: `${status}: ${message}`, cause });
     this.status = status;
     this.retryable = RETRYABLE.has(status);
+    this.rateLimited =
+      status === 'RateLimited' || (status === 'Busy' && message.startsWith('rate limited'));
+    const retryIn = this.rateLimited ? RETRY_IN.exec(message) : null;
+    this.retryAfterMs = retryIn ? Number(retryIn[1]) : undefined;
   }
 }
 
@@ -575,7 +592,7 @@ export class ExecConnection {
   /**
    * Calls a node's endpoint with raw bytes and returns the reply's bytes. A call
    * whose connection closes, or that is answered `Moved`, is tried once more on a
-   * fresh connection.
+   * fresh connection. A `Busy` reply is not retried: see {@link CrowdyExecError.retryAfterMs}.
    * @throws {CrowdyExecError} for any status but `Ok`.
    */
   async callRaw(
@@ -751,12 +768,46 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return Array.from(d, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** One guest log line (`ctx.log`); `level` is 0 error, 1 warn, 2 info, 3 debug. */
+/**
+ * One guest log line (`ctx.log`); `level` is 0 error, 1 warn, 2 info, 3 debug. `flow` is the
+ * call it was written in (32 lowercase hex digits, shared by everything that call caused, on
+ * any host), or null outside a call; pass it as {@link ExecLogsOptions.flow} to follow it.
+ */
 export type ExecLogLine = Omit<ExecLogsQuery['execLogs'][number], '__typename'>;
 /** An instance the execution manager has placed. */
 export type ExecInstance = Omit<ExecInstancesQuery['execInstances'][number], '__typename'>;
-/** A deployed version. */
-export type ExecVersion = Omit<ExecVersionsQuery['execVersions'][number], '__typename'>;
+/** A node type in a deployed manifest, as {@link ExecVersion.manifest} shows it. */
+export interface ExecManifestType {
+  kind: 'hub' | 'spoke';
+  parent?: string;
+  client?: boolean;
+  calls?: string[];
+  /** The spawn seed's size in bytes; the seed itself is not returned. */
+  seed_bytes?: number;
+  /** Node API scopes, limits and any other manifest field. */
+  [field: string]: unknown;
+}
+
+/** A deployed manifest: the root hub and each node type. */
+export interface ExecManifest {
+  root: string;
+  types: Record<string, ExecManifestType>;
+  [field: string]: unknown;
+}
+
+/**
+ * A deployed version. `manifestJson` is its manifest as the game API returns it, and
+ * `manifest` the same parsed; both are null when the version's row is gone.
+ */
+export type ExecVersion = Omit<ExecVersionsQuery['execVersions'][number], '__typename'> & {
+  manifest: ExecManifest | null;
+};
+/**
+ * Calls to one endpoint (a node type's `method`) over a window, by outcome. `busy` includes
+ * calls refused by the caller's call limit; the latencies are over `timedCalls` and null
+ * when none was timed.
+ */
+export type ExecEndpointStat = Omit<ExecEndpointStatsQuery['execEndpointStats'][number], '__typename'>;
 /** An app's active version, kill switches and budget pause. */
 export type ExecAppStatus = Omit<ExecAppStatusFieldsFragment, '__typename'>;
 /**
@@ -783,6 +834,24 @@ export interface ExecLogsOptions {
   before?: string;
   /** At most this many lines (default 100, at most 500). */
   limit?: number;
+  /** Only lines of this flow (a line's `flow`, 32 hex digits): one call through every hub and host. */
+  flow?: string;
+}
+
+export interface ExecEndpointStatsOptions {
+  /** Only this node type's endpoints. */
+  nodeType?: string;
+  /** How far back, in minutes: default 60, at most 10 080 (7 days). */
+  sinceMinutes?: number;
+}
+
+function parseManifest(json: string | null | undefined): ExecManifest | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as ExecManifest;
+  } catch {
+    return null;
+  }
 }
 
 function strip<T extends { __typename?: string }>(v: T): Omit<T, '__typename'> {
@@ -847,10 +916,23 @@ export class ExecAPI {
     return data.execInstances.map(strip);
   }
 
-  /** The app's versions, newest first. Requires `view_compute_diagnostics`. */
+  /** The app's versions, newest first, with their manifests. Requires `view_compute_diagnostics`. */
   async versions(appId: string): Promise<ExecVersion[]> {
     const data = await this.graphql.request(ExecVersionsDocument, { appId });
-    return data.execVersions.map(strip);
+    return data.execVersions.map((v) => {
+      const version = strip(v);
+      return { ...version, manifest: parseManifest(version.manifestJson) };
+    });
+  }
+
+  /**
+   * Calls to each endpoint of the app's code over the last `sinceMinutes` (default 60), by
+   * outcome and with their latency, most called first. Each host reports a minute once it
+   * ends. Requires `view_compute_diagnostics`.
+   */
+  async endpointStats(appId: string, options: ExecEndpointStatsOptions = {}): Promise<ExecEndpointStat[]> {
+    const data = await this.graphql.request(ExecEndpointStatsDocument, { appId, ...options });
+    return data.execEndpointStats.map(strip);
   }
 
   /** The active version and the switches. Requires `view_compute_diagnostics`. */
