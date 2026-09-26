@@ -3,7 +3,6 @@ import type { PlayerCodeHostCall } from '../player-runtime/player-code-broker.js
 import type { ChunksAPI } from '../domains/chunks.js';
 import type { VoxelsAPI } from '../domains/voxels.js';
 import type { StateAPI } from '../domains/state.js';
-import type { GameModelAPI } from '../domains/gameModel.js';
 
 /**
  * Game-local fast paths. A game that already holds the world in memory (a
@@ -32,15 +31,8 @@ export interface GridHostCallsOptions {
     chunks: ChunksAPI;
     voxels: VoxelsAPI;
     state: StateAPI;
-    gameModel: GameModelAPI;
   };
   local?: GridHostLocal;
-  /**
-   * Let mods call Studio model functions as the player (`model_invoke`, the
-   * ordinary player authority path). Off by default: a game opts in when its
-   * functions are meant to be scriptable by visitors' mods.
-   */
-  allowModelInvoke?: boolean;
   /**
    * Channels a mod may post to. Default: the grid's own channels only (the
    * server rule for grid code). A game may widen it to channels the player
@@ -187,47 +179,6 @@ export function createGridHostCalls(
         }
         return scope.channels.send(channelId, uuid(args), String(args.payloadBase64 ?? ''));
       }
-      case 'container_create':
-        return scope.model.create({
-          typeKey: typeof args.typeName === 'string' ? args.typeName : undefined,
-          displayName: typeof args.displayName === 'string' ? args.displayName : undefined,
-          stateJson: JSON.stringify(args.state ?? args.properties ?? {}),
-        });
-      case 'container_get':
-        return scope.model.container(String(args.containerId));
-      case 'container_get_by_key':
-        // Binding keys are a server game-model concept. Grid containers have none.
-        throw new GridHostCallRefused(fn, 'server-only');
-      case 'container_get_batch': {
-        const ids = Array.isArray(args.containerIds) ? args.containerIds.slice(0, 32) : [];
-        const found = await Promise.all(
-          ids.map((id) => scope.model.container(String(id)).catch(() => null)),
-        );
-        return found.filter((c) => c != null);
-      }
-      case 'containers_list':
-        return scope.model.containers();
-      case 'container_delete':
-        return scope.model.delete(String(args.containerId));
-      case 'property_set':
-        return scope.model.set({
-          containerId: String(args.containerId),
-          propertyKey: String(args.key),
-          valueJson: JSON.stringify(args.value ?? null),
-        });
-      case 'model_invoke':
-        if (!options.allowModelInvoke) throw new GridHostCallRefused(fn);
-        return client.gameModel.invoke({
-          appId,
-          functionName: String(args.functionName),
-          selfContainerId: String(args.selfContainerId),
-          paramsJson: JSON.stringify(args.params ?? {}),
-          ...(typeof args.sessionId === 'string' ? { sessionId: args.sessionId } : {}),
-        });
-      case 'sessions_list':
-        return scope.sessions.list(
-          typeof args.status === 'string' ? { status: args.status } : {},
-        );
       case 'user_state_get':
         return client.state.getOne(appId);
       case 'user_state_set':
@@ -239,9 +190,10 @@ export function createGridHostCalls(
         if (!local?.drainPointerClicks) throw new GridHostCallRefused(fn);
         return local.drainPointerClicks();
       default:
-        // edge_*, grid_state_*, avatar_state_get and grid_permission_check have
-        // no browser GraphQL surface yet: the server host answers them for
-        // SERVER mods.
+        // The model host calls (container_*, property_set, edge_*, model_invoke,
+        // sessions_list) went with the game model and the player model;
+        // grid_state_*, avatar_state_get and grid_permission_check have no
+        // browser GraphQL surface.
         throw new GridHostCallRefused(fn);
     }
   };

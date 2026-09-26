@@ -16,23 +16,6 @@ fragment PlayerCodeListingFields on PlayerCodeListing {
   createdAt
 }
 
-fragment PlayerCodeListingVersionFields on PlayerCodeListingVersion {
-  versionId
-  listingId
-  versionNo
-  serverArtifactHashes
-  clientArtifactHashes
-  requirements {
-    serverArtifactHash
-    clientArtifactHash
-  }
-  capabilitySummaryJson
-  capabilityHash
-  openSource
-  licenseText
-  createdAt
-}
-
 fragment PlayerCodeAcquisitionFields on PlayerCodeAcquisition {
   acquisitionId
   listingId
@@ -45,18 +28,6 @@ fragment PlayerCodeAcquisitionFields on PlayerCodeAcquisition {
   acquiredAt
 }
 
-fragment PlayerCodeInstallFields on PlayerCodeInstall {
-  installId
-  acquisitionId
-  listingId
-  appId
-  pinnedVersionId
-  targetGridId
-  consentedCapabilityHash
-  status
-  createdAt
-}
-
 fragment GridClaimRequestFields on GridClaimRequest {
   requestId
   appId
@@ -67,146 +38,6 @@ fragment GridClaimRequestFields on GridClaimRequest {
 }
 
 # ---- Game API: browse / publish / acquire / install / consent -----------------
-
-query MarketplaceListings($appId: BigInt!) {
-  playerCodeListings(appId: $appId) {
-    ...PlayerCodeListingFields
-    admissionState
-    latestVersionId
-  }
-}
-
-query MarketplaceListingVersions($appId: BigInt!, $listingId: String!) {
-  playerCodeListingVersions(appId: $appId, listingId: $listingId) {
-    ...PlayerCodeListingVersionFields
-  }
-}
-
-query MarketplaceMyAcquisitions($appId: BigInt!) {
-  myPlayerCodeAcquisitions(appId: $appId) {
-    ...PlayerCodeAcquisitionFields
-  }
-}
-
-query MarketplaceMyInstalls($appId: BigInt!) {
-  myPlayerCodeInstalls(appId: $appId) {
-    ...PlayerCodeInstallFields
-  }
-}
-
-query MarketplaceGridClientMods($appId: BigInt!, $gridId: BigInt!) {
-  gridClientMods(appId: $appId, gridId: $gridId) {
-    attachmentId
-    listingId
-    listingName
-    versionId
-    sourceKind
-    authorKind
-    authorRef
-    serverVersionId
-    clientVersionId
-    clientArtifactHash
-    gridId
-    capabilitySummaryJson
-    capabilityHash
-    authorCapabilitySummaryJson
-    authorCapabilityHash
-    callerConsented
-    callerTrustsAuthor
-  }
-}
-
-query MarketplaceClientArtifact(
-  $appId: BigInt!
-  $listingId: String
-  $attachmentId: String
-  $versionId: String
-) {
-  playerCodeClientArtifact(
-    appId: $appId
-    listingId: $listingId
-    attachmentId: $attachmentId
-    versionId: $versionId
-  ) {
-    versionId
-    artifactHash
-    artifactBase64
-    sizeBytes
-    abiVersion
-    contractJson
-    clientFuelPerDispatch
-  }
-}
-
-mutation MarketplaceTrustGridAuthor(
-  $appId: BigInt!
-  $gridId: BigInt!
-  $authorKind: PlayerCodeOwnerKind!
-  $authorRef: BigInt!
-  $consentCapabilityHash: String!
-) {
-  trustGridAuthor(
-    appId: $appId
-    gridId: $gridId
-    authorKind: $authorKind
-    authorRef: $authorRef
-    consentCapabilityHash: $consentCapabilityHash
-  )
-}
-
-mutation MarketplacePublishListing($input: PublishPlayerCodeInput!) {
-  publishPlayerCode(input: $input) {
-    ...PlayerCodeListingFields
-    admissionState
-    latestVersionId
-  }
-}
-
-mutation MarketplacePublishVersion($input: PublishPlayerCodeVersionInput!) {
-  publishPlayerCodeVersion(input: $input) {
-    ...PlayerCodeListingVersionFields
-  }
-}
-
-mutation MarketplaceAcquire($appId: BigInt!, $listingId: String!) {
-  acquirePlayerCode(appId: $appId, listingId: $listingId) {
-    ...PlayerCodeAcquisitionFields
-  }
-}
-
-mutation MarketplaceInstall(
-  $appId: BigInt!
-  $acquisitionId: String!
-  $consentCapabilityHash: String!
-  $gridId: BigInt
-  $versionId: String
-) {
-  installPlayerCode(
-    appId: $appId
-    acquisitionId: $acquisitionId
-    consentCapabilityHash: $consentCapabilityHash
-    gridId: $gridId
-    versionId: $versionId
-  ) {
-    ...PlayerCodeInstallFields
-  }
-}
-
-mutation MarketplaceUninstall($appId: BigInt!, $installId: String!) {
-  uninstallPlayerCode(appId: $appId, installId: $installId)
-}
-
-mutation MarketplaceConsentGridClientMod(
-  $appId: BigInt!
-  $attachmentId: String!
-  $consentCapabilityHash: String!
-) {
-  consentGridClientMod(
-    appId: $appId
-    attachmentId: $attachmentId
-    consentCapabilityHash: $consentCapabilityHash
-  )
-}
 
 # ---- Game API: D4 grid claim flows --------------------------------------------
 

@@ -115,12 +115,6 @@ export {
   type TypedEvent,
 } from './inbox.js';
 export {
-  ContainerMirror,
-  attachContainerMirror,
-  type ContainerMirrorConfig,
-  type MirroredContainer,
-} from './model.js';
-export {
   AvatarStateStore,
   HostTracker,
   SaveStateStore,
@@ -148,7 +142,6 @@ import {
   type HostTrackerConfig,
   type SaveStateConfig,
 } from './durable.js';
-import { ContainerMirror, type ContainerMirrorConfig } from './model.js';
 import { ErrorStore, type ErrorStoreConfig } from './errors.js';
 import {
   ActorInbox,
@@ -207,11 +200,6 @@ export interface WorldSessionConfig extends WorldSessionBaseConfig {
   save?: SaveStateConfig<any> | true;
   /** Typed avatar public/private/app state ({@link AvatarStateStore}). */
   avatar?: AvatarStateConfig<any, any, any> | true;
-  /**
-   * Game-model mirror: typed cached container snapshots with coalesced
-   * refresh + notify-to-pull channel binding ({@link ContainerMirror}).
-   */
-  model?: ContainerMirrorConfig | true;
 }
 
 /** Infer the payload type of a `codec` config field (else the default `D`). */
@@ -275,9 +263,6 @@ export type WorldSession<C extends WorldSessionConfig = WorldSessionConfig> =
             AvatarAppType<CC>
           >;
         }
-      : unknown) &
-    (C extends { model: ContainerMirrorConfig | true }
-      ? { readonly model: ContainerMirror }
       : unknown);
 
 /**
@@ -346,7 +331,6 @@ export function createWorldSession<const C extends WorldSessionConfig = Record<n
   const host = cfg.host ? new HostTracker(core, opt(cfg.host)) : undefined;
   const save = cfg.save ? new SaveStateStore(core, opt(cfg.save)) : undefined;
   const avatar = cfg.avatar ? new AvatarStateStore(core, opt(cfg.avatar)) : undefined;
-  const model = cfg.model ? new ContainerMirror(core, opt(cfg.model)) : undefined;
 
   const session = {
     appId,
@@ -361,7 +345,6 @@ export function createWorldSession<const C extends WorldSessionConfig = Record<n
     ...(host ? { host } : {}),
     ...(save ? { save } : {}),
     ...(avatar ? { avatar } : {}),
-    ...(model ? { model } : {}),
     dispose: () => core.dispose(),
   };
   return session as unknown as WorldSession<C>;

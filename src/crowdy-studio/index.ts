@@ -8,7 +8,7 @@ export {
   type CrowdyStudioInvokeResult,
   type CrowdyStudioPhase,
   type CrowdyStudioPolledSurface,
-  type CrowdyStudioRun,
+  type CrowdyStudioLogLine,
   type CrowdyStudioRuntimeStatus,
   type CrowdyStudioRuntimeSync,
   type CrowdyStudioRuntimeSyncState,
@@ -16,7 +16,6 @@ export {
   type CrowdyStudioMods,
   type CrowdyStudioPlayerCompute,
   type CrowdyStudioPlayerWallet,
-  type CrowdyStudioServerEngine,
   type CrowdyStudioState,
   type CrowdyStudioStopResult,
   type CrowdyStudioUsageSnapshot,
@@ -81,19 +80,6 @@ export {
   type CrowdyStudioDiagnosticSeverity,
   type CrowdyStudioDiagnosticSource,
 } from './diagnostics.js';
-export {
-  MODEL_LINT_QUERY,
-  modelLintDiagnostics,
-  modelLintSubjectPath,
-  type CrowdyModelLintFinding,
-  type CrowdyModelLintResult,
-} from './model-lint.js';
-export {
-  CrowdyModelLintLog,
-  MODEL_REFUSAL_CODES,
-  modelRefusalFrom,
-  type CrowdyModelRefusal,
-} from './model-lint-log.js';
 export {
   isCurrentDiagnosticVersion,
   type MonacoCrowdyStudioEditorOptions,

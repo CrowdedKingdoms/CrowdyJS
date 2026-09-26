@@ -1,0 +1,35 @@
+mutation DefineAppFeature($input: DefineAppFeatureInput!) {
+  gameModelDefineFeature(input: $input) {
+    appId
+    featureKey
+    description
+  }
+}
+
+query AppFeatures($appId: BigInt!) {
+  gameModelFeatures(appId: $appId) {
+    appId
+    featureKey
+    description
+  }
+}
+
+mutation GrantTierFeature($input: GrantTierFeatureInput!) {
+  gameModelGrantTierFeature(input: $input) {
+    appId
+    tierId
+    featureKey
+  }
+}
+
+mutation RevokeTierFeature($input: GrantTierFeatureInput!) {
+  gameModelRevokeTierFeature(input: $input)
+}
+
+query TierFeatures($appId: BigInt!, $tierId: BigInt) {
+  gameModelTierFeatures(appId: $appId, tierId: $tierId) {
+    appId
+    tierId
+    featureKey
+  }
+}

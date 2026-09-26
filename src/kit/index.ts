@@ -4,217 +4,10 @@ export {
   type OptimisticActionSpec,
 } from './actions.js';
 export {
-  andPolicies,
-  combatBlueprint,
-  combatNames,
-  composeBlueprints,
-  decksBlueprint,
-  decksNames,
-  economyBlueprint,
-  economyCurrencyFn,
-  economyNames,
-  featureGate,
-  guildBlueprint,
-  guildNames,
-  inventoryBarterFunctionName,
-  inventoryBlueprint,
-  inventoryCraftFunctionName,
-  inventoryNames,
-  kitPolicyJson,
-  leaderboardsBlueprint,
-  leaderboardsNames,
-  lockBlueprint,
-  lockNames,
-  lootBlueprint,
-  lootNames,
-  lootRollFn,
-  matchesBlueprint,
-  matchesNames,
-  mergeBlueprints,
-  npcBehaviorFunctionName,
-  npcBlueprint,
-  ownerEquals,
-  ownerEqualsCaller,
-  ownerMirrorProperty,
-  plotBlueprint,
-  plotNames,
-  progressionBlueprint,
-  progressionNames,
-  questsBlueprint,
-  questsNames,
-  toSnakeCase,
-  trustedAuthorityFields,
-  worldsimBlueprint,
-  worldsimNames,
-  type CombatBlueprintOptions,
-  type CombatNames,
-  type DecksBlueprintOptions,
-  type DecksNames,
-  type EconomyBlueprintOptions,
-  type EconomyNames,
-  type GuildBlueprintOptions,
-  type GuildNames,
-  type InventoryBarterSpec,
-  type InventoryBlueprintOptions,
-  type InventoryNames,
-  type InventoryRecipeSpec,
-  type KitAutomationSpec,
-  type KitAutomationTriggerSpec,
-  type KitBlueprint,
-  type KitInvokePolicy,
-  type KitOwnerIdKind,
-  type KitSelectorSpec,
-  type KitTrustedAuthority,
-  type LeaderboardsBlueprintOptions,
-  type LeaderboardsNames,
-  type LockAuthority,
-  type LockBlueprintOptions,
-  type LockNames,
-  type LootBlueprintOptions,
-  type LootDropSpec,
-  type LootEntrySpec,
-  type LootNames,
-  type LootTableSpec,
-  type MatchesBlueprintOptions,
-  type MatchesNames,
-  type MergedBlueprints,
-  type NpcBehaviorSpec,
-  type NpcBehaviorTrigger,
-  type NpcBlueprintOptions,
-  type PlotBlueprintOptions,
-  type PlotNames,
-  type ProgressionBlueprintOptions,
-  type ProgressionNames,
-  type QuestAdvanceSpec,
-  type QuestsBlueprintOptions,
-  type QuestsNames,
-  type SelectorPermissionPredicate,
-  type WorldsimBlueprintOptions,
-  type WorldsimNames,
-  liveopsBlueprint,
-  liveopsNames,
-  type LiveopsBlueprintOptions,
-  type LiveopsNames,
-  moderationBlueprint,
-  moderationNames,
-  type ModerationBlueprintOptions,
-  type ModerationNames,
-} from './blueprints/index.js';
-export {
   GameKitClient,
   type GameKitDomains,
   type GameKitOptions,
-  type KitDeployResult,
 } from './kit.js';
-export {
-  MatchesKit,
-  turnExpired,
-  type KitMatch,
-  type KitMatchFinishResult,
-  type KitMatchScore,
-  type KitMatchSessionEnd,
-  type MatchesKitOptions,
-} from './matches.js';
-export { InventoryKit, type InventoryKitOptions, type KitItemStack } from './inventory.js';
-export {
-  CombatKit,
-  type CombatKitOptions,
-  type KitCombatant,
-  type KitRoutedAttack,
-  type KitStatusEffect,
-} from './combat.js';
-export { DecksKit, type DecksKitOptions, type KitCard } from './decks.js';
-export { FeaturesKit } from './features.js';
-export {
-  EconomyKit,
-  MarketKit,
-  type EconomyKitOptions,
-  type KitMarketListing,
-  type KitShopListing,
-  type KitTradeOffer,
-  type KitWallet,
-} from './economy.js';
-export {
-  LeaderboardsKit,
-  type KitLeaderboardEntry,
-  type LeaderboardsKitOptions,
-} from './leaderboards.js';
-export { LootKit, type KitLootRoll, type LootKitOptions } from './loot.js';
-export { ObjectsKit, type ObjectsKitOptions } from './objects.js';
-export {
-  NpcsKit,
-  type KitNpc,
-  type LiveNpcPose,
-  type NpcsKitOptions,
-} from './npcs.js';
-export {
-  MobsKit,
-  type KitAttackResult,
-  type KitMobDef,
-  type KitMobSlot,
-  type MobsKitOptions,
-} from './mobs.js';
-export {
-  PetsKit,
-  type KitPet,
-  type KitPetResult,
-  type PetsKitOptions,
-} from './pets.js';
-export { EngineDetector, type EngineInvokeResult } from './engine.js';
-export {
-  LiveopsKit,
-  type KitEventWindow,
-  type KitSeason,
-  type LiveopsKitOptions,
-  type ZoneChangeEvent,
-} from './liveops.js';
-export {
-  AbilitiesKit,
-  type AbilitiesKitOptions,
-  type KitAbility,
-} from './abilities.js';
-export {
-  MovementKit,
-  type KitViolations,
-  type MovementKitOptions,
-} from './movement.js';
-export {
-  TerritoryKit,
-  type KitControlPoint,
-  type TerritoryKitOptions,
-} from './territory.js';
-export {
-  RacingKit,
-  type KitRaceRun,
-  type RacingKitOptions,
-} from './racing.js';
-export {
-  ModerationKit,
-  type KitModReport,
-  type ModerationKitOptions,
-} from './moderation.js';
-export {
-  TelemetryKit,
-  telemetryBlueprint,
-  type TelemetryKitOptions,
-} from './telemetry.js';
-export {
-  InstancesKit,
-  type InstancesKitOptions,
-  type KitInstance,
-} from './instances.js';
-export {
-  DirectorKit,
-  type DirectorKitOptions,
-  type KitDirectorRun,
-  type KitWaveSpec,
-} from './director.js';
-export {
-  MatchmakingKit,
-  type KitQueueStatus,
-  type MatchmakingKitOptions,
-} from './matchmaking.js';
-export { MinigamesKit, type MinigamesKitOptions } from './minigames.js';
 export {
   EVENT_CONTACT_DAMAGE,
   EVENT_WEATHER,
@@ -237,6 +30,7 @@ export {
   parseScoreEvent,
   parseTurnEvent,
   parseWeatherEvent,
+  parseZoneChangeEvent,
   poseSuffix,
   EVENT_ABILITY,
   EVENT_CONTROL_POINT,
@@ -256,47 +50,11 @@ export {
   type ScoreEvent,
   type TurnEvent,
   type WeatherEvent,
+  type ZoneChangeEvent,
 } from './wire.js';
-export { PlotsKit, type PlotsKitOptions, type KitPlot } from './plots.js';
-export {
-  QuestsKit,
-  type KitQuestDef,
-  type KitQuestProgress,
-  type QuestsKitOptions,
-} from './quests.js';
-export {
-  ProgressionKit,
-  type KitAchievementDef,
-  type KitAchievementUnlock,
-  type KitProgress,
-  type KitSkillDef,
-  type KitSkillRank,
-  type ProgressionKitOptions,
-} from './progression.js';
 export {
   SocialKit,
   type KitChatMessage,
   type KitGroupWithChannel,
   type SocialKitOptions,
 } from './social.js';
-export {
-  WorldsimKit,
-  type KitCrop,
-  type KitForecast,
-  type KitResourceNode,
-  type KitWaveSpawner,
-  type KitWorldState,
-  type WorldsimKitOptions,
-} from './worldsim.js';
-export {
-  isKitVerdictError,
-  kitInvoke,
-  toKitInvokeResult,
-  type KitInvokeResult,
-  type RawInvokeResult,
-} from './shared.js';
-export {
-  sessionChannelNotification,
-  namedChannelNotification,
-  channelIdNotification,
-} from './notifications.js';
