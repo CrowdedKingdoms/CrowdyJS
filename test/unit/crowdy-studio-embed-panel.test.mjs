@@ -40,6 +40,7 @@ function makeEmbed(overrides = {}) {
     client: {
       crowdyStudio: provider,
       playerCompute: sampleCompute(),
+      ...overrides.client,
     },
     appId: () => '2',
     gameName: 'Example Game',
@@ -485,6 +486,57 @@ test('routes host calls and mirrors untrusted HUD payloads as text-only preview'
   );
   hud.destroy();
   assert.equal(document.querySelector('.ck-crowdy-studio-hud-layer'), null);
+});
+
+/** Enough of `client.exec` for a Studio that opens and polls; no project is built. */
+function sampleExec() {
+  return {
+    async modStarter() {
+      throw new Error('no project is created here');
+    },
+    async modBuild() {},
+    async modBuildStatus() {},
+    async modDeploy() {},
+    async modSetEnabled() {},
+    async modLogs() {
+      return [];
+    },
+    async connect() {
+      throw new Error('nothing is invoked here');
+    },
+  };
+}
+
+async function mountedEngine(overrides) {
+  const { embed, agentMounted } = makeEmbed(overrides);
+  embed.toggle(embedContext());
+  await waitForMounted();
+  const engine = agentMounted.calls[0][0].controller.getState().serverEngine;
+  embed.close();
+  return engine;
+}
+
+test('the SERVER engine defaults to ck-exec when the client has exec; player-compute stays selectable', async () => {
+  assert.equal(await mountedEngine({ client: { exec: sampleExec() } }), 'ck-exec');
+  assert.equal(await mountedEngine({}), 'player-compute', 'a client without exec stays on player compute');
+  assert.equal(
+    await mountedEngine({
+      client: { exec: sampleExec() },
+      options: { serverEngine: 'player-compute' },
+    }),
+    'player-compute',
+  );
+
+  const { embed, agentUnavailable } = makeEmbed({ options: { serverEngine: 'ck-exec' } });
+  embed.toggle(embedContext());
+  await waitFor(() => {
+    assert.match(
+      document.querySelector('.ck-crowdy-studio-embed-status').textContent,
+      /needs the client's exec domain/,
+    );
+  });
+  assert.equal(agentUnavailable.calls.length, 1);
+  embed.close();
 });
 
 test('createCrowdyStudioEmbed returns a working embed instance', () => {

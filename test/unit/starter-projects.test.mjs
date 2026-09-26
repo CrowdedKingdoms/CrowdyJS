@@ -38,6 +38,60 @@ test('SERVER starter Cargo.toml does not declare a client tick interval', async 
   assert.doesNotMatch(cargo.content, /tick_interval_ms/u);
 });
 
+test('with the mod starter, the SERVER target is its crate and the CLIENT target is unchanged', async () => {
+  const { createCrowdyStudioStarterProject } = await import(
+    '../../dist/crowdy-studio/index.js'
+  );
+  const modStarter = {
+    files: [
+      {
+        path: 'Cargo.toml',
+        content:
+          '[package]\nname = "grid-mod"\nedition = "2024"\n\n[lib]\nname = "grid_mod"\ncrate-type = ["cdylib"]\n',
+      },
+      { path: 'src/lib.rs', content: 'use ckx_sdk::prelude::*;\n' },
+    ],
+  };
+  const legacy = createCrowdyStudioStarterProject({
+    appId: '1',
+    gridId: '2',
+    name: 'Demo',
+    kind: 'FULL_STACK',
+  });
+  const project = createCrowdyStudioStarterProject({
+    appId: '1',
+    gridId: '2',
+    name: 'Demo',
+    kind: 'FULL_STACK',
+    modStarter,
+  });
+  assert.equal(project.metadata.pairingPreference, 'NONE');
+  assert.equal(legacy.metadata.pairingPreference, 'REQUIRED');
+  const server = project.files.filter((file) => file.target === 'SERVER');
+  assert.deepEqual(server.map((file) => file.path), ['Cargo.toml', 'src/lib.rs']);
+  // Only [package] name changes; [lib] name is the crate's own business.
+  assert.equal(
+    server[0].content,
+    '[package]\nname = "demo-server"\nedition = "2024"\n\n[lib]\nname = "grid_mod"\ncrate-type = ["cdylib"]\n',
+  );
+  assert.deepEqual(
+    project.files.filter((file) => file.target === 'CLIENT'),
+    legacy.files.filter((file) => file.target === 'CLIENT'),
+  );
+
+  assert.throws(
+    () =>
+      createCrowdyStudioStarterProject({
+        appId: '1',
+        gridId: '2',
+        name: 'Demo',
+        kind: 'SERVER',
+        modStarter: { files: [{ path: 'src/lib.rs', content: '' }] },
+      }),
+    /no Cargo\.toml or src\/lib\.rs/,
+  );
+});
+
 test('parseClientTickIntervalMs reads, clamps, and defaults', async () => {
   const { parseClientTickIntervalMs } = await import(
     '../../dist/crowdy-studio/index.js'
