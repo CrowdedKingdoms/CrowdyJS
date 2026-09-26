@@ -1,3 +1,41 @@
+# Crowdy Studio runs SERVER code on ck-exec by default (next release after 17.12.0)
+
+**A behaviour change for embedders; no signature is removed.** The platform is switching
+legacy player compute off (the game API answers `ENGINE_SWITCHED_OFF`, HTTP 503), so
+Crowdy Studio's SERVER target moves to ck-exec mods, which 17.12.0 offered behind an option.
+
+- **`createCrowdyStudioEmbed` / `CrowdyStudioEmbed`: `serverEngine` now defaults to
+  `'ck-exec'` when `client.exec` is present** (every `CrowdyClient`), and to
+  `'player-compute'` only for a client without it. An embed that passed nothing now builds
+  and runs SERVER code as the grid's mod. Pass `serverEngine: 'player-compute'` to keep the
+  legacy engine until it is removed; `'ck-exec'` without `exec` is refused at mount, as
+  before.
+- **`CrowdyStudioController` and `mountCrowdyStudio` take `serverEngine` too**, defaulting
+  to `'ck-exec'` when `mods` is given and `'player-compute'` otherwise, so a direct caller
+  keeps its engine until it passes `mods: client.exec`. `CrowdyStudioState.serverEngine`
+  says which one runs.
+- **On ck-exec a new project's SERVER target is the mod starter.** `createProject` asks
+  `mods.modStarter(appId)` (`execModStarter`) and uses its `ckx-sdk` crate, with the Cargo
+  package named for the project, instead of the legacy `crowdy-compute-sdk` crate; the
+  server module name fits a mod's (48 characters, starting with a letter) and a full-stack
+  project records pairing `NONE`, since a mod has no client pairing. The CLIENT crate is
+  unchanged. `createCrowdyStudioStarterProject` takes the starter as `modStarter`.
+- **Invoke, Logs, Runs and the budget line follow the engine.** On ck-exec, Invoke calls the
+  mod's endpoint (default `state`, JSON arguments sent as MessagePack) over one exec
+  connection, and the result is the decoded reply as JSON; Logs are the mod's `ctx.log`
+  lines (`modLogs`; `CrowdyStudioRun.level` is set and the text is `errorMessage`); Runs
+  stay empty (ck-exec keeps no run records); player compute usage is read only for a
+  project with a CLIENT target, whose compiles still spend it.
+- **`CrowdyStudioMods` gained `modStarter`, `modLogs` and `connect`.** Pass `client.exec`;
+  a hand-written stand-in needs those three as well.
+- **The mod build sends only the crate**: `Cargo.toml`, `README.md` and `src/**/*.rs`
+  (grid program assets such as `programs/*.js` stay in the project), and a server module
+  name that starts with a digit builds as crate `mod-<name>`.
+
+Existing projects keep their files: a project created on the legacy engine has a
+`crowdy-compute-sdk` crate, which a mod build refuses. Start a new project, or replace its
+SERVER `Cargo.toml` and `src/lib.rs` with the mod starter's.
+
 # CrowdyJS v17.7 — grid-scoped parity (DN-10)
 
 **Additive, plus one coordinated break.** `17.7.0` (2026-09-22), on top of the

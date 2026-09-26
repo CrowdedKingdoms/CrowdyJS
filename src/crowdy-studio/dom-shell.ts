@@ -459,12 +459,16 @@ export class CrowdyStudioDomShell {
       ),
     );
 
-    this.invokeExport = input('Export name');
-    this.invokeExport.value = 'invoke';
+    const onMod = controller.getState().serverEngine === 'ck-exec';
+    this.invokeExport = input(onMod ? 'Endpoint' : 'Export name');
+    this.invokeExport.value = onMod ? 'state' : 'invoke';
     this.invokeParams = document.createElement('textarea');
     this.invokeParams.placeholder = '{"example": true}';
-    this.invokeParams.setAttribute('aria-label', 'Invoke JSON parameters');
-    const invokeButton = button('Invoke server export');
+    this.invokeParams.setAttribute(
+      'aria-label',
+      onMod ? 'Call arguments (JSON)' : 'Invoke JSON parameters',
+    );
+    const invokeButton = button(onMod ? 'Call mod endpoint' : 'Invoke server export');
     this.invokeResult = document.createElement('pre');
     const invokeControls = element('div', 'ck-crowdy-studio-invoke');
     invokeControls.append(this.invokeExport, this.invokeParams, invokeButton);
@@ -505,7 +509,13 @@ export class CrowdyStudioDomShell {
     this.renderProblems(state);
     this.renderBuild(state);
     this.renderRuntimeRows(this.logsPanel, state.logs);
-    this.renderRuntimeRows(this.runsPanel, state.runs);
+    this.renderRuntimeRows(
+      this.runsPanel,
+      state.runs,
+      state.serverEngine === 'ck-exec'
+        ? 'A mod keeps no run records; its log lines are under Logs.'
+        : undefined,
+    );
     this.invokeResult.textContent = state.invokeResult
       ? formatInvokeResult(state.invokeResult)
       : '';
@@ -1254,15 +1264,18 @@ export class CrowdyStudioDomShell {
   private renderRuntimeRows(
     panel: HTMLElement,
     rows: CrowdyStudioState['runs'],
+    emptyText = 'No runtime records.',
   ): void {
     panel.replaceChildren();
     if (rows.length === 0) {
-      panel.append(empty('No runtime records.'));
+      panel.append(empty(emptyText));
       return;
     }
     for (const row of rows) {
       const line = document.createElement('pre');
-      line.textContent = `${row.success ? '✓' : '✗'} ${row.startedAt} ${row.moduleName} ${row.triggerSource} · ${row.durationUs}µs · ${row.fuelUsed} fuel${row.errorMessage ? `\n${row.errorMessage}` : ''}`;
+      line.textContent = row.level
+        ? `${row.success ? '·' : '✗'} ${row.startedAt} ${row.moduleName} ${row.level}\n${row.errorMessage ?? ''}`
+        : `${row.success ? '✓' : '✗'} ${row.startedAt} ${row.moduleName} ${row.triggerSource} · ${row.durationUs}µs · ${row.fuelUsed} fuel${row.errorMessage ? `\n${row.errorMessage}` : ''}`;
       panel.append(line);
     }
   }

@@ -786,7 +786,7 @@ import { createCrowdyStudioEmbed } from '@crowdedkingdoms/crowdyjs/crowdy-studio
 import workerUrl from '@crowdedkingdoms/crowdyjs/player-glue-worker?worker&url';
 
 const studio = createCrowdyStudioEmbed({
-  client: game, // CrowdyClient: crowdyStudio, playerCompute, playerWallet, crowdyStudioGitHub
+  client: game, // CrowdyClient: crowdyStudio, exec, playerCompute, playerWallet, crowdyStudioGitHub
   appId,
   gameName: 'My Game',
   suppressGameplayInput: () => pauseInput(),
@@ -808,6 +808,17 @@ fullscreen modal on narrow screens. For custom chrome, call
 `mountCrowdyStudio(host, options)` directly; for a headless integration, use
 `new CrowdyStudioController(options)`. New games should start SERVER-only.
 Untrusted HUD payloads always render as text, never HTML.
+
+**The SERVER target runs as a ck-exec mod.** The embed's `serverEngine` defaults to
+`'ck-exec'` when the client has `exec` (a `CrowdyClient` always does): a new project's
+SERVER target starts from the platform's mod starter (`client.exec.modStarter(appId)`, a
+`ckx-sdk` crate), Test draft and Deploy live build it with `modBuild` and deploy it to the
+grid as the mod `mod:<server module name>`, Invoke calls one of its endpoints (`state` by
+default) over an exec connection, and Logs shows its `ctx.log` lines. The CLIENT target is
+unchanged. `mountCrowdyStudio` and the controller take the same `serverEngine` with
+`mods: client.exec`; without `mods` they stay on legacy player compute, and
+`serverEngine: 'player-compute'` keeps it explicitly. The platform is switching legacy
+player compute off, so that option lasts only until it is removed.
 
 See [Crowdy Studio & player client mods](https://docs.crowdedkingdoms.com/crowdyjs/player-client-mods)
 and [Embed Crowdy Studio in your game](https://docs.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).

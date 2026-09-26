@@ -232,6 +232,8 @@ export type CrowdyFaultCode =
   | 'UNAUTHENTICATED'
   | 'WRONG_DATACENTER'
   | 'APP_UNAVAILABLE'
+  /** The tier switched the legacy engine off (compute, player compute, game model); never retryable. */
+  | 'ENGINE_SWITCHED_OFF'
   | (string & {});
 
 /** What the platform says about a failure, in the only vocabulary a player is shown. */

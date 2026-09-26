@@ -11,6 +11,19 @@ not answerable from this page, and the paragraph this replaces proved it: it rea
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
+**Unreleased (after 17.12.0): Crowdy Studio's SERVER target runs on ck-exec by default
+(2026-09-26, P2 W9).** The embed's `serverEngine` defaults to `'ck-exec'` when the client has
+`exec`; the controller and `mountCrowdyStudio` take `serverEngine` too (default `'ck-exec'`
+with `mods`, else `'player-compute'`, which stays selectable until the legacy deletion).
+On ck-exec, `createProject` starts the SERVER target from `mods.modStarter` (`execModStarter`)
+instead of the `crowdy-compute-sdk` crate, Invoke calls the mod over an exec connection, Logs
+read `modLogs`, and Runs and a SERVER-only project's usage no longer read player compute.
+`CrowdyStudioMods` grew `modStarter`, `modLogs` and `connect`. **Still on legacy player
+compute, with no ck-exec replacement yet:** the CLIENT target's compile (`playerComputeDeploy`
+target CLIENT, `playerComputeVersions`) and its artifact (`playerComputeArtifact`); a tier with
+player compute switched off refuses CLIENT compiles with `ENGINE_SWITCHED_OFF` (already
+compiled artifacts are still served). [MIGRATION.md](MIGRATION.md).
+
 **17.12.0 adds ck-exec mods to `client.exec` (dev-tier preview, 2026-09-25, P2 W7).** A mod is
 a player's code on a grid they own, the node type `mod:<name>` (`execModType`) keyed by the
 grid id, which players call through an `ExecConnection` like any node. `modBuild` /
