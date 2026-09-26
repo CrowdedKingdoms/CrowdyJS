@@ -602,10 +602,8 @@ function clampLimit(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.min(400, Math.floor(value)));
 }
 
-function formatRunLine(run: CrowdyStudioState['logs'][number]): string {
-  const status = run.success ? 'ok' : 'FAILED';
-  const error = run.errorMessage ? ` — ${run.errorMessage}` : '';
-  return `${run.startedAt} ${run.moduleName} ${run.triggerSource} ${status} ${Math.round(run.durationUs / 1000)}ms fuel=${run.fuelUsed}${error}`;
+function formatRunLine(line: CrowdyStudioState['logs'][number]): string {
+  return `${line.at} ${line.moduleName} ${line.level}: ${line.text}`;
 }
 
 function toDshDiagnostic(diagnostic: CrowdyStudioDiagnostic): DshDiagnostic {

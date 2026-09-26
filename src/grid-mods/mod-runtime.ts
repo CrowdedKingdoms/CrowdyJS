@@ -44,7 +44,6 @@ export interface StartGridModOptions {
   graphqlUrl?: string;
   graphqlWsUrl?: string;
   local?: GridHostLocal;
-  allowModelInvoke?: boolean;
   onPresentation?: (presentation: PlayerCodePresentation) => void;
   onStopped?: (reason: string) => void;
 }
@@ -80,7 +79,6 @@ export async function startGridMod(
         scope,
         client: options.client,
         local: options.local,
-        allowModelInvoke: options.allowModelInvoke,
       }),
       onPresentation: options.onPresentation,
       onCircuitOpen: (reason) => options.onStopped?.(reason),

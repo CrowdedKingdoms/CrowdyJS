@@ -1,0 +1,7 @@
+query TierFeatures($appId: BigInt!, $tierId: BigInt) {
+  gameModelTierFeatures(appId: $appId, tierId: $tierId) {
+    appId
+    tierId
+    featureKey
+  }
+}

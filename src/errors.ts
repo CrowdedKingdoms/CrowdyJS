@@ -232,6 +232,8 @@ export type CrowdyFaultCode =
   | 'UNAUTHENTICATED'
   | 'WRONG_DATACENTER'
   | 'APP_UNAVAILABLE'
+  /** The tier switched the legacy engine off (compute, player compute, game model); never retryable. */
+  | 'ENGINE_SWITCHED_OFF'
   | (string & {});
 
 /** What the platform says about a failure, in the only vocabulary a player is shown. */
@@ -268,7 +270,7 @@ export interface CrowdyPlayerFault {
  * @example
  * ```ts
  * try {
- *   await client.compute.invoke({ appId, moduleName: 'combat', exportName: 'hit' });
+ *   await client.graphql.request(SomeDocument, variables);
  * } catch (err) {
  *   const fault = playerFaultOf(err);
  *   if (!fault) throw err;
@@ -328,13 +330,10 @@ function faultFields(
 /**
  * Read the platform's attribution from EITHER carrier, so a game branches once.
  *
- * There are two, and the split is the server's rather than a wart of this SDK.
- * `computeInvoke` and `playerComputeInvoke` FAIL — they throw, and the fault arrives in
- * the GraphQL error's extensions. `gameModelInvoke` RETURNS — a denial or an evaluation
- * failure is a gameplay verdict that still carries an event id and any writes that did
- * apply, so it comes back as `success: false` with a `fault` field. Forcing either into
- * the other's shape would lose something real, so this function accepts both and gives
- * you one thing to switch on.
+ * There are two. A refused or failed call THROWS, and the fault arrives in the GraphQL
+ * error's extensions. A result may instead RETURN one: a verdict that still carries
+ * whatever did apply comes back as `success: false` with a `fault` field (the legacy
+ * `gameModelInvoke` did). This function accepts both and gives you one thing to switch on.
  *
  * Returns `null` when there is no fault: a successful result, or an error that is not an
  * attributed one (a network drop, a timeout, an ordinary validation error elsewhere in
@@ -343,8 +342,7 @@ function faultFields(
  *
  * @example
  * ```ts
- * const result = await client.gameModel.invoke({ appId, functionName, selfContainerId });
- * const fault = playerFaultOf(result);
+ * const fault = playerFaultOf(errorOrResult);
  * if (fault?.retryable) scheduleRetry();
  * ```
  */

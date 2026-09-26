@@ -41,9 +41,7 @@ export interface KitChatMessage {
  * Runtime **social** helpers — parties, guilds, and chat rooms in familiar
  * words, wrapped over the platform's teams (membership + roles) and
  * channels (location-independent messaging) with realtime delivery via the
- * UDP notification subscription. No model schema needed; the only
- * deployable is the optional {@link guildBlueprint} composite (guild hall +
- * bank).
+ * UDP notification subscription. Nothing is deployed.
  *
  * Conventions: a party is a team named `party:<name>` paired with an
  * equally-named channel; a guild is `guild:<name>` likewise. Guild

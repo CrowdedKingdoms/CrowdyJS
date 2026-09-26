@@ -61,61 +61,12 @@ test('an UNCONFIGURED client dials the default origin', async () => {
   assert.equal(seen[0], `${sdk.CROWDY_DEFAULT_HTTP_ORIGIN}/graphql`);
 });
 
-/**
- * WHY THIS CASE EXISTS, and it was found by sabotaging the other three.
- *
- * The HTTP assertion above is satisfied by EITHER layer — `CrowdyClient`'s
- * resolution or `GraphQLClient`'s own last-resort — so deleting the former left
- * all four green. Measured, not reasoned about. That is defence in depth rather
- * than an untested path (both layers produce the same URL), but it does mean the
- * HTTP case cannot tell you WHICH layer answered.
- *
- * This case can only be satisfied by `CrowdyClient`, because `gameModel` has no
- * fallback of its own and refuses a missing `wsUrl` outright. Deleting the WS
- * resolution turns it red; deleting the all-or-nothing guard turns the case
- * below red. Three sabotages, and the two that change behaviour are both caught.
- */
-test('an UNCONFIGURED client resolves the WS default for the sub-clients too', async () => {
+test('an UNCONFIGURED client resolves the WS default for the realtime client too', async () => {
   const sdk = await loadSdk();
   const client = sdk.createCrowdyClient({});
-  const urls = [];
-  class ProbeSocket {
-    static CONNECTING = 0;
-    static OPEN = 1;
-    static CLOSING = 2;
-    static CLOSED = 3;
-    constructor(url) {
-      urls.push(String(url));
-      this.readyState = ProbeSocket.CONNECTING;
-    }
-    send() {}
-    close() {}
-  }
   try {
-    client.gameModel.activePlayerCountChanged(
-      { appId: '1' },
-      { next() {}, webSocketImpl: ProbeSocket },
-    );
+    assert.equal(client.realtime.wsUrl, `${sdk.CROWDY_DEFAULT_WS_ORIGIN}/graphql`);
   } finally {
     client.close();
   }
-  assert.deepEqual(urls, [`${sdk.CROWDY_DEFAULT_WS_ORIGIN}/graphql`]);
-});
-
-test('a PARTIALLY configured client gets NO default — the origin stays whole', async () => {
-  const sdk = await loadSdk();
-  // httpUrl supplied, wsUrl not. The websocket must not fall through to the
-  // tier default, which would split one session across two origins while
-  // looking connected. The existing refusal is what proves it did not.
-  const client = sdk.createCrowdyClient({ httpUrl: 'https://game.invalid' });
-  assert.throws(
-    () =>
-      client.gameModel.activePlayerCountChanged(
-        { appId: '1' },
-        { next() {} },
-      ),
-    /requires a wsUrl/,
-    'a configured client must keep its explicit refusal rather than inheriting the default',
-  );
-  client.close();
 });

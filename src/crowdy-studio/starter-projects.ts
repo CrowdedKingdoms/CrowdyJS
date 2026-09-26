@@ -4,10 +4,18 @@ import {
   type CrowdyStudioProjectFile,
   type CrowdyStudioProjectKind,
   type CrowdyStudioProjectMetadata,
-  type CrowdyStudioTarget,
 } from './models.js';
 
 const SDK_VERSION = '0.1.8';
+
+/** A mod's name is at most 48 characters, and the SERVER module name is `<base>-server`. */
+const MOD_BASE_MAX = 48 - '-server'.length;
+
+/** ck-exec's mod starter crate (`client.exec.modStarter(appId)`). */
+export interface CrowdyStudioModStarter {
+  /** `Cargo.toml` and `src/**` of a `ckx-sdk` crate. */
+  files: readonly { path: string; content: string }[];
+}
 
 export interface CrowdyStudioNewProjectOptions {
   appId: string;
@@ -15,14 +23,27 @@ export interface CrowdyStudioNewProjectOptions {
   name: string;
   kind: CrowdyStudioProjectKind;
   description?: string;
+  /**
+   * The SERVER target's crate, its package named for the project; required when the kind
+   * has a SERVER target.
+   */
+  modStarter?: CrowdyStudioModStarter;
 }
 
-/** Create a compile-oriented starter without introducing a raw JSON source map. */
+/**
+ * Create a compile-oriented starter without introducing a raw JSON source map. The SERVER
+ * target is the mod starter's crate and its module name fits a mod's (a mod has no client
+ * pairing, so the preference is `NONE`); the CLIENT target is a `crowdy-compute-sdk` crate.
+ */
 export function createCrowdyStudioStarterProject(
   options: CrowdyStudioNewProjectOptions,
 ): CreateCrowdyStudioProjectInput {
-  const base = moduleName(options.name);
   const targets = projectTargets(options.kind);
+  const mod = options.modStarter;
+  if (targets.includes('SERVER') && !mod) {
+    throw new Error('A SERVER target starts from the mod starter (client.exec.modStarter)');
+  }
+  const base = mod ? modModuleBase(options.name) : moduleName(options.name);
   const metadata: CrowdyStudioProjectMetadata = {
     name: options.name.trim() || 'Untitled mod',
     ...(options.description?.trim()
@@ -34,7 +55,7 @@ export function createCrowdyStudioStarterProject(
     ...(targets.includes('CLIENT')
       ? { clientModuleName: `${base}-client` }
       : {}),
-    pairingPreference: options.kind === 'FULL_STACK' ? 'REQUIRED' : 'NONE',
+    pairingPreference: 'NONE',
   };
   return {
     appId: options.appId,
@@ -42,41 +63,85 @@ export function createCrowdyStudioStarterProject(
     kind: options.kind,
     metadata,
     files: targets.flatMap((target) =>
-      starterFiles(target, target === 'SERVER'
-        ? metadata.serverModuleName!
-        : metadata.clientModuleName!),
+      target === 'SERVER'
+        ? modStarterFiles(mod!, metadata.serverModuleName!)
+        : clientStarterFiles(metadata.clientModuleName!),
     ),
   };
 }
 
-function starterFiles(
-  target: CrowdyStudioTarget,
+function modStarterFiles(
+  starter: CrowdyStudioModStarter,
   name: string,
 ): CrowdyStudioProjectFile[] {
+  const paths = new Set(starter.files.map((file) => file.path));
+  if (!paths.has('Cargo.toml') || !paths.has('src/lib.rs')) {
+    throw new Error('The mod starter has no Cargo.toml or src/lib.rs');
+  }
+  return starter.files.map((file) => ({
+    target: 'SERVER',
+    path: file.path,
+    content:
+      file.path === 'Cargo.toml'
+        ? renamePackage(file.content, name)
+        : file.content,
+  }));
+}
+
+/** The first `name` in `[package]`, set to `name`; every other line as it was. */
+function renamePackage(manifest: string, name: string): string {
+  let section = '';
+  let renamed = false;
+  return manifest
+    .split('\n')
+    .map((line) => {
+      const header = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+      if (header) {
+        section = header[1].trim();
+        return line;
+      }
+      if (section !== 'package' || renamed || !/^\s*name\s*=/.test(line)) {
+        return line;
+      }
+      renamed = true;
+      return `name = "${name}"`;
+    })
+    .join('\n');
+}
+
+function moduleName(value: string): string {
+  const slug = slugModuleName(value).slice(0, 48);
+  return slug || 'player-mod';
+}
+
+/**
+ * A mod module base: short enough for `<base>-server` to be a mod name, and starting with a
+ * letter, as a build's crate names must.
+ */
+function modModuleBase(value: string): string {
+  const slug = slugModuleName(value);
+  if (!slug) return 'player-mod';
+  const cut = (/^[a-z]/u.test(slug) ? slug : `mod-${slug}`).slice(0, MOD_BASE_MAX);
+  // The slug has no runs of dashes, so the cut leaves at most one at the end.
+  return cut.endsWith('-') ? cut.slice(0, -1) : cut;
+}
+
+function clientStarterFiles(name: string): CrowdyStudioProjectFile[] {
   return [
     {
-      target,
+      target: 'CLIENT',
       path: 'Cargo.toml',
-      content: cargoToml(target, name),
+      content: clientCargoToml(name),
     },
     {
-      target,
+      target: 'CLIENT',
       path: 'src/lib.rs',
-      content: target === 'SERVER' ? serverSource() : clientSource(),
+      content: clientSource(),
     },
   ];
 }
 
-function cargoToml(target: CrowdyStudioTarget, name: string): string {
-  const clientTick =
-    target === 'CLIENT'
-      ? `
-# How often the browser calls CLIENT on_tick (clamped 16–1000 ms).
-# 1000 = HUD/text. 50 = physics minigames (pool). 16 = shooters, if a tick stays cheap.
-[package.metadata.crowdy]
-tick_interval_ms = 1000
-`
-      : '';
+function clientCargoToml(name: string): string {
   return `[package]
 name = "${name}"
 version = "0.1.0"
@@ -84,32 +149,15 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
-${clientTick}
+
+# How often the browser calls CLIENT on_tick (clamped 16–1000 ms).
+# 1000 = HUD/text. 50 = physics minigames (pool). 16 = shooters, if a tick stays cheap.
+[package.metadata.crowdy]
+tick_interval_ms = 1000
+
 [dependencies]
 crowdy-compute-sdk = "${SDK_VERSION}"
 serde_json = "1"
-`;
-}
-
-function serverSource(): string {
-  return `use crowdy_compute_sdk as crowdy;
-
-fn on_init() {
-    // Runs once when this SERVER module starts on the owned grid.
-}
-
-fn on_tick(_dt_ms: u32) {
-    // The host only ticks when tickIntervalMs is set (omit/0 = invoke-only).
-    // Server host calls are permission checked and clamped to the owned grid.
-    // Type "crowdy::" for the platform-indexed host-call surface.
-}
-
-fn on_invoke(payload: &[u8]) -> Vec<u8> {
-    // Called by Crowdy Studio's Invoke panel or an allowed game caller.
-    payload.to_vec()
-}
-
-crowdy::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);
 `;
 }
 
@@ -141,11 +189,6 @@ fn on_invoke(payload: &[u8]) -> Vec<u8> {
 
 crowdy::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);
 `;
-}
-
-function moduleName(value: string): string {
-  const slug = slugModuleName(value).slice(0, 48);
-  return slug || 'player-mod';
 }
 
 /**

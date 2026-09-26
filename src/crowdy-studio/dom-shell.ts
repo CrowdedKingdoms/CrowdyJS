@@ -19,7 +19,7 @@ import {
 } from './models.js';
 import { CROWDY_STUDIO_STYLES } from './styles.js';
 
-type PanelName = 'problems' | 'build' | 'logs' | 'runs' | 'invoke';
+type PanelName = 'problems' | 'build' | 'logs' | 'invoke';
 
 type ExplorerFormState =
   | { kind: 'add'; target: CrowdyStudioTarget; value: string }
@@ -119,7 +119,6 @@ export class CrowdyStudioDomShell {
   private readonly problemsPanel: HTMLElement;
   private readonly buildPanel: HTMLElement;
   private readonly logsPanel: HTMLElement;
-  private readonly runsPanel: HTMLElement;
   private readonly invokePanel: HTMLElement;
   private readonly invokeExport: HTMLInputElement;
   private readonly invokeParams: HTMLTextAreaElement;
@@ -231,7 +230,6 @@ export class CrowdyStudioDomShell {
     this.problemsPanel = this.createPanel('problems', 'Problems', panelTabs);
     this.buildPanel = this.createPanel('build', 'Build', panelTabs);
     this.logsPanel = this.createPanel('logs', 'Logs', panelTabs);
-    this.runsPanel = this.createPanel('runs', 'Runs', panelTabs);
     this.invokePanel = this.createPanel('invoke', 'Invoke', panelTabs);
     const hidePanel = button('×');
     hidePanel.className = 'ck-crowdy-studio-panel-hide';
@@ -459,12 +457,12 @@ export class CrowdyStudioDomShell {
       ),
     );
 
-    this.invokeExport = input('Export name');
-    this.invokeExport.value = 'invoke';
+    this.invokeExport = input('Endpoint');
+    this.invokeExport.value = 'state';
     this.invokeParams = document.createElement('textarea');
     this.invokeParams.placeholder = '{"example": true}';
-    this.invokeParams.setAttribute('aria-label', 'Invoke JSON parameters');
-    const invokeButton = button('Invoke server export');
+    this.invokeParams.setAttribute('aria-label', 'Call arguments (JSON)');
+    const invokeButton = button('Call mod endpoint');
     this.invokeResult = document.createElement('pre');
     const invokeControls = element('div', 'ck-crowdy-studio-invoke');
     invokeControls.append(this.invokeExport, this.invokeParams, invokeButton);
@@ -504,8 +502,7 @@ export class CrowdyStudioDomShell {
     this.deployAction.disabled = !projectTargetsAvailable;
     this.renderProblems(state);
     this.renderBuild(state);
-    this.renderRuntimeRows(this.logsPanel, state.logs);
-    this.renderRuntimeRows(this.runsPanel, state.runs);
+    this.renderLogLines(this.logsPanel, state.logs);
     this.invokeResult.textContent = state.invokeResult
       ? formatInvokeResult(state.invokeResult)
       : '';
@@ -523,7 +520,6 @@ export class CrowdyStudioDomShell {
     this.disposed = true;
     this.controller.setSurfaceVisible('usage', false);
     this.controller.setSurfaceVisible('logs', false);
-    this.controller.setSurfaceVisible('runs', false);
     this.unsubscribeLayout();
     for (const splitter of this.splitters.values()) splitter.dispose();
     this.projectMenu.dispose();
@@ -735,15 +731,12 @@ export class CrowdyStudioDomShell {
     this.syncPanelPolling();
   }
 
-  /** Poll logs/runs only while their panel is both selected and shown. */
+  /** Poll logs only while their panel is both selected and shown. */
   private syncPanelPolling(): void {
-    const bottomVisible = this.layout.isVisible('bottom');
-    for (const surface of ['logs', 'runs'] as const) {
-      this.controller.setSurfaceVisible(
-        surface,
-        bottomVisible && this.activePanel === surface,
-      );
-    }
+    this.controller.setSurfaceVisible(
+      'logs',
+      this.layout.isVisible('bottom') && this.activePanel === 'logs',
+    );
   }
 
   // ----- Rendering -----------------------------------------------------------
@@ -1251,18 +1244,18 @@ export class CrowdyStudioDomShell {
     this.buildPanel.append(output);
   }
 
-  private renderRuntimeRows(
+  private renderLogLines(
     panel: HTMLElement,
-    rows: CrowdyStudioState['runs'],
+    lines: CrowdyStudioState['logs'],
   ): void {
     panel.replaceChildren();
-    if (rows.length === 0) {
-      panel.append(empty('No runtime records.'));
+    if (lines.length === 0) {
+      panel.append(empty('No log lines.'));
       return;
     }
-    for (const row of rows) {
+    for (const entry of lines) {
       const line = document.createElement('pre');
-      line.textContent = `${row.success ? '✓' : '✗'} ${row.startedAt} ${row.moduleName} ${row.triggerSource} · ${row.durationUs}µs · ${row.fuelUsed} fuel${row.errorMessage ? `\n${row.errorMessage}` : ''}`;
+      line.textContent = `${entry.level === 'error' ? '✗' : '·'} ${entry.at} ${entry.moduleName} ${entry.level}\n${entry.text}`;
       panel.append(line);
     }
   }
@@ -1288,13 +1281,7 @@ function budgetText(state: CrowdyStudioState): string {
 }
 
 function formatInvokeResult(result: NonNullable<CrowdyStudioState['invokeResult']>): string {
-  return [
-    result.resultJson ?? result.resultBase64 ?? '(empty result)',
-    result.fuelUsed ? `${result.fuelUsed} fuel` : '',
-    result.durationUs !== undefined ? `${result.durationUs}µs` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  return `${result.resultJson}\n${result.durationUs}µs`;
 }
 
 function sameRef(a: CrowdyStudioFileRef, b: CrowdyStudioFileRef): boolean {

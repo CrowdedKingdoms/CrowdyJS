@@ -1,3 +1,82 @@
+# CrowdyJS v18 — the legacy engines are gone
+
+**Breaking.** `18.0.0` ships once ck-exec is promoted (phase P4 of the ck-exec program), after
+the game API removes the legacy developer-code engines: Studio compute, the game model and its
+automations, player compute's server side and the player model. Their code moves to ck-exec
+(`client.exec`): an app's server code as hubs and spokes, a player's grid code as mods. Nothing
+is migrated for you; port the code, then upgrade.
+
+| 17.x | 18.0 |
+| --- | --- |
+| `client.gameModel` (containers, properties, functions, `invoke`, sessions, events, timers, automations, `seed`, lint, the player-count feed) | A hub's own state and endpoints: `client.exec.connect(appId, { nodeType, key })`, then `call` / `subscribe`; timers are `ctx.timer_after` / `ctx.timer_every` in the hub; sessions are a keyed hub (the `session` starter) |
+| `gameModel.defineFeature`, `grantTierFeature`, `revokeTierFeature`, `features`, `tierFeatures` | `client.appAccess.defineFeature`, `grantTierFeature`, `revokeTierFeature`, `features(appId)`, `tierFeatures(appId, tierId?)` (same fields; a hub reads them with `players.features`) |
+| `client.compute` (modules, `invoke`, templates, runs, logs) | `client.exec.starters` / `build` / `waitForBuild` / `deploy`, `logs`, `instances`, `versions`, `activateVersion`, `setEnabled`; manual calls through `connectAsDeveloper` |
+| `client.playerModel` (containers, automations) | A mod's own state and timers |
+| `client.playerCompute` SERVER side (`deploy` with `target: SERVER`, `setEnabled`, `setRequires`, `invoke`, `runs`, `logs`) | Mods: `client.exec.modBuild` / `waitForModBuild` / `modDeploy` / `modSetEnabled`, calls through `connect(appId, { nodeType: execModType(name), key: gridId })`, `modLogs` |
+| `client.kit(appId)` blueprints, `kit.deploy`, engines, `kit.inventory` … `kit.minigames`, `kit.features` | Hubs; the starters for NPCs and mobs, sessions and matchmaking. `kit.social` stays; `kit/wire.ts` codecs and `runOptimisticAction` stay |
+| `createWorldSession({ model })` (`ContainerMirror`) | Subscribe to the hub's topic |
+| `client.grid(...).sessions`, `.model`, `.compute` | A mod on the grid (`client.exec.mod*`) |
+| `marketplace.listings` / `versions` / `publishListing` / `publishVersion` / `acquire` / `install` / `uninstall` / `myAcquisitions` / `myInstalls`, and grid attachments (`gridClientMods`, `consentGridClientMod`, `trustGridAuthor`, `clientArtifact(Bytes)`) | `client.exec.modPublish` / `modListings` / `modInstall` / `modUnpublish` (no client companion yet) |
+| `MODEL_LINT_QUERY`, `modelLintDiagnostics`, `CrowdyModelLintLog`, the `'model-lint'` diagnostic source | The Rust compiler's diagnostics from the build |
+
+- **`client.playerCompute` is players' CLIENT modules only**: `deploy` compiles a project's
+  CLIENT target (it takes no `target`, `tickHz` or `gridEvents`), plus `versions`, `artifact`,
+  `artifactBytes`, `usage` (compile quota), `myModules`, `delete`, `setSwitch`, `switches`.
+- **Crowdy Studio has one SERVER engine, the mod.** Drop `serverEngine` from the embed, the
+  controller and `mountCrowdyStudio`; the controller and `mountCrowdyStudio` require
+  `mods: client.exec`, and the embed requires `client.exec`. `CrowdyStudioState` loses
+  `serverEngine` and `runs` (and the Runs panel went); `logs` are `CrowdyStudioLogLine`s
+  (`id`, `moduleName`, `level`, `at`, `text`); `CrowdyStudioInvokeResult` is
+  `{ resultJson, durationUs }`; `CrowdyStudioPlayerCompute` is `deploy`, `versions`,
+  `artifactBytes` and `usage`. `createCrowdyStudioStarterProject` needs `modStarter` for a
+  kind with a SERVER target.
+- **CLIENT host calls** `container_*`, `containers_list`, `property_set`, `model_invoke` and
+  `sessions_list` are refused (`GridHostCallRefused`), and `createGridHostCalls` /
+  `startGridMod` lost `allowModelInvoke` and the client's `gameModel`.
+- The kit's type-98 parser is `parseZoneChangeEvent` beside the other wire parsers.
+
+`schema.gql` and the generated types follow the game API: the release that carries 18.0.0
+syncs the SDL after the game API's deletion reaches dev (`npm run schema:sync:local` against
+that checkout, or the published SDL once it is), then `npm run codegen`.
+
+# Crowdy Studio runs SERVER code on ck-exec by default (the release after 17.12.0)
+
+**A behaviour change for embedders; no signature is removed.** The platform is switching
+legacy player compute off (the game API answers `ENGINE_SWITCHED_OFF`, HTTP 503), so
+Crowdy Studio's SERVER target moves to ck-exec mods, which 17.12.0 offered behind an option.
+
+- **`createCrowdyStudioEmbed` / `CrowdyStudioEmbed`: `serverEngine` now defaults to
+  `'ck-exec'` when `client.exec` is present** (every `CrowdyClient`), and to
+  `'player-compute'` only for a client without it. An embed that passed nothing now builds
+  and runs SERVER code as the grid's mod. Pass `serverEngine: 'player-compute'` to keep the
+  legacy engine until it is removed; `'ck-exec'` without `exec` is refused at mount, as
+  before.
+- **`CrowdyStudioController` and `mountCrowdyStudio` take `serverEngine` too**, defaulting
+  to `'ck-exec'` when `mods` is given and `'player-compute'` otherwise, so a direct caller
+  keeps its engine until it passes `mods: client.exec`. `CrowdyStudioState.serverEngine`
+  says which one runs.
+- **On ck-exec a new project's SERVER target is the mod starter.** `createProject` asks
+  `mods.modStarter(appId)` (`execModStarter`) and uses its `ckx-sdk` crate, with the Cargo
+  package named for the project, instead of the legacy `crowdy-compute-sdk` crate; the
+  server module name fits a mod's (48 characters, starting with a letter) and a full-stack
+  project records pairing `NONE`, since a mod has no client pairing. The CLIENT crate is
+  unchanged. `createCrowdyStudioStarterProject` takes the starter as `modStarter`.
+- **Invoke, Logs, Runs and the budget line follow the engine.** On ck-exec, Invoke calls the
+  mod's endpoint (default `state`, JSON arguments sent as MessagePack) over one exec
+  connection, and the result is the decoded reply as JSON; Logs are the mod's `ctx.log`
+  lines (`modLogs`; `CrowdyStudioRun.level` is set and the text is `errorMessage`); Runs
+  stay empty (ck-exec keeps no run records); player compute usage is read only for a
+  project with a CLIENT target, whose compiles still spend it.
+- **`CrowdyStudioMods` gained `modStarter`, `modLogs` and `connect`.** Pass `client.exec`;
+  a hand-written stand-in needs those three as well.
+- **The mod build sends only the crate**: `Cargo.toml`, `README.md` and `src/**/*.rs`
+  (grid program assets such as `programs/*.js` stay in the project), and a server module
+  name that starts with a digit builds as crate `mod-<name>`.
+
+Existing projects keep their files: a project created on the legacy engine has a
+`crowdy-compute-sdk` crate, which a mod build refuses. Start a new project, or replace its
+SERVER `Cargo.toml` and `src/lib.rs` with the mod starter's.
+
 # CrowdyJS v17.7 — grid-scoped parity (DN-10)
 
 **Additive, plus one coordinated break.** `17.7.0` (2026-09-22), on top of the

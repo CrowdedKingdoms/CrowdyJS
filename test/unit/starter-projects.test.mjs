@@ -23,19 +23,64 @@ test('starter Cargo.toml pins crowdy-compute-sdk and serde_json', async () => {
   assert.match(lib.content, /pointer_clicks/u);
 });
 
-test('SERVER starter Cargo.toml does not declare a client tick interval', async () => {
+const MOD_STARTER = {
+  files: [
+    {
+      path: 'Cargo.toml',
+      content:
+        '[package]\nname = "grid-mod"\nedition = "2024"\n\n[lib]\nname = "grid_mod"\ncrate-type = ["cdylib"]\n',
+    },
+    { path: 'src/lib.rs', content: 'use ckx_sdk::prelude::*;\n' },
+  ],
+};
+
+test('the SERVER target is the mod starter crate, and the CLIENT target keeps its crate', async () => {
   const { createCrowdyStudioStarterProject } = await import(
     '../../dist/crowdy-studio/index.js'
   );
+  const clientOnly = createCrowdyStudioStarterProject({
+    appId: '1',
+    gridId: '2',
+    name: 'Demo',
+    kind: 'CLIENT',
+  });
   const project = createCrowdyStudioStarterProject({
     appId: '1',
     gridId: '2',
     name: 'Demo',
-    kind: 'SERVER',
+    kind: 'FULL_STACK',
+    modStarter: MOD_STARTER,
   });
-  const cargo = project.files.find((file) => file.path === 'Cargo.toml');
-  assert.ok(cargo);
-  assert.doesNotMatch(cargo.content, /tick_interval_ms/u);
+  assert.equal(project.metadata.pairingPreference, 'NONE');
+  const server = project.files.filter((file) => file.target === 'SERVER');
+  assert.deepEqual(server.map((file) => file.path), ['Cargo.toml', 'src/lib.rs']);
+  // Only [package] name changes; [lib] name is the crate's own business.
+  assert.equal(
+    server[0].content,
+    '[package]\nname = "demo-server"\nedition = "2024"\n\n[lib]\nname = "grid_mod"\ncrate-type = ["cdylib"]\n',
+  );
+  assert.doesNotMatch(server[0].content, /tick_interval_ms/u);
+  assert.deepEqual(
+    project.files.filter((file) => file.target === 'CLIENT'),
+    clientOnly.files,
+  );
+
+  assert.throws(
+    () =>
+      createCrowdyStudioStarterProject({ appId: '1', gridId: '2', name: 'Demo', kind: 'SERVER' }),
+    /starts from the mod starter/,
+  );
+  assert.throws(
+    () =>
+      createCrowdyStudioStarterProject({
+        appId: '1',
+        gridId: '2',
+        name: 'Demo',
+        kind: 'SERVER',
+        modStarter: { files: [{ path: 'src/lib.rs', content: '' }] },
+      }),
+    /no Cargo\.toml or src\/lib\.rs/,
+  );
 });
 
 test('parseClientTickIntervalMs reads, clamps, and defaults', async () => {

@@ -1,0 +1,7 @@
+mutation DefineAppFeature($input: DefineAppFeatureInput!) {
+  gameModelDefineFeature(input: $input) {
+    appId
+    featureKey
+    description
+  }
+}

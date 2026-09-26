@@ -164,8 +164,6 @@ export function sampleCompute() {
     async versions() {
       return [];
     },
-    async setEnabled() {},
-    async setRequires() {},
     async artifactBytes() {
       return {
         bytes: new ArrayBuffer(1),
@@ -186,14 +184,24 @@ export function sampleCompute() {
         gateReason: null,
       };
     },
-    async runs() {
+  };
+}
+
+/** Enough of `client.exec` for a Studio that opens and polls; no project is built here. */
+export function sampleExec() {
+  return {
+    async modStarter() {
+      throw new Error('no project is created here');
+    },
+    async modBuild() {},
+    async modBuildStatus() {},
+    async modDeploy() {},
+    async modSetEnabled() {},
+    async modLogs() {
       return [];
     },
-    async logs() {
-      return [];
-    },
-    async invoke() {
-      return {};
+    async connect() {
+      throw new Error('nothing is invoked here');
     },
   };
 }

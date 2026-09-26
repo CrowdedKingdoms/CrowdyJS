@@ -8,6 +8,7 @@ import {
   recorder,
   sampleProvider,
   sampleCompute,
+  sampleExec,
 } from './fixtures/embed-dom.mjs';
 
 const { CrowdyStudioEmbed, createCrowdyStudioEmbed } = await import(
@@ -40,6 +41,8 @@ function makeEmbed(overrides = {}) {
     client: {
       crowdyStudio: provider,
       playerCompute: sampleCompute(),
+      exec: sampleExec(),
+      ...overrides.client,
     },
     appId: () => '2',
     gameName: 'Example Game',
@@ -487,11 +490,25 @@ test('routes host calls and mirrors untrusted HUD payloads as text-only preview'
   assert.equal(document.querySelector('.ck-crowdy-studio-hud-layer'), null);
 });
 
+test('refuses to mount without the client\'s exec domain', async () => {
+  const { embed, agentUnavailable } = makeEmbed({ client: { exec: undefined } });
+  embed.toggle(embedContext());
+  await waitFor(() => {
+    assert.match(
+      document.querySelector('.ck-crowdy-studio-embed-status').textContent,
+      /needs the client's exec domain/,
+    );
+  });
+  assert.equal(agentUnavailable.calls.length, 1);
+  embed.close();
+});
+
 test('createCrowdyStudioEmbed returns a working embed instance', () => {
   const embed = createCrowdyStudioEmbed({
     client: {
       crowdyStudio: sampleProvider(),
       playerCompute: sampleCompute(),
+      exec: sampleExec(),
     },
     appId: '2',
   });

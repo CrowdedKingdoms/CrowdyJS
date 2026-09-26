@@ -42,12 +42,13 @@ export type CrowdyStudioEmbedDisplayMode = 'docked' | 'fullscreen';
  */
 export interface CrowdyStudioEmbedServices {
   crowdyStudio: CrowdyStudioProjectProvider;
+  /** The SERVER target: ck-exec mods. `CrowdyClient` provides it. */
+  exec: CrowdyStudioMods;
+  /** The CLIENT target's compiles and artifacts. `CrowdyClient` provides it. */
   playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
   /** GitHub repository loop; omission hides the card. `CrowdyClient` provides it. */
   crowdyStudioGitHub?: CrowdyStudioGitHubTransport;
-  /** ck-exec, for `serverEngine: 'ck-exec'`. `CrowdyClient` provides it. */
-  exec?: CrowdyStudioMods;
 }
 
 export interface CrowdyStudioEmbedTargetPermission {
@@ -101,12 +102,6 @@ export interface CrowdyStudioEmbedOptions {
    * the project provider commits them.
    */
   github?: CrowdyStudioGitHubTransport;
-  /**
-   * What runs the SERVER target: legacy player compute (the default until it is switched
-   * off), or a ck-exec mod on the grid, built from the project's `ckx-sdk` crate
-   * (`client.exec`).
-   */
-  serverEngine?: 'player-compute' | 'ck-exec';
   /**
    * Suppress gameplay input and return a restoration callback. Used only by
    * the narrow-screen modal; the desktop dock remains non-modal.
@@ -497,13 +492,13 @@ export class CrowdyStudioEmbed {
             });
           }
         : undefined);
-    if (this.options.serverEngine === 'ck-exec' && !client.exec) {
-      throw new Error("serverEngine 'ck-exec' needs the client's exec domain");
+    if (!client.exec) {
+      throw new Error("Crowdy Studio needs the client's exec domain (ck-exec mods)");
     }
     const handle = await mountCrowdyStudio(element, {
       projectProvider: client.crowdyStudio,
       playerCompute: client.playerCompute,
-      ...(this.options.serverEngine === 'ck-exec' ? { mods: client.exec } : {}),
+      mods: client.exec,
       ...((this.options.github ?? client.crowdyStudioGitHub)
         ? { github: this.options.github ?? client.crowdyStudioGitHub }
         : {}),
