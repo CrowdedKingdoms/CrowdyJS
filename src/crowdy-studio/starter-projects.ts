@@ -9,19 +9,35 @@ import {
 
 const SDK_VERSION = '0.1.8';
 
+/** A mod's name is at most 48 characters, and the SERVER module name is `<base>-server`. */
+const MOD_BASE_MAX = 48 - '-server'.length;
+
+/** ck-exec's mod starter crate (`client.exec.modStarter(appId)`). */
+export interface CrowdyStudioModStarter {
+  /** `Cargo.toml` and `src/**` of a `ckx-sdk` crate. */
+  files: readonly { path: string; content: string }[];
+}
+
 export interface CrowdyStudioNewProjectOptions {
   appId: string;
   gridId: string;
   name: string;
   kind: CrowdyStudioProjectKind;
   description?: string;
+  /**
+   * The SERVER target starts from this crate, its package named for the project, instead of
+   * the legacy compute SDK crate, and the server module name fits a mod's. A mod has no
+   * client pairing, so a full-stack project records `NONE`.
+   */
+  modStarter?: CrowdyStudioModStarter;
 }
 
 /** Create a compile-oriented starter without introducing a raw JSON source map. */
 export function createCrowdyStudioStarterProject(
   options: CrowdyStudioNewProjectOptions,
 ): CreateCrowdyStudioProjectInput {
-  const base = moduleName(options.name);
+  const mod = options.modStarter;
+  const base = mod ? modModuleBase(options.name) : moduleName(options.name);
   const targets = projectTargets(options.kind);
   const metadata: CrowdyStudioProjectMetadata = {
     name: options.name.trim() || 'Untitled mod',
@@ -34,7 +50,8 @@ export function createCrowdyStudioStarterProject(
     ...(targets.includes('CLIENT')
       ? { clientModuleName: `${base}-client` }
       : {}),
-    pairingPreference: options.kind === 'FULL_STACK' ? 'REQUIRED' : 'NONE',
+    pairingPreference:
+      options.kind === 'FULL_STACK' && !mod ? 'REQUIRED' : 'NONE',
   };
   return {
     appId: options.appId,
@@ -42,11 +59,64 @@ export function createCrowdyStudioStarterProject(
     kind: options.kind,
     metadata,
     files: targets.flatMap((target) =>
-      starterFiles(target, target === 'SERVER'
-        ? metadata.serverModuleName!
-        : metadata.clientModuleName!),
+      target === 'SERVER'
+        ? mod
+          ? modStarterFiles(mod, metadata.serverModuleName!)
+          : starterFiles(target, metadata.serverModuleName!)
+        : starterFiles(target, metadata.clientModuleName!),
     ),
   };
+}
+
+function modStarterFiles(
+  starter: CrowdyStudioModStarter,
+  name: string,
+): CrowdyStudioProjectFile[] {
+  const paths = new Set(starter.files.map((file) => file.path));
+  if (!paths.has('Cargo.toml') || !paths.has('src/lib.rs')) {
+    throw new Error('The mod starter has no Cargo.toml or src/lib.rs');
+  }
+  return starter.files.map((file) => ({
+    target: 'SERVER',
+    path: file.path,
+    content:
+      file.path === 'Cargo.toml'
+        ? renamePackage(file.content, name)
+        : file.content,
+  }));
+}
+
+/** The first `name` in `[package]`, set to `name`; every other line as it was. */
+function renamePackage(manifest: string, name: string): string {
+  let section = '';
+  let renamed = false;
+  return manifest
+    .split('\n')
+    .map((line) => {
+      const header = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+      if (header) {
+        section = header[1].trim();
+        return line;
+      }
+      if (section !== 'package' || renamed || !/^\s*name\s*=/.test(line)) {
+        return line;
+      }
+      renamed = true;
+      return `name = "${name}"`;
+    })
+    .join('\n');
+}
+
+/**
+ * A mod module base: short enough for `<base>-server` to be a mod name, and starting with a
+ * letter, as a build's crate names must.
+ */
+function modModuleBase(value: string): string {
+  const slug = slugModuleName(value);
+  if (!slug) return 'player-mod';
+  const cut = (/^[a-z]/u.test(slug) ? slug : `mod-${slug}`).slice(0, MOD_BASE_MAX);
+  // The slug has no runs of dashes, so the cut leaves at most one at the end.
+  return cut.endsWith('-') ? cut.slice(0, -1) : cut;
 }
 
 function starterFiles(

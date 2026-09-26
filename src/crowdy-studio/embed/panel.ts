@@ -10,6 +10,7 @@ import type {
   CrowdyStudioMods,
   CrowdyStudioPlayerCompute,
   CrowdyStudioPlayerWallet,
+  CrowdyStudioServerEngine,
 } from '../controller.js';
 import type { CrowdyStudioProjectProvider } from '../models.js';
 import type { CrowdyStudioGitHubTransport } from '../github/transport.js';
@@ -46,7 +47,7 @@ export interface CrowdyStudioEmbedServices {
   playerWallet?: CrowdyStudioPlayerWallet;
   /** GitHub repository loop; omission hides the card. `CrowdyClient` provides it. */
   crowdyStudioGitHub?: CrowdyStudioGitHubTransport;
-  /** ck-exec, for `serverEngine: 'ck-exec'`. `CrowdyClient` provides it. */
+  /** ck-exec, the default SERVER engine when present. `CrowdyClient` provides it. */
   exec?: CrowdyStudioMods;
 }
 
@@ -102,11 +103,13 @@ export interface CrowdyStudioEmbedOptions {
    */
   github?: CrowdyStudioGitHubTransport;
   /**
-   * What runs the SERVER target: legacy player compute (the default until it is switched
-   * off), or a ck-exec mod on the grid, built from the project's `ckx-sdk` crate
-   * (`client.exec`).
+   * What runs the SERVER target: a ck-exec mod on the grid, built from the project's
+   * `ckx-sdk` crate (`client.exec`), or legacy player compute, which the platform is
+   * switching off. Defaults to `'ck-exec'` when the client has `exec` (every `CrowdyClient`
+   * does), else `'player-compute'`. Pass `'player-compute'` to stay on the legacy engine
+   * until it is removed.
    */
-  serverEngine?: 'player-compute' | 'ck-exec';
+  serverEngine?: CrowdyStudioServerEngine;
   /**
    * Suppress gameplay input and return a restoration callback. Used only by
    * the narrow-screen modal; the desktop dock remains non-modal.
@@ -497,13 +500,16 @@ export class CrowdyStudioEmbed {
             });
           }
         : undefined);
-    if (this.options.serverEngine === 'ck-exec' && !client.exec) {
+    const serverEngine =
+      this.options.serverEngine ?? (client.exec ? 'ck-exec' : 'player-compute');
+    if (serverEngine === 'ck-exec' && !client.exec) {
       throw new Error("serverEngine 'ck-exec' needs the client's exec domain");
     }
     const handle = await mountCrowdyStudio(element, {
       projectProvider: client.crowdyStudio,
       playerCompute: client.playerCompute,
-      ...(this.options.serverEngine === 'ck-exec' ? { mods: client.exec } : {}),
+      serverEngine,
+      ...(serverEngine === 'ck-exec' ? { mods: client.exec } : {}),
       ...((this.options.github ?? client.crowdyStudioGitHub)
         ? { github: this.options.github ?? client.crowdyStudioGitHub }
         : {}),
