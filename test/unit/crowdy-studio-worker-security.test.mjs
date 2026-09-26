@@ -183,6 +183,7 @@ test('mount fallback edits one target file instead of a JSON blob', async () => 
     const handle = await mountCrowdyStudio(host, {
       projectProvider: provider,
       playerCompute: sampleCompute(),
+      mods: sampleExec(),
       appId: '1',
       gridId: '2',
     });
@@ -194,7 +195,6 @@ test('mount fallback edits one target file instead of a JSON blob', async () => 
       'Problems',
       'Build',
       'Logs',
-      'Runs',
       'Invoke',
     ]) {
       assert.ok(findByText(host, label), `${label} surface should be mounted`);
@@ -294,8 +294,6 @@ function sampleCompute() {
   return {
     async deploy() { return { versionId: 'v1' }; },
     async versions() { return []; },
-    async setEnabled() {},
-    async setRequires() {},
     async artifactBytes() {
       return {
         bytes: new ArrayBuffer(1),
@@ -316,9 +314,18 @@ function sampleCompute() {
         gateReason: null,
       };
     },
-    async runs() { return []; },
-    async logs() { return []; },
-    async invoke() { return {}; },
+  };
+}
+
+function sampleExec() {
+  return {
+    async modStarter() { throw new Error('no project is created here'); },
+    async modBuild() {},
+    async modBuildStatus() {},
+    async modDeploy() {},
+    async modSetEnabled() {},
+    async modLogs() { return []; },
+    async connect() { throw new Error('nothing is invoked here'); },
   };
 }
 

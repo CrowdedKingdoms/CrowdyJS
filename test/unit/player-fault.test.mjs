@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
 import {
   CrowdyGraphQLError,
   CrowdyUserCodeFaultError,
@@ -10,11 +9,10 @@ import {
 /**
  * The SDK half of decision D4.
  *
- * THE PROMISE BEING TESTED: a game branches ONCE. The server has two carriers — a thrown
- * error for `computeInvoke` / `playerComputeInvoke`, an in-band `fault` field for
- * `gameModelInvoke`, because the latter still returns an event id and the writes that did
- * apply — and `playerFaultOf` has to make those one thing. If it did not, every game
- * would grow two error paths and the second one would rot.
+ * THE PROMISE BEING TESTED: a game branches ONCE. There are two carriers — a thrown
+ * error, and an in-band `fault` field on a result that still reports what did apply (the
+ * legacy `gameModelInvoke` was one) — and `playerFaultOf` has to make those one thing. If
+ * it did not, every game would grow two error paths and the second one would rot.
  *
  * AND WHAT MUST *NOT* HAPPEN: `playerFaultOf` returning a fault for something that is not
  * one. A timeout, a dropped socket and an ordinary validation error elsewhere in the API
@@ -111,21 +109,3 @@ test('a missing retryable reads as false, not as permission to retry', () => {
   assert.equal(playerFaultOf(error).retryable, false);
 });
 
-/**
- * The reason the SDK can promise a game that no platform string reaches it is that the
- * generated operation asks for the structured field. Selecting only `errorMessage` would
- * leave every fault `null` here and every game back to rendering text.
- */
-test('the invoke document selects the structured fault', () => {
-  const document = readFileSync(
-    new URL('../../src/operations/gameModel/GameModelRuntime.graphql', import.meta.url),
-    'utf8',
-  );
-  const fragment = document.slice(
-    document.indexOf('fragment GmInvokeResultFields'),
-  );
-  const body = fragment.slice(0, fragment.indexOf('\n}'));
-  for (const field of ['fault', 'code', 'blame', 'retryable']) {
-    assert.ok(body.includes(field), `GmInvokeResultFields must select ${field}`);
-  }
-});

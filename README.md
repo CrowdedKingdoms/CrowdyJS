@@ -2,9 +2,9 @@
 
 The official browser-first TypeScript SDK for **Crowded Kingdoms**. CrowdyJS
 gives you typed clients for the whole platform: identity and
-studio administration (the Management surface), world data and the abstract
-game model (the Game surface), and the UDP proxy realtime stream — all over
-one unified GraphQL API.
+studio administration (the Management surface), world data (the Game surface),
+the UDP proxy realtime stream, and ck-exec, where an app's server code runs —
+all behind one unified GraphQL API.
 
 Authentication follows a two-token model: an identity **session token** for
 account and admin operations, and short-lived **app-scoped tokens** for
@@ -225,23 +225,20 @@ never told about, so a native refresh without it is a re-placement.
 | `client.platform` | Public platform configuration (`config()`). |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
 | `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes: terrain/LODs, voxel edit + history/rollback, durable actors, avatars, per-user app state blobs. |
-| `client.host` | Game-host election (`get`, `amIHost`) + actor liveness `heartbeat`. `amIHost` is UI convenience only — authoritative host gating uses `gameModelInvoke`'s `is_host` policy. |
+| `client.host` | Game-host election (`get`, `amIHost`) + actor liveness `heartbeat`. `amIHost` is UI convenience only — a hub decides host-only actions from its caller. |
 | `client.teleport` | Teleport requests. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
-| `client.gameModel` | Abstract game model: containers, properties, functions (incl. model-driven `notify_*` effects), sessions, app-scoped active-session counts (`activePlayerCount`, `activePlayerCountChanged`), container-change push (`containerChanged`), flow-correlation timelines (`flow`), automations / NPCs (`upsertAutomation`, `runAutomation`, `automationRuns`, `automationStats`, …), and one-shot timers (`scheduleInvoke`, `cancelTimer`, `timers`). |
-| `client.compute` | Compute Modules — server-side Rust/WASM logic: author + deploy source (`upsertModule`, `deployVersion`, `deployTemplate`, `waitForCompile`), triggers + policy, synchronous `invoke`, and monitoring (`moduleRuns`, `moduleStats`, `moduleLogs`, `appDiagnostics`). See [Compute Modules](https://docs.crowdedkingdoms.com/game-api/compute-modules). |
-| `client.exec` | **ck-exec (dev-tier preview, 17.9.0):** `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `deploy({ appId, root, types })` deploys an app's hubs and spokes (`manage_compute`). See [ck-exec](#ck-exec-dev-tier-preview). |
-| `client.playerCompute` | Player-authored SERVER/CLIENT Rust/WASM bound to player-owned grids: deploy source, activate/deactivate, list modules/versions, delete self-authored modules. |
-| `client.playerModel` | Player-owned flexible model containers and grid-confined automations (`containers`, `createContainer`, `setProperty`, `automations`, `createAutomation`, …). |
+| `client.exec` | **ck-exec (dev-tier preview):** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion` and `setEnabled` operate it; `mod*` are players' mods on grids they own. See [ck-exec](#ck-exec-dev-tier-preview). |
+| `client.playerCompute` | Players' CLIENT modules: compile a Crowdy Studio project's CLIENT target to browser WASM (`deploy`, `versions`), fetch the artifact for `PlayerCodeBroker` (`artifact`, `artifactBytes`), compile quota (`usage`), list and delete modules, and the studio kill ladder (`setSwitch`, `switches`). Server-side player code is a ck-exec mod. |
 | `client.playerWallet` | Player spend: balance, spend caps, card setup, policy, charges. |
-| `client.marketplace` | Player-code store/install/consent flows plus player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`) and client-mod artifact fetches. |
+| `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
 | `client.crowdyStudioGitHub` | Optional GitHub repository for a Crowdy Studio project: status, `bind` (push the project in, or take the repository), `unbind`, `refresh`, `layout`, `tree`, `getFile`, commit-guarded `putFile` / `deleteFile`. While bound the repository is the working tree and every Studio save commits; the project's `files` are the server's mirror at `github.sha`. Never required. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendVideoPacket` / `sendVideoFrame`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token (see [Token refresh](#token-refresh-during-gameplay)). |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`, `actor.sendToActor`). |
-| `client.kit(appId)` | Game Kit: ready-made mappings of game concepts onto the game model — see [Game Kit](#game-kit). |
+| `client.kit(appId)` | Game Kit: parties, guilds and chat over teams and channels (`kit.social`) — see [Game Kit](#game-kit). |
 | `createWorldSession(client, appId, config)` | World Stores: opt-in, SDK-managed game state from the `@crowdedkingdoms/crowdyjs/stores` subpath — see [World Stores](#world-stores). |
 
 **Studio-admin surface** (privileged; drive with a server-side / studio token,
@@ -251,7 +248,7 @@ grouped under `client.admin` and mirrored at the top level):
 |---|---|
 | `client.organizations` | Orgs, members, RBAC roles, org API tokens. |
 | `client.apps` | App registry, discovery + routing (`create`, `routeFor`, `marketplace`), visibility, and player-code admission mode / allow-list administration. |
-| `client.appAccess` | Access tiers + per-user grants. |
+| `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`. |
 | `client.billing` | Org wallet + per-app spend budgets. |
 | `client.payments` | Payment checkouts (wallet top-ups, plan purchases). |
 | `client.quotas` | Usage quotas at the org/app scope. |
@@ -485,16 +482,14 @@ pre-bound — convenient for browser games. Advanced callers can always use
 
 ## Grids: player code inside one grid
 
-A grid is a box of chunks a player can own. Everything an app-scoped Studio
-module can do, code running in a grid can do too, confined to that grid:
-spatial messages that originate in it, the grid's own channels, a grid event
-bus, sessions hosted in it, and the player-tier Game Model.
+A grid is a box of chunks a player can own. Code running in a grid is confined
+to it: spatial messages that originate in it, the grid's own channels, and a
+grid event bus. Its server side is a ck-exec mod (`client.exec.mod*`).
 
 ```ts
 const plot = client.grid(appId, gridId);
 await plot.mintToken();                        // learns the box; a grid-scoped token
 await plot.channels.create('plot-chat');       // a grid channel (owner only)
-await plot.sessions.create({ name: 'race' });  // a game within the game
 await plot.send.text({ chunk: { x: 4, y: 0, z: 0 }, uuid, text: 'hi', distance: 2 });
 plot.send.text({ chunk: { x: 9, y: 0, z: 0 }, uuid, text: 'x' }); // throws GridScopeError
 ```
@@ -513,8 +508,9 @@ await hostGridProgram({ port, scope: client.grid(appId, gridId), graphqlUrl, gra
 ```
 
 `startGridMod` runs either a Rust CLIENT mod (WASM) or a JS grid program
-behind one interface; `createGridHostCalls` answers every CLIENT host call in
-the platform catalog through CrowdyJS for a mod's broker.
+behind one interface; `createGridHostCalls` answers the CLIENT host calls in
+the platform catalog through CrowdyJS for a mod's broker (the model ones went
+with the game model and the player model in 18.0.0 and are refused).
 
 ## World Stores
 
@@ -571,8 +567,8 @@ The available stores are `self` (your actor + send loop), `actors` (remote
 actor registry with lanes/history/staleness), `errors` (attributed send
 errors), `chunks` (chunk/voxel cache with realtime merge + worldgen
 write-back), `channelInbox` / `actorInbox` (message inboxes), `events` (typed
-event router), `host` (host tracking), `save` / `avatar` (typed durable
-state), and `model` (game-model container mirror).
+event router), `host` (host tracking), and `save` / `avatar` (typed durable
+state).
 
 Every store is **opt-in twice over**: only configured stores are constructed
 (and only they exist on the session's TYPE — `session.host` without
@@ -586,101 +582,25 @@ keep timer-driven sends at full rate while hidden. See the
 
 ## Game Kit
 
-`client.kit(appId)` maps traditional game concepts onto the abstract game
-model + automations API. Studios **deploy blueprints** (the admin "load the
-state/rules" step, requires `manage_apps`); game clients then use the typed
-runtime helpers. Everything composes `client.gameModel` — no new server
-surface.
+`client.kit(appId).social` gives parties, guilds and chat rooms in familiar
+words over teams (membership and roles) and channels (messaging), with
+realtime delivery on the UDP notification subscription:
 
 ```ts
-// Studio setup (admin context):
-import { inventoryBlueprint, lockBlueprint, npcBlueprint } from '@crowdedkingdoms/crowdyjs';
-
-await admin.kit(appId).deploy([
-  inventoryBlueprint(),
-  lockBlueprint({ objectTypeName: 'Door', authority: { kind: 'key' } }),
-  npcBlueprint({
-    behaviors: [{
-      name: 'npc-wander',
-      role: 'wanderer',
-      trigger: { intervalMs: 60000 },
-      mutations: [
-        { target: 'self', property: 'x', expression: 'self.x + rand_int(-2, 2)' },
-        { target: 'self', property: 'z', expression: 'self.z + rand_int(-2, 2)' },
-      ],
-    }],
-  }),
-]);
-
-// Game client (player token):
-const kit = game.kit(appId);
-const bag = await kit.inventory.ensure(me.userId);
-const result = await kit.objects.open(doorId, { keyId });
-if (!result.success) console.warn('locked:', result.errorMessage);
+const kit = game.kit(appId, { social: { actorUuid: me.uuid } });
+const party = await kit.social.party.create('raid');   // team + paired channel
+const room = await kit.social.chat.room('lobby');
+kit.social.chat.onMessage(room.groupId, (m) => log(m.senderUuid, m.text));
 ```
 
-Land sale closes the permission loop end to end:
-
-```ts
-// Studio: sell a plot over a grid; doors on it honor the purchase automatically.
-await admin.kit(appId).deploy([
-  plotBlueprint({ rentable: true }),
-  lockBlueprint({ objectTypeName: 'PlotDoor',
-    authority: { kind: 'chunkPermission', key: 'access', mode: 'smallest' } }),
-]);
-
-// Game client: buying spends gold AND grants enforced grid access atomically.
-const buy = await kit.plots.buy(plotId, walletId);
-if (buy.success) await kit.objects.open(doorId); // has_chunk_permission passes now
-```
-
-NPC blueprints can target by permissions too — e.g. a guard automation whose
-selector has `candidatePermissionWhere: [{ userFrom: { property: 'owner_user_id' },
-op: 'lacks', key: 'access', grid: { property: 'grid_id' } }]` reacts only to
-intruders.
-
-The kit covers the common genre staples end to end — each layer is a blueprint
-builder plus a typed runtime helper:
-
-| Layer | Builder → helper | Highlights |
-| --- | --- | --- |
-| Inventory | `inventoryBlueprint` → `kit.inventory` | bags/stacks, grant/consume/transfer, craft, barter |
-| Objects | `lockBlueprint` → `kit.objects` | lockable doors/chests with key or permission authority |
-| NPCs | `npcBlueprint` → `kit.npcs` | automation-driven NPC instances (spawn, runNow, enable) |
-| Plots | `plotBlueprint` → `kit.plots` | buy/rent land with transactional, replication-enforced grid grants |
-| Economy | `economyBlueprint` → `kit.economy` | multi-currency wallets, atomic shop buys, escrow trades, player market, escrowed order book (`kit.economy.orderBook`) |
-| Progression | `progressionBlueprint` → `kit.progression` | xp/levels via the `fn:` curve helper, skill prerequisite chains, achievements, host-gated rating |
-| Loot | `lootBlueprint` → `kit.loot` | weighted tables unrolled into seed-driven expressions, atomic single-claim, event-triggered drops |
-| Quests | `questsBlueprint` → `kit.quests` | event-automation progress, atomic claim into stack+wallet, cron daily resets, tutorial sequencing |
-| Combat | `combatBlueprint` → `kit.combat` | server-side damage/death, status-effect tick automation, `turnBased`/`hostSynced`, routed attacks |
-| Matches | `matchesBlueprint` → `kit.matches` | session lobbies/rounds/turns/scores, per-match channel + `onMatchChanged` (notify-to-pull) |
-| Decks | `decksBlueprint` → `kit.decks` | hidden hands via owner-visibility `card_id`, shuffle-by-position automation |
-| World sim | `worldsimBlueprint` → `kit.worldsim` | day/night clock with spatial notify, node regen + atomic gather, crops, wave counters, forecasts |
-| Social | `guildBlueprint` → `kit.social` | parties/guilds/chat over teams+channels, grid territory grants, guild hall + bank composite |
-| Leaderboards | `leaderboardsBlueprint` → `kit.leaderboards` | trusted keep-best submits, client-side ranking, cron seasons |
-| Live ops | `liveopsBlueprint` → `kit.liveops` | timed event windows and seasons |
-| Moderation | `moderationBlueprint` → `kit.moderation` | reports, queues, mutes |
-| Telemetry | `telemetryBlueprint` → `kit.telemetry` | counters and lightweight event tracking |
-| Monetization | `featureGate` → `kit.features` | feature keys, tier grants, `*policyExtra` gating on builders |
-| Abilities | — → `kit.abilities` | ability definitions, casts, loadouts |
-| Movement | — → `kit.movement` | movement warden configs + violation parsing |
-| Territory | — → `kit.territory` | control points, factions, enrollment |
-| Racing | — → `kit.racing` | courses, entries, possession (claim/pass/shoot) |
-
-Engine-aware layers talk to compute-module game engines when they are
-deployed, and degrade gracefully on model-only apps via capability detection
-(`kit.engines`): `kit.mobs` (refereed attacks, defs/slots, contact-damage
-parsing), `kit.pets` (adopt/summon/dismiss/rename), `kit.instances` (private
-world slices, seeded runs), `kit.director` (encounter runs),
-`kit.matchmaking` (queues/proposals/rating), `kit.minigames` (invoke-loop
-wrapper), plus engine paths on `kit.matches` / `kit.decks` /
-`kit.leaderboards` and the `kit/wire` pose codec + event parsers. Deploy
-engines alongside blueprints with `kit.deploy(blueprints, { engines })`.
-
-See the docs guides [Modeling game concepts](https://docs.crowdedkingdoms.com/game-api/modeling-game-concepts)
-(the underlying model + genre map) and [Game Kit](https://docs.crowdedkingdoms.com/crowdyjs/game-kit)
-(the SDK surface + the simulation-tier / notify-to-pull / timer / hidden-info
-/ anti-cheat patterns).
+Game rules and state are ck-exec hubs (`client.exec`, below). Two kit pieces
+stand alone: the wire codecs (`encodeEnginePose` / `decodeEnginePose`, the
+48-byte engine pose, `engineLanes`, and `parseEngineEvent` with the typed
+parsers for server events 77 and 90-98) for games whose hubs keep that wire,
+and `runOptimisticAction`, which applies an action locally, asks a referee
+(a hub endpoint, say) and rolls back on a denial. The blueprints,
+`kit.deploy`, the engines and the model-backed helpers went with the game
+model in 18.0.0; see [MIGRATION.md](MIGRATION.md).
 
 ## ck-exec (dev-tier preview)
 
@@ -809,16 +729,14 @@ fullscreen modal on narrow screens. For custom chrome, call
 `new CrowdyStudioController(options)`. New games should start SERVER-only.
 Untrusted HUD payloads always render as text, never HTML.
 
-**The SERVER target runs as a ck-exec mod.** The embed's `serverEngine` defaults to
-`'ck-exec'` when the client has `exec` (a `CrowdyClient` always does): a new project's
-SERVER target starts from the platform's mod starter (`client.exec.modStarter(appId)`, a
-`ckx-sdk` crate), Test draft and Deploy live build it with `modBuild` and deploy it to the
-grid as the mod `mod:<server module name>`, Invoke calls one of its endpoints (`state` by
-default) over an exec connection, and Logs shows its `ctx.log` lines. The CLIENT target is
-unchanged. `mountCrowdyStudio` and the controller take the same `serverEngine` with
-`mods: client.exec`; without `mods` they stay on legacy player compute, and
-`serverEngine: 'player-compute'` keeps it explicitly. The platform is switching legacy
-player compute off, so that option lasts only until it is removed.
+**The SERVER target runs as a ck-exec mod.** A new project's SERVER target starts from
+the platform's mod starter (`client.exec.modStarter(appId)`, a `ckx-sdk` crate), Test draft
+and Deploy live build it with `modBuild` and deploy it to the grid as the mod
+`mod:<server module name>`, Invoke calls one of its endpoints (`state` by default) over an
+exec connection, and Logs shows its `ctx.log` lines. The CLIENT target compiles on the
+platform to browser WASM (`client.playerCompute`) and runs in `PlayerCodeBroker`. The embed
+takes both from the client; `mountCrowdyStudio` and the controller take
+`mods: client.exec` and `playerCompute: client.playerCompute`.
 
 See [Crowdy Studio & player client mods](https://docs.crowdedkingdoms.com/crowdyjs/player-client-mods)
 and [Embed Crowdy Studio in your game](https://docs.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).

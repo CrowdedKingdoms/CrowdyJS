@@ -4,25 +4,32 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.12.0**. Whether that is *published* is
+**Current package:** `package.json` is **18.0.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**Unreleased (after 17.12.0): Crowdy Studio's SERVER target runs on ck-exec by default
-(2026-09-26, P2 W9).** The embed's `serverEngine` defaults to `'ck-exec'` when the client has
-`exec`; the controller and `mountCrowdyStudio` take `serverEngine` too (default `'ck-exec'`
-with `mods`, else `'player-compute'`, which stays selectable until the legacy deletion).
-On ck-exec, `createProject` starts the SERVER target from `mods.modStarter` (`execModStarter`)
-instead of the `crowdy-compute-sdk` crate, Invoke calls the mod over an exec connection, Logs
-read `modLogs`, and Runs and a SERVER-only project's usage no longer read player compute.
-`CrowdyStudioMods` grew `modStarter`, `modLogs` and `connect`. **Still on legacy player
-compute, with no ck-exec replacement yet:** the CLIENT target's compile (`playerComputeDeploy`
-target CLIENT, `playerComputeVersions`) and its artifact (`playerComputeArtifact`); a tier with
-player compute switched off refuses CLIENT compiles with `ENGINE_SWITCHED_OFF` (already
-compiled artifacts are still served). [MIGRATION.md](MIGRATION.md).
+**18.0.0 removes the legacy engines' SDK surface (held until ck-exec reaches P4, 2026-09-26, P2
+W9).** Gone: `client.gameModel`, `client.compute`, `client.playerModel`; the Game Kit's
+blueprints, `kit.deploy`, engines and model-backed helpers (`client.kit(appId)` keeps `social`;
+`kit/wire.ts` and `runOptimisticAction` stay); World Stores' `model` mirror; Studio's model
+lint; `GridScope`'s `sessions`, `model` and `compute`; the CLIENT host calls the models
+answered; `playerCompute`'s SERVER half (`setEnabled`, `setRequires`, `invoke`, `runs`,
+`logs`); the marketplace's player-code listings and grid attachments; and Crowdy Studio's
+`'player-compute'` engine (`mods` is required, `serverEngine` and the Runs panel are gone,
+logs are `CrowdyStudioLogLine`s). **Kept, because the game API keeps their fields:** tier
+features (moved to `client.appAccess`), grid claims and the app-admin marketplace fields.
+**Kept as an open question:** the CLIENT module path in `client.playerCompute` (`deploy`,
+`versions`, `artifact`, `usage`, `myModules`, `delete`, the kill ladder), which Studio's CLIENT
+target needs and which the game API's W9 plan deletes with `src/player-compute`. `schema.gql`
+still carries the removed fields until the P4 sync. [MIGRATION.md](MIGRATION.md).
+
+**Unreleased before 18.0.0 (after 17.12.0): Crowdy Studio's SERVER target runs on ck-exec by
+default (P2 W9, CrowdyJS #186).** The embed's `serverEngine` defaulted to `'ck-exec'` when the
+client had `exec`; on ck-exec `createProject` started the SERVER target from `mods.modStarter`
+(`execModStarter`). 18.0.0 removed the choice.
 
 **17.12.0 adds ck-exec mods to `client.exec` (dev-tier preview, 2026-09-25, P2 W7).** A mod is
 a player's code on a grid they own, the node type `mod:<name>` (`execModType`) keyed by the
@@ -315,7 +322,8 @@ not a running service and is not a schema source; gameplay data lives in
 - `src/world.ts` — `client.world(appId)` facade.
 - `src/stores/` — World Stores (`@crowdedkingdoms/crowdyjs/stores`); the core
   client never imports it. See the README.
-- `src/kit/` — `client.kit(appId)` Game Kit over `gameModel`.
+- `src/kit/` — `client.kit(appId).social`, the wire codecs (`kit/wire.ts`) and
+  `runOptimisticAction`. The model-backed kit went in 18.0.0.
 - `schema.gql` + `src/generated/graphql.ts` — committed artifacts. Refresh from
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
   depend on sibling repos at build time.
@@ -467,10 +475,12 @@ reference consumer of the hosted flow.
 | Player presence & movement | `udp.subscribe` + `udp.sendActorUpdate`; `world(appId)`; World Stores `session.self` / `session.actors` |
 | Client-side bookkeeping | `createWorldSession` from `@crowdedkingdoms/crowdyjs/stores` |
 | Persistent terrain | `chunks.*` (durable) + `udp.sendVoxelUpdate` (realtime) |
-| Server-side rules (inventory, stats, NPCs) | `gameModel` containers / properties / functions with invoke policies — **admin-seeded before play** |
-| World life between requests | `gameModel` automations (`autonomousInvocable` functions) — see the presence rule below |
-| Ready-made genre mappings | `kit(appId)` blueprints + runtime helpers |
-| Client-side simulation authority | `host.heartbeat` + `is_host` invoke policy |
+| Server-side rules and state (inventory, stats, NPCs, sessions) | ck-exec hubs: `exec.connect` + `call` / `subscribe`; built and deployed with `exec.starters` / `build` / `deploy` (`manage_compute`) |
+| World life between requests | hub timers (`ctx.timer_every`, `ctx.timer_after`) — see the presence rule below |
+| Player code on an owned grid | ck-exec mods (`exec.mod*`); CLIENT modules through `playerCompute` + `PlayerCodeBroker` |
+| Parties, guilds, chat rooms | `kit(appId).social` |
+| Client-side simulation authority | `host.heartbeat`; the hub decides from its caller |
+| Tier-gated features | `appAccess.defineFeature` / `grantTierFeature`; a hub reads `players.features` |
 | Voice / chat / guilds | `udp.sendAudioPacket`; `udp.sendTextPacket`; `channels.*`; `teams.*` |
 | Land claims | `gameApps.createGrid` / `grantPermissions` |
 | Direct player-to-player | `udp.sendSingleActorMessage` |
@@ -479,30 +489,26 @@ reference consumer of the hosted flow.
 
 Everything realtime is addressed to a **chunk** and fanned out within
 `distance` chunks. GraphQL `chunks.*` is the durable store;
-`udp.sendVoxelUpdate` is the live edit path. The model must be seeded by a
-studio-admin token (`manage_apps`) before players can invoke it — `kit.deploy`
-or `gameModel.seed`. Host election is informational unless you put `is_host`
-on the invoke policy.
+`udp.sendVoxelUpdate` is the live edit path. An app's hubs must be deployed by a
+developer with `manage_compute` before players can call them. Host election is
+informational; a hub decides host-only actions from its caller.
 
-**Nothing runs for an app with no player in it** (platform change 2026-09-01).
-Compute modules tick only while the app has at least one player connected
-somewhere in the fleet, and `alwaysOn` is retired — `computeUpsertModule` refuses
-`true`. Scheduled work (cron and interval automations, `gm_timers`) that comes due
-while an app is empty is skipped silently and rescheduled from the moment a player
-returns; missed runs are never made up.
+**Nothing runs for an app with no player in it.** A hub's timers fire only while
+the hub runs, and a pending timer keeps an idle hub running only while players
+are present; a repeating timer's missed runs are not made up, and a one-shot
+timer that came due while the hub was stopped fires once when it starts again.
 
-This row used to read "world life with no client online", which was true and is
-not. Write automations so they are **idempotent in elapsed time**: advance the
-world by `now - lastTick` rather than by one fixed step per tick, and store
-expiries as timestamps rather than as remaining-tick counters. A blueprint that
-assumes a cadence will silently stall while nobody is playing.
+Write timers so they are **idempotent in elapsed time**: advance the world by
+`now - lastTick` rather than by one fixed step per tick, and store expiries as
+timestamps rather than as remaining-tick counters. Code that assumes a cadence
+will silently stall while nobody is playing.
 
 Blocks with Friends (crowdy.games, source not public) is the complete
-consumer of these surfaces: World Stores + kit blueprints + a hand-authored
+consumer of these surfaces: World Stores + ck-exec hubs + a hand-authored
 remainder. **The public consumer is
 [`CrowdedKingdoms/the-construct`](https://github.com/CrowdedKingdoms/the-construct)**
 (2026-09-07): an engine-agnostic starter over this SDK with two renderers, the
-Crowdy Studio embed with CLIENT mods, kit-seeded model, and an in-app org → app
+Crowdy Studio embed with SERVER mods and CLIENT modules, ck-exec hubs, and an in-app org → app
 → tier → seed wizard, verified end to end on dev by a third-party account. It
 pins the tier's exact prerelease per branch and its `AGENTS.md` lists the
 platform facts it depends on. It is also the
