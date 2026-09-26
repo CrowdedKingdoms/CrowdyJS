@@ -704,6 +704,18 @@ exec.onReconnect((host) => console.log('moved to', host));
   without a global `WebSocket` (Node before 22), pass one: `{ WebSocket }` from the `ws` package.
 - A refused call throws `CrowdyExecError`: `status` is the platform's (`AppError` carries the
   handler's own message; `Busy`, `Moved`, `Unavailable` and `RateLimited` are `retryable`).
+  The SDK does not retry `Busy`. A gateway refuses a player's calls over 120 per 10 s (per app
+  and host) as `Busy` with `rateLimited` true and `retryAfterMs` set; wait that long before
+  calling again, since calling sooner is refused again:
+
+  ```ts
+  try {
+    await exec.call('arena', 'm1', 'hit');
+  } catch (e) {
+    if (e instanceof CrowdyExecError && e.rateLimited) await new Promise((r) => setTimeout(r, e.retryAfterMs ?? 1_000));
+    else throw e;
+  }
+  ```
 - When the host goes away, the connection asks for a host again, reconnects and renews every
   subscription; a call caught by it, or answered `Moved`, is tried once more.
 - `ExecConnection.open(gatewayUrl, token)` connects with a connect token you already have
@@ -711,6 +723,13 @@ exec.onReconnect((host) => console.log('moved to', host));
 - `client.exec.deploy({ appId, root, types })` takes each node type's compiled module
   (`wasm: Uint8Array`) with its manifest fields, sends each distinct module once, and makes
   the version active.
+- Operating it (`view_compute_diagnostics`): `logs(appId, { nodeType, key, maxLevel, flow })`,
+  where each line's `flow` is the call it was written in, so `logs(appId, { flow })` follows
+  one client call through every hub and host; `versions(appId)` with each version's
+  `manifestJson` and parsed `manifest` (a spawn seed shows as `seed_bytes`);
+  `endpointStats(appId, { nodeType, sinceMinutes })`, calls per endpoint by outcome (`calls`,
+  `appErrors`, `busy`, `denied`, `deadlineExceeded`, `otherErrors`) with latency over
+  `timedCalls` (default the last 60 minutes, at most 7 days).
 
 Integers above 2^53 decode as `number` and lose precision unless you pass
 `{ decode: { useBigInt64: true } }`. The wire format is in the

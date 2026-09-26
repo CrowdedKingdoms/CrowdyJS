@@ -129,6 +129,31 @@ test('a refused call is a CrowdyExecError with the platform status and the handl
   await assert.rejects(c.call('arena', 'm1', 'apply_damage'), (e) => e.status === 'Denied');
 });
 
+test('a call over the player call limit is Busy, rate limited with its retry hint, and not retried', async (t) => {
+  const refusal = 'rate limited: a player may make 120 calls per 10000 ms to an app on one host; retry in 250 ms';
+  const gw = await fakeGateway((f, conn) => {
+    if (f.kind === 'call') conn.ws.send(reply(f.rid, 2, Buffer.from(f.method === 'spam' ? refusal : 'mailbox full')));
+  });
+  t.after(() => gw.wss.close());
+  const c = await api(gw).exec.connect('77', opts);
+  t.after(() => c.close());
+  await assert.rejects(c.call('arena', 'm1', 'spam'), (e) => {
+    assert.ok(e instanceof CrowdyExecError);
+    assert.equal(e.status, 'Busy');
+    assert.equal(e.retryable, true);
+    assert.equal(e.rateLimited, true);
+    assert.equal(e.retryAfterMs, 250);
+    return true;
+  });
+  assert.equal(gw.frames.filter((f) => f.kind === 'call' && f.method === 'spam').length, 1);
+  await assert.rejects(c.call('arena', 'm1', 'hit'), (e) => {
+    assert.equal(e.status, 'Busy');
+    assert.equal(e.rateLimited, false);
+    assert.equal(e.retryAfterMs, undefined);
+    return true;
+  });
+});
+
 test('pushes reach their handlers decoded, and the last unsubscribe tells the gateway', async (t) => {
   const gw = await fakeGateway((f, conn) => {
     echo(f, conn);
@@ -236,11 +261,31 @@ test('connectAsDeveloper dials execConnectAsDeveloper, and reconnects with a fre
 
 test('operations pass their arguments through and drop __typename', async () => {
   const seen = [];
+  const flowId = '0123456789abcdef0123456789abcdef';
+  const manifest = {
+    root: 'lobby',
+    types: {
+      lobby: { kind: 'hub', client: true, seed_bytes: 4 },
+      arena: { kind: 'hub', parent: 'lobby', calls: ['lobby'] },
+    },
+  };
+  const manifestJson = JSON.stringify(manifest);
+  const stat = {
+    nodeType: 'arena', method: 'hit', calls: 40, appErrors: 1, busy: 3, denied: 0, deadlineExceeded: 0,
+    otherErrors: 0, timedCalls: 37, latencyMsAvg: 1.5, latencyMsMax: 9, firstMinute: '2026-09-26T10:00:00.000Z',
+    lastMinute: '2026-09-26T10:59:00.000Z',
+  };
   const status = { __typename: 'ExecAppStatus', activeVersion: 2, disabled: false, disabledTypes: ['bare'], budgetPaused: false };
   const answers = {
-    ExecLogs: { execLogs: [{ __typename: 'ExecLogLine', id: '9', nodeType: 'arena', key: 'm1', level: 2, host: 'h', at: '2026-09-25T00:00:00.000Z', text: 'hi' }] },
+    ExecLogs: { execLogs: [{ __typename: 'ExecLogLine', id: '9', nodeType: 'arena', key: 'm1', level: 2, host: 'h', at: '2026-09-25T00:00:00.000Z', text: 'hi', flow: flowId }] },
     ExecInstances: { execInstances: [{ __typename: 'ExecInstance', instanceId: '1', nodeType: 'lobby', key: '', kind: 'hub', phase: 'running', host: 'h', epoch: 3, sinceMs: 5, heldBack: null }] },
-    ExecVersions: { execVersions: [{ __typename: 'ExecVersion', version: 2, createdBy: 'user:1', createdAt: '2026-09-25T00:00:00.000Z', types: 4, active: true }] },
+    ExecVersions: {
+      execVersions: [
+        { __typename: 'ExecVersion', version: 2, createdBy: 'user:1', createdAt: '2026-09-25T00:00:00.000Z', types: 2, active: true, manifestJson },
+        { __typename: 'ExecVersion', version: 1, createdBy: 'user:1', createdAt: '2026-09-24T00:00:00.000Z', types: 1, active: false, manifestJson: null },
+      ],
+    },
+    ExecEndpointStats: { execEndpointStats: [{ __typename: 'ExecEndpointStat', ...stat }] },
     ExecAppStatus: { execAppStatus: status },
     ExecActivateVersion: { execActivateVersion: status },
     ExecSetEnabled: { execSetEnabled: status },
@@ -252,18 +297,24 @@ test('operations pass their arguments through and drop __typename', async () => 
       return answers[name];
     },
   });
-  const [line] = await exec.logs('77', { nodeType: 'arena', maxLevel: 1, limit: 10 });
-  assert.deepEqual(line, { id: '9', nodeType: 'arena', key: 'm1', level: 2, host: 'h', at: '2026-09-25T00:00:00.000Z', text: 'hi' });
+  const [line] = await exec.logs('77', { nodeType: 'arena', maxLevel: 1, limit: 10, flow: flowId });
+  assert.deepEqual(line, { id: '9', nodeType: 'arena', key: 'm1', level: 2, host: 'h', at: '2026-09-25T00:00:00.000Z', text: 'hi', flow: flowId });
   assert.equal((await exec.instances('77'))[0].phase, 'running');
-  assert.equal((await exec.versions('77'))[0].active, true);
+  const [active, gone] = await exec.versions('77');
+  assert.equal(active.active, true);
+  assert.equal(active.manifestJson, manifestJson);
+  assert.deepEqual(active.manifest, manifest);
+  assert.equal(gone.manifest, null);
+  assert.deepEqual(await exec.endpointStats('77', { nodeType: 'arena', sinceMinutes: 30 }), [stat]);
   const { __typename, ...plain } = status;
   assert.deepEqual(await exec.status('77'), plain);
   assert.deepEqual(await exec.activateVersion('77', 1), plain);
   assert.deepEqual(await exec.setEnabled('77', false, 'bare'), plain);
   assert.deepEqual(seen, [
-    ['ExecLogs', { appId: '77', nodeType: 'arena', maxLevel: 1, limit: 10 }],
+    ['ExecLogs', { appId: '77', nodeType: 'arena', maxLevel: 1, limit: 10, flow: flowId }],
     ['ExecInstances', { appId: '77' }],
     ['ExecVersions', { appId: '77' }],
+    ['ExecEndpointStats', { appId: '77', nodeType: 'arena', sinceMinutes: 30 }],
     ['ExecAppStatus', { appId: '77' }],
     ['ExecActivateVersion', { appId: '77', version: 1 }],
     ['ExecSetEnabled', { appId: '77', enabled: false, nodeType: 'bare' }],

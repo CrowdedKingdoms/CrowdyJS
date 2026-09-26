@@ -48,7 +48,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '17.12.0';
+export const VERSION = '17.13.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -586,6 +586,15 @@ export {
   type ExecBuild,
   type ExecStarter,
   type ExecStarterPack,
+  type ExecLogLine,
+  type ExecLogsOptions,
+  type ExecInstance,
+  type ExecVersion,
+  type ExecManifest,
+  type ExecManifestType,
+  type ExecAppStatus,
+  type ExecEndpointStat,
+  type ExecEndpointStatsOptions,
   ExecModScope,
   execModType,
   type ExecMod,

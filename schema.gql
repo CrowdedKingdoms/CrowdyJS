@@ -745,6 +745,26 @@ type AppUserAccessConnection {
   totalCount: Int
 }
 
+"""An app feature key that functions can gate on and tiers can grant."""
+type GmAppFeature {
+  """The app (tenant) that defines the feature."""
+  appId: BigInt!
+  """The feature key (referenced by tier_feature authority rules)."""
+  featureKey: String!
+  """Optional description of the feature."""
+  description: String
+}
+
+"""A grant of a feature key to an access tier."""
+type GmTierFeature {
+  """The app (tenant)."""
+  appId: BigInt!
+  """The access tier the feature is granted to."""
+  tierId: BigInt!
+  """The feature key granted to the tier."""
+  featureKey: String!
+}
+
 """
 Result of a successful login or registration: a session token plus the authenticated user.
 """
@@ -6538,6 +6558,10 @@ enum PlayerFaultCode {
   An operator switch, a latch, or a platform hold. An open author circuit is CIRCUIT_OPEN, not this code.
   """
   TEMPORARILY_DISABLED
+  """
+  The engine this call needs is switched off on this tier, so the app's code does not run here. An operator's switch: retrying will not turn it back on, and the code's home is ck-exec.
+  """
+  ENGINE_SWITCHED_OFF
   """The arguments did not satisfy the function's contract."""
   INVALID_REQUEST
   """An invoke policy or permission refused this caller."""
@@ -7112,26 +7136,6 @@ type GmTypeSchema {
   functions: [GmFunction!]!
 }
 
-"""An app feature key that functions can gate on and tiers can grant."""
-type GmAppFeature {
-  """The app (tenant) that defines the feature."""
-  appId: BigInt!
-  """The feature key (referenced by tier_feature authority rules)."""
-  featureKey: String!
-  """Optional description of the feature."""
-  description: String
-}
-
-"""A grant of a feature key to an access tier."""
-type GmTierFeature {
-  """The app (tenant)."""
-  appId: BigInt!
-  """The access tier the feature is granted to."""
-  tierId: BigInt!
-  """The feature key granted to the tier."""
-  featureKey: String!
-}
-
 """The app's game-model runtime policy."""
 type GmAppPolicy {
   """The app (tenant) the policy applies to."""
@@ -7654,8 +7658,60 @@ type ExecLogLine {
   host: String!
   """When the instance logged it."""
   at: DateTime!
+  """
+  The flow of the call the instance was handling, as 32 lowercase hex digits. A client’s call and everything it causes (the calls it makes to other hubs, on any host, and the lines they log) share one flow; pass it as `flow` to `execLogs` to follow the chain. Null for a line written outside a call (start, snapshot, stop).
+  """
+  flow: String
   """The line, at most 1 KiB."""
   text: String!
+}
+
+"""
+Calls to one endpoint (a node type's method) of an app's ck-exec code over a window, by outcome (dev-tier preview). A client's or an instance's call is counted once, by the host it entered on, with the status its caller got; a platform event (`$timer`, `$topic`, `$presence`, `$session`, `$world`) is counted by the host that ran it. Counts are whole numbers.
+"""
+type ExecEndpointStat {
+  """
+  The node type called; `(other)` for calls to endpoints past the 256 one host counts per app a minute.
+  """
+  nodeType: String!
+  """
+  The method called; a `$` method is a platform event, and `(other)` as for `nodeType`.
+  """
+  method: String!
+  """Calls in the window."""
+  calls: Float!
+  """Calls the handler answered with an error (`AppError`)."""
+  appErrors: Float!
+  """
+  Calls refused as busy: a full mailbox, the root hub’s call rate, or the caller’s call limit (120 calls per 10 seconds per player and app on a host, refused `Busy` with a message starting "rate limited").
+  """
+  busy: Float!
+  """Calls refused as not allowed (`Denied`)."""
+  denied: Float!
+  """Calls not answered before their deadline (`DeadlineExceeded`)."""
+  deadlineExceeded: Float!
+  """
+  Calls that failed otherwise: not found, unavailable, trapped, moved, internal or a bad request.
+  """
+  otherErrors: Float!
+  """
+  Calls a handler answered (`Ok` or `AppError`); the latencies are over these.
+  """
+  timedCalls: Float!
+  """
+  The timed calls’ average latency in milliseconds. For a client’s or an instance’s call it runs from reaching the host the call entered on to its answer leaving that host: queueing, the handler, and any hop to the host that runs the target. For a platform event it is the time in the handler. Null when no call was timed.
+  """
+  latencyMsAvg: Float
+  """
+  The longest of those latencies in milliseconds; null when no call was timed.
+  """
+  latencyMsMax: Float
+  """The first minute of the window with calls."""
+  firstMinute: DateTime!
+  """
+  The last minute of the window with calls. Each host reports a minute once it ends.
+  """
+  lastMinute: DateTime!
 }
 
 """
@@ -7695,6 +7751,10 @@ type ExecVersion {
   types: Int!
   """Whether it is the active version."""
   active: Boolean!
+  """
+  The deployed manifest as JSON: the root and each node type with its kind, parent, client access, calls, node API scopes and limits. A type’s spawn seed is replaced by its size in bytes (`seed_bytes`). Null if the version’s row is gone.
+  """
+  manifestJson: String
 }
 
 """
@@ -8377,6 +8437,22 @@ type Query {
     """
     appId: BigInt!
   ): [AppGrantMemberCandidate!]! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
+  """
+  List the feature keys defined for an app. Requires app-admin ('manage_apps').
+  """
+  gameModelFeatures(
+    """The app (tenant) whose features to list."""
+    appId: BigInt!
+  ): [GmAppFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
+  List tier -> feature grants for an app, optionally filtered to one tier. Requires app-admin ('manage_apps').
+  """
+  gameModelTierFeatures(
+    """The app (tenant) whose tier grants to list."""
+    appId: BigInt!
+    """Optional: only grants for this access tier. Omit for all tiers."""
+    tierId: BigInt
+  ): [GmTierFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
   The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart.
   """
@@ -9413,22 +9489,6 @@ type Query {
     typeName: String!
   ): GmTypeSchema! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
-  List the feature keys defined for an app. Requires app-admin ('manage_apps').
-  """
-  gameModelFeatures(
-    """The app (tenant) whose features to list."""
-    appId: BigInt!
-  ): [GmAppFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
-  """
-  List tier -> feature grants for an app, optionally filtered to one tier. Requires app-admin ('manage_apps').
-  """
-  gameModelTierFeatures(
-    """The app (tenant) whose tier grants to list."""
-    appId: BigInt!
-    """Optional: only grants for this access tier. Omit for all tiers."""
-    tierId: BigInt
-  ): [GmTierFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
-  """
   Read the app's game-model runtime policy (session creation policy + default participant role). Requires app-admin ('manage_apps').
   """
   gameModelPolicy(
@@ -10028,7 +10088,24 @@ type Query {
     before: String
     """At most this many lines (default 100, at most 500)."""
     limit: Int
+    """
+    Only lines of this flow: the 32 hex digits a line’s `flow` shows (any case). Follows one client call through every hub and host it reached.
+    """
+    flow: String
   ): [ExecLogLine!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  Calls to each endpoint of an app's ck-exec code over the last minutes, by outcome, with their latency, most called first (dev-tier preview). Each execution host reports a minute once it ends; counters are kept 7 days. Requires the org 'view_compute_diagnostics' permission.
+  """
+  execEndpointStats(
+    """The app whose ck-exec code this is about."""
+    appId: BigInt!
+    """Only this node type’s endpoints."""
+    nodeType: String
+    """
+    How far back the window reaches, in minutes: default 60, at most 10080 (the 7 days counters are kept).
+    """
+    sinceMinutes: Int
+  ): [ExecEndpointStat!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
   What the execution manager has placed for an app: every instance, its phase and host (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
   """
@@ -10728,6 +10805,27 @@ type Mutation {
     """Numeric id of the app to grant the caller access to."""
     appId: BigInt!
   ): AppUserAccess!
+  """
+  Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps').
+  """
+  gameModelDefineFeature(
+    """The app, the feature key, and an optional description."""
+    input: DefineAppFeatureInput!
+  ): GmAppFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps').
+  """
+  gameModelGrantTierFeature(
+    """The app, the tier id, and the feature key to grant to that tier."""
+    input: GrantTierFeatureInput!
+  ): GmTierFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed.
+  """
+  gameModelRevokeTierFeature(
+    """The app, the tier id, and the feature key to revoke from that tier."""
+    input: GrantTierFeatureInput!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
@@ -11842,27 +11940,6 @@ type Mutation {
     """
     input: SetGameModelPolicyInput!
   ): GmAppPolicy! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
-  """
-  Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps').
-  """
-  gameModelDefineFeature(
-    """The app, the feature key, and an optional description."""
-    input: DefineAppFeatureInput!
-  ): GmAppFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
-  """
-  Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps').
-  """
-  gameModelGrantTierFeature(
-    """The app, the tier id, and the feature key to grant to that tier."""
-    input: GrantTierFeatureInput!
-  ): GmTierFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
-  """
-  Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed.
-  """
-  gameModelRevokeTierFeature(
-    """The app, the tier id, and the feature key to revoke from that tier."""
-    input: GrantTierFeatureInput!
-  ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps'). NOTHING RUNS FOR AN APP WITH NO PLAYER IN IT: a SCHEDULE trigger that comes due while the app is empty is skipped and rescheduled from the moment a player returns, and the missed runs are never made up -- so write the entry point to advance the world by elapsed time rather than by one step per run. Event and manual triggers are unaffected, because something already asked.
   """
@@ -13041,6 +13118,26 @@ input GrantAppAccessInput {
   Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
   """
   idempotencyKey: String
+}
+
+"""Define an app feature key."""
+input DefineAppFeatureInput {
+  """The app (tenant) defining the feature."""
+  appId: BigInt!
+  """The feature key (referenced by tier_feature authority rules)."""
+  featureKey: String!
+  """Optional description of the feature."""
+  description: String
+}
+
+"""Grant or revoke a feature key for an access tier."""
+input GrantTierFeatureInput {
+  """The app (tenant)."""
+  appId: BigInt!
+  """The access tier id."""
+  tierId: BigInt!
+  """The feature key to grant to (or revoke from) the tier."""
+  featureKey: String!
 }
 
 """Request an emailed magic-link to sign in (passwordless)."""
@@ -14651,26 +14748,6 @@ input SetGameModelPolicyInput {
   sessionCreationPolicy: String
   """Default role assigned to new session participants."""
   defaultParticipantRole: String
-}
-
-"""Define an app feature key."""
-input DefineAppFeatureInput {
-  """The app (tenant) defining the feature."""
-  appId: BigInt!
-  """The feature key (referenced by tier_feature authority rules)."""
-  featureKey: String!
-  """Optional description of the feature."""
-  description: String
-}
-
-"""Grant or revoke a feature key for an access tier."""
-input GrantTierFeatureInput {
-  """The app (tenant)."""
-  appId: BigInt!
-  """The access tier id."""
-  tierId: BigInt!
-  """The feature key to grant to (or revoke from) the tier."""
-  featureKey: String!
 }
 
 """

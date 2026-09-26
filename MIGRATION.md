@@ -1,4 +1,22 @@
-# Crowdy Studio runs SERVER code on ck-exec by default (next release after 17.12.0)
+# 17.13.0 ck-exec observability
+
+Additive (dev-tier preview; ck-api `v2.22.0`).
+
+- `client.exec.endpointStats(appId, { nodeType?, sinceMinutes? })` returns `ExecEndpointStat[]`:
+  per endpoint (`nodeType`, `method`) the `calls`, `appErrors`, `busy`, `denied`,
+  `deadlineExceeded`, `otherErrors` and `timedCalls` in the window, `latencyMsAvg` /
+  `latencyMsMax` over the timed calls (null when none), and `firstMinute` / `lastMinute`.
+- `client.exec.logs(appId, { flow })` keeps only one flow's lines, and every `ExecLogLine` (also
+  from `modLogs`) has `flow`: 32 lowercase hex digits, or null for a line written outside a call.
+- `ExecVersion` has `manifestJson` and `manifest` (`ExecManifest`, parsed), null when the
+  version's row is gone; a type's spawn seed is its size, `seed_bytes`.
+- `CrowdyExecError.rateLimited` and `retryAfterMs`. A call over a player's limit (120 per 10 s
+  per app and host) is refused `Busy` with a message starting `rate limited`; wait
+  `retryAfterMs` before calling again. The SDK never retries `Busy` itself.
+- Now exported: `ExecLogLine`, `ExecLogsOptions`, `ExecInstance`, `ExecVersion`, `ExecManifest`,
+  `ExecManifestType`, `ExecAppStatus`, `ExecEndpointStat`, `ExecEndpointStatsOptions`.
+
+# 17.13.0 Crowdy Studio runs SERVER code on ck-exec by default
 
 **A behaviour change for embedders; no signature is removed.** The platform is switching
 legacy player compute off (the game API answers `ENGINE_SWITCHED_OFF`, HTTP 503), so

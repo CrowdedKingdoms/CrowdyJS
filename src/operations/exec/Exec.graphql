@@ -29,6 +29,7 @@ query ExecLogs(
   $maxLevel: Int
   $before: String
   $limit: Int
+  $flow: String
 ) {
   execLogs(
     appId: $appId
@@ -37,6 +38,7 @@ query ExecLogs(
     maxLevel: $maxLevel
     before: $before
     limit: $limit
+    flow: $flow
   ) {
     id
     nodeType
@@ -45,6 +47,7 @@ query ExecLogs(
     host
     at
     text
+    flow
   }
 }
 
@@ -69,6 +72,25 @@ query ExecVersions($appId: BigInt!) {
     createdAt
     types
     active
+    manifestJson
+  }
+}
+
+query ExecEndpointStats($appId: BigInt!, $nodeType: String, $sinceMinutes: Int) {
+  execEndpointStats(appId: $appId, nodeType: $nodeType, sinceMinutes: $sinceMinutes) {
+    nodeType
+    method
+    calls
+    appErrors
+    busy
+    denied
+    deadlineExceeded
+    otherErrors
+    timedCalls
+    latencyMsAvg
+    latencyMsMax
+    firstMinute
+    lastMinute
   }
 }
 
@@ -258,6 +280,7 @@ query ExecModLogs(
     host
     at
     text
+    flow
   }
 }
 
