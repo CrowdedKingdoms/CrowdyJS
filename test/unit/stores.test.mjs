@@ -775,6 +775,82 @@ test('ChunkStore: bulk load + hydration, realtime merge, optimistic edits, world
   session.dispose();
 });
 
+test('ChunkStore: hydration runs 8 at a time, retries busy refusals and is best effort', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const initial = {};
+  for (let x = -2; x <= 2; x++) for (let z = -2; z <= 1; z++) initial[`${x}:0:${z}`] = {};
+  const { api } = fakeChunks(initial);
+  const busy = () => Object.assign(new Error('The service is busy'), { code: 'PLATFORM_BUSY' });
+  const refused = () => Object.assign(new Error('Forbidden'), { code: 'FORBIDDEN' });
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const attempts = new Map();
+  const get = api.get;
+  api.get = async (input) => {
+    const key = `${input.coordinates.x}:${input.coordinates.y}:${input.coordinates.z}`;
+    attempts.set(key, (attempts.get(key) ?? 0) + 1);
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    try {
+      await sleep(5);
+      if (key === '0:0:0' && attempts.get(key) <= 2) throw busy();
+      if (key === '1:0:1') throw refused();
+      return await get(input);
+    } finally {
+      inFlight -= 1;
+    }
+  };
+  const { client } = fakeClient({ chunks: api });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { voxelStateCodec: jsonCodec(), writeBackIntervalMs: false },
+  });
+  const store = session.chunks;
+
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 2);
+  assert.ok(maxInFlight <= 8, `at most 8 hydrations at once (saw ${maxInFlight})`);
+  assert.equal(attempts.get('0:0:0'), 3, 'a busy refusal is asked again');
+  assert.equal(store.get({ x: 0, y: 0, z: 0 }).hydrated, true);
+  const stubborn = store.get({ x: 1, y: 0, z: 1 });
+  assert.equal(stubborn.loadState, 'loaded', 'its voxels from the bulk load stay');
+  assert.equal(stubborn.hydrated, false);
+  assert.equal(attempts.get('1:0:1'), 1, 'a refusal that is not busy is not retried at once');
+
+  // A later call hydrates what failed, and only that; after three failures it stops asking.
+  const before = attempts.get('0:0:0');
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 2);
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 2);
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 2);
+  assert.equal(attempts.get('1:0:1'), 3);
+  assert.equal(attempts.get('0:0:0'), before, 'a hydrated chunk is not fetched again');
+  session.dispose();
+});
+
+test('ChunkStore: a chunk whose bulk load failed is requested again', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+  const { api, calls } = fakeChunks({ '0:0:0': {} });
+  const byDistance = api.byDistance;
+  let fail = true;
+  api.byDistance = async (input) => {
+    if (fail) {
+      fail = false;
+      throw Object.assign(new Error('Internal error'), { code: 'INTERNAL_SERVER_ERROR' });
+    }
+    return byDistance(input);
+  };
+  const { client } = fakeClient({ chunks: api });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { writeBackIntervalMs: false },
+  });
+  await assert.rejects(session.chunks.ensureAround({ x: 0, y: 0, z: 0 }, 1));
+  assert.equal(session.chunks.get({ x: 0, y: 0, z: 0 }).loadState, 'failed');
+  await session.chunks.ensureAround({ x: 0, y: 0, z: 0 }, 1);
+  assert.equal(session.chunks.get({ x: 0, y: 0, z: 0 }).loadState, 'loaded');
+  assert.equal(calls.byDistance, 1, 'the retry went through the real bulk load');
+  session.dispose();
+});
+
 test('ChunkStore: onMissing can seed without write-back', async () => {
   const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
   const { api: chunksApi } = fakeChunks();
