@@ -1,5 +1,6 @@
 import {
   PlayerCodeBroker,
+  type PlayerCodeEngine,
   type PlayerCodePresentation,
 } from '../player-runtime/player-code-broker.js';
 import { hostGridProgram, type GridProgramHost } from '../grid-program/host.js';
@@ -11,7 +12,11 @@ import {
   type GridHostLocal,
 } from './grid-host-calls.js';
 
-/** A Rust CLIENT mod: platform-built WASM run in the tokenless glue worker. */
+/**
+ * A Rust CLIENT mod: platform-built WASM run in the tokenless glue worker. A ck-exec mod's
+ * CLIENT half is `engine: 'ck-exec'` with the `digest`, `fuelPerDispatch` and `tickIntervalMs`
+ * of `exec.modClientArtifactBytes` (`ExecClientHalves` runs a whole grid's).
+ */
 export interface WasmGridModSpec {
   kind: 'wasm';
   moduleName: string;
@@ -19,6 +24,8 @@ export interface WasmGridModSpec {
   artifactHash?: string;
   fuelPerDispatch?: bigint;
   tickIntervalMs?: number;
+  /** Default `'player-compute'`, a legacy CLIENT module. */
+  engine?: PlayerCodeEngine;
   /** The platform glue worker URL (`@crowdedkingdoms/crowdyjs/player-glue-worker`). */
   workerUrl: string | URL;
 }
@@ -70,6 +77,7 @@ export async function startGridMod(
   const box = scope.bounds!;
   if (spec.kind === 'wasm') {
     const broker = new PlayerCodeBroker({
+      engine: spec.engine,
       workerUrl: spec.workerUrl,
       grid: { low: box.low, high: box.high, gridId: scope.gridId },
       moduleName: spec.moduleName,

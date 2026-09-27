@@ -7,7 +7,8 @@
  * worker message loop.
  *
  *  - it instantiates the gas-injected player artifact with an import table
- *    that exposes ONLY `ck.*` + inert wasi stubs (nothing else importable),
+ *    that exposes ONLY `ck.*` + inert wasi stubs (nothing else importable);
+ *    a ck-exec CLIENT half gets `ck.*` and `random_get` alone,
  *  - it never has the DOM, `window`, auth tokens, `fetch`, or third-party
  *    `importScripts`,
  *  - `ck.host_call` blocks the worker on a SharedArrayBuffer while the
@@ -130,6 +131,7 @@ export function startGlueWorker(port: {
       hostCallSync,
       onLog: (level, message) => post({ type: 'log', level, message }),
       fuelPerDispatch,
+      engine: init.engine === 'ck-exec' ? 'ck-exec' : 'player-compute',
     });
     try {
       await runtime.instantiate(init.artifact);

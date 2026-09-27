@@ -137,6 +137,7 @@ query ExecStarters($appId: BigInt!) {
 fragment ExecBuildFields on ExecBuild {
   buildId
   status
+  kind
   log
   createdAt
   startedAt
@@ -145,6 +146,9 @@ fragment ExecBuildFields on ExecBuild {
     crate
     digest
     sizeBytes
+    capabilitySummaryJson
+    capabilityHash
+    tickIntervalMs
   }
 }
 
@@ -183,6 +187,10 @@ fragment ExecModListingFields on ExecModListing {
   sourceVersion
   digest
   installs
+  clientDigest
+  clientCapabilitySummaryJson
+  clientCapabilityHash
+  clientTickIntervalMs
   createdAt
   delistedAt
 }
@@ -344,5 +352,99 @@ mutation ExecModSetSwitch(
 ) {
   execModSetSwitch(appId: $appId, scope: $scope, off: $off, target: $target, reason: $reason) {
     ...ExecModSwitchFields
+  }
+}
+
+fragment ExecModClientFields on ExecModClient {
+  modId
+  gridId
+  name
+  ownerId
+  clientVersion
+  digest
+  sizeBytes
+  capabilitySummaryJson
+  capabilityHash
+  tickIntervalMs
+  updatedAt
+}
+
+fragment ExecGridClientModFields on ExecGridClientMod {
+  modId
+  name
+  gridId
+  authorId
+  listingId
+  clientVersion
+  digest
+  capabilitySummaryJson
+  capabilityHash
+  tickIntervalMs
+  callerConsented
+  authorCapabilitySummaryJson
+  authorCapabilityHash
+  callerTrustsAuthor
+  updatedAt
+}
+
+mutation ExecModClientBuild($appId: BigInt!, $crate: ExecBuildCrateInput!) {
+  execModClientBuild(appId: $appId, crate: $crate) {
+    ...ExecBuildFields
+  }
+}
+
+mutation ExecModClientDeploy(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $name: String!
+  $buildId: String!
+) {
+  execModClientDeploy(appId: $appId, gridId: $gridId, name: $name, buildId: $buildId) {
+    ...ExecModClientFields
+  }
+}
+
+mutation ExecModClientDelete($appId: BigInt!, $gridId: BigInt!, $name: String!) {
+  execModClientDelete(appId: $appId, gridId: $gridId, name: $name)
+}
+
+query ExecGridClientMods($appId: BigInt!, $gridId: BigInt!) {
+  execGridClientMods(appId: $appId, gridId: $gridId) {
+    ...ExecGridClientModFields
+  }
+}
+
+mutation ExecConsentClientMod($appId: BigInt!, $modId: String!, $capabilityHash: String!) {
+  execConsentClientMod(appId: $appId, modId: $modId, capabilityHash: $capabilityHash)
+}
+
+mutation ExecTrustAuthor(
+  $appId: BigInt!
+  $gridId: BigInt!
+  $authorId: BigInt!
+  $capabilityHash: String!
+) {
+  execTrustAuthor(
+    appId: $appId
+    gridId: $gridId
+    authorId: $authorId
+    capabilityHash: $capabilityHash
+  )
+}
+
+query ExecModClientArtifact($appId: BigInt!, $modId: String!) {
+  execModClientArtifact(appId: $appId, modId: $modId) {
+    modId
+    name
+    gridId
+    clientVersion
+    digest
+    wasmBase64
+    sizeBytes
+    capabilitySummaryJson
+    capabilityHash
+    tickIntervalMs
+    fuelPerDispatch
+    abiVersion
   }
 }

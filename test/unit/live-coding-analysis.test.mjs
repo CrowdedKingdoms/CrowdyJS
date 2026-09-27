@@ -299,3 +299,16 @@ test('producer static symbols are accepted and mapped as variables', async () =>
     local.dispose();
   }
 });
+
+test('a CLIENT file on crowdy-client-sdk gets the lifecycle snippet for that crate', () => {
+  const vfs = new VirtualFileSystem();
+  const half = open(vfs, 'client/src/lib.rs', 'use crowdy_client_sdk as crowdy;\n');
+  const legacy = open(vfs, 'client/src/legacy.rs', 'use crowdy_compute_sdk as crowdy;\n');
+  const snippet = (document) =>
+    analysis
+      .completions(document, { line: 1, character: 0 }, vfs.documents())
+      .find((item) => item.label === 'client lifecycle').insertText;
+  assert.match(snippet(half), /crowdy_client_sdk::register_module!/);
+  assert.doesNotMatch(snippet(half), /crowdy_compute_sdk/);
+  assert.match(snippet(legacy), /crowdy_compute_sdk::register_module!/);
+});

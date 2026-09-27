@@ -1,3 +1,69 @@
+# 17.14.0 ck-exec CLIENT halves
+
+Dev-tier preview (cks-game-api #422, P3 W1). **The release needs a game API that has #422:**
+the build and listing documents now select `ExecBuild.kind`, the artifacts' capability fields
+and the listings' `client*` fields, which an older API refuses as a validation error. Deploy
+the API first.
+
+A mod can carry a **CLIENT half**: browser WASM from one `crowdy-client-sdk` crate, built on
+the platform, attached to the mod and served by its grid to visitors who consent to it or
+trust its author. It replaces the legacy grid-attached client mods, which keep working until
+18.0.
+
+- **`client.exec`**: `modClientBuild(appId, crate)` (a build of `kind` `client`; poll it with
+  `modBuildStatus` / `waitForModBuild`), `modClientDeploy(appId, gridId, name, buildId)` →
+  `ExecModClient`, `modClientDelete(appId, gridId, name)`, `gridClientMods(appId, gridId)` →
+  `ExecGridClientMod[]` (with `capabilitySummary` and `authorCapabilitySummary` parsed beside
+  the JSON), `consentClientMod(appId, modId, capabilityHash)`, `trustAuthor(appId, gridId,
+  authorId, capabilityHash)`, `modClientArtifact(appId, modId)` and
+  `modClientArtifactBytes(appId, modId)`, which decodes the module, recomputes its SHA-256 and
+  refuses bytes that differ from `digest` (or a CLIENT ABI other than
+  `EXEC_CLIENT_ABI_VERSION`, 0) with a `CrowdyProtocolError`. Errors are the API's: a stale
+  hash is `CONFLICT`, every artifact refusal `NOT_FOUND`, more than 12 fetches a minute per
+  player and mod `RATE_LIMITED`.
+- **Types**: `ExecBuild.kind`; `ExecBuildArtifact` (`capabilitySummaryJson`,
+  `capabilitySummary`, `capabilityHash`, `tickIntervalMs`, null for a ck-exec module);
+  `ExecModListing.clientDigest`, `clientCapabilitySummaryJson`, `clientCapabilitySummary`,
+  `clientCapabilityHash`, `clientTickIntervalMs`; `ExecClientCapabilitySummary`,
+  `ExecModClient`, `ExecGridClientMod`, `ExecModClientArtifact`, `ExecModClientArtifactBytes`.
+- **`ExecClientHalves`**, the exec twin of the-construct's `runConsentedGridMod` and
+  `ClientModLifecycle`: tell it the grid (`enterGrid`) and `refresh()` on a cadence. It lists
+  the grid's CLIENT halves, stops the ones removed or changed (keyed by `modId`, `digest`,
+  `capabilityHash` and tick interval), asks the player once per author (`trustAuthor`) or per
+  CLIENT half (`ask: 'mod'`, `consentClientMod`) through your `confirm`, fetches and caches by
+  digest, and runs each in a `PlayerCodeBroker` with its fuel budget and tick interval.
+  `NOT_FOUND` holds a CLIENT half back 15 s, `RATE_LIMITED` 60 s, refused bytes and a tripped
+  circuit 60 s.
+- **`PlayerCodeBroker({ engine: 'ck-exec' })`**: the allowlist is `EXEC_CLIENT_HOST_CALLS`,
+  exactly what crowdy-client-sdk calls (the client catalog less the Game Model group,
+  `sessions_list` and `grid_state_*`); the glue offers exactly `EXEC_CLIENT_ABI_IMPORTS`
+  (`ck::{log,now_ms,state_get,state_set,host_call}`, `wasi_snapshot_preview1::random_get`),
+  refuses a module without the `ck_fuel` meter, and the broker will not start without
+  `artifactHash` and `fuelPerDispatch`. The default, `'player-compute'`, is unchanged for
+  legacy CLIENT modules. `startGridMod`'s wasm spec takes `engine` too.
+- **Crowdy Studio's CLIENT target runs on ck-exec** with `serverEngine: 'ck-exec'` (the
+  default when `exec` is present). A new CLIENT target starts from a `crowdy-client-sdk` crate
+  (`createCrowdyStudioStarterProject({ engine: 'ck-exec' })`); Test draft and Deploy live
+  build it with `modClientBuild`, attach it to the project's mod with `modClientDeploy`,
+  consent to it as its author and preview the served module with `engine: 'ck-exec'`. A
+  CLIENT-only project's CLIENT half rides the mod named for its CLIENT module (which must be a
+  mod name now): with no such mod of the player's on the grid, Studio deploys the mod starter's
+  server half under it first and says so in the build log, switches it on, and Stop switches
+  it off. The preview loads only for a player with `run_client_code` standing in the grid. On
+  ck-exec no target reads player compute usage, and the pairing select is disabled.
+- **`CrowdyStudioMods` gained `myMods`, `modClientBuild`, `modClientDeploy`,
+  `consentClientMod` and `modClientArtifactBytes`.** Pass `client.exec`; a hand-written
+  stand-in needs those too.
+- **Superseded** (`@deprecated`, removed in 18.0): `marketplace.gridClientMods`,
+  `consentGridClientMod`, `trustGridAuthor`, `clientArtifact`, `clientArtifactBytes`, and
+  `GridScope.compute.clientMods`.
+
+Existing CLIENT projects keep their files: a CLIENT crate on `crowdy-compute-sdk` is refused on
+ck-exec before any build, with what to change (the SDK line becomes
+`crowdy-client-sdk = "0.1.0"`, `crowdy_compute_sdk` becomes `crowdy_client_sdk`; the host
+calls are the same less the Game Model and sessions). `serverEngine: 'player-compute'` keeps
+both targets on legacy player compute until 18.0.
+
 # 17.13.0 ck-exec observability
 
 Additive (dev-tier preview; ck-api `v2.22.0`).
@@ -37,7 +103,8 @@ Crowdy Studio's SERVER target moves to ck-exec mods, which 17.12.0 offered behin
   package named for the project, instead of the legacy `crowdy-compute-sdk` crate; the
   server module name fits a mod's (48 characters, starting with a letter) and a full-stack
   project records pairing `NONE`, since a mod has no client pairing. The CLIENT crate is
-  unchanged. `createCrowdyStudioStarterProject` takes the starter as `modStarter`.
+  unchanged (17.14.0 moved it to ck-exec). `createCrowdyStudioStarterProject` takes the
+  starter as `modStarter`.
 - **Invoke, Logs, Runs and the budget line follow the engine.** On ck-exec, Invoke calls the
   mod's endpoint (default `state`, JSON arguments sent as MessagePack) over one exec
   connection, and the result is the decoded reply as JSON; Logs are the mod's `ctx.log`
