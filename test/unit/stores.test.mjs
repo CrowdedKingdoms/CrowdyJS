@@ -315,6 +315,79 @@ test('LocalActorStore: identity, send loop with dedup + keyframe, ack/error reco
   assert.equal(net.sent.length, 4);
 });
 
+test('LocalActorStore: a refused loop send is recorded, never unhandled, and resent on the next tick', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const { client, net } = fakeClient();
+  const busy = Object.assign(new Error('The service is busy. Please try again in a moment.'), {
+    code: 'PLATFORM_BUSY',
+  });
+  let refuse = 0;
+  const send = client.udp.sendActorUpdate;
+  client.udp.sendActorUpdate = async (input) => {
+    if (refuse > 0) {
+      refuse -= 1;
+      throw busy;
+    }
+    return send(input);
+  };
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const ticker = manualTicker();
+    let wallClock = 0;
+    const codec = jsonCodec();
+    const session = createWorldSession(client, '42', {
+      ticker,
+      self: {
+        codec,
+        initialState: { x: 0 },
+        now: () => wallClock,
+        keyframeEveryMs: 10_000,
+      },
+    });
+    const self = session.self;
+    await self.join({ x: '0', y: '1', z: '0' });
+    assert.equal(net.sent.length, 1);
+
+    // A changed state's loop send is refused before reaching the server.
+    self.patchState({ x: 1 });
+    refuse = 1;
+    wallClock = 200;
+    ticker.advance(200);
+    await sleep(0);
+    assert.equal(net.sent.length, 1, 'the refused send never went out');
+    assert.equal(self.status, 'error');
+    assert.equal(self.lastError.errorCode, 'PLATFORM_BUSY');
+    assert.equal(self.lastError.sequenceNumber, self.lastSent.sequenceNumber);
+
+    // The state is unchanged since, yet the next tick sends it again.
+    wallClock = 400;
+    ticker.advance(200);
+    await sleep(0);
+    assert.equal(net.sent.length, 2, 'resent although unchanged');
+    assert.equal(codec.decode(net.sent[1].input.state).x, 1);
+    assert.equal(self.status, 'pending');
+
+    // Then dedup applies again.
+    wallClock = 600;
+    ticker.advance(200);
+    await sleep(0);
+    assert.equal(net.sent.length, 2, 'deduped once delivered');
+
+    // An explicit send still rejects to its caller.
+    refuse = 1;
+    await assert.rejects(self.sendNow(), /service is busy/);
+    assert.equal(self.lastError.errorCode, 'PLATFORM_BUSY');
+
+    session.dispose();
+    await sleep(10);
+    assert.deepEqual(unhandled, [], 'no unhandled rejection');
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+});
+
 test('LocalActorStore: uuid persistence, explicit uuid, manual-send mode', async () => {
   const { createWorldSession, memoryUuidStore, jsonCodec, manualTicker } =
     await loadStores();
@@ -1137,6 +1210,57 @@ test('SaveStateStore: typed load/set/save cache with debounced autosave', async 
   await save.save();
   assert.equal(updates.length, 2);
   session.dispose();
+});
+
+test('SaveStateStore: a refused autosave stays dirty, is never unhandled, and the next autosave persists it', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+
+  const updates = [];
+  let refuse = 1;
+  const stateApi = {
+    async getOne() {
+      return null;
+    },
+    async update(input) {
+      if (refuse > 0) {
+        refuse -= 1;
+        throw Object.assign(new Error('The service is busy. Please try again in a moment.'), {
+          code: 'PLATFORM_BUSY',
+        });
+      }
+      updates.push(input);
+      return { state: input.state };
+    },
+  };
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const { client } = fakeClient({ state: stateApi });
+    const ticker = manualTicker();
+    const session = createWorldSession(client, '42', {
+      ticker,
+      save: { autosaveMs: 500, now: () => ticker.now },
+    });
+    const save = session.save;
+
+    save.set({ level: 5 });
+    ticker.advance(500);
+    await sleep(0);
+    assert.equal(updates.length, 0, 'the refused save wrote nothing');
+    assert.equal(save.dirty, true, 'still dirty after the refusal');
+
+    ticker.advance(500);
+    await sleep(0);
+    assert.equal(updates.length, 1, 'the next autosave persisted it');
+    assert.equal(save.dirty, false);
+
+    session.dispose();
+    await sleep(10);
+    assert.deepEqual(unhandled, [], 'no unhandled rejection');
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
 });
 
 test('AvatarStateStore: binds an avatar and round-trips typed public/private/app state', async () => {
