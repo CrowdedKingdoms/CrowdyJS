@@ -116,6 +116,8 @@ interface RunningHalf {
 interface CachedModule {
   bytes: ArrayBuffer;
   fuelPerDispatch: bigint;
+  /** The served artifact's own `hostFunctions`; the broker allows only calls also listed. */
+  hostFunctions: readonly string[];
 }
 
 const identity = (m: ExecGridClientMod) =>
@@ -324,7 +326,8 @@ export class ExecClientHalves {
     grid: ExecClientHalvesGrid,
     current: () => boolean,
   ): Promise<void> {
-    // What the player consented to bounds the module's host calls in the broker.
+    // What the player consented to, and what the served artifact itself lists, bound the
+    // module's host calls in the broker.
     const consented = mod.capabilitySummary?.hostFunctions;
     if (!Array.isArray(consented)) {
       this.fail(
@@ -343,7 +346,11 @@ export class ExecClientHalves {
     } else {
       try {
         const a = await this.options.exec.modClientArtifactBytes(this.options.appId, mod.modId);
-        module = { bytes: a.bytes, fuelPerDispatch: a.fuelPerDispatch };
+        module = {
+          bytes: a.bytes,
+          fuelPerDispatch: a.fuelPerDispatch,
+          hostFunctions: a.capabilitySummary.hostFunctions,
+        };
         this.remember(a.digest, module);
         if (!current()) return;
         // Changed between the listing and the fetch: the next listing starts the new one.
@@ -360,6 +367,7 @@ export class ExecClientHalves {
         return;
       }
     }
+    const served = module.hostFunctions;
     const broker: ExecClientHalfBroker = (
       this.options.brokerFactory ?? ((o) => new PlayerCodeBroker(o))
     )({
@@ -370,7 +378,7 @@ export class ExecClientHalves {
       artifactHash: mod.digest,
       fuelPerDispatch: module.fuelPerDispatch,
       tickIntervalMs: mod.tickIntervalMs,
-      consentedHostCalls: consented,
+      consentedHostCalls: consented.filter((fn) => served.includes(fn)),
       onHostCall: (call) => this.options.onHostCall(call, mod),
       onPresentation: (presentation) => this.options.onPresentation?.(presentation, mod),
       onCircuitOpen: () => {

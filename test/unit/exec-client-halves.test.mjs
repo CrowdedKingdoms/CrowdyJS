@@ -351,6 +351,20 @@ test('the runner runs what the player consented to, without asking, in a ck-exec
   assert.ok(!state.calls.some(([op]) => op === 'consent' || op === 'trust'), 'nothing is consented without a confirm');
 });
 
+test('the broker allows only host calls both in the listed summary and in the served artifact\u2019s', async () => {
+  const wide = { ...SUMMARY, hostFunctions: ['hud_set', 'overlay_draw'] };
+  const { exec } = fakeGrid([
+    listed('1', { callerConsented: true, capabilitySummary: wide, capabilitySummaryJson: JSON.stringify(wide) }),
+  ]);
+  const fetch = exec.modClientArtifactBytes;
+  exec.modClientArtifactBytes = async (...args) => ({ ...(await fetch(...args)), capabilitySummary: SUMMARY });
+  const { halves, made } = runner(exec);
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  assert.equal(made.length, 1);
+  assert.deepEqual(made[0].options.consentedHostCalls, ['hud_set']);
+});
+
 test('trust is asked once per author, answered with trustAuthor at the union hash; a no is not asked again', async () => {
   const { state, exec } = fakeGrid([
     listed('1'),
