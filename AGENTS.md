@@ -4,12 +4,44 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.13.0**. Whether that is *published* is
+**Current package:** `package.json` is **17.14.0**. Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**17.14.0 adds ck-exec CLIENT halves (cks-game-api #422, P3 W1, HS-40, 2026-09-27).** A mod
+may carry browser WASM from one `crowdy-client-sdk` crate, which its grid serves to visitors who
+consent to it or trust its author. `client.exec`: `modClientBuild` (a build of `kind` `client`,
+polled with `modBuildStatus`), `modClientDeploy` / `modClientDelete`, `gridClientMods` (both
+capability summaries parsed beside their JSON), `consentClientMod`, `trustAuthor`,
+`modClientArtifact` and `modClientArtifactBytes` (recomputes the SHA-256 with WebCrypto and
+refuses bytes that differ from `digest`, or a CLIENT ABI other than 0, as `CrowdyProtocolError`).
+`ExecBuild.kind`, the artifacts' capability fields and the listings' `client*` fields are in
+the shared fragments, **so 17.14.0 needs an API with #422 for every exec build and listing
+call**: deploy the API first. `ExecClientHalves` (`src/grid-mods/exec-client-halves.ts`) is the
+game-side runner, the exec twin of the-construct's `runConsentedGridMod` + `ClientModLifecycle`:
+keyed by `modId` + `digest` + `capabilityHash` (+ tick interval), one prompt per author or per
+mod, a module cache by digest, `NOT_FOUND` / `RATE_LIMITED` backoff. `PlayerCodeBroker({ engine:
+'ck-exec' })` allows exactly `EXEC_CLIENT_HOST_CALLS` (the client catalog less the `model`
+group, `sessions_list` and `grid_state_*`, what crowdy-client-sdk calls) and the glue offers
+exactly `EXEC_CLIENT_ABI_IMPORTS` and requires the `ck_fuel` meter; the broker also refuses
+calls outside `consentedHostCalls` (the served summary's `hostFunctions`, required with
+ck-exec), since the build derives the summary by a byte scan that a name assembled at run time
+escapes. The default engine, `'player-compute'`, keeps the legacy catalog until 18.0. Crowdy Studio's CLIENT target runs on
+ck-exec with `serverEngine: 'ck-exec'`: a crowdy-client-sdk starter, `modClientBuild`, attach to
+the project's mod, consent as its author, and a preview from the served artifact; a CLIENT-only
+project rides the mod named for its CLIENT module and deploys the mod starter under that name
+when the player has none (and says so in the build log). The legacy client-mod methods in
+`marketplace.ts` and `GridScope.compute.clientMods` are `@deprecated` (superseded). The schema
+is cks-game-api `dev`'s after #422 merged (`schema:sync:paths`).
+`test/unit/exec-client-runtime.test.mjs` runs a real CLIENT half when `CROWDY_EXEC_CLIENT_WASM`
+names one (Studio's starter built with cargo, `instrument` and `wasm-opt`, as the API builds it).
+**The Studio authoring index has no crowdy-client-sdk symbols:** the index is generated in
+cks-game-api (`compute-toolchain/scripts/generate-authoring-index.mjs`, crowdy-compute-sdk and
+the game kit only) and embedded here byte for byte, so adding them is a cks-game-api change
+followed by `authoring-index:drift -- --source ... --write`. [MIGRATION.md](MIGRATION.md).
 
 **17.13.0 adds ck-exec observability to `client.exec` (ck-api `v2.22.0`, 2026-09-26).**
 `endpointStats(appId, { nodeType, sinceMinutes })` (`execEndpointStats`: calls per endpoint by
@@ -28,11 +60,11 @@ with `mods`, else `'player-compute'`, which stays selectable until the legacy de
 On ck-exec, `createProject` starts the SERVER target from `mods.modStarter` (`execModStarter`)
 instead of the `crowdy-compute-sdk` crate, Invoke calls the mod over an exec connection, Logs
 read `modLogs`, and Runs and a SERVER-only project's usage no longer read player compute.
-`CrowdyStudioMods` grew `modStarter`, `modLogs` and `connect`. **Still on legacy player
-compute, with no ck-exec replacement yet:** the CLIENT target's compile (`playerComputeDeploy`
-target CLIENT, `playerComputeVersions`) and its artifact (`playerComputeArtifact`); a tier with
-player compute switched off refuses CLIENT compiles with `ENGINE_SWITCHED_OFF` (already
-compiled artifacts are still served). [MIGRATION.md](MIGRATION.md).
+`CrowdyStudioMods` grew `modStarter`, `modLogs` and `connect`. The CLIENT target stayed on
+legacy player compute in 17.13.0 (`playerComputeDeploy` target CLIENT, `playerComputeArtifact`,
+refused with `ENGINE_SWITCHED_OFF` where player compute is off); 17.14.0 moved it to ck-exec
+CLIENT halves, and `serverEngine: 'player-compute'` still keeps both targets legacy.
+[MIGRATION.md](MIGRATION.md).
 
 **17.12.0 adds ck-exec mods to `client.exec` (dev-tier preview, 2026-09-25, P2 W7).** A mod is
 a player's code on a grid they own, the node type `mod:<name>` (`execModType`) keyed by the
@@ -483,6 +515,7 @@ reference consumer of the hosted flow.
 | Client-side simulation authority | `host.heartbeat` + `is_host` invoke policy |
 | Voice / chat / guilds | `udp.sendAudioPacket`; `udp.sendTextPacket`; `channels.*`; `teams.*` |
 | Land claims | `gameApps.createGrid` / `grantPermissions` |
+| Players' code on their grids | ck-exec mods (`exec.modBuild` / `modDeploy`) and their CLIENT halves (`exec.modClientBuild` / `modClientDeploy`); visitors run a grid's with `ExecClientHalves` |
 | Direct player-to-player | `udp.sendSingleActorMessage` |
 | Save / characters / teleport | `state.*`; `avatars.*`; `teleport.request` |
 | Version / capability | `serverStatus.gameClientBootstrap(appId)` |

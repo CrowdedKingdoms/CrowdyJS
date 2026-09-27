@@ -47,7 +47,7 @@ export interface CrowdyStudioEmbedServices {
   playerWallet?: CrowdyStudioPlayerWallet;
   /** GitHub repository loop; omission hides the card. `CrowdyClient` provides it. */
   crowdyStudioGitHub?: CrowdyStudioGitHubTransport;
-  /** ck-exec, the default SERVER engine when present. `CrowdyClient` provides it. */
+  /** ck-exec, the default engine for both targets when present. `CrowdyClient` provides it. */
   exec?: CrowdyStudioMods;
 }
 
@@ -103,11 +103,12 @@ export interface CrowdyStudioEmbedOptions {
    */
   github?: CrowdyStudioGitHubTransport;
   /**
-   * What runs the SERVER target: a ck-exec mod on the grid, built from the project's
-   * `ckx-sdk` crate (`client.exec`), or legacy player compute, which the platform is
-   * switching off. Defaults to `'ck-exec'` when the client has `exec` (every `CrowdyClient`
-   * does), else `'player-compute'`. Pass `'player-compute'` to stay on the legacy engine
-   * until it is removed.
+   * What runs the project: a ck-exec mod on the grid, built from the project's `ckx-sdk`
+   * crate, with the CLIENT target as its `crowdy-client-sdk` CLIENT half (`client.exec`), or
+   * legacy player compute for both targets, which the platform is switching off. Defaults to
+   * `'ck-exec'` when the client has `exec` (every `CrowdyClient` does), else
+   * `'player-compute'`. Pass `'player-compute'` to stay on the legacy engine until 18.0
+   * removes it.
    */
   serverEngine?: CrowdyStudioServerEngine;
   /**

@@ -1197,7 +1197,9 @@ export class CrowdyStudioDomShell {
     );
     this.serverModuleName.disabled = !projectTargets(project.kind).includes('SERVER');
     this.clientModuleName.disabled = !projectTargets(project.kind).includes('CLIENT');
-    this.pairing.disabled = project.kind !== 'FULL_STACK';
+    // A mod has no pairing: its CLIENT half rides it.
+    this.pairing.disabled =
+      project.kind !== 'FULL_STACK' || state.serverEngine === 'ck-exec';
     this.pairing.value = project.metadata.pairingPreference;
   }
 

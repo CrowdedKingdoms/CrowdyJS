@@ -7570,6 +7570,18 @@ type ExecBuildArtifact {
   digest: String!
   """The module’s size in bytes."""
   sizeBytes: Int!
+  """
+  A CLIENT half’s capability summary as JSON, derived from the module: its imports, the client host calls it can reach, their groups, its presentation hooks and exports. Null for a ck-exec module.
+  """
+  capabilitySummaryJson: String
+  """
+  SHA-256 of the canonical capability summary, hex: what visitors consent to. Null for a ck-exec module.
+  """
+  capabilityHash: String
+  """
+  How often, in milliseconds, browsers tick a CLIENT half: `[package.metadata.crowdy] tick_interval_ms`, 16-1000, 1000 by default. Null for a ck-exec module.
+  """
+  tickIntervalMs: Int
 }
 
 """
@@ -7580,6 +7592,10 @@ type ExecBuild {
   buildId: String!
   """`queued`, `building`, `succeeded` or `failed`."""
   status: String!
+  """
+  What it builds: `exec` for ck-exec modules, `client` for the CLIENT half of a mod (`execModClientBuild`).
+  """
+  kind: String!
   """
   The compiler’s output once the build finishes, at most 64 KB (the end is kept).
   """
@@ -7774,6 +7790,122 @@ type ExecAppStatus {
 }
 
 """
+The CLIENT half of a mod (dev-tier preview): browser WASM built from a crowdy-client-sdk crate and attached to the mod, which the mod’s grid serves to visitors who consent to it.
+"""
+type ExecModClient {
+  """The mod it is attached to."""
+  modId: String!
+  """The mod’s grid."""
+  gridId: BigInt!
+  """The mod’s name."""
+  name: String!
+  """The player it was attached as: the mod’s owner."""
+  ownerId: BigInt!
+  """Rises by one with every attach to the mod."""
+  clientVersion: Int!
+  """SHA-256 of the module, hex: what `execModClientArtifact` serves."""
+  digest: String!
+  """The module’s size in bytes."""
+  sizeBytes: Int!
+  """
+  Its capability summary as JSON, derived from the module: imports, the client host calls it can reach, their groups, presentation hooks and exports.
+  """
+  capabilitySummaryJson: String!
+  """
+  SHA-256 of the canonical capability summary, hex: what a visitor consents to.
+  """
+  capabilityHash: String!
+  """
+  How often, in milliseconds, browsers tick it (16-1000, from its Cargo.toml).
+  """
+  tickIntervalMs: Int!
+  """When it was last attached."""
+  updatedAt: DateTime!
+}
+
+"""
+A CLIENT half a grid serves (dev-tier preview): of a mod on it that is switched on, not stopped by the kill ladder and admitted, running as the grid’s owner. Carries the caller’s consent and trust in its author.
+"""
+type ExecGridClientMod {
+  """The mod, for `execConsentClientMod` and `execModClientArtifact`."""
+  modId: String!
+  """The mod’s name: its name on the page’s grid event bus."""
+  name: String!
+  """The grid."""
+  gridId: BigInt!
+  """
+  Its author: the mod’s owner, who owns the grid. Pass it to `execTrustAuthor`.
+  """
+  authorId: BigInt!
+  """The marketplace listing the mod was installed from."""
+  listingId: BigInt
+  """The CLIENT half’s version."""
+  clientVersion: Int!
+  """
+  SHA-256 of the module, hex: cache the bytes by it, and stop a worker whose digest is no longer listed.
+  """
+  digest: String!
+  """Its capability summary as JSON."""
+  capabilitySummaryJson: String!
+  """
+  The hash `execConsentClientMod` takes: SHA-256 of the canonical capability summary.
+  """
+  capabilityHash: String!
+  """How often, in milliseconds, to tick it (16-1000)."""
+  tickIntervalMs: Int!
+  """The caller consented to it at its current capability hash."""
+  callerConsented: Boolean!
+  """
+  The union, as JSON, of the capability summaries of every CLIENT half this author has on the grid: the summary a one-per-author trust prompt shows.
+  """
+  authorCapabilitySummaryJson: String!
+  """
+  The hash `execTrustAuthor` takes: SHA-256 of the canonical union. A new capability changes it.
+  """
+  authorCapabilityHash: String!
+  """
+  The caller trusts this author on this grid, at this hash or a union at least as wide.
+  """
+  callerTrustsAuthor: Boolean!
+  """When it was last attached."""
+  updatedAt: DateTime!
+}
+
+"""
+A CLIENT half’s module and what the browser broker needs to run it (dev-tier preview): the fuel-metered wasm32-unknown-unknown module, its digest to check the bytes against, and the per-dispatch fuel budget to load into its `ck_fuel` global.
+"""
+type ExecModClientArtifact {
+  """The mod."""
+  modId: String!
+  """The mod’s name: its name on the page’s grid event bus."""
+  name: String!
+  """The mod’s grid."""
+  gridId: BigInt!
+  """The CLIENT half’s version."""
+  clientVersion: Int!
+  """
+  SHA-256 of the module, hex. The broker recomputes it and refuses bytes that differ.
+  """
+  digest: String!
+  """The module, base64."""
+  wasmBase64: String!
+  """Its size in bytes, at most 512 KiB."""
+  sizeBytes: Int!
+  """Its capability summary as JSON."""
+  capabilitySummaryJson: String!
+  """SHA-256 of the canonical capability summary."""
+  capabilityHash: String!
+  """How often, in milliseconds, to tick it (16-1000)."""
+  tickIntervalMs: Int!
+  """
+  Fuel for each dispatch (init, tick, invoke, event): the broker sets `ck_fuel` to it before every call, and the module traps when it runs out.
+  """
+  fuelPerDispatch: BigInt!
+  """The client ABI version it was built for (0)."""
+  abiVersion: Int!
+}
+
+"""
 A mod: a player’s code on a grid they own, run by ck-exec as the hub `mod:<name>` keyed by the grid id, in its owner’s own sandbox (dev-tier preview).
 """
 type ExecMod {
@@ -7838,6 +7970,18 @@ type ExecModListing {
   """SHA-256 of its module, hex."""
   digest: String!
   installs: Int!
+  """
+  SHA-256 of the CLIENT half the mod had when it was published, hex; null without one. An install attaches it to the installer’s mod, and visitors consent to it afresh.
+  """
+  clientDigest: String
+  """
+  That CLIENT half’s capability summary as JSON, for an installer to review first.
+  """
+  clientCapabilitySummaryJson: String
+  """SHA-256 of that capability summary, hex."""
+  clientCapabilityHash: String
+  """How often, in milliseconds, browsers tick that CLIENT half."""
+  clientTickIntervalMs: Int
   createdAt: DateTime!
   delistedAt: DateTime
 }
@@ -10217,6 +10361,24 @@ type Query {
     """The app the grid is in."""
     appId: BigInt!
   ): [ExecModSwitch!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
+  """
+  The CLIENT halves a grid serves (dev-tier preview): those of its mods that are switched on, not stopped by the kill ladder, running as the grid's owner and admitted, each with its capability summary and hash and whether you consented to it, and its author's union summary and hash and whether you trust them. Show one prompt per author and call `execTrustAuthor` (or `execConsentClientMod` per CLIENT half), fetch with `execModClientArtifact`, cache by digest, and poll this to stop CLIENT halves that were removed or changed. Requires access to the app.
+  """
+  execGridClientMods(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid whose CLIENT halves to list."""
+    gridId: BigInt!
+  ): [ExecGridClientMod!]!
+  """
+  A served CLIENT half's module, for the browser broker (dev-tier preview). Served only to a player holding 'run_client_code' in the app, standing in the mod's grid now, who consented to it at its current hash or trusts its author at a union no wider; every refusal answers NOT_FOUND. At most 12 fetches a minute per player and mod on each API instance (RATE_LIMITED); the module never changes for its digest, so cache it.
+  """
+  execModClientArtifact(
+    """The app the mod is in."""
+    appId: BigInt!
+    """The mod’s id (`modId` of `execGridClientMods`)."""
+    modId: String!
+  ): ExecModClientArtifact!
   """
   List the authenticated player’s private Crowdy Studio projects in one app, newest first. Requires an app-scoped token for appId; every row and source-file read is filtered by both app and caller ownership. The bounded result defaults to 25 and never grants grid deployment authority.
   """
@@ -12749,6 +12911,69 @@ type Mutation {
     """Why, at most 200 characters; refused calls carry it to players."""
     reason: String
   ): [ExecModSwitch!]! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Build the CLIENT half of a mod from one crowdy-client-sdk crate (dev-tier preview): compiled for wasm32-unknown-unknown in the build sandbox, fuel-metered and optimized there, checked against the client ABI and at most 512 KiB, with its capability summary derived from the module. Returns at once with the build queued (`kind` `client`); poll `execModBuildStatus`, then attach it with `execModClientDeploy`. One build, server or CLIENT, at a time per player. Requires the 'write_client_code' permission in the app.
+  """
+  execModClientBuild(
+    """The app the grid is in."""
+    appId: BigInt!
+    """
+    The CLIENT half’s one crate. Its `Cargo.toml` may have only [package], [lib] as a cdylib, [dependencies] on `crowdy-client-sdk`, `serde` and `serde_json`, and [package.metadata.crowdy] with `tick_interval_ms`.
+    """
+    crate: ExecBuildCrateInput!
+  ): ExecBuild!
+  """
+  Attach a CLIENT build of yours to your mod on a grid you own (dev-tier preview), replacing the CLIENT half it had; its version rises by one. A visitor's consent carries over only while the capability hash is unchanged. Requires being the grid's current owner, 'write_client_code' on both the app tier and the grid, the mod running as you, and the app's code admission admitting the new CLIENT version (an admission naming the mod, its listing or you).
+  """
+  execModClientDeploy(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+    """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
+    name: String!
+    """A succeeded `execModClientBuild` of yours."""
+    buildId: String!
+  ): ExecModClient!
+  """
+  Detach the CLIENT half of a mod on your grid (dev-tier preview), with every visitor's consent to it; the mod itself keeps running. Requires being the grid's current owner and 'write_client_code' on both the app tier and the grid.
+  """
+  execModClientDelete(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid the mod runs on."""
+    gridId: BigInt!
+    """The mod: 1-48 lowercase letters, digits, `-` or `_`."""
+    name: String!
+  ): Boolean!
+  """
+  Consent to run a mod's CLIENT half in your browser (dev-tier preview) at its current capability hash. A CLIENT half whose capabilities change carries a new hash, and the consent stops holding until you consent again. Answers CONFLICT when the hash is not the current one. Requires access to the app.
+  """
+  execConsentClientMod(
+    """The app the mod is in."""
+    appId: BigInt!
+    """The mod’s id (`modId` of `execGridClientMods`)."""
+    modId: String!
+    """
+    The `capabilityHash` of the CLIENT half you were shown, as `execGridClientMods` returned it.
+    """
+    capabilityHash: String!
+  ): Boolean!
+  """
+  Trust one author's CLIENT halves on a grid you stand in (dev-tier preview), at the hash of their union (`authorCapabilityHash`): it covers the author's CLIENT halves there while their union is no wider, and consents to each current one at its own hash. Answers CONFLICT when the hash is not the current one. Requires access to the app.
+  """
+  execTrustAuthor(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid you stand in."""
+    gridId: BigInt!
+    """The author: `authorId` of `execGridClientMods`."""
+    authorId: BigInt!
+    """
+    The `authorCapabilityHash` you were shown, as `execGridClientMods` returned it.
+    """
+    capabilityHash: String!
+  ): Boolean!
   """
   Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
   """

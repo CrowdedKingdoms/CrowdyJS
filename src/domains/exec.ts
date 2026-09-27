@@ -2,7 +2,7 @@ import { decode, encode } from '@msgpack/msgpack';
 import type { DecoderOptions } from '@msgpack/msgpack';
 
 import type { GraphQLClient } from '../client.js';
-import { CrowdyError } from '../errors.js';
+import { CrowdyError, CrowdyProtocolError } from '../errors.js';
 import {
   ExecActivateVersionDocument,
   ExecAppStatusDocument,
@@ -14,9 +14,12 @@ import {
   type ExecConnectAsDeveloperMutation,
   ExecConnectDocument,
   type ExecConnectMutation,
+  ExecConsentClientModDocument,
   ExecDeployDocument,
   ExecEndpointStatsDocument,
   type ExecEndpointStatsQuery,
+  ExecGridClientModsDocument,
+  type ExecGridClientModFieldsFragment,
   ExecInstancesDocument,
   type ExecInstancesQuery,
   ExecLogsDocument,
@@ -24,6 +27,12 @@ import {
   ExecAppModsDocument,
   ExecModBuildDocument,
   ExecModBuildStatusDocument,
+  ExecModClientArtifactDocument,
+  type ExecModClientArtifactQuery,
+  ExecModClientBuildDocument,
+  ExecModClientDeleteDocument,
+  ExecModClientDeployDocument,
+  type ExecModClientFieldsFragment,
   ExecModDeleteDocument,
   ExecModDeployDocument,
   type ExecModFieldsFragment,
@@ -43,6 +52,7 @@ import {
   ExecMyModsDocument,
   ExecSetEnabledDocument,
   ExecStartersDocument,
+  ExecTrustAuthorDocument,
   ExecVersionsDocument,
   type ExecVersionsQuery,
 } from '../generated/graphql.js';
@@ -736,9 +746,41 @@ export interface ExecSourceFile {
   content: string;
 }
 
-/** A build: `queued`, `building`, `succeeded` or `failed`, its log, and one module per crate. */
+/**
+ * A CLIENT half's capability summary, which the build derives from the module and its author
+ * cannot declare: the module's imports, the client host calls it can reach, their capability
+ * groups, its presentation hooks and exports. Visitors consent to its hash.
+ */
+export interface ExecClientCapabilitySummary {
+  version: number;
+  target: 'client';
+  /** The module's WASM imports as `module.name`. */
+  imports: string[];
+  /** The client host calls it can reach. */
+  hostFunctions: string[];
+  /** The host catalog groups of those calls. */
+  capabilityGroups: string[];
+  /** HUD and overlay hooks among them. */
+  presentationHooks: string[];
+  /** The functions the module exports. */
+  exportedFunctions: string[];
+  [field: string]: unknown;
+}
+
+/**
+ * One module of a build. A CLIENT build's (`kind` `client`) carries its capability summary,
+ * the hash visitors consent to and its tick interval; a ck-exec module's are null.
+ */
+export type ExecBuildArtifact = Omit<ExecBuildFieldsFragment['artifacts'][number], '__typename'> & {
+  capabilitySummary: ExecClientCapabilitySummary | null;
+};
+
+/**
+ * A build: `queued`, `building`, `succeeded` or `failed`, its log, and one module per crate.
+ * `kind` is `exec` for ck-exec modules and `client` for the CLIENT half of a mod.
+ */
 export type ExecBuild = Omit<ExecBuildFieldsFragment, '__typename' | 'artifacts'> & {
-  artifacts: Array<{ crate: string; digest: string; sizeBytes: number }>;
+  artifacts: ExecBuildArtifact[];
 };
 
 /** A starter crate, with its files ready for {@link ExecAPI.build}. */
@@ -761,6 +803,13 @@ function base64(bytes: Uint8Array): string {
     s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   }
   return btoa(s);
+}
+
+function fromBase64(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -815,10 +864,69 @@ export type ExecAppStatus = Omit<ExecAppStatusFieldsFragment, '__typename'>;
  * (call it with {@link execModType}). It runs as its owner while `enabled` and `blocked` is null.
  */
 export type ExecMod = Omit<ExecModFieldsFragment, '__typename'>;
-/** A published mod other grid owners may install (no payments). */
-export type ExecModListing = Omit<ExecModListingFieldsFragment, '__typename'>;
+/**
+ * A published mod other grid owners may install (no payments). `clientDigest` and the other
+ * `client*` fields describe the CLIENT half it had when published (null without one), which an
+ * install attaches to the installer's mod; `clientCapabilitySummary` is that summary parsed,
+ * for an installer to review first.
+ */
+export type ExecModListing = Omit<ExecModListingFieldsFragment, '__typename'> & {
+  clientCapabilitySummary: ExecClientCapabilitySummary | null;
+};
 /** A rung of the app's mods kill ladder that is off. */
 export type ExecModSwitch = Omit<ExecModSwitchFieldsFragment, '__typename'>;
+
+/**
+ * The CLIENT half attached to a mod: browser WASM built from a `crowdy-client-sdk` crate, which
+ * the mod's grid serves to visitors who consent to its `capabilityHash` or trust its author.
+ */
+export type ExecModClient = Omit<ExecModClientFieldsFragment, '__typename'> & {
+  capabilitySummary: ExecClientCapabilitySummary | null;
+};
+
+/**
+ * A CLIENT half a grid serves, with the caller's consent and their trust in its author.
+ * `capabilitySummary` and `authorCapabilitySummary` are the two JSON fields parsed (null when
+ * they do not parse); the author's is the union a one-per-author trust prompt shows.
+ */
+export type ExecGridClientMod = Omit<ExecGridClientModFieldsFragment, '__typename'> & {
+  capabilitySummary: ExecClientCapabilitySummary | null;
+  authorCapabilitySummary: ExecClientCapabilitySummary | null;
+};
+
+/**
+ * A served CLIENT half's module as the game API returns it: `wasmBase64`, the `digest` to check
+ * it against, and `fuelPerDispatch` (a decimal string) to load into its `ck_fuel` global.
+ */
+export type ExecModClientArtifact = Omit<ExecModClientArtifactQuery['execModClientArtifact'], '__typename'> & {
+  capabilitySummary: ExecClientCapabilitySummary | null;
+};
+
+/** {@link ExecModClientArtifact} decoded and checked for `PlayerCodeBroker` (`engine: 'ck-exec'`). */
+export interface ExecModClientArtifactBytes {
+  modId: string;
+  /** The mod's name: its name on the page's grid event bus. */
+  name: string;
+  gridId: string;
+  clientVersion: number;
+  /** The module; its SHA-256 is `digest`. */
+  bytes: ArrayBuffer;
+  /** SHA-256 of `bytes`, lowercase hex. */
+  digest: string;
+  sizeBytes: number;
+  /** Fuel for each dispatch (init, tick, invoke, event). */
+  fuelPerDispatch: bigint;
+  /** How often to tick it, in milliseconds (16-1000). */
+  tickIntervalMs: number;
+  capabilitySummaryJson: string;
+  /** What the player consented to; its `hostFunctions` bound the module in the broker. */
+  capabilitySummary: ExecClientCapabilitySummary;
+  capabilityHash: string;
+  abiVersion: number;
+}
+
+/** The CLIENT ABI version the player runtime's glue implements (crowdy-client-sdk `ABI_VERSION`). */
+export const EXEC_CLIENT_ABI_VERSION = 0;
 
 /** The node type players call a mod by: `mod:<name>`, keyed by its grid id. */
 export function execModType(name: string): string {
@@ -854,6 +962,18 @@ function parseManifest(json: string | null | undefined): ExecManifest | null {
   }
 }
 
+function parseCapabilities(json: string | null | undefined): ExecClientCapabilitySummary | null {
+  if (!json) return null;
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as ExecClientCapabilitySummary)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function strip<T extends { __typename?: string }>(v: T): Omit<T, '__typename'> {
   const { __typename: _, ...rest } = v;
   return rest;
@@ -861,13 +981,30 @@ function strip<T extends { __typename?: string }>(v: T): Omit<T, '__typename'> {
 
 function build(b: ExecBuildFieldsFragment): ExecBuild {
   const { __typename: _, artifacts, ...rest } = b;
-  return { ...rest, artifacts: artifacts.map(strip) };
+  return {
+    ...rest,
+    artifacts: artifacts.map((a) => ({
+      ...strip(a),
+      capabilitySummary: parseCapabilities(a.capabilitySummaryJson),
+    })),
+  };
+}
+
+function listing(l: ExecModListingFieldsFragment): ExecModListing {
+  return { ...strip(l), clientCapabilitySummary: parseCapabilities(l.clientCapabilitySummaryJson) };
+}
+
+function crateInput(crate: ExecCrate): { name: string; files: ExecSourceFile[] } {
+  const files = Array.isArray(crate.files)
+    ? crate.files
+    : Object.entries(crate.files).map(([path, content]) => ({ path, content }));
+  return { name: crate.name, files };
 }
 
 /**
  * `client.exec`: connecting players to ck-exec, building and deploying an app's nodes (and
- * the starter packs), and operating them (logs, instances, versions, rollback, the kill
- * switch, developer connections).
+ * the starter packs), operating them (logs, instances, versions, rollback, the kill switch,
+ * developer connections), and players' mods with their CLIENT halves.
  */
 export class ExecAPI {
   constructor(private readonly graphql: GraphQLClient) {}
@@ -1038,23 +1175,17 @@ export class ExecAPI {
    * player. Requires `write_server_code` in the app.
    */
   async modBuild(appId: string, crate: ExecCrate): Promise<ExecBuild> {
-    const files = Array.isArray(crate.files)
-      ? crate.files
-      : Object.entries(crate.files).map(([path, content]) => ({ path, content }));
-    const data = await this.graphql.request(ExecModBuildDocument, {
-      appId,
-      crate: { name: crate.name, files },
-    });
+    const data = await this.graphql.request(ExecModBuildDocument, { appId, crate: crateInput(crate) });
     return build(data.execModBuild);
   }
 
-  /** A mod build of yours. */
+  /** A mod build of yours: a mod's (`kind` `exec`) or a CLIENT half's (`kind` `client`). */
   async modBuildStatus(appId: string, buildId: string): Promise<ExecBuild> {
     const data = await this.graphql.request(ExecModBuildStatusDocument, { appId, buildId });
     return build(data.execModBuildStatus);
   }
 
-  /** Polls a mod build until it succeeds or fails, like {@link waitForBuild}. */
+  /** Polls a mod build, server or CLIENT, until it succeeds or fails, like {@link waitForBuild}. */
   async waitForModBuild(
     appId: string,
     buildId: string,
@@ -1126,13 +1257,13 @@ export class ExecAPI {
     description?: string,
   ): Promise<ExecModListing> {
     const data = await this.graphql.request(ExecModPublishDocument, { appId, gridId, name, title, description });
-    return strip(data.execModPublish);
+    return listing(data.execModPublish);
   }
 
-  /** The app's listed mods, most installed first. */
+  /** The app's listed mods, most installed first, each with the CLIENT half it carries, if any. */
   async modListings(appId: string): Promise<ExecModListing[]> {
     const data = await this.graphql.request(ExecModListingsDocument, { appId });
-    return data.execModListings.map(strip);
+    return data.execModListings.map(listing);
   }
 
   /** Delists a listing you published; installed copies keep running. */
@@ -1141,7 +1272,10 @@ export class ExecAPI {
     return data.execModUnpublish;
   }
 
-  /** Installs a listing onto a grid you own as your own mod, switched off. */
+  /**
+   * Installs a listing onto a grid you own as your own mod, switched off, with the listing's
+   * CLIENT half if it has one; visitors, you too, consent to that CLIENT half afresh.
+   */
   async modInstall(appId: string, gridId: string, name: string, listingId: string): Promise<ExecMod> {
     const data = await this.graphql.request(ExecModInstallDocument, { appId, gridId, name, listingId });
     return strip(data.execModInstall);
@@ -1172,6 +1306,143 @@ export class ExecAPI {
   ): Promise<ExecModSwitch[]> {
     const data = await this.graphql.request(ExecModSetSwitchDocument, { appId, scope, off, ...options });
     return data.execModSetSwitch.map(strip);
+  }
+
+  // ---- CLIENT halves: a mod's browser half ----
+
+  /**
+   * Builds the CLIENT half of a mod from one `crowdy-client-sdk` crate: compiled for
+   * `wasm32-unknown-unknown` in the build sandbox, fuel-metered and optimized there, checked
+   * against the CLIENT ABI and at most 512 KiB, with its capability summary derived from the
+   * module. Its `Cargo.toml` may have only `[package]`, `[lib]` as a cdylib, `[dependencies]` on
+   * `crowdy-client-sdk`, `serde` and `serde_json`, and `[package.metadata.crowdy]
+   * tick_interval_ms`. Returns at once with the build queued (`kind` `client`); wait with
+   * {@link waitForModBuild}, then attach it with {@link modClientDeploy}. One build, server or
+   * CLIENT, at a time per player. Requires `write_client_code` in the app.
+   */
+  async modClientBuild(appId: string, crate: ExecCrate): Promise<ExecBuild> {
+    const data = await this.graphql.request(ExecModClientBuildDocument, { appId, crate: crateInput(crate) });
+    return build(data.execModClientBuild);
+  }
+
+  /**
+   * Attaches a succeeded CLIENT build of yours to your mod `name` on a grid you own, replacing
+   * the CLIENT half it had; its `clientVersion` rises by one. The mod must exist and run as
+   * you. A visitor's consent carries over only while the capability hash is unchanged.
+   * Requires being the grid's owner, `write_client_code` on the app tier and the grid, and the
+   * app's code admission admitting the new CLIENT version.
+   */
+  async modClientDeploy(appId: string, gridId: string, name: string, buildId: string): Promise<ExecModClient> {
+    const data = await this.graphql.request(ExecModClientDeployDocument, { appId, gridId, name, buildId });
+    const c = strip(data.execModClientDeploy);
+    return { ...c, capabilitySummary: parseCapabilities(c.capabilitySummaryJson) };
+  }
+
+  /** Detaches the CLIENT half of a mod on your grid, with every visitor's consent to it; the mod keeps running. */
+  async modClientDelete(appId: string, gridId: string, name: string): Promise<boolean> {
+    const data = await this.graphql.request(ExecModClientDeleteDocument, { appId, gridId, name });
+    return data.execModClientDelete;
+  }
+
+  /**
+   * The CLIENT halves a grid serves: those of its mods that are switched on, not stopped by the
+   * kill ladder, running as the grid's owner and admitted. Each has its capability summary and
+   * hash and whether you consented to it, and its author's union summary and hash and whether
+   * you trust them. Prompt once per author ({@link trustAuthor}) or per CLIENT half
+   * ({@link consentClientMod}), fetch with {@link modClientArtifactBytes}, cache by `digest`, and
+   * poll this to stop the CLIENT halves that are no longer listed or whose digest changed:
+   * `ExecClientHalves` does all of that for a game. Requires access to the app.
+   */
+  async gridClientMods(appId: string, gridId: string): Promise<ExecGridClientMod[]> {
+    const data = await this.graphql.request(ExecGridClientModsDocument, { appId, gridId });
+    return data.execGridClientMods.map((m) => ({
+      ...strip(m),
+      capabilitySummary: parseCapabilities(m.capabilitySummaryJson),
+      authorCapabilitySummary: parseCapabilities(m.authorCapabilitySummaryJson),
+    }));
+  }
+
+  /**
+   * Consents to run one mod's CLIENT half in your browser at `capabilityHash`, the one
+   * {@link gridClientMods} showed you. A CLIENT half whose capabilities change carries a new hash,
+   * and the consent stops holding until you consent again; a hash that is not the current one
+   * is refused as `CONFLICT` (`CrowdyGraphQLError.code`). Requires access to the app.
+   */
+  async consentClientMod(appId: string, modId: string, capabilityHash: string): Promise<boolean> {
+    const data = await this.graphql.request(ExecConsentClientModDocument, { appId, modId, capabilityHash });
+    return data.execConsentClientMod;
+  }
+
+  /**
+   * Trusts one author's CLIENT halves on a grid you stand in, at the hash of their union
+   * (`authorCapabilityHash`): the trust covers their CLIENT halves there while the union is no
+   * wider, and consents to each current one at its own hash. A hash that is not the current one
+   * is `CONFLICT`; not standing in the grid, or an author with nothing served there, is
+   * `NOT_FOUND`. Requires access to the app.
+   */
+  async trustAuthor(appId: string, gridId: string, authorId: string, capabilityHash: string): Promise<boolean> {
+    const data = await this.graphql.request(ExecTrustAuthorDocument, { appId, gridId, authorId, capabilityHash });
+    return data.execTrustAuthor;
+  }
+
+  /**
+   * A served CLIENT half's module, base64, with what the broker needs to run it. Served only to a
+   * player holding `run_client_code` in the app, standing in the mod's grid now, who consented
+   * to it at its current hash or trusts its author at a union no wider; every refusal is
+   * `NOT_FOUND`. At most 12 fetches a minute per player and mod on each API instance
+   * (`RATE_LIMITED`): the module never changes for its digest, so cache it by `digest`.
+   */
+  async modClientArtifact(appId: string, modId: string): Promise<ExecModClientArtifact> {
+    const data = await this.graphql.request(ExecModClientArtifactDocument, { appId, modId });
+    const a = strip(data.execModClientArtifact);
+    return { ...a, capabilitySummary: parseCapabilities(a.capabilitySummaryJson) };
+  }
+
+  /**
+   * {@link modClientArtifact} decoded for `PlayerCodeBroker`: the module's bytes, their SHA-256
+   * recomputed with WebCrypto, and the fuel budget as a bigint; the exec twin of
+   * `marketplace.clientArtifactBytes`. Bytes that differ from `digest`, a module built for a
+   * CLIENT ABI other than {@link EXEC_CLIENT_ABI_VERSION}, or a capability summary that does not
+   * parse are refused with a {@link CrowdyProtocolError} and never returned. Start the broker
+   * with `engine: 'ck-exec'`, `artifactHash: digest`, `fuelPerDispatch`, `tickIntervalMs` and
+   * `consentedHostCalls: capabilitySummary.hostFunctions`.
+   */
+  async modClientArtifactBytes(appId: string, modId: string): Promise<ExecModClientArtifactBytes> {
+    const a = await this.modClientArtifact(appId, modId);
+    if (a.abiVersion !== EXEC_CLIENT_ABI_VERSION) {
+      throw new CrowdyProtocolError({
+        message: `CLIENT half of mod ${a.modId} is built for CLIENT ABI ${a.abiVersion}; this SDK runs ABI ${EXEC_CLIENT_ABI_VERSION}`,
+      });
+    }
+    const capabilitySummary = a.capabilitySummary;
+    if (!capabilitySummary || !Array.isArray(capabilitySummary.hostFunctions)) {
+      throw new CrowdyProtocolError({
+        message: `CLIENT half of mod ${a.modId}: its capability summary does not parse, so nothing bounds its host calls`,
+      });
+    }
+    const bytes = fromBase64(a.wasmBase64);
+    const digest = a.digest.toLowerCase();
+    const actual = await sha256Hex(bytes);
+    if (actual !== digest) {
+      throw new CrowdyProtocolError({
+        message: `CLIENT half of mod ${a.modId}: the module's SHA-256 is ${actual}, not the digest ${digest} it was served with`,
+      });
+    }
+    return {
+      modId: a.modId,
+      name: a.name,
+      gridId: a.gridId,
+      clientVersion: a.clientVersion,
+      bytes: bytes.buffer as ArrayBuffer,
+      digest,
+      sizeBytes: a.sizeBytes,
+      fuelPerDispatch: BigInt(a.fuelPerDispatch),
+      tickIntervalMs: a.tickIntervalMs,
+      capabilitySummaryJson: a.capabilitySummaryJson,
+      capabilitySummary,
+      capabilityHash: a.capabilityHash,
+      abiVersion: a.abiVersion,
+    };
   }
 
   /** A host for this player and its connect token (valid for about a minute). */

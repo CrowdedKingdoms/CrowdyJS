@@ -197,8 +197,13 @@ export class MarketplaceAPI {
   }
 
   // -- Grid-attached client mods (D2) --------------------------------------------
+  // Superseded by ck-exec mods' CLIENT halves (`client.exec`, 17.14.0) and removed with the
+  // legacy engines in 18.0.
 
-  /** Client mods attached to a grid, with the caller's consent state. */
+  /**
+   * Client mods attached to a grid, with the caller's consent state.
+   * @deprecated Superseded by `client.exec.gridClientMods` (a ck-exec mod's CLIENT half); removed in 18.0.
+   */
   async gridClientMods(
     variables: MarketplaceGridClientModsQueryVariables,
   ): Promise<MarketplaceGridClientModsQuery['gridClientMods']> {
@@ -209,7 +214,10 @@ export class MarketplaceAPI {
     return data.gridClientMods;
   }
 
-  /** Consent to one attachment's exact capability hash (per player). */
+  /**
+   * Consent to one attachment's exact capability hash (per player).
+   * @deprecated Superseded by `client.exec.consentClientMod`; removed in 18.0.
+   */
   async consentGridClientMod(
     variables: MarketplaceConsentGridClientModMutationVariables,
   ): Promise<boolean> {
@@ -225,6 +233,7 @@ export class MarketplaceAPI {
    * Trust one author's active attachments in a grid at the exact aggregate
    * capability hash returned by `gridClientMods`. Capability widening changes
    * the hash and requires another explicit call.
+   * @deprecated Superseded by `client.exec.trustAuthor`; removed in 18.0.
    */
   async trustGridAuthor(
     variables: MarketplaceTrustGridAuthorMutationVariables,
@@ -236,7 +245,10 @@ export class MarketplaceAPI {
     return data.trustGridAuthor;
   }
 
-  /** Fetch an acquired/attached listing's client artifact (base64 + metadata). */
+  /**
+   * Fetch an acquired/attached listing's client artifact (base64 + metadata).
+   * @deprecated Superseded by `client.exec.modClientArtifact`; removed in 18.0.
+   */
   async clientArtifact(
     variables: MarketplaceClientArtifactQueryVariables,
   ): Promise<MarketplaceClientArtifactQuery['playerCodeClientArtifact']> {
@@ -251,6 +263,8 @@ export class MarketplaceAPI {
    * Fetch and decode a client artifact into broker inputs (bytes, content
    * hash, per-dispatch fuel budget) — the marketplace twin of
    * `playerCompute.artifactBytes` for acquired and grid-attached mods.
+   * @deprecated Superseded by `client.exec.modClientArtifactBytes`, which also checks the
+   * bytes against their digest; `ExecClientHalves` runs a grid's CLIENT halves. Removed in 18.0.
    */
   async clientArtifactBytes(
     variables: MarketplaceClientArtifactQueryVariables,

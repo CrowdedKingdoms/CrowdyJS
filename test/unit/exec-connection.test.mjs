@@ -323,8 +323,11 @@ test('operations pass their arguments through and drop __typename', async () => 
 
 test('starters, build and waitForBuild pass their arguments through and drop __typename', async () => {
   const seen = [];
-  const artifacts = [{ __typename: 'ExecBuildArtifact', crate: 'world-tick', digest: 'ab'.repeat(32), sizeBytes: 9 }];
-  const fields = { __typename: 'ExecBuild', buildId: 'b1', log: null, createdAt: 't', startedAt: null, finishedAt: null };
+  const artifacts = [{
+    __typename: 'ExecBuildArtifact', crate: 'world-tick', digest: 'ab'.repeat(32), sizeBytes: 9,
+    capabilitySummaryJson: null, capabilityHash: null, tickIntervalMs: null,
+  }];
+  const fields = { __typename: 'ExecBuild', buildId: 'b1', kind: 'exec', log: null, createdAt: 't', startedAt: null, finishedAt: null };
   const statuses = ['queued', 'building', 'succeeded'];
   const answers = {
     ExecStarters: () => ({
@@ -351,10 +354,13 @@ test('starters, build and waitForBuild pass their arguments through and drop __t
     { name: pack.starters[0].crate, files: pack.starters[0].files },
     { name: 'mine', files: { 'Cargo.toml': 'm', 'src/lib.rs': 'l' } },
   ]);
-  assert.deepEqual(queued, { buildId: 'b1', status: 'queued', log: null, createdAt: 't', startedAt: null, finishedAt: null, artifacts: [] });
+  assert.deepEqual(queued, { buildId: 'b1', status: 'queued', kind: 'exec', log: null, createdAt: 't', startedAt: null, finishedAt: null, artifacts: [] });
   const done = await exec.waitForBuild('77', 'b1', { intervalMs: 1 });
   assert.equal(done.status, 'succeeded');
-  assert.deepEqual(done.artifacts, [{ crate: 'world-tick', digest: 'ab'.repeat(32), sizeBytes: 9 }]);
+  assert.deepEqual(done.artifacts, [{
+    crate: 'world-tick', digest: 'ab'.repeat(32), sizeBytes: 9,
+    capabilitySummaryJson: null, capabilitySummary: null, capabilityHash: null, tickIntervalMs: null,
+  }]);
   assert.deepEqual(seen.slice(0, 2), [
     ['ExecStarters', { appId: '77' }],
     ['ExecBuild', { input: { appId: '77', crates: [
