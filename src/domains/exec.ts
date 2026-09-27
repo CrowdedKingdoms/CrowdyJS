@@ -919,7 +919,8 @@ export interface ExecModClientArtifactBytes {
   /** How often to tick it, in milliseconds (16-1000). */
   tickIntervalMs: number;
   capabilitySummaryJson: string;
-  capabilitySummary: ExecClientCapabilitySummary | null;
+  /** What the player consented to; its `hostFunctions` bound the module in the broker. */
+  capabilitySummary: ExecClientCapabilitySummary;
   capabilityHash: string;
   abiVersion: number;
 }
@@ -1400,16 +1401,23 @@ export class ExecAPI {
   /**
    * {@link modClientArtifact} decoded for `PlayerCodeBroker`: the module's bytes, their SHA-256
    * recomputed with WebCrypto, and the fuel budget as a bigint; the exec twin of
-   * `marketplace.clientArtifactBytes`. Bytes that differ from `digest`, or a module built for a
-   * CLIENT ABI other than {@link EXEC_CLIENT_ABI_VERSION}, are refused with a
-   * {@link CrowdyProtocolError} and never returned. Start the broker with `engine: 'ck-exec'`,
-   * `artifactHash: digest`, `fuelPerDispatch` and `tickIntervalMs`.
+   * `marketplace.clientArtifactBytes`. Bytes that differ from `digest`, a module built for a
+   * CLIENT ABI other than {@link EXEC_CLIENT_ABI_VERSION}, or a capability summary that does not
+   * parse are refused with a {@link CrowdyProtocolError} and never returned. Start the broker
+   * with `engine: 'ck-exec'`, `artifactHash: digest`, `fuelPerDispatch`, `tickIntervalMs` and
+   * `consentedHostCalls: capabilitySummary.hostFunctions`.
    */
   async modClientArtifactBytes(appId: string, modId: string): Promise<ExecModClientArtifactBytes> {
     const a = await this.modClientArtifact(appId, modId);
     if (a.abiVersion !== EXEC_CLIENT_ABI_VERSION) {
       throw new CrowdyProtocolError({
         message: `CLIENT half of mod ${a.modId} is built for CLIENT ABI ${a.abiVersion}; this SDK runs ABI ${EXEC_CLIENT_ABI_VERSION}`,
+      });
+    }
+    const capabilitySummary = a.capabilitySummary;
+    if (!capabilitySummary || !Array.isArray(capabilitySummary.hostFunctions)) {
+      throw new CrowdyProtocolError({
+        message: `CLIENT half of mod ${a.modId}: its capability summary does not parse, so nothing bounds its host calls`,
       });
     }
     const bytes = fromBase64(a.wasmBase64);
@@ -1431,7 +1439,7 @@ export class ExecAPI {
       fuelPerDispatch: BigInt(a.fuelPerDispatch),
       tickIntervalMs: a.tickIntervalMs,
       capabilitySummaryJson: a.capabilitySummaryJson,
-      capabilitySummary: a.capabilitySummary,
+      capabilitySummary,
       capabilityHash: a.capabilityHash,
       abiVersion: a.abiVersion,
     };

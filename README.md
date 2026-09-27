@@ -781,7 +781,9 @@ Each refresh stops the CLIENT halves whose mod is gone or whose digest, capabili
 tick interval changed, asks about the rest, and starts the consented ones in a broker with
 `engine: 'ck-exec'`. That engine allows exactly the host calls crowdy-client-sdk makes
 (`EXEC_CLIENT_HOST_CALLS`: no Game Model, sessions or `grid_state_*`), offers exactly the CLIENT
-ABI imports (`EXEC_CLIENT_ABI_IMPORTS`) and runs a module only with its digest and fuel budget.
+ABI imports (`EXEC_CLIENT_ABI_IMPORTS`) and runs a module only with its digest, its fuel budget
+and `consentedHostCalls`, the host calls of the summary the player consented to: a call outside
+them is refused, even one whose name the module assembled at run time.
 `NOT_FOUND` holds a CLIENT half back 15 s and `RATE_LIMITED` 60 s. The grid's owner is asked
 about their own CLIENT halves like anyone; answer yes in `confirm` when `prompt.authorId` is
 the player. The legacy grid-attached client mods (`marketplace.gridClientMods` and the rest)

@@ -55,10 +55,11 @@ export interface ExecClientHalfError {
   /**
    * `not-found`: not served to the player now (every refusal of the artifact, and a trust while
    * not standing in the grid); `rate-limited`: 12 fetches a minute per player and mod;
-   * `conflict`: the hash moved on; `digest-mismatch`: the bytes were refused; `failed`: anything
-   * else.
+   * `conflict`: the hash moved on; `refused`: the served module was, for bytes that differ from
+   * its digest, an unknown CLIENT ABI or a capability summary that does not parse; `failed`:
+   * anything else.
    */
-  reason: 'not-found' | 'rate-limited' | 'conflict' | 'digest-mismatch' | 'failed';
+  reason: 'not-found' | 'rate-limited' | 'conflict' | 'refused' | 'failed';
   error: unknown;
   /** When the runner fetches or starts it again (epoch ms); absent for a consent. */
   retryAt?: number;
@@ -121,7 +122,7 @@ const identity = (m: ExecGridClientMod) =>
   `${m.modId}\u0000${m.digest}\u0000${m.capabilityHash}\u0000${m.tickIntervalMs}`;
 
 function refusal(error: unknown): ExecClientHalfError['reason'] {
-  if (error instanceof CrowdyProtocolError) return 'digest-mismatch';
+  if (error instanceof CrowdyProtocolError) return 'refused';
   if (error instanceof CrowdyGraphQLError) {
     if (error.code === 'NOT_FOUND') return 'not-found';
     if (error.code === 'RATE_LIMITED') return 'rate-limited';
@@ -137,7 +138,8 @@ function refusal(error: unknown): ExecClientHalfError['reason'] {
  * whose mod is gone or whose `modId`, `digest`, `capabilityHash` or tick interval changed, asks
  * the player once per author (or per CLIENT half) about the rest, fetches each consented one
  * (`exec.modClientArtifactBytes`, which refuses bytes that differ from their digest) and runs it
- * in a `PlayerCodeBroker` with `engine: 'ck-exec'`, its fuel budget and tick interval.
+ * in a `PlayerCodeBroker` with `engine: 'ck-exec'`, its fuel budget and tick interval, bounded
+ * to the host calls of the capability summary the player consented to.
  *
  * Modules are cached by digest, since a digest never changes its bytes and the artifact query
  * allows 12 fetches a minute per player and mod. A cached module starts without a fetch, so the
@@ -322,6 +324,18 @@ export class ExecClientHalves {
     grid: ExecClientHalvesGrid,
     current: () => boolean,
   ): Promise<void> {
+    // What the player consented to bounds the module's host calls in the broker.
+    const consented = mod.capabilitySummary?.hostFunctions;
+    if (!Array.isArray(consented)) {
+      this.fail(
+        mod,
+        'start',
+        new CrowdyProtocolError({
+          message: `CLIENT half of mod ${mod.modId}: its capability summary does not parse`,
+        }),
+      );
+      return;
+    }
     let module = this.cache.get(mod.digest);
     if (module) {
       this.cache.delete(mod.digest);
@@ -356,6 +370,7 @@ export class ExecClientHalves {
       artifactHash: mod.digest,
       fuelPerDispatch: module.fuelPerDispatch,
       tickIntervalMs: mod.tickIntervalMs,
+      consentedHostCalls: consented,
       onHostCall: (call) => this.options.onHostCall(call, mod),
       onPresentation: (presentation) => this.options.onPresentation?.(presentation, mod),
       onCircuitOpen: () => {

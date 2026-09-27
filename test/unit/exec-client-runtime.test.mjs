@@ -88,6 +88,8 @@ class FakeWorker {
 }
 
 const GRID = { low: { x: 0n, y: 0n, z: 0n }, high: { x: 2n, y: 2n, z: 2n }, gridId: '5' };
+/** The capability summary's host calls the player consented to. */
+const CONSENTED = ['chunk_get', 'voxel_set', 'user_state_get', 'grid_permission_check', 'grid_info'];
 
 async function brokerFor(engine, extra = {}) {
   const worker = new FakeWorker();
@@ -100,6 +102,7 @@ async function brokerFor(engine, extra = {}) {
     artifactHash: 'f'.repeat(64),
     hashArtifact: async () => 'f'.repeat(64),
     fuelPerDispatch: 1000n,
+    consentedHostCalls: engine === 'ck-exec' ? CONSENTED : undefined,
     eventBus: null,
     onHostCall: async (call) => {
       calls.push(call.fn);
@@ -141,6 +144,21 @@ test('a ck-exec broker refuses the legacy-only calls and answers the SDK\u2019s'
   broker.stop();
 });
 
+test('a ck-exec broker refuses an SDK call outside the capability summary the player consented to', async () => {
+  const { broker, worker, calls } = await brokerFor('ck-exec');
+  // In the allowlist, but not in this module's summary: a name it assembled at run time.
+  for (const [fn, args] of [
+    ['hud_set', { payload: 'x' }],
+    ['emit_spatial', { kind: 'text', chunkX: 1, chunkY: 1, chunkZ: 1, uuidHex: 'a'.repeat(64), payloadBase64: '', distance: 1, decay: 0 }],
+  ]) {
+    const reply = await ask(worker, fn.length, fn, args);
+    assert.equal(reply.ok, false, fn);
+    assert.match(reply.error.message, /outside the capabilities the player consented to/, fn);
+  }
+  assert.deepEqual(calls, []);
+  broker.stop();
+});
+
 test('a legacy broker still answers the Game Model calls until 18.0', async () => {
   const { broker, worker, calls } = await brokerFor(undefined);
   assert.equal(worker.sent[0].engine, 'player-compute');
@@ -149,8 +167,8 @@ test('a legacy broker still answers the Game Model calls until 18.0', async () =
   broker.stop();
 });
 
-test('a ck-exec broker runs only hash-bound and metered', async () => {
-  for (const missing of ['artifactHash', 'fuelPerDispatch']) {
+test('a ck-exec broker runs only hash-bound, metered and bounded by what the player consented to', async () => {
+  for (const missing of ['artifactHash', 'fuelPerDispatch', 'consentedHostCalls']) {
     const broker = new PlayerCodeBroker({
       engine: 'ck-exec',
       workerUrl: 'glue.js',
@@ -158,10 +176,11 @@ test('a ck-exec broker runs only hash-bound and metered', async () => {
       grid: GRID,
       artifactHash: 'f'.repeat(64),
       fuelPerDispatch: 1000n,
+      consentedHostCalls: CONSENTED,
       [missing]: undefined,
       onHostCall: async () => null,
     });
-    await assert.rejects(broker.start(new ArrayBuffer(8)), /artifactHash and fuelPerDispatch/, missing);
+    await assert.rejects(broker.start(new ArrayBuffer(8)), /artifactHash, fuelPerDispatch and consentedHostCalls/, missing);
   }
 });
 

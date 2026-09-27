@@ -18,7 +18,8 @@ trust its author. It replaces the legacy grid-attached client mods, which keep w
   authorId, capabilityHash)`, `modClientArtifact(appId, modId)` and
   `modClientArtifactBytes(appId, modId)`, which decodes the module, recomputes its SHA-256 and
   refuses bytes that differ from `digest` (or a CLIENT ABI other than
-  `EXEC_CLIENT_ABI_VERSION`, 0) with a `CrowdyProtocolError`. Errors are the API's: a stale
+  `EXEC_CLIENT_ABI_VERSION`, 0, or a capability summary that does not parse) with a
+  `CrowdyProtocolError`. Errors are the API's: a stale
   hash is `CONFLICT`, every artifact refusal `NOT_FOUND`, more than 12 fetches a minute per
   player and mod `RATE_LIMITED`.
 - **Types**: `ExecBuild.kind`; `ExecBuildArtifact` (`capabilitySummaryJson`,
@@ -39,8 +40,11 @@ trust its author. It replaces the legacy grid-attached client mods, which keep w
   `sessions_list` and `grid_state_*`); the glue offers exactly `EXEC_CLIENT_ABI_IMPORTS`
   (`ck::{log,now_ms,state_get,state_set,host_call}`, `wasi_snapshot_preview1::random_get`),
   refuses a module without the `ck_fuel` meter, and the broker will not start without
-  `artifactHash` and `fuelPerDispatch`. The default, `'player-compute'`, is unchanged for
-  legacy CLIENT modules. `startGridMod`'s wasm spec takes `engine` too.
+  `artifactHash`, `fuelPerDispatch` and `consentedHostCalls` (the served capability summary's
+  `hostFunctions`). A call outside that summary is refused too: the build derives the summary by
+  scanning the module for host-call names, so a name assembled at run time would otherwise reach
+  calls the player never consented to. The default, `'player-compute'`, is unchanged for legacy
+  CLIENT modules. `startGridMod`'s wasm spec takes `engine` and `consentedHostCalls` too.
 - **Crowdy Studio's CLIENT target runs on ck-exec** with `serverEngine: 'ck-exec'` (the
   default when `exec` is present). A new CLIENT target starts from a `crowdy-client-sdk` crate
   (`createCrowdyStudioStarterProject({ engine: 'ck-exec' })`); Test draft and Deploy live

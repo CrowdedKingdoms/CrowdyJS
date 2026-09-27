@@ -64,11 +64,19 @@ export interface PlayerCodeBrokerOptions {
    * `'ck-exec'` for a mod's CLIENT half: host calls are exactly
    * {@link EXEC_CLIENT_HOST_CALLS}, the glue offers exactly the CLIENT ABI imports
    * (`ck::{log,now_ms,state_get,state_set,host_call}` and
-   * `wasi_snapshot_preview1::random_get`), and a module without the `ck_fuel` meter or a
-   * `fuelPerDispatch` does not start. `'player-compute'` (the default until 18.0) keeps a legacy
+   * `wasi_snapshot_preview1::random_get`), and a module without the `ck_fuel` meter, a
+   * `fuelPerDispatch` or {@link consentedHostCalls} does not start. `'player-compute'` (the
+   * default until 18.0) keeps a legacy
    * CLIENT module's whole {@link ALLOWED_HOST_CALLS} and import table.
    */
   engine?: PlayerCodeEngine;
+  /**
+   * The host calls the player consented to: the served CLIENT half's
+   * `capabilitySummary.hostFunctions`. Required with `engine: 'ck-exec'`. A call outside it is
+   * refused like one outside the allowlist, so a module that assembles a host call's name at run
+   * time, which the build's summary cannot see, still reaches only what the player agreed to.
+   */
+  consentedHostCalls?: readonly string[];
   /**
    * Content hash of the platform-fetched artifact. When set, start() refuses
    * any artifact whose hash does not match — a side-loaded module cannot be
@@ -254,6 +262,9 @@ export class PlayerCodeBroker {
     | { generation: number; id: number; kind: string }
     | null = null;
 
+  private readonly consented: ReadonlySet<string> | null = this.options.consentedHostCalls
+    ? new Set(this.options.consentedHostCalls)
+    : null;
   private busUnsubscribe: (() => void) | null = null;
   private deliveringEventDepth = 0;
   private readonly busSubscriber = {
@@ -350,10 +361,12 @@ export class PlayerCodeBroker {
     }
     if (
       this.options.engine === 'ck-exec' &&
-      (!this.options.artifactHash || !this.options.fuelPerDispatch)
+      (!this.options.artifactHash ||
+        !this.options.fuelPerDispatch ||
+        !Array.isArray(this.options.consentedHostCalls))
     ) {
       throw new Error(
-        'a ck-exec CLIENT half runs only with the artifactHash and fuelPerDispatch it was served with',
+        'a ck-exec CLIENT half runs only with the artifactHash, fuelPerDispatch and consentedHostCalls it was served with',
       );
     }
     const lifecycleVersion = ++this.lifecycleVersion;
@@ -484,6 +497,9 @@ export class PlayerCodeBroker {
       const group = FN_TO_GROUP[this.options.engine ?? 'player-compute'].get(raw.fn);
       if (!group) {
         throw new Error('host call is not allowed in the player browser sandbox');
+      }
+      if (this.consented && !this.consented.has(raw.fn)) {
+        throw new Error('host call is outside the capabilities the player consented to');
       }
       if (!isPlainRecord(raw.args)) {
         // Confused-deputy guard: reject malformed payloads outright rather

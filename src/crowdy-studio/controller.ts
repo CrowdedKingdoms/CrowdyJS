@@ -1777,6 +1777,7 @@ export class CrowdyStudioController {
         moduleName: half.name,
         artifactHash: half.digest,
         fuelPerDispatch: half.fuelPerDispatch,
+        consentedHostCalls: half.capabilitySummary.hostFunctions,
         onPresentation: this.options.onPresentation,
         tickIntervalMs: this.options.clientTickIntervalMs ?? half.tickIntervalMs,
       };

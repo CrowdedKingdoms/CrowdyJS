@@ -26,8 +26,10 @@ keyed by `modId` + `digest` + `capabilityHash` (+ tick interval), one prompt per
 mod, a module cache by digest, `NOT_FOUND` / `RATE_LIMITED` backoff. `PlayerCodeBroker({ engine:
 'ck-exec' })` allows exactly `EXEC_CLIENT_HOST_CALLS` (the client catalog less the `model`
 group, `sessions_list` and `grid_state_*`, what crowdy-client-sdk calls) and the glue offers
-exactly `EXEC_CLIENT_ABI_IMPORTS` and requires the `ck_fuel` meter; the default engine,
-`'player-compute'`, keeps the legacy catalog until 18.0. Crowdy Studio's CLIENT target runs on
+exactly `EXEC_CLIENT_ABI_IMPORTS` and requires the `ck_fuel` meter; the broker also refuses
+calls outside `consentedHostCalls` (the served summary's `hostFunctions`, required with
+ck-exec), since the build derives the summary by a byte scan that a name assembled at run time
+escapes. The default engine, `'player-compute'`, keeps the legacy catalog until 18.0. Crowdy Studio's CLIENT target runs on
 ck-exec with `serverEngine: 'ck-exec'`: a crowdy-client-sdk starter, `modClientBuild`, attach to
 the project's mod, consent as its author, and a preview from the served artifact; a CLIENT-only
 project rides the mod named for its CLIENT module and deploys the mod starter under that name

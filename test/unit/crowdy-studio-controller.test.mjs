@@ -559,7 +559,8 @@ function execMods(calls, overrides = {}) {
       return {
         modId, name: 'weather-server', gridId: '500', clientVersion: 4, bytes: new Uint8Array([0, 97, 115, 109]).buffer,
         digest: CLIENT_DIGEST, sizeBytes: 4, fuelPerDispatch: 7_000n, tickIntervalMs: 250,
-        capabilitySummaryJson: '{}', capabilitySummary: {}, capabilityHash: CLIENT_HASH, abiVersion: 0,
+        capabilitySummaryJson: '{"hostFunctions":["hud_set"]}', capabilitySummary: { hostFunctions: ['hud_set'] },
+        capabilityHash: CLIENT_HASH, abiVersion: 0,
       };
     },
     ...overrides,
@@ -1275,6 +1276,7 @@ test('on ck-exec a full-stack deploy builds the CLIENT half first, then the mod,
   assert.equal(made[0].fuelPerDispatch, 7_000n);
   assert.equal(made[0].tickIntervalMs, 250, 'the served CLIENT half\u2019s tick interval');
   assert.equal(made[0].moduleName, 'weather-server', 'its name on the grid event bus is its mod\u2019s');
+  assert.deepEqual(made[0].consentedHostCalls, ['hud_set'], 'bounded to the summary the author consented to');
   const log = controller.getState().buildOutput;
   assert.match(log, /## CLIENT\nweather-client: capabilities/);
   assert.match(log, /Attached to mod 'weather-server' as CLIENT version 4/);

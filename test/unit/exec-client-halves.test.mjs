@@ -203,6 +203,11 @@ test('modClientArtifactBytes refuses bytes that differ from the digest, and an A
   await assert.rejects(future.exec.modClientArtifactBytes('77', '900'), (e) => e instanceof CrowdyProtocolError && /ABI 1/.test(e.message));
 });
 
+test('modClientArtifactBytes refuses a capability summary that does not parse: nothing would bound the module', async () => {
+  const { exec } = fakeExec({ ExecModClientArtifact: artifactAnswer({ capabilitySummaryJson: '{"version":1' }) });
+  await assert.rejects(exec.modClientArtifactBytes('77', '900'), (e) => e instanceof CrowdyProtocolError && /does not parse/.test(e.message));
+});
+
 test('modClientArtifactBytes passes NOT_FOUND and RATE_LIMITED through untouched', async () => {
   for (const code of ['NOT_FOUND', 'RATE_LIMITED']) {
     const { exec } = fakeExec({
@@ -337,6 +342,7 @@ test('the runner runs what the player consented to, without asking, in a ck-exec
   assert.equal(options.fuelPerDispatch, 5_000n);
   assert.equal(options.tickIntervalMs, 250);
   assert.equal(options.moduleName, 'mod-1');
+  assert.deepEqual(options.consentedHostCalls, ['hud_set'], 'bounded to the summary the player consented to');
   assert.equal(options.workerUrl, 'glue.js');
   assert.deepEqual(options.grid, { low: GRID.low, high: GRID.high, gridId: '5' });
   assert.deepEqual([...made[0].bytes], [...state.mods[0].wasm]);
@@ -491,8 +497,18 @@ test('bytes that differ from their digest never reach a broker', async () => {
   const { halves, events, made } = runner(exec);
   halves.enterGrid(GRID);
   await halves.refresh();
-  assert.deepEqual(events, [['error', '1', 'fetch', 'digest-mismatch']]);
+  assert.deepEqual(events, [['error', '1', 'fetch', 'refused']]);
   assert.equal(made.length, 0);
+});
+
+test('a listed CLIENT half whose summary does not parse is never fetched or started', async () => {
+  const { state, exec } = fakeGrid([listed('1', { callerConsented: true, capabilitySummary: null })]);
+  const { halves, events, made } = runner(exec);
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  assert.deepEqual(events, [['error', '1', 'start', 'refused']]);
+  assert.equal(made.length, 0);
+  assert.equal(state.calls.filter(([op]) => op === 'fetch').length, 0);
 });
 
 test('a trust refused while the player is not yet in the grid is retried without asking again', async () => {
