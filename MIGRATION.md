@@ -1,3 +1,88 @@
+# CrowdyJS v18 — the legacy engines are gone
+
+**Breaking.** The game API deleted its legacy developer-code engines on dev (cks-game-api #417,
+ck-api `v2.27.0`): Studio compute, the game model and its automations, player compute (its
+browser CLIENT modules too) and the player model. `18.0.0` removes their SDK surface. Their
+code moves to ck-exec (`client.exec`): an app's server code as hubs and spokes, a player's grid
+code as mods, and a mod's browser code as its CLIENT half. Nothing is migrated for you; port the
+code, then upgrade.
+
+**What it needs.** 18.0.0 calls nothing the legacy engines served, so it runs against any API
+with ck-exec CLIENT halves (ck-api `v2.24.0`, as 17.14.0 did). **Crowdy Studio's CLIENT
+projects need ck-api `v2.25.1` or later:** `v2.24.0` and `v2.25.0` refuse to save a
+`crowdy-client-sdk` crate in a Studio project (`CROWDY_STUDIO_MANIFEST_INVALID`, cks-game-api
+#425). The other way round, a 17.x SDK against `v2.27.0` fails every call into a deleted field
+as a GraphQL validation error.
+
+| 17.x | 18.0 |
+| --- | --- |
+| `client.gameModel` (containers, properties, functions, `invoke`, sessions, events, timers, automations, `seed`, lint, the player-count feed) | A hub's own state and endpoints: `client.exec.connect(appId, { nodeType, key })`, then `call` / `subscribe`; timers are `ctx.timer_after` / `ctx.timer_every` in the hub; sessions are a keyed hub (the `session` starter) |
+| `gameModel.defineFeature`, `grantTierFeature`, `revokeTierFeature`, `features`, `tierFeatures` | `client.appAccess.defineFeature`, `grantTierFeature`, `revokeTierFeature`, `features(appId)`, `tierFeatures(appId, tierId?)` (same fields; a hub reads them with `players.features`) |
+| `client.compute` (modules, `invoke`, templates, runs, logs) | `client.exec.starters` / `build` / `waitForBuild` / `deploy`, `logs`, `instances`, `versions`, `activateVersion`, `setEnabled`; manual calls through `connectAsDeveloper` |
+| `client.playerModel` (containers, automations) | A mod's own state and timers |
+| `client.playerCompute` SERVER side (`deploy` with `target: SERVER`, `setEnabled`, `setRequires`, `invoke`, `runs`, `logs`) | Mods: `client.exec.modBuild` / `waitForModBuild` / `modDeploy` / `modSetEnabled`, calls through `connect(appId, { nodeType: execModType(name), key: gridId })`, `modLogs` |
+| `client.playerCompute` CLIENT modules (`deploy`, `versions`, `artifact`, `artifactBytes`, `usage`, `myModules`, `delete`, `setSwitch`, `switches`) | A mod's CLIENT half: `client.exec.modClientBuild` (polled with `modBuildStatus` / `waitForModBuild`), `modClientDeploy` / `modClientDelete`, `modClientArtifactBytes`; its kill ladder is the mod's, `modSetSwitch` |
+| `marketplace.gridClientMods`, `consentGridClientMod`, `trustGridAuthor`, `clientArtifact`, `clientArtifactBytes`, and `client.grid(...).compute.clientMods` | `client.exec.gridClientMods`, `consentClientMod`, `trustAuthor`, `modClientArtifactBytes` (which checks the bytes against their digest); `ExecClientHalves` runs a grid's CLIENT halves |
+| `marketplace.listings` / `versions` / `publishListing` / `publishVersion` / `acquire` / `install` / `uninstall` / `myAcquisitions` / `myInstalls` | `client.exec.modPublish` / `modListings` / `modInstall` / `modUnpublish`; a listing carries its mod's CLIENT half |
+| `playerWallet.policies` / `setPolicy` / `deletePolicy` (`playerWasmPolicies`) | Mods run under the platform's mod limits; the kill ladder is `client.exec.modSetSwitch` |
+| `client.operator` (`computePlatformCeilings`, `setComputePlatformCeilings`) | ck-exec code is bounded by its manifest limits within the platform's; there is nothing to call |
+| `client.kit(appId)` blueprints, `kit.deploy`, engines, `kit.inventory` … `kit.minigames`, `kit.features` | Hubs; the starters for NPCs and mobs, sessions and matchmaking. `kit.social` stays; `kit/wire.ts` codecs and `runOptimisticAction` stay |
+| `createWorldSession({ model })` (`ContainerMirror`) | Subscribe to the hub's topic |
+| `client.grid(...).sessions`, `.model`, `.compute` | A mod on the grid (`client.exec.mod*`) |
+| `PlayerCodeBroker` / `startGridMod` without `engine` (a legacy CLIENT module: unmetered, with the whole client catalog), `ALLOWED_HOST_CALLS` | A CLIENT half, the only kind of player module: `artifactHash`, `fuelPerDispatch` and `consentedHostCalls` are required, the allowlist is `EXEC_CLIENT_HOST_CALLS`, and the module must carry the `ck_fuel` meter |
+| `MODEL_LINT_QUERY`, `modelLintDiagnostics`, `CrowdyModelLintLog`, the `'model-lint'` diagnostic source | The Rust compiler's diagnostics from the build |
+
+- **The player runtime runs CLIENT halves only.** `PlayerCodeBroker`'s `artifactHash` (the
+  served `digest`), `fuelPerDispatch` and `consentedHostCalls` are required, and `engine` is
+  `'ck-exec'` or absent; a broker without them, or asked for another engine, does not start.
+  The glue offers exactly `EXEC_CLIENT_ABI_IMPORTS` and refuses a module without the `ck_fuel`
+  meter; its inert wasi stubs and the `wasi_unstable` alias are gone. `ALLOWED_HOST_CALLS` is
+  gone, and `GLUE_HOST_FUNCTIONS` names the CLIENT allowlist. `startGridMod`'s wasm spec needs
+  the same three values.
+- **CLIENT host calls the legacy engines answered are refused** by the broker as not allowed:
+  the Game Model group (`container_*`, `containers_list`, `property_set`, `edge_*`,
+  `model_invoke`), `sessions_list`, and `grid_state_get` / `grid_state_set`. A mod's server
+  half, a hub keyed by the grid, holds grid state now. `createGridHostCalls` / `startGridMod`
+  lost `allowModelInvoke` and the client's `gameModel`.
+- **What a CLIENT half says and answers, on the page** (new):
+  - `onLog`: its `crowdy::log` lines (crowdy-client-sdk levels 0 debug, 1 info, 2 warn,
+    3 error), at most `PLAYER_CODE_LOG_LINES_PER_SECOND` (20) a second and
+    `PLAYER_CODE_LOG_MAX_CHARS` (1,000) characters each, then a `warn` counting what was
+    dropped. On `PlayerCodeBroker`, `ExecClientHalves` (with the mod) and `startGridMod`. The
+    text is the mod author's: render it as text. Crowdy Studio shows its preview's lines in
+    Logs.
+  - `invoke(payload)`: the module's `handle_invoke` export, called by the page:
+    `PlayerCodeBroker.invoke`, `ExecClientHalves.invoke(modId, payload)` and
+    `RunningGridMod.invoke`, up to `PLAYER_CODE_INVOKE_MAX_BYTES` (256 KiB) each way. The reply
+    is the module's: treat it as untrusted input.
+  - `createGridHostCalls` answers `avatar_state_get` and `grid_permission_check` as the host
+    catalog scopes them: an avatar whose live actor the game places inside the grid
+    (`local.avatarChunk`, then the public `avatarAppState`), and the visiting player
+    (`userId`) on this grid, from the permission keys the game knows
+    (`local.gridPermissionKeys`). Without those they are refused as not offered, as
+    `actors_list` is without `local.actorsInChunk`.
+- **Crowdy Studio runs on ck-exec only.** Drop `serverEngine` from the embed, the controller
+  and `mountCrowdyStudio`, and `playerCompute` from the embed's services and the controller's
+  and `mountCrowdyStudio`'s options (`CrowdyStudioPlayerCompute` is gone); they require
+  `mods: client.exec`, and the embed requires `client.exec`. `CrowdyStudioState` loses
+  `serverEngine`, `runs` (the Runs panel went) and `usage` (`CrowdyStudioUsageSnapshot`:
+  nothing on ck-exec spends player compute quota, and the `'usage'` surface reads the
+  wallet); `logs` are `CrowdyStudioLogLine`s (`id`, `source` `'mod' | 'preview'`,
+  `moduleName`, `level`, `at`, `text`); `CrowdyStudioInvokeResult` is
+  `{ resultJson, durationUs }`. `createCrowdyStudioStarterProject` needs `modStarter` for a
+  kind with a SERVER target and has no `engine`: a CLIENT target is a `crowdy-client-sdk`
+  CLIENT half. The pairing control went: a mod has no pairing.
+- A CLIENT crate still on `crowdy-compute-sdk` is refused before any build, with what to
+  change: `crowdy-client-sdk = "0.1.0"` in `Cargo.toml` and `crowdy_client_sdk` in place of
+  `crowdy_compute_sdk` in `src/`. Its host calls are the same less the Game Model, sessions and
+  grid state (`grid_state_get` / `grid_state_set`).
+- `ENGINE_SWITCHED_OFF` left `CrowdyFaultCode`: nothing raises it now.
+- The kit's type-98 parser is `parseZoneChangeEvent` beside the other wire parsers.
+
+`schema.gql` and the generated types follow the game API: the release carries cks-game-api
+`dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
+`npm run codegen`).
+
 # 17.14.0 ck-exec CLIENT halves
 
 Dev-tier preview (cks-game-api #422, P3 W1). **The release needs a game API that has #422:**
@@ -65,8 +150,14 @@ trust its author. It replaces the legacy grid-attached client mods, which keep w
 Existing CLIENT projects keep their files: a CLIENT crate on `crowdy-compute-sdk` is refused on
 ck-exec before any build, with what to change (the SDK line becomes
 `crowdy-client-sdk = "0.1.0"`, `crowdy_compute_sdk` becomes `crowdy_client_sdk`; the host
-calls are the same less the Game Model and sessions). `serverEngine: 'player-compute'` keeps
+calls are the same less the Game Model, sessions and grid state, `grid_state_get` /
+`grid_state_set`, which a mod's server half holds now). `serverEngine: 'player-compute'` keeps
 both targets on legacy player compute until 18.0.
+
+**Studio's CLIENT target on ck-exec needs ck-api `v2.25.1` or later.** `v2.24.0` and
+`v2.25.0` refuse to save a `crowdy-client-sdk` crate in a Studio project
+(`CROWDY_STUDIO_MANIFEST_INVALID`, cks-game-api #425), so a CLIENT project cannot start there;
+the SDK calls themselves need only `v2.24.0`.
 
 # 17.13.0 ck-exec observability
 

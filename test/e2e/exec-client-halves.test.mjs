@@ -82,7 +82,7 @@ test('CLIENT halves: build, attach, list, consent, fetch, detach', { skip, timeo
 
     // Studio's CLIENT starter, built as a CLIENT half.
     const starterProject = createCrowdyStudioStarterProject({
-      appId, gridId, name: 'e2e hud', kind: 'CLIENT', engine: 'ck-exec',
+      appId, gridId, name: 'e2e hud', kind: 'CLIENT',
     });
     const queued = await exec.modClientBuild(appId, {
       name: `${name}-client`,

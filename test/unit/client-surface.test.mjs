@@ -44,20 +44,20 @@ test('client exposes the full management + game sub-client surface', async () =>
   // Existing client-facing sub-clients still present.
   for (const k of [
     'auth', 'users', 'apps', 'platform', 'chunks', 'voxels', 'actors',
-    'teleport', 'state', 'serverStatus', 'channels', 'teams', 'udp', 'gameModel',
+    'teleport', 'state', 'serverStatus', 'channels', 'teams', 'udp', 'exec',
   ]) {
     assert.ok(client[k], `client.${k} should exist`);
   }
 
-  // Compute Modules (server-side Rust/WASM logic).
-  assertMethods(client.compute, 'compute', [
-    'upsertModule', 'deployVersion', 'setModuleEnabled', 'deleteModule',
-    'upsertTrigger', 'deleteTrigger', 'setPolicy', 'invoke', 'waitForCompile',
-    'modules', 'module', 'moduleVersions', 'moduleTriggers', 'modulePolicy',
-    'moduleRuns', 'moduleStats', 'moduleLogs', 'appDiagnostics',
-  ]);
-  assertMethods(client.playerCompute, 'playerCompute', [
-    'deploy', 'setEnabled', 'invoke', 'myModules', 'versions', 'delete',
+  // The legacy engines' domains went in 18.0.0: ck-exec (`client.exec`) replaced the game
+  // model, its automations, Studio compute and player compute (its CLIENT modules too, by a
+  // mod's CLIENT half); the operator surface held only the legacy compute ceilings.
+  for (const removed of ['gameModel', 'compute', 'playerModel', 'playerCompute', 'operator']) {
+    assert.equal(client[removed], undefined, `client.${removed} was removed in 18.0.0`);
+  }
+  assertMethods(client.exec, 'exec', [
+    'modClientBuild', 'modClientDeploy', 'modClientDelete', 'gridClientMods',
+    'consentClientMod', 'trustAuthor', 'modClientArtifact', 'modClientArtifactBytes',
   ]);
   assertMethods(client.crowdyStudio, 'crowdyStudio', [
     'listProjects', 'getProject', 'createProject', 'saveProject',
@@ -71,27 +71,26 @@ test('client exposes the full management + game sub-client surface', async () =>
     'status', 'connectUrl', 'repos', 'bind', 'unbind', 'refresh', 'layout', 'tree', 'getFile', 'putFile', 'deleteFile',
   ]);
   assert.equal(client[['player', 'Code', 'Projects'].join('')], undefined);
-  // P4a marketplace (free mode): store + installs + consent + claim flows
-  // (game API) and studio moderation (management API).
+  // Grid claim flows and studio moderation; the player-facing listings and grid
+  // attachments went with player compute in 18.0.0.
   assertMethods(client.marketplace, 'marketplace', [
-    'listings', 'versions', 'myAcquisitions', 'myInstalls',
-    'publishListing', 'publishVersion', 'acquire', 'install', 'uninstall',
-    'gridClientMods', 'consentGridClientMod', 'clientArtifact',
-    'clientArtifactBytes', 'gridClaimPolicy', 'gridClaimRequests',
+    'gridClaimPolicy', 'gridClaimRequests',
     'claimGridOwnership', 'claimGridChunk', 'releaseClaimedGrid',
     'decideGridClaim', 'issueGridClaimInvite',
     'admissionQueue', 'appListings', 'appAcquisitions', 'transferListing',
     'setListingStatus', 'setGridClaimPolicy',
   ]);
-  assertMethods(client.playerModel, 'playerModel', [
-    'containers', 'container', 'createContainer', 'setProperty',
-    'deleteContainer', 'automations', 'createAutomation',
-    'setAutomationEnabled', 'deleteAutomation',
-  ]);
+  for (const removed of ['listings', 'acquire', 'install', 'gridClientMods', 'clientArtifact']) {
+    assert.equal(client.marketplace[removed], undefined, `marketplace.${removed} was removed in 18.0.0`);
+  }
 
   // New management admin sub-clients.
   assertMethods(client.organizations, 'organizations', ['get', 'bySlug', 'mine', 'create', 'createToken', 'inviteMember', 'createRole']);
-  assertMethods(client.appAccess, 'appAccess', ['tiers', 'myAccess', 'createTier', 'grant', 'revoke']);
+  assertMethods(client.appAccess, 'appAccess', [
+    'tiers', 'myAccess', 'createTier', 'grant', 'revoke',
+    // Tier features, beside access tiers since 18.0.0.
+    'defineFeature', 'features', 'grantTierFeature', 'revokeTierFeature', 'tierFeatures',
+  ]);
   assertMethods(client.billing, 'billing', ['walletBalance', 'walletTransactions', 'appBudget', 'setAppBudget']);
   assertMethods(client.payments, 'payments', ['create', 'mine', 'all']);
   assertMethods(client.quotas, 'quotas', ['forOrg', 'forApp', 'effective', 'set', 'remove']);
@@ -100,21 +99,14 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.usage, 'usage', ['appGraphqlOperations', 'appSummary', 'playerPulse']);
   assertMethods(client.sharedEnvironment, 'sharedEnvironment', ['plans', 'freeAppQuota', 'appRuntimeState', 'publishApp', 'setSpendCaps', 'setAutoBilling']);
 
-  // Operator (control-plane) surface.
-  assertMethods(client.operator, 'operator', ['computePlatformCeilings', 'setComputePlatformCeilings']);
+  // The player WASM policies went with player compute; the wallet stays.
+  for (const removed of ['policies', 'setPolicy', 'deletePolicy']) {
+    assert.equal(client.playerWallet[removed], undefined, `playerWallet.${removed} was removed in 18.0.0`);
+  }
 
   // New game-side sub-clients.
   assertMethods(client.avatars, 'avatars', ['listForUser', 'get', 'mine', 'appState', 'create', 'update', 'delete', 'updateState', 'updateAppState']);
   assertMethods(client.host, 'host', ['get', 'heartbeat']);
-  assertMethods(client.gameModel, 'gameModel', [
-    'activePlayerCount', 'activePlayerCountChanged',
-    'scheduleInvoke', 'cancelTimer', 'timers',
-    // The session system (17.2.0): roster, admission, host, revisions.
-    'createSession', 'joinSession', 'leaveSession', 'setSessionTurn',
-    'setSessionAdmission', 'transferSessionHost', 'endSession',
-    'session', 'sessions', 'sessionSnapshot', 'sessionEvents', 'sessionInspect',
-    'sessionChanged',
-  ]);
   assertMethods(client.gameApps, 'gameApps', [
     'ownership', 'assignOwnership', 'transferOwnership', 'userPermissions',
     'nearbyPermissions', 'permissionLimits', 'createGrid', 'grantPermissions',
@@ -182,58 +174,10 @@ test('client exposes the full management + game sub-client surface', async () =>
     'myAuthorizedApps', 'setAppClientSettings',
   ]);
 
-  // Game Kit facade (app-scoped, over gameModel).
+  // Game Kit: only the social helpers outlived the game model (18.0.0).
   const kit = client.kit('1');
-  assertMethods(kit, 'kit', ['deploy', 'objectsFor']);
-  assertMethods(kit.inventory, 'kit.inventory', [
-    'ensure', 'stacks', 'createStack', 'grant', 'consume', 'move', 'transfer',
-    'linkStack', 'contents',
-  ]);
-  assertMethods(kit.objects, 'kit.objects', [
-    'create', 'grantKey', 'keysOf', 'open', 'close', 'isOpen', 'list',
-  ]);
-  assertMethods(kit.npcs, 'kit.npcs', [
-    'spawn', 'list', 'state', 'runNow', 'setEnabled', 'stats', 'runs',
-  ]);
-  assertMethods(kit.plots, 'kit.plots', [
-    'create', 'list', 'buy', 'rent', 'evict', 'accessOf',
-  ]);
-  assertMethods(kit.economy, 'kit.economy', [
-    'ensureWallet', 'balance', 'wallet', 'earn', 'spend',
-  ]);
-  assertMethods(kit.economy.shop, 'kit.economy.shop', ['create', 'list', 'buy']);
-  assertMethods(kit.economy.trades, 'kit.economy.trades', [
-    'offer', 'accept', 'cancel', 'get', 'listMine',
-  ]);
-  assertMethods(kit.economy.market, 'kit.economy.market', [
-    'list', 'browse', 'buy', 'cancel',
-  ]);
-  assertMethods(kit.loot, 'kit.loot', [
-    'createRoll', 'roll', 'claim', 'state', 'rolls', 'history',
-  ]);
-  assertMethods(kit.progression, 'kit.progression', [
-    'ensure', 'state', 'grantXp', 'skillCatalog', 'defineSkill', 'ensureSkillRank',
-    'buySkill', 'skills', 'achievementCatalog', 'defineAchievement', 'achievements',
-    'unlockAchievement', 'applyMatchResult',
-  ]);
-  assertMethods(kit.quests, 'kit.quests', [
-    'catalog', 'defineQuest', 'accept', 'mine', 'state', 'advance', 'claim',
-  ]);
-  assertMethods(kit.combat, 'kit.combat', [
-    'spawnCombatant', 'state', 'attack', 'applyEffect', 'effects', 'respawn',
-    'revive', 'syncCombatant',
-  ]);
-  assertMethods(kit.matches, 'kit.matches', [
-    'create', 'open', 'get', 'join', 'leave', 'start', 'advanceRound', 'myTurn', 'endTurn',
-    'ensureScore', 'score', 'standings', 'finish', 'notifyChanged', 'onMatchChanged',
-  ]);
-  assertMethods(kit.decks, 'kit.decks', [
-    'deal', 'shuffle', 'cards', 'myHand', 'board', 'draw', 'drawCard', 'play', 'discard',
-  ]);
-  assertMethods(kit.worldsim, 'kit.worldsim', [
-    'ensureWorld', 'worldState', 'setWeather', 'createNode', 'nodes', 'gather',
-    'plant', 'crops', 'harvest', 'createSpawner', 'spawners', 'runNow', 'setEnabled',
-  ]);
+  assert.equal(kit.deploy, undefined, 'kit.deploy was removed in 18.0.0');
+  assert.equal(kit.inventory, undefined, 'the model-backed kit helpers were removed in 18.0.0');
   assertMethods(kit.social.party, 'kit.social.party', [
     'create', 'find', 'invite', 'join', 'leave', 'members',
   ]);
@@ -242,12 +186,6 @@ test('client exposes the full management + game sub-client surface', async () =>
   ]);
   assertMethods(kit.social.chat, 'kit.social.chat', [
     'room', 'join', 'send', 'onMessage',
-  ]);
-  assertMethods(kit.leaderboards, 'kit.leaderboards', [
-    'ensureEntry', 'submit', 'board', 'top', 'around', 'season',
-  ]);
-  assertMethods(kit.features, 'kit.features', [
-    'define', 'list', 'grantToTier', 'revokeFromTier', 'tierFeatures', 'gate',
   ]);
 
   // Admin grouping facade points at the same instances.
@@ -349,7 +287,7 @@ test('marketplace chunk claim wrappers map variables, results, and documents', a
 // there is one endpoint, so what is worth pinning is that every wrapper still sends
 // the right variables — and that both families reach the SAME client, which is what
 // actually broke when the management client was removed.
-test('player runtime and app-admission wrappers send the right variables on one client', async () => {
+test('grid ownership and app-admission wrappers send the right variables on one client', async () => {
   const { createCrowdyClient, CodeAdmissionMode } = await loadSdk();
   const client = createCrowdyClient({
     httpUrl: 'https://game.invalid',
@@ -359,11 +297,6 @@ test('player runtime and app-admission wrappers send the right variables on one 
     { gridOwnership: { gridOwnershipId: 'ownership-1' } },
     { assignGridOwnership: { gridOwnershipId: 'ownership-2' } },
     { transferGridOwnership: { gridOwnershipId: 'ownership-3' } },
-    { playerComputeDeploy: { versionId: 'version-1' } },
-    { playerComputeSetEnabled: { moduleId: 'module-1' } },
-    { playerComputeMyModules: [{ moduleId: 'module-1' }] },
-    { playerComputeVersions: [{ versionId: 'version-1' }] },
-    { playerComputeDelete: true },
     { appCodeAdmissionMode: CodeAdmissionMode.ImplicitAllow },
     { appCodeAdmissions: [{ admissionId: 'admission-1' }] },
     { setAppCodeAdmissionMode: CodeAdmissionMode.AllowList },
@@ -378,15 +311,6 @@ test('player runtime and app-admission wrappers send the right variables on one 
   await client.gameApps.ownership('1', '2');
   await client.gameApps.assignOwnership({ appId: '1', gridId: '2', ownerUserId: '3' });
   await client.gameApps.transferOwnership({ appId: '1', gridId: '2', newOwnerUserId: '4' });
-  await client.playerCompute.deploy({
-    appId: '1', gridId: '2', projectId: 'p1', name: 'weather', target: 'SERVER',
-  });
-  await client.playerCompute.setEnabled({
-    appId: '1', gridId: '2', name: 'weather', enabled: true,
-  });
-  await client.playerCompute.myModules({ appId: '1' });
-  await client.playerCompute.versions({ appId: '1', gridId: '2', name: 'weather' });
-  await client.playerCompute.delete({ appId: '1', gridId: '2', name: 'weather' });
 
   await client.apps.codeAdmissionMode('1');
   await client.apps.codeAdmissions('1', true);
@@ -396,14 +320,11 @@ test('player runtime and app-admission wrappers send the right variables on one 
   });
   await client.apps.revokeCodeAdmission('1', 'admission-2');
 
-  // All 13 landed on the one client; a wrapper wired to a second client would
+  // All 8 landed on the one client; a wrapper wired to a second client would
   // short this list rather than fail an assertion.
-  assert.equal(calls.length, 13);
+  assert.equal(calls.length, 8);
   assert.deepEqual(calls[0], { appId: '1', gridId: '2' });
-  assert.deepEqual(calls[4], {
-    appId: '1', gridId: '2', name: 'weather', enabled: true,
-  });
-  assert.deepEqual(calls.slice(8), [
+  assert.deepEqual(calls.slice(3), [
     { appId: '1' },
     { appId: '1', includeRevoked: true },
     { appId: '1', mode: CodeAdmissionMode.AllowList },
@@ -437,7 +358,6 @@ test('World Stores session exposes exactly the configured stores', async () => {
     host: { heartbeatImmediately: false },
     save: true,
     avatar: true,
-    model: true,
   });
 
   assert.equal(session.appId, '1');
@@ -466,14 +386,12 @@ test('World Stores session exposes exactly the configured stores', async () => {
   assertMethods(session.avatar, 'session.avatar', [
     'load', 'setIdentityState', 'setAppState',
   ]);
-  assertMethods(session.model, 'session.model', [
-    'watch', 'unwatch', 'get', 'list', 'onChange', 'bindToChannel', 'refresh', 'refreshAll',
-  ]);
+  assert.equal(session.model, undefined, 'the game-model mirror was removed in 18.0.0');
 
   // Unconfigured stores are absent at runtime too.
   const bare = createWorldSession(client, '1', { ticker: manualTicker() });
   for (const key of ['self', 'actors', 'errors', 'chunks', 'channelInbox',
-    'actorInbox', 'events', 'host', 'save', 'avatar', 'model']) {
+    'actorInbox', 'events', 'host', 'save', 'avatar']) {
     assert.equal(bare[key], undefined, `bare session has no ${key}`);
   }
 

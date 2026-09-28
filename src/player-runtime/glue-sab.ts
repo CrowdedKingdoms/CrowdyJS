@@ -1,6 +1,6 @@
 /**
- * The synchronous host-call transport for browser-target player WASM
- * (player compute P5). WASM imports are synchronous, but the host-call
+ * The synchronous host-call transport for a CLIENT half's browser WASM.
+ * WASM imports are synchronous, but the host-call
  * handler (the server-authorized SDK path) is async and lives on the page,
  * while the guest runs in a Worker. The only correct bridge is a
  * SharedArrayBuffer the worker blocks on with `Atomics.wait`: the worker

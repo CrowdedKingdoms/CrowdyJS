@@ -9,6 +9,7 @@ import {
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
   type PlayerCodeHostCall,
+  type PlayerCodeLogLine,
   type PlayerCodePresentation,
 } from '../player-runtime/player-code-broker.js';
 
@@ -69,6 +70,8 @@ export interface ExecClientHalfError {
 export interface ExecClientHalfBroker {
   start(artifact: ArrayBuffer): Promise<void>;
   stop(): void;
+  /** `PlayerCodeBroker.invoke`: the module's `handle_invoke`. */
+  invoke?(payload: Uint8Array, options?: { timeoutMs?: number }): Promise<Uint8Array>;
 }
 
 export interface ExecClientHalvesOptions {
@@ -82,6 +85,11 @@ export interface ExecClientHalvesOptions {
    */
   onHostCall: (call: PlayerCodeHostCall, mod: ExecGridClientMod) => Promise<unknown>;
   onPresentation?: (presentation: PlayerCodePresentation, mod: ExecGridClientMod) => void;
+  /**
+   * Each CLIENT half's `crowdy::log` lines, bounded by the broker (see
+   * `PlayerCodeBrokerOptions.onLog`). The text is the mod author's: render it as text.
+   */
+  onLog?: (line: PlayerCodeLogLine, mod: ExecGridClientMod) => void;
   /**
    * Asks the player about CLIENT halves they neither consented to nor trust the author of; true
    * consents. Without it, only what the player already agreed to runs. A declined question is
@@ -149,8 +157,7 @@ function refusal(error: unknown): ExecClientHalfError['reason'] {
  * that filled the cache; consent and trust are the listing's, on every refresh.
  *
  * `NOT_FOUND` (not served to this player now) and `RATE_LIMITED` hold that CLIENT half back for
- * a while instead of fetching on every refresh. The legacy grid-attached client mods
- * (`marketplace.gridClientMods`) are not this runner's.
+ * a while instead of fetching on every refresh.
  */
 export class ExecClientHalves {
   private grid: ExecClientHalvesGrid | null = null;
@@ -191,6 +198,22 @@ export class ExecClientHalves {
     });
     this.inFlight = { generation, done };
     return done;
+  }
+
+  /**
+   * Calls the `handle_invoke` export of the running CLIENT half of mod `modId` with `payload`
+   * and resolves with its reply bytes (see `PlayerCodeBroker.invoke`). Rejects when that CLIENT
+   * half is not running.
+   */
+  invoke(modId: string, payload: Uint8Array, options?: { timeoutMs?: number }): Promise<Uint8Array> {
+    const worker = this.workers.get(modId);
+    if (!worker?.started) {
+      return Promise.reject(new Error(`the CLIENT half of mod ${modId} is not running`));
+    }
+    if (!worker.broker.invoke) {
+      return Promise.reject(new Error('this broker cannot invoke its module'));
+    }
+    return worker.broker.invoke(payload, options);
   }
 
   /** Stops every CLIENT half and leaves the grid; the module cache stays. */
@@ -381,6 +404,7 @@ export class ExecClientHalves {
       consentedHostCalls: consented.filter((fn) => served.includes(fn)),
       onHostCall: (call) => this.options.onHostCall(call, mod),
       onPresentation: (presentation) => this.options.onPresentation?.(presentation, mod),
+      ...(this.options.onLog ? { onLog: (line: PlayerCodeLogLine) => this.options.onLog?.(line, mod) } : {}),
       onCircuitOpen: () => {
         if (this.workers.get(mod.modId)?.broker !== broker) return;
         this.retryAt.set(identity(mod), this.now() + (this.options.failedRetryMs ?? 60_000));

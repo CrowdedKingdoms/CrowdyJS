@@ -1,18 +1,31 @@
-import type { GridScope } from '../grid-scope.js';
+import type { GridChunk, GridScope } from '../grid-scope.js';
 import type { PlayerCodeHostCall } from '../player-runtime/player-code-broker.js';
+import type { AvatarsAPI } from '../domains/avatars.js';
 import type { ChunksAPI } from '../domains/chunks.js';
 import type { VoxelsAPI } from '../domains/voxels.js';
 import type { StateAPI } from '../domains/state.js';
-import type { GameModelAPI } from '../domains/gameModel.js';
 
 /**
- * Game-local fast paths. A game that already holds the world in memory (a
- * chunk store, an actor store) answers reads from there instead of a round
- * trip; anything it leaves out falls through to the server path.
+ * Game-local fast paths and knowledge. A game that already holds the world in memory (a chunk
+ * store, an actor store) answers reads from there instead of a round trip; anything it leaves
+ * out falls through to the server path. The calls only the game can answer (`actors_list*`,
+ * `avatar_state_get`, `grid_permission_check`, `pointer_clicks`) are refused without their
+ * hook.
  */
 export interface GridHostLocal {
   chunkVoxels?(x: bigint, y: bigint, z: bigint): { voxelsBase64: string | null } | null;
   actorsInChunk?(x: bigint, y: bigint, z: bigint): Array<Record<string, unknown>>;
+  /**
+   * The chunk of the avatar's live actor, from the game's actor store, or null when the game
+   * sees none. `avatar_state_get` answers only for an avatar whose actor is inside the grid.
+   */
+  avatarChunk?(avatarId: string): GridChunk | null | undefined | Promise<GridChunk | null | undefined>;
+  /**
+   * The runtime permission keys the visiting player holds on this grid, as the game knows them
+   * (where Crowdy Studio's `targetPermissions` come from). `grid_permission_check` answers from
+   * these, for that player and this grid only; the server still enforces the permissions.
+   */
+  gridPermissionKeys?(): Iterable<string> | Promise<Iterable<string>>;
   setVoxel?(input: {
     chunk: { x: number; y: number; z: number };
     x: number;
@@ -32,15 +45,15 @@ export interface GridHostCallsOptions {
     chunks: ChunksAPI;
     voxels: VoxelsAPI;
     state: StateAPI;
-    gameModel: GameModelAPI;
+    /** For `avatar_state_get`, a public read (`avatarAppState`). */
+    avatars?: Pick<AvatarsAPI, 'appState'>;
   };
   local?: GridHostLocal;
   /**
-   * Let mods call Studio model functions as the player (`model_invoke`, the
-   * ordinary player authority path). Off by default: a game opts in when its
-   * functions are meant to be scriptable by visitors' mods.
+   * The visiting player's user id. `grid_permission_check` answers only about them, so without
+   * it the call is refused.
    */
-  allowModelInvoke?: boolean;
+  userId?: string;
   /**
    * Channels a mod may post to. Default: the grid's own channels only (the
    * server rule for grid code). A game may widen it to channels the player
@@ -62,13 +75,12 @@ export class GridHostCallRefused extends Error {
 const SPATIAL_KINDS = new Set(['actor', 'client_event', 'server_event', 'text']);
 
 /**
- * The page-side answer to every CLIENT host call in the platform catalog,
- * through ordinary CrowdyJS confined to one grid (DN-10 §4). Hand the result
- * to `PlayerCodeBroker({ onHostCall })`; the broker has already applied the
- * allowlist, rate caps and chunk clamps, and answers `grid_info`, `emit_event`,
- * `hud_set` and `overlay_draw` itself. A ck-exec CLIENT half (`engine:
- * 'ck-exec'`) reaches only the crowdy-client-sdk calls: the model and sessions
- * cases below serve legacy CLIENT modules until 18.0.
+ * The page-side answer to a CLIENT half's host calls (`EXEC_CLIENT_HOST_CALLS`,
+ * what crowdy-client-sdk wraps), through ordinary CrowdyJS confined to one grid
+ * (DN-10 §4). Hand the result to `PlayerCodeBroker({ onHostCall })`; the broker
+ * has already applied the allowlist, the player's consent, rate caps and chunk
+ * clamps, and answers `grid_info`, `emit_event`, `hud_set` and `overlay_draw`
+ * itself.
  */
 export function createGridHostCalls(
   options: GridHostCallsOptions,
@@ -189,47 +201,32 @@ export function createGridHostCalls(
         }
         return scope.channels.send(channelId, uuid(args), String(args.payloadBase64 ?? ''));
       }
-      case 'container_create':
-        return scope.model.create({
-          typeKey: typeof args.typeName === 'string' ? args.typeName : undefined,
-          displayName: typeof args.displayName === 'string' ? args.displayName : undefined,
-          stateJson: JSON.stringify(args.state ?? args.properties ?? {}),
-        });
-      case 'container_get':
-        return scope.model.container(String(args.containerId));
-      case 'container_get_by_key':
-        // Binding keys are a server game-model concept. Grid containers have none.
-        throw new GridHostCallRefused(fn, 'server-only');
-      case 'container_get_batch': {
-        const ids = Array.isArray(args.containerIds) ? args.containerIds.slice(0, 32) : [];
-        const found = await Promise.all(
-          ids.map((id) => scope.model.container(String(id)).catch(() => null)),
-        );
-        return found.filter((c) => c != null);
+      case 'avatar_state_get': {
+        const avatarId = decimalId(args.avatarId);
+        if (!avatarId) throw new GridHostCallRefused(fn, 'needs an avatar id');
+        if (!local?.avatarChunk || !client.avatars) throw new GridHostCallRefused(fn);
+        const at = await local.avatarChunk(avatarId);
+        if (!at || !scope.contains(at)) {
+          throw new GridHostCallRefused(fn, 'names an avatar with no live actor in this grid');
+        }
+        return client.avatars.appState(appId, avatarId);
       }
-      case 'containers_list':
-        return scope.model.containers();
-      case 'container_delete':
-        return scope.model.delete(String(args.containerId));
-      case 'property_set':
-        return scope.model.set({
-          containerId: String(args.containerId),
-          propertyKey: String(args.key),
-          valueJson: JSON.stringify(args.value ?? null),
-        });
-      case 'model_invoke':
-        if (!options.allowModelInvoke) throw new GridHostCallRefused(fn);
-        return client.gameModel.invoke({
-          appId,
-          functionName: String(args.functionName),
-          selfContainerId: String(args.selfContainerId),
-          paramsJson: JSON.stringify(args.params ?? {}),
-          ...(typeof args.sessionId === 'string' ? { sessionId: args.sessionId } : {}),
-        });
-      case 'sessions_list':
-        return scope.sessions.list(
-          typeof args.status === 'string' ? { status: args.status } : {},
-        );
+      case 'grid_permission_check': {
+        const player = decimalId(options.userId);
+        if (!local?.gridPermissionKeys || !player) throw new GridHostCallRefused(fn);
+        const gridId = decimalId(args.gridId);
+        if (!gridId || gridId !== decimalId(scope.gridId)) {
+          throw new GridHostCallRefused(fn, 'names another grid');
+        }
+        if (decimalId(args.userId) !== player) {
+          throw new GridHostCallRefused(fn, 'asks about another player');
+        }
+        const key = args.permissionKey;
+        if (typeof key !== 'string' || !PERMISSION_KEY.test(key)) {
+          throw new GridHostCallRefused(fn, 'needs a permission key');
+        }
+        return new Set(await local.gridPermissionKeys()).has(key);
+      }
       case 'user_state_get':
         return client.state.getOne(appId);
       case 'user_state_set':
@@ -241,12 +238,19 @@ export function createGridHostCalls(
         if (!local?.drainPointerClicks) throw new GridHostCallRefused(fn);
         return local.drainPointerClicks();
       default:
-        // edge_*, grid_state_*, avatar_state_get and grid_permission_check have
-        // no browser GraphQL surface yet: the server host answers them for
-        // SERVER mods.
         throw new GridHostCallRefused(fn);
     }
   };
+}
+
+/** As the runtime permission keys (`runtimePermissions`): lowercase, digits and `_`. */
+const PERMISSION_KEY = /^[a-z][a-z0-9_]{0,63}$/;
+
+/** A positive decimal id (BigInt as a decimal string, or a safe integer), normalized; else null. */
+function decimalId(value: unknown): string | null {
+  const text =
+    typeof value === 'string' ? value : typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : '';
+  return /^[1-9][0-9]{0,19}$/.test(text) ? text : null;
 }
 
 function coords(x: unknown, y: unknown, z: unknown): [bigint, bigint, bigint] {

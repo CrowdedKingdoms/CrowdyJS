@@ -1,12 +1,11 @@
 /**
- * Player-compute P3 broker adversarial suite (09 T7/T9), the CrowdyJS half.
+ * Broker adversarial suite (09 T7/T9), the CrowdyJS half, for a ck-exec CLIENT half.
  *
  * Exercises the page-side security boundary against a hostile module speaking
  * the worker protocol: allowlist bypass, grid-filter bypass, confused-deputy
  * payloads, side-loaded bytes, rate-cap floods, and the trap circuit breaker.
  * Covers the broker-reachable rows of C1-C14 from 13-phase-3-plan.md §5; the
- * server-authorization backstop and draft egress are proven in the game-api
- * suites.
+ * server-authorization backstop is proven in the game-api suites.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,13 +41,17 @@ class FakeWorker {
 const GRID = { low: { x: 0n, y: 0n, z: 0n }, high: { x: 2n, y: 2n, z: 2n } };
 
 async function makeBroker(overrides = {}) {
-  const { PlayerCodeBroker } = await loadSdk();
+  const { PlayerCodeBroker, EXEC_CLIENT_HOST_CALLS } = await loadSdk();
   const worker = new FakeWorker();
   const calls = [];
   const broker = new PlayerCodeBroker({
     workerUrl: 'glue.js',
     workerFactory: () => worker,
     grid: GRID,
+    artifactHash: 'h',
+    hashArtifact: async () => 'h',
+    fuelPerDispatch: 1000n,
+    consentedHostCalls: Object.values(EXEC_CLIENT_HOST_CALLS).flatMap((set) => [...set]),
     onHostCall: async (call) => {
       calls.push(call);
       return { ok: true };
@@ -93,8 +96,8 @@ test('C3: reads and effects outside the grid AABB are filtered', async () => {
 test('C4: confused-deputy malformed payloads are rejected, not coerced', async () => {
   const { broker, worker, calls } = await makeBroker();
   await broker.start(new ArrayBuffer(8));
-  worker.receive({ type: 'hostcall', id: 1, fn: 'model_invoke', args: 'not-an-object' });
-  worker.receive({ type: 'hostcall', fn: 'model_invoke', args: {} }); // missing id
+  worker.receive({ type: 'hostcall', id: 1, fn: 'user_state_set', args: 'not-an-object' });
+  worker.receive({ type: 'hostcall', fn: 'user_state_set', args: {} }); // missing id
   await flush();
   assert.equal(calls.length, 0);
   assert.equal(worker.lastResult().ok, false);
@@ -121,6 +124,13 @@ test('C5: a platform-fetched artifact (hash match) starts', async () => {
   await broker.start(new ArrayBuffer(8));
   assert.equal(worker.sent[0].type, 'init');
   assert.equal(worker.sent[0].authority, 'player');
+  assert.equal(worker.sent[0].fuelPerDispatch, '1000', 'the served budget reaches the glue');
+});
+
+test('C5: without the served hash there is nothing to check the bytes against, so nothing starts', async () => {
+  const { broker, worker } = await makeBroker({ artifactHash: undefined });
+  await assert.rejects(() => broker.start(new ArrayBuffer(8)), /artifactHash/);
+  assert.equal(worker.sent.length, 0);
 });
 
 test('C8: a rate-cap flood on one family is capped; other families still work', async () => {

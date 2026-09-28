@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-test('starter Cargo.toml pins crowdy-compute-sdk and serde_json', async () => {
+test('a CLIENT starter pins crowdy-client-sdk and serde_json', async () => {
   const { createCrowdyStudioStarterProject } = await import(
     '../../dist/crowdy-studio/index.js'
   );
@@ -13,7 +13,8 @@ test('starter Cargo.toml pins crowdy-compute-sdk and serde_json', async () => {
   });
   const cargo = project.files.find((file) => file.path === 'Cargo.toml');
   assert.ok(cargo, 'starter includes Cargo.toml');
-  assert.match(cargo.content, /crowdy-compute-sdk = "0\.1\.8"/u);
+  assert.match(cargo.content, /crowdy-client-sdk = "0\.1\.0"/u);
+  assert.doesNotMatch(cargo.content, /crowdy-compute-sdk/u);
   assert.match(cargo.content, /serde_json = "1"/u);
   assert.match(cargo.content, /\[package\.metadata\.crowdy\]/u);
   assert.match(cargo.content, /tick_interval_ms = 1000/u);
@@ -23,50 +24,35 @@ test('starter Cargo.toml pins crowdy-compute-sdk and serde_json', async () => {
   assert.match(lib.content, /pointer_clicks/u);
 });
 
-test('SERVER starter Cargo.toml does not declare a client tick interval', async () => {
-  const { createCrowdyStudioStarterProject } = await import(
-    '../../dist/crowdy-studio/index.js'
-  );
-  const project = createCrowdyStudioStarterProject({
-    appId: '1',
-    gridId: '2',
-    name: 'Demo',
-    kind: 'SERVER',
-  });
-  const cargo = project.files.find((file) => file.path === 'Cargo.toml');
-  assert.ok(cargo);
-  assert.doesNotMatch(cargo.content, /tick_interval_ms/u);
-});
+const MOD_STARTER = {
+  files: [
+    {
+      path: 'Cargo.toml',
+      content:
+        '[package]\nname = "grid-mod"\nedition = "2024"\n\n[lib]\nname = "grid_mod"\ncrate-type = ["cdylib"]\n',
+    },
+    { path: 'src/lib.rs', content: 'use ckx_sdk::prelude::*;\n' },
+  ],
+};
 
-test('with the mod starter, the SERVER target is its crate and the CLIENT target is unchanged', async () => {
+test('the SERVER target is the mod starter crate, and the CLIENT target is a CLIENT project\u2019s crate', async () => {
   const { createCrowdyStudioStarterProject } = await import(
     '../../dist/crowdy-studio/index.js'
   );
-  const modStarter = {
-    files: [
-      {
-        path: 'Cargo.toml',
-        content:
-          '[package]\nname = "grid-mod"\nedition = "2024"\n\n[lib]\nname = "grid_mod"\ncrate-type = ["cdylib"]\n',
-      },
-      { path: 'src/lib.rs', content: 'use ckx_sdk::prelude::*;\n' },
-    ],
-  };
-  const legacy = createCrowdyStudioStarterProject({
+  const clientOnly = createCrowdyStudioStarterProject({
     appId: '1',
     gridId: '2',
     name: 'Demo',
-    kind: 'FULL_STACK',
+    kind: 'CLIENT',
   });
   const project = createCrowdyStudioStarterProject({
     appId: '1',
     gridId: '2',
     name: 'Demo',
     kind: 'FULL_STACK',
-    modStarter,
+    modStarter: MOD_STARTER,
   });
   assert.equal(project.metadata.pairingPreference, 'NONE');
-  assert.equal(legacy.metadata.pairingPreference, 'REQUIRED');
   const server = project.files.filter((file) => file.target === 'SERVER');
   assert.deepEqual(server.map((file) => file.path), ['Cargo.toml', 'src/lib.rs']);
   // Only [package] name changes; [lib] name is the crate's own business.
@@ -74,11 +60,17 @@ test('with the mod starter, the SERVER target is its crate and the CLIENT target
     server[0].content,
     '[package]\nname = "demo-server"\nedition = "2024"\n\n[lib]\nname = "grid_mod"\ncrate-type = ["cdylib"]\n',
   );
+  assert.doesNotMatch(server[0].content, /tick_interval_ms/u);
   assert.deepEqual(
     project.files.filter((file) => file.target === 'CLIENT'),
-    legacy.files.filter((file) => file.target === 'CLIENT'),
+    clientOnly.files,
   );
 
+  assert.throws(
+    () =>
+      createCrowdyStudioStarterProject({ appId: '1', gridId: '2', name: 'Demo', kind: 'SERVER' }),
+    /starts from the mod starter/,
+  );
   assert.throws(
     () =>
       createCrowdyStudioStarterProject({
@@ -156,7 +148,7 @@ function clientManifestProblems(manifest) {
   return problems;
 }
 
-test("on ck-exec a CLIENT target starts from a crowdy-client-sdk crate the game API's builder accepts", async () => {
+test("a CLIENT target starts from a crowdy-client-sdk crate the game API's builder accepts", async () => {
   const { createCrowdyStudioStarterProject, parseClientTickIntervalMs } = await import(
     '../../dist/crowdy-studio/index.js'
   );
@@ -166,7 +158,6 @@ test("on ck-exec a CLIENT target starts from a crowdy-client-sdk crate the game 
       gridId: '2',
       name: 'Weather HUD',
       kind,
-      engine: 'ck-exec',
       modStarter: {
         files: [
           { path: 'Cargo.toml', content: '[package]\nname = "grid-mod"\n\n[lib]\ncrate-type = ["cdylib"]\n\n[dependencies]\nckx-sdk = "0.7.0"\n' },
@@ -185,12 +176,9 @@ test("on ck-exec a CLIENT target starts from a crowdy-client-sdk crate the game 
     assert.equal(project.metadata.clientModuleName, 'weather-hud-client');
     assert.equal(project.metadata.pairingPreference, 'NONE');
   }
-  // The legacy starter still does not pass: it names the compute SDK.
-  const legacy = createCrowdyStudioStarterProject({ appId: '1', gridId: '2', name: 'Demo', kind: 'CLIENT' });
-  const legacyCargo = legacy.files.find((file) => file.path === 'Cargo.toml').content;
-  assert.deepEqual(clientManifestProblems(legacyCargo), ['dependency crowdy-compute-sdk']);
-  assert.throws(
-    () => createCrowdyStudioStarterProject({ appId: '1', gridId: '2', name: 'Demo', kind: 'SERVER', engine: 'ck-exec' }),
-    /starts from the mod starter/,
+  // The rules refuse the legacy compute SDK, which no starter names any more.
+  assert.deepEqual(
+    clientManifestProblems('[lib]\ncrate-type = ["cdylib"]\n\n[dependencies]\ncrowdy-compute-sdk = "0.1.8"\n'),
+    ['dependency crowdy-compute-sdk'],
   );
 });
