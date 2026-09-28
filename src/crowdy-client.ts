@@ -75,6 +75,7 @@ import { GameModelAPI } from './domains/gameModel.js';
 import { ComputeAPI } from './domains/compute.js';
 import { ExecAPI } from './domains/exec.js';
 import { PlayerComputeAPI } from './domains/playerCompute.js';
+import { MeshArtifactsAPI } from './domains/meshArtifacts.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 import { CrowdyStudioGitHubTransport } from './crowdy-studio/github/transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
@@ -316,6 +317,8 @@ export class CrowdyClient {
   readonly exec: ExecAPI;
   /** Player-authored Rust/WASM bound to player-owned grids. */
   readonly playerCompute: PlayerComputeAPI;
+  /** Player-uploaded glTF meshes stored by SHA-256 on an owned grid. */
+  readonly meshArtifacts: MeshArtifactsAPI;
   /** Crowdy Studio cloud projects, libraries, and common source files. */
   readonly crowdyStudio: CrowdyStudioAPI;
   /** GitHub repository loop for Crowdy Studio projects (same session; the API resolves the repo from the bind). */
@@ -520,6 +523,7 @@ export class CrowdyClient {
     this.compute = new ComputeAPI(this.graphql);
     this.exec = new ExecAPI(this.graphql);
     this.playerCompute = new PlayerComputeAPI(this.graphql);
+    this.meshArtifacts = new MeshArtifactsAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
     this.crowdyStudioGitHub = new CrowdyStudioGitHubTransport(this.graphql);
     this.playerWallet = new PlayerWalletAPI(this.graphql);

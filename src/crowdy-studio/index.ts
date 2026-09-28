@@ -16,6 +16,8 @@ export {
   type CrowdyStudioMods,
   type CrowdyStudioPlayerCompute,
   type CrowdyStudioPlayerWallet,
+  type CrowdyStudioMeshArtifact,
+  type CrowdyStudioMeshArtifacts,
   type CrowdyStudioServerEngine,
   type CrowdyStudioState,
   type CrowdyStudioStopResult,

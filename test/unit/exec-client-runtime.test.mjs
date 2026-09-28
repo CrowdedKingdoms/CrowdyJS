@@ -21,7 +21,10 @@ import {
   makeForbiddenImportArtifact,
 } from './fixtures/d13-wasm-corpus.mjs';
 
-/** Every host call crowdy-client-sdk wraps (its `api` module, plus nothing else). */
+/**
+ * Every client host call the ck-exec allowlist is built from: crowdy-client-sdk's `api`
+ * module, plus the mesh and skin presentation calls this branch's catalog adds.
+ */
 const CLIENT_SDK_CALLS = [
   'actor_despawn',
   'actor_pose',
@@ -39,10 +42,17 @@ const CLIENT_SDK_CALLS = [
   'events_poll',
   'grid_info',
   'grid_permission_check',
+  'grid_skin_clear',
+  'grid_skin_set',
   'hud_set',
   'input_axes',
   'input_key',
   'input_look',
+  'mechanics_emit',
+  'mesh_asset_attach',
+  'mesh_asset_clear',
+  'mesh_asset_register',
+  'mesh_asset_spawn',
   'overlay_draw',
   'pointer_clicks',
   'pose_get',
@@ -87,7 +97,14 @@ test('the ck-exec allowlist is exactly crowdy-client-sdk\u2019s calls; the legac
     [...EXEC_CLIENT_HOST_CALLS.present].sort(),
     [
       'avatar_appearance',
+      'grid_skin_clear',
+      'grid_skin_set',
       'hud_set',
+      'mechanics_emit',
+      'mesh_asset_attach',
+      'mesh_asset_clear',
+      'mesh_asset_register',
+      'mesh_asset_spawn',
       'overlay_draw',
       'scene_catalog',
       'scene_instances',
