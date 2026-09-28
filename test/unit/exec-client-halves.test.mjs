@@ -658,3 +658,32 @@ test('a listing that fails rejects refresh and leaves what runs running', async 
   await assert.rejects(halves.refresh(), /network down/);
   assert.deepEqual(halves.running.map((m) => m.modId), ['1']);
 });
+
+test('a CLIENT half\u2019s log lines reach onLog with the mod they came from; no sink, no onLog', async () => {
+  const { exec } = fakeGrid([listed('1', { callerConsented: true })]);
+  const seen = [];
+  const { halves, made } = runner(exec, { onLog: (line, mod) => seen.push([mod.modId, line.message]) });
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  made[0].options.onLog({ level: 'info', message: 'ready', moduleName: 'mod-1' });
+  assert.deepEqual(seen, [['1', 'ready']]);
+
+  const quiet = runner(fakeGrid([listed('2', { callerConsented: true })]).exec);
+  quiet.halves.enterGrid(GRID);
+  await quiet.halves.refresh();
+  assert.equal(quiet.made[0].options.onLog, undefined);
+});
+
+test('invoke reaches the handle_invoke of a running CLIENT half, and only a running one', async () => {
+  const { exec } = fakeGrid([listed('1', { callerConsented: true }), listed('2')]);
+  const { halves, made } = runner(exec);
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  made[0].invoke = async (payload) => new Uint8Array([...payload].reverse());
+  assert.deepEqual([...(await halves.invoke('1', new Uint8Array([1, 2, 3])))], [3, 2, 1]);
+  await assert.rejects(halves.invoke('2', new Uint8Array([1])), /mod 2 is not running/);
+  delete made[0].invoke;
+  await assert.rejects(halves.invoke('1', new Uint8Array([1])), /cannot invoke/);
+  halves.stop();
+  await assert.rejects(halves.invoke('1', new Uint8Array([1])), /not running/);
+});

@@ -243,16 +243,23 @@ export function makeMalformedHostCallLoopArtifact() {
 
 /**
  * The shape of a ck-exec CLIENT half: imports `ck.log` (and `extraImport` when given), exports
- * memory, `ck_alloc`, `init` (logs "ready" at level 1) and `tick`, and, unless `withFuel` is
- * false, the mutable i64 `ck_fuel` global the build's instrument step injects.
+ * memory, `ck_alloc`, `init` (logs "ready" at level 1, `initLogs` times) and `tick`, and, unless
+ * `withFuel` is false, the mutable i64 `ck_fuel` global the build's instrument step injects.
+ * With `withInvoke`, it also exports a `handle_invoke` that answers with the bytes it was given.
  */
-export function makeExecClientArtifact({ withFuel = true, extraImport = null } = {}) {
+export function makeExecClientArtifact({
+  withFuel = true,
+  extraImport = null,
+  withInvoke = false,
+  initLogs = 1,
+} = {}) {
   const ready = encoder.encode('ready');
   const types = section(1, vector([
     functionType([I32, I32, I32], []),
     functionType([I32], [I32]),
     functionType([], []),
     functionType([I32], []),
+    functionType([I32, I32], [I64]),
   ]));
   const importEntries = [[...stringBytes('ck'), ...stringBytes('log'), 0x00, ...u32(0)]];
   if (extraImport) {
@@ -260,7 +267,12 @@ export function makeExecClientArtifact({ withFuel = true, extraImport = null } =
   }
   const imported = importEntries.length;
   const imports = section(2, vector(importEntries));
-  const functions = section(3, vector([[...u32(1)], [...u32(2)], [...u32(3)]]));
+  const functions = section(3, vector([
+    [...u32(1)],
+    [...u32(2)],
+    [...u32(3)],
+    ...(withInvoke ? [[...u32(4)]] : []),
+  ]));
   const memory = section(5, vector([[0x00, ...u32(1)]]));
   const globals = section(6, vector([[I64, 0x01, 0x42, 0x00, 0x0b]]));
   const exportEntries = [
@@ -269,17 +281,28 @@ export function makeExecClientArtifact({ withFuel = true, extraImport = null } =
     exportEntry('init', 0x00, imported + 1),
     exportEntry('tick', 0x00, imported + 2),
   ];
+  if (withInvoke) exportEntries.push(exportEntry('handle_invoke', 0x00, imported + 3));
   if (withFuel) exportEntries.push(exportEntry('ck_fuel', 0x03, 0));
   const exports = section(7, vector(exportEntries));
+  const logReady = [
+    0x41, ...s32(1),
+    0x41, ...s32(64),
+    0x41, ...s32(ready.length),
+    0x10, ...u32(0),
+  ];
   const code = section(10, vector([
     functionBody([0x41, ...s32(1024)]),
-    functionBody([
-      0x41, ...s32(1),
-      0x41, ...s32(64),
-      0x41, ...s32(ready.length),
-      0x10, ...u32(0),
-    ]),
+    functionBody(Array.from({ length: initLogs }, () => logReady).flat()),
     functionBody([]),
+    // (ptr << 32) | len: the reply is the request, where ck_alloc put it.
+    ...(withInvoke
+      ? [functionBody([
+          0x20, ...u32(0), 0xad,
+          0x42, ...s32(32), 0x86,
+          0x20, ...u32(1), 0xad,
+          0x84,
+        ])]
+      : []),
   ]));
   const data = section(11, vector([[
     0x00,

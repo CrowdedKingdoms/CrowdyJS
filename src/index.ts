@@ -394,10 +394,15 @@ export { MarketplaceAPI } from './domains/marketplace.js';
 export {
   PlayerCodeBroker,
   EXEC_CLIENT_HOST_CALLS,
+  PLAYER_CODE_INVOKE_MAX_BYTES,
+  PLAYER_CODE_LOG_LINES_PER_SECOND,
+  PLAYER_CODE_LOG_MAX_CHARS,
   type PlayerCodeEngine,
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
   type PlayerCodeHostCall,
+  type PlayerCodeLogLevel,
+  type PlayerCodeLogLine,
   type PlayerCodeWorkerLike,
   type PlayerCodePresentation,
 } from './player-runtime/player-code-broker.js';
@@ -433,6 +438,7 @@ export {
 } from './player-runtime/player-glue-worker.js';
 export {
   EXEC_CLIENT_ABI_IMPORTS,
+  GLUE_LOG_MAX_BYTES,
   type GuestExports,
   type GlueRuntimeOptions,
 } from './player-runtime/glue-runtime.js';

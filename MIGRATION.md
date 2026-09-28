@@ -6,6 +6,12 @@ automations, player compute's server side and the player model. Their code moves
 (`client.exec`): an app's server code as hubs and spokes, a player's grid code as mods. Nothing
 is migrated for you; port the code, then upgrade.
 
+**What it needs.** 18.0.0 calls nothing the legacy engines served, so it runs against any API
+with ck-exec CLIENT halves (ck-api `v2.24.0`, as 17.14.0 did). **Crowdy Studio's CLIENT
+projects need ck-api `v2.25.1` or later:** `v2.24.0` and `v2.25.0` refuse to save a
+`crowdy-client-sdk` crate in a Studio project (`CROWDY_STUDIO_MANIFEST_INVALID`, cks-game-api
+#425).
+
 | 17.x | 18.0 |
 | --- | --- |
 | `client.gameModel` (containers, properties, functions, `invoke`, sessions, events, timers, automations, `seed`, lint, the player-count feed) | A hub's own state and endpoints: `client.exec.connect(appId, { nodeType, key })`, then `call` / `subscribe`; timers are `ctx.timer_after` / `ctx.timer_every` in the hub; sessions are a keyed hub (the `session` starter) |
@@ -30,9 +36,11 @@ is migrated for you; port the code, then upgrade.
   `{ resultJson, durationUs }`; `CrowdyStudioPlayerCompute` is `deploy`, `versions`,
   `artifactBytes` and `usage`. `createCrowdyStudioStarterProject` needs `modStarter` for a
   kind with a SERVER target.
-- **CLIENT host calls** `container_*`, `containers_list`, `property_set`, `model_invoke` and
-  `sessions_list` are refused (`GridHostCallRefused`), and `createGridHostCalls` /
-  `startGridMod` lost `allowModelInvoke` and the client's `gameModel`.
+- **CLIENT host calls the legacy engines answered are refused**: the Game Model group
+  (`container_*`, `containers_list`, `property_set`, `edge_*`, `model_invoke`), `sessions_list`,
+  and grid state (`grid_state_get` / `grid_state_set`), which a mod's server half, a hub keyed
+  by the grid, holds now. `createGridHostCalls` / `startGridMod` lost `allowModelInvoke` and
+  the client's `gameModel`.
 - The kit's type-98 parser is `parseZoneChangeEvent` beside the other wire parsers.
 
 `schema.gql` and the generated types follow the game API: the release that carries 18.0.0
@@ -106,8 +114,14 @@ trust its author. It replaces the legacy grid-attached client mods, which keep w
 Existing CLIENT projects keep their files: a CLIENT crate on `crowdy-compute-sdk` is refused on
 ck-exec before any build, with what to change (the SDK line becomes
 `crowdy-client-sdk = "0.1.0"`, `crowdy_compute_sdk` becomes `crowdy_client_sdk`; the host
-calls are the same less the Game Model and sessions). `serverEngine: 'player-compute'` keeps
+calls are the same less the Game Model, sessions and grid state, `grid_state_get` /
+`grid_state_set`, which a mod's server half holds now). `serverEngine: 'player-compute'` keeps
 both targets on legacy player compute until 18.0.
+
+**Studio's CLIENT target on ck-exec needs ck-api `v2.25.1` or later.** `v2.24.0` and
+`v2.25.0` refuse to save a `crowdy-client-sdk` crate in a Studio project
+(`CROWDY_STUDIO_MANIFEST_INVALID`, cks-game-api #425), so a CLIENT project cannot start there;
+the SDK calls themselves need only `v2.24.0`.
 
 # 17.13.0 ck-exec observability
 

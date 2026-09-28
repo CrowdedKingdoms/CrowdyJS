@@ -29,6 +29,9 @@ export const GLUE_HOST_FUNCTIONS: readonly string[] = Object.values(EXEC_CLIENT_
   (fns) => [...fns],
 );
 
+/** The most of one `ck.log` message read out of guest memory, in bytes. */
+export const GLUE_LOG_MAX_BYTES = 4096;
+
 /** Every import a ck-exec CLIENT half may have (CLIENT ABI 0), by module. */
 export const EXEC_CLIENT_ABI_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   ck: ['log', 'now_ms', 'state_get', 'state_set', 'host_call'],
@@ -110,7 +113,10 @@ export interface GuestExports {
 export interface GlueRuntimeOptions {
   /** Synchronous host-API gateway: JSON request bytes in, SDK Response-envelope bytes out. */
   hostCallSync: (reqBytes: Uint8Array) => Uint8Array;
-  /** debug/info/warn/error sink for guest `ck.log` (optional). */
+  /**
+   * Sink for guest `ck.log` (optional): crowdy-client-sdk's level (0 debug, 1 info, 2 warn,
+   * 3 error) and at most {@link GLUE_LOG_MAX_BYTES} of the message.
+   */
   onLog?: (level: number, message: string) => void;
   /** Deterministic-enough randomness for the guest `random_get` (defaults to crypto). */
   randomFill?: (buf: Uint8Array) => void;
@@ -203,8 +209,11 @@ export class GlueRuntime {
 
     const ck: Record<string, (...args: number[]) => number | bigint | void> = {
       log: (level: number, ptr: number, len: number): void => {
+        const ex = getExports();
+        if (!ex) throw new Error('guest not instantiated');
+        assertMemoryRange(ex.memory.buffer, ptr, len, 'guest log read');
         if (this.options.onLog) {
-          this.options.onLog(level, textDecoder.decode(bytesAt(ptr, len)));
+          this.options.onLog(level, textDecoder.decode(bytesAt(ptr, Math.min(len, GLUE_LOG_MAX_BYTES))));
         }
       },
       now_ms: (): bigint => BigInt(now()),

@@ -2,6 +2,7 @@ import {
   PlayerCodeBroker,
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
+  type PlayerCodeLogLine,
 } from '../player-runtime/player-code-broker.js';
 import type {
   ExecAPI,
@@ -113,9 +114,14 @@ export interface CrowdyStudioWalletSnapshot {
   currency: string;
 }
 
-/** One line the SERVER target's mod logged (`ctx.log`), newest first in the state. */
+/**
+ * One log line, newest first in the state: `mod`, a `ctx.log` line of the project's mod on the
+ * server; `preview`, a `crowdy::log` line of the CLIENT half running in this browser's preview.
+ * The text is the module's: render it as text.
+ */
 export interface CrowdyStudioLogLine {
   id: string;
+  source: 'mod' | 'preview';
   moduleName: string;
   level: CrowdyStudioLogLevel;
   at: string;
@@ -188,7 +194,9 @@ export type CrowdyStudioMods = Pick<
 const MOD_NAME = /^[a-z0-9_-]{1,48}$/;
 /** As a ck-exec build's crate names. */
 const CRATE_NAME = /^[a-z][a-z0-9_-]{0,63}$/;
+/** ck-exec's server log levels (`ExecLogLine.level`); a CLIENT half's are crowdy-client-sdk's. */
 const LOG_LEVELS: readonly CrowdyStudioLogLevel[] = ['error', 'warn', 'info', 'debug'];
+const PREVIEW_LOG_LINES_KEPT = 100;
 
 export interface CrowdyStudioBroker {
   start(bytes: ArrayBuffer): Promise<void>;
@@ -314,6 +322,9 @@ export class CrowdyStudioController {
   private destroyed = false;
   private readonly mods: CrowdyStudioMods;
   private modConnection: { name: string; connection: Promise<ExecConnection> } | null = null;
+  private modLogLines: readonly CrowdyStudioLogLine[] = [];
+  private previewLogLines: CrowdyStudioLogLine[] = [];
+  private previewLogSeq = 0;
 
   constructor(private readonly options: CrowdyStudioControllerOptions) {
     if (!options.mods) {
@@ -577,7 +588,7 @@ export class CrowdyStudioController {
       buildOutput: '',
       authoritativeDiagnostics: [],
       localDiagnostics: [],
-      logs: [],
+      logs: this.clearLogLines(),
       invokeResult: null,
       github: null,
       githubMessage: undefined,
@@ -1621,6 +1632,7 @@ export class CrowdyStudioController {
     }
     const runtime = this.clientRuntimeOptions();
     const half = await this.attachClientHalf(compiled, operation);
+    let broker: CrowdyStudioBroker | null = null;
     const brokerOptions: PlayerCodeBrokerOptions = {
       ...runtime,
       engine: 'ck-exec',
@@ -1629,9 +1641,13 @@ export class CrowdyStudioController {
       fuelPerDispatch: half.fuelPerDispatch,
       consentedHostCalls: half.capabilitySummary.hostFunctions,
       onPresentation: this.options.onPresentation,
+      // Only the preview running now logs into the project's Logs.
+      onLog: (line) => {
+        if (broker && this.broker === broker) this.recordPreviewLog(compiled.name, line);
+      },
       tickIntervalMs: this.options.clientTickIntervalMs ?? half.tickIntervalMs,
     };
-    const broker =
+    broker =
       this.options.brokerFactory?.(brokerOptions) ??
       new PlayerCodeBroker(brokerOptions);
     await broker.start(half.bytes);
@@ -1775,6 +1791,37 @@ export class CrowdyStudioController {
     void open?.connection.then((connection) => connection.close(), () => {});
   }
 
+  private clearLogLines(): readonly CrowdyStudioLogLine[] {
+    this.modLogLines = [];
+    this.previewLogLines = [];
+    return [];
+  }
+
+  /** The mod's lines and the preview's, newest first. */
+  private mergedLogLines(): readonly CrowdyStudioLogLine[] {
+    return [...this.previewLogLines, ...this.modLogLines].sort(
+      (a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0),
+    );
+  }
+
+  /** A `crowdy::log` line of the CLIENT half this browser previews; the last 100 are kept. */
+  private recordPreviewLog(moduleName: string, line: PlayerCodeLogLine): void {
+    if (this.destroyed) return;
+    this.previewLogSeq += 1;
+    this.previewLogLines = [
+      {
+        id: `preview-${this.previewLogSeq}`,
+        source: 'preview' as const,
+        moduleName,
+        level: line.level,
+        at: new Date().toISOString(),
+        text: line.message,
+      },
+      ...this.previewLogLines,
+    ].slice(0, PREVIEW_LOG_LINES_KEPT);
+    this.update({ logs: this.mergedLogLines() });
+  }
+
   async refreshSurface(surface: CrowdyStudioPolledSurface): Promise<void> {
     if (!this.state.project) return;
     if (surface === 'logs') {
@@ -1783,7 +1830,8 @@ export class CrowdyStudioController {
       const lines = name
         ? await this.mods.modLogs(this.options.appId, this.options.gridId, name, { limit: 50 })
         : [];
-      this.update({ logs: lines.map((line) => modLogLine(name!, line)) });
+      this.modLogLines = lines.map((line) => modLogLine(name!, line));
+      this.update({ logs: this.mergedLogLines() });
       return;
     }
     this.update({ wallet: (await this.options.playerWallet?.balance()) ?? null });
@@ -2163,11 +2211,14 @@ const LEGACY_CLIENT_CRATE =
   'This CLIENT crate depends on crowdy-compute-sdk, legacy player compute. On ck-exec a CLIENT ' +
   'target is a mod\u2019s CLIENT half, one crowdy-client-sdk crate: in Cargo.toml replace the ' +
   'crowdy-compute-sdk line with crowdy-client-sdk = "0.1.0", and in src/ use crowdy_client_sdk ' +
-  'in place of crowdy_compute_sdk. Its host calls are the same, less the Game Model and sessions.';
+  'in place of crowdy_compute_sdk. Its host calls are the same less the Game Model, sessions and ' +
+  'grid state (grid_state_get / grid_state_set): the mod\u2019s server half, a hub keyed by the ' +
+  'grid, holds grid state now.';
 
 function modLogLine(moduleName: string, line: ExecLogLine): CrowdyStudioLogLine {
   return {
     id: line.id,
+    source: 'mod',
     moduleName,
     level: LOG_LEVELS[line.level] ?? 'debug',
     at: line.at,

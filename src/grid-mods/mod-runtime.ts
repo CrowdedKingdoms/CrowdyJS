@@ -1,6 +1,7 @@
 import {
   PlayerCodeBroker,
   type PlayerCodeEngine,
+  type PlayerCodeLogLine,
   type PlayerCodePresentation,
 } from '../player-runtime/player-code-broker.js';
 import { hostGridProgram, type GridProgramHost } from '../grid-program/host.js';
@@ -53,7 +54,11 @@ export interface StartGridModOptions {
   graphqlUrl?: string;
   graphqlWsUrl?: string;
   local?: GridHostLocal;
+  /** Forwarded to `createGridHostCalls`: the visiting player, for `grid_permission_check`. */
+  userId?: string;
   onPresentation?: (presentation: PlayerCodePresentation) => void;
+  /** A CLIENT half's `crowdy::log` lines, bounded by the broker. Render them as text. */
+  onLog?: (line: PlayerCodeLogLine) => void;
   onStopped?: (reason: string) => void;
 }
 
@@ -61,6 +66,8 @@ export interface RunningGridMod {
   kind: GridModSpec['kind'];
   moduleName: string;
   stop(): void;
+  /** A CLIENT half's `handle_invoke` (`PlayerCodeBroker.invoke`); absent for a grid program. */
+  invoke?(payload: Uint8Array, options?: { timeoutMs?: number }): Promise<Uint8Array>;
 }
 
 /**
@@ -90,8 +97,10 @@ export async function startGridMod(
         scope,
         client: options.client,
         local: options.local,
+        ...(options.userId !== undefined ? { userId: options.userId } : {}),
       }),
       onPresentation: options.onPresentation,
+      onLog: options.onLog,
       onCircuitOpen: (reason) => options.onStopped?.(reason),
     });
     await broker.start(spec.artifact);
@@ -99,6 +108,7 @@ export async function startGridMod(
       kind: 'wasm',
       moduleName: spec.moduleName,
       stop: () => broker.stop(),
+      invoke: (payload, invokeOptions) => broker.invoke(payload, invokeOptions),
     };
   }
   if (!options.graphqlUrl || !options.graphqlWsUrl) {

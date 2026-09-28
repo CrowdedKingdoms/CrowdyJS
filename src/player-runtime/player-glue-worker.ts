@@ -46,6 +46,9 @@ export {
   type GlueDispatchResult,
 };
 
+/** Log lines the worker posts per rolling second; the broker forwards fewer. */
+const GLUE_LOG_LINES_PER_SECOND = 50;
+
 declare const self: {
   addEventListener?: (type: string, listener: (e: MessageEvent) => void) => void;
   postMessage?: (message: unknown, transfer?: Transferable[]) => void;
@@ -67,8 +70,24 @@ export function startGlueWorker(port: {
   let dispatchId = 0;
   let hostCallTimeoutMs = GLUE_HOST_CALL_TIMEOUT_MS;
   let ticking = false;
+  let logTimes: number[] = [];
+  let droppedLogs = 0;
 
   const post = (message: unknown) => port.postMessage(message);
+
+  // The broker bounds what reaches the page; this bounds what a flooding module costs it in
+  // messages. Dropped lines are counted on the next line posted.
+  const postLog = (level: number, message: string) => {
+    const now = Date.now();
+    logTimes = logTimes.filter((t) => now - t < 1000);
+    if (logTimes.length >= GLUE_LOG_LINES_PER_SECOND) {
+      droppedLogs += 1;
+      return;
+    }
+    logTimes.push(now);
+    post({ type: 'log', level, message, dropped: droppedLogs });
+    droppedLogs = 0;
+  };
 
   // Synchronous gateway: post the request (so the page can see it), then
   // block on the SAB until the broker writes the reply.
@@ -128,7 +147,7 @@ export function startGlueWorker(port: {
     const fuelPerDispatch = parseFuelBudget(init.fuelPerDispatch);
     runtime = new GlueRuntime({
       hostCallSync,
-      onLog: (level, message) => post({ type: 'log', level, message }),
+      onLog: postLog,
       fuelPerDispatch,
     });
     try {

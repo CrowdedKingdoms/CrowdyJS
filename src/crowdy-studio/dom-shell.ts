@@ -1256,7 +1256,8 @@ export class CrowdyStudioDomShell {
     }
     for (const entry of lines) {
       const line = document.createElement('pre');
-      line.textContent = `${entry.level === 'error' ? '✗' : '·'} ${entry.at} ${entry.moduleName} ${entry.level}\n${entry.text}`;
+      const where = entry.source === 'preview' ? ' (preview in this browser)' : '';
+      line.textContent = `${entry.level === 'error' ? '✗' : '·'} ${entry.at} ${entry.moduleName}${where} ${entry.level}\n${entry.text}`;
       panel.append(line);
     }
   }

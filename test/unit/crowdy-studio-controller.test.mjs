@@ -564,8 +564,8 @@ test('Invoke calls the mod over one exec connection, Logs are its log lines, and
   await controller.refreshSurface('logs');
   assert.deepEqual(calls, [['logs', '42', '500', 'weather-server', { limit: 50 }]]);
   assert.deepEqual(controller.getState().logs, [
-    { id: 'l2', moduleName: 'weather-server', level: 'error', at: '2026-09-26T00:00:02Z', text: 'boom' },
-    { id: 'l1', moduleName: 'weather-server', level: 'info', at: '2026-09-26T00:00:01Z', text: 'visited' },
+    { id: 'l2', source: 'mod', moduleName: 'weather-server', level: 'error', at: '2026-09-26T00:00:02Z', text: 'boom' },
+    { id: 'l1', source: 'mod', moduleName: 'weather-server', level: 'info', at: '2026-09-26T00:00:01Z', text: 'visited' },
   ]);
 
   calls.length = 0;
@@ -1091,8 +1091,43 @@ test('a legacy compute-SDK CLIENT crate is refused before any build, with what t
   assert.equal(result.status, 'COMPILE_FAILED');
   assert.deepEqual(calls, []);
   assert.match(controller.getState().buildOutput, /crowdy-client-sdk = "0\.1\.0"/);
+  // What the crate loses: the Game Model, sessions and grid state are not CLIENT host calls.
+  assert.match(controller.getState().buildOutput, /less the Game Model, sessions and grid state \(grid_state_get \/ grid_state_set\)/);
   assert.match(controller.getState().runtime.message, /legacy player compute crate/);
   controller.destroy();
+});
+
+test('the preview\u2019s CLIENT half log lines show in Logs beside the mod\u2019s, newest first', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  const { made, brokerFactory } = recordingBrokers(calls);
+  const provider = providerFor(execProject('FULL_STACK'));
+  const controller = new CrowdyStudioController(
+    options(provider, { mods: execMods(calls), brokerFactory }),
+  );
+  await controller.initialize();
+  assert.equal((await controller.deployLive()).status, 'RUNNING');
+  assert.equal(typeof made[0].onLog, 'function', 'the preview broker has a log sink');
+
+  await controller.refreshSurface('logs');
+  made[0].onLog({ level: 'warn', message: '<b>low fuel</b>', moduleName: 'weather-server' });
+  const [first, ...rest] = controller.getState().logs;
+  assert.deepEqual(
+    { source: first.source, moduleName: first.moduleName, level: first.level, text: first.text },
+    { source: 'preview', moduleName: 'weather-client', level: 'warn', text: '<b>low fuel</b>' },
+  );
+  assert.ok(!Number.isNaN(Date.parse(first.at)));
+  assert.deepEqual(rest.map((line) => [line.source, line.id]), [['mod', 'l2'], ['mod', 'l1']]);
+
+  // A poll keeps the preview's lines; opening another project clears both.
+  await controller.refreshSurface('logs');
+  assert.equal(controller.getState().logs.filter((line) => line.source === 'preview').length, 1);
+  await controller.createProject({ name: 'Other', kind: 'SERVER' });
+  assert.deepEqual(controller.getState().logs, []);
+
+  controller.destroy();
+  made[0].onLog({ level: 'info', message: 'late', moduleName: 'weather-server' });
+  assert.deepEqual(controller.getState().logs, []);
 });
 
 test('a CLIENT build that fails attaches nothing', async () => {

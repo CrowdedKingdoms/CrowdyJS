@@ -603,7 +603,8 @@ function clampLimit(value: number | undefined, fallback: number): number {
 }
 
 function formatRunLine(line: CrowdyStudioState['logs'][number]): string {
-  return `${line.at} ${line.moduleName} ${line.level}: ${line.text}`;
+  const where = line.source === 'preview' ? ' (preview)' : '';
+  return `${line.at} ${line.moduleName}${where} ${line.level}: ${line.text}`;
 }
 
 function toDshDiagnostic(diagnostic: CrowdyStudioDiagnostic): DshDiagnostic {

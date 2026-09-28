@@ -52,6 +52,28 @@ export interface PlayerCodePresentation {
   payload: unknown;
 }
 
+/** crowdy-client-sdk's log levels: 0 debug, 1 info, 2 warn, 3 error. */
+export type PlayerCodeLogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * One `crowdy::log` line of the running module, as the broker forwards it. The text is the
+ * module author's, so render it as text, never as markup.
+ */
+export interface PlayerCodeLogLine {
+  level: PlayerCodeLogLevel;
+  /** At most {@link PLAYER_CODE_LOG_MAX_CHARS} characters; a longer line ends in `…`. */
+  message: string;
+  /** The broker's `moduleName`, or null. */
+  moduleName: string | null;
+}
+
+/** Log lines forwarded per rolling second; past it lines are counted and dropped. */
+export const PLAYER_CODE_LOG_LINES_PER_SECOND = 20;
+/** The longest log line forwarded, in characters. */
+export const PLAYER_CODE_LOG_MAX_CHARS = 1000;
+/** The largest `invoke` payload, and the largest reply accepted, in bytes. */
+export const PLAYER_CODE_INVOKE_MAX_BYTES = 256 * 1024;
+
 /**
  * What built a player module: the CLIENT half of a ck-exec mod, a `crowdy-client-sdk` crate.
  * The only engine since 18.0 removed legacy player compute's CLIENT modules.
@@ -90,6 +112,13 @@ export interface PlayerCodeBrokerOptions {
   onHostCall: (call: PlayerCodeHostCall) => Promise<unknown>;
   /** Optional sink for HUD/overlay presentation the mod emits (BWF wires this). */
   onPresentation?: (presentation: PlayerCodePresentation) => void;
+  /**
+   * Optional sink for the module's `crowdy::log` lines, at most
+   * {@link PLAYER_CODE_LOG_LINES_PER_SECOND} a second, each cut to
+   * {@link PLAYER_CODE_LOG_MAX_CHARS} characters. Past the rate, lines are dropped and the next
+   * line forwarded is preceded by a `warn` that counts them. Without a sink they are dropped.
+   */
+  onLog?: (line: PlayerCodeLogLine) => void;
   /** Called when the local circuit breaker trips (repeated traps / rate abuse). */
   onCircuitOpen?: (reason: string) => void;
   workerFactory?: (url: string | URL) => PlayerCodeWorkerLike;
@@ -162,6 +191,9 @@ function groupsByFunction(
 const FN_TO_GROUP: ReadonlyMap<string, string> = groupsByFunction(EXEC_CLIENT_HOST_CALLS);
 
 const RATE_WINDOW_MS = 1000;
+const LOG_LEVELS: readonly PlayerCodeLogLevel[] = ['debug', 'info', 'warn', 'error'];
+const MAX_PENDING_INVOKES = 8;
+const DEFAULT_INVOKE_TIMEOUT_MS = 10_000;
 const CIRCUIT_TRIP_THRESHOLD = 5;
 const GLOBAL_HOST_CALL_CAP = 1000;
 const MAX_HOST_CALL_FN_BYTES = 128;
@@ -226,6 +258,17 @@ export class PlayerCodeBroker {
   );
   private busUnsubscribe: (() => void) | null = null;
   private deliveringEventDepth = 0;
+  private logBucket: number[] = [];
+  private droppedLogs = 0;
+  private invokeSeq = 0;
+  private readonly pendingInvokes = new Map<
+    number,
+    {
+      resolve: (reply: Uint8Array) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   private readonly busSubscriber = {
     moduleName: this.options.moduleName ?? null,
     deliver: (event: ClientGridEvent) => this.deliverEvent(event),
@@ -363,6 +406,45 @@ export class PlayerCodeBroker {
     this.artifact = null;
   }
 
+  /**
+   * Call the running module's `handle_invoke` export with `payload` and resolve with the bytes
+   * it returns. The page chooses the payload; the reply is the module's, so treat it as
+   * untrusted input. Refused while the module is not running, above
+   * {@link PLAYER_CODE_INVOKE_MAX_BYTES}, or with eight invokes already pending; rejected when
+   * the module traps, stops or does not answer within `timeoutMs` (default 10 s). Each invoke is
+   * one dispatch, on the same fuel budget and watchdog as a tick.
+   */
+  invoke(payload: Uint8Array, options: { timeoutMs?: number } = {}): Promise<Uint8Array> {
+    const worker = this.worker;
+    if (!worker || !this.workerReady || this.circuitOpen) {
+      return Promise.reject(new Error('the CLIENT half is not running'));
+    }
+    if (!(payload instanceof Uint8Array)) {
+      return Promise.reject(new Error('invoke takes a Uint8Array payload'));
+    }
+    if (payload.byteLength > PLAYER_CODE_INVOKE_MAX_BYTES) {
+      return Promise.reject(new Error('invoke payload exceeds the browser sandbox limit'));
+    }
+    if (this.pendingInvokes.size >= MAX_PENDING_INVOKES) {
+      return Promise.reject(new Error('too many invokes are pending'));
+    }
+    this.invokeSeq = (this.invokeSeq % 0x7ffffffe) + 1;
+    const id = this.invokeSeq;
+    return new Promise<Uint8Array>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.pendingInvokes.delete(id)) return;
+        reject(new Error('the CLIENT half did not answer the invoke in time'));
+      }, options.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS);
+      this.pendingInvokes.set(id, { resolve, reject, timer });
+      const copy = payload.slice();
+      try {
+        worker.postMessage({ type: 'invoke', id, payload: copy }, [copy.buffer]);
+      } catch (error) {
+        this.settleInvoke(id, new Error(`invoke could not reach the worker: ${(error as Error).message}`));
+      }
+    });
+  }
+
   /** Clear a tripped circuit so the caller can start again after a fix. */
   resetCircuit(): void {
     this.circuitOpen = false;
@@ -429,6 +511,25 @@ export class PlayerCodeBroker {
       if (kind && kind !== 'init') {
         this.consecutiveTraps = 0;
         this.hardTimeouts = 0;
+      }
+      return;
+    }
+    if (raw.type === 'log') {
+      this.forwardLog(raw.level, raw.message, raw.dropped);
+      return;
+    }
+    if (raw.type === 'invoke-result') {
+      if (!Number.isSafeInteger(raw.id)) return;
+      const id = raw.id as number;
+      if (raw.ok !== true) {
+        const detail = typeof raw.error === 'string' ? raw.error.slice(0, 200) : 'trap';
+        this.settleInvoke(id, new Error(`the CLIENT half's handle_invoke failed: ${detail}`));
+      } else if (!(raw.payload instanceof Uint8Array)) {
+        this.settleInvoke(id, new Error('the CLIENT half answered the invoke with no bytes'));
+      } else if (raw.payload.byteLength > PLAYER_CODE_INVOKE_MAX_BYTES) {
+        this.settleInvoke(id, new Error('the invoke reply exceeds the browser sandbox limit'));
+      } else {
+        this.settleInvoke(id, null, raw.payload.slice());
       }
       return;
     }
@@ -613,9 +714,62 @@ export class PlayerCodeBroker {
     }
   }
 
+  private settleInvoke(id: number, error: Error | null, reply?: Uint8Array): void {
+    const pending = this.pendingInvokes.get(id);
+    if (!pending) return;
+    this.pendingInvokes.delete(id);
+    clearTimeout(pending.timer);
+    if (error) pending.reject(error);
+    else pending.resolve(reply ?? new Uint8Array(0));
+  }
+
+  /** Forward one worker log line within the rate and size bounds; a sink that throws is ignored. */
+  private forwardLog(level: unknown, message: unknown, dropped: unknown): void {
+    if (Number.isSafeInteger(dropped) && (dropped as number) > 0) {
+      this.droppedLogs += dropped as number;
+    }
+    const sink = this.options.onLog;
+    if (!sink || typeof message !== 'string') return;
+    const now = Date.now();
+    this.logBucket = this.logBucket.filter((t) => now - t < RATE_WINDOW_MS);
+    if (this.logBucket.length >= PLAYER_CODE_LOG_LINES_PER_SECOND) {
+      this.droppedLogs += 1;
+      return;
+    }
+    this.logBucket.push(now);
+    const moduleName = this.options.moduleName ?? null;
+    const lines: PlayerCodeLogLine[] = [];
+    if (this.droppedLogs > 0) {
+      lines.push({
+        level: 'warn',
+        message: `${this.droppedLogs} log line${this.droppedLogs === 1 ? '' : 's'} dropped (more than ${PLAYER_CODE_LOG_LINES_PER_SECOND} a second)`,
+        moduleName,
+      });
+      this.droppedLogs = 0;
+    }
+    lines.push({
+      level: (Number.isInteger(level) && LOG_LEVELS[level as number]) || 'info',
+      message:
+        message.length > PLAYER_CODE_LOG_MAX_CHARS
+          ? `${message.slice(0, PLAYER_CODE_LOG_MAX_CHARS - 1)}…`
+          : message,
+      moduleName,
+    });
+    for (const line of lines) {
+      try {
+        sink(line);
+      } catch {
+        // The page's sink is not the module's business.
+      }
+    }
+  }
+
   private stopWorker(): void {
     this.clearStartupTimer();
     this.clearDispatchTimer();
+    for (const id of [...this.pendingInvokes.keys()]) {
+      this.settleInvoke(id, new Error('the CLIENT half stopped'));
+    }
     this.activeDispatch = null;
     this.workerReady = false;
     const worker = this.worker;
