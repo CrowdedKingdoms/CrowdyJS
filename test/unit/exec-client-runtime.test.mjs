@@ -1,18 +1,19 @@
 /**
- * The player runtime for a ck-exec mod's CLIENT half (`engine: 'ck-exec'`): the broker's
- * allowlist is exactly what crowdy-client-sdk can call, the glue offers exactly the CLIENT ABI
- * imports and refuses an unmetered module, and legacy CLIENT modules keep the whole catalog
- * until 18.0. The last test runs a real crowdy-client-sdk build when CROWDY_EXEC_CLIENT_WASM
- * names one (Studio's CLIENT starter, built as the game API builds a CLIENT half).
+ * The player runtime for a ck-exec mod's CLIENT half, the only kind of player module since
+ * 18.0: the broker's allowlist is exactly what crowdy-client-sdk can call, the glue offers
+ * exactly the CLIENT ABI imports and refuses an unmetered module, and nothing runs without the
+ * served hash, fuel budget and consented host calls. The last test runs a real
+ * crowdy-client-sdk build when CROWDY_EXEC_CLIENT_WASM names one (Studio's CLIENT starter,
+ * built as the game API builds a CLIENT half).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
-  ALLOWED_HOST_CALLS,
   EXEC_CLIENT_ABI_IMPORTS,
   EXEC_CLIENT_HOST_CALLS,
+  GLUE_HOST_FUNCTIONS,
   GlueRuntime,
   PlayerCodeBroker,
 } from '../../dist/index.js';
@@ -40,6 +41,7 @@ const CLIENT_SDK_CALLS = [
   'voxel_set',
   'voxels_list',
 ];
+/** The catalog's client calls only the legacy engines answered. */
 const LEGACY_ONLY = [
   'container_create',
   'container_get',
@@ -57,12 +59,12 @@ const LEGACY_ONLY = [
 
 const flat = (groups) => Object.values(groups).flatMap((s) => [...s]).sort();
 
-test('the ck-exec allowlist is exactly crowdy-client-sdk\u2019s calls; the legacy one keeps the rest until 18.0', () => {
+test('the allowlist is exactly crowdy-client-sdk\u2019s calls, and the glue names the same', () => {
   assert.deepEqual(flat(EXEC_CLIENT_HOST_CALLS), CLIENT_SDK_CALLS);
   assert.equal(EXEC_CLIENT_HOST_CALLS.model, undefined);
   assert.equal(EXEC_CLIENT_HOST_CALLS.sessions, undefined);
   assert.deepEqual([...EXEC_CLIENT_HOST_CALLS.present].sort(), ['hud_set', 'overlay_draw']);
-  assert.deepEqual(flat(ALLOWED_HOST_CALLS), [...CLIENT_SDK_CALLS, ...LEGACY_ONLY].sort());
+  assert.deepEqual([...GLUE_HOST_FUNCTIONS].sort(), CLIENT_SDK_CALLS);
 });
 
 class FakeWorker {
@@ -91,18 +93,17 @@ const GRID = { low: { x: 0n, y: 0n, z: 0n }, high: { x: 2n, y: 2n, z: 2n }, grid
 /** The capability summary's host calls the player consented to. */
 const CONSENTED = ['chunk_get', 'voxel_set', 'user_state_get', 'grid_permission_check', 'grid_info'];
 
-async function brokerFor(engine, extra = {}) {
+async function brokerFor(extra = {}) {
   const worker = new FakeWorker();
   const calls = [];
   const broker = new PlayerCodeBroker({
-    engine,
     workerUrl: 'glue.js',
     workerFactory: () => worker,
     grid: GRID,
     artifactHash: 'f'.repeat(64),
     hashArtifact: async () => 'f'.repeat(64),
     fuelPerDispatch: 1000n,
-    consentedHostCalls: engine === 'ck-exec' ? CONSENTED : undefined,
+    consentedHostCalls: CONSENTED,
     eventBus: null,
     onHostCall: async (call) => {
       calls.push(call.fn);
@@ -120,8 +121,8 @@ async function ask(worker, id, fn, args) {
   return worker.sent.findLast((m) => m.type === 'hostcall-result' && m.id === id);
 }
 
-test('a ck-exec broker refuses the legacy-only calls and answers the SDK\u2019s', async () => {
-  const { broker, worker, calls } = await brokerFor('ck-exec');
+test('a broker refuses the legacy-only calls and answers the SDK\u2019s', async () => {
+  const { broker, worker, calls } = await brokerFor();
   assert.equal(worker.sent[0].engine, 'ck-exec', 'the glue is told which ABI to offer');
   let id = 0;
   for (const fn of LEGACY_ONLY) {
@@ -144,8 +145,8 @@ test('a ck-exec broker refuses the legacy-only calls and answers the SDK\u2019s'
   broker.stop();
 });
 
-test('a ck-exec broker refuses an SDK call outside the capability summary the player consented to', async () => {
-  const { broker, worker, calls } = await brokerFor('ck-exec');
+test('a broker refuses an SDK call outside the capability summary the player consented to', async () => {
+  const { broker, worker, calls } = await brokerFor();
   // In the allowlist, but not in this module's summary: a name it assembled at run time.
   for (const [fn, args] of [
     ['hud_set', { payload: 'x' }],
@@ -159,64 +160,65 @@ test('a ck-exec broker refuses an SDK call outside the capability summary the pl
   broker.stop();
 });
 
-test('a legacy broker still answers the Game Model calls until 18.0', async () => {
-  const { broker, worker, calls } = await brokerFor(undefined);
-  assert.equal(worker.sent[0].engine, 'player-compute');
-  assert.equal((await ask(worker, 1, 'container_create', { typeName: 'crate' })).ok, true);
-  assert.deepEqual(calls, ['container_create']);
-  broker.stop();
-});
-
-test('a ck-exec broker runs only hash-bound, metered and bounded by what the player consented to', async () => {
-  for (const missing of ['artifactHash', 'fuelPerDispatch', 'consentedHostCalls']) {
-    const broker = new PlayerCodeBroker({
-      engine: 'ck-exec',
-      workerUrl: 'glue.js',
-      workerFactory: () => new FakeWorker(),
-      grid: GRID,
-      artifactHash: 'f'.repeat(64),
-      fuelPerDispatch: 1000n,
-      consentedHostCalls: CONSENTED,
-      [missing]: undefined,
-      onHostCall: async () => null,
-    });
-    await assert.rejects(broker.start(new ArrayBuffer(8)), /artifactHash, fuelPerDispatch and consentedHostCalls/, missing);
+test('a broker runs only hash-bound, metered and bounded by what the player consented to', async () => {
+  const served = {
+    workerUrl: 'glue.js',
+    grid: GRID,
+    artifactHash: 'f'.repeat(64),
+    fuelPerDispatch: 1000n,
+    consentedHostCalls: CONSENTED,
+    onHostCall: async () => null,
+  };
+  for (const [what, override] of [
+    ['artifactHash', { artifactHash: undefined }],
+    ['fuelPerDispatch', { fuelPerDispatch: undefined }],
+    ['a zero budget', { fuelPerDispatch: 0n }],
+    ['consentedHostCalls', { consentedHostCalls: undefined }],
+    ['the legacy engine', { engine: 'player-compute' }],
+  ]) {
+    const worker = new FakeWorker();
+    const broker = new PlayerCodeBroker({ ...served, workerFactory: () => worker, ...override });
+    await assert.rejects(broker.start(new ArrayBuffer(8)), /artifactHash, fuelPerDispatch and consentedHostCalls/, what);
+    assert.equal(worker.sent.length, 0, what);
   }
 });
 
-test('the ck-exec glue offers exactly the CLIENT ABI imports; the legacy glue keeps its stubs', () => {
-  const exec = new GlueRuntime({ engine: 'ck-exec', hostCallSync: () => new Uint8Array() }).buildImports(() => null);
-  assert.deepEqual(
-    Object.fromEntries(Object.entries(exec).map(([mod, fns]) => [mod, Object.keys(fns).sort()])),
-    Object.fromEntries(Object.entries(EXEC_CLIENT_ABI_IMPORTS).map(([mod, fns]) => [mod, [...fns].sort()])),
-  );
+test('the glue offers exactly the CLIENT ABI imports, whatever engine it is asked for', () => {
+  for (const engine of [undefined, 'ck-exec', 'player-compute']) {
+    const imports = new GlueRuntime({ engine, hostCallSync: () => new Uint8Array() }).buildImports(() => null);
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(imports).map(([mod, fns]) => [mod, Object.keys(fns).sort()])),
+      Object.fromEntries(Object.entries(EXEC_CLIENT_ABI_IMPORTS).map(([mod, fns]) => [mod, [...fns].sort()])),
+      String(engine),
+    );
+  }
   assert.deepEqual(EXEC_CLIENT_ABI_IMPORTS, {
     ck: ['log', 'now_ms', 'state_get', 'state_set', 'host_call'],
     wasi_snapshot_preview1: ['random_get'],
   });
-  const legacy = new GlueRuntime({ hostCallSync: () => new Uint8Array() }).buildImports(() => null);
-  assert.ok(legacy.wasi_unstable);
-  assert.equal(typeof legacy.wasi_snapshot_preview1.fd_write, 'function');
 });
 
-test('the ck-exec glue will not link an import outside the ABI, nor run an unmetered module', async () => {
-  const glue = (engine, fuelPerDispatch = 1000n) =>
-    new GlueRuntime({ engine, fuelPerDispatch, hostCallSync: () => new Uint8Array() });
+test('the glue will not link an import outside the ABI, nor run an unmetered module', async () => {
+  const glue = (fuelPerDispatch = 1000n) =>
+    new GlueRuntime({ fuelPerDispatch, hostCallSync: () => new Uint8Array() });
   const stray = makeForbiddenImportArtifact('wasi_snapshot_preview1', 'fd_write');
-  await assert.rejects(glue('ck-exec').instantiate(stray.buffer), (e) => e instanceof WebAssembly.LinkError);
-  await assert.rejects(glue('player-compute').instantiate(stray.buffer), /missing the ck ABI/, 'legacy links it');
+  await assert.rejects(glue().instantiate(stray.buffer), (e) => e instanceof WebAssembly.LinkError);
+  // No `wasi_unstable` module at all: V8 refuses a missing module as a TypeError.
+  const unstable = makeForbiddenImportArtifact('wasi_unstable', 'random_get');
+  await assert.rejects(
+    glue().instantiate(unstable.buffer),
+    (e) => e instanceof WebAssembly.LinkError || e instanceof TypeError,
+  );
 
   const withStub = makeExecClientArtifact({ extraImport: ['wasi_snapshot_preview1', 'proc_exit'] });
-  await assert.rejects(glue('ck-exec').instantiate(withStub.buffer), (e) => e instanceof WebAssembly.LinkError);
+  await assert.rejects(glue().instantiate(withStub.buffer), (e) => e instanceof WebAssembly.LinkError);
 
   const unmetered = makeExecClientArtifact({ withFuel: false });
-  await assert.rejects(glue('ck-exec').instantiate(unmetered.buffer), /ck_fuel meter/);
-  await glue('player-compute').instantiate(unmetered.buffer);
-  await assert.rejects(glue('ck-exec', null).instantiate(makeExecClientArtifact().buffer), /fuel budget/);
+  await assert.rejects(glue().instantiate(unmetered.buffer), /ck_fuel meter/);
+  await assert.rejects(glue(null).instantiate(makeExecClientArtifact().buffer), /fuel budget/);
 
   const logs = [];
   const metered = new GlueRuntime({
-    engine: 'ck-exec',
     fuelPerDispatch: 1000n,
     hostCallSync: () => new Uint8Array(),
     onLog: (level, message) => logs.push([level, message]),
@@ -242,7 +244,6 @@ test(
     const logs = [];
     const runtime = (fuelPerDispatch) =>
       new GlueRuntime({
-        engine: 'ck-exec',
         fuelPerDispatch,
         onLog: (level, message) => logs.push([level, message]),
         hostCallSync: (req) => {

@@ -77,6 +77,10 @@ function binaryModule(sections) {
   ]);
 }
 
+/** The global section holding the mutable i64 `ck_fuel` meter (global 0) the build injects. */
+const FUEL_GLOBALS = section(6, vector([[I64, 0x01, 0x42, 0x00, 0x0b]]));
+const FUEL_EXPORT = exportEntry('ck_fuel', 0x03, 0);
+
 export function makeHostCallArtifact({
   request,
   requestPtr = 64,
@@ -103,6 +107,7 @@ export function makeHostCallArtifact({
     exportEntry('memory', 0x02, 0),
     exportEntry('ck_alloc', 0x00, 1),
     exportEntry('init', 0x00, 2),
+    FUEL_EXPORT,
   ]));
   const code = section(10, vector([
     functionBody([0x41, ...s32(allocPtr)]),
@@ -119,7 +124,7 @@ export function makeHostCallArtifact({
     ...u32(requestBytes.length),
     ...requestBytes,
   ]]));
-  return binaryModule([types, imports, functions, memory, exports, code, data]);
+  return binaryModule([types, imports, functions, memory, FUEL_GLOBALS, exports, code, data]);
 }
 
 export function makeForbiddenImportArtifact(moduleName, importName) {
@@ -144,6 +149,7 @@ export function makeSpinArtifact(iterations = 20_000_000) {
     exportEntry('memory', 0x02, 0),
     exportEntry('ck_alloc', 0x00, 0),
     exportEntry('tick', 0x00, 1),
+    FUEL_EXPORT,
   ]));
   const code = section(10, vector([
     functionBody([0x41, ...s32(1024)]),
@@ -164,7 +170,7 @@ export function makeSpinArtifact(iterations = 20_000_000) {
       0x0b,
     ], [{ count: 1, type: I32 }]),
   ]));
-  return binaryModule([types, functions, memory, exports, code]);
+  return binaryModule([types, functions, memory, FUEL_GLOBALS, exports, code]);
 }
 
 /** A tick export that never returns: loop { br 0 }. */
@@ -179,6 +185,7 @@ export function makeInfiniteSpinArtifact() {
     exportEntry('memory', 0x02, 0),
     exportEntry('ck_alloc', 0x00, 0),
     exportEntry('tick', 0x00, 1),
+    FUEL_EXPORT,
   ]));
   const code = section(10, vector([
     functionBody([0x41, ...s32(1024)]),
@@ -188,7 +195,7 @@ export function makeInfiniteSpinArtifact() {
       0x0b,
     ]),
   ]));
-  return binaryModule([types, functions, memory, exports, code]);
+  return binaryModule([types, functions, memory, FUEL_GLOBALS, exports, code]);
 }
 
 /** A tick export that loops forever over a denied host call. */
@@ -211,6 +218,7 @@ export function makeMalformedHostCallLoopArtifact() {
     exportEntry('memory', 0x02, 0),
     exportEntry('ck_alloc', 0x00, 1),
     exportEntry('tick', 0x00, 2),
+    FUEL_EXPORT,
   ]));
   const code = section(10, vector([
     functionBody([0x41, ...s32(2048)]),
@@ -230,7 +238,7 @@ export function makeMalformedHostCallLoopArtifact() {
     ...u32(requestBytes.length),
     ...requestBytes,
   ]]));
-  return binaryModule([types, imports, functions, memory, exports, code, data]);
+  return binaryModule([types, imports, functions, memory, FUEL_GLOBALS, exports, code, data]);
 }
 
 /**

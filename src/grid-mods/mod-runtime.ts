@@ -13,21 +13,21 @@ import {
 } from './grid-host-calls.js';
 
 /**
- * A Rust CLIENT mod: platform-built WASM run in the tokenless glue worker. A ck-exec mod's
- * CLIENT half is `engine: 'ck-exec'` with the `digest`, `fuelPerDispatch`, `tickIntervalMs` and
- * summary host calls of `exec.modClientArtifactBytes` (`ExecClientHalves` runs a whole grid's).
+ * A ck-exec mod's CLIENT half: platform-built WASM run in the tokenless glue worker, with the
+ * `digest` (as `artifactHash`), `fuelPerDispatch`, `tickIntervalMs` and summary host calls of
+ * `exec.modClientArtifactBytes` (`ExecClientHalves` runs a whole grid's).
  */
 export interface WasmGridModSpec {
   kind: 'wasm';
   moduleName: string;
   artifact: ArrayBuffer;
-  artifactHash?: string;
-  fuelPerDispatch?: bigint;
+  artifactHash: string;
+  fuelPerDispatch: bigint;
   tickIntervalMs?: number;
-  /** Default `'player-compute'`, a legacy CLIENT module. */
+  /** `'ck-exec'`, the only engine. */
   engine?: PlayerCodeEngine;
-  /** A CLIENT half's `capabilitySummary.hostFunctions`; required with `engine: 'ck-exec'`. */
-  consentedHostCalls?: readonly string[];
+  /** The CLIENT half's `capabilitySummary.hostFunctions` the player consented to. */
+  consentedHostCalls: readonly string[];
   /** The platform glue worker URL (`@crowdedkingdoms/crowdyjs/player-glue-worker`). */
   workerUrl: string | URL;
 }
@@ -65,7 +65,7 @@ export interface RunningGridMod {
 
 /**
  * One way to run player code inside a grid, whatever it is written in (DN-10
- * §4-5). Rust CLIENT mods get the full client host catalog through
+ * §4-5). A ck-exec CLIENT half gets the host calls it was consented through
  * {@link createGridHostCalls}; JS grid programs get real CrowdyJS through a
  * grid-token relay. Both are confined to `scope`'s grid, locally for UX and by
  * the server for authority.

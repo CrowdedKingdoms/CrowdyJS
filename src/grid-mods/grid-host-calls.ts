@@ -54,13 +54,12 @@ export class GridHostCallRefused extends Error {
 const SPATIAL_KINDS = new Set(['actor', 'client_event', 'server_event', 'text']);
 
 /**
- * The page-side answer to every CLIENT host call in the platform catalog,
- * through ordinary CrowdyJS confined to one grid (DN-10 §4). Hand the result
- * to `PlayerCodeBroker({ onHostCall })`; the broker has already applied the
- * allowlist, rate caps and chunk clamps, and answers `grid_info`, `emit_event`,
- * `hud_set` and `overlay_draw` itself. A ck-exec CLIENT half (`engine:
- * 'ck-exec'`) reaches only the crowdy-client-sdk calls: the model and sessions
- * cases below serve legacy CLIENT modules until 18.0.
+ * The page-side answer to a CLIENT half's host calls (`EXEC_CLIENT_HOST_CALLS`,
+ * what crowdy-client-sdk wraps), through ordinary CrowdyJS confined to one grid
+ * (DN-10 §4). Hand the result to `PlayerCodeBroker({ onHostCall })`; the broker
+ * has already applied the allowlist, the player's consent, rate caps and chunk
+ * clamps, and answers `grid_info`, `emit_event`, `hud_set` and `overlay_draw`
+ * itself.
  */
 export function createGridHostCalls(
   options: GridHostCallsOptions,
@@ -192,10 +191,7 @@ export function createGridHostCalls(
         if (!local?.drainPointerClicks) throw new GridHostCallRefused(fn);
         return local.drainPointerClicks();
       default:
-        // The model host calls (container_*, property_set, edge_*, model_invoke,
-        // sessions_list) went with the game model and the player model;
-        // grid_state_*, avatar_state_get and grid_permission_check have no
-        // browser GraphQL surface.
+        // avatar_state_get and grid_permission_check have no browser GraphQL surface.
         throw new GridHostCallRefused(fn);
     }
   };

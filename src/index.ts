@@ -393,7 +393,6 @@ export { PlayerWalletAPI } from './domains/playerWallet.js';
 export { MarketplaceAPI } from './domains/marketplace.js';
 export {
   PlayerCodeBroker,
-  ALLOWED_HOST_CALLS,
   EXEC_CLIENT_HOST_CALLS,
   type PlayerCodeEngine,
   type PlayerCodeBrokerOptions,

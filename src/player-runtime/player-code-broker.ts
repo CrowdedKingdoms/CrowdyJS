@@ -4,20 +4,22 @@ import {
   wrapGlueSab,
   writeGlueResult,
 } from './glue-sab.js';
-import { GENERATED_HOST_CATALOG } from './host-catalog.generated.js';
+import { EXEC_CLIENT_HOST_CALLS } from './client-host-calls.js';
 import {
   ClientGridEvent,
   ClientGridEventBus,
   defaultClientGridEventBus,
 } from './client-grid-event-bus.js';
 
+export { EXEC_CLIENT_HOST_CALLS };
+
 export interface PlayerCodeGridBounds {
   low: { x: bigint; y: bigint; z: bigint };
   high: { x: bigint; y: bigint; z: bigint };
   /**
    * The grid's id. Required for the grid event bus (`emit_event` /
-   * `on_event`) and for self-grid checks on `grid_state_*`; a broker without
-   * it refuses those calls.
+   * `on_event`); a broker without it refuses those calls. With it, a
+   * `grid_permission_check` naming another grid is refused here.
    */
   gridId?: string;
 }
@@ -51,43 +53,40 @@ export interface PlayerCodePresentation {
 }
 
 /**
- * What built a player module. `'ck-exec'`: the CLIENT half of a ck-exec mod, a
- * `crowdy-client-sdk` crate. `'player-compute'`: a legacy CLIENT module (removed in 18.0).
+ * What built a player module: the CLIENT half of a ck-exec mod, a `crowdy-client-sdk` crate.
+ * The only engine since 18.0 removed legacy player compute's CLIENT modules.
  */
-export type PlayerCodeEngine = 'player-compute' | 'ck-exec';
+export type PlayerCodeEngine = 'ck-exec';
 
 export interface PlayerCodeBrokerOptions {
   /** Platform-owned glue worker URL; the worker never receives auth tokens. */
   workerUrl: string | URL;
   grid: PlayerCodeGridBounds;
   /**
-   * `'ck-exec'` for a mod's CLIENT half: host calls are exactly
-   * {@link EXEC_CLIENT_HOST_CALLS}, the glue offers exactly the CLIENT ABI imports
+   * `'ck-exec'`, the only engine and the default: host calls are at most
+   * {@link EXEC_CLIENT_HOST_CALLS}, and the glue offers exactly the CLIENT ABI imports
    * (`ck::{log,now_ms,state_get,state_set,host_call}` and
-   * `wasi_snapshot_preview1::random_get`), and a module without the `ck_fuel` meter, a
-   * `fuelPerDispatch` or {@link consentedHostCalls} does not start. `'player-compute'` (the
-   * default until 18.0) keeps a legacy
-   * CLIENT module's whole {@link ALLOWED_HOST_CALLS} and import table.
+   * `wasi_snapshot_preview1::random_get`) and refuses a module without the `ck_fuel` meter.
    */
   engine?: PlayerCodeEngine;
   /**
    * The host calls the player consented to: the served CLIENT half's
-   * `capabilitySummary.hostFunctions`. Required with `engine: 'ck-exec'`. A call outside it is
-   * refused like one outside the allowlist, so a module that assembles a host call's name at run
-   * time, which the build's summary cannot see, still reaches only what the player agreed to.
+   * `capabilitySummary.hostFunctions`. A call outside it is refused like one outside the
+   * allowlist, so a module that assembles a host call's name at run time, which the build's
+   * summary cannot see, still reaches only what the player agreed to.
    */
-  consentedHostCalls?: readonly string[];
+  consentedHostCalls: readonly string[];
   /**
-   * Content hash of the platform-fetched artifact. When set, start() refuses
-   * any artifact whose hash does not match — a side-loaded module cannot be
-   * run (09 T7). Compute it from the same bytes the game-api served.
+   * Content hash (SHA-256, hex) of the platform-served artifact: start() refuses any artifact
+   * whose hash does not match, so a side-loaded module cannot run (09 T7). Pass the served
+   * CLIENT half's `digest`.
    */
-  artifactHash?: string;
+  artifactHash: string;
   /**
-   * Informational server-authored fuel metadata. The browser does not enforce
-   * this value; metering must be injected into the platform artifact.
+   * The served CLIENT half's per-dispatch fuel budget. The glue loads it into the module's
+   * `ck_fuel` meter before every dispatch; the build's instrument step is what enforces it.
    */
-  fuelPerDispatch?: bigint;
+  fuelPerDispatch: bigint;
   onHostCall: (call: PlayerCodeHostCall) => Promise<unknown>;
   /** Optional sink for HUD/overlay presentation the mod emits (BWF wires this). */
   onPresentation?: (presentation: PlayerCodePresentation) => void;
@@ -121,48 +120,15 @@ export interface PlayerCodeBrokerOptions {
 }
 
 /**
- * Deny-by-default host-call allowlist, grouped by capability (04 §4), built
- * from the platform host catalog (DN-10: the same list the server dispatchers
- * and the capability summary are checked against). Only owner-lawful reads and
- * effects cross the bridge; auth, admin, authoring, grid mutation, raw UDP
- * pose, voice, teams, and any network fetch are absent by construction, not
- * by a denylist. `grid_info` and `emit_event` are answered by the broker
- * itself (the mod's own bounds; the page-local grid event bus).
+ * Per-call-family rate caps (calls per rolling second); flood one, others hold. The allowlist
+ * itself is {@link EXEC_CLIENT_HOST_CALLS}, deny by default: only owner-lawful reads and effects
+ * cross the bridge, and auth, admin, authoring, grid mutation, raw UDP pose, voice, teams and
+ * any network fetch are absent by construction, not by a denylist. `grid_info` and
+ * `emit_event` are answered by the broker itself (the mod's own bounds; the page-local grid
+ * event bus).
  */
-export const ALLOWED_HOST_CALLS: Readonly<Record<string, ReadonlySet<string>>> =
-  clientHostCalls(() => true);
-
-/** Client calls only the legacy engines answer, besides the Game Model group. */
-const LEGACY_ONLY_HOST_CALLS: ReadonlySet<string> = new Set([
-  'sessions_list',
-  'grid_state_get',
-  'grid_state_set',
-]);
-
-/**
- * The host calls a ck-exec mod's CLIENT half may make, grouped as {@link ALLOWED_HOST_CALLS}:
- * the client half of the host catalog less what only the legacy engines answer (the `model`
- * group, `sessions_list` and `grid_state_*`). It is exactly what crowdy-client-sdk wraps.
- */
-export const EXEC_CLIENT_HOST_CALLS: Readonly<Record<string, ReadonlySet<string>>> =
-  clientHostCalls((fn) => fn.group !== 'model' && !LEGACY_ONLY_HOST_CALLS.has(fn.name));
-
-function clientHostCalls(
-  keep: (fn: (typeof GENERATED_HOST_CATALOG.functions)[number]) => boolean,
-): Readonly<Record<string, ReadonlySet<string>>> {
-  const groups: Record<string, Set<string>> = {};
-  for (const fn of GENERATED_HOST_CATALOG.functions) {
-    if (!fn.targets.includes('client') || !keep(fn)) continue;
-    (groups[fn.group] ??= new Set()).add(fn.name);
-  }
-  return groups;
-}
-
-/** Per-call-family rate caps (calls per rolling second); flood one, others hold. */
 const RATE_CAPS: Record<string, number> = {
-  model: 100,
   state: 100,
-  sessions: 20,
   world_read: 400,
   world_write: 200,
   egress: 60,
@@ -172,11 +138,7 @@ const RATE_CAPS: Record<string, number> = {
 };
 
 /** Grid-addressed functions whose `gridId` argument must be the mod's own grid. */
-const SELF_GRID_FUNCTIONS = new Set([
-  'grid_state_get',
-  'grid_state_set',
-  'grid_permission_check',
-]);
+const SELF_GRID_FUNCTIONS = new Set(['grid_permission_check']);
 
 const CHUNK_FUNCTIONS = new Set([
   'chunk_get',
@@ -197,10 +159,7 @@ function groupsByFunction(
   return byFn;
 }
 
-const FN_TO_GROUP: Readonly<Record<PlayerCodeEngine, ReadonlyMap<string, string>>> = {
-  'player-compute': groupsByFunction(ALLOWED_HOST_CALLS),
-  'ck-exec': groupsByFunction(EXEC_CLIENT_HOST_CALLS),
-};
+const FN_TO_GROUP: ReadonlyMap<string, string> = groupsByFunction(EXEC_CLIENT_HOST_CALLS);
 
 const RATE_WINDOW_MS = 1000;
 const CIRCUIT_TRIP_THRESHOLD = 5;
@@ -222,16 +181,16 @@ const FORBIDDEN_BINDING_KEYS = new Set([
 const utf8Encoder = new TextEncoder();
 
 /**
- * Page-side security broker for browser-target player WASM (production shape,
- * player compute P3).
+ * Page-side security broker for a ck-exec mod's CLIENT half: browser WASM from one
+ * `crowdy-client-sdk` crate, built by the platform and served to a player who consented to it.
  *
  * The untrusted glue worker runs the player module; the broker is the trusted
  * boundary on the page:
  *  - artifact bytes come only from the platform (hash-verified; side-load
- *    refused),
+ *    refused) and are metered (`ck_fuel`, refilled per dispatch),
  *  - a deny-by-default, capability-grouped host-call allowlist crosses the
- *    bridge, each call re-validated (confused-deputy safe) and grid-AABB
- *    filtered on both reads and effects,
+ *    bridge, narrowed to what the player consented to, each call re-validated
+ *    (confused-deputy safe) and grid-AABB filtered on both reads and effects,
  *  - per-call-family rate caps bound a runaway mod,
  *  - a local circuit breaker + per-dispatch watchdog recover the page from a
  *    hung or abusive worker.
@@ -262,9 +221,9 @@ export class PlayerCodeBroker {
     | { generation: number; id: number; kind: string }
     | null = null;
 
-  private readonly consented: ReadonlySet<string> | null = this.options.consentedHostCalls
-    ? new Set(this.options.consentedHostCalls)
-    : null;
+  private readonly consented: ReadonlySet<string> = new Set(
+    Array.isArray(this.options.consentedHostCalls) ? this.options.consentedHostCalls : [],
+  );
   private busUnsubscribe: (() => void) | null = null;
   private deliveringEventDepth = 0;
   private readonly busSubscriber = {
@@ -360,10 +319,11 @@ export class PlayerCodeBroker {
       throw new Error('player code circuit is open; reset before starting');
     }
     if (
-      this.options.engine === 'ck-exec' &&
-      (!this.options.artifactHash ||
-        !this.options.fuelPerDispatch ||
-        !Array.isArray(this.options.consentedHostCalls))
+      (this.options.engine ?? 'ck-exec') !== 'ck-exec' ||
+      !this.options.artifactHash ||
+      typeof this.options.fuelPerDispatch !== 'bigint' ||
+      this.options.fuelPerDispatch <= 0n ||
+      !Array.isArray(this.options.consentedHostCalls)
     ) {
       throw new Error(
         'a ck-exec CLIENT half runs only with the artifactHash, fuelPerDispatch and consentedHostCalls it was served with',
@@ -372,13 +332,11 @@ export class PlayerCodeBroker {
     const lifecycleVersion = ++this.lifecycleVersion;
     this.starting = true;
     try {
-      if (this.options.artifactHash) {
-        const actual = await this.hash(artifact);
-        if (actual !== this.options.artifactHash) {
-          throw new Error(
-            'refusing to run an artifact that was not fetched from the platform',
-          );
-        }
+      const actual = await this.hash(artifact);
+      if (actual !== this.options.artifactHash) {
+        throw new Error(
+          'refusing to run an artifact that was not fetched from the platform',
+        );
       }
       if (lifecycleVersion !== this.lifecycleVersion) {
         throw new Error('PlayerCodeBroker start was cancelled');
@@ -494,11 +452,11 @@ export class PlayerCodeBroker {
       ) {
         throw new Error('invalid host call fn');
       }
-      const group = FN_TO_GROUP[this.options.engine ?? 'player-compute'].get(raw.fn);
+      const group = FN_TO_GROUP.get(raw.fn);
       if (!group) {
         throw new Error('host call is not allowed in the player browser sandbox');
       }
-      if (this.consented && !this.consented.has(raw.fn)) {
+      if (!this.consented.has(raw.fn)) {
         throw new Error('host call is outside the capabilities the player consented to');
       }
       if (!isPlainRecord(raw.args)) {
@@ -640,8 +598,8 @@ export class PlayerCodeBroker {
           type: 'init',
           artifact: workerArtifact,
           authority: 'player',
-          engine: this.options.engine ?? 'player-compute',
-          fuelPerDispatch: this.options.fuelPerDispatch?.toString(),
+          engine: 'ck-exec',
+          fuelPerDispatch: this.options.fuelPerDispatch.toString(),
           hostCallTimeoutMs:
             this.options.hostCallTimeoutMs ?? GLUE_HOST_CALL_TIMEOUT_MS,
           tickIntervalMs: this.options.tickIntervalMs ?? 0,

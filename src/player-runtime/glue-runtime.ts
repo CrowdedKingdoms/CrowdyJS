@@ -1,21 +1,19 @@
 /**
- * Factored, environment-agnostic core of the platform glue (player compute
- * P3/P5). This is the ONLY platform code that shares an execution context
+ * Factored, environment-agnostic core of the platform glue for a ck-exec mod's
+ * CLIENT half. This is the ONLY platform code that shares an execution context
  * with an untrusted player module, so it is deliberately tiny and auditable
  * and has NO dependency on worker globals, the DOM, or the SDK client — the
  * browser worker entry ([player-glue-worker.ts]) and the Node integration
  * test both drive this same core.
  *
- * ABI (matches crowdy-compute-sdk and crowdy-client-sdk `lib.rs`, CLIENT ABI
- * 0): the guest imports module `ck` with `log`, `now_ms`, `state_get`,
- * `state_set`, and the JSON gateway `host_call(ptr,len) -> u64` (packed
- * `resp_ptr<<32 | resp_len`, guest frees with `ck_free`), plus
- * `wasi_snapshot_preview1.random_get`. The guest exports `memory`,
- * `ck_alloc`, `ck_free`, and the module hooks `init`, `tick(dt_ms)`,
- * `handle_invoke(ptr,len)->u64`, optional `on_event(ptr,len)`. A ck-exec
- * CLIENT half (`engine: 'ck-exec'`) is offered exactly those imports, and
- * must export the `ck_fuel` meter; a legacy module also gets inert wasi
- * stubs and the `wasi_unstable` alias.
+ * ABI (crowdy-client-sdk `lib.rs`, CLIENT ABI 0): the guest imports module
+ * `ck` with `log`, `now_ms`, `state_get`, `state_set`, and the JSON gateway
+ * `host_call(ptr,len) -> u64` (packed `resp_ptr<<32 | resp_len`, guest frees
+ * with `ck_free`), plus `wasi_snapshot_preview1.random_get`, and nothing else.
+ * The guest exports `memory`, `ck_alloc`, `ck_free`, the `ck_fuel` meter the
+ * build's instrument step injects, and the module hooks `init`,
+ * `tick(dt_ms)`, `handle_invoke(ptr,len)->u64` and optional
+ * `on_event(ptr,len)`.
  *
  * `host_call` is SYNCHRONOUS from the guest's view. The single synchronous
  * dependency this core takes is `hostCallSync(reqBytes) -> respBytes`; the
@@ -24,13 +22,12 @@
  * the reply back). Everything else here is pure.
  */
 
-import { GENERATED_HOST_CATALOG } from './host-catalog.generated.js';
+import { EXEC_CLIENT_HOST_CALLS } from './client-host-calls.js';
 
-/** The host-call names surfaced to a guest: the client half of the host catalog (the broker allowlist). */
-export const GLUE_HOST_FUNCTIONS: readonly string[] =
-  GENERATED_HOST_CATALOG.functions
-    .filter((fn) => fn.targets.includes('client'))
-    .map((fn) => fn.name);
+/** The host-call names a guest may send: the broker's allowlist, {@link EXEC_CLIENT_HOST_CALLS}. */
+export const GLUE_HOST_FUNCTIONS: readonly string[] = Object.values(EXEC_CLIENT_HOST_CALLS).flatMap(
+  (fns) => [...fns],
+);
 
 /** Every import a ck-exec CLIENT half may have (CLIENT ABI 0), by module. */
 export const EXEC_CLIENT_ABI_IMPORTS: Readonly<Record<string, readonly string[]>> = {
@@ -42,9 +39,9 @@ export interface GlueInitMessage {
   type: 'init';
   artifact: ArrayBuffer;
   authority: 'player';
-  /** `'ck-exec'`: a mod's CLIENT half, offered exactly {@link EXEC_CLIENT_ABI_IMPORTS}. */
-  engine?: 'player-compute' | 'ck-exec';
-  /** Server-authored budget loaded into an injected mutable `ck_fuel` global. */
+  /** A mod's CLIENT half, offered exactly {@link EXEC_CLIENT_ABI_IMPORTS}: the only engine. */
+  engine?: 'ck-exec';
+  /** Server-authored budget loaded into the module's mutable `ck_fuel` global; required. */
   fuelPerDispatch?: string;
   /** Legacy metadata; the hard watchdog is owned by the page-side broker. */
   watchdogMs?: number;
@@ -118,12 +115,13 @@ export interface GlueRuntimeOptions {
   /** Deterministic-enough randomness for the guest `random_get` (defaults to crypto). */
   randomFill?: (buf: Uint8Array) => void;
   now?: () => number;
+  /** The per-dispatch budget; a module is refused without one. */
   fuelPerDispatch?: bigint | null;
   /**
-   * `'ck-exec'`: offer exactly {@link EXEC_CLIENT_ABI_IMPORTS} and refuse a module that does not
-   * export the `ck_fuel` meter, or a missing budget. Default `'player-compute'`.
+   * `'ck-exec'`, the only engine: offer exactly {@link EXEC_CLIENT_ABI_IMPORTS} and refuse a
+   * module that does not export the `ck_fuel` meter, or a missing budget.
    */
-  engine?: 'player-compute' | 'ck-exec';
+  engine?: 'ck-exec';
 }
 
 const textDecoder = new TextDecoder();
@@ -182,11 +180,6 @@ export class GlueRuntime {
 
   /** The import object handed to `WebAssembly.instantiate`. Guest sees only these. */
   buildImports(getExports: () => GuestExports | null): WebAssembly.Imports {
-    const mem = (): DataView => {
-      const ex = getExports();
-      if (!ex) throw new Error('guest not instantiated');
-      return new DataView(ex.memory.buffer);
-    };
     const bytesAt = (ptr: number, len: number): Uint8Array => {
       const ex = getExports();
       if (!ex) throw new Error('guest not instantiated');
@@ -250,34 +243,9 @@ export class GlueRuntime {
       randomFill(buf);
       return 0;
     };
-    if (this.options.engine === 'ck-exec') {
-      return {
-        ck,
-        wasi_snapshot_preview1: { random_get },
-      } as unknown as WebAssembly.Imports;
-    }
-
-    const wasi = {
-      random_get,
-      // A player artifact may pull in a few benign wasi stubs; keep them inert.
-      proc_exit: (): void => {
-        throw new Error('proc_exit called (guest trap)');
-      },
-      fd_write: (): number => 0,
-      environ_get: (): number => 0,
-      environ_sizes_get: (envcPtr: number, envBufSzPtr: number): number => {
-        const dv = mem();
-        dv.setUint32(envcPtr, 0, true);
-        dv.setUint32(envBufSzPtr, 0, true);
-        return 0;
-      },
-    };
-
     return {
       ck,
-      wasi_snapshot_preview1: wasi,
-      // Some toolchains name the module `wasi_unstable`; alias defensively.
-      wasi_unstable: wasi,
+      wasi_snapshot_preview1: { random_get },
     } as unknown as WebAssembly.Imports;
   }
 
@@ -288,13 +256,11 @@ export class GlueRuntime {
     if (!ex.memory || typeof ex.ck_alloc !== 'function') {
       throw new Error('artifact is missing the ck ABI (memory / ck_alloc)');
     }
-    if (this.options.engine === 'ck-exec') {
-      if (!(ex.ck_fuel instanceof WebAssembly.Global)) {
-        throw new Error('a ck-exec CLIENT half must export the ck_fuel meter; it was not instrumented');
-      }
-      if (this.options.fuelPerDispatch == null) {
-        throw new Error('a ck-exec CLIENT half needs its fuel budget');
-      }
+    if (!(ex.ck_fuel instanceof WebAssembly.Global)) {
+      throw new Error('a ck-exec CLIENT half must export the ck_fuel meter; it was not instrumented');
+    }
+    if (this.options.fuelPerDispatch == null) {
+      throw new Error('a ck-exec CLIENT half needs its fuel budget');
     }
     this.exports = ex;
   }

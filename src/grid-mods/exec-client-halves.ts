@@ -149,8 +149,7 @@ function refusal(error: unknown): ExecClientHalfError['reason'] {
  * that filled the cache; consent and trust are the listing's, on every refresh.
  *
  * `NOT_FOUND` (not served to this player now) and `RATE_LIMITED` hold that CLIENT half back for
- * a while instead of fetching on every refresh. The legacy grid-attached client mods
- * (`marketplace.gridClientMods`) are not this runner's.
+ * a while instead of fetching on every refresh.
  */
 export class ExecClientHalves {
   private grid: ExecClientHalvesGrid | null = null;
