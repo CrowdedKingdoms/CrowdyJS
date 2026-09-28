@@ -92,8 +92,21 @@ test('client exposes the full management + game sub-client surface', async () =>
     'defineFeature', 'features', 'grantTierFeature', 'revokeTierFeature', 'tierFeatures',
   ]);
   assertMethods(client.billing, 'billing', ['walletBalance', 'walletTransactions', 'appBudget', 'setAppBudget']);
-  assertMethods(client.payments, 'payments', ['create', 'mine', 'all']);
+  assertMethods(client.payments, 'payments', ['create', 'mine', 'mineConnection', 'capturePaypal']);
   assertMethods(client.quotas, 'quotas', ['forOrg', 'forApp', 'effective', 'set', 'remove']);
+  // The SDK is for normal clients: nothing only a super-admin or an operator can call (18.0.0).
+  for (const [domain, removed] of [
+    ['users', ['paginated', 'listConnection', 'setSuperAdmin', 'setOperator', 'setEarlyAccessOverride', 'updateType', 'forceLogout']],
+    ['payments', ['all', 'allConnection', 'events', 'eventsConnection']],
+    ['organizations', ['setStatus']],
+    ['apps', ['setVisibility']],
+    ['hosting', ['all', 'setListing', 'takeDown']],
+  ]) {
+    for (const m of removed) {
+      assert.equal(client[domain][m], undefined, `${domain}.${m} is platform administration, not in the SDK`);
+    }
+  }
+  assert.equal(client.admin.payments.all, undefined);
   // Dedicated environments retired with the v13 unified API.
   assert.equal('environments' in client, false, 'client.environments was removed in v13');
   assertMethods(client.usage, 'usage', ['appGraphqlOperations', 'appSummary', 'playerPulse']);
