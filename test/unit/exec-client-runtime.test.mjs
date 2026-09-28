@@ -21,22 +21,44 @@ import {
   makeForbiddenImportArtifact,
 } from './fixtures/d13-wasm-corpus.mjs';
 
-/** Every host call crowdy-client-sdk 0.1.0 makes (its `api` module, plus nothing else). */
+/** Every host call crowdy-client-sdk wraps (its `api` module, plus nothing else). */
 const CLIENT_SDK_CALLS = [
+  'actor_despawn',
+  'actor_pose',
+  'actor_spawn',
   'actors_list',
   'actors_list_radius',
+  'avatar_appearance',
   'avatar_state_get',
+  'avatar_state_set',
   'chunk_get',
+  'clock',
   'emit_channel',
   'emit_event',
   'emit_spatial',
+  'events_poll',
   'grid_info',
   'grid_permission_check',
   'hud_set',
+  'input_axes',
+  'input_key',
+  'input_look',
   'overlay_draw',
   'pointer_clicks',
+  'pose_get',
+  'pose_release',
+  'pose_set',
+  'scene_catalog',
+  'scene_instances',
+  'send_actor_message',
+  'send_channel_message',
+  'send_client_event',
+  'send_text',
+  'teleport_request',
   'user_state_get',
   'user_state_set',
+  'video_set',
+  'voice_set',
   'voxel_set',
   'voxels_list',
 ];
@@ -61,7 +83,18 @@ test('the ck-exec allowlist is exactly crowdy-client-sdk\u2019s calls; the legac
   assert.deepEqual(flat(EXEC_CLIENT_HOST_CALLS), CLIENT_SDK_CALLS);
   assert.equal(EXEC_CLIENT_HOST_CALLS.model, undefined);
   assert.equal(EXEC_CLIENT_HOST_CALLS.sessions, undefined);
-  assert.deepEqual([...EXEC_CLIENT_HOST_CALLS.present].sort(), ['hud_set', 'overlay_draw']);
+  assert.deepEqual(
+    [...EXEC_CLIENT_HOST_CALLS.present].sort(),
+    [
+      'avatar_appearance',
+      'hud_set',
+      'overlay_draw',
+      'scene_catalog',
+      'scene_instances',
+      'video_set',
+      'voice_set',
+    ],
+  );
   assert.deepEqual(flat(ALLOWED_HOST_CALLS), [...CLIENT_SDK_CALLS, ...LEGACY_ONLY].sort());
 });
 
