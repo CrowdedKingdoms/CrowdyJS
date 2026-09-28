@@ -257,7 +257,7 @@ grouped under `client.admin` and mirrored at the top level):
 
 **The SDK is for normal clients, and designed for production.** It carries what players,
 developers and org-admins call, and nothing only a super-admin or a platform operator can
-call: those fields are in the API, and platform tooling calls them directly (18.0.0 removed
+call: those fields are in the API, and platform tooling calls them directly (18.0.1 removed
 the last wrappers; see [MIGRATION.md](MIGRATION.md)). There is no `client.operator`, and
 infrastructure operations live in the separate infra-control-plane service.
 

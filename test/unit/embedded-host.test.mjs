@@ -156,7 +156,7 @@ test('the hosting surface is on every client, and the Node helper is a subpath e
   for (const m of ['game', 'listed', 'mine', 'publishes', 'claim', 'beginPublish', 'completePublish', 'abandonPublish', 'setEnabled']) {
     assert.equal(typeof client.hosting[m], 'function', `client.hosting.${m}`);
   }
-  // Listing and take-down are the operator's, outside the SDK (18.0.0).
+  // Listing and take-down are the operator's, outside the SDK (18.0.1).
   for (const m of ['all', 'setListing', 'takeDown']) {
     assert.equal(client.hosting[m], undefined, `client.hosting.${m}`);
   }

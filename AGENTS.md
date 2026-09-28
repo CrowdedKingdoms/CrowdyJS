@@ -4,7 +4,8 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.0.0**. Whether that is *published* is
+**Current package:** `package.json` is **18.0.1** (18.0.0 was published only as
+`18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
@@ -25,7 +26,8 @@ directly. So, before adding a wrapper:
 - `test/unit/sdk-audience.test.mjs` fails when any operation document names a root field on
   its platform-only list, or one whose schema description says operator- or super-admin-only.
   When cks-game-api adds such a field, add it to that list; do not wrap it.
-- 18.0.0 removed the last ones (MIGRATION.md lists them). The per-release default origin
+- 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
+  moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
 **18.0.0 removes the legacy engines' SDK surface (P3 W2, HS-42, 2026-09-28): it lands on `dev`

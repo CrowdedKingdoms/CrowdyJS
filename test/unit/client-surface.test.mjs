@@ -94,7 +94,7 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.billing, 'billing', ['walletBalance', 'walletTransactions', 'appBudget', 'setAppBudget']);
   assertMethods(client.payments, 'payments', ['create', 'mine', 'mineConnection', 'capturePaypal']);
   assertMethods(client.quotas, 'quotas', ['forOrg', 'forApp', 'effective', 'set', 'remove']);
-  // The SDK is for normal clients: nothing only a super-admin or an operator can call (18.0.0).
+  // The SDK is for normal clients: nothing only a super-admin or an operator can call (18.0.1).
   for (const [domain, removed] of [
     ['users', ['paginated', 'listConnection', 'setSuperAdmin', 'setOperator', 'setEarlyAccessOverride', 'updateType', 'forceLogout']],
     ['payments', ['all', 'allConnection', 'events', 'eventsConnection']],
