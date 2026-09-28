@@ -11,20 +11,34 @@ not answerable from this page, and the paragraph this replaces proved it: it rea
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
 
-**18.0.0 removes the legacy engines' SDK surface (held until ck-exec reaches P4, 2026-09-26, P2
-W9).** Gone: `client.gameModel`, `client.compute`, `client.playerModel`; the Game Kit's
-blueprints, `kit.deploy`, engines and model-backed helpers (`client.kit(appId)` keeps `social`;
-`kit/wire.ts` and `runOptimisticAction` stay); World Stores' `model` mirror; Studio's model
-lint; `GridScope`'s `sessions`, `model` and `compute`; the CLIENT host calls the models
-answered; `playerCompute`'s SERVER half (`setEnabled`, `setRequires`, `invoke`, `runs`,
-`logs`); the marketplace's player-code listings and grid attachments; and Crowdy Studio's
-`'player-compute'` engine (`mods` is required, `serverEngine` and the Runs panel are gone,
-logs are `CrowdyStudioLogLine`s). **Kept, because the game API keeps their fields:** tier
-features (moved to `client.appAccess`), grid claims and the app-admin marketplace fields.
-**Kept as an open question:** the CLIENT module path in `client.playerCompute` (`deploy`,
-`versions`, `artifact`, `usage`, `myModules`, `delete`, the kill ladder), which Studio's CLIENT
-target needs and which the game API's W9 plan deletes with `src/player-compute`. `schema.gql`
-still carries the removed fields until the P4 sync. [MIGRATION.md](MIGRATION.md).
+**18.0.0 removes the legacy engines' SDK surface (P3 W2, HS-42, 2026-09-28): it lands on `dev`
+with the game API's deletion (cks-game-api #417, ck-api `dev/v2.27.0`).** Gone:
+`client.gameModel`, `client.compute`, `client.playerModel`, **`client.playerCompute`** (its
+CLIENT module path too), **`client.operator`** (it held only the compute ceilings) and
+`playerWallet`'s WASM policies; the Game Kit's blueprints, `kit.deploy`, engines and
+model-backed helpers (`client.kit(appId)` keeps `social`; `kit/wire.ts` and
+`runOptimisticAction` stay); World Stores' `model` mirror; Studio's model lint; `GridScope`'s
+`sessions`, `model` and `compute`; the marketplace's player-code listings and grid attachments
+(`gridClientMods`, `consentGridClientMod`, `trustGridAuthor`, `clientArtifact(Bytes)`); and
+Crowdy Studio's `'player-compute'` engine for both targets (`mods` is required; `serverEngine`,
+`playerCompute`, the Runs panel, `state.usage` and the pairing control are gone). Each
+replacement is ck-exec's: hubs and spokes, mods, and a mod's CLIENT half (MIGRATION.md has the
+map; the docs' [from the legacy engines](https://docs.dev.crowdedkingdoms.com/exec/from-the-legacy-engines)
+page the reasoning). **The player runtime runs CLIENT
+halves only:** `PlayerCodeBroker` needs `artifactHash`, `fuelPerDispatch` and
+`consentedHostCalls`, the allowlist is `EXEC_CLIENT_HOST_CALLS` (`ALLOWED_HOST_CALLS` is gone),
+the glue refuses a module without the `ck_fuel` meter and offers only `EXEC_CLIENT_ABI_IMPORTS`.
+**New in 18.0.0 (the P3 W1 review's findings):** a CLIENT half's `crowdy::log` lines reach
+`onLog` (broker, `ExecClientHalves`, `startGridMod`; 20 a second, 1,000 characters, Studio's
+Logs shows its preview's), the page can call its `handle_invoke` (`invoke`), and
+`createGridHostCalls` answers `avatar_state_get` and `grid_permission_check` from the game's
+knowledge (`local.avatarChunk`, `local.gridPermissionKeys` + `userId`). **Kept, because the game
+API keeps their fields:** tier features (in `client.appAccess`), grid claims and the app-admin
+marketplace fields. It needs ck-api `v2.24.0` for exec (as 17.14.0) and `v2.25.1` for Studio's
+CLIENT projects. The embedded authoring index is cks-game-api `dev`'s after #417 (`ckx-sdk`
+and `crowdy-client-sdk`, 338 symbols); the host catalog is unchanged. **The release's
+`schema.gql` is cks-game-api `dev`'s after #417** (`schema:sync:paths`); a 17.x SDK against
+`v2.27.0` fails every legacy call as a GraphQL validation error. [MIGRATION.md](MIGRATION.md).
 
 **17.14.0 adds ck-exec CLIENT halves (cks-game-api #422, P3 W1, HS-40, 2026-09-27).** A mod
 may carry browser WASM from one `crowdy-client-sdk` crate, which its grid serves to visitors who
@@ -53,10 +67,11 @@ when the player has none (and says so in the build log). The legacy client-mod m
 is cks-game-api `dev`'s after #422 merged (`schema:sync:paths`).
 `test/unit/exec-client-runtime.test.mjs` runs a real CLIENT half when `CROWDY_EXEC_CLIENT_WASM`
 names one (Studio's starter built with cargo, `instrument` and `wasm-opt`, as the API builds it).
-**The Studio authoring index has no crowdy-client-sdk symbols:** the index is generated in
-cks-game-api (`compute-toolchain/scripts/generate-authoring-index.mjs`, crowdy-compute-sdk and
-the game kit only) and embedded here byte for byte, so adding them is a cks-game-api change
-followed by `authoring-index:drift -- --source ... --write`. [MIGRATION.md](MIGRATION.md).
+**The Studio authoring index is generated in cks-game-api**
+(`compute-toolchain/scripts/generate-authoring-index.mjs`) and embedded here byte for byte
+(`authoring-index:drift -- --source ... --write`, then `authoring-index:generate`); 17.14.0's
+still held only the legacy compute SDK and game kit, and 18.0.0 embeds the one #417 generated
+from `ckx-sdk` and `crowdy-client-sdk`. [MIGRATION.md](MIGRATION.md).
 
 **17.13.0 adds ck-exec observability to `client.exec` (ck-api `v2.22.0`, 2026-09-26).**
 `endpointStats(appId, { nodeType, sinceMinutes })` (`execEndpointStats`: calls per endpoint by
@@ -527,13 +542,12 @@ reference consumer of the hosted flow.
 | Persistent terrain | `chunks.*` (durable) + `udp.sendVoxelUpdate` (realtime) |
 | Server-side rules and state (inventory, stats, NPCs, sessions) | ck-exec hubs: `exec.connect` + `call` / `subscribe`; built and deployed with `exec.starters` / `build` / `deploy` (`manage_compute`) |
 | World life between requests | hub timers (`ctx.timer_every`, `ctx.timer_after`) — see the presence rule below |
-| Player code on an owned grid | ck-exec mods (`exec.mod*`); CLIENT modules through `playerCompute` + `PlayerCodeBroker` |
 | Parties, guilds, chat rooms | `kit(appId).social` |
 | Client-side simulation authority | `host.heartbeat`; the hub decides from its caller |
 | Tier-gated features | `appAccess.defineFeature` / `grantTierFeature`; a hub reads `players.features` |
 | Voice / chat / guilds | `udp.sendAudioPacket`; `udp.sendTextPacket`; `channels.*`; `teams.*` |
 | Land claims | `gameApps.createGrid` / `grantPermissions` |
-| Players' code on their grids | ck-exec mods (`exec.modBuild` / `modDeploy`) and their CLIENT halves (`exec.modClientBuild` / `modClientDeploy`); visitors run a grid's with `ExecClientHalves` |
+| Players' code on their grids | ck-exec mods (`exec.modBuild` / `modDeploy`) and their CLIENT halves (`exec.modClientBuild` / `modClientDeploy`); visitors run a grid's with `ExecClientHalves` (`PlayerCodeBroker`, `createGridHostCalls`) |
 | Direct player-to-player | `udp.sendSingleActorMessage` |
 | Save / characters / teleport | `state.*`; `avatars.*`; `teleport.request` |
 | Version / capability | `serverStatus.gameClientBootstrap(appId)` |
@@ -559,7 +573,7 @@ consumer of these surfaces: World Stores + ck-exec hubs + a hand-authored
 remainder. **The public consumer is
 [`CrowdedKingdoms/the-construct`](https://github.com/CrowdedKingdoms/the-construct)**
 (2026-09-07): an engine-agnostic starter over this SDK with two renderers, the
-Crowdy Studio embed with SERVER mods and CLIENT modules, ck-exec hubs, and an in-app org → app
+Crowdy Studio embed with mods and their CLIENT halves, ck-exec hubs, and an in-app org → app
 → tier → seed wizard, verified end to end on dev by a third-party account. It
 pins the tier's exact prerelease per branch and its `AGENTS.md` lists the
 platform facts it depends on. It is also the

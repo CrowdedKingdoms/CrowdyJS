@@ -229,8 +229,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.teleport` | Teleport requests. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
 | `client.exec` | **ck-exec (dev-tier preview):** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion` and `setEnabled` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod` and `trustAuthor` their CLIENT halves. See [ck-exec](#ck-exec-dev-tier-preview). |
-| `client.playerCompute` | Players' CLIENT modules: compile a Crowdy Studio project's CLIENT target to browser WASM (`deploy`, `versions`), fetch the artifact for `PlayerCodeBroker` (`artifact`, `artifactBytes`), compile quota (`usage`), list and delete modules, and the studio kill ladder (`setSwitch`, `switches`). Server-side player code is a ck-exec mod. |
-| `client.playerWallet` | Player spend: balance, spend caps, card setup, policy, charges. |
+| `client.playerWallet` | Player spend: balance, ledger, hourly charges, spend caps, card setup, auto-recharge. A ck-exec mod's compute is billed here, to its owner. |
 | `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
 | `client.crowdyStudioGitHub` | Optional GitHub repository for a Crowdy Studio project: status, `bind` (push the project in, or take the repository), `unbind`, `refresh`, `layout`, `tree`, `getFile`, commit-guarded `putFile` / `deleteFile`. While bound the repository is the working tree and every Studio save commits; the project's `files` are the server's mirror at `github.sha`. Never required. |
@@ -256,15 +255,13 @@ grouped under `client.admin` and mirrored at the top level):
 | `client.sharedEnvironment` | Publish to shared, runtime gating, spend caps, auto-billing. |
 | `client.gameApps` | App grids (`createGrid` / `deleteGrid`), first-class grid ownership (`ownership` / `assignOwnership` / `transferOwnership`), and grid runtime-permission administration. |
 
-**Operator surface** (platform operations; requires `is_operator`):
+There is no operator surface: `client.operator` held only the legacy compute ceilings and
+went with them in 18.0.0 (ck-exec code is bounded by its manifest limits within the
+platform's), and infrastructure operations live in the separate infra-control-plane service.
 
-| Sub-client | What it does |
-|---|---|
-| `client.operator` | Platform compute ceilings (`computePlatformCeilings`, `setComputePlatformCeilings`). Infrastructure operations live in the separate infra-control-plane service, not this SDK. |
-
-Auth, user reads and the studio-admin / operator surfaces use the **identity
-session token**; the world/UDP surfaces require an **app-scoped token** for that
-app. Both go to the same endpoint.
+Auth, user reads and the studio-admin surface use the **identity session token**; the
+world/UDP surfaces require an **app-scoped token** for that app. Both go to the same
+endpoint.
 
 CrowdyJS wraps the full public API surface — every
 non-deprecated public root field has a typed method, with Relay `*Connection`
@@ -507,12 +504,17 @@ import { hostGridProgram } from '@crowdedkingdoms/crowdyjs/grid-program';
 await hostGridProgram({ port, scope: client.grid(appId, gridId), graphqlUrl, graphqlWsUrl });
 ```
 
-`startGridMod` runs either a Rust CLIENT mod (WASM) or a JS grid program
-behind one interface; `createGridHostCalls` answers the CLIENT host calls in
-the platform catalog through CrowdyJS for a mod's broker (the model ones went
-with the game model and the player model in 18.0.0 and are refused). A ck-exec
-mod's CLIENT half is `engine: 'ck-exec'`, and `ExecClientHalves` runs a whole
-grid's (see [A mod's CLIENT half](#a-mods-client-half)).
+`startGridMod` runs either a mod's CLIENT half (WASM) or a JS grid program
+behind one interface, and `ExecClientHalves` runs a whole grid's CLIENT halves
+(see [A mod's CLIENT half](#a-mods-client-half)). `createGridHostCalls` answers
+a CLIENT half's host calls through CrowdyJS confined to the grid. The ones only
+the game can answer need its knowledge: `local.actorsInChunk` for
+`actors_list*`, `local.avatarChunk` (where an avatar's live actor is) for
+`avatar_state_get`, `local.gridPermissionKeys` with the visiting player's
+`userId` for `grid_permission_check`, and `local.drainPointerClicks` for
+`pointer_clicks`; without its hook such a call is refused as not offered. The
+Game Model, sessions and grid state calls went with the legacy engines in
+18.0.0: the broker refuses them.
 
 ## World Stores
 
@@ -662,7 +664,8 @@ Integers above 2^53 decode as `number` and lose precision unless you pass
 A mod (a player's code on a grid they own: `modBuild`, `modDeploy`) can carry a **CLIENT
 half** (17.14.0): browser WASM from one `crowdy-client-sdk` crate, which the mod's grid serves
 to visitors who consent to it or trust its author. It runs in the visitor's
-`PlayerCodeBroker`, sandboxed like a legacy CLIENT module.
+`PlayerCodeBroker`, in a worker with no DOM, token or network, and it is the only kind of
+player module the broker runs since 18.0.0.
 
 ```ts
 // The mod's owner builds one crowdy-client-sdk crate and attaches it to the mod.
@@ -690,24 +693,30 @@ const halves = new ExecClientHalves({
   workerUrl,                                  // the platform glue worker, same origin
   onHostCall: (call) => hostCalls(call),      // e.g. createGridHostCalls({ scope, client })
   onPresentation: (p, mod) => hud.set({ source: mod.modId, label: mod.name, payload: p.payload }),
+  onLog: (line, mod) => devConsole.append(mod.name, line.level, line.message), // text, never HTML
   confirm: (prompt) => window.confirm(describe(prompt)), // once per author; ask: 'mod' for each
   onStopped: (mod) => hud.remove(mod.modId),
 });
 halves.enterGrid({ gridId, low, high });      // the grid the player stands in; null to leave
 setInterval(() => void halves.refresh().catch(console.warn), 10_000);
+
+// The page calls a running CLIENT half's handle_invoke; the reply is the module's bytes.
+const reply = await halves.invoke(modId, new TextEncoder().encode('{"ask":"score"}'));
 ```
 
 Each refresh stops the CLIENT halves whose mod is gone or whose digest, capability hash or
-tick interval changed, asks about the rest, and starts the consented ones in a broker with
-`engine: 'ck-exec'`. That engine allows exactly the host calls crowdy-client-sdk makes
-(`EXEC_CLIENT_HOST_CALLS`: no Game Model, sessions or `grid_state_*`), offers exactly the CLIENT
-ABI imports (`EXEC_CLIENT_ABI_IMPORTS`) and runs a module only with its digest, its fuel budget
-and `consentedHostCalls`, the host calls of the summary the player consented to: a call outside
-them is refused, even one whose name the module assembled at run time.
-`NOT_FOUND` holds a CLIENT half back 15 s and `RATE_LIMITED` 60 s. The grid's owner is asked
-about their own CLIENT halves like anyone; answer yes in `confirm` when `prompt.authorId` is
-the player. The legacy grid-attached client mods (`marketplace.gridClientMods` and the rest)
-keep working until 18.0.
+tick interval changed, asks about the rest, and starts the consented ones in a broker. The
+broker allows at most the host calls crowdy-client-sdk makes (`EXEC_CLIENT_HOST_CALLS`: no Game
+Model, sessions or `grid_state_*`), offers exactly the CLIENT ABI imports
+(`EXEC_CLIENT_ABI_IMPORTS`) and runs a module only with its digest, its fuel budget and
+`consentedHostCalls`, the host calls of the summary the player consented to: a call outside them
+is refused, even one whose name the module assembled at run time. A CLIENT half's
+`crowdy::log` lines reach `onLog` at most 20 a second and 1,000 characters each (then a `warn`
+counts what was dropped); `invoke` sends at most 256 KiB each way and is refused while the
+module is not running. `NOT_FOUND` holds a CLIENT half back 15 s and `RATE_LIMITED` 60 s. The
+grid's owner is asked about their own CLIENT halves like anyone; answer yes in `confirm` when
+`prompt.authorId` is the player. See
+[CLIENT halves](https://docs.dev.crowdedkingdoms.com/exec/client-halves).
 
 ## Hosting a game on Crowdy Games
 
@@ -747,27 +756,31 @@ Crowdy Studio is the in-game SERVER/CLIENT Rust authoring surface for player
 code: cloud projects with target-scoped files, optimistic-concurrency
 autosave, draft/live/stop orchestration, and a Monaco editor backed by a local
 Rust language worker. The worker receives source files and the embedded
-platform index only — never a credential and never a server connection.
-Compiled CLIENT artifacts run through `PlayerCodeBroker`, which keeps tokens
-on the page, allow-lists host calls, and locally clamps chunk-targeted effects
-to the owned grid before the normal SDK path reaches server authorization.
-The host only ticks a CLIENT mod when `tickIntervalMs` is set (omit or `0`
-is invoke-only):
+platform index (the `ckx-sdk` and `crowdy-client-sdk` symbols) only — never a
+credential and never a server connection. A CLIENT half runs through
+`PlayerCodeBroker`, which keeps tokens on the page, allow-lists host calls
+(narrowed to what the player consented to), and locally clamps chunk-targeted
+effects to the owned grid before the normal SDK path reaches server
+authorization. It takes what the platform served with the module, and ticks it
+only when `tickIntervalMs` is set (omit or `0` is invoke-only):
 
 ```ts
 import { PlayerCodeBroker } from '@crowdedkingdoms/crowdyjs';
 
+const half = await client.exec.modClientArtifactBytes(appId, modId);
 const broker = new PlayerCodeBroker({
   workerUrl,
   grid,
   onHostCall,
-  tickIntervalMs: 1000, // required for on_tick; omit for invoke-only
+  moduleName: half.name,
+  artifactHash: half.digest,
+  fuelPerDispatch: half.fuelPerDispatch,
+  consentedHostCalls: half.capabilitySummary.hostFunctions,
+  tickIntervalMs: half.tickIntervalMs, // omit for invoke-only
+  onLog: (line) => console.log(`[${line.moduleName}] ${line.level}: ${line.message}`),
 });
-await broker.start(artifactBytes);
+await broker.start(half.bytes);
 ```
-
-The Studio embed defaults `clientTickIntervalMs` to `1000` when you do not
-pass one; a raw `PlayerCodeBroker` does not.
 
 Most games embed the ready-made shell rather than hand-rolling window chrome
 around `mountCrowdyStudio`:
@@ -779,7 +792,7 @@ import { createCrowdyStudioEmbed } from '@crowdedkingdoms/crowdyjs/crowdy-studio
 import workerUrl from '@crowdedkingdoms/crowdyjs/player-glue-worker?worker&url';
 
 const studio = createCrowdyStudioEmbed({
-  client: game, // CrowdyClient: crowdyStudio, exec, playerCompute, playerWallet, crowdyStudioGitHub
+  client: game, // CrowdyClient: crowdyStudio, exec, playerWallet, crowdyStudioGitHub
   appId,
   gameName: 'My Game',
   suppressGameplayInput: () => pauseInput(),
@@ -812,14 +825,17 @@ exec connection, and Logs shows its `ctx.log` lines.
 `crowdy-client-sdk` crate; Test draft and Deploy live build it with `modClientBuild`, attach
 it to the project's mod with `modClientDeploy`, consent to it as its author (the API serves a
 CLIENT half only to players who consented, its author too) and preview the served module in
-the HUD layer. A CLIENT-only project's CLIENT half rides the mod named for its CLIENT module:
+the HUD layer; the preview's `crowdy::log` lines show in Logs beside the mod's own. A
+CLIENT-only project's CLIENT half rides the mod named for its CLIENT module:
 when the player has no mod of that name on the grid, Studio deploys the mod starter's server
 half under it first and says so in the build log, and Stop switches that mod off. The
-preview loads only while the player stands in the grid with `run_client_code`. A CLIENT crate
-still on the legacy `crowdy-compute-sdk` is refused with what to change. The embed takes
-`exec` from the client; `mountCrowdyStudio` and the controller take `mods: client.exec`.
+preview loads only while the player stands in the grid with `run_client_code`, and saving a
+CLIENT project needs ck-api `v2.25.1` or later. A CLIENT crate still on the legacy
+`crowdy-compute-sdk` is refused with what to change. The embed takes `exec` from the client;
+`mountCrowdyStudio` and the controller take `mods: client.exec`. Crowdy Studio runs nothing
+on legacy player compute since 18.0.0.
 
-See [Crowdy Studio & player client mods](https://docs.crowdedkingdoms.com/crowdyjs/player-client-mods)
+See [CLIENT halves](https://docs.dev.crowdedkingdoms.com/exec/client-halves), [mods](https://docs.dev.crowdedkingdoms.com/exec/mods)
 and [Embed Crowdy Studio in your game](https://docs.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).
 
 ### The Studio agent (DeepSeek Harness in the browser)

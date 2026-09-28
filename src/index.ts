@@ -37,14 +37,13 @@
  * As of v6 the SDK wraps the **full** public API surface, namespaced
  * by audience: the game-client surface (`auth`, `users`, `udp`, `world`,
  * `chunks`/`voxels`/`actors`/`avatars`/`state`/`teleport`/`channels`/`teams`/
- * `exec`/`host`), the privileged studio-admin surface grouped under
+ * `exec`/`host`) and the privileged studio-admin surface grouped under
  * `client.admin` (`organizations`, `appAccess`, `billing`, `payments`,
  * `quotas`, `usage`, `sharedEnvironment`, `gameApps`; also
- * available top-level), and the operator control-plane surface under
- * `client.operator` (requires `is_operator`). Admin/operator calls still
- * require the appropriate token + permission — the server enforces them; the
- * SDK only provides typed wrappers. Drive admin/operator from a studio backend
- * or internal tooling, never an untrusted browser.
+ * available top-level). Admin calls still require the appropriate token +
+ * permission — the server enforces them; the SDK only provides typed
+ * wrappers. Drive admin calls from a studio backend or internal tooling,
+ * never an untrusted browser.
  */
 
 /** The published package version. Mirrors `package.json`. */
