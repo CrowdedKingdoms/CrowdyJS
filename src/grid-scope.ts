@@ -241,6 +241,7 @@ export class GridScope {
         exportName,
         ...(params !== undefined ? { paramsJson: JSON.stringify(params) } : {}),
       }),
+    /** @deprecated Superseded by `client.exec.gridClientMods(appId, gridId)`; removed in 18.0. */
     clientMods: () =>
       this.clients.marketplace.gridClientMods({
         appId: this.appId,

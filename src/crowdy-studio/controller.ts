@@ -3,6 +3,14 @@ import {
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
 } from '../player-runtime/player-code-broker.js';
+import type {
+  ExecAPI,
+  ExecBuild,
+  ExecConnection,
+  ExecLogLine,
+  ExecModClientArtifactBytes,
+} from '../domains/exec.js';
+import { CrowdyError, CrowdyGraphQLError } from '../errors.js';
 import type { PlayerComputeAPI } from '../domains/playerCompute.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
 import {
@@ -127,7 +135,14 @@ export interface CrowdyStudioRun {
   fuelUsed: string;
   success: boolean;
   errorMessage?: string | null;
+  /**
+   * Set on a ck-exec mod's log line (`ctx.log`), whose text is `errorMessage` at every level;
+   * such a line has no duration or fuel.
+   */
+  level?: CrowdyStudioLogLevel;
 }
+
+export type CrowdyStudioLogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 export interface CrowdyStudioInvokeResult {
   resultBase64?: string | null;
@@ -137,6 +152,8 @@ export interface CrowdyStudioInvokeResult {
 }
 
 export interface CrowdyStudioState {
+  /** What runs the project's targets; fixed for the controller's life. */
+  serverEngine: CrowdyStudioServerEngine;
   projects: readonly CrowdyStudioProjectSummary[];
   project: CrowdyStudioProject | null;
   personalLibraryFiles: readonly CrowdyStudioReferenceFile[];
@@ -180,6 +197,44 @@ export type CrowdyStudioPlayerCompute = Pick<
 
 export type CrowdyStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
 
+/**
+ * What runs the project: `'ck-exec'`, a mod on the grid (`mods`) with the CLIENT target as its
+ * CLIENT half, or `'player-compute'`, legacy player compute for both targets, which the
+ * platform is switching off and removes in 18.0.
+ */
+export type CrowdyStudioServerEngine = 'player-compute' | 'ck-exec';
+
+/**
+ * ck-exec mods (`client.exec`), in place of legacy player compute. The SERVER target of a new
+ * project starts from the mod starter, builds the project's server crate and runs it as the
+ * grid's mod; the Invoke and Logs panels call and read that mod. The CLIENT target is a
+ * `crowdy-client-sdk` crate built as that mod's CLIENT half (`modClientBuild`), attached to it
+ * (`modClientDeploy`) and previewed from the served artifact once its author consents to it. A
+ * CLIENT-only project's CLIENT half rides the mod named for its CLIENT module, which Studio
+ * deploys from the mod starter when the player has no mod of that name on the grid.
+ */
+export type CrowdyStudioMods = Pick<
+  ExecAPI,
+  | 'modStarter'
+  | 'modBuild'
+  | 'modBuildStatus'
+  | 'modDeploy'
+  | 'modSetEnabled'
+  | 'modLogs'
+  | 'myMods'
+  | 'modClientBuild'
+  | 'modClientDeploy'
+  | 'consentClientMod'
+  | 'modClientArtifactBytes'
+  | 'connect'
+>;
+
+/** As ck-exec's mod names. */
+const MOD_NAME = /^[a-z0-9_-]{1,48}$/;
+/** As a ck-exec build's crate names. */
+const CRATE_NAME = /^[a-z][a-z0-9_-]{0,63}$/;
+const LOG_LEVELS: readonly CrowdyStudioLogLevel[] = ['error', 'warn', 'info', 'debug'];
+
 export interface CrowdyStudioBroker {
   start(bytes: ArrayBuffer): Promise<void>;
   stop(): void;
@@ -187,7 +242,15 @@ export interface CrowdyStudioBroker {
 
 export interface CrowdyStudioControllerOptions {
   projectProvider: CrowdyStudioProjectProvider;
+  /** Legacy player compute: both targets' compiles and runs with `'player-compute'`. */
   playerCompute: CrowdyStudioPlayerCompute;
+  /** Run the project as a ck-exec mod and its CLIENT half (see {@link CrowdyStudioMods}). */
+  mods?: CrowdyStudioMods;
+  /**
+   * Defaults to `'ck-exec'` when `mods` is given, else `'player-compute'`. `'ck-exec'` needs
+   * `mods`; `'player-compute'` keeps the legacy engine even when `mods` is given.
+   */
+  serverEngine?: CrowdyStudioServerEngine;
   playerWallet?: CrowdyStudioPlayerWallet;
   /**
    * GitHub repository card (bring-your-own repo). Optional: without it the
@@ -220,7 +283,8 @@ export interface CrowdyStudioControllerOptions {
   /**
    * Override CLIENT tick cadence. When omitted, Studio reads
    * `[package.metadata.crowdy] tick_interval_ms` from the project's CLIENT
-   * Cargo.toml (default 1000, clamped 16–1000).
+   * Cargo.toml (default 1000, clamped 16–1000); on ck-exec the served CLIENT
+   * half carries the value its build read from that line.
    */
   clientTickIntervalMs?: number;
   autosaveMs?: number;
@@ -249,6 +313,7 @@ export interface CrowdyStudioStopResult {
 interface CompiledTarget {
   target: CrowdyStudioTarget;
   name: string;
+  /** Player compute's version, a mod's version, or a CLIENT half's build id. */
   versionId: string;
 }
 
@@ -261,6 +326,7 @@ class OperationCancelledError extends Error {}
  */
 export class CrowdyStudioController {
   private state: CrowdyStudioState = {
+    serverEngine: 'player-compute',
     projects: [],
     project: null,
     personalLibraryFiles: [],
@@ -301,8 +367,17 @@ export class CrowdyStudioController {
   >();
   private pageVisible = true;
   private destroyed = false;
+  private readonly mods: CrowdyStudioMods | null;
+  private modConnection: { name: string; connection: Promise<ExecConnection> } | null = null;
 
   constructor(private readonly options: CrowdyStudioControllerOptions) {
+    const serverEngine =
+      options.serverEngine ?? (options.mods ? 'ck-exec' : 'player-compute');
+    if (serverEngine === 'ck-exec' && !options.mods) {
+      throw new Error("serverEngine 'ck-exec' needs the mods option (client.exec)");
+    }
+    this.mods = serverEngine === 'ck-exec' ? options.mods! : null;
+    this.state = { ...this.state, serverEngine };
     if (options.onStateChange) this.listeners.add(options.onStateChange);
   }
 
@@ -460,9 +535,15 @@ export class CrowdyStudioController {
     if (this.state.project && !(await this.saveNow())) {
       throw new Error('Resolve or retry the current project save before creating another');
     }
+    const modStarter =
+      this.mods && projectTargets(options.kind).includes('SERVER')
+        ? await this.mods.modStarter(this.options.appId)
+        : undefined;
     const input = createCrowdyStudioStarterProject({
       ...options,
       ...this.scope(),
+      ...(modStarter ? { modStarter } : {}),
+      engine: this.state.serverEngine,
     });
     const project = await this.options.projectProvider.createProject(input);
     this.installProject(project);
@@ -531,6 +612,7 @@ export class CrowdyStudioController {
     this.stopSurfacePolling();
     this.broker?.stop();
     this.broker = null;
+    this.closeModConnection();
     this.clearSaveTimers();
     this.editGeneration = 0;
     this.persistedGeneration = 0;
@@ -1286,16 +1368,19 @@ export class CrowdyStudioController {
           };
         }
         this.checkOperation(operation);
-        const requiredClientName =
-          project.metadata.pairingPreference === 'REQUIRED'
-            ? client.name
-            : null;
-        await this.options.playerCompute.setRequires({
-          ...this.scope(),
-          serverName: server.name,
-          requiredClientName,
-        });
-        this.checkOperation(operation);
+        // A mod has no client pairing: its players call it by name.
+        if (!this.mods) {
+          const requiredClientName =
+            project.metadata.pairingPreference === 'REQUIRED'
+              ? client.name
+              : null;
+          await this.options.playerCompute.setRequires({
+            ...this.scope(),
+            serverName: server.name,
+            requiredClientName,
+          });
+          this.checkOperation(operation);
+        }
         await this.enableServer(server.name, operation);
         await this.runClient(client, operation);
       }
@@ -1364,6 +1449,11 @@ export class CrowdyStudioController {
         message: `Submitting ${name}`,
       },
     });
+    if (this.mods) {
+      return target === 'SERVER'
+        ? this.buildMod(name, files, operation)
+        : this.buildClientHalf(name, files, operation);
+    }
 
     // The server resolves the source from the project itself: the saved
     // files at the project revision, or — for a GITHUB project — the rust at
@@ -1418,6 +1508,214 @@ export class CrowdyStudioController {
     return null;
   }
 
+  /**
+   * The SERVER target as a ck-exec mod: the project's server crate files, built on the
+   * platform, then deployed to this grid (switched off until {@link enableServer}). Other
+   * project files, such as grid program assets, are not part of the crate.
+   */
+  private async buildMod(
+    name: string,
+    files: readonly { path: string; content: string }[],
+    operation: number,
+  ): Promise<CompiledTarget | null> {
+    const mods = this.mods!;
+    const problem = modNameProblem(this.requireProject());
+    if (problem) throw new Error(problem);
+    const { appId, gridId } = this.scope();
+    const queued = await mods.modBuild(appId, {
+      name: crateName(name),
+      files: crateFiles(files),
+    });
+    this.checkOperation(operation);
+    const built = await this.awaitModBuild('SERVER', name, queued.buildId, operation);
+    if (!built) return null;
+    const mod = await mods.modDeploy(appId, gridId, name, built.buildId);
+    this.checkOperation(operation);
+    return { target: 'SERVER', name, versionId: String(mod.version) };
+  }
+
+  /**
+   * The CLIENT target as a ck-exec mod's CLIENT half: the project's `crowdy-client-sdk` crate,
+   * built on the platform (`modClientBuild`, a build of `kind` `client`). It is attached to the
+   * project's mod when the project runs ({@link attachClientHalf}).
+   */
+  private async buildClientHalf(
+    name: string,
+    files: readonly { path: string; content: string }[],
+    operation: number,
+  ): Promise<CompiledTarget | null> {
+    const problem = modNameProblem(this.requireProject());
+    if (problem) throw new Error(problem);
+    const cargo = files.find((file) => file.path === 'Cargo.toml')?.content ?? '';
+    if (/^\s*crowdy-compute-sdk\s*=/m.test(cargo)) {
+      this.recordBuild('CLIENT', LEGACY_CLIENT_CRATE);
+      this.update({
+        runtime: {
+          phase: 'COMPILE_FAILED',
+          target: 'CLIENT',
+          message: `${name} is a legacy player compute crate; a CLIENT half builds on crowdy-client-sdk`,
+        },
+      });
+      return null;
+    }
+    const queued = await this.mods!.modClientBuild(this.options.appId, {
+      name: crateName(name),
+      files: crateFiles(files),
+    });
+    this.checkOperation(operation);
+    const built = await this.awaitModBuild('CLIENT', name, queued.buildId, operation);
+    return built ? { target: 'CLIENT', name, versionId: built.buildId } : null;
+  }
+
+  /** Polls a mod build, a mod's or a CLIENT half's, recording its log; null when it did not succeed. */
+  private async awaitModBuild(
+    target: CrowdyStudioTarget,
+    name: string,
+    buildId: string,
+    operation: number,
+  ): Promise<ExecBuild | null> {
+    const mods = this.mods!;
+    const limit = this.options.compilePollLimit ?? 60;
+    const pollMs = this.options.compilePollMs ?? 1_500;
+    for (let attempt = 0; attempt < limit; attempt++) {
+      const b = await mods.modBuildStatus(this.options.appId, buildId);
+      this.checkOperation(operation);
+      if (b.status === 'succeeded') {
+        this.recordBuild(target, b.log ?? '');
+        return b;
+      }
+      if (b.status === 'failed') {
+        this.recordBuild(target, b.log ?? 'Compilation failed without output');
+        this.update({
+          runtime: {
+            phase: 'COMPILE_FAILED',
+            target,
+            message: `${name} failed to compile`,
+          },
+        });
+        return null;
+      }
+      await this.sleep(pollMs);
+      this.checkOperation(operation);
+    }
+    const timeout = `Compilation timed out after ${limit} polls`;
+    this.recordBuild(target, timeout);
+    this.update({
+      runtime: { phase: 'COMPILE_FAILED', target, message: timeout },
+    });
+    return null;
+  }
+
+  /**
+   * Attaches a built CLIENT half to the project's mod, consents to it as its author (the API
+   * serves a CLIENT half only to a player who consented or trusts its author, the author too) and
+   * fetches the served module for this browser's preview. A CLIENT-only project first makes sure
+   * the mod it rides is the player's and switched on.
+   */
+  private async attachClientHalf(
+    compiled: CompiledTarget,
+    operation: number,
+  ): Promise<ExecModClientArtifactBytes> {
+    const mods = this.mods!;
+    const { appId, gridId } = this.scope();
+    const project = this.requireProject();
+    const modName = projectModName(project);
+    if (!projectTargets(project.kind).includes('SERVER')) {
+      await this.ensureClientOnlyMod(modName, operation);
+    }
+    this.update({
+      runtime: { phase: 'ENABLING', target: 'CLIENT', message: `Attaching ${compiled.name} to ${modName}` },
+    });
+    const attached = await mods.modClientDeploy(appId, gridId, modName, compiled.versionId);
+    this.checkOperation(operation);
+    await mods.consentClientMod(appId, attached.modId, attached.capabilityHash);
+    this.checkOperation(operation);
+    this.recordNote(
+      'CLIENT',
+      `Attached to mod '${modName}' as CLIENT version ${attached.clientVersion} (capabilities ` +
+        `${attached.capabilityHash}; ticks every ${attached.tickIntervalMs} ms). Visitors of grid ` +
+        `${gridId} run it once they consent to it or trust you; you consented to it as its author.`,
+    );
+    let artifact: ExecModClientArtifactBytes;
+    try {
+      artifact = await mods.modClientArtifactBytes(appId, attached.modId);
+    } catch (error) {
+      if (error instanceof CrowdyGraphQLError && error.code === 'NOT_FOUND') {
+        throw new CrowdyError({
+          message:
+            `${compiled.name} is attached to mod '${modName}', but its preview did not load: the ` +
+            'API serves a CLIENT half only while its mod is switched on and not held, to a player ' +
+            `with run_client_code who stands in grid ${gridId}`,
+          cause: error,
+        });
+      }
+      if (error instanceof CrowdyGraphQLError && error.code === 'RATE_LIMITED') {
+        throw new CrowdyError({
+          message:
+            `${compiled.name} is attached to mod '${modName}', but its preview was fetched too ` +
+            'often (12 a minute); deploy again in a minute',
+          cause: error,
+        });
+      }
+      throw error;
+    }
+    this.checkOperation(operation);
+    if (artifact.digest !== attached.digest || artifact.clientVersion !== attached.clientVersion) {
+      throw new Error('The served CLIENT half is not the one just attached; deploy again');
+    }
+    return artifact;
+  }
+
+  /**
+   * A CLIENT half rides a mod: without a mod of this name running as the player on the grid,
+   * the mod starter's server half is deployed under it first, and the log says so. The mod is
+   * switched on, since only a running mod's CLIENT half is served.
+   */
+  private async ensureClientOnlyMod(name: string, operation: number): Promise<void> {
+    const mods = this.mods!;
+    const { appId, gridId } = this.scope();
+    const mine = (await mods.myMods(appId)).find(
+      (mod) => String(mod.gridId) === gridId && mod.name === name,
+    );
+    this.checkOperation(operation);
+    if (!mine) {
+      if (!this.canTarget('SERVER', 'write') || !this.canTarget('SERVER', 'run')) {
+        throw new Error(
+          `A CLIENT half rides a mod, and grid ${gridId} has no mod '${name}' of yours; deploying one needs SERVER write and run permissions here`,
+        );
+      }
+      this.update({
+        runtime: { phase: 'COMPILING', target: 'SERVER', message: `Deploying the mod starter as ${name}` },
+      });
+      const starter = await mods.modStarter(appId);
+      this.checkOperation(operation);
+      const queued = await mods.modBuild(appId, { name: crateName(name), files: starter.files });
+      this.checkOperation(operation);
+      const built = await this.awaitModBuild('SERVER', name, queued.buildId, operation);
+      if (!built) {
+        throw new Error(`The mod starter did not build, so the CLIENT half has no mod '${name}' to ride`);
+      }
+      await mods.modDeploy(appId, gridId, name, built.buildId);
+      this.checkOperation(operation);
+      this.recordNote(
+        'SERVER',
+        `Grid ${gridId} had no mod '${name}' of yours, and a CLIENT half rides a mod: deployed the ` +
+          `ck-exec mod starter (${starter.crate}) as '${name}', its server half.`,
+      );
+    }
+    if (!mine?.enabled) {
+      await mods.modSetEnabled(appId, gridId, name, true);
+      this.checkOperation(operation);
+      if (mine) this.recordNote('SERVER', `Switched mod '${name}' on, so its CLIENT half is served.`);
+    }
+  }
+
+  private recordNote(target: CrowdyStudioTarget, note: string): void {
+    this.update({
+      buildOutput: [this.state.buildOutput, `## ${target}\n${note}`].filter(Boolean).join('\n\n'),
+    });
+  }
+
   private recordBuild(target: CrowdyStudioTarget, log: string): void {
     const section = `## ${target}\n${log || 'Compiled successfully.'}`;
     const authoritativeDiagnostics = [
@@ -1441,12 +1739,21 @@ export class CrowdyStudioController {
     this.update({
       runtime: { phase: 'ENABLING', target: 'SERVER', message: `Enabling ${name}` },
     });
+    await this.setServerEnabled(name, true);
+    this.checkOperation(operation);
+  }
+
+  private async setServerEnabled(name: string, enabled: boolean): Promise<void> {
+    if (this.mods) {
+      const { appId, gridId } = this.scope();
+      await this.mods.modSetEnabled(appId, gridId, name, enabled);
+      return;
+    }
     await this.options.playerCompute.setEnabled({
       ...this.scope(),
       name,
-      enabled: true,
+      enabled,
     });
-    this.checkOperation(operation);
   }
 
   private async runClient(
@@ -1459,36 +1766,54 @@ export class CrowdyStudioController {
       );
     }
     const runtime = this.clientRuntimeOptions();
-    const artifact = await this.options.playerCompute.artifactBytes({
-      ...this.scope(),
-      name: compiled.name,
-      versionId: compiled.versionId,
-    });
-    this.checkOperation(operation);
-    if (
-      artifact.versionId !== compiled.versionId ||
-      !artifact.artifactHash ||
-      artifact.bytes.byteLength === 0
-    ) {
-      throw new Error('Client artifact did not match the compiled project version');
+    let brokerOptions: PlayerCodeBrokerOptions;
+    let bytes: ArrayBuffer;
+    if (this.mods) {
+      const half = await this.attachClientHalf(compiled, operation);
+      bytes = half.bytes;
+      brokerOptions = {
+        ...runtime,
+        engine: 'ck-exec',
+        moduleName: half.name,
+        artifactHash: half.digest,
+        fuelPerDispatch: half.fuelPerDispatch,
+        consentedHostCalls: half.capabilitySummary.hostFunctions,
+        onPresentation: this.options.onPresentation,
+        tickIntervalMs: this.options.clientTickIntervalMs ?? half.tickIntervalMs,
+      };
+    } else {
+      const artifact = await this.options.playerCompute.artifactBytes({
+        ...this.scope(),
+        name: compiled.name,
+        versionId: compiled.versionId,
+      });
+      this.checkOperation(operation);
+      if (
+        artifact.versionId !== compiled.versionId ||
+        !artifact.artifactHash ||
+        artifact.bytes.byteLength === 0
+      ) {
+        throw new Error('Client artifact did not match the compiled project version');
+      }
+      bytes = artifact.bytes;
+      brokerOptions = {
+        ...runtime,
+        artifactHash: artifact.artifactHash,
+        fuelPerDispatch: artifact.fuelPerDispatch,
+        onPresentation: this.options.onPresentation,
+        tickIntervalMs:
+          this.options.clientTickIntervalMs ??
+          parseClientTickIntervalMs(
+            this.requireProject().files.find(
+              (file) => file.target === 'CLIENT' && file.path === 'Cargo.toml',
+            )?.content,
+          ),
+      };
     }
-    const brokerOptions: PlayerCodeBrokerOptions = {
-      ...runtime,
-      artifactHash: artifact.artifactHash,
-      fuelPerDispatch: artifact.fuelPerDispatch,
-      onPresentation: this.options.onPresentation,
-      tickIntervalMs:
-        this.options.clientTickIntervalMs ??
-        parseClientTickIntervalMs(
-          this.requireProject().files.find(
-            (file) => file.target === 'CLIENT' && file.path === 'Cargo.toml',
-          )?.content,
-        ),
-    };
     const broker =
       this.options.brokerFactory?.(brokerOptions) ??
       new PlayerCodeBroker(brokerOptions);
-    await broker.start(artifact.bytes);
+    await broker.start(bytes);
     this.checkOperation(operation);
     const previous = this.broker;
     this.broker = broker;
@@ -1516,14 +1841,15 @@ export class CrowdyStudioController {
       }
     }
 
-    if (projectTargets(project.kind).includes('SERVER')) {
+    // On ck-exec a CLIENT-only project's CLIENT half rides a mod too: switched off, it is no
+    // longer served to visitors.
+    if (projectTargets(project.kind).includes('SERVER') || this.mods) {
       serverStopped = false;
       try {
-        await this.options.playerCompute.setEnabled({
-          ...this.scope(),
-          name: moduleNameFor(project, 'SERVER'),
-          enabled: false,
-        });
+        await this.setServerEnabled(
+          this.mods ? projectModName(project) : moduleNameFor(project, 'SERVER'),
+          false,
+        );
         serverStopped = true;
       } catch (error) {
         failures.push(`Server: ${errorMessage(error)}`);
@@ -1557,6 +1883,16 @@ export class CrowdyStudioController {
     if (!projectTargets(project.kind).includes('SERVER')) {
       throw new Error('Invoke requires a SERVER target');
     }
+    if (this.mods) {
+      const result = await this.callMod(
+        moduleNameFor(project, 'SERVER'),
+        exportName.trim() || 'state',
+        paramsJson,
+      );
+      this.checkAgentOperation(agentOperation);
+      this.update({ invokeResult: result });
+      return result;
+    }
     const result = await this.options.playerCompute.invoke({
       ...this.scope(),
       moduleName: moduleNameFor(project, 'SERVER'),
@@ -1588,9 +1924,70 @@ export class CrowdyStudioController {
     else this.stopSurfacePolling();
   }
 
+  /**
+   * The mod's endpoint `method` with `paramsJson` as its arguments, through one exec
+   * connection to the mod (`mod:<name>`, keyed by the grid) that later calls reuse.
+   */
+  private async callMod(
+    name: string,
+    method: string,
+    paramsJson?: string,
+  ): Promise<CrowdyStudioInvokeResult> {
+    const text = paramsJson?.trim();
+    let args: unknown = null;
+    if (text) {
+      try {
+        args = JSON.parse(text);
+      } catch {
+        throw new Error('The call arguments must be JSON');
+      }
+    }
+    if (this.modConnection?.name !== name) {
+      this.closeModConnection();
+      const connection = this.mods!.connect(this.options.appId, {
+        nodeType: modNodeType(name),
+        key: this.options.gridId,
+      });
+      connection.catch(() => {
+        if (this.modConnection?.connection === connection) this.modConnection = null;
+      });
+      this.modConnection = { name, connection };
+    }
+    const connection = await this.modConnection.connection;
+    const started = Date.now();
+    const value = await connection.call(modNodeType(name), this.options.gridId, method, args);
+    return {
+      resultJson: JSON.stringify(value ?? null, (_key, v: unknown) =>
+        typeof v === 'bigint' ? v.toString() : v,
+      ),
+      durationUs: (Date.now() - started) * 1000,
+    };
+  }
+
+  private closeModConnection(): void {
+    const open = this.modConnection;
+    this.modConnection = null;
+    void open?.connection.then((connection) => connection.close(), () => {});
+  }
+
   async refreshSurface(surface: CrowdyStudioPolledSurface): Promise<void> {
     if (!this.state.project) return;
     const serverName = this.state.project.metadata.serverModuleName;
+    if (this.mods && surface !== 'usage') {
+      // ck-exec records no runs; a mod's log is its own `ctx.log` lines.
+      if (surface === 'runs') {
+        this.update({ runs: [] });
+        return;
+      }
+      const modName = projectModNameOrNull(this.state.project);
+      const lines = modName
+        ? await this.mods.modLogs(this.options.appId, this.options.gridId, modName, {
+            limit: 50,
+          })
+        : [];
+      this.update({ logs: lines.map((line) => modLogRow(modName!, line)) });
+      return;
+    }
     if (surface === 'runs') {
       this.update({
         runs: await this.options.playerCompute.runs({
@@ -1612,11 +2009,14 @@ export class CrowdyStudioController {
       });
       return;
     }
+    // Player compute's units and compile quota, which nothing spends on ck-exec.
     const [usage, wallet] = await Promise.all([
-      this.options.playerCompute.usage({ appId: this.options.appId }),
+      !this.mods
+        ? this.options.playerCompute.usage({ appId: this.options.appId })
+        : Promise.resolve(null),
       this.options.playerWallet?.balance() ?? Promise.resolve(null),
     ]);
-    this.update({ usage: normalizeUsage(usage), wallet });
+    this.update({ usage: usage ? normalizeUsage(usage) : null, wallet });
   }
 
   destroy(): void {
@@ -1627,6 +2027,7 @@ export class CrowdyStudioController {
     this.stopSurfacePolling();
     this.broker?.stop();
     this.broker = null;
+    this.closeModConnection();
     this.listeners.clear();
     this.humanEditListeners.clear();
   }
@@ -1931,6 +2332,82 @@ function compareProjectFile(a: CrowdyStudioProjectFile, b: CrowdyStudioProjectFi
   return crowdyStudioFileKey(a.target, a.path).localeCompare(
     crowdyStudioFileKey(b.target, b.path),
   );
+}
+
+/** The node type players call a mod by, as `execModType`. */
+function modNodeType(name: string): string {
+  return `mod:${name}`;
+}
+
+/** What a mod build takes: `Cargo.toml`, `README.md` and Rust under `src/`. */
+function isModCrateFile(path: string): boolean {
+  return (
+    path === 'Cargo.toml' ||
+    path === 'README.md' ||
+    (path.startsWith('src/') && path.endsWith('.rs'))
+  );
+}
+
+function crateFiles(
+  files: readonly { path: string; content: string }[],
+): Array<{ path: string; content: string }> {
+  return files
+    .filter((file) => isModCrateFile(file.path))
+    .map((file) => ({ path: file.path, content: file.content }));
+}
+
+/** A build's crate name for a module: its own when it is one, else `mod-<name>`. */
+function crateName(name: string): string {
+  return CRATE_NAME.test(name) ? name : `mod-${name}`;
+}
+
+/**
+ * The mod a ck-exec project runs as: its SERVER module's name, or for a CLIENT-only project the
+ * CLIENT module's, which names the mod its CLIENT half rides.
+ */
+function projectModName(project: CrowdyStudioProject): string {
+  return moduleNameFor(
+    project,
+    projectTargets(project.kind).includes('SERVER') ? 'SERVER' : 'CLIENT',
+  );
+}
+
+function projectModNameOrNull(project: CrowdyStudioProject): string | null {
+  try {
+    return projectModName(project);
+  } catch {
+    return null;
+  }
+}
+
+/** Why a ck-exec project's mod name cannot be a mod's, or null. */
+function modNameProblem(project: CrowdyStudioProject): string | null {
+  const name = projectModName(project);
+  if (MOD_NAME.test(name)) return null;
+  return projectTargets(project.kind).includes('SERVER')
+    ? `The server module name '${name}' must be 1-48 lowercase letters, digits, - or _ to run as a mod`
+    : `The CLIENT module name '${name}' names the mod its CLIENT half rides, so it must be 1-48 lowercase letters, digits, - or _`;
+}
+
+const LEGACY_CLIENT_CRATE =
+  'This CLIENT crate depends on crowdy-compute-sdk, legacy player compute. On ck-exec a CLIENT ' +
+  'target is a mod\u2019s CLIENT half, one crowdy-client-sdk crate: in Cargo.toml replace the ' +
+  'crowdy-compute-sdk line with crowdy-client-sdk = "0.1.0", and in src/ use crowdy_client_sdk ' +
+  'in place of crowdy_compute_sdk. Its host calls are the same, less the Game Model and sessions.';
+
+function modLogRow(moduleName: string, line: ExecLogLine): CrowdyStudioRun {
+  const level = LOG_LEVELS[line.level] ?? 'debug';
+  return {
+    runId: line.id,
+    moduleName,
+    triggerSource: level,
+    startedAt: line.at,
+    durationUs: 0,
+    fuelUsed: '0',
+    success: level !== 'error',
+    errorMessage: line.text,
+    level,
+  };
 }
 
 function moduleNameFor(

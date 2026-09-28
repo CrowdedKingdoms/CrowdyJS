@@ -8,7 +8,7 @@ export type CrowdyStudioProjectKind = 'SERVER' | 'CLIENT' | 'FULL_STACK';
  * Whether a full-stack server should advertise its client companion.
  * `OPTIONAL` records author intent without creating a runtime requirement;
  * `REQUIRED` is applied with `playerCompute.setRequires` after both targets
- * compile successfully.
+ * compile successfully. A ck-exec mod has no pairing: players call it by name.
  */
 export type CrowdyStudioPairingPreference = 'NONE' | 'OPTIONAL' | 'REQUIRED';
 
