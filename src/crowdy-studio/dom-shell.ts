@@ -115,7 +115,6 @@ export class CrowdyStudioDomShell {
   private readonly settingsDescription: HTMLInputElement;
   private readonly serverModuleName: HTMLInputElement;
   private readonly clientModuleName: HTMLInputElement;
-  private readonly pairing: HTMLSelectElement;
   private readonly problemsPanel: HTMLElement;
   private readonly buildPanel: HTMLElement;
   private readonly logsPanel: HTMLElement;
@@ -256,18 +255,12 @@ export class CrowdyStudioDomShell {
     this.settingsDescription = input('Description');
     this.serverModuleName = input('Server module name');
     this.clientModuleName = input('Client module name');
-    this.pairing = select([
-      ['NONE', 'No pairing'],
-      ['OPTIONAL', 'Optional companion'],
-      ['REQUIRED', 'Require client companion'],
-    ]);
     this.settings.append(
       settingsTitle,
       labeled('Name', this.settingsName),
       labeled('Description', this.settingsDescription),
       labeled('Server module', this.serverModuleName),
       labeled('Client module', this.clientModuleName),
-      labeled('Pairing', this.pairing),
     );
 
     // ----- GitHub repository card -------------------------------------------
@@ -450,11 +443,6 @@ export class CrowdyStudioDomShell {
       this.controller.updateSettings({
         clientModuleName: this.clientModuleName.value,
       }),
-    );
-    this.pairing.addEventListener('change', () =>
-      this.controller.setPairingPreference(
-        this.pairing.value as 'NONE' | 'OPTIONAL' | 'REQUIRED',
-      ),
     );
 
     this.invokeExport = input('Endpoint');
@@ -1160,7 +1148,6 @@ export class CrowdyStudioDomShell {
       this.settingsDescription,
       this.serverModuleName,
       this.clientModuleName,
-      this.pairing,
     ]) {
       control.disabled = disabled;
     }
@@ -1180,9 +1167,6 @@ export class CrowdyStudioDomShell {
     );
     this.serverModuleName.disabled = !projectTargets(project.kind).includes('SERVER');
     this.clientModuleName.disabled = !projectTargets(project.kind).includes('CLIENT');
-    // A mod has no pairing: its CLIENT half rides it.
-    this.pairing.disabled = true;
-    this.pairing.value = project.metadata.pairingPreference;
   }
 
   private renderProblems(state: CrowdyStudioState): void {

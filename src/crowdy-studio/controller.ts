@@ -762,11 +762,7 @@ export class CrowdyStudioController {
     patch: Partial<
       Pick<
         CrowdyStudioProjectMetadata,
-        | 'name'
-        | 'description'
-        | 'serverModuleName'
-        | 'clientModuleName'
-        | 'pairingPreference'
+        'name' | 'description' | 'serverModuleName' | 'clientModuleName'
       >
     >,
   ): void {
@@ -774,14 +770,9 @@ export class CrowdyStudioController {
     project.metadata = {
       ...project.metadata,
       ...patch,
-      pairingPreference:
-        patch.pairingPreference ?? project.metadata.pairingPreference,
+      pairingPreference: project.metadata.pairingPreference,
     };
     this.markEdited();
-  }
-
-  setPairingPreference(preference: CrowdyStudioPairingPreference): void {
-    this.updateSettings({ pairingPreference: preference });
   }
 
   setLocalDiagnostics(diagnostics: readonly CrowdyStudioDiagnostic[]): void {
