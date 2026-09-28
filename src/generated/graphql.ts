@@ -174,22 +174,6 @@ export type ActorsConnection = {
   totalCount: Maybe<Scalars['Int']['output']>;
 };
 
-/** Create a directed edge between two containers. */
-export type AddEdgeInput = {
-  /** The app (tenant) that owns the containers. */
-  appId: Scalars['BigInt']['input'];
-  /** Source container id. */
-  fromContainerId: Scalars['String']['input'];
-  /** JSON object of edge metadata. */
-  metadataJson?: InputMaybe<Scalars['String']['input']>;
-  /** The relationship type label. */
-  relationshipType: Scalars['String']['input'];
-  /** Target container id. */
-  toContainerId: Scalars['String']['input'];
-  /** Optional edge weight. */
-  weight?: InputMaybe<Scalars['Float']['input']>;
-};
-
 export type AdmitAppCodeInput = {
   /** Numeric app id whose allow list receives this entry. */
   appId: Scalars['BigInt']['input'];
@@ -1038,12 +1022,12 @@ export type AppCodeAdmission = {
   versionRange: Maybe<Scalars['String']['output']>;
 };
 
-/** An app's compute allowance in units per minute, spanning the expression engine and both WASM tiers. Absent when no allowance has been set for the app, in which case the app is measured against the platform reference allowance and is never refused. */
+/** An app's compute allowance in units per minute. Absent when no allowance has been set for the app, in which case its ck-exec code is never paused for its budget. */
 export type AppComputeBudgetInfo = {
   __typename?: 'AppComputeBudgetInfo';
   /** The app the allowance belongs to. */
   appId: Scalars['BigInt']['output'];
-  /** When false the allowance is observed and recorded and nothing is refused (the ship default). When true, exceeding it refuses further model invokes until the minute rolls. Enforcement additionally requires the fleet kill switch to be in its default position, so a true here can still be observing. */
+  /** When false the allowance is recorded and nothing is paused (the default). When true, ck-exec pauses the app's code while its last settled minute is over the allowance, and resumes it once a minute is back inside. */
   enforce: Scalars['Boolean']['output'];
   /** Why this number was chosen. Recorded because an allowance with no stated basis is a number the next operator cannot safely change. */
   note: Maybe<Scalars['String']['output']>;
@@ -1051,42 +1035,6 @@ export type AppComputeBudgetInfo = {
   unitsPerMinute: Scalars['BigInt']['output'];
   /** When the allowance was last written. */
   updatedAt: Scalars['DateTime']['output'];
-};
-
-/** Whether an app is inside its per-minute compute allowance right now, and what would happen if it were not. Reading this does not charge anything. */
-export type AppComputeBudgetStatus = {
-  __typename?: 'AppComputeBudgetStatus';
-  /** The allowance the decision was made against. */
-  allowance: Scalars['BigInt']['output'];
-  /** True when the allowance is the app's own stored one, false when it is the platform reference allowance. The reference allowance can never refuse — it exists so shadow-mode observations have a denominator. */
-  allowanceIsAppOwn: Scalars['Boolean']['output'];
-  /** The app. */
-  appId: Scalars['BigInt']['output'];
-  /** Which engines the units came from. Carried on every decision because a single allowance spans the engines, so a player invoke can be refused for compute modules the developer forgot were ticking — and that is only explainable with the breakdown. */
-  byEngine: Array<EngineComputeUnits>;
-  /** Whether being over the allowance is currently refusing invokes. False while in shadow mode, which is the ship default. */
-  enforced: Scalars['Boolean']['output'];
-  /** Whether the app is over the allowance this minute. */
-  overBudget: Scalars['Boolean']['output'];
-  /** Milliseconds until the minute rolls and the allowance resets. */
-  retryAfterMs: Scalars['Int']['output'];
-  /** Compute units accrued in the current minute, across every engine. Between reconciles this is the serving instance's own view, so it can read low on a multi-instance fleet; it converges within seconds. */
-  unitsUsed: Scalars['BigInt']['output'];
-};
-
-/** What an app consumed, per engine, in ONE unit — the number a developer uses to compare the model engine against compute modules, and the number an operator's per-minute allowance is checked against. Derived from the existing per-minute ledgers (wasm_compute_usage, player_wasm_compute_usage, gm_automation_runs, gm_event_log); there is deliberately no separate rollup table for it. */
-export type AppComputeUsage = {
-  __typename?: 'AppComputeUsage';
-  /** Units per engine, always including engines that contributed nothing, so a zero is distinguishable from an engine the query forgot. */
-  byEngine: Array<EngineComputeUnits>;
-  /** Units divided by the window length. Useful for cost, misleading for safety — compare peakMinuteUnits against an allowance, not this. */
-  meanUnitsPerMinute: Scalars['Float']['output'];
-  /** The highest single minute in the window, summed across engines. This is the number a per-minute allowance refuses on: a mean over an hour hides the minute that would have been refused. */
-  peakMinuteUnits: Scalars['BigInt']['output'];
-  /** Compute units across every engine in the window. */
-  totalUnits: Scalars['BigInt']['output'];
-  /** Length of the window in minutes, as clamped (1 to 1440). */
-  windowMinutes: Scalars['Int']['output'];
 };
 
 /** Where an app runs: none (draft), shared (the shared game-api), or dedicated (a provisioned environment). */
@@ -2096,30 +2044,6 @@ export type CompleteLoginLinkInput = {
   token: Scalars['String']['input'];
 };
 
-/** The synchronous result of a computeInvoke call. Unlike the spatial send surface (dual-success), this is direct RPC: the module ran and this is its output. */
-export type ComputeInvokeResult = {
-  __typename?: 'ComputeInvokeResult';
-  /** Wall-clock duration in microseconds. */
-  durationUs: Scalars['Int']['output'];
-  /** Fuel consumed by the call. */
-  fuelUsed: Scalars['BigInt']['output'];
-  /** The module's raw response bytes, base64-encoded. */
-  resultBase64: Scalars['String']['output'];
-  /** The response decoded as JSON text when it parses as JSON; null otherwise. */
-  resultJson: Maybe<Scalars['String']['output']>;
-};
-
-/** One entry in the platform's engine-template registry (deployable by name via computeDeployTemplate). */
-export type ComputeTemplateInfo = {
-  __typename?: 'ComputeTemplateInfo';
-  /** What the template does (from its deploy manifest). */
-  description: Scalars['String']['output'];
-  /** The invoke exports the template binds (its client surface). */
-  exports: Array<Scalars['String']['output']>;
-  /** The template name (e.g. 'mob-engine', 'matchmaking'). */
-  name: Scalars['String']['output'];
-};
-
 /** Relay-style pagination metadata for a connection. */
 export type ConnectionPageInfo = {
   __typename?: 'ConnectionPageInfo';
@@ -2131,63 +2055,6 @@ export type ConnectionPageInfo = {
   hasPreviousPage: Scalars['Boolean']['output'];
   /** Opaque cursor of the first edge in this page. */
   startCursor: Maybe<Scalars['String']['output']>;
-};
-
-/** Operator-set platform ceilings for the per-app WASM compute policy. Each field caps the matching wasm_module_policy knob platform-wide: game-api rejects computeSetPolicy values above the ceiling. A null field means no operator override is stored — game-api falls back to its COMPUTE_PLATFORM_MAX_* env var (bootstrap default), then to the built-in code default. Edits propagate to game-api replicas via replica sync and apply within ~30 seconds, without a game-api restart. */
-export type CpComputePlatformCeilings = {
-  __typename?: 'CpComputePlatformCeilings';
-  /** Max deterministic fuel budget per invoke (fuel_per_invoke ceiling; decimal string). Null = no override (game-api bootstrap default 50000000000). */
-  fuelPerInvoke: Maybe<Scalars['BigInt']['output']>;
-  /** Max deterministic fuel budget per tick (fuel_per_tick ceiling; decimal string). Null = no override (game-api bootstrap default 10000000000). */
-  fuelPerTick: Maybe<Scalars['BigInt']['output']>;
-  /** Max host data-API operations per tick (max_db_ops_per_tick ceiling). Null = no override (game-api bootstrap default 500). */
-  maxDbOpsPerTick: Maybe<Scalars['Int']['output']>;
-  /** Max module-emitted replication bytes per minute (max_egress_bytes_per_min ceiling; decimal string). Null = no override (game-api bootstrap default 100000000). */
-  maxEgressBytesPerMin: Maybe<Scalars['BigInt']['output']>;
-  /** Max module-emitted replication messages per minute (max_egress_msgs_per_min ceiling). Null = no override (game-api bootstrap default 60000). */
-  maxEgressMsgsPerMin: Maybe<Scalars['Int']['output']>;
-  /** Max WASM linear memory per module instance in MiB (max_memory_mb ceiling). Null = no override (game-api bootstrap default 512). */
-  maxMemoryMb: Maybe<Scalars['Int']['output']>;
-  /** Max compute modules per app (wasm_module_policy.max_modules ceiling). Null = no override (game-api bootstrap default 100). */
-  maxModules: Maybe<Scalars['Int']['output']>;
-  /** Max wall-clock watchdog deadline per entry call in milliseconds (max_run_ms ceiling). Null = no override (game-api bootstrap default 5000). */
-  maxRunMs: Maybe<Scalars['Int']['output']>;
-  /** Max module state bytes written per minute (max_state_bytes_per_min ceiling; decimal string). Null = no override (game-api bootstrap default 1073741824). */
-  maxStateBytesPerMin: Maybe<Scalars['BigInt']['output']>;
-  /** Max module state saves per minute (max_state_writes_per_min ceiling). Null = no override (game-api bootstrap default 6000). */
-  maxStateWritesPerMin: Maybe<Scalars['Int']['output']>;
-  /** Max tick trigger rate in Hz per module (max_tick_hz ceiling). Null = no override (game-api bootstrap default 60). */
-  maxTickHz: Maybe<Scalars['Int']['output']>;
-  /** When the ceilings row was last updated (UTC). */
-  updatedAt: Scalars['DateTime']['output'];
-  /** users.user_id of the operator who last updated the ceilings. Null when never edited. */
-  updatedByUserId: Maybe<Scalars['String']['output']>;
-};
-
-/** Patch for cpSetComputePlatformCeilings. Omitted fields stay unchanged; a field set to an explicit null clears that override (game-api falls back to its COMPUTE_PLATFORM_MAX_* env var, then the code default); a value sets the ceiling. All values must be > 0. At least one field is required. */
-export type CpSetComputePlatformCeilingsInput = {
-  /** Max fuel per invoke (decimal string). > 0; explicit null clears the override; omit to leave unchanged. */
-  fuelPerInvoke?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Max fuel per tick (decimal string). > 0; explicit null clears the override; omit to leave unchanged. */
-  fuelPerTick?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Max host data-API operations per tick. > 0; explicit null clears the override; omit to leave unchanged. */
-  maxDbOpsPerTick?: InputMaybe<Scalars['Int']['input']>;
-  /** Max module-emitted replication bytes per minute (decimal string). > 0; explicit null clears the override; omit to leave unchanged. */
-  maxEgressBytesPerMin?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Max module-emitted replication messages per minute. > 0; explicit null clears the override; omit to leave unchanged. */
-  maxEgressMsgsPerMin?: InputMaybe<Scalars['Int']['input']>;
-  /** Max WASM memory per module instance in MiB. > 0; explicit null clears the override; omit to leave unchanged. */
-  maxMemoryMb?: InputMaybe<Scalars['Int']['input']>;
-  /** Max compute modules per app. > 0; explicit null clears the override; omit to leave unchanged. */
-  maxModules?: InputMaybe<Scalars['Int']['input']>;
-  /** Max watchdog deadline per entry call in milliseconds. > 0; explicit null clears the override; omit to leave unchanged. */
-  maxRunMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Max module state bytes written per minute (decimal string). > 0; explicit null clears the override; omit to leave unchanged. */
-  maxStateBytesPerMin?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Max module state saves per minute. > 0; explicit null clears the override; omit to leave unchanged. */
-  maxStateWritesPerMin?: InputMaybe<Scalars['Int']['input']>;
-  /** Max tick rate in Hz per module. > 0; explicit null clears the override; omit to leave unchanged. */
-  maxTickHz?: InputMaybe<Scalars['Int']['input']>;
 };
 
 /** Input for creating a new app access tier. */
@@ -2285,42 +2152,6 @@ export type CreateCheckoutInput = {
   successUrl?: InputMaybe<Scalars['String']['input']>;
   /** Access tier to purchase (BigInt as a decimal string). Required for APP_ACCESS_PURCHASE. */
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
-};
-
-/** Instantiate a container (runtime entity). */
-export type CreateContainerInput = {
-  /** The app (tenant) the container belongs to. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional description. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Human-friendly display name. */
-  displayName: Scalars['String']['input'];
-  /** JSON object of metadata. */
-  metadataJson?: InputMaybe<Scalars['String']['input']>;
-  /** Owner user id; defaults to the caller for member/owner instantiation. */
-  ownerUserId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Initial property values for the container. */
-  properties?: InputMaybe<Array<SeedPropertyInput>>;
-  /** Optional session to create the container in (omit for app-global). */
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-  /** The container type to instantiate. */
-  typeName: Scalars['String']['input'];
-};
-
-/** Lazily create a private project by copying the authenticated author’s latest source versions from existing self-authored player modules. */
-export type CreateCrowdyStudioProjectFromModulesInput = {
-  /** App tenant containing the authored modules. */
-  appId: Scalars['BigInt']['input'];
-  /** Existing self-authored CLIENT module name to copy; at least one module name is required. */
-  clientModuleName?: InputMaybe<Scalars['String']['input']>;
-  /** Grid containing the authored modules. Current ownership is not required to recover one’s own source, but deployment is rechecked separately. */
-  gridId: Scalars['BigInt']['input'];
-  /** Optional 24-hour retry key. The operation also returns an already-created active project with the same module affinity. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** Optional project name. Omit to derive a bounded name from the imported module name(s). */
-  projectName?: InputMaybe<Scalars['String']['input']>;
-  /** Existing self-authored SERVER module name to copy; at least one module name is required. */
-  serverModuleName?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** Create a private player-owned project, optionally with bounded initial files for either target. */
@@ -2423,42 +2254,6 @@ export type CreateOrganizationInput = {
   slug: Scalars['String']['input'];
 };
 
-/** Create a grid-confined player automation. Trigger and action are strict JSON shapes; owner/app/grid selectors cannot be supplied. */
-export type CreatePlayerAutomationInput = {
-  /** Strict action JSON. Use {"kind":"studio_model_invoke","functionName":"...","selfContainerId":"...","params":{}} or {"kind":"player_compute_invoke","moduleName":"...","exportName":"...","params":{}}. Selectors and caller identity are forbidden. */
-  actionJson: Scalars['String']['input'];
-  /** App containing the owned grid. */
-  appId: Scalars['BigInt']['input'];
-  /** Circuit cooldown in milliseconds. Default 60000; minimum 1. */
-  cooldownMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Optional description. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Consecutive failures before the circuit opens. Default 5; minimum 1. */
-  failureThreshold?: InputMaybe<Scalars['Int']['input']>;
-  /** Grid that confines the automation. */
-  gridId: Scalars['BigInt']['input'];
-  /** Per-automation run limit per rolling minute. Default 60; minimum 1. */
-  maxRunsPerMinute?: InputMaybe<Scalars['Int']['input']>;
-  /** Name unique for the current owner in this grid. */
-  name: Scalars['String']['input'];
-  /** Strict trigger JSON. Schedule: {"kind":"schedule","scheduleKind":"interval","intervalMs":2000} or cron with cronExpr. Event: {"kind":"event","eventKind":"owner_container_changed|grid_actor_changed|grid_voxel_changed|compute_event"}; compute_event may include eventName. */
-  triggerJson: Scalars['String']['input'];
-};
-
-/** Create a flexible player-owned model container inside one grid. The caller must currently own the grid; owner identity cannot be supplied. */
-export type CreatePlayerModelContainerInput = {
-  /** App containing the owned grid. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional player-facing name, unique within the owner/grid/type tuple. */
-  displayName?: InputMaybe<Scalars['String']['input']>;
-  /** Grid that confines the container. */
-  gridId: Scalars['BigInt']['input'];
-  /** Optional JSON object stored as untyped container state. */
-  stateJson?: InputMaybe<Scalars['String']['input']>;
-  /** Flexible instance kit key. Defaults to 'PlayerData'; this does not author a studio model type. */
-  typeKey?: InputMaybe<Scalars['String']['input']>;
-};
-
 /** Input for createPortalAuthorizationCode: the Overworld (identity origin, holding the session token) mints a one-time code the destination game exchanges for an app token. Browser handoff path; pair with a PKCE verifier held by the destination game origin. */
 export type CreatePortalAuthorizationCodeInput = {
   /** Numeric id of the target app the player is portaling into. */
@@ -2469,32 +2264,6 @@ export type CreatePortalAuthorizationCodeInput = {
   codeChallengeMethod?: InputMaybe<Scalars['String']['input']>;
   /** Where to redirect the player after issuing the code. Must match the target app's configured launch_url origin when set. */
   redirectUri: Scalars['String']['input'];
-};
-
-/** Create a runtime session. */
-export type CreateSessionInput = {
-  /** Initial admission: 'open' (default) or 'locked' (only the initial participants may join/reconnect until the host unlocks). */
-  admission?: InputMaybe<Scalars['String']['input']>;
-  /** The app (tenant) the session belongs to. */
-  appId: Scalars['BigInt']['input'];
-  /** Seconds a session may sit with nobody joined before the server ends it as abandoned. Omit for the platform default; 0 disables the timeout for this session. */
-  emptyTimeoutSec?: InputMaybe<Scalars['Int']['input']>;
-  /** Optional: host the session inside a grid (a game within the game). Only the grid's current owner may do this, and the app's session creation policy still applies. Player modules on that grid list it through sessions_list; everyone else sees it as an ordinary session carrying gridId. */
-  gridId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Optional idempotency key. Replaying with the same key and identical input returns the first session instead of creating a second; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** Seat cap: the most participants that may be joined at once. Omit for unbounded. Initial participants count against it. */
-  maxParticipants?: InputMaybe<Scalars['Int']['input']>;
-  /** JSON object of session metadata. */
-  metadataJson?: InputMaybe<Scalars['String']['input']>;
-  /** Optional session name. */
-  name?: InputMaybe<Scalars['String']['input']>;
-  /** Initial participants besides the creator. */
-  participantUserIds?: InputMaybe<Array<Scalars['BigInt']['input']>>;
-  /** How the roster is judged: 'actor' (default) expires a joined participant with no fresh Buddy actor in the app after the join grace window; 'none' never expires anybody. Use 'none' for turn-based play that talks GraphQL and channel pings and never replicates an actor (kit.matches does), where the roster's only exits are leave and end. */
-  presence?: InputMaybe<Scalars['String']['input']>;
-  /** Optional: copy the app's template rows of the listed container types into the new session at creation (see SessionSeedInput). At most 2,000 rows per session; above that the creation is refused with the count and no session exists. The count of rows stamped is on the session's `created` event (containersSeeded) and on GmSession.seededContainerCount of the create response. */
-  seedFromApp?: InputMaybe<SessionSeedInput>;
 };
 
 /** Create a team in an app. */
@@ -3651,44 +3420,6 @@ export type DeleteGridResponse = {
   gridId: Maybe<Scalars['BigInt']['output']>;
 };
 
-/** Upload a new immutable source version of a module. The source is validated (size caps, crate allowlist, no build-time code) and parked as compile_status=pending until an instance compiles it. */
-export type DeployComputeVersionInput = {
-  /** The guest ABI version the source targets (must be platform-supported; currently 0). */
-  abiVersion: Scalars['Int']['input'];
-  /** The app (tenant) that owns the module. */
-  appId: Scalars['BigInt']['input'];
-  /** The module (by name) this version belongs to. */
-  moduleName: Scalars['String']['input'];
-  /** The crowdy-compute-sdk version the source targets (must be a platform-supported version, e.g. '0.0.1'). */
-  sdkVersion: Scalars['String']['input'];
-  /** JSON object mapping relative paths to file contents. Must include Cargo.toml and src/lib.rs; only .rs files under src/ plus Cargo.toml are allowed. Dependencies are restricted to the platform crate allowlist; build.rs and [build-dependencies] are rejected. */
-  sourceFilesJson: Scalars['String']['input'];
-};
-
-/** Deploy one target of a Crowdy Studio project the caller owns. The server resolves the source itself — the project files at their saved revision for a STUDIO project, the rust under the layout roots at commitSha (default githubSha) for a GITHUB project — so a client never uploads file bodies and what compiles is exactly what was saved or committed. */
-export type DeployPlayerComputeInput = {
-  /** App containing the owned grid. */
-  appId: Scalars['BigInt']['input'];
-  /** GITHUB projects only: the full 40-hex commit to compile. Defaults to the project githubSha (the mirror commit). Refused for a STUDIO project. */
-  commitSha?: InputMaybe<Scalars['String']['input']>;
-  /** Optional player-facing module description. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Deploy in draft mode (live-coding iteration): the module runs for its author but its spatial egress is suppressed server-side, so no other session in the grid observes its world effects. Omit or false for a normal deploy. */
-  draft?: InputMaybe<Scalars['Boolean']['input']>;
-  /** SERVER only (DN-10): grid event bus subscriptions. Each entry is an event name this module's on_event receives when another module on the same grid calls emit_event with it; '*' subscribes to every name. Omit to keep the module's current subscriptions; pass [] to clear them. Addressed events (emit_event with target = this module's name) arrive either way. */
-  gridEvents?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** Owned grid that confines server execution. */
-  gridId: Scalars['BigInt']['input'];
-  /** Lowercase crate-style module name, unique within the grid. Defaults to the project’s module name for the target and must equal it when both are set. */
-  name?: InputMaybe<Scalars['String']['input']>;
-  /** Crowdy Studio project (owned by the caller, in this app) whose target is deployed. */
-  projectId: Scalars['String']['input'];
-  /** SERVER or CLIENT compile target; the project must have files for it. */
-  target: PlayerComputeTarget;
-  /** Optional server tick rate in Hz. Omit for invoke/event-only modules or CLIENT artifacts. Clamped by the effective player/app policy. */
-  tickHz?: InputMaybe<Scalars['Float']['input']>;
-};
-
 /** Everything this API knows about whether an address can be emailed, and why. */
 export type EmailDeliverability = {
   __typename?: 'EmailDeliverability';
@@ -3751,51 +3482,6 @@ export type EmailStatusRecord = {
   status: Scalars['String']['output'];
 };
 
-/** End a session. Host or app admin ('manage_apps'). */
-export type EndSessionInput = {
-  /** The app (tenant) that owns the session. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since. */
-  expectedHostTerm?: InputMaybe<Scalars['Int']['input']>;
-  /** Optional idempotency key (24h). */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** Terminal status: 'completed' (default; the match ran its course) or 'abandoned'. Either way every joined participant is marked left (session_ended) and admission becomes closed. */
-  reason?: InputMaybe<Scalars['String']['input']>;
-  /** The session id to end. */
-  sessionId: Scalars['String']['input'];
-};
-
-/** Compute units attributed to one engine over the query window. */
-export type EngineComputeUnits = {
-  __typename?: 'EngineComputeUnits';
-  /** The engine whose meter produced these units. */
-  engine: MeteredComputeEngine;
-  /** Compute units, where one unit is one millisecond of measured execution time. Comparable across engines by construction: both engines measure the same quantity with the same clock (process.hrtime around the app's code), and a WASM engine additionally floors its answer by fuel/22,000,000 to charge work done inside the sandbox between two host calls. Zero when the engine ran nothing. */
-  units: Scalars['BigInt']['output'];
-};
-
-/** Atomically get-or-create a container by an opaque binding key. The key is unique per (appId, typeName, sessionId); concurrent ensures converge on one row. Creation-only fields are ignored when the row already exists. */
-export type EnsureContainerInput = {
-  /** The app (tenant) the container belongs to. */
-  appId: Scalars['BigInt']['input'];
-  /** Opaque client-derived key (max 128 chars) identifying the shared container within (appId, typeName, sessionId). All concurrent ensures with the same key return the same containerId. The prefix `seed:` is reserved for gameModelSeed; non-admin ensureContainer may not claim it. */
-  bindingKey: Scalars['String']['input'];
-  /** Optional description. Used ONLY when this call creates the row. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Human-friendly display name. Used ONLY when this call creates the row. */
-  displayName: Scalars['String']['input'];
-  /** JSON object of metadata. Used ONLY when this call creates the row. */
-  metadataJson?: InputMaybe<Scalars['String']['input']>;
-  /** Owner user id, same rules as CreateContainerInput (defaults to the caller for member/owner types, shared null for admin types). Used ONLY when this call creates the row. */
-  ownerUserId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Initial property values. Used ONLY when this call creates the row. */
-  properties?: InputMaybe<Array<SeedPropertyInput>>;
-  /** Optional session scoping the key and the container (omit for app-global). Two sessions may hold the same bindingKey independently. */
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-  /** The container type to resolve or instantiate. */
-  typeName: Scalars['String']['input'];
-};
-
 /** Input for exchangePortalCode: the destination game (public client) trades a one-time portal code for an app-scoped gameplay token. Public (the code + PKCE verifier authorize the call). */
 export type ExchangePortalCodeInput = {
   /** The one-time authorization code received on the redirect. */
@@ -3830,7 +3516,7 @@ export type ExecBuild = {
   __typename?: 'ExecBuild';
   /** The modules built so far, one per crate. */
   artifacts: Array<ExecBuildArtifact>;
-  /** The build’s id, for `execBuildStatus` and `execDeploy`. */
+  /** The build’s id: for `execBuildStatus` and `execDeploy`, or for a player’s builds `execModBuildStatus` with `execModDeploy` (server) or `execModClientDeploy` (CLIENT half). */
   buildId: Scalars['String']['output'];
   /** When the build was requested. */
   createdAt: Scalars['DateTime']['output'];
@@ -3855,7 +3541,7 @@ export type ExecBuildArtifact = {
   capabilitySummaryJson: Maybe<Scalars['String']['output']>;
   /** The crate it was built from. */
   crate: Scalars['String']['output'];
-  /** SHA-256 of the WASM: the `digest` a manifest names it by. */
+  /** SHA-256 of the WASM, hex: the `digest` a manifest names a ck-exec module by, and a CLIENT half’s digest once attached (`execModClientDeploy`). */
   digest: Scalars['String']['output'];
   /** The module’s size in bytes. */
   sizeBytes: Scalars['Int']['output'];
@@ -3865,7 +3551,7 @@ export type ExecBuildArtifact = {
 
 /** One crate of a ck-exec build: a `ckx-sdk` library with `[lib] crate-type = ["cdylib"]`, built into one module. */
 export type ExecBuildCrateInput = {
-  /** Its files, at most 64. `Cargo.toml` may have only [package], [lib] and [dependencies] from `ckx-sdk`, `serde` and `serde_json`. */
+  /** Its files, at most 64. `Cargo.toml` may have only [package], [lib] and [dependencies] from `ckx-sdk`, `serde` and `serde_json`; a CLIENT half (`execModClientBuild`) depends on `crowdy-client-sdk` instead of `ckx-sdk` and may add [package.metadata.crowdy] with `tick_interval_ms`. */
   files: Array<ExecBuildFileInput>;
   /** The crate’s name: lowercase letters, digits, `-` or `_`, at most 64 characters. The build reports each module under it. */
   name: Scalars['String']['input'];
@@ -4248,70 +3934,6 @@ export type FreePlayWindowInfo = {
   nextWindowStart: Maybe<Scalars['String']['output']>;
 };
 
-/** One property write a function performs. */
-export type FunctionMutationInput = {
-  /** Expression string (compiled to AST server-side). */
-  expression: Scalars['String']['input'];
-  /** The property key to write. */
-  property: Scalars['String']['input'];
-  /** Container target: self | ref("uuid") | ref($param). */
-  target: Scalars['String']['input'];
-};
-
-/** A declarative realtime notification the function emits via Buddy AFTER its transaction commits. Players and automations (NPCs) emit identically. Fenced by delivery mode (proximity / channel membership / target). */
-export type FunctionNotificationInput = {
-  /** Named argument expressions. spatial: chunk_x/chunk_y/chunk_z required (+ event_type/state/distance/decay/source_uuid); channel: channel_id/payload required (+ sender_uuid); actor: target_uuid/payload required (+ chunk_x/y/z/source_uuid). */
-  args: Array<NotificationArgInput>;
-  /** For kind 'spatial': which client downlink Buddy emits — 'server_event' (default) | 'generic_spatial' | 'actor_update'. */
-  emitAs?: InputMaybe<Scalars['String']['input']>;
-  /** Delivery mode: 'spatial' (nearby clients) | 'channel' (channel members) | 'actor' (one target). */
-  kind: Scalars['String']['input'];
-};
-
-/** A typed parameter declaration for a function. */
-export type FunctionParamInput = {
-  /** JSON-encoded default value. */
-  defaultValueJson?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description of the parameter. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Parameter name (referenced as $name in expressions). */
-  name: Scalars['String']['input'];
-  /** Whether the parameter is required. Defaults to true. */
-  required?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Display/order index. Defaults to 0. */
-  sortOrder?: InputMaybe<Scalars['Int']['input']>;
-  /** int | float | string | bool | array | object | container_ref */
-  valueType: Scalars['String']['input'];
-};
-
-/** A declarative grid-permission effect the function applies TRANSACTIONALLY with its property mutations: grant or revoke runtime grid permissions (the same ACL Buddy enforces on movement/voxel writes) driven by game logic. Expressions are compiled server-side and evaluated in the invocation context (params plus the injected $caller_user_id / $self_owner_id / $session_id / $current_turn_user_id / $self_container_id). If an effect fails, the whole invocation rolls back. Applied effects are recorded on the invocation event. */
-export type FunctionPermissionEffectInput = {
-  /** 'grant' (upsert direct grants, optionally expiring) or 'revoke' (delete direct grants for the listed keys). */
-  action: Scalars['String']['input'];
-  /** Expression resolving the grid id (int) the permissions apply to, e.g. "self.grid_id". The grid must belong to the app. */
-  gridIdExpression: Scalars['String']['input'];
-  /** Runtime permission keys to grant/revoke (validated against the runtime_permissions catalog, e.g. 'access', 'teleport', 'update_voxel_data', 'use_voice_chat', 'use_video_chat'). */
-  permissionKeys: Array<Scalars['String']['input']>;
-  /** Grant only: optional expression resolving a TTL in seconds (int > 0) after which the grant expires (rentals/leases), e.g. '86400'. Omit for a non-expiring grant. */
-  ttlSecondsExpression?: InputMaybe<Scalars['String']['input']>;
-  /** Expression resolving the target user id (int), e.g. "$caller_user_id" or "self.owner_user_id". */
-  userExpression: Scalars['String']['input'];
-};
-
-/** A declarative one-shot timer the function arms TRANSACTIONALLY with its property mutations: "invoke this function again in N ms". The timer survives replica restarts and is claimed by the same dispatcher that runs scheduled automations, so it fires exactly once. Rolling back the invocation arms nothing. The target function must be autonomousInvocable, because a timer fires headlessly with no player in the request. */
-export type FunctionTimerInput = {
-  /** Optional expression resolving an app-scoped string key. Re-arming the same key replaces the pending timer instead of queueing another fire, so a repeatedly invoked function cannot flood the timer queue. */
-  dedupeKeyExpression?: InputMaybe<Scalars['String']['input']>;
-  /** Expression resolving the delay in milliseconds (int > 0), floored by the app's minTimerDelayMs policy. */
-  delayMsExpression: Scalars['String']['input'];
-  /** The function to invoke when the timer fires. Must exist and be autonomousInvocable. */
-  functionName: Scalars['String']['input'];
-  /** Parameters bound into the delayed invocation. Expressions are evaluated at arm time on post-mutation state, so the fired invocation sees the values the arming logic decided. */
-  params?: InputMaybe<Array<TimerParamInput>>;
-  /** Container reference the delayed invocation runs against, e.g. "self" (default) or "$target_id". */
-  target?: InputMaybe<Scalars['String']['input']>;
-};
-
 /** Startup contract for browser game clients. Fetch this after login to initialize protocol/version checks and UDP proxy state in one round trip. */
 export type GameClientBootstrap = {
   __typename?: 'GameClientBootstrap';
@@ -4357,59 +3979,6 @@ export type GameHost = {
   /** The user_id of the elected host. Stable while this user has at least one fresh row in `actors` for the app; the next-oldest user takes over automatically once the current host stops heartbeating (its rows age past HOST_ACTOR_FRESHNESS_SECONDS) or Buddy idle-evicts its last row. */
   hostUserId: Scalars['BigInt']['output'];
 };
-
-/** One durable transition between complete app-scoped active gameplay-session counts. Delivery is cross-replica but best-effort; deduplicate by revision and requery gameModelActivePlayerCount after reconnect or a revision gap. */
-export type GameModelActivePlayerCountChange = {
-  __typename?: 'GameModelActivePlayerCountChange';
-  /** The app whose complete active-session count changed. */
-  appId: Scalars['BigInt']['output'];
-  /** New complete active gameplay-session count after this transition. */
-  currentCount: Scalars['Int']['output'];
-  /** Signed change: currentCount minus previousCount. */
-  delta: Scalars['Int']['output'];
-  /** Latest fresh Buddy heartbeat represented by the new count. */
-  observedAt: Scalars['DateTime']['output'];
-  /** Last complete active gameplay-session count before this transition. */
-  previousCount: Scalars['Int']['output'];
-  /** Durable monotonic app revision for this transition. Use it to deduplicate and detect gaps. */
-  revision: Scalars['BigInt']['output'];
-};
-
-/** A point-in-time app-scoped count of active gameplay sessions. This counts sessions, not actors or distinct users; one user with multiple active sessions contributes multiple players. Status states whether the fleet-wide count is complete. */
-export type GameModelActivePlayerCountSnapshot = {
-  __typename?: 'GameModelActivePlayerCountSnapshot';
-  /** Active gameplay sessions currently reported for the app. For PARTIAL this is the best-known sum from supported fresh Buddies; for UNAVAILABLE it is zero because no live report can be observed. Check status before treating it as a complete fleet total. */
-  activePlayerCount: Scalars['Int']['output'];
-  /** The app whose active gameplay sessions were counted. */
-  appId: Scalars['BigInt']['output'];
-  /** Latest heartbeat time represented by this observation, or null when no fresh Buddy is available. */
-  observedAt: Maybe<Scalars['DateTime']['output']>;
-  /** Durable monotonic revision of complete count changes. Zero means the app is untracked or has not changed after its silent baseline. Partial and unavailable observations never advance it. */
-  revision: Scalars['BigInt']['output'];
-  /** Whether activePlayerCount is complete (FRESH), a supported-Buddy subset (PARTIAL), or unavailable because no Buddy heartbeat is fresh (UNAVAILABLE). */
-  status: GameModelPlayerCountStatus;
-};
-
-/** Relay-style cursor-paginated connection over the function-invocation event log (GmEvent). Page with `first`/`after`; cursors are opaque. */
-export type GameModelEventsConnection = {
-  __typename?: 'GameModelEventsConnection';
-  /** Edges on this page. */
-  edges: Array<GmEventEdge>;
-  /** Pagination metadata. */
-  pageInfo: ConnectionPageInfo;
-  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
-  totalCount: Maybe<Scalars['Int']['output']>;
-};
-
-/** Completeness of an app-scoped active gameplay-session count across the fresh Buddy fleet. */
-export enum GameModelPlayerCountStatus {
-  /** At least one non-Offline Buddy heartbeat is fresh and every fresh Buddy supports version 1 app-scoped counts. The count is complete. */
-  Fresh = 'FRESH',
-  /** At least one non-Offline Buddy heartbeat is fresh, but one or more fresh Buddies do not support app-scoped counts. The count is only the best-known supported-Buddy sum and does not advance change revisions. */
-  Partial = 'PARTIAL',
-  /** No non-Offline Buddy heartbeat is fresh enough to observe. The count is unavailable and does not advance change revisions. */
-  Unavailable = 'UNAVAILABLE'
-}
 
 /** Asynchronous error from the UDP game server for a previously sent datagram (e.g. a send* mutation). Delivered as a member of the udpNotifications union, NOT as a GraphQL error on the mutation (which only reports whether the datagram was accepted for sending). Match it to the originating send via sequenceNumber and read errorCode for the reason. Note: not every failure produces one — some auth failures are dropped silently (see UdpErrorCode). */
 export type GenericErrorResponse = {
@@ -4464,39 +4033,6 @@ export type GetVoxelListInput = {
   coordinates: ChunkCoordinatesInput;
 };
 
-/** A snapshot of an app's game-model footprint and recent activity: row counts in the database plus invocation activity. Helps developers understand what is in their game and their database. */
-export type GmAppDiagnostics = {
-  __typename?: 'GmAppDiagnostics';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** Defined automations. */
-  automationCount: Scalars['Int']['output'];
-  /** Automation-driven invocations in the last 24h. */
-  automationEvents24h: Scalars['Int']['output'];
-  /** Container instances in the app. */
-  containerCount: Scalars['Int']['output'];
-  /** Edge rows in the app. */
-  edgeCount: Scalars['Int']['output'];
-  /** Total event-log rows (all time). */
-  eventCount: Scalars['Int']['output'];
-  /** Event-log rows in the last 24h. */
-  events24h: Scalars['Int']['output'];
-  /** Failed invocations in the last 24h. */
-  failedEvents24h: Scalars['Int']['output'];
-  /** Defined functions. */
-  functionCount: Scalars['Int']['output'];
-  /** Model-driven notifications emitted in the last 24h, across every function and automation. */
-  notificationsEmitted24h: Scalars['Int']['output'];
-  /** Of those, how many reached nobody: the target channel had no members in this app. Emission is best-effort and cannot fail your function, so this is the only place an undeliverable notification is visible — a non-zero count here beside a healthy run history is the signature of a notification aimed at a channel this app does not own. Check gameModelLint for NOTIFICATION_CHANNEL_FOREIGN, which names the function. Note this does NOT mean delivery is broken: it counts datagrams that were sent to every server successfully and had no recipient. */
-  notificationsUndeliverable24h: Scalars['Int']['output'];
-  /** Property rows in the app. */
-  propertyCount: Scalars['Int']['output'];
-  /** Sessions in the app. */
-  sessionCount: Scalars['Int']['output'];
-  /** Most-invoked functions in the last 24h. */
-  topFunctions: Array<GmTopFunction>;
-};
-
 /** An app feature key that functions can gate on and tiers can grant. */
 export type GmAppFeature = {
   __typename?: 'GmAppFeature';
@@ -4508,835 +4044,6 @@ export type GmAppFeature = {
   featureKey: Scalars['String']['output'];
 };
 
-/** The app's game-model runtime policy. */
-export type GmAppPolicy = {
-  __typename?: 'GmAppPolicy';
-  /** The app (tenant) the policy applies to. */
-  appId: Scalars['BigInt']['output'];
-  /** Default role assigned to new session participants. */
-  defaultParticipantRole: Scalars['String']['output'];
-  /** Who may create sessions: admin | member | anyone. */
-  sessionCreationPolicy: Scalars['String']['output'];
-};
-
-/** An autonomous process (automation / NPC): a server-driven entry-point function bound to a trigger (schedule or model activity) plus a safety budget and circuit-breaker state. */
-export type GmAutomation = {
-  __typename?: 'GmAutomation';
-  /** Action kind: model_function (invoke a Model function) or compute_invoke (invoke a compute-module export). */
-  actionKind: Scalars['String']['output'];
-  /** The app (tenant) that owns the automation. */
-  appId: Scalars['BigInt']['output'];
-  /** Unique automation id (UUID). */
-  automationId: Scalars['String']['output'];
-  /** Circuit-breaker state: closed | open | half_open. */
-  circuitState: Scalars['String']['output'];
-  /** For action_kind=compute_invoke: the module invoke export called. */
-  computeExport: Maybe<Scalars['String']['output']>;
-  /** For action_kind=compute_invoke: the compute module name invoked. */
-  computeModuleName: Maybe<Scalars['String']['output']>;
-  /** Current consecutive-failure count. */
-  consecutiveFailures: Scalars['Int']['output'];
-  /** Cooldown (ms) while the circuit is open. */
-  cooldownMs: Scalars['Int']['output'];
-  /** Cron expression (schedule_kind=cron). */
-  cronExpr: Maybe<Scalars['String']['output']>;
-  /** Optional description. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Whether the automation is eligible to run. */
-  enabled: Scalars['Boolean']['output'];
-  /** Consecutive failures that trip the circuit breaker. */
-  failureThreshold: Scalars['Int']['output'];
-  /** The entry-point function name (must be autonomous_invocable). Null for compute_invoke actions. */
-  functionName: Maybe<Scalars['String']['output']>;
-  /** Override: evaluation gas per invoke. */
-  gasLimit: Maybe<Scalars['Int']['output']>;
-  /** Interval in ms (schedule_kind=interval). */
-  intervalMs: Maybe<Scalars['Int']['output']>;
-  /** Last error recorded for this automation. */
-  lastError: Maybe<Scalars['String']['output']>;
-  /** When the automation last ran. */
-  lastRunAt: Maybe<Scalars['DateTime']['output']>;
-  /** Override: max fn: call depth per invoke. */
-  maxFnDepth: Maybe<Scalars['Int']['output']>;
-  /** Max runs per minute for this automation. */
-  maxRunsPerMinute: Scalars['Int']['output'];
-  /** Max targets per run (fan-out cap). */
-  maxTargets: Scalars['Int']['output'];
-  /** Automation name (unique per app); the upsert key. */
-  name: Scalars['String']['output'];
-  /** When the automation is next due (schedule). Due is not a promise to run: a schedule that comes due while the app has no players is skipped, and this advances to the next slot without the skipped run being made up. */
-  nextRunAt: Maybe<Scalars['DateTime']['output']>;
-  /** JSON object of static params passed to the entry point. */
-  paramsJson: Scalars['String']['output'];
-  /** When the open circuit may retry (half-open). */
-  pausedUntil: Maybe<Scalars['DateTime']['output']>;
-  /** Identity the automation acts as (drives owner_of_self / $caller_user_id). Null = trusted server caller. */
-  runAsUserId: Maybe<Scalars['BigInt']['output']>;
-  /** Override: wall-clock budget per invoke (ms). */
-  runTimeoutMs: Maybe<Scalars['Int']['output']>;
-  /** For schedule triggers: interval | cron. */
-  scheduleKind: Maybe<Scalars['String']['output']>;
-  /** JSON selector that resolves candidate refs/scalars over model data (e.g. nearest enemy) into params. Null when unused. */
-  selectorJson: Maybe<Scalars['String']['output']>;
-  /** For target_mode=container: the specific self container UUID. */
-  selfContainerId: Maybe<Scalars['String']['output']>;
-  /** Optional session scope (UUID). */
-  sessionId: Maybe<Scalars['String']['output']>;
-  /** Target resolution mode: container | type | global. */
-  targetMode: Scalars['String']['output'];
-  /** For target_mode=type: the container type to fan out over. */
-  targetTypeName: Maybe<Scalars['String']['output']>;
-  /** Trigger type: schedule | event | manual. */
-  triggerType: Scalars['String']['output'];
-};
-
-/** Per-app guardrails / platform ceilings for autonomous processes. */
-export type GmAutomationPolicy = {
-  __typename?: 'GmAutomationPolicy';
-  /** The app (tenant) the policy applies to. */
-  appId: Scalars['BigInt']['output'];
-  /** App-wide kill switch for all automations. */
-  enabled: Scalars['Boolean']['output'];
-  /** Maximum aggregate automation runs per minute for the app. */
-  globalRunsPerMinute: Scalars['Int']['output'];
-  /** Maximum number of automations the app may define. */
-  maxAutomations: Scalars['Int']['output'];
-  /** Maximum event-trigger cascade depth. */
-  maxCascadeDepth: Scalars['Int']['output'];
-  /** Maximum fan-out targets per run. */
-  maxFanout: Scalars['Int']['output'];
-  /** Maximum pending (armed but not yet fired) timers the app may hold at once. */
-  maxPendingTimers: Scalars['Int']['output'];
-  /** Minimum allowed schedule interval (ms) floor. */
-  minIntervalMs: Scalars['Int']['output'];
-  /** Minimum timer delay (ms) floor for gameModelScheduleInvoke and function timer effects. */
-  minTimerDelayMs: Scalars['Int']['output'];
-};
-
-/** One execution of an automation: its target/fan-out + invocation counts, timing, outcome, circuit action, and billed compute. The monitoring + billing record. */
-export type GmAutomationRun = {
-  __typename?: 'GmAutomationRun';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** The automation that ran, or null for a timer fire (which has no owning automation). */
-  automationId: Maybe<Scalars['String']['output']>;
-  /** The automation name at run time, or the invoked function name for a timer fire. */
-  automationName: Scalars['String']['output'];
-  /** Cascade depth (0 = top-level). */
-  cascadeDepth: Scalars['Int']['output'];
-  /** Circuit action taken (e.g. opened, half_open_retry, budget_paused, cascade_dropped, rate_limited). */
-  circuitAction: Maybe<Scalars['String']['output']>;
-  /** Billed compute units for this run. */
-  computeUnits: Scalars['Int']['output'];
-  /** Wall-clock duration in microseconds. */
-  durationUs: Scalars['Int']['output'];
-  /** Error message when the run failed. */
-  errorMessage: Maybe<Scalars['String']['output']>;
-  /** When the run finished. */
-  finishedAt: Maybe<Scalars['DateTime']['output']>;
-  /** Flow correlation id: shared with gm event-log rows and compute module runs triggered by the same entry call (player invoke / automation run / computeInvoke). */
-  flowId: Maybe<Scalars['String']['output']>;
-  /** Number of fn: user-function calls across invocations. */
-  fnCalls: Scalars['Int']['output'];
-  /** Evaluation gas consumed across invocations. */
-  gasUsed: Scalars['Int']['output'];
-  /** Number of function invocations performed. */
-  invocations: Scalars['Int']['output'];
-  /** Number of property mutations applied across invocations. */
-  mutations: Scalars['Int']['output'];
-  /** Parent run id when triggered as a cascade. */
-  parentRunId: Maybe<Scalars['String']['output']>;
-  /** Unique run id (UUID). */
-  runId: Scalars['String']['output'];
-  /** When the run started. */
-  startedAt: Scalars['DateTime']['output'];
-  /** Whether the run succeeded. */
-  success: Scalars['Boolean']['output'];
-  /** Number of target containers acted on (fan-out). */
-  targets: Scalars['Int']['output'];
-  /** The event trigger that matched, when the run came from one. Null for schedule, manual, and timer-fired runs. */
-  triggerId: Maybe<Scalars['String']['output']>;
-  /** What triggered the run: schedule | event | manual | cascade | timer. */
-  triggerSource: Scalars['String']['output'];
-};
-
-/** Per-automation rollup within a stats window. */
-export type GmAutomationStat = {
-  __typename?: 'GmAutomationStat';
-  /** The automation name. */
-  automationName: Scalars['String']['output'];
-  /** Average run duration (microseconds). */
-  avgDurationUs: Scalars['Int']['output'];
-  /** Current circuit-breaker state: closed | open | half_open. */
-  circuitState: Scalars['String']['output'];
-  /** Total compute units consumed. */
-  computeUnits: Scalars['Int']['output'];
-  /** Failed runs in the window. */
-  failures: Scalars['Int']['output'];
-  /** Total invocations across runs. */
-  invocations: Scalars['Int']['output'];
-  /** Runs in the window. */
-  runs: Scalars['Int']['output'];
-};
-
-/** Aggregate automation activity for an app over a recent window: throughput, failure rate, compute, and a per-automation breakdown. The "what are my NPCs doing" view. */
-export type GmAutomationStats = {
-  __typename?: 'GmAutomationStats';
-  /** Average run duration in microseconds. */
-  avgDurationUs: Scalars['Int']['output'];
-  /** Per-automation breakdown. */
-  byAutomation: Array<GmAutomationStat>;
-  /** Failed runs in the window. */
-  failedRuns: Scalars['Int']['output'];
-  /** Failure rate as a percentage (0-100). */
-  failureRatePct: Scalars['Float']['output'];
-  /** Average runs per minute over the window. */
-  runsPerMinute: Scalars['Float']['output'];
-  /** Total billed compute units in the window. */
-  totalComputeUnits: Scalars['Int']['output'];
-  /** Total function invocations across runs. */
-  totalInvocations: Scalars['Int']['output'];
-  /** Total property mutations across runs. */
-  totalMutations: Scalars['Int']['output'];
-  /** Total runs in the window. */
-  totalRuns: Scalars['Int']['output'];
-  /** The window size in minutes. */
-  windowMinutes: Scalars['Int']['output'];
-};
-
-/** An event subscription that fires an automation in reaction to model activity or a complete app-scoped active-player-count transition (matched in the API server, not a DB trigger). */
-export type GmAutomationTrigger = {
-  __typename?: 'GmAutomationTrigger';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** The automation this trigger fires. */
-  automationId: Scalars['String']['output'];
-  /** Filter: only this container type. Always null for player_count_changed, player_left and player_joined. */
-  containerTypeName: Maybe<Scalars['String']['output']>;
-  /** Debounce window in ms. player_count_changed coalesces on the trailing edge; other model events use their existing leading-edge behavior. */
-  debounceMs: Scalars['Int']['output'];
-  /** Filter: only this function name. Always null for player_count_changed, player_left and player_joined. */
-  functionName: Maybe<Scalars['String']['output']>;
-  /** When this trigger last matched an event and dispatched a run, or null if it has never matched. A trigger that stays null while its event is happening is almost always a filter that cannot match — see warnings. */
-  lastMatchedAt: Maybe<Scalars['DateTime']['output']>;
-  /** Runs this trigger dispatched in the last 24 hours, including runs a guard then dropped. Fires suppressed by debounceMs never reach a run and are not counted. */
-  matchCount24h: Scalars['Int']['output'];
-  /** Observed event: function_invoked | property_changed | container_created | player_count_changed | player_left | player_joined. */
-  onEvent: Scalars['String']['output'];
-  /** Filter: only this property key. Always null for player_count_changed, player_left and player_joined. */
-  propertyKey: Maybe<Scalars['String']['output']>;
-  /** Unique trigger id (UUID). */
-  triggerId: Scalars['String']['output'];
-  /** Authoring problems detected for this trigger, empty when healthy. Reported rather than silently never firing. */
-  warnings: Array<Scalars['String']['output']>;
-  /** property_changed only: which writes are observed — "direct" (gameModelSetProperty), "function" (a mutation applied inside an invoke, automation run, or timer fire), or "any". Always "any" for other events, which ignore it. */
-  writeSource: Scalars['String']['output'];
-};
-
-/** A container: a runtime instance of a container type (optionally scoped to a session). */
-export type GmContainer = {
-  __typename?: 'GmContainer';
-  /** The app (tenant) that owns the container. */
-  appId: Scalars['BigInt']['output'];
-  /** Opaque client-derived key the container was ensured under (unique per appId + typeName + sessionId), or null when it was created without one. */
-  bindingKey: Maybe<Scalars['String']['output']>;
-  /** Unique container id (UUID). */
-  containerId: Scalars['String']['output'];
-  /** Optional description. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Human-friendly display name. */
-  displayName: Scalars['String']['output'];
-  /** JSON object of developer metadata. */
-  metadataJson: Scalars['String']['output'];
-  /** The owning user, or null if unowned. */
-  ownerUserId: Maybe<Scalars['BigInt']['output']>;
-  /** Owning session id, or null for an app-global container. */
-  sessionId: Maybe<Scalars['String']['output']>;
-  /** The container type name. */
-  typeName: Scalars['String']['output'];
-};
-
-/** One container-change notification from gameModelContainerChanged. Metadata only (no property values): clients pull the visibility-filtered state with gameModelContainerState on receipt. Delivery is post-commit and best-effort, like model-driven notifications. */
-export type GmContainerChange = {
-  __typename?: 'GmContainerChange';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** The property keys the change touched (empty for created/deleted; clamped to 32 keys). */
-  changedKeys: Array<Scalars['String']['output']>;
-  /** The container that changed. */
-  containerId: Scalars['String']['output'];
-  /** For source='function': the function that mutated it. */
-  functionName: Maybe<Scalars['String']['output']>;
-  /** When the change committed. */
-  occurredAt: Scalars['DateTime']['output'];
-  /** The session scope of the change, when any. */
-  sessionId: Maybe<Scalars['String']['output']>;
-  /** What changed it: 'function' (invoke mutation), 'direct' (gameModelSetProperty), 'created', or 'deleted'. */
-  source: Scalars['String']['output'];
-  /** The container type (null if the type is unknown). */
-  typeName: Maybe<Scalars['String']['output']>;
-};
-
-/** A container plus its property values filtered to what the requesting caller is allowed to see. */
-export type GmContainerState = {
-  __typename?: 'GmContainerState';
-  /** The app (tenant) that owns the container. */
-  appId: Scalars['BigInt']['output'];
-  /** The container id (UUID). */
-  containerId: Scalars['String']['output'];
-  /** Human-friendly display name. */
-  displayName: Scalars['String']['output'];
-  /** The owning user, or null if unowned. */
-  ownerUserId: Maybe<Scalars['BigInt']['output']>;
-  /** JSON object of visible properties (filtered by the caller). */
-  propertiesJson: Scalars['String']['output'];
-  /** Owning session id, or null if app-global. */
-  sessionId: Maybe<Scalars['String']['output']>;
-  /** The container type name. */
-  typeName: Scalars['String']['output'];
-};
-
-/** A studio-defined container type: the schema for a kind of runtime entity (like a class). */
-export type GmContainerType = {
-  __typename?: 'GmContainerType';
-  /** The app (tenant) that owns the type. */
-  appId: Scalars['BigInt']['output'];
-  /** Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner. */
-  bindPolicyJson: Maybe<Scalars['String']['output']>;
-  /** Default visibility for this type's properties: public | owner | hidden. */
-  defaultPropertyVisibility: Scalars['String']['output'];
-  /** Optional description of the type. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Human-friendly display name. */
-  displayName: Scalars['String']['output'];
-  /** Who may instantiate this type: admin | member | owner. */
-  instantiableBy: Scalars['String']['output'];
-  /** JSON object of developer metadata. */
-  metadataJson: Scalars['String']['output'];
-  /** Where this type's rows live. 'session' (default): one row per bindingKey per session, and a client inside a session binds the session's row. 'app': one row per bindingKey for the whole app, shared by every session (state that outlives matches: territory, landmarks, a persistent world). On an app-scoped type, gameModelEnsureContainer / gameModelCreateContainer with a sessionId are refused (CONTAINER_TYPE_APP_SCOPED); bind at app scope and pass the session on gameModelInvoke, where is_participant / is_current_turn are judged against the call's session. Changing 'session' to 'app' is refused while the type holds session-scoped rows. */
-  scope: Scalars['String']['output'];
-  /** Stable type name (unique per app); used to reference the type. */
-  typeName: Scalars['String']['output'];
-};
-
-/** A directed relationship edge between two containers. */
-export type GmEdge = {
-  __typename?: 'GmEdge';
-  /** Unique edge id (UUID). */
-  edgeId: Scalars['String']['output'];
-  /** Source container id. */
-  fromContainerId: Scalars['String']['output'];
-  /** The relationship type label. */
-  relationshipType: Scalars['String']['output'];
-  /** Target container id. */
-  toContainerId: Scalars['String']['output'];
-  /** Optional edge weight. */
-  weight: Maybe<Scalars['Float']['output']>;
-};
-
-/** Result of gameModelEnsureContainer: the resolved container plus whether this call inserted it. */
-export type GmEnsureContainerResult = {
-  __typename?: 'GmEnsureContainerResult';
-  /** The container all ensures of this key converge on. */
-  container: GmContainer;
-  /** True when THIS call created the row; false when it resolved an existing one (creation-only input fields were ignored). */
-  created: Scalars['Boolean']['output'];
-};
-
-/** An audit-log entry recording one function invocation and its outcome. */
-export type GmEvent = {
-  __typename?: 'GmEvent';
-  /** The automation (autonomous process) that drove this invocation, if any. */
-  automationId: Maybe<Scalars['String']['output']>;
-  /** Who invoked: player | automation | system. Distinguishes NPC/autonomous-process actions from player actions. */
-  callerKind: Scalars['String']['output'];
-  /** The user who invoked the function. */
-  callerUserId: Maybe<Scalars['BigInt']['output']>;
-  /** Error message when the invocation failed. */
-  errorMessage: Maybe<Scalars['String']['output']>;
-  /** Unique event id. */
-  eventId: Scalars['String']['output'];
-  /** When the invocation executed. */
-  executedAt: Scalars['DateTime']['output'];
-  /** Flow correlation id: shared with automation runs and compute module runs caused by the same entry call (player invoke / automation run / computeInvoke), so cross-engine flows can be stitched together. */
-  flowId: Maybe<Scalars['String']['output']>;
-  /** The function that was invoked. */
-  functionName: Scalars['String']['output'];
-  /** JSON array of applied mutations. */
-  mutationsAppliedJson: Scalars['String']['output'];
-  /** JSON object of params. */
-  paramsJson: Scalars['String']['output'];
-  /** JSON array of grid-permission effects this invocation applied (audit trail for model-driven grants/revokes): [{ action, permission_keys, user_id, grid_id, expires_at }]. */
-  permissionEffectsAppliedJson: Scalars['String']['output'];
-  /** JSON-encoded return value. */
-  returnValueJson: Maybe<Scalars['String']['output']>;
-  /** The self container id the function ran against. */
-  selfContainerId: Maybe<Scalars['String']['output']>;
-  /** The session the invocation ran in, if any. */
-  sessionId: Maybe<Scalars['String']['output']>;
-  /** True if the invocation succeeded. */
-  success: Scalars['Boolean']['output'];
-};
-
-/** An edge in a GmEvent connection. */
-export type GmEventEdge = {
-  __typename?: 'GmEventEdge';
-  /** Opaque cursor for this edge. */
-  cursor: Scalars['String']['output'];
-  /** The node at the end of this edge. */
-  node: GmEvent;
-};
-
-/** The stitched cross-engine timeline for one flow correlation id: every model event, automation run, and compute module run that shares the flow_id minted at the entry edge (player invoke / automation run / computeInvoke). Each array is ordered by time ascending, so the three together read as one causal diagnostics trace (e.g. mob kill -> compute event -> reward grant). */
-export type GmFlowTimeline = {
-  __typename?: 'GmFlowTimeline';
-  /** Automation (autonomous process) runs in the flow, ordered by startedAt ascending. */
-  automationRuns: Array<GmAutomationRun>;
-  /** Model function-invocation events (gm_event_log rows) in the flow, ordered by executedAt ascending. */
-  events: Array<GmEvent>;
-  /** The flow correlation id (UUID) this timeline was built for. */
-  flowId: Scalars['String']['output'];
-  /** Compute module runs in the flow, ordered by startedAt ascending. */
-  moduleRuns: Array<WasmModuleRun>;
-};
-
-/** A studio-defined function: a named, sandboxed behavior over containers (parameters, declared mutations, optional return, and an authority invoke policy). */
-export type GmFunction = {
-  __typename?: 'GmFunction';
-  /** The app (tenant) that owns the function. */
-  appId: Scalars['BigInt']['output'];
-  /** Whether an autonomous process (automation/NPC) may use this function as an entry point. Players are unaffected by this flag. */
-  autonomousInvocable: Scalars['Boolean']['output'];
-  /** Optional container type this function is bound to (null = global). */
-  containerTypeName: Maybe<Scalars['String']['output']>;
-  /** Optional description of the function. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Unique function id (UUID). */
-  functionId: Scalars['String']['output'];
-  /** JSON-encoded invoke policy rule tree. */
-  invokePolicyJson: Maybe<Scalars['String']['output']>;
-  /** Who may invoke and in what context: player | server | internal. */
-  invokeScope: Scalars['String']['output'];
-  /** The property writes the function performs when invoked. */
-  mutations: Array<GmFunctionMutation>;
-  /** Function name (unique per app); used to invoke it. */
-  name: Scalars['String']['output'];
-  /** Declarative realtime notifications the function emits via Buddy after it commits. */
-  notifications: Array<GmFunctionNotification>;
-  /** Typed parameters the function accepts. */
-  parameters: Array<GmFunctionParam>;
-  /** Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations. */
-  permissionEffects: Array<GmFunctionPermissionEffect>;
-  /** Optional expression whose value becomes the invoke result. */
-  returnExpression: Maybe<Scalars['String']['output']>;
-  /** Optional declared return value type. */
-  returnType: Maybe<Scalars['String']['output']>;
-  /** Declarative one-shot timers armed atomically with the function's mutations. */
-  timers: Array<GmFunctionTimer>;
-  /** Non-fatal static-analysis warnings, recomputed for this read rather than remembered from the upload. That matters because they are cross-object: a call to a function written later stops being a warning once that function exists, and starts being one again if it is deleted. For the structured form, with a code and a severity per finding, use gameModelLint. */
-  warnings: Array<Scalars['String']['output']>;
-};
-
-/** The player-invoke breaker's mode and thresholds on the answering instance, with this app's circuits. The mode decides whether any of it refuses anything. */
-export type GmFunctionBreakerStatus = {
-  __typename?: 'GmFunctionBreakerStatus';
-  /** Circuits for this app, non-closed first, then by consecutive failures. Only functions that have failed at least once appear. */
-  circuits: Array<GmFunctionCircuit>;
-  /** How long an open circuit waits before admitting one probe, in milliseconds. */
-  cooldownMs: Scalars['Int']['output'];
-  /** Consecutive failed player invokes of one function before its circuit opens. */
-  failureThreshold: Scalars['Int']['output'];
-  /** 'shadow' (default: the state machine runs in full, every call is admitted, and shadowRefusals counts what enforcement would have refused), 'enforce' (the same state machine, refusing), or 'off' (no state, no measurement). Read from GM_FUNCTION_BREAKER_MODE on the instance that answered. */
-  mode: Scalars['String']['output'];
-};
-
-/** One model function's circuit on the player-invoke path. Rows are created lazily on a function's first failure, so a function absent from this list has never failed. */
-export type GmFunctionCircuit = {
-  __typename?: 'GmFunctionCircuit';
-  /** App the function belongs to. */
-  appId: Scalars['BigInt']['output'];
-  /** 'closed', 'open', or 'half_open'. In shadow mode an open circuit refuses nothing: read it as 'this function has been failing', not 'players are being blocked'. */
-  circuitState: Scalars['String']['output'];
-  /** Failed player invokes with no success in between. One success resets it to zero, which is what makes the threshold mean a broken function rather than a busy one. */
-  consecutiveFailures: Scalars['Int']['output'];
-  /** When an open circuit next admits one probe, and the window that probe holds. Null when closed. */
-  cooldownUntil: Maybe<Scalars['DateTime']['output']>;
-  /** Function name as a player invokes it, matching gm_function_defs.name. A renamed function starts with a clean circuit. */
-  functionName: Scalars['String']['output'];
-  /** When the circuit last opened. Null if it never has. */
-  openedAt: Maybe<Scalars['DateTime']['output']>;
-  /** Player invokes admitted in shadow mode that enforcement WOULD have refused. This is the measurement: it answers what switching enforcement on would have cost players. Never incremented in enforce mode, where those calls are refused instead. */
-  shadowRefusals: Scalars['BigInt']['output'];
-  /** Lifetime openings. A function that opens once a week and one that opens every minute are different problems, and circuitState cannot tell them apart. */
-  totalOpens: Scalars['BigInt']['output'];
-  /** When the circuit row last changed. */
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** One declared write a function performs: set `property` on `target` to `expression`. */
-export type GmFunctionMutation = {
-  __typename?: 'GmFunctionMutation';
-  /** The expression (source) evaluated to produce the new value. */
-  expression: Scalars['String']['output'];
-  /** The property key being written. */
-  property: Scalars['String']['output'];
-  /** Container reference target: self | ref("uuid") | ref($param). */
-  target: Scalars['String']['output'];
-};
-
-/** A declarative realtime notification the function emits via Buddy AFTER its transaction commits. Fenced by delivery mode (proximity / channel membership / target). */
-export type GmFunctionNotification = {
-  __typename?: 'GmFunctionNotification';
-  /** Named argument expressions. */
-  args: Array<GmNotificationArg>;
-  /** For kind 'spatial': 'server_event' (default) | 'generic_spatial' | 'actor_update'. */
-  emitAs: Maybe<Scalars['String']['output']>;
-  /** Delivery mode: 'spatial' | 'channel' | 'actor'. */
-  kind: Scalars['String']['output'];
-};
-
-/** A typed parameter of a studio-defined function. */
-export type GmFunctionParam = {
-  __typename?: 'GmFunctionParam';
-  /** JSON-encoded default value. */
-  defaultValueJson: Maybe<Scalars['String']['output']>;
-  /** Optional description of the parameter. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Parameter name (referenced as $name in expressions). */
-  name: Scalars['String']['output'];
-  /** Whether the parameter is required at invoke time. */
-  required: Scalars['Boolean']['output'];
-  /** Display/order index of the parameter. */
-  sortOrder: Scalars['Int']['output'];
-  /** Value type: int | float | string | bool | array | object | container_ref. */
-  valueType: Scalars['String']['output'];
-};
-
-/** A declarative grid-permission effect applied transactionally with the function's mutations: grant or revoke runtime grid permissions (the ACL Buddy enforces) driven by game logic. */
-export type GmFunctionPermissionEffect = {
-  __typename?: 'GmFunctionPermissionEffect';
-  /** 'grant' or 'revoke'. */
-  action: Scalars['String']['output'];
-  /** The expression (source) resolving the grid id. */
-  gridIdExpression: Scalars['String']['output'];
-  /** Runtime permission keys granted/revoked. */
-  permissionKeys: Array<Scalars['String']['output']>;
-  /** Grant only: optional expression resolving a TTL in seconds. */
-  ttlSecondsExpression: Maybe<Scalars['String']['output']>;
-  /** The expression (source) resolving the target user id. */
-  userExpression: Scalars['String']['output'];
-};
-
-/** A declarative one-shot timer the function arms transactionally with its mutations: invoke another function after a delay. Fires exactly once, survives replica restarts, and is bounded by the app's automation guardrails. */
-export type GmFunctionTimer = {
-  __typename?: 'GmFunctionTimer';
-  /** Optional expression (source) resolving the app-scoped dedupe key; re-arming the same key replaces the pending timer. */
-  dedupeKeyExpression: Maybe<Scalars['String']['output']>;
-  /** The expression (source) resolving the delay in milliseconds. */
-  delayMsExpression: Scalars['String']['output'];
-  /** The function invoked when the timer fires. */
-  functionName: Scalars['String']['output'];
-  /** Parameters bound into the delayed invocation. */
-  params: Array<GmTimerParam>;
-  /** Container reference (source) the delayed invocation runs against, e.g. "self". */
-  target: Scalars['String']['output'];
-};
-
-/** The outcome of a gameModelInvoke call (return value, applied writes, and any error). */
-export type GmInvokeResult = {
-  __typename?: 'GmInvokeResult';
-  /**
-   * A platform-authored sentence matching `fault`, safe to show a player. It carries no engine detail on purpose (decision D4): the failing expression, the timeout and the gas figures are in gameModelEvents and the fault record, where a developer reads them and a player does not.
-   * @deprecated Read `fault` instead and choose your own wording. This field no longer carries the engine's error text and will be removed once no client depends on it.
-   */
-  errorMessage: Maybe<Scalars['String']['output']>;
-  /** The id of the event logged for this invocation. */
-  eventId: Scalars['String']['output'];
-  /** Why the invocation failed, when it did: a stable code, whose problem it is, and whether retrying could help. Null when success is true. This is the field to branch on — it is the platform's blame attribution, and rendering is the game's decision. */
-  fault: Maybe<PlayerFaultInfo>;
-  /** The function that was invoked. */
-  functionName: Scalars['String']['output'];
-  /** The property writes that were applied (empty if none / on failure). */
-  mutationsApplied: Array<GmMutationApplied>;
-  /** True when the caller asked for bypassPolicy and held manage_apps, so the function's invoke policy was NOT evaluated for this call. Null/false otherwise. An administrative invoke that did not set bypassPolicy was judged exactly like a player's. */
-  policyBypassed: Maybe<Scalars['Boolean']['output']>;
-  /** JSON-encoded return value. */
-  returnValueJson: Maybe<Scalars['String']['output']>;
-  /** True if the invocation succeeded; false if it was rejected or errored. */
-  success: Scalars['Boolean']['output'];
-};
-
-/** What is wrong, at the granularity a developer would fix. One code per distinguishable remedy: a missing `fn:` target and a missing timer target are both an unresolved name and are kept apart because the second one arms successfully and fails minutes later somewhere else. */
-export enum GmLintCode {
-  /** The app holds containers and declares no types at all — the shape an app takes when it is recreated or moved between organizations, because containers are made on demand by the client and schema is not carried with them. */
-  AppHasNoContainerTypes = 'APP_HAS_NO_CONTAINER_TYPES',
-  /** An automation trigger's filter cannot match, so it will never dispatch. */
-  AutomationTriggerUnmatchable = 'AUTOMATION_TRIGGER_UNMATCHABLE',
-  /** A container names a type this app has not defined. The client cannot bind it, and the only symptom is "no container bound for entity" in the game's own log. */
-  ContainerTypeUndefined = 'CONTAINER_TYPE_UNDEFINED',
-  /** A `fn:` call names a function this app does not define. */
-  FunctionNotDefined = 'FUNCTION_NOT_DEFINED',
-  /** A stored function definition no longer compiles, so it is inert. Only possible for a row written before a validation the compiler enforces now; re-upsert it. */
-  FunctionUncompilable = 'FUNCTION_UNCOMPILABLE',
-  /** A grid builtin was given a mode or axis literal outside its allowed set. */
-  GridLiteralInvalid = 'GRID_LITERAL_INVALID',
-  /** A channel notification names a channel that belongs to a different app. Membership is scoped to the app, so the datagram reaches nobody no matter how healthy delivery is — the shape a model takes when it is copied out of the app it was authored against. Repoint it, or name the channel with `channel_name` so it cannot go stale again. */
-  NotificationChannelForeign = 'NOTIFICATION_CHANNEL_FOREIGN',
-  /** A channel notification names a channel id, or a channel name, that this app does not have. A warning rather than an error because the channel may simply not exist yet. */
-  NotificationChannelUnknown = 'NOTIFICATION_CHANNEL_UNKNOWN',
-  /** An expression references a `$param` the function does not declare. */
-  ParamNotDeclared = 'PARAM_NOT_DECLARED',
-  /** A permission-key literal is not in the runtime_permissions catalog. */
-  PermissionKeyUnknown = 'PERMISSION_KEY_UNKNOWN',
-  /** `self.<key>` is not in the property definitions for the function's container type. */
-  PropertyNotDeclared = 'PROPERTY_NOT_DECLARED',
-  /** A timer's target function does not exist. */
-  TimerTargetMissing = 'TIMER_TARGET_MISSING',
-  /** A timer's target exists but is not autonomousInvocable, so the timer arms and then fails when it fires. */
-  TimerTargetNotAutonomous = 'TIMER_TARGET_NOT_AUTONOMOUS'
-}
-
-/** One problem with one object in the game model, recomputed at read time rather than remembered from a write. */
-export type GmLintFindingType = {
-  __typename?: 'GmLintFindingType';
-  /** What is wrong. */
-  code: GmLintCode;
-  /** How many objects this row stands for, when one finding summarises many (for example a type missing under 40 containers). */
-  count: Maybe<Scalars['Int']['output']>;
-  /** What is wrong, in a sentence. */
-  message: Scalars['String']['output'];
-  /** What to do about it. */
-  remedy: Maybe<Scalars['String']['output']>;
-  /** ERROR is provably broken and gate-eligible; WARNING is reported only. */
-  severity: GmLintSeverity;
-  /** The object's own name — a function name, a container type name — not a rendered label. Group and deduplicate on (code, subject). */
-  subject: Scalars['String']['output'];
-  /** What kind of object this is about. */
-  subjectKind: GmLintSubjectKind;
-};
-
-/** Whether an app's game model hangs together. Every check is recomputed on demand: a stored warning goes stale the moment an unrelated object changes, which is the failure this replaces. */
-export type GmLintResult = {
-  __typename?: 'GmLintResult';
-  /** The app that was linted. */
-  appId: Scalars['BigInt']['output'];
-  /** True when there are no ERROR findings. WARNING findings do not make an app unclean, because most of them are a normal mid-edit state. */
-  clean: Scalars['Boolean']['output'];
-  /** How many findings have severity ERROR. */
-  errorCount: Scalars['Int']['output'];
-  /** Findings, errors first, then by code and subject. */
-  findings: Array<GmLintFindingType>;
-  /** How many findings have severity WARNING. */
-  warningCount: Scalars['Int']['output'];
-};
-
-/** How much a finding is worth doing something about. Only ERROR is ever eligible to gate anything; WARNING is reported and never enforced, because ordinary authoring is transiently inconsistent and a gate that fought it would be worse than the problem. */
-export enum GmLintSeverity {
-  /** Provably broken. No reading of the app makes this fine, and the platform can say so without knowing your intent. */
-  Error = 'ERROR',
-  /** Suspicious and frequently correct anyway — most often because you are mid-edit and the other half is not written yet. */
-  Warning = 'WARNING'
-}
-
-/** What kind of object a finding is about, so results can be grouped without parsing `subject`. */
-export enum GmLintSubjectKind {
-  App = 'APP',
-  Automation = 'AUTOMATION',
-  Container = 'CONTAINER',
-  ContainerType = 'CONTAINER_TYPE',
-  Function = 'FUNCTION'
-}
-
-/** One property write applied during a function invocation (with before/after values). */
-export type GmMutationApplied = {
-  __typename?: 'GmMutationApplied';
-  /** The container that was written. */
-  containerId: Scalars['String']['output'];
-  /** The property key written. */
-  key: Scalars['String']['output'];
-  /** JSON-encoded value after the write. */
-  newValueJson: Maybe<Scalars['String']['output']>;
-  /** JSON-encoded value before the write. */
-  oldValueJson: Maybe<Scalars['String']['output']>;
-  /** The value type written. */
-  valueType: Scalars['String']['output'];
-};
-
-/** One named argument expression of a notify_* effect. */
-export type GmNotificationArg = {
-  __typename?: 'GmNotificationArg';
-  /** The expression (source) evaluated post-mutation to produce the value. */
-  expression: Scalars['String']['output'];
-  /** Argument name (kind-specific: chunk_x, channel_id, payload, target_uuid, ...). */
-  name: Scalars['String']['output'];
-};
-
-/** A typed property (field) defined on a container type. */
-export type GmPropertyDef = {
-  __typename?: 'GmPropertyDef';
-  /** The app (tenant) that owns the type. */
-  appId: Scalars['BigInt']['output'];
-  /** The container type this property belongs to. */
-  containerTypeName: Scalars['String']['output'];
-  /** JSON-encoded default value. */
-  defaultValueJson: Maybe<Scalars['String']['output']>;
-  /** Optional description of the property. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Property key (unique within the type). */
-  key: Scalars['String']['output'];
-  /** Value type: int | float | string | bool | array | object | container_ref. */
-  valueType: Scalars['String']['output'];
-  /** Read visibility: public | owner | hidden. */
-  visibility: Scalars['String']['output'];
-  /** Who may write the property: function | owner | admin. */
-  writable: Scalars['String']['output'];
-};
-
-/** One property predicate for filtered container lists (the same shape automation selectors use): compare a property value against a JSON literal. Missing properties fall back to the type default. */
-export type GmPropertyPredicateInput = {
-  /** Property key to compare. */
-  key: Scalars['String']['input'];
-  /** Comparison operator: '==', '!=', '<', '>', '<=' or '>='. */
-  op: Scalars['String']['input'];
-  /** JSON-encoded comparison value (e.g. '"enemy"', 'true', '10'). */
-  valueJson: Scalars['String']['input'];
-};
-
-/** Summary of what a gameModelSeed call created. containersCreated / edgesCreated count new rows only; idMapJson still maps every tempId, including existing containers on re-seed. */
-export type GmSeedResult = {
-  __typename?: 'GmSeedResult';
-  /** Number of container types created. */
-  containerTypesCreated: Scalars['Int']['output'];
-  /** Number of containers (instances) created. */
-  containersCreated: Scalars['Int']['output'];
-  /** Number of edges created. */
-  edgesCreated: Scalars['Int']['output'];
-  /** Number of functions created. */
-  functionsCreated: Scalars['Int']['output'];
-  /** JSON object mapping seed temp_id -> container UUID (existing id on re-seed). */
-  idMapJson: Scalars['String']['output'];
-  /** Number of property definitions created. */
-  propertyDefinitionsCreated: Scalars['Int']['output'];
-  /** Non-fatal warnings produced while seeding. */
-  warnings: Array<Scalars['String']['output']>;
-};
-
-/** A runtime session: an isolated instance scope (e.g. a match or room) for containers. */
-export type GmSession = {
-  __typename?: 'GmSession';
-  /** Who may still get in: 'open' (anyone the app admits), 'locked' (only a participant who already joined may reconnect), 'closed' (nobody; set automatically when the session ends). */
-  admission: Scalars['String']['output'];
-  /** The app (tenant) that owns the session. */
-  appId: Scalars['BigInt']['output'];
-  /** When the session was created. */
-  createdAt: Scalars['DateTime']['output'];
-  /** The user who created the session. */
-  createdByUserId: Maybe<Scalars['BigInt']['output']>;
-  /** The user whose turn it currently is (turn-based play), or null. */
-  currentTurnUserId: Maybe<Scalars['BigInt']['output']>;
-  /** Why it ended: 'completed' or 'abandoned' by the host/admin, 'empty_timeout' when the server ended a session nobody was in. */
-  endReason: Maybe<Scalars['String']['output']>;
-  /** When the session ended, or null while active. */
-  endedAt: Maybe<Scalars['DateTime']['output']>;
-  /** The grid this session is hosted in, when its creator hosted it inside a grid they own (a game within the game); null for an app-level session. Player modules on that grid see it through sessions_list. */
-  gridId: Maybe<Scalars['BigInt']['output']>;
-  /** Increments on every host change. Send it as expectedHostTerm on host actions to be refused (SESSION_HOST_TERM_STALE) instead of acting on a host change you have not seen. */
-  hostTerm: Scalars['Int']['output'];
-  /** The current session host, or null while nobody is joined. The creator starts as host; when the host leaves or expires, the longest-joined present participant succeeds. */
-  hostUserId: Maybe<Scalars['BigInt']['output']>;
-  /** Seat cap: the most participants that may be joined at once. Null means unbounded. A participant reconnecting never counts against it twice. */
-  maxParticipants: Maybe<Scalars['Int']['output']>;
-  /** JSON object of developer metadata. */
-  metadataJson: Scalars['String']['output'];
-  /** Optional session name. */
-  name: Maybe<Scalars['String']['output']>;
-  /** How many participants are joined right now. */
-  participantCount: Scalars['Int']['output'];
-  /** How the roster is judged: 'actor' (default) expires a joined participant with no fresh Buddy actor in the app after the join grace window; 'none' never expires anybody -- for turn-based play that never replicates an actor -- so the roster's only exits are leave, end, and the empty timeout once everyone has left. */
-  presence: Scalars['String']['output'];
-  /** Monotonic change counter. Every event in gameModelSessionChanged carries the revision that produced it; gameModelSessionSnapshot returns the revision it describes. Compare as integers. */
-  revision: Scalars['String']['output'];
-  /** On the gameModelCreateSession response only: how many container rows seedFromApp stamped into the session (0 when seedFromApp was given and matched nothing). Null on every other read; the durable record is the containersSeeded field of the created event. */
-  seededContainerCount: Maybe<Scalars['Int']['output']>;
-  /** Unique session id. */
-  sessionId: Scalars['String']['output'];
-  /** Lifecycle status (e.g. active). */
-  status: Scalars['String']['output'];
-};
-
-/** One session revision: what changed, in order. The payload names the subject (user id, host, admission, ...) as a JSON object. */
-export type GmSessionEvent = {
-  __typename?: 'GmSessionEvent';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** When the revision was committed. */
-  createdAt: Scalars['DateTime']['output'];
-  /** created | participant_joined | participant_rejoined | participant_left | participant_expired | host_changed | admission_changed | turn_changed | ended */
-  kind: Scalars['String']['output'];
-  /** JSON object describing the change (e.g. {"userId":"…","incarnation":2} for a join, {"hostUserId":"…","hostTerm":3,"previousHostUserId":"…","reason":"host_left"} for a host change). */
-  payloadJson: Scalars['String']['output'];
-  /** The revision this event produced. Strictly increasing per session; a gap means a missed event -- pull gameModelSessionSnapshot or gameModelSessionEvents(afterRevision). */
-  revision: Scalars['String']['output'];
-  /** The session this revision belongs to. */
-  sessionId: Scalars['String']['output'];
-};
-
-/** An operator's view of one session: the full roster including departed participants, each joined participant's live presence verdict, and the most recent events. */
-export type GmSessionInspection = {
-  __typename?: 'GmSessionInspection';
-  /** Every participant row, joined and left, oldest join first. */
-  participants: Array<GmSessionParticipantInspection>;
-  /** The most recent events, newest first. */
-  recentEvents: Array<GmSessionEvent>;
-  /** The session row. */
-  session: GmSession;
-};
-
-/** A user's participation in a session. */
-export type GmSessionParticipant = {
-  __typename?: 'GmSessionParticipant';
-  /** The Buddy actor uuid the client bound at join, if any. When set, this participant's presence is that actor's; when null, any fresh actor of the user in the app counts. */
-  actorUuid: Maybe<Scalars['String']['output']>;
-  /** Counts this user's joins to this session. A reconnect is the same row with incarnation + 1; a leave that names an older incarnation is a superseded client and is refused (SESSION_INCARNATION_STALE). */
-  incarnation: Scalars['Int']['output'];
-  /** When the user first joined (kept across reconnects). */
-  joinedAt: Scalars['DateTime']['output'];
-  /** When the participant last left, or null while joined. */
-  leftAt: Maybe<Scalars['DateTime']['output']>;
-  /** Why the participant left: 'left' (their own call), 'presence_expired' (no fresh actor past the grace window), 'session_ended', 'kicked'. */
-  leftReason: Maybe<Scalars['String']['output']>;
-  /** The participant role within the session. */
-  role: Scalars['String']['output'];
-  /** The session id. */
-  sessionId: Scalars['String']['output'];
-  /** 'joined' while the user is in the session, 'left' after a leave, a presence expiry, or the session ending. Rows are kept so the roster history is answerable. */
-  state: Scalars['String']['output'];
-  /** The participant user id. */
-  userId: Scalars['BigInt']['output'];
-};
-
-/** A joined participant with the platform's current presence verdict, for operators. */
-export type GmSessionParticipantInspection = {
-  __typename?: 'GmSessionParticipantInspection';
-  /** The roster row. */
-  participant: GmSessionParticipant;
-  /** 'fresh' (a qualifying actor is present), 'grace' (inside the join grace window, not yet judged), 'stale' (no qualifying actor; the next presence sweep will expire this participant), 'none' (the session's presence mode is 'none'; never expired), 'legacy' (row predates presence tracking; never expired), 'left' (not joined). */
-  presence: Scalars['String']['output'];
-  /** When the presence rule starts applying to this participant (join + grace), or null for a row the rule never applies to (a legacy row, or a session whose presence mode is 'none'). */
-  presenceFrom: Maybe<Scalars['DateTime']['output']>;
-};
-
-/** The authoritative state of one session at one revision: the session and every joined participant. The catch-up read after a subscription gap or a reconnect. */
-export type GmSessionSnapshot = {
-  __typename?: 'GmSessionSnapshot';
-  /** Every participant whose state is joined, oldest join first. */
-  participants: Array<GmSessionParticipant>;
-  /** The revision this snapshot describes. Discard buffered events at or below it and apply the ones above it. */
-  revision: Scalars['String']['output'];
-  /** The session row at this revision. */
-  session: GmSession;
-};
-
 /** A grant of a feature key to an access tier. */
 export type GmTierFeature = {
   __typename?: 'GmTierFeature';
@@ -5346,77 +4053,6 @@ export type GmTierFeature = {
   featureKey: Scalars['String']['output'];
   /** The access tier the feature is granted to. */
   tierId: Scalars['BigInt']['output'];
-};
-
-/** A pending one-shot timer: a delayed invocation that has been armed but has not fired yet. Timers are removed from this list the moment they are claimed for execution. */
-export type GmTimer = {
-  __typename?: 'GmTimer';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** What armed it: function (a timer effect inside an invoke) | client (gameModelScheduleInvoke) | automation. */
-  armedBy: Scalars['String']['output'];
-  /** Cascade depth inherited from whatever armed the timer. The fired invocation runs one deeper, so timer chains are bounded by the app's maxCascadeDepth. */
-  cascadeDepth: Scalars['Int']['output'];
-  /** When the timer was armed. */
-  createdAt: Scalars['DateTime']['output'];
-  /** App-scoped dedupe key, or null. Re-arming the same key replaces this timer instead of adding another. */
-  dedupeKey: Maybe<Scalars['String']['output']>;
-  /** When the timer becomes due. */
-  fireAt: Scalars['DateTime']['output'];
-  /** Flow correlation id carried from the arming call, so the eventual fire stays visible in gameModelFlow. */
-  flowId: Maybe<Scalars['String']['output']>;
-  /** The function that will be invoked when it fires. */
-  functionName: Scalars['String']['output'];
-  /** JSON object of parameters bound at arm time and passed to the invocation. */
-  paramsJson: Scalars['String']['output'];
-  /** Container the delayed invocation runs against ("self"). */
-  selfContainerId: Scalars['String']['output'];
-  /** Session the delayed invocation runs in, or null if app-global. */
-  sessionId: Maybe<Scalars['String']['output']>;
-  /** Unique timer id (UUID). */
-  timerId: Scalars['String']['output'];
-};
-
-/** One named parameter expression bound into a timer invocation at arm time. */
-export type GmTimerParam = {
-  __typename?: 'GmTimerParam';
-  /** The expression (source) evaluated when arming. */
-  expression: Scalars['String']['output'];
-  /** Parameter name on the timer's target function. */
-  name: Scalars['String']['output'];
-};
-
-/** A function and its recent invocation counts (diagnostics). */
-export type GmTopFunction = {
-  __typename?: 'GmTopFunction';
-  /** Failed invocations in the window. */
-  failures: Scalars['Int']['output'];
-  /** The function name. */
-  functionName: Scalars['String']['output'];
-  /** Invocations in the window. */
-  invocations: Scalars['Int']['output'];
-};
-
-/** The result of a graph traversal: the reachable container nodes and the edges between them. */
-export type GmTraverseResult = {
-  __typename?: 'GmTraverseResult';
-  /** Edges traversed, of the requested relationship type. */
-  edges: Array<GmEdge>;
-  /** Containers reached within the requested depth. */
-  nodes: Array<GmContainer>;
-  /** The root container the traversal started from. */
-  rootId: Scalars['String']['output'];
-};
-
-/** A container type's complete schema: its property definitions and available functions. */
-export type GmTypeSchema = {
-  __typename?: 'GmTypeSchema';
-  /** The functions available on the type. */
-  functions: Array<GmFunction>;
-  /** The type's property definitions. */
-  propertyDefinitions: Array<GmPropertyDef>;
-  /** The container type name. */
-  typeName: Scalars['String']['output'];
 };
 
 /** Input for granting a user access to an app, optionally on a specific tier. */
@@ -5556,45 +4192,6 @@ export type GridClaimResult = {
   ownershipAssigned: Scalars['Boolean']['output'];
   /** The app policy that was applied. */
   policy: GridClaimPolicy;
-};
-
-/** One marketplace or self-authored client attachment active on a grid, including immutable artifact identity, exact attachment consent, and aggregate per-author capability/trust state. */
-export type GridClientMod = {
-  __typename?: 'GridClientMod';
-  /** UUID of the grid attachment. */
-  attachmentId: Scalars['String']['output'];
-  /** Hash of authorCapabilitySummaryJson. Any capability widening changes this hash and requires fresh author trust. */
-  authorCapabilityHash: Scalars['String']['output'];
-  /** JSON aggregate of every active attachment from this author in the grid. This is the summary shown by the one-per-author trust prompt. */
-  authorCapabilitySummaryJson: Scalars['String']['output'];
-  /** Kind of author whose code this attachment executes. */
-  authorKind: PlayerCodeOwnerKind;
-  /** User id or org id of the author, according to authorKind. */
-  authorRef: Scalars['BigInt']['output'];
-  /** Whether the calling player has already consented to this attachment. */
-  callerConsented: Scalars['Boolean']['output'];
-  /** Whether the caller's grid-author trust matches the current aggregate author capability hash. */
-  callerTrustsAuthor: Scalars['Boolean']['output'];
-  /** Capability hash a player must consent to before fetching. */
-  capabilityHash: Scalars['String']['output'];
-  /** JSON derived capability summary of the pinned version. */
-  capabilitySummaryJson: Scalars['String']['output'];
-  /** Compile artifact hash of the client half. Clients use it as an immutable cache and lifecycle key. */
-  clientArtifactHash: Scalars['String']['output'];
-  /** Immutable self-authored CLIENT version to fetch; null for marketplace attachments. */
-  clientVersionId: Maybe<Scalars['String']['output']>;
-  /** The grid the client mod is attached to. */
-  gridId: Scalars['BigInt']['output'];
-  /** UUID of the marketplace listing, or null for a self-authored attachment. */
-  listingId: Maybe<Scalars['String']['output']>;
-  /** Listing display name. */
-  listingName: Scalars['String']['output'];
-  /** Immutable self-authored SERVER version declaring the requirement; null for marketplace attachments. */
-  serverVersionId: Maybe<Scalars['String']['output']>;
-  /** Attachment source: 'marketplace' or 'self_authored'. */
-  sourceKind: Scalars['String']['output'];
-  /** UUID of the pinned marketplace version, or null for a self-authored attachment. */
-  versionId: Maybe<Scalars['String']['output']>;
 };
 
 /** A single group/role -> permission-key grant on a grid (one row of the grid_group_grants input table). */
@@ -5877,48 +4474,6 @@ export type InviteOrgMemberInput = {
   userId: Scalars['BigInt']['input'];
 };
 
-/** Invoke a studio-defined function against a self container. */
-export type InvokeFunctionInput = {
-  /** The app (tenant) that owns the function. */
-  appId: Scalars['BigInt']['input'];
-  /** Administrative override: skip the function's invoke policy for this one call. Only a caller holding manage_apps on the app may set it (NOT_ALLOWED otherwise, nothing runs); the result then carries policyBypassed=true and the call is audit-logged. Default false. Until v1.89.0 every manage_apps holder bypassed every invoke policy IMPLICITLY, so a developer testing their own game with their own account saw policies that appeared not to be enforced; now an admin's invoke is judged exactly like a player's unless they say otherwise. */
-  bypassPolicy?: InputMaybe<Scalars['Boolean']['input']>;
-  /** The function name to invoke. */
-  functionName: Scalars['String']['input'];
-  /** JSON object of params. */
-  paramsJson?: InputMaybe<Scalars['String']['input']>;
-  /** The 'self' container the function runs against (referenced as self in expressions). */
-  selfContainerId: Scalars['String']['input'];
-  /** Optional session context for the invocation. */
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** Join an existing session, or reconnect to one you are already in. */
-export type JoinSessionInput = {
-  /** Optional: the Buddy actor uuid this client is playing as (32 hex characters, dashes accepted). It must be the caller's own actor. When given, the participant's presence is that actor's presence in the app; a new actor after a reconnect should rejoin with its uuid. When omitted, any fresh actor of this user in the app keeps the participant present. */
-  actorUuid?: InputMaybe<Scalars['String']['input']>;
-  /** The app (tenant) that owns the session. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional idempotency key. Replaying with the same key and identical input returns the first result (same incarnation) instead of joining again. Keys expire after 24h. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** Optional participant role to join as. */
-  role?: InputMaybe<Scalars['String']['input']>;
-  /** The session id to join. */
-  sessionId: Scalars['String']['input'];
-};
-
-/** Leave a session you are joined to. */
-export type LeaveSessionInput = {
-  /** The app (tenant) that owns the session. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional idempotency key (24h). */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** The incarnation gameModelJoinSession returned to THIS client (a creator starts at 1; gameModelSessionSnapshot shows every participant's). Required: if a newer client has since rejoined as the same user, the call is refused with SESSION_INCARNATION_STALE and the newer client stays joined, so a superseded client can never remove the one that took over. */
-  incarnation: Scalars['Int']['input'];
-  /** The session id to leave. */
-  sessionId: Scalars['String']['input'];
-};
-
 /** Link an additional federated identity to the signed-in account. */
 export type LinkIdentityInput = {
   code: Scalars['String']['input'];
@@ -5976,16 +4531,6 @@ export type LoginUserInput = {
   password: Scalars['String']['input'];
 };
 
-/** Which engine's meter produced a quantity of compute units. "expression" is the model expression engine (player invokes, automations and timers); "studio_wasm" is developer-authored compute modules; "player_wasm" is the player compute tier, which has its own tables and its own billed metric. */
-export enum MeteredComputeEngine {
-  /** The model expression engine: gameModelInvoke, automation runs and timer fires. */
-  Expression = 'EXPRESSION',
-  /** Player-authored WASM compute. */
-  PlayerWasm = 'PLAYER_WASM',
-  /** Developer-authored WASM compute modules. */
-  StudioWasm = 'STUDIO_WASM'
-}
-
 /** Input for mintAppToken: directly mint an app-scoped gameplay token for the calling user (native/direct path, no browser redirect). */
 export type MintAppTokenInput = {
   /** Numeric id of the app to mint a confined gameplay token for. Free/open apps are auto-granted access; paid apps require an existing entitlement (else FORBIDDEN). */
@@ -6006,8 +4551,6 @@ export type Mutation = {
   __typename?: 'Mutation';
   /** Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token. */
   abandonGamePublish: HostedGamePublish;
-  /** Acquire a free listing: writes the entitlement row. Paid listings (price_cents > 0 or a non-free acquisition mode) are refused with FEATURE_DISABLED. Idempotent per (listing, caller). Allowed in any admission mode; in allow_list apps an unadmitted acquisition holds until the listing/author/org is admitted, at which point installPlayerCode proceeds. */
-  acquirePlayerCode: PlayerCodeAcquisition;
   /** Application liveness heartbeat for the authenticated user's existing actor rows in an app. Refreshes actors.updated_at so the user stays host-eligible, then returns the freshly-elected host so a client can fold its poll and heartbeat into one round-trip. This is not proof of a live Buddy session and does not refresh the separate Buddy presence lease used by security-sensitive artifact/compute occupancy gates. */
   actorHeartbeat: Maybe<GameHost>;
   /** Add a user to a channel, or approve their pending join request (upsert to active). Requires the 'manage_members' channel permission (app admins bypass). Auto-assigns the default role if configured and notifies Buddy with the member's effective send permission. */
@@ -6044,42 +4587,18 @@ export type Mutation = {
   claimGridChunk: ChunkClaimResult;
   /** Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses. The grid must exist and have no current owner; game rules gate who may attempt a claim. */
   claimGridOwnership: GridClaimResult;
-  /** Remove an app's compute allowance, returning it to observation against the platform reference allowance. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
+  /** Remove an app's compute allowance, so its ck-exec code is no longer paused for its budget. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
   clearAppComputeBudget: Scalars['Boolean']['output'];
   /** Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token. */
   completeGamePublish: CompleteGamePublishResult;
   /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   completeLoginLink: AuthResponse;
-  /** Delete a compute module and (via cascade) its versions, triggers, and lease. Run history is retained for auditing. Returns true when a module was deleted. Requires the org 'manage_compute' permission. */
-  computeDeleteModule: Scalars['Boolean']['output'];
-  /** Delete a compute-module trigger by id. Returns true when a trigger was deleted. Requires the org 'manage_compute' permission. */
-  computeDeleteTrigger: Scalars['Boolean']['output'];
-  /** Deploy a named engine template from the platform registry: upserts the module, publishes the template source (deduped by hash), binds its triggers, and enables it — one call instead of the upsert/deploy/trigger/enable sequence. Compilation proceeds asynchronously; poll computeModuleVersions for compile status. Templates are data-driven (behavior comes from model containers such as MobDef/EncounterDef/Course), so most games parameterize rather than fork. Requires the org 'manage_compute' permission. */
-  computeDeployTemplate: WasmModule;
-  /** Upload a new immutable source version of a compute module and make it the deployed version. The source map is validated (Cargo.toml + src/*.rs only, size caps, platform crate allowlist, no build-time code) and parked as compile_status=pending; a game-api instance compiles it before it can run. Requires the org 'manage_compute' permission. */
-  computeDeployVersion: WasmModuleVersion;
-  /** Invoke a compute module's client-callable export (a trigger with triggerType=invoke). Synchronous RPC: the module runs and returns its result directly (unlike the spatial send surface's dual-success model). Authorization: the export's invoke policy (authority tree) — or holders of 'manage_compute' only when no policy is set. Requires a valid app token. */
-  computeInvoke: ComputeInvokeResult;
-  /** Restart a module that was stopped for exceeding a resource limit, without deploying a new version. Deploying a fix clears the stop on its own and is the normal path; use this when the limit itself was wrong or the load is being accepted deliberately. The reason is recorded. Requires the org 'manage_compute' permission. */
-  computeResetBreaker: WasmModule;
-  /** Enable or disable a compute module. Enabling requires a deployed version and resets the module's circuit breaker; disabling stops all scheduling. Requires the org 'manage_compute' permission. */
-  computeSetModuleEnabled: WasmModule;
-  /** Set the app's compute policy (platform guardrails): the kill switch, module count / tick-rate / fuel / memory / runtime / host-op / egress ceilings, and circuit-breaker tuning. Omitted fields keep current values. Requires the org 'manage_compute' permission. */
-  computeSetPolicy: WasmModulePolicy;
-  /** Create or update a WASM compute module (metadata only). Modules hold developer-authored Rust compiled to sandboxed WASM on game-api instances; upload source with computeDeployVersion. New modules start disabled. Upsert key is (app, name). Requires the org 'manage_compute' permission. */
-  computeUpsertModule: WasmModule;
-  /** Bind a trigger to a compute module: a tick loop (tickHz, clamped by policy), an event subscription (model or compute events), or a client-invokable export (with an optional invoke policy). Requires the org 'manage_compute' permission. */
-  computeUpsertTrigger: WasmModuleTrigger;
   /** Confirms a user email address using the token from the confirmation email (also enables password sign-in for the account). Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   confirmEmail: Scalars['Boolean']['output'];
   /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
   connectUdpProxy: UdpProxyConnectionStatus;
-  /** Consent to run a grid-attached client mod (D2): acknowledges the attachment's exact capability hash. A newer version with a widened summary carries a different hash, so stale consents fail closed — re-consent is always explicit. Consent is per player per attachment. */
-  consentGridClientMod: Scalars['Boolean']['output'];
   /** Operator only. Credit the payer of an over-billed charge (an I3 finding: an allowance or rate was raised after the charge landed) the difference, and close the charge row. Idempotent per charge state. SIDE EFFECT: a wallet credit and a CREDIT event. */
   cpBillingCreditOverbill: BillingCreditResult;
-  /** Operator only (is_operator). Patches the platform compute ceilings: omitted fields stay unchanged, an explicit null clears that override (game-api falls back to env/default), a value (> 0) sets it. SIDE EFFECTS: fans a replica notify out to every game-api so the new ceilings clamp computeSetPolicy within ~30 seconds without a restart, and writes an audit entry. Lowering a ceiling does not shrink already-stored per-app policies; it rejects future computeSetPolicy values above the new ceiling. Returns the updated ceilings row. */
-  cpSetComputePlatformCeilings: CpComputePlatformCeilings;
   /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment and a sanitized audit event. NOTHING IS PUSHED TO GAME API: preemption takes effect when its runtime next pulls this app's crowdy.studio-agent-policy/1 replica, which is within about a minute for an app already holding one and not at all for an app that does not until a permitted caller asks. Releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   cpSetCrowdyStudioAgentAppKill: CrowdyStudioAgentPolicy;
   /** Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, the revision increments, and a sanitized append-only audit event is written. NOTHING IS FANNED OUT TO APPS: Game API pulls crowdy.studio-agent-policy/1 per app, so a platform change reaches an app that already holds a replica within about a minute (refreshAfter is two thirds of a 60s validity) and reaches an app with no replica only when a permitted caller next asks about it. Game API must fail closed if the envelope is missing, malformed, or stale. Narrowing the platform lists narrows every app immediately on its next read, including apps that expressed no narrowing of their own. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
@@ -6136,8 +4655,6 @@ export type Mutation = {
   crowdyStudioLibrarySetArchived: CrowdyStudioLibraryFile;
   /** Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically. */
   crowdyStudioProjectCreate: CrowdyStudioProject;
-  /** Lazily create a private project by copying the authenticated author’s latest source from an existing self-authored SERVER module, CLIENT module, or both. Requires an app-scoped token and authorship of every requested module; current grid ownership is deliberately not required for private source recovery after transfer, while any later deploy still rechecks ownership and target permissions. Repeated requests reuse the matching active project. */
-  crowdyStudioProjectCreateFromModules: CrowdyStudioProject;
   /** Copy one active caller-owned library revision or one immutable published app-common version into a private project by value. Requires an app-scoped token and exact project ownership. The source is re-authorized, content/provenance are snapshotted, project caps and aggregate storage are checked, and the project revision advances atomically. */
   crowdyStudioProjectImportFile: CrowdyStudioProject;
   /** Atomically save selected private project metadata and a batch of file upserts/deletes under one expected project revision. Requires an app-scoped token and exact project ownership. No partial metadata or file changes survive validation, target-cap, aggregate-storage, module-binding, or revision failures. */
@@ -6166,8 +4683,6 @@ export type Mutation = {
   deleteMyAccount: Scalars['Boolean']['output'];
   /** Deletes an organization role. Requires the 'manage_members' permission on the role's org (super admins bypass). DESTRUCTIVE: removes the role and unassigns it from all members. Returns false if the role does not exist. */
   deleteOrgRole: Scalars['Boolean']['output'];
-  /** Delete a player-compute policy row; covered players fall back to the next most general scope. Returns false when no matching row exists. Requires 'manage_compute'. */
-  deletePlayerWasmPolicy: Scalars['Boolean']['output'];
   /** Permanently deletes a quota enforcement rule by id. Returns true if a rule was removed, or false if no quota with that id exists. Destructive and not reversible: once removed, the metric falls back to the next-most-specific rule or the free-tier default. Requires the 'manage_quotas' permission on the same scope (app or org) the quota belongs to, or super admin for global quotas. */
   deleteQuota: Scalars['Boolean']['output'];
   /** Delete a team. Requires the 'manage_group' team permission (app admins bypass). DESTRUCTIVE: cascades to members, roles, and any grid grants the team conferred, and recomputes the effective grid ACL for affected grids. Returns true on success. */
@@ -6222,82 +4737,18 @@ export type Mutation = {
   forceLogoutUser: Scalars['Boolean']['output'];
   /** Operator only (is_operator). Deletes the stored deliverability rows for one address (email_status and email_events) and returns how many rows went. Exists so a verification run is not reading the previous run's events, and so an address suppressed by a bounce that has since been fixed can be given another chance. Returns 0 when there was nothing stored. */
   forgetEmailDeliverability: Scalars['Int']['output'];
-  /** Create a directed relationship edge between two containers (the game model is a graph), with a relationship type and optional weight. Requires a valid token. */
-  gameModelAddEdge: GmEdge;
-  /** Cancel pending timers by id or by dedupe key, returning how many were removed. A timer already claimed for execution cannot be cancelled. Requires app-admin ('manage_apps'). */
-  gameModelCancelTimer: Scalars['Int']['output'];
-  /** Instantiate a container (a runtime entity of a given type), optionally within a session, with an owner and initial properties. Subject to the type's instantiableBy rule (admin | member | owner). Requires a valid token. */
-  gameModelCreateContainer: GmContainer;
-  /** Create a runtime session: an isolated instance scope for containers (e.g. a match, room, or save) with its own roster, host, admission and capacity. Subject to the app's session creation policy. The caller becomes creator, host (term 1) and a joined participant. Presence is actor presence: a participant with no fresh Buddy actor in the app after the join grace window is expired by the server. With seedFromApp, the app's keyed template rows of the listed types are copied into the new session in the same transaction (max 2000 rows, refused above; no per-row events; count on the created event and on seededContainerCount). The copies seedFromApp stamps are dropped by the retention sweep once the session has been ended for GM_SESSION_CONTAINER_RETENTION_DAYS, when the tier's operator has set it (default 0, disabled); hand-made rows are never purged. Requires a valid token. */
-  gameModelCreateSession: GmSession;
   /** Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps'). */
   gameModelDefineFeature: GmAppFeature;
-  /** Delete an automation by name (also removes its event triggers). Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if one was deleted. */
-  gameModelDeleteAutomation: Scalars['Boolean']['output'];
-  /** Delete an automation event trigger by id. Requires app-admin ('manage_apps'). Returns true if one was deleted. */
-  gameModelDeleteAutomationTrigger: Scalars['Boolean']['output'];
-  /** Delete a container instance. Cascades its instance properties and any edges connected to it. Allowed for an app admin or the container owner. Requires a valid token. DESTRUCTIVE. Returns true if a container was deleted. */
-  gameModelDeleteContainer: Scalars['Boolean']['output'];
-  /** Delete a container type. Also deletes its property definitions. Refuses if live containers of that type exist, or if functions are bound to it — delete those first. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a type was deleted. */
-  gameModelDeleteContainerType: Scalars['Boolean']['output'];
-  /** Delete a directed relationship edge between two containers. Allowed for an app admin or the owner of the source (from) container. Requires a valid token. DESTRUCTIVE. Returns true if an edge was deleted. */
-  gameModelDeleteEdge: Scalars['Boolean']['output'];
-  /** Delete a studio-defined function by name. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a function was deleted. */
-  gameModelDeleteFunction: Scalars['Boolean']['output'];
-  /** Delete a property definition from a container type. Does not remove instance property values already stored on containers. Requires app-admin ('manage_apps'). DESTRUCTIVE. Returns true if a definition was deleted. */
-  gameModelDeletePropertyDef: Scalars['Boolean']['output'];
-  /** End a session as 'completed' (default) or 'abandoned': every joined participant is marked left (session_ended), admission becomes closed, and an ended event closes the revision log. Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. The server also ends sessions nobody has been joined to for longer than their empty timeout. Requires a valid token. */
-  gameModelEndSession: GmSession;
-  /** Atomically get-or-create a container by an opaque bindingKey, unique per (appId, typeName, sessionId). Concurrent ensures with the same key all return the SAME containerId and exactly one response has created: true — no client-side leader election or list-then-create coordination is needed for shared world objects. When the row already exists this behaves like a read (creation-only fields are ignored and the type's instantiableBy rule is NOT enforced); when it does not exist, creation is authorized exactly like gameModelCreateContainer (instantiableBy + owner rules) AND by the type's bindPolicy, so a caller who may not instantiate the type, or may not claim keys for it, errors only in the not-exists case. bindingKey is client-supplied, so on a member- or owner-instantiable type ANY entitled player may create the keyed row and becomes its owner — which inverts every owner_of_self invoke policy on that type. Set the container type's bindPolicy (e.g. {"type":"is_host"}), or use an admin-instantiable type, for any object more than one player shares. The prefix `seed:` is reserved for gameModelSeed (v1.93.0); a non-admin ensure cannot claim it. Requires a valid token. */
-  gameModelEnsureContainer: GmEnsureContainerResult;
   /** Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps'). */
   gameModelGrantTierFeature: GmTierFeature;
-  /** Invoke a studio-defined function against a 'self' container with JSON params. The server enforces the function's invoke policy (authority rule tree: owner_of_self / is_host / is_current_turn / is_participant / tier_feature / group_permission / grid_permission / condition), evaluates its expressions, atomically applies its declared property mutations, logs an event, and returns the result (return value + mutations applied, or success=false with an error message). Invoke-policy denials are gameplay verdicts, NOT exceptions: they return success=false with errorMessage and log a failure event (observable via gameModelEvents). Scope violations (calling a server-scope function as a non-admin, or an internal function directly) are misconfigurations and throw FORBIDDEN. THE POLICY APPLIES TO APP ADMINS TOO (since v1.89.0): a manage_apps holder is judged exactly like a player unless the input sets bypassPolicy=true, which is refused for anyone else, marks the result policyBypassed=true and is audit-logged. This is the primary, safe way for players to mutate game state. Requires a valid token; only player-scope functions are invocable here. RATE LIMITED per player per app, defaulting to 120 invocations per 10 seconds: over the limit the call is refused with extensions.code RATE_LIMITED, extensions.blame 'budget' (the caller's own budget — not a fault in the game's code and not a platform failure) and extensions.retryAfterMs. A client that awaits each response cannot reach the limit, because the per-call ceiling already bounds a serial caller well below it. */
-  gameModelInvoke: GmInvokeResult;
-  /** Join a session, or reconnect to one you are already in. Refused with SESSION_ENDED, SESSION_CLOSED, SESSION_LOCKED (unless you already joined) or SESSION_FULL. A rejoin returns the same row with incarnation + 1 and supersedes any older client of yours. Pass actorUuid to bind the participant's presence to that Buddy actor. Requires a valid token. */
-  gameModelJoinSession: GmSessionParticipant;
-  /** Leave a session you are joined to. Send the incarnation gameModelJoinSession gave you so a superseded client cannot remove the one that took over (SESSION_INCARNATION_STALE). Leaving an already-left row is a no-op. If you were host, the longest-joined present participant succeeds you (host_changed). Requires a valid token. */
-  gameModelLeaveSession: GmSessionParticipant;
   /** Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed. */
   gameModelRevokeTierFeature: Scalars['Boolean']['output'];
-  /** Run an automation once, immediately (manual trigger), regardless of its schedule. Applies the same guard chain (app gate, rate limit, circuit) and records a run. Useful for testing an NPC. Requires app-admin ('manage_apps'). */
-  gameModelRunAutomation: GmAutomationRun;
-  /** Arm a one-shot timer: invoke a function once, after a delay. The timer is durable (it survives an API restart) and claimed by exactly one replica, so it fires once. A timer whose deadline passes while the app has no players WAITS rather than firing into an empty world, and fires when somebody returns: late, not lost. Read the clock in the handler rather than assuming the delay you asked for is the delay that elapsed. The target function must be autonomousInvocable, because the fire is headless and runs with system authority rather than a player's — which is also why this needs app-admin ('manage_apps'). For player-driven delays, author a timers effect on a function instead so the delay is part of your game logic. Supply dedupeKey to make re-arming replace the pending timer rather than queue another fire. */
-  gameModelScheduleInvoke: GmTimer;
-  /** Bulk-create game-model definitions (container types, property defs, functions) and upsert instances (containers + edges) in one transaction — used to initialize or import a model. Seed containers bind as `seed:` + tempId, or as the row's own bindingKey when given (admin-instantiable or bind-policied types only, so a runtime gameModelEnsureContainer later resolves the same row; an existing row is adopted only if its owner matches, so a player who claimed the key first is never written onto); re-seed maps tempId to the existing id and containersCreated increments only on insert. At most 1000 containers per call (BAD_REQUEST above, nothing written); the call is all-or-nothing. Seeded rows fire no container_created automation or change-feed events. Requires app-admin ('manage_apps'). */
-  gameModelSeed: GmSeedResult;
-  /** Enable or disable an automation. Re-enabling also resets its circuit breaker (closed, zero failures, no pause) so a tripped automation resumes. Requires app-admin ('manage_apps'). */
-  gameModelSetAutomationEnabled: GmAutomation;
-  /** Set the app's automation policy (platform guardrails): the kill switch, max automations, the minimum schedule interval floor, max fan-out, max event cascade depth, and the aggregate per-minute run ceiling. Requires app-admin ('manage_apps'). */
-  gameModelSetAutomationPolicy: GmAutomationPolicy;
-  /** Set the app's game-model runtime policy: who may create sessions (admin | member | anyone) and the default participant role. Requires app-admin ('manage_apps'). */
-  gameModelSetPolicy: GmAppPolicy;
-  /** Set a single property value on a container directly (outside a function). Allowed only when the property's writability (function | owner | admin) permits the caller. The value is JSON-encoded and coerced to the property's value type. Requires a valid token. For game-logic changes prefer gameModelInvoke. */
-  gameModelSetProperty: GmContainer;
-  /** Change who may still join: 'open', 'locked' (participants who already joined may reconnect, nobody new), or 'closed' (nobody). Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. Emits admission_changed. Requires a valid token. */
-  gameModelSetSessionAdmission: GmSession;
-  /** Set or clear the session's current-turn user, for turn-based play. Allowed for an app admin, the app's elected host, the session host, or the current turn holder. Pass userId null to clear the turn; expectedHostTerm refuses a stale host. Requires a valid token. */
-  gameModelSetSessionTurn: GmSession;
-  /** Hand the session host role to another joined participant. Session host or app admin ('manage_apps'); expectedHostTerm refuses a stale host. Increments hostTerm and emits host_changed. Requires a valid token. */
-  gameModelTransferSessionHost: GmSession;
-  /** Create or update an autonomous process ("automation" / NPC): a server-driven entry-point function bound to a trigger (schedule | event | manual), an optional run-as identity, a target/candidate selector, and a per-automation safety budget. The entry-point function must be marked autonomousInvocable. Idempotent on (app, name). Requires app-admin ('manage_apps'). NOTHING RUNS FOR AN APP WITH NO PLAYER IN IT: a SCHEDULE trigger that comes due while the app is empty is skipped and rescheduled from the moment a player returns, and the missed runs are never made up -- so write the entry point to advance the world by elapsed time rather than by one step per run. Event and manual triggers are unaffected, because something already asked. */
-  gameModelUpsertAutomation: GmAutomation;
-  /** Create an event trigger that fires an automation in reaction to model activity or a complete app-scoped active-player-count transition. player_count_changed rejects model filters, starts silent-baseline tracking, injects reserved previous/current/delta/revision params, and uses trailing-edge debounce; other event behavior is unchanged. Matched in the API server post-commit. Requires app-admin ('manage_apps'). */
-  gameModelUpsertAutomationTrigger: GmAutomationTrigger;
-  /** Create or update a container type: the studio-defined schema for a kind of runtime entity (like a class). Idempotent on (app, typeName). Requires app-admin ('manage_apps'). */
-  gameModelUpsertContainerType: GmContainerType;
-  /** Create or update a studio-defined function: a named, sandboxed behavior with typed parameters, declared property mutations (expressions compiled to an AST server-side, never eval'd), an optional return expression, an invoke scope, and an invoke policy (authority rule tree). Idempotent on (app, name). Requires app-admin ('manage_apps'). Returns the function plus any non-fatal static-analysis warnings. */
-  gameModelUpsertFunction: GmFunction;
-  /** Create or update a property definition on a container type (a typed field with default value, visibility, and writability). Idempotent on (app, containerTypeName, key). Requires app-admin ('manage_apps'). */
-  gameModelUpsertPropertyDef: GmPropertyDef;
   /** Grant (or re-activate) a user's access to an app, optionally on a specific tier. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. ENTITLEMENT CHANGE: upserts an active app_user_access row and notifies the game API, so the target user immediately gains that tier's runtime permissions in Buddy. Idempotent per (app,user): re-granting updates the tier and sets status back to active. */
   grantAppAccess: AppUserAccess;
   /** Grant one or more runtime permission keys directly to a single user on a grid (writes the `grid_user_direct_grants` input table), then recompute that user's materialized effective ACL on the grid. The target user must already have active app access (otherwise this fails). Requires app-admin ('manage_apps'). Returns the user's full effective permission-key set on the grid. To grant by group/role instead of per-user, use `assignGroupToGrid`. */
   grantGridPermissions: GridUserPermissions;
   /** Org dashboard shortcut: the authenticated caller grants themselves access to an app using its default active tier. Requires that the caller is an active member of the app's owning org OR holds the 'manage_access_tiers' permission on the app. ENTITLEMENT CHANGE: upserts an active grant and notifies the game API. Errors if the app has no active tier, or the caller is neither a member nor a manager. */
   grantMyAppAccess: AppUserAccess;
-  /** Install an acquired listing after consenting to its capability summary (echo the version's capabilityHash as consentCapabilityHash — a mismatch fails closed). Server halves register through the same P1 registry as instances in a grid the caller OWNS (requires run_server_code) and run as the grid owner on their quota/wallet — never as the author. Bundled client halves attach to the grid for per-visitor consent (D2); omitting gridId makes a personal client-only install. Fail-closed on entitlement, admission, consent, ownership, and run keys. */
-  installPlayerCode: PlayerCodeInstall;
   /** Adds a user to an organization as a member. Requires the 'manage_members' permission on the target org (super admins bypass). */
   inviteOrgMember: OrgMember;
   /** Issue a standing grid claim invite (claim policy INVITE). Callable by designated approvers or studio staff holding manage_compute; the invitee then calls claimGridOwnership to take ownership. */
@@ -6320,45 +4771,17 @@ export type Mutation = {
   logoutAllDevices: Scalars['Boolean']['output'];
   /** Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). Side effect: may create an app_user_access row on the app's free default tier. */
   mintAppToken: AppTokenResponse;
-  /** Mint a grid-scoped token from the app token you hold (DN-10). The result can call only a short, fixed list of gameplay fields, and each is confined to the grid: world reads and replication sends must address a chunk inside it (a send's origin; its reach follows distance), channels must be the grid's own, sessions must be hosted in it, and player-model / player-compute calls must name it. refreshAppToken and logout are refused, so the token cannot widen or tear down its parent. Requires an app token (not a session token, not another grid token), and the caller must own the grid or hold run_client_code on it. */
+  /** Mint a grid-scoped token from the app token you hold (DN-10). The result can call only a short, fixed list of gameplay fields, and each is confined to the grid: world reads and replication sends must address a chunk inside it (a send's origin; its reach follows distance), and channels must be the grid's own. refreshAppToken and logout are refused, so the token cannot widen or tear down its parent. Requires an app token (not a session token, not another grid token), and the caller must own the grid or hold run_client_code on it. */
   mintGridToken: GridTokenResponse;
-  /** Create a disabled player automation confined to the caller and one currently owned grid. Strict trigger/action validation rejects selectors, supplied identities, and app-wide shapes. */
-  playerAutomationCreate: PlayerAutomation;
-  /** Delete one caller-owned player automation from the specified currently owned grid. Destructive; recorded run rows remain for audit. */
-  playerAutomationDelete: Scalars['Boolean']['output'];
-  /** Enable or disable one caller-owned player automation. Enabling requires effective run_server_code and, in strict mode, author admission. Interval/cron triggers compute the first due time; the P1 dispatcher executes scheduled studio-model actions while event delivery and player-compute actions remain typed pending paths. */
-  playerAutomationSetEnabled: PlayerAutomation;
-  /** Delete a self-authored player module and its source versions. Only the code author may delete it, and they must still own the target grid. Returns false when no matching module exists. */
-  playerComputeDelete: Scalars['Boolean']['output'];
-  /** Deploy player-authored Rust into a grid the caller currently owns. Requires the target's write permission at both app-tier and grid ACL layers. One call creates/updates the module and publishes an immutable pending version; the shared compiler builds it asynchronously. Authoring is never admission-gated, but only the original author may replace closed source. */
-  playerComputeDeploy: PlayerWasmModuleVersion;
-  /** Synchronously invoke a server player-module export as the current grid owner. Requires the module to be enabled, compiled, admitted, and covered by run_server_code at app and grid scope. The runtime payload carries callerUserId/gridId; author identity never participates. */
-  playerComputeInvoke: PlayerComputeInvokeResult;
-  /** Enable or disable a player module. Enabling requires current grid ownership, the target's run permission, a successful compile, and admission when the app uses strict ALLOW_LIST mode. Write permission is not sufficient to run code. */
-  playerComputeSetEnabled: PlayerWasmModule;
-  /** Set or clear the required CLIENT companion for the current immutable SERVER module version. Both modules must be caller-authored, successfully compiled, and in the same owned grid. Enabling the server exposes the aggregate server+client capability summary to visitors; pass null to clear the requirement. */
-  playerComputeSetRequires: Scalars['Boolean']['output'];
-  /** Throw or release a player-compute kill switch at player, grid, app, or listing scope (the 03 §7 kill ladder). Throwing a switch stops the covered modules on the next scheduler pass; quota state is retained, and releasing resumes normally. LISTING scope (P4a) disables every install of a marketplace listing fleet-wide — pass the listing UUID in listingRef; pair it with the management-side catalog kill to also stop new acquisitions. Module-level disable is playerComputeSetEnabled. Requires the org 'manage_compute' permission. */
-  playerComputeSetSwitch: Scalars['Boolean']['output'];
-  /** Create a flexible player-model instance in a currently owned grid. The server forces ownerUserId to the caller; this cannot author studio types or app-wide rows. */
-  playerModelCreateContainer: PlayerModelContainer;
-  /** Delete one caller-owned player-model container and its properties from the specified currently owned grid. Destructive; foreign or absent IDs return NOT_FOUND. */
-  playerModelDeleteContainer: Scalars['Boolean']['output'];
-  /** Upsert one arbitrary JSON property on a caller-owned player-model container. Requires current ownership of the specified grid. */
-  playerModelSetProperty: PlayerModelContainer;
   /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
-  /** Create a marketplace listing (free mode) for code the caller authors — personally, or org-owned via ownerOrgId (DN-9; requires manage_compute in that org). SIDE EFFECTS: writes the catalog row with an ownership audit entry. Publishing never uploads source; versions snapshot artifact hashes only. */
-  publishPlayerCode: PlayerCodeListing;
-  /** Publish an immutable version under a listing from the caller's successfully compiled module versions. Snapshots artifact hashes, explicit SERVER-to-required-CLIENT edges, and the derived aggregate capability summary; publishing fails if a required client version is absent from the bundle. Source never leaves the author's rows. */
-  publishPlayerCodeVersion: PlayerCodeListingVersion;
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
   refreshAppToken: AppTokenResponse;
   /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   register: AuthResponse;
   /** OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired. */
   reinstateOrganization: OrgRetirementType;
-  /** Release a one-chunk grid previously created through claimGridChunk. Requires an ordinary app-scoped player token and the caller must still be its current user owner. Refuses foreign grids, studio/marketplace grids, and grids assigned through legacy claimGridOwnership. Atomically removes active install attachments, self-claim ownership, direct/effective ACL rows, and the grid so its chunk can be claimed again. Player modules on the grid are deleted by the grid cascade. */
+  /** Release a one-chunk grid previously created through claimGridChunk. Requires an ordinary app-scoped player token and the caller must still be its current user owner. Refuses foreign grids, studio/marketplace grids, and grids assigned through legacy claimGridOwnership. Atomically removes pending claim requests and invites, self-claim ownership, direct/effective ACL rows, and the grid so its chunk can be claimed again. */
   releaseClaimedGrid: ReleaseClaimedGridResult;
   /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
   removeChannelMember: Scalars['Boolean']['output'];
@@ -6422,7 +4845,7 @@ export type Mutation = {
   setAppClientSettings: PortalConsentState;
   /** Set an app's player-code censorship mode. Requires 'manage_compute'. SIDE EFFECTS: writes an immutable audit row and replica-syncs the mode to game-api. Switching to ALLOW_LIST is strict: unadmitted code (including self-authored code) drains at the runtime activation gate; deploy/compile remain allowed. */
   setAppCodeAdmissionMode: CodeAdmissionMode;
-  /** Set an app's compute allowance in units per minute, spanning the model expression engine and both WASM tiers. One unit is one millisecond of measured execution time. An over-ceiling value is REFUSED naming the ceiling (6000000 units per minute) rather than accepted and clamped, so the value reported back is always the value in force. Set enforce to true to refuse invokes when the allowance is exceeded; leave it false to record the decision and admit, which is what produces the measurements a threshold should be chosen from. Requires app-admin ('manage_apps'). */
+  /** Set an app's compute allowance in units per minute. One unit is one millisecond of measured execution time; ck-exec work is converted from busy time and fuel. An over-ceiling value is REFUSED naming the ceiling (6000000 units per minute) rather than accepted and clamped, so the value reported back is always the value in force. Set enforce to true to pause the app's ck-exec code while its last settled minute is over the allowance; leave it false to record the allowance without pausing anything. Requires app-admin ('manage_apps'). */
   setAppComputeBudget: AppComputeBudgetInfo;
   /** Set how a player claim confers grid ownership in this app (D4): SELF_CLAIM, APPROVAL (optionally with a designated approver list), or INVITE. MARKETPLACE_ONLY is refused with FEATURE_DISABLED while paid grid commerce is off the public API. Requires 'manage_apps'. Changing policy never revokes existing grid_ownership rows. */
   setAppGridClaimPolicy: GridClaimPolicy;
@@ -6460,14 +4883,12 @@ export type Mutation = {
   setOrgStatus: Organization;
   /** Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method. */
   setPlayerAutoBilling: PlayerAutoBilling;
-  /** Change a listing's catalog status. DELISTED/ACTIVE are owner actions (existing installs keep their pinned versions; delisting only stops new acquisitions). KILLED requires 'manage_compute' on the app (studio/operator) and is the catalog half of the listing kill — pair it with the game-api listing-scope kill switch (playerComputeSetSwitch) to disable running installs fleet-wide. SIDE EFFECTS: audit row + replica sync. */
+  /** Change a listing's catalog status. DELISTED/ACTIVE are owner actions (existing installs keep their pinned versions; delisting only stops new acquisitions). KILLED requires 'manage_compute' on the app (studio/operator). SIDE EFFECTS: audit row + replica sync. */
   setPlayerCodeListingStatus: PlayerCodeListing;
   /** Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income accrues per charge to the org's income line and is paid out via the P4b payout ledger. Requires 'manage_billing'. */
   setPlayerRateMarkup: Scalars['Int']['output'];
   /** Set (or clear, by passing both limits null) one of the caller's self-set spend caps: a global or per-app daily/monthly ceiling in cents. Hitting a cap pauses that player's mods with PLAYER_SPEND_CAP until the window rolls — play is untouched. Changes replica-sync to the game runtime. */
   setPlayerSpendCap: Array<PlayerSpendCap>;
-  /** Create or update a player-compute policy row at app_default, tier, grid, or user scope. Omitted knobs keep their current value; unitsPerHour/unitsPerDay set the PLAYER_QUOTA_EXHAUSTED budgets (null = uncapped). Every knob is additionally clamped by the app's studio compute policy at runtime, so a player policy can only tighten. Requires 'manage_compute'. */
-  setPlayerWasmPolicy: PlayerWasmPolicy;
   /** Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage. */
   setQuota: ServiceQuota;
   /** ADMIN PRIVILEGE CHANGE: grants or revokes platform super-admin on the target user, changing their privileges across the whole platform. Requires a super-admin bearer game token (and the management API enabled). */
@@ -6490,10 +4911,6 @@ export type Mutation = {
   transferGridOwnership: GridOwnership;
   /** Transfer a listing between personal and org ownership (DN-9). The caller must be the current owner (user-owned) or hold manage_compute in the owning org; transfers to an org require manage_compute in the receiving org. SIDE EFFECTS: append-only ownership audit row + replica sync to game-api. Ownership moves listing control and source-access rights; from P4b it also moves proceeds. */
   transferPlayerCodeListing: PlayerCodeListing;
-  /** Trust one author’s active client attachments in a grid at the exact aggregate capability hash returned by gridClientMods. The caller must be currently present in the grid. Widening the author’s aggregate capabilities changes the hash and requires a new explicit trust action; attachment-level consent rows are written for compatibility. */
-  trustGridAuthor: Scalars['Boolean']['output'];
-  /** Uninstall: removes the registered instances, grid client attachments, and fetch rights. The acquisition row is RETAINED for audit; reinstalling later needs no new acquisition. Returns false when no matching active install exists. */
-  uninstallPlayerCode: Scalars['Boolean']['output'];
   /** Unlink a federated identity from the signed-in account by identityId. Refuses to remove your last remaining sign-in method. Requires a session token. */
   unlinkIdentity: Scalars['Boolean']['output'];
   /** Update an existing access tier (name, ordering, pricing, permissions, etc.); only fields present in the input are changed. Requires the 'manage_access_tiers' permission on the app that owns the tier (resolved from tierId); super admins bypass. SIDE EFFECTS: re-syncs the tier's permissions to the game API. Throws if the tier is not found or the caller lacks permission. */
@@ -6546,12 +4963,6 @@ export type Mutation = {
 export type MutationAbandonGamePublishArgs = {
   publishId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
-};
-
-
-export type MutationAcquirePlayerCodeArgs = {
-  appId: Scalars['BigInt']['input'];
-  listingId: Scalars['String']['input'];
 };
 
 
@@ -6665,76 +5076,8 @@ export type MutationCompleteLoginLinkArgs = {
 };
 
 
-export type MutationComputeDeleteModuleArgs = {
-  appId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type MutationComputeDeleteTriggerArgs = {
-  appId: Scalars['BigInt']['input'];
-  triggerId: Scalars['String']['input'];
-};
-
-
-export type MutationComputeDeployTemplateArgs = {
-  appId: Scalars['BigInt']['input'];
-  moduleName?: InputMaybe<Scalars['String']['input']>;
-  templateName: Scalars['String']['input'];
-};
-
-
-export type MutationComputeDeployVersionArgs = {
-  input: DeployComputeVersionInput;
-};
-
-
-export type MutationComputeInvokeArgs = {
-  appId: Scalars['BigInt']['input'];
-  exportName: Scalars['String']['input'];
-  moduleName: Scalars['String']['input'];
-  paramsJson?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type MutationComputeResetBreakerArgs = {
-  appId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-  reason: Scalars['String']['input'];
-};
-
-
-export type MutationComputeSetModuleEnabledArgs = {
-  appId: Scalars['BigInt']['input'];
-  enabled: Scalars['Boolean']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type MutationComputeSetPolicyArgs = {
-  input: SetComputePolicyInput;
-};
-
-
-export type MutationComputeUpsertModuleArgs = {
-  input: UpsertComputeModuleInput;
-};
-
-
-export type MutationComputeUpsertTriggerArgs = {
-  input: UpsertComputeTriggerInput;
-};
-
-
 export type MutationConfirmEmailArgs = {
   token: Scalars['String']['input'];
-};
-
-
-export type MutationConsentGridClientModArgs = {
-  appId: Scalars['BigInt']['input'];
-  attachmentId: Scalars['String']['input'];
-  consentCapabilityHash: Scalars['String']['input'];
 };
 
 
@@ -6742,11 +5085,6 @@ export type MutationCpBillingCreditOverbillArgs = {
   appId: Scalars['BigInt']['input'];
   chargeId: Scalars['String']['input'];
   reason: Scalars['String']['input'];
-};
-
-
-export type MutationCpSetComputePlatformCeilingsArgs = {
-  input: CpSetComputePlatformCeilingsInput;
 };
 
 
@@ -6888,11 +5226,6 @@ export type MutationCrowdyStudioProjectCreateArgs = {
 };
 
 
-export type MutationCrowdyStudioProjectCreateFromModulesArgs = {
-  input: CreateCrowdyStudioProjectFromModulesInput;
-};
-
-
 export type MutationCrowdyStudioProjectImportFileArgs = {
   input: ImportCrowdyStudioProjectFileInput;
 };
@@ -6960,13 +5293,6 @@ export type MutationDeleteGridArgs = {
 export type MutationDeleteOrgRoleArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   orgRoleId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationDeletePlayerWasmPolicyArgs = {
-  appId: Scalars['BigInt']['input'];
-  scope: Scalars['String']['input'];
-  scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
 
@@ -7141,83 +5467,8 @@ export type MutationForgetEmailDeliverabilityArgs = {
 };
 
 
-export type MutationGameModelAddEdgeArgs = {
-  input: AddEdgeInput;
-};
-
-
-export type MutationGameModelCancelTimerArgs = {
-  appId: Scalars['BigInt']['input'];
-  dedupeKey?: InputMaybe<Scalars['String']['input']>;
-  timerId?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type MutationGameModelCreateContainerArgs = {
-  input: CreateContainerInput;
-};
-
-
-export type MutationGameModelCreateSessionArgs = {
-  input: CreateSessionInput;
-};
-
-
 export type MutationGameModelDefineFeatureArgs = {
   input: DefineAppFeatureInput;
-};
-
-
-export type MutationGameModelDeleteAutomationArgs = {
-  appId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelDeleteAutomationTriggerArgs = {
-  appId: Scalars['BigInt']['input'];
-  triggerId: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelDeleteContainerArgs = {
-  appId: Scalars['BigInt']['input'];
-  containerId: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelDeleteContainerTypeArgs = {
-  appId: Scalars['BigInt']['input'];
-  typeName: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelDeleteEdgeArgs = {
-  appId: Scalars['BigInt']['input'];
-  edgeId: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelDeleteFunctionArgs = {
-  appId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelDeletePropertyDefArgs = {
-  appId: Scalars['BigInt']['input'];
-  containerTypeName: Scalars['String']['input'];
-  key: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelEndSessionArgs = {
-  input: EndSessionInput;
-};
-
-
-export type MutationGameModelEnsureContainerArgs = {
-  input: EnsureContainerInput;
 };
 
 
@@ -7226,101 +5477,8 @@ export type MutationGameModelGrantTierFeatureArgs = {
 };
 
 
-export type MutationGameModelInvokeArgs = {
-  input: InvokeFunctionInput;
-};
-
-
-export type MutationGameModelJoinSessionArgs = {
-  input: JoinSessionInput;
-};
-
-
-export type MutationGameModelLeaveSessionArgs = {
-  input: LeaveSessionInput;
-};
-
-
 export type MutationGameModelRevokeTierFeatureArgs = {
   input: GrantTierFeatureInput;
-};
-
-
-export type MutationGameModelRunAutomationArgs = {
-  appId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelScheduleInvokeArgs = {
-  input: ScheduleInvokeInput;
-};
-
-
-export type MutationGameModelSeedArgs = {
-  input: SeedGameModelInput;
-};
-
-
-export type MutationGameModelSetAutomationEnabledArgs = {
-  appId: Scalars['BigInt']['input'];
-  enabled: Scalars['Boolean']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type MutationGameModelSetAutomationPolicyArgs = {
-  input: SetAutomationPolicyInput;
-};
-
-
-export type MutationGameModelSetPolicyArgs = {
-  input: SetGameModelPolicyInput;
-};
-
-
-export type MutationGameModelSetPropertyArgs = {
-  input: SetContainerPropertyInput;
-};
-
-
-export type MutationGameModelSetSessionAdmissionArgs = {
-  input: SetSessionAdmissionInput;
-};
-
-
-export type MutationGameModelSetSessionTurnArgs = {
-  input: SetSessionTurnInput;
-};
-
-
-export type MutationGameModelTransferSessionHostArgs = {
-  input: TransferSessionHostInput;
-};
-
-
-export type MutationGameModelUpsertAutomationArgs = {
-  input: UpsertAutomationInput;
-};
-
-
-export type MutationGameModelUpsertAutomationTriggerArgs = {
-  input: UpsertAutomationTriggerInput;
-};
-
-
-export type MutationGameModelUpsertContainerTypeArgs = {
-  input: UpsertContainerTypeInput;
-};
-
-
-export type MutationGameModelUpsertFunctionArgs = {
-  input: UpsertFunctionInput;
-};
-
-
-export type MutationGameModelUpsertPropertyDefArgs = {
-  input: UpsertPropertyDefInput;
 };
 
 
@@ -7336,15 +5494,6 @@ export type MutationGrantGridPermissionsArgs = {
 
 export type MutationGrantMyAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationInstallPlayerCodeArgs = {
-  acquisitionId: Scalars['String']['input'];
-  appId: Scalars['BigInt']['input'];
-  consentCapabilityHash: Scalars['String']['input'];
-  gridId?: InputMaybe<Scalars['BigInt']['input']>;
-  versionId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -7401,83 +5550,6 @@ export type MutationMintGridTokenArgs = {
 };
 
 
-export type MutationPlayerAutomationCreateArgs = {
-  input: CreatePlayerAutomationInput;
-};
-
-
-export type MutationPlayerAutomationDeleteArgs = {
-  input: PlayerAutomationRefInput;
-};
-
-
-export type MutationPlayerAutomationSetEnabledArgs = {
-  input: SetPlayerAutomationEnabledInput;
-};
-
-
-export type MutationPlayerComputeDeleteArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type MutationPlayerComputeDeployArgs = {
-  input: DeployPlayerComputeInput;
-};
-
-
-export type MutationPlayerComputeInvokeArgs = {
-  appId: Scalars['BigInt']['input'];
-  exportName: Scalars['String']['input'];
-  gridId: Scalars['BigInt']['input'];
-  moduleName: Scalars['String']['input'];
-  paramsJson?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type MutationPlayerComputeSetEnabledArgs = {
-  appId: Scalars['BigInt']['input'];
-  enabled: Scalars['Boolean']['input'];
-  gridId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type MutationPlayerComputeSetRequiresArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  requiredClientName?: InputMaybe<Scalars['String']['input']>;
-  serverName: Scalars['String']['input'];
-};
-
-
-export type MutationPlayerComputeSetSwitchArgs = {
-  appId: Scalars['BigInt']['input'];
-  disabled: Scalars['Boolean']['input'];
-  listingRef?: InputMaybe<Scalars['String']['input']>;
-  reason?: InputMaybe<Scalars['String']['input']>;
-  scope: Scalars['String']['input'];
-  scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
-};
-
-
-export type MutationPlayerModelCreateContainerArgs = {
-  input: CreatePlayerModelContainerInput;
-};
-
-
-export type MutationPlayerModelDeleteContainerArgs = {
-  input: PlayerModelContainerRefInput;
-};
-
-
-export type MutationPlayerModelSetPropertyArgs = {
-  input: SetPlayerModelPropertyInput;
-};
-
-
 export type MutationPublishAppToSharedArgs = {
   appId: Scalars['BigInt']['input'];
   cancelUrl?: InputMaybe<Scalars['String']['input']>;
@@ -7485,16 +5557,6 @@ export type MutationPublishAppToSharedArgs = {
   planId?: InputMaybe<Scalars['BigInt']['input']>;
   provider?: InputMaybe<PaymentProvider>;
   successUrl?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type MutationPublishPlayerCodeArgs = {
-  input: PublishPlayerCodeInput;
-};
-
-
-export type MutationPublishPlayerCodeVersionArgs = {
-  input: PublishPlayerCodeVersionInput;
 };
 
 
@@ -7822,11 +5884,6 @@ export type MutationSetPlayerSpendCapArgs = {
 };
 
 
-export type MutationSetPlayerWasmPolicyArgs = {
-  input: SetPlayerWasmPolicyInput;
-};
-
-
 export type MutationSetQuotaArgs = {
   input: SetQuotaInput;
 };
@@ -7882,21 +5939,6 @@ export type MutationTransferGridOwnershipArgs = {
 
 export type MutationTransferPlayerCodeListingArgs = {
   input: TransferPlayerCodeListingInput;
-};
-
-
-export type MutationTrustGridAuthorArgs = {
-  appId: Scalars['BigInt']['input'];
-  authorKind: PlayerCodeOwnerKind;
-  authorRef: Scalars['BigInt']['input'];
-  consentCapabilityHash: Scalars['String']['input'];
-  gridId: Scalars['BigInt']['input'];
-};
-
-
-export type MutationUninstallPlayerCodeArgs = {
-  appId: Scalars['BigInt']['input'];
-  installId: Scalars['String']['input'];
 };
 
 
@@ -8076,14 +6118,6 @@ export type NearbyGridsInput = {
   highChunk: ChunkCoordinatesInput;
   /** Low corner of the region to scan, in chunk coordinates (normalized). */
   lowChunk: ChunkCoordinatesInput;
-};
-
-/** One named argument expression of a notify_* effect. */
-export type NotificationArgInput = {
-  /** Expression string (compiled to AST server-side; evaluated post-mutation). */
-  expression: Scalars['String']['input'];
-  /** Argument name (kind-specific: chunk_x, channel_id, payload, target_uuid, ...). */
-  name: Scalars['String']['input'];
 };
 
 /** Per-app projection row within an org rollup. */
@@ -8472,61 +6506,6 @@ export type PlayerAutoBilling = {
   userId: Scalars['BigInt']['output'];
 };
 
-/** A player-owned automation confined to one app and grid. Trigger/action JSON has been structurally validated. */
-export type PlayerAutomation = {
-  __typename?: 'PlayerAutomation';
-  /** Validated action as canonical JSON. */
-  actionJson: Scalars['String']['output'];
-  /** App containing the automation. */
-  appId: Scalars['BigInt']['output'];
-  /** Player automation UUID. */
-  automationId: Scalars['String']['output'];
-  /** Circuit state: closed, open, or half_open. */
-  circuitState: Scalars['String']['output'];
-  /** Current consecutive failure count. */
-  consecutiveFailures: Scalars['Int']['output'];
-  /** Open-circuit cooldown in milliseconds. */
-  cooldownMs: Scalars['Int']['output'];
-  /** Automation creation time. */
-  createdAt: Scalars['DateTime']['output'];
-  /** Optional description. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Whether the automation may dispatch. */
-  enabled: Scalars['Boolean']['output'];
-  /** Failures required to open the circuit. */
-  failureThreshold: Scalars['Int']['output'];
-  /** Grid confining the automation. */
-  gridId: Scalars['BigInt']['output'];
-  /** Most recent dispatch error. */
-  lastError: Maybe<Scalars['String']['output']>;
-  /** Most recent dispatch time. */
-  lastRunAt: Maybe<Scalars['DateTime']['output']>;
-  /** Maximum runs per rolling minute. */
-  maxRunsPerMinute: Scalars['Int']['output'];
-  /** Owner-local automation name. */
-  name: Scalars['String']['output'];
-  /** Next scheduled dispatch time. */
-  nextRunAt: Maybe<Scalars['DateTime']['output']>;
-  /** Owning user. Forced from current grid ownership at creation. */
-  ownerUserId: Scalars['BigInt']['output'];
-  /** Time at which an open circuit may retry. */
-  pausedUntil: Maybe<Scalars['DateTime']['output']>;
-  /** Validated trigger as canonical JSON. */
-  triggerJson: Scalars['String']['output'];
-  /** Most recent automation update time. */
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** Identify one player automation within its app and grid. The server additionally forces the current caller as owner. */
-export type PlayerAutomationRefInput = {
-  /** App containing the owned grid. */
-  appId: Scalars['BigInt']['input'];
-  /** Player automation UUID. */
-  automationId: Scalars['String']['input'];
-  /** Grid that confines the automation. */
-  gridId: Scalars['BigInt']['input'];
-};
-
 /** A pending player card-vault (P4b): the Stripe SetupIntent the browser confirms to save a card off-session, enabling wallet auto-recharge and rent auto-renew. On success a setup_intent.succeeded webhook persists the card. */
 export type PlayerCardSetup = {
   __typename?: 'PlayerCardSetup';
@@ -8536,25 +6515,6 @@ export type PlayerCardSetup = {
   externalCustomerId: Scalars['String']['output'];
   /** Stripe publishable key the browser needs to confirm the card. */
   publishableKey: Maybe<Scalars['String']['output']>;
-};
-
-/** A compiled CLIENT-target player artifact plus the metadata the browser broker needs to run it (player compute P3). Served only to the current grid owner who authored the version, holding run_client_code, when the app's admission mode admits the code. The bytes are the gas-injected wasm32-unknown-unknown module; clientFuelPerDispatch is the per-dispatch fuel budget the glue worker enforces locally. */
-export type PlayerClientArtifact = {
-  __typename?: 'PlayerClientArtifact';
-  /** ABI version the artifact was built for. */
-  abiVersion: Scalars['Int']['output'];
-  /** The gas-injected client WASM artifact, base64-encoded. */
-  artifactBase64: Scalars['String']['output'];
-  /** SHA-256 content hash of the served artifact bytes. The browser broker recomputes it and refuses any artifact whose hash differs, so a side-loaded module cannot run (T7). */
-  artifactHash: Scalars['String']['output'];
-  /** Per-dispatch client fuel budget from the resolved player policy; the broker's glue worker traps when a dispatch exceeds it. */
-  clientFuelPerDispatch: Scalars['BigInt']['output'];
-  /** Declared client interop contract (bridge messages) as JSON, when the version pins one. */
-  contractJson: Maybe<Scalars['String']['output']>;
-  /** Artifact size in bytes (<= 512 KiB). */
-  sizeBytes: Scalars['Int']['output'];
-  /** The served version UUID. */
-  versionId: Scalars['String']['output'];
 };
 
 /** The caller's entitlement to a listing (mode 'free' in P4a). Uninstalling never deletes this row; it is the audit trail P4b attaches payment to. */
@@ -8613,29 +6573,6 @@ export enum PlayerCodeAdmissionState {
   Revoked = 'REVOKED'
 }
 
-/** An install of an acquired listing: the pinned version, the consent hash acknowledged, and (for server halves) the owned target grid. Installs pin their version; updating to a newer version is a new consent + install update, never automatic. */
-export type PlayerCodeInstall = {
-  __typename?: 'PlayerCodeInstall';
-  /** UUID of the acquisition this install uses. */
-  acquisitionId: Scalars['String']['output'];
-  /** App of the listing. */
-  appId: Scalars['BigInt']['output'];
-  /** The capability hash the installer consented to. */
-  consentedCapabilityHash: Scalars['String']['output'];
-  /** When installed. */
-  createdAt: Scalars['DateTime']['output'];
-  /** UUID of the install. */
-  installId: Scalars['String']['output'];
-  /** UUID of the installed listing. */
-  listingId: Scalars['String']['output'];
-  /** UUID of the pinned listing version. */
-  pinnedVersionId: Scalars['String']['output'];
-  /** Install status: 'active', 'uninstalled', or 'disabled'. */
-  status: Scalars['String']['output'];
-  /** Owned grid the server half (and any bundled client attachment) was installed into; null for personal client-only installs. */
-  targetGridId: Maybe<Scalars['BigInt']['output']>;
-};
-
 /** Source-access mode of a listing: CLOSED (artifacts + contracts only) or OPEN_SOURCE (source readable; irreversible per published version). */
 export enum PlayerCodeLicenseMode {
   Closed = 'CLOSED',
@@ -8690,33 +6627,6 @@ export enum PlayerCodeListingStatus {
   Killed = 'KILLED'
 }
 
-/** An immutable published version of a code listing: artifact hashes (never source), explicit server-to-client requirements, and the DERIVED capability summary installers consent to. */
-export type PlayerCodeListingVersion = {
-  __typename?: 'PlayerCodeListingVersion';
-  /** sha256 of the canonical capability summary. installPlayerCode and consentGridClientMod must echo this hash as the consent acknowledgement. */
-  capabilityHash: Scalars['String']['output'];
-  /** JSON capability summary DERIVED from the artifacts (host functions, capability groups, presentation hooks, triggers, egress budgets). Never self-declared; shown at acquire and install consent. */
-  capabilitySummaryJson: Scalars['String']['output'];
-  /** Client-target artifact hashes (empty for server-only listings). */
-  clientArtifactHashes: Array<Scalars['String']['output']>;
-  /** When the version was published. */
-  createdAt: Maybe<Scalars['DateTime']['output']>;
-  /** Author license terms shown at acquisition. */
-  licenseText: Maybe<Scalars['String']['output']>;
-  /** UUID of the listing. */
-  listingId: Scalars['String']['output'];
-  /** Whether this version’s source is open (irreversible per version). */
-  openSource: Scalars['Boolean']['output'];
-  /** Explicit SERVER artifact to required CLIENT artifact edges. Every referenced hash is a member of this immutable bundle. */
-  requirements: Array<PlayerCodeRequirement>;
-  /** Server-target artifact hashes (empty for client-only listings). */
-  serverArtifactHashes: Array<Scalars['String']['output']>;
-  /** UUID of this published version. */
-  versionId: Scalars['String']['output'];
-  /** Monotonic version number within the listing. */
-  versionNo: Scalars['Int']['output'];
-};
-
 /** Who owns a marketplace code listing: a player user or an org (DN-9: the org then holds source access and listing control). */
 export enum PlayerCodeOwnerKind {
   Org = 'ORG',
@@ -8759,157 +6669,6 @@ export type PlayerCodeVersion = {
   versionId: Scalars['String']['output'];
   /** Monotonic version number within the listing. */
   versionNo: Scalars['Int']['output'];
-};
-
-/** Synchronous result from invoking an admitted server player-module export as the current grid owner. */
-export type PlayerComputeInvokeResult = {
-  __typename?: 'PlayerComputeInvokeResult';
-  /** Wall-clock execution duration in µs. */
-  durationUs: Scalars['Int']['output'];
-  /** Instrumented fuel consumed. */
-  fuelUsed: Scalars['BigInt']['output'];
-  /** Raw module result bytes encoded as base64. */
-  resultBase64: Scalars['String']['output'];
-  /** UTF-8 result when it is valid JSON; otherwise null. */
-  resultJson: Maybe<Scalars['String']['output']>;
-};
-
-/** A kill-ladder switch row (03 §7): a studio-set immediate stop at player, grid, app, or listing scope. Module-level disable lives on the module itself; killing a LISTING disables every install of that marketplace listing fleet-wide (P4a). Quota state is retained across a kill. */
-export type PlayerComputeSwitch = {
-  __typename?: 'PlayerComputeSwitch';
-  /** The app the switch applies to. */
-  appId: Scalars['BigInt']['output'];
-  /** When execution was stopped. */
-  disabledAt: Scalars['DateTime']['output'];
-  /** The marketplace listing UUID for listing scope; null otherwise. */
-  listingRef: Maybe<Scalars['String']['output']>;
-  /** Operator note recorded when the switch was thrown. */
-  reason: Maybe<Scalars['String']['output']>;
-  /** Scope: 'player', 'grid', 'app', or 'listing'. */
-  scope: Scalars['String']['output'];
-  /** The player user id or grid id; null for app and listing scopes. */
-  scopeRef: Maybe<Scalars['BigInt']['output']>;
-  /** Switch row UUID. */
-  switchId: Scalars['String']['output'];
-};
-
-/** Execution target for player-authored Rust. SERVER runs as the grid owner in game-api; CLIENT runs as the actual player in the browser worker sandbox. */
-export enum PlayerComputeTarget {
-  Client = 'CLIENT',
-  Server = 'SERVER'
-}
-
-/** The caller's player-compute spend and quota view for one app (P2): unit usage in the current clock hour/day, the effective policy limits, compile-quota utilization, and the replica-synced wallet/spend-cap gate state. Units follow the platform formula GREATEST(cpu ms, fuel/22M); player automation units are included. */
-export type PlayerComputeUsage = {
-  __typename?: 'PlayerComputeUsage';
-  /** The app this view covers. */
-  appId: Scalars['BigInt']['output'];
-  /** Compile submissions counted in the current clock hour. */
-  compilesThisHour: Scalars['Int']['output'];
-  /** Compute units consumed in the current clock day. */
-  dayUnitsUsed: Scalars['BigInt']['output'];
-  /** Typed pause reason when gated: PLAYER_WALLET_EMPTY, PLAYER_SPEND_CAP, PLAYER_QUOTA_EXHAUSTED, or PLAYER_COMPUTE_KILLED. */
-  gateReason: Maybe<Scalars['String']['output']>;
-  /** Replica-synced management player gate for this app: 'active', 'grace', or 'denied'. Non-active pauses this player's modules only; play is untouched. */
-  gateStatus: Scalars['String']['output'];
-  /** Compute units consumed in the current clock hour (modules + automations, all owned grids aggregated). */
-  hourUnitsUsed: Scalars['BigInt']['output'];
-  /** Effective max_compiles_per_hour policy cap. */
-  maxCompilesPerHour: Scalars['Int']['output'];
-  /** Effective units_per_day developer-policy cap; null when the app sets no daily quota. */
-  unitsPerDay: Maybe<Scalars['BigInt']['output']>;
-  /** Effective units_per_hour developer-policy cap; null when the app sets no hourly quota. */
-  unitsPerHour: Maybe<Scalars['BigInt']['output']>;
-};
-
-/** What a player-facing surface may be told about a failure that came from code the platform did not write. Deliberately coarser than the internal fault taxonomy: it says what a player can act on and never names an engine, a module, a function or a limit. The full detail is in the developer surfaces (gameModelEvents, computeModuleRuns, userCodeFaults). */
-export enum PlayerFaultCode {
-  /** The app's datacenter has no instance able to serve clients. No endpoint is named, on purpose — there is nowhere to send the client. */
-  AppUnavailable = 'APP_UNAVAILABLE',
-  /** A per-minute allowance for this app is spent; it returns on the next window. */
-  BudgetExceeded = 'BUDGET_EXCEEDED',
-  /** The app's own circuit is open after repeated failures. Retry after extensions.retryAfterMs. extensions.cause is watchdog_timeout when those failures were watchdog kills. This is not PLATFORM_BUSY and not a rate limit. */
-  CircuitOpen = 'CIRCUIT_OPEN',
-  /** The engine this call needs is switched off on this tier, so the app's code does not run here. An operator's switch: retrying will not turn it back on, and the code's home is ck-exec. */
-  EngineSwitchedOff = 'ENGINE_SWITCHED_OFF',
-  /** The arguments did not satisfy the function's contract. */
-  InvalidRequest = 'INVALID_REQUEST',
-  /** An invoke policy or permission refused this caller. */
-  NotAllowed = 'NOT_ALLOWED',
-  /** The named function, module or export does not exist for this app. */
-  NotFound = 'NOT_FOUND',
-  /** The platform could not start the work in time. The app's code never ran. Retrying is correct. */
-  PlatformBusy = 'PLATFORM_BUSY',
-  /** A platform failure. Retrying is reasonable. */
-  PlatformError = 'PLATFORM_ERROR',
-  /** A metered allowance is spent and does not return on its own. */
-  QuotaExhausted = 'QUOTA_EXHAUSTED',
-  /** This caller is asking too often. It arrives ONLY as a thrown error, never in band on a result, and `extensions.retryAfterMs` carries the wait. That number is the milliseconds REMAINING in the current fixed window at the moment the refusal was built, not a fixed backoff, so a second refusal inside the same window carries a smaller number: treat it as a deadline from receipt and do not reuse a cached one. */
-  RateLimited = 'RATE_LIMITED',
-  SpendCapReached = 'SPEND_CAP_REACHED',
-  /** An operator switch, a latch, or a platform hold. An open author circuit is CIRCUIT_OPEN, not this code. */
-  TemporarilyDisabled = 'TEMPORARILY_DISABLED',
-  /** No valid credential was presented. */
-  Unauthenticated = 'UNAUTHENTICATED',
-  /** The app's own code failed while running. */
-  UserCodeError = 'USER_CODE_ERROR',
-  /** The app's own code exceeded a per-call resource ceiling (gas, fuel, memory, depth, database operations, response size). */
-  UserCodeLimitExceeded = 'USER_CODE_LIMIT_EXCEEDED',
-  /** The app's own code ran past the time it is allowed. */
-  UserCodeTooSlow = 'USER_CODE_TOO_SLOW',
-  WalletEmpty = 'WALLET_EMPTY',
-  /** This app is served from another datacenter. The error extensions carry `gameApiUrl`; move there and retry. */
-  WrongDatacenter = 'WRONG_DATACENTER'
-}
-
-/**
- * Why an invocation failed, in the only vocabulary a player may be shown: a stable code, whose problem it is, and whether repeating the identical call could succeed. It carries no message, no engine name and no internal detail by design — blame attribution is the platform's job and presentation is the game's.
- *
- * IT CARRIES NO TIMING, AND NOTHING THAT NEEDS TIMING ARRIVES HERE. A refusal that can tell you how long to wait — `RATE_LIMITED` above all — is THROWN, with `extensions.retryAfterMs`, and never returned in band on a result. So `retryable: true` here means "try again", not "try again after N milliseconds", and a client with nothing but this object is right to use its own backoff. `expression-fault.classifier.spec.ts` holds that split rather than leaving it to how the code happens to be arranged.
- */
-export type PlayerFaultInfo = {
-  __typename?: 'PlayerFaultInfo';
-  /** Whose problem this is. The one question a game cannot answer for itself. */
-  blame: UserCodeFaultBlame;
-  /** A stable, enumerated reason. Branch on this rather than on any text. */
-  code: PlayerFaultCode;
-  /** True when repeating the identical call could succeed with nothing else changing. About the caller's options, not about how long a fix takes: an open breaker is retryable because it closes itself, while a spent plan allowance is not. */
-  retryable: Scalars['Boolean']['output'];
-};
-
-/** A flexible player-owned model container confined to exactly one app, grid, and current owner. */
-export type PlayerModelContainer = {
-  __typename?: 'PlayerModelContainer';
-  /** App containing the container. */
-  appId: Scalars['BigInt']['output'];
-  /** Player container UUID. */
-  containerId: Scalars['String']['output'];
-  /** Container creation time. */
-  createdAt: Scalars['DateTime']['output'];
-  /** Optional player-facing name. */
-  displayName: Maybe<Scalars['String']['output']>;
-  /** Grid confining the container. */
-  gridId: Scalars['BigInt']['output'];
-  /** Owning user. Always the grid owner at creation time. */
-  ownerUserId: Scalars['BigInt']['output'];
-  /** JSON object containing all separately upserted properties. */
-  propertiesJson: Scalars['String']['output'];
-  /** JSON object containing untyped container state. */
-  stateJson: Scalars['String']['output'];
-  /** Flexible instance kit key; this is not a studio-authored type. */
-  typeKey: Scalars['String']['output'];
-  /** Most recent container or property update time. */
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** Identify one player-owned model container within an app and grid. The server also forces the current caller as owner. */
-export type PlayerModelContainerRefInput = {
-  /** App containing the owned grid. */
-  appId: Scalars['BigInt']['input'];
-  /** Player container UUID. */
-  containerId: Scalars['String']['input'];
-  /** Grid that confines the container. */
-  gridId: Scalars['BigInt']['input'];
 };
 
 /** Live concurrent players for a studio vs its all-time peak, a percentile comparison against other studios, and the site-wide CKS total. */
@@ -9047,154 +6806,6 @@ export type PlayerWalletTransaction = {
   walletId: Scalars['BigInt']['output'];
 };
 
-/** A grid-bound player compute module. Runtime identity is never stored here; it resolves from the grid current owner at activation. */
-export type PlayerWasmModule = {
-  __typename?: 'PlayerWasmModule';
-  /** Owning app id. */
-  appId: Scalars['BigInt']['output'];
-  /** Authoring org id; null for personally-authored code. */
-  authorOrgId: Maybe<Scalars['BigInt']['output']>;
-  /** Personal author user id; null for org-owned code. */
-  authorUserId: Maybe<Scalars['BigInt']['output']>;
-  /** closed, open, or half_open. */
-  circuitState: Scalars['String']['output'];
-  /** Creation time. */
-  createdAt: Scalars['DateTime']['output'];
-  /** Target of the current immutable version, or null before the first deploy. */
-  currentTarget: Maybe<PlayerComputeTarget>;
-  /** Currently deployed immutable version UUID. */
-  currentVersionId: Maybe<Scalars['String']['output']>;
-  /** Module description. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Draft mode: the module runs for its author but its spatial egress is suppressed server-side (live-coding iteration). */
-  draft: Scalars['Boolean']['output'];
-  /** Requested activation state. Actual execution also requires grid ownership, run permission, admission, and a successful version. */
-  enabled: Scalars['Boolean']['output'];
-  /** Confining grid id. */
-  gridId: Scalars['BigInt']['output'];
-  /** Last runtime/transfer error. */
-  lastError: Maybe<Scalars['String']['output']>;
-  /** Module UUID. */
-  moduleId: Scalars['String']['output'];
-  /** Module name within the grid. */
-  name: Scalars['String']['output'];
-  /** Last update time. */
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** One execution of a player module (init/tick/invoke/event), attributed to the grid owner it ran as. The per-run twin of the studio WasmModuleRun, scoped to grids the caller currently owns. */
-export type PlayerWasmModuleRun = {
-  __typename?: 'PlayerWasmModuleRun';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** Wall-clock duration in microseconds. */
-  durationUs: Scalars['Int']['output'];
-  /** Typed failure kind when the run failed. */
-  errorMessage: Maybe<Scalars['String']['output']>;
-  /** Execution identity: the grid owner the run executed as. */
-  executedAsUserId: Scalars['BigInt']['output'];
-  /** Flow correlation id shared across the entry call. */
-  flowId: Maybe<Scalars['String']['output']>;
-  /** Fuel consumed by the run. */
-  fuelUsed: Scalars['BigInt']['output'];
-  /** The owned grid the module ran in. */
-  gridId: Scalars['BigInt']['output'];
-  /** The module that ran. */
-  moduleId: Scalars['String']['output'];
-  /** The module name at run time. */
-  moduleName: Scalars['String']['output'];
-  /** Unique run id (UUID). */
-  runId: Scalars['String']['output'];
-  /** When the run started. */
-  startedAt: Scalars['DateTime']['output'];
-  /** Whether the run succeeded. */
-  success: Scalars['Boolean']['output'];
-  /** What ran: init | tick | event | invoke. */
-  triggerSource: Scalars['String']['output'];
-};
-
-/** An immutable player-code source version. sourceFilesJson is returned only to its personal author (org-owned source requires the future org-authoring path) or when openSource is true. */
-export type PlayerWasmModuleVersion = {
-  __typename?: 'PlayerWasmModuleVersion';
-  /** Compiler log; visible to the author. */
-  compileLog: Maybe<Scalars['String']['output']>;
-  /** pending, compiling, succeeded, or failed. */
-  compileStatus: Scalars['String']['output'];
-  /** Final instrumented/optimized artifact size. */
-  compiledSizeBytes: Maybe<Scalars['BigInt']['output']>;
-  /** Version creation time. */
-  createdAt: Scalars['DateTime']['output'];
-  /** Commit the rust was fetched at (GITHUB projects). A force-push of the bound branch never changes what this version runs. */
-  githubCommitSha: Maybe<Scalars['String']['output']>;
-  /** Parent module UUID. */
-  moduleId: Scalars['String']['output'];
-  /** Whether anyone may read this immutable version source. */
-  openSource: Scalars['Boolean']['output'];
-  /** Crowdy Studio project this version was deployed from, when known. */
-  projectId: Maybe<Scalars['String']['output']>;
-  /** JSON source map. Null for non-authors of closed-source code; P1 exposes no moderation override. */
-  sourceFilesJson: Maybe<Scalars['String']['output']>;
-  /** Project revision the source was read at (STUDIO projects). */
-  sourceRevision: Maybe<Scalars['BigInt']['output']>;
-  /** Compile target. */
-  target: PlayerComputeTarget;
-  /** Version UUID. */
-  versionId: Scalars['String']['output'];
-  /** Monotonic version number. */
-  versionNo: Scalars['Int']['output'];
-};
-
-/** One player-compute policy row (06 §3): developer-set per-player/cohort clamps evaluated most-specific-wins (user > grid > tier > app_default), every knob additionally clamped by the app's studio policy at runtime. Management is authoritative in P2; rows replica-sync to the game runtime. */
-export type PlayerWasmPolicy = {
-  __typename?: 'PlayerWasmPolicy';
-  /** The app. */
-  appId: Scalars['BigInt']['output'];
-  /** DN-10: which channels this scope's player modules may emit_channel into: 'grid' (default, the grid's own channels), 'send_messages' (also channels the grid owner may post to), or 'none'. */
-  channelEgress: Scalars['String']['output'];
-  /** Client-target fuel budget per browser dispatch (04 §3). */
-  clientFuelPerDispatch: Scalars['BigInt']['output'];
-  /** Whether this row is applied. */
-  enabled: Scalars['Boolean']['output'];
-  /** Fuel budget per invoke/event. */
-  fuelPerInvoke: Scalars['BigInt']['output'];
-  /** Fuel budget per tick. */
-  fuelPerTick: Scalars['BigInt']['output'];
-  /** DN-10: whether player modules may publish on the grid event bus (emit_event). Default true. */
-  gridEventEgress: Scalars['Boolean']['output'];
-  /** Deploys (compiles) allowed per player per hour. */
-  maxCompilesPerHour: Scalars['Int']['output'];
-  /** Player model containers created per player per day. */
-  maxContainerCreatesDay: Scalars['Int']['output'];
-  /** Host data-API ops per tick. */
-  maxDbOpsPerTick: Scalars['Int']['output'];
-  /** Module replication bytes per minute. */
-  maxEgressBytesPerMin: Scalars['BigInt']['output'];
-  /** Module replication messages per minute. */
-  maxEgressMsgsPerMin: Scalars['Int']['output'];
-  /** Sandbox memory ceiling (MiB). */
-  maxMemoryMb: Scalars['Int']['output'];
-  /** Max player modules per grid. */
-  maxModulesPerGrid: Scalars['Int']['output'];
-  /** Max player modules across all grids one player owns. */
-  maxModulesTotal: Scalars['Int']['output'];
-  /** Watchdog wall-clock ceiling (ms). */
-  maxRunMs: Scalars['Int']['output'];
-  /** Max tick rate in Hz. */
-  maxTickHz: Scalars['Float']['output'];
-  /** Policy row UUID. */
-  policyId: Scalars['String']['output'];
-  /** 'app_default', 'tier', 'grid', or 'user'. */
-  scope: Scalars['String']['output'];
-  /** Tier/grid/user id; null for app_default. */
-  scopeRef: Maybe<Scalars['BigInt']['output']>;
-  /** DN-10: most chunks a player module's spatial message may reach from its in-grid origin (0-8, default 8). 0 keeps grid messages inside the origin chunk. */
-  spatialMaxDistance: Scalars['Int']['output'];
-  /** Daily compute-unit quota; null = uncapped. */
-  unitsPerDay: Maybe<Scalars['BigInt']['output']>;
-  /** Hourly compute-unit quota (PLAYER_QUOTA_EXHAUSTED pause); null = uncapped. */
-  unitsPerHour: Maybe<Scalars['BigInt']['output']>;
-};
-
 /** A one-time portal authorization code. Redirect the player to `redirectUri` carrying `code`; the destination game exchanges it (with its PKCE verifier) via exchangePortalCode for an app token. Single-use and short-lived. */
 export type PortalAuthorizationCode = {
   __typename?: 'PortalAuthorizationCode';
@@ -9290,34 +6901,6 @@ export type PublishFileInput = {
   size: Scalars['Int']['input'];
 };
 
-export type PublishPlayerCodeInput = {
-  /** App the listing belongs to. */
-  appId: Scalars['BigInt']['input'];
-  /** Store description. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Default source-access mode for new versions (default CLOSED). */
-  licenseMode?: InputMaybe<PlayerCodeLicenseMode>;
-  /** JSON array of media refs for store display. */
-  mediaJson?: InputMaybe<Scalars['String']['input']>;
-  /** Listing display name (unique per app among live listings). */
-  name: Scalars['String']['input'];
-  /** Publish under this org (DN-9 org-owned code: the org then holds source access and listing control). Requires manage_compute in that org. Omit to publish personally. */
-  ownerOrgId?: InputMaybe<Scalars['BigInt']['input']>;
-};
-
-export type PublishPlayerCodeVersionInput = {
-  /** App the listing belongs to. */
-  appId: Scalars['BigInt']['input'];
-  /** Author license terms shown at acquisition. */
-  licenseText?: InputMaybe<Scalars['String']['input']>;
-  /** UUID of the listing to publish under. */
-  listingId: Scalars['String']['input'];
-  /** UUIDs of the caller-authored, successfully compiled player module versions to package. Server and client versions may be combined into a bundle. The publish pipeline snapshots artifact hashes and the derived capability summary — never source. */
-  moduleVersionIds: Array<Scalars['String']['input']>;
-  /** Open-source this published version (irreversible for the version). */
-  openSource?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
 export type Query = {
   __typename?: 'Query';
   /** List only healthy GraphQL API servers (status = ReadyForClients) for client routing/discovery. No authentication required. */
@@ -9332,7 +6915,7 @@ export type Query = {
   agentRateCards: Array<AgentRateCardEntryType>;
   /** OPERATOR: every hosted game on the tier, whatever its status or listing. */
   allHostedGames: Array<HostedGame>;
-  /** Convenience for UI: returns true when the authenticated caller is the currently elected host for the given app (same election as gameHost), otherwise false (including when no host is elected). Not authoritative for server-side mutations — use gameModelInvoke's is_host policy for that. Requires a valid bearer game token (same auth as gameHost). */
+  /** Convenience for UI: returns true when the authenticated caller is the currently elected host for the given app (same election as gameHost), otherwise false (including when no host is elected). Not authoritative for server-side decisions. Requires a valid bearer game token (same auth as gameHost). */
   amIGameHost: Scalars['Boolean']['output'];
   /** Fetch a single app by its numeric id. Requires authentication (any signed-in user); does NOT enforce org/app permissions, so it can read apps the caller does not own, of any visibility/status. Returns null if the id does not exist. Prefer appBySlug for slug-based marketplace lookups. */
   app: Maybe<App>;
@@ -9350,12 +6933,8 @@ export type Query = {
   appCodeAdmissionQueue: Array<PlayerCodeAdmissionQueueEntry>;
   /** List an app's player-code admission entries, newest first. Requires 'view_compute_diagnostics'. By default returns active entries only; includeRevoked adds audit-visible revoked rows. Admission controls execution, never source visibility. */
   appCodeAdmissions: Array<AppCodeAdmission>;
-  /** An app's stored compute allowance, or null when none has been set — in which case the app is measured against the platform reference allowance and is never refused. Requires app-admin ('manage_apps'). */
+  /** An app's stored compute allowance, or null when none has been set — in which case its ck-exec code is never paused for its budget. Requires app-admin ('manage_apps'). */
   appComputeBudget: Maybe<AppComputeBudgetInfo>;
-  /** Whether an app is inside its per-minute compute allowance right now, which engines its units came from, and whether exceeding the allowance is currently refusing invokes or only being recorded. Shipped in shadow mode: unless an operator has set an enforcing allowance for this app, overBudget can be true while enforced is false. Requires app-admin ('manage_apps'). */
-  appComputeBudgetStatus: AppComputeBudgetStatus;
-  /** What an app consumed, in compute units, split by engine — the model expression engine, developer compute modules, and player compute — over a window of minutes. ONE unit spans them: a compute unit is one millisecond of measured execution time, which both engines already measure with the same clock, floored per engine by that engine's own work counter where the clock cannot see the work (fuel for WASM). Use peakMinuteUnits, not meanUnitsPerMinute, when comparing against a per-minute allowance. Requires app-admin ('manage_apps'). */
-  appComputeUsage: AppComputeUsage;
   /** Resolve where one or more apps are placed, WITHOUT authenticating. Call this before login and connect to the returned gameApiUrl, so the session and app token are both written in the app's own datacenter instead of across a WAN. Pass every app a launcher might switch to and cache the result; placement changes rarely and only an operator can change it. An app with no placement comes back with nulls, which means 'keep using the shared origin'. */
   appDiscovery: Array<AppDiscovery>;
   /** Lists org members eligible for a manual app access grant (active members of the app's owning org). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Use the returned user ids with grantAppAccess. */
@@ -9429,34 +7008,12 @@ export type Query = {
   checkouts: CheckoutsPage;
   /** Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckoutsConnection` instead. Relay cursor connection; prefer this over the offset-based checkouts. */
   checkoutsConnection: CheckoutsConnection;
-  /** A snapshot of an app's compute footprint: module/version/trigger counts plus 24h run activity and the most-active modules. Requires the org 'view_compute_diagnostics' permission. */
-  computeAppDiagnostics: WasmAppDiagnostics;
-  /** Read one compute module by name. Requires the org 'view_compute_diagnostics' permission. */
-  computeModule: WasmModule;
-  /** Diagnostic log lines for an app's compute modules, newest first: failed-run errors from the runtime plus guest ck.log output. Complete across the fleet — each line carries the instance that produced it. Requires the org 'view_compute_diagnostics' permission. */
-  computeModuleLogs: Array<WasmModuleLogEntry>;
-  /** Read the app's compute policy (platform defaults when unset). Requires the org 'view_compute_diagnostics' permission. */
-  computeModulePolicy: WasmModulePolicy;
-  /** List compute-module runs (the monitoring + audit trail of executions), newest first, optionally filtered by module and/or outcome. Rows are written by the runtime; empty until modules execute (Phase 2). Requires the org 'view_compute_diagnostics' permission. */
-  computeModuleRuns: Array<WasmModuleRun>;
-  /** Aggregate compute activity for an app over a recent window: run/failure counts, fuel, egress, and a per-module breakdown. Requires the org 'view_compute_diagnostics' permission. */
-  computeModuleStats: WasmComputeStats;
-  /** List trigger bindings for an app, optionally filtered to one module. Requires the org 'view_compute_diagnostics' permission. */
-  computeModuleTriggers: Array<WasmModuleTrigger>;
-  /** List a module's source versions, newest first, including compile status/logs. Requires the org 'view_compute_diagnostics' permission. */
-  computeModuleVersions: Array<WasmModuleVersion>;
-  /** List the compute modules defined for an app. Requires the org 'view_compute_diagnostics' permission. */
-  computeModules: Array<WasmModule>;
-  /** The platform's engine-template registry: ready-made compute engines (mob/world/match/deck/instance/director/matchmaking/market/board/minigame/abilities/movement-warden/territory/racing/...) deployable by name with computeDeployTemplate. Requires the org 'manage_compute' permission. */
-  computeTemplates: Array<ComputeTemplateInfo>;
   /** Operator only. The ledger invariant runs, newest first: whether the sums closed and, when they did not, which check failed and by how much. */
   cpBillingInvariantRuns: Array<BillingInvariantRun>;
   /** Operator only. Ledger-versus-provider reconciliation, one row per provider per UTC day. */
   cpBillingReconciliations: Array<BillingReconciliation>;
   /** Operator only (is_operator or is_super_admin). Every write-off, newest first. */
   cpBillingWriteOffs: Array<BillingWriteOff>;
-  /** Operator only (is_operator). The stored platform ceilings for the per-app WASM compute policy (the knobs computeSetPolicy clamps against). Null fields mean no operator override: game-api uses its COMPUTE_PLATFORM_MAX_* env var, then the code default. Read-only. */
-  cpComputePlatformCeilings: CpComputePlatformCeilings;
   /** Operator only (is_operator or is_super_admin). What the ANSWERING ck-api instance carries for Agentic Studio: allowlisted models with their pinned micro-USD prices, the implemented crowdy.agent-tools/1 tools with risk classes, and the complete mode and risk-class value sets a policy may draw from. It is deployed configuration read from that one process, not stored policy and not a fleet-wide claim, so it reports which instance and datacenter answered. A platform policy may name a model or tool absent here: the write succeeds, the value is stored and echoed back, and no run can use it. */
   cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog;
   /** Operator only (is_operator or is_super_admin). Read the platform Agentic Studio enablement, global emergency kill, model/tool/mode/risk allowlists, budget ceilings, retention/privacy policy, pilot funding seam, timestamps, and revision. No provider credential or request body is stored or returned. */
@@ -9535,70 +7092,10 @@ export type Query = {
   gameClientBootstrap: GameClientBootstrap;
   /** Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
   gameHost: Maybe<GameHost>;
-  /** Read the best-known app-scoped number of active gameplay sessions across fresh non-Offline Buddy servers. This counts sessions, not actors or distinct users. FRESH is a complete fleet total; PARTIAL is only the supported-Buddy subset; UNAVAILABLE has no fresh observation. Partial/unavailable samples never create count-change revisions. Requires an app-scoped token for this exact app. */
-  gameModelActivePlayerCount: GameModelActivePlayerCountSnapshot;
-  /** A snapshot of an app's game-model footprint and recent activity: container/property/edge/session/function/automation row counts, total + 24h event volume, failed + automation-driven invocations, and the most-invoked functions. Helps developers understand what is in their game and their database. Requires app-admin ('manage_apps'). */
-  gameModelAppDiagnostics: GmAppDiagnostics;
-  /** Fetch one automation by name, including its circuit-breaker state. Requires app-admin ('manage_apps'). */
-  gameModelAutomation: GmAutomation;
-  /** Read the app's automation policy (guardrails / platform ceilings). Requires app-admin ('manage_apps'). */
-  gameModelAutomationPolicy: GmAutomationPolicy;
-  /** List automation runs (the monitoring + audit trail of autonomous-process executions) for an app, newest first, optionally filtered by automation name and/or outcome. Each run carries timing, fan-out + invocation counts, billed compute, and any circuit action. Requires app-admin ('manage_apps'). */
-  gameModelAutomationRuns: Array<GmAutomationRun>;
-  /** Aggregate automation activity for an app over a recent window (default 60 minutes, max 1440): total/failed runs, failure rate, runs/min, invocations/mutations/compute, and a per-automation breakdown with current circuit state. The "what are my NPCs doing" dashboard query. Requires app-admin ('manage_apps'). */
-  gameModelAutomationStats: GmAutomationStats;
-  /** List automation event triggers for an app, optionally filtered to one automation (by name). Requires app-admin ('manage_apps'). */
-  gameModelAutomationTriggers: Array<GmAutomationTrigger>;
-  /** List the automations defined for an app. Requires app-admin ('manage_apps'). */
-  gameModelAutomations: Array<GmAutomation>;
-  /** Fetch one container (instance) by id. Requires a valid token. */
-  gameModelContainer: GmContainer;
-  /** Fetch a container with its property values filtered to what the CALLER may see (public always; owner/hidden depend on the caller's relationship to the container). Use this for a player-facing view of an entity. Requires a valid token. */
-  gameModelContainerState: GmContainerState;
-  /** Bulk twin of gameModelContainerState: identity plus visible property state for up to 500 containers in one call (BAD_REQUEST above). The same visibility rules apply per row (public always; owner/hidden depend on the CALLER's relationship to each container). Ids the app does not hold are omitted rather than errors; duplicates are returned once; order follows the input. Use it after paging gameModelContainers to pull a level's state in a few calls instead of one per object. Requires a valid token. */
-  gameModelContainerStates: Array<GmContainerState>;
-  /** List all container types defined for an app. Requires app-admin ('manage_apps'). */
-  gameModelContainerTypes: Array<GmContainerType>;
-  /** List containers in an app, optionally filtered by container type and/or session, by bindingKey (get-by-key read of an ensured container), by property predicates (`where`, requires typeName; the same predicate shape automation selectors use — missing properties fall back to the type default), and paged with offset/limit over the stable (createdAt, containerId) ordering. Pages: an omitted limit returns 200 rows; the maximum is 1000 (BAD_REQUEST above it). Without `where` the page is read in SQL; with `where` the predicates are evaluated after reading up to 10000 rows of the type, and a larger type is refused (narrow with sessionId / bindingKey, or page without where). Requires a valid token. */
-  gameModelContainers: Array<GmContainer>;
-  /** Query the function-invocation event log (audit trail) with optional filters and pagination. Useful for debugging functions or showing recent activity. Requires a valid token. */
-  gameModelEvents: Array<GmEvent>;
-  /** Relay-style cursor-paginated version of `gameModelEvents`: query the function-invocation event log (audit trail) with optional filters. Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`), which replace the legacy `limit`/`offset`. Useful for debugging functions or showing recent activity. Requires a valid token. */
-  gameModelEventsConnection: GameModelEventsConnection;
   /** List the feature keys defined for an app. Requires app-admin ('manage_apps'). */
   gameModelFeatures: Array<GmAppFeature>;
-  /** Diagnostics surface: stitch one flow correlation id into a single cross-engine timeline — the model events (gm event log), automation runs, and compute module runs that share the flowId minted at the entry edge (player gameModelInvoke / automation run / computeInvoke) and propagated across model_invoke, the event bus, and emit_compute_event. Each array is ordered by time ascending; an unknown flowId returns three empty arrays. Answers "what happened to this kill's reward" in one query instead of three hand-joined ones. Requires app-admin ('manage_apps'). */
-  gameModelFlow: GmFlowTimeline;
-  /** Fetch one studio-defined function by name. Requires app-admin ('manage_apps'). */
-  gameModelFunction: GmFunction;
-  /** State of the per-function circuit breaker on the player-invoke path (gameModelInvoke) for one app, plus the mode and thresholds the answering instance is running. In the default 'shadow' mode nothing is refused and shadowRefusals counts what enforcement would have refused, so an open circuit means the function has been failing rather than that players are being blocked. A function that has never failed has no row and is absent. Requires the org 'view_compute_diagnostics' permission. */
-  gameModelFunctionCircuits: GmFunctionBreakerStatus;
-  /** List studio-defined functions for an app, optionally filtered to those attached to a container type. Requires app-admin ('manage_apps'). */
-  gameModelFunctions: Array<GmFunction>;
-  /** Whether an app's game model hangs together: containers whose type does not exist, functions calling functions that are not defined, timers targeting something that cannot be invoked autonomously, unmatchable automation triggers, and stored definitions that no longer compile. Every check is recomputed on demand — a stored warning goes stale the moment an unrelated object changes, which is exactly how an app can look healthy while being unable to bind anything. ERROR findings are provably broken; WARNING findings are frequently just a mid-edit state. Requires app-admin ('manage_apps'). */
-  gameModelLint: GmLintResult;
-  /** Read the app's game-model runtime policy (session creation policy + default participant role). Requires app-admin ('manage_apps'). */
-  gameModelPolicy: GmAppPolicy;
-  /** List the property definitions for a container type. Requires app-admin ('manage_apps'). */
-  gameModelPropertyDefs: Array<GmPropertyDef>;
-  /** Fetch one session by id, with its joined-participant count, host, admission and revision. Requires a valid token. */
-  gameModelSession: GmSession;
-  /** The session events with a revision greater than afterRevision, oldest first: the gap-fill read behind gameModelSessionChanged. Events of ended sessions are retained for a bounded period, then purged. Requires a valid token. */
-  gameModelSessionEvents: Array<GmSessionEvent>;
-  /** Operator view of one session: the full roster including departed participants (with left reason and incarnation), each joined participant's live presence verdict, and the most recent events. Requires app-admin ('manage_apps'). */
-  gameModelSessionInspect: GmSessionInspection;
-  /** The authoritative state of one session at one revision: the session row and every joined participant. Pull it when you subscribe, after a reconnect, or when gameModelSessionChanged shows a revision gap; then apply only events with a higher revision. Requires a valid token. */
-  gameModelSessionSnapshot: GmSessionSnapshot;
-  /** List sessions in an app, newest first, optionally filtered by status, admission, host and/or grid. Requires a valid token. */
-  gameModelSessions: Array<GmSession>;
   /** List tier -> feature grants for an app, optionally filtered to one tier. Requires app-admin ('manage_apps'). */
   gameModelTierFeatures: Array<GmTierFeature>;
-  /** Pending one-shot timers for the app, soonest first. A timer leaves this list the moment it is claimed for execution, so an empty list means nothing is scheduled (not that nothing ran). Requires app-admin ('manage_apps'). */
-  gameModelTimers: Array<GmTimer>;
-  /** Traverse the container graph from a root container along a relationship type up to a depth, returning the reachable nodes and edges. Requires a valid token. */
-  gameModelTraverse: GmTraverseResult;
-  /** Fetch a container type's full schema: its property definitions plus the functions available on it. Requires app-admin ('manage_apps'). */
-  gameModelTypeSchema: GmTypeSchema;
   /** Fetches one chunk (its base64 voxel grid, per-voxel states, chunk state and LODs) by app id and chunk coordinates. Returns null if the chunk does not exist. Use the input's LOD options to limit which LODs come back. Requires a valid bearer token in the Authorization header; a token scoped to an app may only read that app's chunks. Read-only (no world state is changed). */
   getChunk: Maybe<Chunk>;
   /** Fetches only the requested level-of-detail (LOD) meshes for one chunk, identified by app id and coordinates. Returns null if the chunk does not exist. Cheaper than getChunk when you only need LODs. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
@@ -9615,8 +7112,6 @@ export type Query = {
   gridClaimPolicy: GridClaimPolicy;
   /** Pending grid claim requests: designated approvers (or studio staff holding manage_compute) see the app's queue; other callers see their own requests. */
   gridClaimRequests: Array<GridClaimRequest>;
-  /** Marketplace and self-authored client mods attached to a grid. Rows include exact attachment consent plus an aggregate capability summary/hash and trust state per author. Games should show one author prompt, call trustGridAuthor, cache by clientArtifactHash, and poll this metadata to stop removed or changed workers. */
-  gridClientMods: Array<GridClientMod>;
   /** List the group/role -> permission-key grants configured on a grid for one group (rows of the `grid_group_grants` input table). These are inputs to the effective ACL, not the materialized result — use `gridUserPermissions` for a specific user's effective keys. Requires app-admin ('manage_apps'). */
   gridGroupGrants: Array<GridGroupGrant>;
   /** Read the current first-class ownership record for a grid. Requires authentication. Returns null when the grid has no current/unexpired owner. Player server code always resolves its execution identity from this record. */
@@ -9666,10 +7161,6 @@ export type Query = {
   myIdentities: Array<UserIdentity>;
   /** Lists the authenticated caller's organization memberships. Each entry bundles the org, the caller's effective permission keys, and assigned roles. Requires a valid session token. */
   myOrganizations: Array<OrgMembership>;
-  /** The caller's code entitlements in this app (all mode 'free' in P4a). Uninstalls never remove acquisitions. */
-  myPlayerCodeAcquisitions: Array<PlayerCodeAcquisition>;
-  /** The caller's active installs in this app: pinned versions, consent hashes, and target grids. */
-  myPlayerCodeInstalls: Array<PlayerCodeInstall>;
   /**
    * The authenticated user’s property-token balances (available, in use, total). Requires a valid game token.
    * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
@@ -9713,32 +7204,6 @@ export type Query = {
   platformConfig: PlatformConfig;
   /** The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds). */
   playerAutoBilling: PlayerAutoBilling;
-  /** List only the caller-owned player automations in one currently owned grid. Requires an app-scoped token; no app-wide listing exists. */
-  playerAutomations: Array<PlayerAutomation>;
-  /** Fetch client WASM for an entitled marketplace install or an exact marketplace/self-authored grid attachment. Attachment fetches require current in-grid presence plus matching attachment consent or capability-bound author trust; self-authored code uses module/author admission rather than a synthetic listing. Every factor, including run_client_code, Buddy lease when enabled, and kill switches, fails closed as 'not found'. */
-  playerCodeClientArtifact: PlayerClientArtifact;
-  /** List the immutable published versions of a listing, newest first, with each version’s derived capability summary and consent hash. */
-  playerCodeListingVersions: Array<PlayerCodeListingVersion>;
-  /** Browse an app's active marketplace code listings (free mode). Each listing carries its admission standing: in allow_list apps a PENDING listing can be acquired but not installed. Closed-source listings expose artifact hashes and the derived capability summary only — never source. */
-  playerCodeListings: Array<PlayerCodeListing>;
-  /** Fetch a compiled CLIENT player artifact plus the metadata the browser broker needs to run it (player compute P3). Fail-closed: the caller must currently own the grid, be the version's author, hold run_client_code at app and grid scope, and the code must be admitted under the app's mode. Returns the gas-injected wasm bytes (base64), the declared client contract, and the per-dispatch fuel budget the glue worker enforces. Acquired (bought/rented) client code is served through the marketplace path in a later phase. */
-  playerComputeArtifact: PlayerClientArtifact;
-  /** Failed-run diagnostics for player modules on a grid the caller currently owns: the failing runs with their typed error kinds, newest first. The owner-scoped twin of computeModuleLogs. */
-  playerComputeLogs: Array<PlayerWasmModuleRun>;
-  /** List player modules the caller authored or that are installed on grids they currently own. Requires a valid app token; closed source is never included here. */
-  playerComputeMyModules: Array<PlayerWasmModule>;
-  /** List executions of player modules on a grid the caller currently owns, newest first. Every run is attributed to the grid owner it executed as; author identity never appears here. */
-  playerComputeRuns: Array<PlayerWasmModuleRun>;
-  /** Active player-compute kill switches for an app, newest first. Requires the org 'view_compute_diagnostics' permission. */
-  playerComputeSwitches: Array<PlayerComputeSwitch>;
-  /** The caller's player-compute spend and quota view for one app (P2): compute units used in the current clock hour/day vs the effective units_per_hour/units_per_day policy caps, compile-quota utilization, and the wallet/spend-cap gate state with its typed reason. This is the remaining-budget source the live-coding panel consumes. */
-  playerComputeUsage: PlayerComputeUsage;
-  /** List immutable versions for one player module. Source and compile logs are returned only to the personal author, or source when that version is open-source. There is intentionally no studio/operator moderation override. */
-  playerComputeVersions: Array<PlayerWasmModuleVersion>;
-  /** Return one caller-owned player-model container in the specified app/grid, or null when it is absent or outside that owner scope. Requires current grid ownership. */
-  playerModelContainer: Maybe<PlayerModelContainer>;
-  /** List flexible player-model containers owned by the caller in one currently owned grid. Requires an app-scoped token and current grid ownership; never returns app-wide or foreign-owner rows. */
-  playerModelContainers: Array<PlayerModelContainer>;
   /** Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission. */
   playerPulse: PlayerPulse;
   /** The app's player rate-card markup in basis points on the platform base price (06 §4): the studio's usage-revenue stream, shown to players as a separate spend-history component. 0 = no markup (the BWF posture). Requires 'view_billing'. */
@@ -9753,8 +7218,6 @@ export type Query = {
   playerWalletBalance: PlayerWallet;
   /** The caller's player-wallet ledger, newest first: top-ups, hourly usage debits (per app), auto-recharges, refunds, and adjustments. Usage-debit hours are broken down by playerUsageCharges, whose snapshot splits the platform and studio-markup components. */
   playerWalletTransactions: Array<PlayerWalletTransaction>;
-  /** List an app's player-compute policy rows (developer cost/rate clamps per player or cohort, 06 §3), most general first. Requires 'view_compute_diagnostics'. Management is authoritative; rows replica-sync to the game runtime on change. */
-  playerWasmPolicies: Array<PlayerWasmPolicy>;
   /** Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token. */
   portalConsent: PortalConsentState;
   /** Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission. */
@@ -9789,10 +7252,6 @@ export type Query = {
   userAppStates: Array<UserAppState>;
   /** Lists the avatars owned by `userId`. Requires a valid game token. Owner-aware: when the caller is NOT the owner, each avatar’s `privateState` is stripped (returned null); `publicState` is always included. State blobs are base64-encoded binary. */
   userAvatars: Array<Avatar>;
-  /** Faults grouped by engine, kind, blame and subject over a window, most frequent first. This is the health question: a count per shape answers 'what is failing and how often', which a single overwritten last_error slot never could — five prod modules read last_error = NULL while holding 4,767 lifetime watchdog terminations between them. Requires the org 'view_compute_diagnostics' permission. */
-  userCodeFaultSummary: Array<UserCodeFaultSummaryEntry>;
-  /** Failures of code this app's users wrote, newest first, across all three engines (model expressions, studio WASM, player WASM). Each row carries what ran, what went wrong, whose problem it is, whether retrying could help, and what the run cost against what it was allowed. Requires the org 'view_compute_diagnostics' permission. */
-  userCodeFaults: Array<UserCodeFaultRecord>;
   /** Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated. */
   usersConnection: UsersConnection;
   /** SUPER-ADMIN ONLY paginated user search; replaces the legacy `users`/`usersByGamertag`/`usersByEmail` queries. `query` is ILIKE-prefix matched against email, gamertag, and disambiguation, plus an exact user_id match. Requires a super-admin bearer game token. */
@@ -9879,17 +7338,6 @@ export type QueryAppCodeAdmissionsArgs = {
 
 export type QueryAppComputeBudgetArgs = {
   appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryAppComputeBudgetStatusArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryAppComputeUsageArgs = {
-  appId: Scalars['BigInt']['input'];
-  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -10084,67 +7532,6 @@ export type QueryCheckoutsConnectionArgs = {
   after?: InputMaybe<Scalars['String']['input']>;
   filter?: InputMaybe<CheckoutFilterInput>;
   first?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryComputeAppDiagnosticsArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryComputeModuleArgs = {
-  appId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type QueryComputeModuleLogsArgs = {
-  appId: Scalars['BigInt']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  moduleName?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryComputeModulePolicyArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryComputeModuleRunsArgs = {
-  appId: Scalars['BigInt']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  moduleName?: InputMaybe<Scalars['String']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  success?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
-export type QueryComputeModuleStatsArgs = {
-  appId: Scalars['BigInt']['input'];
-  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryComputeModuleTriggersArgs = {
-  appId: Scalars['BigInt']['input'];
-  moduleName?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryComputeModuleVersionsArgs = {
-  appId: Scalars['BigInt']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  moduleName: Scalars['String']['input'];
-};
-
-
-export type QueryComputeModulesArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryComputeTemplatesArgs = {
-  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -10372,215 +7759,14 @@ export type QueryGameHostArgs = {
 };
 
 
-export type QueryGameModelActivePlayerCountArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGameModelAppDiagnosticsArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGameModelAutomationArgs = {
-  appId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelAutomationPolicyArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGameModelAutomationRunsArgs = {
-  appId: Scalars['BigInt']['input'];
-  automationName?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  success?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
-export type QueryGameModelAutomationStatsArgs = {
-  appId: Scalars['BigInt']['input'];
-  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryGameModelAutomationTriggersArgs = {
-  appId: Scalars['BigInt']['input'];
-  automationName?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryGameModelAutomationsArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGameModelContainerArgs = {
-  appId: Scalars['BigInt']['input'];
-  containerId: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelContainerStateArgs = {
-  appId: Scalars['BigInt']['input'];
-  containerId: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelContainerStatesArgs = {
-  appId: Scalars['BigInt']['input'];
-  containerIds: Array<Scalars['String']['input']>;
-};
-
-
-export type QueryGameModelContainerTypesArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGameModelContainersArgs = {
-  appId: Scalars['BigInt']['input'];
-  bindingKey?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-  typeName?: InputMaybe<Scalars['String']['input']>;
-  where?: InputMaybe<Array<GmPropertyPredicateInput>>;
-};
-
-
-export type QueryGameModelEventsArgs = {
-  appId: Scalars['BigInt']['input'];
-  functionName?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  selfContainerId?: InputMaybe<Scalars['String']['input']>;
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-  success?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
-export type QueryGameModelEventsConnectionArgs = {
-  after?: InputMaybe<Scalars['String']['input']>;
-  appId: Scalars['BigInt']['input'];
-  first?: InputMaybe<Scalars['Int']['input']>;
-  functionName?: InputMaybe<Scalars['String']['input']>;
-  selfContainerId?: InputMaybe<Scalars['String']['input']>;
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-  success?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
 export type QueryGameModelFeaturesArgs = {
   appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGameModelFlowArgs = {
-  appId: Scalars['BigInt']['input'];
-  flowId: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelFunctionArgs = {
-  appId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelFunctionCircuitsArgs = {
-  appId: Scalars['BigInt']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryGameModelFunctionsArgs = {
-  appId: Scalars['BigInt']['input'];
-  containerTypeName?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryGameModelLintArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGameModelPolicyArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGameModelPropertyDefsArgs = {
-  appId: Scalars['BigInt']['input'];
-  typeName: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelSessionArgs = {
-  appId: Scalars['BigInt']['input'];
-  sessionId: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelSessionEventsArgs = {
-  afterRevision: Scalars['String']['input'];
-  appId: Scalars['BigInt']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  sessionId: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelSessionInspectArgs = {
-  appId: Scalars['BigInt']['input'];
-  sessionId: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelSessionSnapshotArgs = {
-  appId: Scalars['BigInt']['input'];
-  sessionId: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelSessionsArgs = {
-  admission?: InputMaybe<Scalars['String']['input']>;
-  appId: Scalars['BigInt']['input'];
-  gridId?: InputMaybe<Scalars['BigInt']['input']>;
-  hostUserId?: InputMaybe<Scalars['BigInt']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
 };
 
 
 export type QueryGameModelTierFeaturesArgs = {
   appId: Scalars['BigInt']['input'];
   tierId?: InputMaybe<Scalars['BigInt']['input']>;
-};
-
-
-export type QueryGameModelTimersArgs = {
-  appId: Scalars['BigInt']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryGameModelTraverseArgs = {
-  appId: Scalars['BigInt']['input'];
-  depth?: InputMaybe<Scalars['Int']['input']>;
-  relationshipType: Scalars['String']['input'];
-  rootId: Scalars['String']['input'];
-};
-
-
-export type QueryGameModelTypeSchemaArgs = {
-  appId: Scalars['BigInt']['input'];
-  typeName: Scalars['String']['input'];
 };
 
 
@@ -10617,12 +7803,6 @@ export type QueryGridClaimPolicyArgs = {
 
 export type QueryGridClaimRequestsArgs = {
   appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryGridClientModsArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
 };
 
 
@@ -10705,16 +7885,6 @@ export type QueryMyCheckoutsConnectionArgs = {
 };
 
 
-export type QueryMyPlayerCodeAcquisitionsArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryMyPlayerCodeInstallsArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
 export type QueryMyTeamsArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -10793,90 +7963,6 @@ export type QueryPaymentEventsConnectionArgs = {
 };
 
 
-export type QueryPlayerAutomationsArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryPlayerCodeClientArtifactArgs = {
-  appId: Scalars['BigInt']['input'];
-  attachmentId?: InputMaybe<Scalars['String']['input']>;
-  listingId?: InputMaybe<Scalars['String']['input']>;
-  versionId?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryPlayerCodeListingVersionsArgs = {
-  appId: Scalars['BigInt']['input'];
-  listingId: Scalars['String']['input'];
-};
-
-
-export type QueryPlayerCodeListingsArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryPlayerComputeArtifactArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-  versionId?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryPlayerComputeLogsArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  moduleName?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryPlayerComputeMyModulesArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryPlayerComputeRunsArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  moduleName?: InputMaybe<Scalars['String']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  success?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
-export type QueryPlayerComputeSwitchesArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryPlayerComputeUsageArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryPlayerComputeVersionsArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-  name: Scalars['String']['input'];
-};
-
-
-export type QueryPlayerModelContainerArgs = {
-  input: PlayerModelContainerRefInput;
-};
-
-
-export type QueryPlayerModelContainersArgs = {
-  appId: Scalars['BigInt']['input'];
-  gridId: Scalars['BigInt']['input'];
-};
-
-
 export type QueryPlayerPulseArgs = {
   orgId: Scalars['BigInt']['input'];
 };
@@ -10896,11 +7982,6 @@ export type QueryPlayerUsageChargesArgs = {
 export type QueryPlayerWalletTransactionsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryPlayerWasmPoliciesArgs = {
-  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -10956,24 +8037,6 @@ export type QueryUserAppStateArgs = {
 
 export type QueryUserAvatarsArgs = {
   userId: Scalars['BigInt']['input'];
-};
-
-
-export type QueryUserCodeFaultSummaryArgs = {
-  appId: Scalars['BigInt']['input'];
-  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryUserCodeFaultsArgs = {
-  appId: Scalars['BigInt']['input'];
-  blame?: InputMaybe<UserCodeFaultBlame>;
-  engine?: InputMaybe<UserCodeFaultEngine>;
-  kind?: InputMaybe<UserCodeFaultKind>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  subject?: InputMaybe<Scalars['String']['input']>;
-  windowMinutes?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -11338,154 +8401,6 @@ export type SavedPaymentMethod = {
   status: Scalars['String']['output'];
 };
 
-/** Arm a one-shot timer that invokes a function after a delay. The target function must be autonomousInvocable, because the timer fires headlessly with no player in the request. */
-export type ScheduleInvokeInput = {
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['input'];
-  /** Optional app-scoped key. Re-arming the same key replaces the pending timer instead of adding another, which makes "reset the countdown" a single call. */
-  dedupeKey?: InputMaybe<Scalars['String']['input']>;
-  /** Delay in milliseconds before the timer fires. Must be at least the app's minTimerDelayMs and at most 30 days. */
-  delayMs: Scalars['Int']['input'];
-  /** The function to invoke when the timer fires. Must be autonomousInvocable. */
-  functionName: Scalars['String']['input'];
-  /** JSON object of parameters passed to the delayed invocation. Defaults to '{}'. */
-  paramsJson?: InputMaybe<Scalars['String']['input']>;
-  /** The 'self' container the delayed invocation runs against. Must belong to the app, and match the function's bound container type when it has one. */
-  selfContainerId: Scalars['String']['input'];
-  /** Session for the delayed invocation. Defaults to the container's own session. */
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** A container (instance) to upsert as part of a seed. Re-seed matches on binding_key `seed:` + tempId; same-name instances are allowed. */
-export type SeedContainerInput = {
-  /** Optional caller-supplied binding key (max 128 chars, opaque) the row upserts on INSTEAD of `seed:` + tempId, on the same unique index gameModelEnsureContainer uses (unique per app + type + the batch sessionId). Lets a deploy tool pre-create the exact rows a runtime gameModelEnsureContainer will later ask for, e.g. a placement-id digest per level object. Allowed only on a type that is admin-instantiable or carries a bindPolicy, so a player cannot have squatted the key first (BAD_REQUEST naming the tempId otherwise). May not begin with `seed:`. A row that already exists under this key is adopted only when its ownerUserId equals this row's (a re-seed); a row with a different owner -- one a player claimed first under a permissive or shadow-mode bind policy -- is a per-row BAD_REQUEST and nothing is written. On adoption properties are upserted onto it and idMapJson maps the tempId to it; containersCreated does not count it. */
-  bindingKey?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Human-friendly display name. */
-  displayName: Scalars['String']['input'];
-  /** JSON object of metadata. */
-  metadataJson?: InputMaybe<Scalars['String']['input']>;
-  /** Optional owning user id. */
-  ownerUserId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Initial property values for the container. */
-  properties?: InputMaybe<Array<SeedPropertyInput>>;
-  /** Developer-assigned id used for edge references and, when bindingKey is omitted, as the seed binding key (`seed:` + tempId). Re-seed maps this tempId to the existing container id. */
-  tempId: Scalars['String']['input'];
-  /** The container type to instantiate. */
-  typeName: Scalars['String']['input'];
-};
-
-/** A container type to create as part of a seed. */
-export type SeedContainerTypeInput = {
-  /** Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner. */
-  bindPolicyJson?: InputMaybe<Scalars['String']['input']>;
-  /** public | owner | hidden default for this type's properties. */
-  defaultPropertyVisibility?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description of the type. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Human-friendly display name. */
-  displayName: Scalars['String']['input'];
-  /** admin | member | owner (who may instantiate this type). */
-  instantiableBy?: InputMaybe<Scalars['String']['input']>;
-  /** JSON object of metadata. */
-  metadataJson?: InputMaybe<Scalars['String']['input']>;
-  /** Where this type's rows live. 'session' (default): one row per bindingKey per session, and a client inside a session binds the session's row. 'app': one row per bindingKey for the whole app, shared by every session (state that outlives matches: territory, landmarks, a persistent world). On an app-scoped type, gameModelEnsureContainer / gameModelCreateContainer with a sessionId are refused (CONTAINER_TYPE_APP_SCOPED); bind at app scope and pass the session on gameModelInvoke, where is_participant / is_current_turn are judged against the call's session. Changing 'session' to 'app' is refused while the type holds session-scoped rows. */
-  scope?: InputMaybe<Scalars['String']['input']>;
-  /** Stable type name (unique per app). */
-  typeName: Scalars['String']['input'];
-};
-
-/** An edge to create between two seeded containers (by temp id). */
-export type SeedEdgeInput = {
-  /** Source container temp_id (from this seed). */
-  fromTempId: Scalars['String']['input'];
-  /** JSON object of edge metadata. */
-  metadataJson?: InputMaybe<Scalars['String']['input']>;
-  /** The relationship type label. */
-  relationshipType: Scalars['String']['input'];
-  /** Target container temp_id (from this seed). */
-  toTempId: Scalars['String']['input'];
-  /** Optional edge weight. */
-  weight?: InputMaybe<Scalars['Float']['input']>;
-};
-
-/** A function to create as part of a seed. */
-export type SeedFunctionInput = {
-  /** Opt-in: allow an autonomous process (automation/NPC) to use this function as an entry point. Defaults to false. */
-  autonomousInvocable?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Optional container type to bind to (omit for a global function). */
-  containerTypeName?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description of the function. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** JSON-encoded invoke-policy rule tree (authority requirements). */
-  invokePolicyJson?: InputMaybe<Scalars['String']['input']>;
-  /** player | server | internal */
-  invokeScope?: InputMaybe<Scalars['String']['input']>;
-  /** The property writes the function performs. */
-  mutations?: InputMaybe<Array<FunctionMutationInput>>;
-  /** Function name (unique per app). */
-  name: Scalars['String']['input'];
-  /** Declarative realtime notifications the function emits via Buddy after it commits (see notify_* effects). */
-  notifications?: InputMaybe<Array<FunctionNotificationInput>>;
-  /** Typed parameters the function accepts. */
-  parameters?: InputMaybe<Array<FunctionParamInput>>;
-  /** Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations. Max 4 per function. */
-  permissionEffects?: InputMaybe<Array<FunctionPermissionEffectInput>>;
-  /** Optional expression whose value becomes the invoke result. */
-  returnExpression?: InputMaybe<Scalars['String']['input']>;
-  /** Optional declared return value type. */
-  returnType?: InputMaybe<Scalars['String']['input']>;
-  /** Declarative one-shot timers armed atomically with the function's mutations: invoke another function after a delay. Max 4 per function. */
-  timers?: InputMaybe<Array<FunctionTimerInput>>;
-};
-
-/** Bulk-create game-model definitions and optional instances in one transaction (model init/import). */
-export type SeedGameModelInput = {
-  /** The app (tenant) to seed into. */
-  appId: Scalars['BigInt']['input'];
-  /** Container types to create. */
-  containerTypes?: InputMaybe<Array<SeedContainerTypeInput>>;
-  /** Containers (instances) to create. */
-  containers?: InputMaybe<Array<SeedContainerInput>>;
-  /** Edges to create between seeded containers. */
-  edges?: InputMaybe<Array<SeedEdgeInput>>;
-  /** Functions to create. */
-  functions?: InputMaybe<Array<SeedFunctionInput>>;
-  /** Property definitions to create. */
-  propertyDefinitions?: InputMaybe<Array<SeedPropertyDefInput>>;
-  /** Optional session to seed instances into (NULL = app-global). */
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** A property definition to create as part of a seed. */
-export type SeedPropertyDefInput = {
-  /** The container type to define the property on. */
-  containerTypeName: Scalars['String']['input'];
-  /** JSON-encoded default value. */
-  defaultValueJson?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description of the property. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Property key (unique within the type). */
-  key: Scalars['String']['input'];
-  /** int | float | string | bool | array | object | container_ref */
-  valueType: Scalars['String']['input'];
-  /** public | owner | hidden */
-  visibility?: InputMaybe<Scalars['String']['input']>;
-  /** function | owner | admin */
-  writable?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** An initial property value for a seeded container. */
-export type SeedPropertyInput = {
-  /** Property key. */
-  key: Scalars['String']['input'];
-  /** JSON-encoded value. */
-  valueJson: Scalars['String']['input'];
-  /** Value type of the value being set. */
-  valueType: Scalars['String']['input'];
-};
-
 /** Result of an operator test send. */
 export type SendTestEmailResult = {
   __typename?: 'SendTestEmailResult';
@@ -11624,14 +8539,6 @@ export type ServiceQuota = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-/** Stamp a new session's world rows from the app's template rows at creation. For every app-scoped (sessionId null) container of each listed type that carries a bindingKey, one row is created in the new session with the same bindingKey, displayName, description, metadata and ownerUserId, inside the session creation transaction: the session exists with its rows or does not exist. The template rows were written by an admin (gameModelSeed), so the copy is not subject to the creator's instantiableBy or bindPolicy. Later changes to an app row do not propagate and a session row never writes back. Copies are marked (seeded_from_container_id) and are the only rows the ended-session retention sweep may drop, on a tier that has enabled it. */
-export type SessionSeedInput = {
-  /** 'defaults' (default): the copies start at the type's property defaults, no property rows written. 'app': each app row's current property rows are copied onto its copy, raw (not visibility-filtered; the copy is server-side and the source is admin-authored). */
-  initialState?: InputMaybe<Scalars['String']['input']>;
-  /** Container types whose app-scoped keyed rows are copied into the new session. Each must be instantiableBy 'admin' or carry a bindPolicy (the same rule gameModelSeed applies to a caller bindingKey: no player may have claimed one of its keys); a plain member type is BAD_REQUEST, as is an undefined type. Types with no app-scoped keyed rows contribute nothing. */
-  typeNames: Array<Scalars['String']['input']>;
-};
-
 /** Register/update an app's OAuth client settings for the portal handoff (requires manage_apps on the app). */
 export type SetAppClientSettingsInput = {
   appId: Scalars['BigInt']['input'];
@@ -11662,28 +8569,6 @@ export type SetAppReservedThroughputResult = {
   chargedCents: Scalars['BigInt']['output'];
 };
 
-/** Set the per-app automation policy (guardrails / platform ceilings). */
-export type SetAutomationPolicyInput = {
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['input'];
-  /** App-wide kill switch. */
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Max aggregate runs per minute for the app. */
-  globalRunsPerMinute?: InputMaybe<Scalars['Int']['input']>;
-  /** Max automations the app may define. */
-  maxAutomations?: InputMaybe<Scalars['Int']['input']>;
-  /** Max event-trigger cascade depth. */
-  maxCascadeDepth?: InputMaybe<Scalars['Int']['input']>;
-  /** Max fan-out targets per run. */
-  maxFanout?: InputMaybe<Scalars['Int']['input']>;
-  /** Max pending (armed but not yet fired) timers the app may hold at once. */
-  maxPendingTimers?: InputMaybe<Scalars['Int']['input']>;
-  /** Minimum schedule interval (ms) floor. */
-  minIntervalMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Minimum timer delay (ms) floor for gameModelScheduleInvoke and function timer effects. */
-  minTimerDelayMs?: InputMaybe<Scalars['Int']['input']>;
-};
-
 /** Set the per-app channel creation/membership policy (app-admin only). */
 export type SetChannelPolicyInput = {
   /** The app (tenant) whose channel policy to set. */
@@ -11696,56 +8581,6 @@ export type SetChannelPolicyInput = {
   maxGroupsPerUser?: InputMaybe<Scalars['Int']['input']>;
   /** Optional cap on members per channel (null = unlimited). */
   maxMembers?: InputMaybe<Scalars['Int']['input']>;
-};
-
-/** Set the per-app compute policy (guardrails / platform ceilings). Omitted fields keep their current (or default) values. */
-export type SetComputePolicyInput = {
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['input'];
-  /** Cooldown (ms) while a module circuit is open. */
-  cooldownMs?: InputMaybe<Scalars['Int']['input']>;
-  /** App-wide kill switch for all compute modules. */
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Consecutive failures that open a module circuit. */
-  failureThreshold?: InputMaybe<Scalars['Int']['input']>;
-  /** Fuel budget per invoke/event call. */
-  fuelPerInvoke?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Fuel budget per tick call. */
-  fuelPerTick?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Max host data-API operations per tick. */
-  maxDbOpsPerTick?: InputMaybe<Scalars['Int']['input']>;
-  /** Max replication bytes a module may emit per minute. */
-  maxEgressBytesPerMin?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Max replication messages a module may emit per minute. */
-  maxEgressMsgsPerMin?: InputMaybe<Scalars['Int']['input']>;
-  /** Max guest linear memory (MB). */
-  maxMemoryMb?: InputMaybe<Scalars['Int']['input']>;
-  /** Max modules the app may define. */
-  maxModules?: InputMaybe<Scalars['Int']['input']>;
-  /** Wall-clock watchdog budget per entry call (ms). */
-  maxRunMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Max state bytes a module may write per minute. */
-  maxStateBytesPerMin?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Max state saves a module may write per minute. */
-  maxStateWritesPerMin?: InputMaybe<Scalars['Int']['input']>;
-  /** Max tick rate (Hz) any module may request. */
-  maxTickHz?: InputMaybe<Scalars['Float']['input']>;
-  /** Minimum gap in milliseconds between saves of a module’s state. Saves made inside the window are combined and the newest one is written, so a module that saves every tick still only writes once per window. */
-  statePersistMinIntervalMs?: InputMaybe<Scalars['Int']['input']>;
-};
-
-/** Set one property value on a container directly. */
-export type SetContainerPropertyInput = {
-  /** The app (tenant) that owns the container. */
-  appId: Scalars['BigInt']['input'];
-  /** The container id to write to. */
-  containerId: Scalars['String']['input'];
-  /** The property key to write. */
-  key: Scalars['String']['input'];
-  /** JSON-encoded value. */
-  valueJson: Scalars['String']['input'];
-  /** The value type being written (must match the property definition). */
-  valueType: Scalars['String']['input'];
 };
 
 /** Patch an app's Agentic Studio policy. Requires manage_compute. Omitted fields stay unchanged; all supplied authority and limits are clamped to platform policy. */
@@ -11870,16 +8705,6 @@ export type SetCrowdyStudioProviderConsentInput = {
   consented: Scalars['Boolean']['input'];
 };
 
-/** Set the app's game-model runtime policy. */
-export type SetGameModelPolicyInput = {
-  /** The app (tenant) whose policy to set. */
-  appId: Scalars['BigInt']['input'];
-  /** Default role assigned to new session participants. */
-  defaultParticipantRole?: InputMaybe<Scalars['String']['input']>;
-  /** admin | member | anyone */
-  sessionCreationPolicy?: InputMaybe<Scalars['String']['input']>;
-};
-
 /** Set the per-grid permission-key whitelist (writes the grid_permission_limits input table). */
 export type SetGridPermissionLimitsInput = {
   /** The app (tenant) that owns the grid. */
@@ -11910,64 +8735,6 @@ export type SetMemberRolesInput = {
   roleIds: Array<Scalars['BigInt']['input']>;
   /** The member (user) whose roles to set. */
   userId: Scalars['BigInt']['input'];
-};
-
-/** Enable or disable one player automation. Enabling a schedule computes its next due time. */
-export type SetPlayerAutomationEnabledInput = {
-  /** App containing the owned grid. */
-  appId: Scalars['BigInt']['input'];
-  /** Player automation UUID. */
-  automationId: Scalars['String']['input'];
-  /** Whether the automation may dispatch. */
-  enabled: Scalars['Boolean']['input'];
-  /** Grid that confines the automation. */
-  gridId: Scalars['BigInt']['input'];
-};
-
-/** Set one arbitrary JSON property on a player-owned container. The caller must currently own the specified grid and container. */
-export type SetPlayerModelPropertyInput = {
-  /** App containing the owned grid. */
-  appId: Scalars['BigInt']['input'];
-  /** Player container UUID. */
-  containerId: Scalars['String']['input'];
-  /** Grid that confines the container. */
-  gridId: Scalars['BigInt']['input'];
-  /** Property key, upserted within the container. */
-  propertyKey: Scalars['String']['input'];
-  /** JSON-encoded property value. Any valid JSON value is accepted. */
-  valueJson: Scalars['String']['input'];
-};
-
-/** Upsert one player policy row. Omitted knobs keep their current value (or the platform default on first insert). unitsPerHour/unitsPerDay accept null to clear the quota. */
-export type SetPlayerWasmPolicyInput = {
-  /** The app. */
-  appId: Scalars['BigInt']['input'];
-  /** DN-10 channel egress: 'none' | 'grid' | 'send_messages'. */
-  channelEgress?: InputMaybe<Scalars['String']['input']>;
-  clientFuelPerDispatch?: InputMaybe<Scalars['BigInt']['input']>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  fuelPerInvoke?: InputMaybe<Scalars['BigInt']['input']>;
-  fuelPerTick?: InputMaybe<Scalars['BigInt']['input']>;
-  /** DN-10 grid event bus on/off. */
-  gridEventEgress?: InputMaybe<Scalars['Boolean']['input']>;
-  maxCompilesPerHour?: InputMaybe<Scalars['Int']['input']>;
-  maxContainerCreatesDay?: InputMaybe<Scalars['Int']['input']>;
-  maxDbOpsPerTick?: InputMaybe<Scalars['Int']['input']>;
-  maxEgressBytesPerMin?: InputMaybe<Scalars['BigInt']['input']>;
-  maxEgressMsgsPerMin?: InputMaybe<Scalars['Int']['input']>;
-  maxMemoryMb?: InputMaybe<Scalars['Int']['input']>;
-  maxModulesPerGrid?: InputMaybe<Scalars['Int']['input']>;
-  maxModulesTotal?: InputMaybe<Scalars['Int']['input']>;
-  maxRunMs?: InputMaybe<Scalars['Int']['input']>;
-  maxTickHz?: InputMaybe<Scalars['Float']['input']>;
-  /** 'app_default', 'tier', 'grid', or 'user'. */
-  scope: Scalars['String']['input'];
-  /** Tier/grid/user id; required unless scope is app_default. */
-  scopeRef?: InputMaybe<Scalars['BigInt']['input']>;
-  /** DN-10 spatial reach cap in chunks (0-8). */
-  spatialMaxDistance?: InputMaybe<Scalars['Int']['input']>;
-  unitsPerDay?: InputMaybe<Scalars['BigInt']['input']>;
-  unitsPerHour?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
 export type SetQuotaInput = {
@@ -12021,34 +8788,6 @@ export type SetRateCardResult = {
   changes: Array<RateChangeType>;
   /** The dimension as it now stands. */
   entry: RateCardEntryType;
-};
-
-/** Change who may still join a session. Host or app admin ('manage_apps'). */
-export type SetSessionAdmissionInput = {
-  /** 'open' (anyone the app admits), 'locked' (only participants who already joined may reconnect), 'closed' (nobody, not even by reconnection). */
-  admission: Scalars['String']['input'];
-  /** The app (tenant) that owns the session. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since. */
-  expectedHostTerm?: InputMaybe<Scalars['Int']['input']>;
-  /** Optional idempotency key (24h). */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** The session id to update. */
-  sessionId: Scalars['String']['input'];
-};
-
-/** Set or clear the current-turn user of a session. */
-export type SetSessionTurnInput = {
-  /** The app (tenant) that owns the session. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since, so a stale host never sets the turn. */
-  expectedHostTerm?: InputMaybe<Scalars['Int']['input']>;
-  /** Optional idempotency key (24h). */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** The session id to update. */
-  sessionId: Scalars['String']['input'];
-  /** The user whose turn it now is (NULL clears the turn). */
-  userId?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
 /** Set the per-app team creation/membership policy (app-admin only). */
@@ -12148,33 +8887,8 @@ export type SocialLoginStartInput = {
 
 export type Subscription = {
   __typename?: 'Subscription';
-  /** Stream complete active gameplay-session count transitions for one app. There is no bootstrap event: query gameModelActivePlayerCount for the current snapshot. The first complete sample is a silent baseline; PARTIAL/UNAVAILABLE samples do not emit or become zero. Delivery uses a Postgres-backed cross-replica best-effort feed with a bounded oldest-drop buffer. Deduplicate by revision; after reconnect or a revision gap, requery gameModelActivePlayerCount. Requires an app-scoped token for this exact app. */
-  gameModelActivePlayerCountChanged: GameModelActivePlayerCountChange;
-  /** Push notification whenever a container in the app changes: an invoke mutated it, a direct gameModelSetProperty wrote it, or it was created/deleted. Metadata only (containerId, typeName, changedKeys — no property values); pull the visibility-filtered state with gameModelContainerState on receipt. Post-commit and best-effort (a dropped event costs one missed pull, never correctness) — durable reads remain the source of truth. Optional typeName/sessionId filters narrow delivery. Fans out across all API replicas. Requires a valid token. Replaces interval polling with pull-on-push. */
-  gameModelContainerChanged: GmContainerChange;
-  /** Stream the revisions of one session as they commit: joins, rejoins, leaves, presence expiries, host changes, admission changes, turn changes, and the end. There is no bootstrap event: pull gameModelSessionSnapshot first (or pass afterRevision to replay retained events from there). Revisions are strictly increasing; on a gap or after a reconnect, pull the snapshot again. Cross-replica, best-effort wakeup over a bounded oldest-drop buffer; the events table is the record. Requires a valid token. */
-  gameModelSessionChanged: GmSessionEvent;
   /** Realtime downlink from the game server: spatial notifications and responses, GenericErrorResponse (errors from your sends, correlated by sequenceNumber), and RealtimeConnectionEvent (lifecycle/setup failures). Requires a bearer game token AND an appId-scoped connection — the appId is read from the graphql-transport-ws connection (game tokens are app-agnostic and one UDP socket is shared across apps, so an app-agnostic subscription is rejected with a RealtimeConnectionEvent code APP_ID_REQUIRED, and a missing/invalid token with AUTH_REQUIRED). On subscribe, opens a UDP proxy session if none exists (binds to the least-loaded game server); open/transport failures are delivered as RealtimeConnectionEvent (code UDP_PROXY_CONNECTION_FAILED) and then the stream ends. Only this app’s spatial fan-out is delivered; appId-less control frames always pass. Subscribe before/while sending so async results are not missed. Unsubscribing stops delivery only — it does NOT close the UDP session; call disconnectUdpProxy (or rely on the server inactivity timeout) to release it. */
   udpNotifications: Maybe<UdpNotification>;
-};
-
-
-export type SubscriptionGameModelActivePlayerCountChangedArgs = {
-  appId: Scalars['BigInt']['input'];
-};
-
-
-export type SubscriptionGameModelContainerChangedArgs = {
-  appId: Scalars['BigInt']['input'];
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-  typeName?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type SubscriptionGameModelSessionChangedArgs = {
-  afterRevision?: InputMaybe<Scalars['String']['input']>;
-  appId: Scalars['BigInt']['input'];
-  sessionId: Scalars['String']['input'];
 };
 
 export type TeleportRequestInput = {
@@ -12194,14 +8908,6 @@ export type TeleportResponse = {
   errorCode: UdpErrorCode;
   /** True when the teleport is authorized/accepted; false otherwise (inspect errorCode for the reason). */
   success: Scalars['Boolean']['output'];
-};
-
-/** One named parameter expression bound into a timer invocation. */
-export type TimerParamInput = {
-  /** Expression evaluated when the timer is armed (not when it fires), in the arming invocation context. */
-  expression: Scalars['String']['input'];
-  /** Parameter name on the timer's target function. */
-  name: Scalars['String']['input'];
 };
 
 export type TransferGridOwnershipInput = {
@@ -12226,20 +8932,6 @@ export type TransferPlayerCodeListingInput = {
   toOwnerKind: PlayerCodeOwnerKind;
   /** Numeric user id or org id of the new owner, per toOwnerKind. */
   toOwnerRef: Scalars['BigInt']['input'];
-};
-
-/** Hand the session host role to another joined participant. Host or app admin ('manage_apps'). */
-export type TransferSessionHostInput = {
-  /** The app (tenant) that owns the session. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional: the hostTerm you last read. Refused with SESSION_HOST_TERM_STALE if the host has changed since. */
-  expectedHostTerm?: InputMaybe<Scalars['Int']['input']>;
-  /** Optional idempotency key (24h). */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  /** The session id. */
-  sessionId: Scalars['String']['input'];
-  /** The joined participant who becomes host. */
-  toUserId: Scalars['BigInt']['input'];
 };
 
 /** Error codes returned by UDP game servers (and surfaced on `GenericErrorResponse.errorCode`) in response to a spatial/realtime message. NO_ERROR (0) indicates success; every other value indicates a failure. The numeric value is the byte sent on the wire; GraphQL exposes the name. Note: a failed message does not always produce an error — some auth failures are dropped silently (see the docs). */
@@ -12506,198 +9198,6 @@ export type UpdateVoxelInput = {
   voxelType: Scalars['Float']['input'];
 };
 
-/** Create or update an autonomous process (automation / NPC). Upsert key is (app, name). */
-export type UpsertAutomationInput = {
-  /** Action kind: model_function (default — invoke a Model function) or compute_invoke (invoke a compute-module export directly; the trusted server path, no invoke policy evaluation). */
-  actionKind?: InputMaybe<Scalars['String']['input']>;
-  /** The app (tenant) that owns the automation. */
-  appId: Scalars['BigInt']['input'];
-  /** For action_kind=compute_invoke: the module invoke export to call (must be bound as an invoke trigger on the module). */
-  computeExport?: InputMaybe<Scalars['String']['input']>;
-  /** For action_kind=compute_invoke: the compute module name to invoke. */
-  computeModuleName?: InputMaybe<Scalars['String']['input']>;
-  /** Cooldown (ms) while the circuit is open. */
-  cooldownMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Cron expression (schedule_kind=cron). */
-  cronExpr?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Whether it may run. Defaults to true. */
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Consecutive failures that open the circuit. */
-  failureThreshold?: InputMaybe<Scalars['Int']['input']>;
-  /** Entry-point function name (must be autonomous_invocable). Required for action_kind=model_function; ignored for compute_invoke. */
-  functionName?: InputMaybe<Scalars['String']['input']>;
-  /** Override: gas per invoke. */
-  gasLimit?: InputMaybe<Scalars['Int']['input']>;
-  /** Interval in ms (schedule_kind=interval). */
-  intervalMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Override: max fn: depth per invoke. */
-  maxFnDepth?: InputMaybe<Scalars['Int']['input']>;
-  /** Max runs per minute for this automation. */
-  maxRunsPerMinute?: InputMaybe<Scalars['Int']['input']>;
-  /** Max fan-out targets per run. */
-  maxTargets?: InputMaybe<Scalars['Int']['input']>;
-  /** Automation name (unique per app). The upsert key. */
-  name: Scalars['String']['input'];
-  /** JSON object of static params. */
-  paramsJson?: InputMaybe<Scalars['String']['input']>;
-  /** Identity to act as (drives owner_of_self / $caller_user_id). Null = trusted server caller. */
-  runAsUserId?: InputMaybe<Scalars['BigInt']['input']>;
-  /** Override: wall-clock budget per invoke (ms). */
-  runTimeoutMs?: InputMaybe<Scalars['Int']['input']>;
-  /** For schedule triggers: interval | cron. */
-  scheduleKind?: InputMaybe<Scalars['String']['input']>;
-  /** JSON selector resolving candidate refs/scalars over model data into params (e.g. {"pick":"nearest","ofType":"Unit","where":[...],"by":"manhattan","bindAs":{...}}). Also supports grid-permission filters "selfPermissionWhere"/"candidatePermissionWhere": arrays of {"userFrom":"owner"|{"property":k},"op":"has"|"lacks","key":<runtime permission key>,"grid":<id>|{"property":k}} checked against the live grid ACL (omit "grid" for any-grid). */
-  selectorJson?: InputMaybe<Scalars['String']['input']>;
-  /** For target_mode=container: the self container UUID. */
-  selfContainerId?: InputMaybe<Scalars['String']['input']>;
-  /** Optional session scope (UUID). */
-  sessionId?: InputMaybe<Scalars['String']['input']>;
-  /** Target mode: container | type | global. Defaults to container (model_function) / global (compute_invoke). */
-  targetMode?: InputMaybe<Scalars['String']['input']>;
-  /** For target_mode=type: the container type to fan out over. */
-  targetTypeName?: InputMaybe<Scalars['String']['input']>;
-  /** Trigger type: schedule | event | manual. Defaults to schedule. */
-  triggerType?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** Create an event trigger that fires an automation on model activity or a complete app-scoped active-player-count transition. */
-export type UpsertAutomationTriggerInput = {
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['input'];
-  /** The automation (by name) this trigger fires. */
-  automationName: Scalars['String']['input'];
-  /** Filter: only this container type. For function_invoked this is the type of the invocation's "self" container, so you can watch "this function, on this type". Rejected for player_count_changed, player_left and player_joined. */
-  containerTypeName?: InputMaybe<Scalars['String']['input']>;
-  /** Debounce window in ms. player_count_changed uses trailing-edge coalescing (first previous count plus latest current count/revision); existing model events retain leading-edge suppression. */
-  debounceMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Filter: only this function name. Applies to function_invoked; rejected for property_changed, container_created, player_count_changed, player_left and player_joined. */
-  functionName?: InputMaybe<Scalars['String']['input']>;
-  /** Event to observe: function_invoked | property_changed | container_created | player_count_changed | player_left | player_joined. player_count_changed fires only after complete fleet counts change, and injects reserved previous/current/delta/revision params. player_left fires once per actor that stops being present (about five seconds after its last update), the LAST player included, and injects actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason (presence_removed | lease_expired) and remaining_player_count. player_joined (v1.93.0) fires once per actor the roster newly inserted (ON CONFLICT no-op is not a join), and injects actor_uuid, user_id, chunk_x/y/z, first_seen_at and current_player_count. A Redis flush can emit leave then join on later ticks. */
-  onEvent: Scalars['String']['input'];
-  /** Filter: only this property key. Applies to property_changed; rejected for function_invoked, container_created, player_count_changed, player_left and player_joined. */
-  propertyKey?: InputMaybe<Scalars['String']['input']>;
-  /** property_changed only: which writes to observe — "direct" (gameModelSetProperty), "function" (a mutation applied inside a gameModelInvoke, automation run, or timer fire), or "any" (default). Rejected for other events. */
-  writeSource?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** Create or update a WASM compute module (metadata only; source is uploaded with computeDeployVersion). Upsert key is (app, name). */
-export type UpsertComputeModuleInput = {
-  /** RETIRED. Modules run only while their app has a player present. Accepted as false or omitted; true is refused. */
-  alwaysOn?: InputMaybe<Scalars['Boolean']['input']>;
-  /** The app (tenant) that owns the module. */
-  appId: Scalars['BigInt']['input'];
-  /** Optional description. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Module name (unique per app, lowercase crate-style: [a-z][a-z0-9_-]*). The upsert key. */
-  name: Scalars['String']['input'];
-};
-
-/** Bind a trigger to a module: a tick loop (tick_hz), a model/compute event subscription, or a client-invokable export. */
-export type UpsertComputeTriggerInput = {
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['input'];
-  /** Event filter: only this container type. */
-  containerTypeName?: InputMaybe<Scalars['String']['input']>;
-  /** For invoke triggers: optional typed contract (JSON): {"params": {name: {type, required?, description?}}, "result": {...}, "description"?}. Types: int|float|string|bool|object|array. Declared params are validated on computeInvoke BEFORE the sandbox runs (required presence + type; undeclared params pass through); result is documentation/codegen only. Null = no validation. */
-  contractJson?: InputMaybe<Scalars['String']['input']>;
-  /** Debounce/coalesce window in ms for event triggers. */
-  debounceMs?: InputMaybe<Scalars['Int']['input']>;
-  /** Event filter: only compute events with this name (on_event=compute_event). */
-  eventName?: InputMaybe<Scalars['String']['input']>;
-  /** For invoke triggers: the exported guest function name computeInvoke routes to. */
-  exportName?: InputMaybe<Scalars['String']['input']>;
-  /** Event filter: only this model function name. */
-  functionName?: InputMaybe<Scalars['String']['input']>;
-  /** For invoke triggers: JSON authority tree gating who may invoke (same shape as game-model function invoke policies). Null = app admins only. */
-  invokePolicyJson?: InputMaybe<Scalars['String']['input']>;
-  /** The module (by name) this trigger drives. */
-  moduleName: Scalars['String']['input'];
-  /** For event triggers: function_invoked | property_changed | container_created | compute_event | player_left | player_joined. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included. player_joined (v1.93.0) is delivered with actor_uuid, user_id, chunk_x/y/z, first_seen_at and current_player_count, once per roster INSERT (ON CONFLICT no-op is not a join). A Redis flush can emit leave then join on later ticks. */
-  onEvent?: InputMaybe<Scalars['String']['input']>;
-  /** Event filter: only this property key. */
-  propertyKey?: InputMaybe<Scalars['String']['input']>;
-  /** For tick triggers: the tick rate in Hz (clamped by the app policy's maxTickHz). */
-  tickHz?: InputMaybe<Scalars['Float']['input']>;
-  /** Trigger type: tick | event | invoke. */
-  triggerType: Scalars['String']['input'];
-};
-
-/** Create or update a container type (schema for a kind of entity). */
-export type UpsertContainerTypeInput = {
-  /** The app (tenant) that owns the type. */
-  appId: Scalars['BigInt']['input'];
-  /** Who may CREATE a container of this type under a client-supplied bindingKey (gameModelEnsureContainer). Same JSON shape as a function invokePolicyJson — an AuthorityRule tree — except that owner_of_self, is_current_turn and condition are refused, because a bind creates the container and there is no acting container to resolve them against. Omit it (the default) and binding is governed by the type's instantiableBy alone, which is the behaviour before this field existed. Resolving an EXISTING key is unaffected: it is a read. For a shared world object, {"type":"is_host"} or instantiableBy: admin stops one player from squatting the key and becoming its owner. */
-  bindPolicyJson?: InputMaybe<Scalars['String']['input']>;
-  /** public | owner | hidden default for this type's properties. */
-  defaultPropertyVisibility?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description of the type. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Human-friendly display name. */
-  displayName: Scalars['String']['input'];
-  /** admin | member | owner (who may instantiate this type). */
-  instantiableBy?: InputMaybe<Scalars['String']['input']>;
-  /** JSON object of metadata. */
-  metadataJson?: InputMaybe<Scalars['String']['input']>;
-  /** Where this type's rows live. 'session' (default): one row per bindingKey per session, and a client inside a session binds the session's row. 'app': one row per bindingKey for the whole app, shared by every session (state that outlives matches: territory, landmarks, a persistent world). On an app-scoped type, gameModelEnsureContainer / gameModelCreateContainer with a sessionId are refused (CONTAINER_TYPE_APP_SCOPED); bind at app scope and pass the session on gameModelInvoke, where is_participant / is_current_turn are judged against the call's session. Changing 'session' to 'app' is refused while the type holds session-scoped rows. */
-  scope?: InputMaybe<Scalars['String']['input']>;
-  /** Stable type name (unique per app). Acts as the upsert key. */
-  typeName: Scalars['String']['input'];
-};
-
-/** Create or update a studio-defined function. Upsert key is (app, name). */
-export type UpsertFunctionInput = {
-  /** The app (tenant) that owns the function. */
-  appId: Scalars['BigInt']['input'];
-  /** Opt-in: allow an autonomous process (automation/NPC) to use this function as an entry point. Defaults to false. Players are unaffected; this only enables server-driven invocation. */
-  autonomousInvocable?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Optional container type to bind the function to (omit for a global function). */
-  containerTypeName?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description of the function. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** JSON-encoded invoke-policy rule tree (authority requirements). */
-  invokePolicyJson?: InputMaybe<Scalars['String']['input']>;
-  /** player | server | internal */
-  invokeScope?: InputMaybe<Scalars['String']['input']>;
-  /** The property writes the function performs (applied atomically when invoked). */
-  mutations?: InputMaybe<Array<FunctionMutationInput>>;
-  /** Function name (unique per app). Used to invoke it. */
-  name: Scalars['String']['input'];
-  /** Declarative realtime notifications the function emits via Buddy AFTER it commits. Players and automations (NPCs) emit identically; fenced by delivery mode. */
-  notifications?: InputMaybe<Array<FunctionNotificationInput>>;
-  /** Typed parameters the function accepts. */
-  parameters?: InputMaybe<Array<FunctionParamInput>>;
-  /** Declarative grid-permission effects (grant/revoke runtime grid ACL rows) applied atomically with the function's mutations. Max 4 per function. */
-  permissionEffects?: InputMaybe<Array<FunctionPermissionEffectInput>>;
-  /** Optional expression whose value becomes the invoke result. */
-  returnExpression?: InputMaybe<Scalars['String']['input']>;
-  /** Optional declared return value type. */
-  returnType?: InputMaybe<Scalars['String']['input']>;
-  /** Declarative one-shot timers armed atomically with the function's mutations: invoke another function after a delay. Max 4 per function. */
-  timers?: InputMaybe<Array<FunctionTimerInput>>;
-};
-
-/** Create or update a typed property on a container type. */
-export type UpsertPropertyDefInput = {
-  /** The app (tenant) that owns the type. */
-  appId: Scalars['BigInt']['input'];
-  /** The container type to define the property on. */
-  containerTypeName: Scalars['String']['input'];
-  /** JSON-encoded default value. */
-  defaultValueJson?: InputMaybe<Scalars['String']['input']>;
-  /** Optional description of the property. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Property key (unique within the type). Part of the upsert key. */
-  key: Scalars['String']['input'];
-  /** int | float | string | bool | array | object | container_ref */
-  valueType: Scalars['String']['input'];
-  /** public | owner | hidden */
-  visibility?: InputMaybe<Scalars['String']['input']>;
-  /** function | owner | admin */
-  writable?: InputMaybe<Scalars['String']['input']>;
-};
-
 /** One minute-bucketed usage sample. Byte/message counters are returned as strings because they can exceed the 32-bit Int range. */
 export type UsageMinuteRow = {
   __typename?: 'UsageMinuteRow';
@@ -12781,116 +9281,6 @@ export type UserAppState = {
   updatedAt: Scalars['DateTime']['output'];
   /** Owner user id. BigInt serialized as a decimal string. */
   userId: Scalars['BigInt']['output'];
-};
-
-/** Whose problem a failure is. The platform attributes blame; the game decides what to render. PLATFORM means ours and a retry is reasonable; AUTHOR means the app's own code and the same call will fail the same way; BUDGET means an allowance is spent and nothing is broken. */
-export enum UserCodeFaultBlame {
-  /** The app's own code or configuration. Repeating the call gets the same answer. */
-  Author = 'AUTHOR',
-  /** A metered allowance for this app or caller is spent. Nothing is broken. */
-  Budget = 'BUDGET',
-  /** Ours. The app's code is not at fault — it may not have run at all. */
-  Platform = 'PLATFORM'
-}
-
-/** Which engine ran the code that faulted: the model expression engine, studio WASM compute, or player WASM compute. */
-export enum UserCodeFaultEngine {
-  /** The model expression engine: declarative JSON ASTs bounded by gas and a wall-clock deadline. */
-  Expression = 'EXPRESSION',
-  /** Player WASM compute: the same compiler and sandbox at a lower trust tier, owned by a player. */
-  PlayerWasm = 'PLAYER_WASM',
-  /** Studio WASM compute: Rust compiled by the pinned toolchain and run in a worker-thread sandbox. */
-  StudioWasm = 'STUDIO_WASM'
-}
-
-/** What went wrong, at the granularity an operator would alert on and a developer would fix. One kind per distinguishable remedy: an expression timeout and a watchdog termination are both "ran too long" and are kept apart because one rolls back a transaction and the other kills a worker thread. */
-export enum UserCodeFaultKind {
-  BindingMismatch = 'BINDING_MISMATCH',
-  CallLimitExceeded = 'CALL_LIMIT_EXCEEDED',
-  CircuitOpen = 'CIRCUIT_OPEN',
-  ContractValidationFailed = 'CONTRACT_VALIDATION_FAILED',
-  DbOpsExceeded = 'DB_OPS_EXCEEDED',
-  DisabledByPolicy = 'DISABLED_BY_POLICY',
-  EgressBudgetExceeded = 'EGRESS_BUDGET_EXCEEDED',
-  ExpressionError = 'EXPRESSION_ERROR',
-  ExpressionTimeout = 'EXPRESSION_TIMEOUT',
-  FuelExhausted = 'FUEL_EXHAUSTED',
-  GasExhausted = 'GAS_EXHAUSTED',
-  HostCallFailed = 'HOST_CALL_FAILED',
-  InternalError = 'INTERNAL_ERROR',
-  MemoryExceeded = 'MEMORY_EXCEEDED',
-  ModuleLoadFailed = 'MODULE_LOAD_FAILED',
-  NotificationUndeliverable = 'NOTIFICATION_UNDELIVERABLE',
-  PlatformBusy = 'PLATFORM_BUSY',
-  QuotaExhausted = 'QUOTA_EXHAUSTED',
-  RateLimitExceeded = 'RATE_LIMIT_EXCEEDED',
-  ResponseTooLarge = 'RESPONSE_TOO_LARGE',
-  SandboxPoisoned = 'SANDBOX_POISONED',
-  StateWriteBudgetExceeded = 'STATE_WRITE_BUDGET_EXCEEDED',
-  UnknownHostFunction = 'UNKNOWN_HOST_FUNCTION',
-  WasmTrap = 'WASM_TRAP',
-  WatchdogTerminated = 'WATCHDOG_TERMINATED',
-  WorkerExit = 'WORKER_EXIT'
-}
-
-/** One failure of code a user wrote, from any of the three engines. Replaces three disagreeing surfaces: a bare error string on the invoke path, a run table that recorded failures and not successes, and a last_error slot the next success cleared. */
-export type UserCodeFaultRecord = {
-  __typename?: 'UserCodeFaultRecord';
-  /** The user the work ran on behalf of, when there was one. */
-  actingUserId: Maybe<Scalars['BigInt']['output']>;
-  /** The app (tenant) the fault occurred in. */
-  appId: Scalars['BigInt']['output'];
-  /** Whose problem this is. Stored rather than derived from kind, because the same kind can have a different owner given context — which is what platform saturation reported as an author timeout cost us. */
-  blame: UserCodeFaultBlame;
-  /** The wall-clock budget it was given, in microseconds. Stored beside durationUs rather than as a ratio: 249ms against a 250ms budget and 249ms against a 2000ms budget are different bugs. */
-  budgetUs: Maybe<Scalars['String']['output']>;
-  /** Operator-facing detail, for the developer who owns the app. Never shown to a player. */
-  detail: Maybe<Scalars['String']['output']>;
-  /** Wall-clock microseconds the work consumed before it faulted. */
-  durationUs: Maybe<Scalars['String']['output']>;
-  /** Which engine ran the code. */
-  engine: UserCodeFaultEngine;
-  /** The entry point that started the work: player_invoke, automation, system, tick, invoke, event, init. */
-  entryPoint: Maybe<Scalars['String']['output']>;
-  /** Unique fault id. */
-  faultId: Scalars['String']['output'];
-  /** Correlation id shared with gm_event_log, gm_automation_runs and wasm_module_runs; pass it to gameModelFlow for the whole timeline. */
-  flowId: Maybe<Scalars['String']['output']>;
-  /** The grid, when the faulting code belonged to one (player WASM). */
-  gridId: Maybe<Scalars['BigInt']['output']>;
-  /** Which ck-api instance observed the fault. A fault that only ever appears on one instance is a different bug from one the fleet shares. */
-  instanceId: Maybe<Scalars['String']['output']>;
-  /** What went wrong. */
-  kind: UserCodeFaultKind;
-  /** When the fault was recorded. */
-  occurredAt: Scalars['DateTime']['output'];
-  /** Whether repeating the identical call could succeed with nothing else changing. This is what a game reads to choose between retrying and telling the player it is broken. */
-  retryable: Scalars['Boolean']['output'];
-  /** Mutation steps or host calls completed before the fault. This is what distinguishes "never started" from "died on step nine". */
-  stepsCompleted: Maybe<Scalars['Int']['output']>;
-  /** What ran: the function name for the expression engine, the module name for either WASM engine. */
-  subject: Scalars['String']['output'];
-  /** Budget units granted, in the same units as unitsUsed. */
-  unitsLimit: Maybe<Scalars['String']['output']>;
-  /** Budget units consumed — expression-engine gas or WASM fuel. Named neutrally so a developer using both engines can compare them. */
-  unitsUsed: Maybe<Scalars['String']['output']>;
-};
-
-/** Faults grouped by engine, kind and blame over a window — the shape to alert on, and the answer to "is this us or them". */
-export type UserCodeFaultSummaryEntry = {
-  __typename?: 'UserCodeFaultSummaryEntry';
-  /** Whose problem it is. */
-  blame: UserCodeFaultBlame;
-  /** Which engine. */
-  engine: UserCodeFaultEngine;
-  /** How many faults of this shape in the window. */
-  faults: Scalars['Int']['output'];
-  /** What went wrong. */
-  kind: UserCodeFaultKind;
-  /** The most recent one. */
-  lastAt: Scalars['DateTime']['output'];
-  /** What ran. */
-  subject: Scalars['String']['output'];
 };
 
 export type UserDonationData = {
@@ -13214,281 +9604,6 @@ export type WalletTransactionsConnection = {
   pageInfo: ConnectionPageInfo;
   /** Total matching records across all pages, when known (null for sources that do not compute a total). */
   totalCount: Maybe<Scalars['Int']['output']>;
-};
-
-/** A snapshot of an app's compute footprint: module/version/trigger counts plus recent run activity. Helps developers understand what compute is deployed and doing. */
-export type WasmAppDiagnostics = {
-  __typename?: 'WasmAppDiagnostics';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** Modules currently enabled. */
-  enabledModuleCount: Scalars['Int']['output'];
-  /** Failed runs in the last 24h. */
-  failedRuns24h: Scalars['Int']['output'];
-  /** Fuel consumed in the last 24h. */
-  fuelUsed24h: Scalars['BigInt']['output'];
-  /** Modules defined. */
-  moduleCount: Scalars['Int']['output'];
-  /** Runs in the last 24h. */
-  runs24h: Scalars['Int']['output'];
-  /** Rust compiler version of the toolchain on the replica that served this query (the boot-logged fingerprint; replicas with skewed toolchains produce disjoint compile-cache keys). Null when the toolchain is not provisioned on this host. */
-  toolchainRustVersion: Maybe<Scalars['String']['output']>;
-  /** wasm-opt version of the toolchain on the replica that served this query. Null when the toolchain is not provisioned on this host. */
-  toolchainWasmOptVersion: Maybe<Scalars['String']['output']>;
-  /** Most-active modules in the last 24h. */
-  topModules: Array<WasmTopModule>;
-  /** Trigger bindings defined. */
-  triggerCount: Scalars['Int']['output'];
-  /** Source versions uploaded (all modules). */
-  versionCount: Scalars['Int']['output'];
-};
-
-/** Per-module rollup within a stats window. */
-export type WasmComputeStat = {
-  __typename?: 'WasmComputeStat';
-  /** Average run duration (microseconds). */
-  avgDurationUs: Scalars['Int']['output'];
-  /** Current circuit-breaker state: closed | open | half_open. */
-  circuitState: Scalars['String']['output'];
-  /** Failed runs in the window. */
-  failures: Scalars['Int']['output'];
-  /** Total fuel consumed. */
-  fuelUsed: Scalars['BigInt']['output'];
-  /** The module name. */
-  moduleName: Scalars['String']['output'];
-  /** Runs in the window. */
-  runs: Scalars['Int']['output'];
-};
-
-/** Aggregate compute activity for an app over a recent window: throughput, failure rate, fuel, egress, and a per-module breakdown. */
-export type WasmComputeStats = {
-  __typename?: 'WasmComputeStats';
-  /** The instant through which these totals are complete. Activity is counted from per-minute usage rollups that each instance buffers in memory and writes every few seconds, so entry calls made after this instant are NOT included yet. Read it before concluding anything from a zero: `totalRuns: 0` with an `aggregatedThrough` a few seconds in the past means "nothing aggregated yet", not "nothing ran". Poll until `aggregatedThrough` is later than the run you are looking for. */
-  aggregatedThrough: Scalars['DateTime']['output'];
-  /** Average run duration in microseconds. */
-  avgDurationUs: Scalars['Int']['output'];
-  /** Per-module breakdown. */
-  byModule: Array<WasmComputeStat>;
-  /** Failed runs in the window. */
-  failedRuns: Scalars['Int']['output'];
-  /** Failure rate as a percentage (0-100). */
-  failureRatePct: Scalars['Float']['output'];
-  /** Total replication messages emitted in the window. */
-  totalEgressMsgs: Scalars['BigInt']['output'];
-  /** Total fuel consumed in the window. */
-  totalFuelUsed: Scalars['BigInt']['output'];
-  /** Total entry calls (ticks + invocations) in the window, complete through `aggregatedThrough`. */
-  totalRuns: Scalars['Int']['output'];
-  /** The window size in minutes. */
-  windowMinutes: Scalars['Int']['output'];
-};
-
-/** A WASM compute module: developer-authored Rust compiled to sandboxed WASM on game-api instances. Holds metadata, the deployed version pointer, and circuit-breaker state; source lives in versions. */
-export type WasmModule = {
-  __typename?: 'WasmModule';
-  /**
-   * RETIRED. Always false. Modules run only while their app has a player present.
-   * @deprecated Retired 2026-09-01: nothing runs for an app with no player in it, so this is always false. Stop selecting it.
-   */
-  alwaysOn: Scalars['Boolean']['output'];
-  /** The app (tenant) that owns the module. */
-  appId: Scalars['BigInt']['output'];
-  /** When this module was stopped for exceeding a resource limit. Null when it is running normally. Unlike the circuit breaker this does not clear on its own: deploy a new version, or ask an admin to reset it. */
-  breakerLatchedAt: Maybe<Scalars['DateTime']['output']>;
-  /** What the module exceeded and what to change, when it has been stopped for a resource limit. Null when it is running normally. */
-  breakerReason: Maybe<Scalars['String']['output']>;
-  /** Circuit-breaker state: closed | open | half_open. */
-  circuitState: Scalars['String']['output'];
-  /** Current consecutive-failure count. */
-  consecutiveFailures: Scalars['Int']['output'];
-  /** When the open circuit may retry (half-open). */
-  cooldownUntil: Maybe<Scalars['DateTime']['output']>;
-  /** When the module was created. */
-  createdAt: Scalars['DateTime']['output'];
-  /** The deployed version id (UUID). Null until first deploy. */
-  currentVersionId: Maybe<Scalars['String']['output']>;
-  /** Optional description. */
-  description: Maybe<Scalars['String']['output']>;
-  /** Whether the module may run. New modules start disabled; enable after a successful compile. */
-  enabled: Scalars['Boolean']['output'];
-  /** The single most recent error string, overwritten by each new failure and CLEARED by the next success — so a module that fails intermittently reports null between failures. Do not read this as a health signal: use userCodeFaultSummary, which keeps every fault with its kind and blame. Kept for the "what went wrong just now" case it is genuinely good at. */
-  lastError: Maybe<Scalars['String']['output']>;
-  /** Unique module id (UUID). */
-  moduleId: Scalars['String']['output'];
-  /** Module name (unique per app); the upsert key. */
-  name: Scalars['String']['output'];
-  /** When the module was last updated. */
-  updatedAt: Scalars['DateTime']['output'];
-};
-
-/** A diagnostic log line for a compute module. Phase 1 surfaces failed-run errors; the Phase 2 runtime adds guest ck.log output. */
-export type WasmModuleLogEntry = {
-  __typename?: 'WasmModuleLogEntry';
-  /** Which ck-api instance produced the line. Null for runtime error lines, which are read back from the run table rather than attributed to an instance. Present on guest ck.log lines, which used to be served from the answering replica's memory and so silently excluded every other instance's output. */
-  instanceId: Maybe<Scalars['String']['output']>;
-  /** Log level: debug | info | warn | error. */
-  level: Scalars['String']['output'];
-  /** The log message. */
-  message: Scalars['String']['output'];
-  /** The module name. */
-  moduleName: Scalars['String']['output'];
-  /** The entry that produced the line: init | tick | event | invoke. */
-  triggerSource: Maybe<Scalars['String']['output']>;
-  /** When the line was recorded. */
-  ts: Scalars['DateTime']['output'];
-};
-
-/** Per-app guardrails / platform ceilings for compute modules. A missing row means platform defaults. */
-export type WasmModulePolicy = {
-  __typename?: 'WasmModulePolicy';
-  /** The app (tenant) the policy applies to. */
-  appId: Scalars['BigInt']['output'];
-  /** Cooldown (ms) while a module circuit is open. */
-  cooldownMs: Scalars['Int']['output'];
-  /** App-wide kill switch for all compute modules. */
-  enabled: Scalars['Boolean']['output'];
-  /** Consecutive failures that open a module circuit. */
-  failureThreshold: Scalars['Int']['output'];
-  /** Fuel budget per invoke/event call. */
-  fuelPerInvoke: Scalars['BigInt']['output'];
-  /** Fuel budget per tick call. */
-  fuelPerTick: Scalars['BigInt']['output'];
-  /** Max host data-API operations per tick. */
-  maxDbOpsPerTick: Scalars['Int']['output'];
-  /** Max replication bytes a module may emit per minute. */
-  maxEgressBytesPerMin: Scalars['BigInt']['output'];
-  /** Max replication messages a module may emit per minute. */
-  maxEgressMsgsPerMin: Scalars['Int']['output'];
-  /** Max guest linear memory (MB). */
-  maxMemoryMb: Scalars['Int']['output'];
-  /** Max modules the app may define. */
-  maxModules: Scalars['Int']['output'];
-  /** Wall-clock watchdog budget per entry call (ms). */
-  maxRunMs: Scalars['Int']['output'];
-  /** Max state bytes a module may write per minute. Saves beyond this are refused and ck.state_set returns false. */
-  maxStateBytesPerMin: Scalars['BigInt']['output'];
-  /** Max state saves a module may write per minute. Saves beyond this are refused and ck.state_set returns false. */
-  maxStateWritesPerMin: Scalars['Int']['output'];
-  /** Max tick rate (Hz) any module may request. */
-  maxTickHz: Scalars['Float']['output'];
-  /** Minimum gap in milliseconds between saves of a module’s state. Saves made inside the window are combined and the newest one is written, so a module that saves every tick still only writes once per window. */
-  statePersistMinIntervalMs: Scalars['Int']['output'];
-};
-
-/** One recorded compute execution: timing, fuel, host-call counts, outcome. NOT a sample of all executions — a successful tick is deliberately not recorded here, because ticks are high-frequency and aggregate into per-minute usage instead, so this table holds every failure plus demand-driven runs plus the reload that follows a terminated worker. Counting rows here to get a success rate gives roughly 50% against a true 0.1-1.6%; computeModuleStats and computeAppDiagnostics read the per-minute rollups for that. Use this for what happened on an individual run and for flow correlation. */
-export type WasmModuleRun = {
-  __typename?: 'WasmModuleRun';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** Circuit action taken (e.g. opened, half_open_retry). */
-  circuitAction: Maybe<Scalars['String']['output']>;
-  /** Host data-API reads performed. */
-  dbReads: Scalars['Int']['output'];
-  /** Host data-API writes performed. */
-  dbWrites: Scalars['Int']['output'];
-  /** Wall-clock duration in microseconds. */
-  durationUs: Scalars['Int']['output'];
-  /** Replication bytes emitted. */
-  egressBytes: Scalars['BigInt']['output'];
-  /** Replication messages emitted. */
-  egressMsgs: Scalars['Int']['output'];
-  /** The guest entry point (e.g. an invoke export name). */
-  entry: Maybe<Scalars['String']['output']>;
-  /** Error message when the run failed (trap, fuel, watchdog). */
-  errorMessage: Maybe<Scalars['String']['output']>;
-  /** Flow correlation id: shared with gm event-log rows and automation runs caused by the same entry call (computeInvoke / automation run / player invoke); ticks mint their own. */
-  flowId: Maybe<Scalars['String']['output']>;
-  /** Fuel consumed by the run. */
-  fuelUsed: Scalars['BigInt']['output'];
-  /** The module that ran. */
-  moduleId: Scalars['String']['output'];
-  /** The module name at run time. */
-  moduleName: Scalars['String']['output'];
-  /** Unique run id (UUID). */
-  runId: Scalars['String']['output'];
-  /** When the run started. */
-  startedAt: Scalars['DateTime']['output'];
-  /** Whether the run succeeded. */
-  success: Scalars['Boolean']['output'];
-  /** What ran: init | tick | event | invoke. */
-  triggerSource: Scalars['String']['output'];
-};
-
-/** A trigger binding on a compute module: a tick loop, a model/compute event subscription, or a client-invokable export. */
-export type WasmModuleTrigger = {
-  __typename?: 'WasmModuleTrigger';
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** Event filter: only this container type. */
-  containerTypeName: Maybe<Scalars['String']['output']>;
-  /** For invoke triggers: the typed contract (JSON: params/result field maps with int|float|string|bool|object|array types). The platform validates computeInvoke params against it pre-sandbox; client codegen reads it for typed wrappers. Null = undeclared. */
-  contractJson: Maybe<Scalars['String']['output']>;
-  /** When the trigger was created. */
-  createdAt: Scalars['DateTime']['output'];
-  /** Debounce/coalesce window in ms. */
-  debounceMs: Scalars['Int']['output'];
-  /** Event filter: only compute events with this name. */
-  eventName: Maybe<Scalars['String']['output']>;
-  /** For invoke triggers: the exported guest function name. */
-  exportName: Maybe<Scalars['String']['output']>;
-  /** Event filter: only this model function name. */
-  functionName: Maybe<Scalars['String']['output']>;
-  /** For invoke triggers: JSON authority tree gating who may invoke. Null = app admins only. */
-  invokePolicyJson: Maybe<Scalars['String']['output']>;
-  /** The module this trigger drives. */
-  moduleId: Scalars['String']['output'];
-  /** For event triggers: function_invoked | property_changed | container_created | compute_event | player_left | player_joined. player_left (v1.87.0) is delivered to on_event as JSON with event, actor_uuid, user_id, chunk_x/y/z, last_seen_at, left_reason and remaining_player_count, once per actor that stops being present, the last one included. player_joined (v1.93.0) is delivered with actor_uuid, user_id, chunk_x/y/z, first_seen_at and current_player_count. */
-  onEvent: Maybe<Scalars['String']['output']>;
-  /** Event filter: only this property key. */
-  propertyKey: Maybe<Scalars['String']['output']>;
-  /** For tick triggers: the tick rate in Hz. The module ticks at this rate only while its app has a player connected somewhere in the fleet, and stops when the last one leaves. */
-  tickHz: Maybe<Scalars['Float']['output']>;
-  /** Unique trigger id (UUID). */
-  triggerId: Scalars['String']['output'];
-  /** Trigger type: tick | event | invoke. */
-  triggerType: Scalars['String']['output'];
-};
-
-/** An immutable source version of a compute module, plus its compile pipeline status. Rows are created pending; a game-api instance compiles them (Phase 2 runtime). */
-export type WasmModuleVersion = {
-  __typename?: 'WasmModuleVersion';
-  /** The guest ABI version the source targets. */
-  abiVersion: Scalars['Int']['output'];
-  /** The app (tenant). */
-  appId: Scalars['BigInt']['output'];
-  /** Compiler output (populated when compilation runs). */
-  compileLog: Maybe<Scalars['String']['output']>;
-  /** Compile status: pending | compiling | succeeded | failed. */
-  compileStatus: Scalars['String']['output'];
-  /** Size of the compiled artifact in bytes (after compile). */
-  compiledSizeBytes: Maybe<Scalars['BigInt']['output']>;
-  /** When this version was uploaded. */
-  createdAt: Scalars['DateTime']['output'];
-  /** The module this version belongs to. */
-  moduleId: Scalars['String']['output'];
-  /** When this version became the deployed version. */
-  publishedAt: Maybe<Scalars['DateTime']['output']>;
-  /** The crowdy-compute-sdk version the source targets. */
-  sdkVersion: Scalars['String']['output'];
-  /** JSON object mapping relative paths to file contents (the uploaded Rust source). */
-  sourceFilesJson: Scalars['String']['output'];
-  /** sha256 of the canonicalized source map; keys the compiled-artifact cache together with toolchain/SDK/ABI versions. */
-  sourceHash: Scalars['String']['output'];
-  /** Unique version id (UUID). */
-  versionId: Scalars['String']['output'];
-  /** Monotonic version number within the module. */
-  versionNo: Scalars['Int']['output'];
-};
-
-/** A module and its recent run counts (diagnostics). */
-export type WasmTopModule = {
-  __typename?: 'WasmTopModule';
-  /** Failed runs in the window. */
-  failures: Scalars['Int']['output'];
-  /** The module name. */
-  moduleName: Scalars['String']['output'];
-  /** Runs in the window. */
-  runs: Scalars['Int']['output'];
 };
 
 export type ActorQueryVariables = Exact<{
