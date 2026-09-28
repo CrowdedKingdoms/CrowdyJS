@@ -1180,7 +1180,8 @@ export class CrowdyStudioDomShell {
     );
     this.serverModuleName.disabled = !projectTargets(project.kind).includes('SERVER');
     this.clientModuleName.disabled = !projectTargets(project.kind).includes('CLIENT');
-    this.pairing.disabled = project.kind !== 'FULL_STACK';
+    // A mod has no pairing: its CLIENT half rides it.
+    this.pairing.disabled = true;
     this.pairing.value = project.metadata.pairingPreference;
   }
 
@@ -1271,13 +1272,7 @@ export class CrowdyStudioDomShell {
 }
 
 function budgetText(state: CrowdyStudioState): string {
-  const usage = state.usage
-    ? `units ${state.usage.hourUnitsUsed}/${state.usage.unitsPerHour ?? '∞'} · compiles ${state.usage.compilesThisHour}/${state.usage.maxCompilesPerHour}`
-    : '';
-  const wallet = state.wallet
-    ? `wallet ${state.wallet.balanceCents} ${state.wallet.currency}`
-    : '';
-  return [usage, wallet].filter(Boolean).join(' · ');
+  return state.wallet ? `wallet ${state.wallet.balanceCents} ${state.wallet.currency}` : '';
 }
 
 function formatInvokeResult(result: NonNullable<CrowdyStudioState['invokeResult']>): string {

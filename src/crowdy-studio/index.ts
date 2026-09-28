@@ -14,11 +14,9 @@ export {
   type CrowdyStudioRuntimeSyncState,
   type CrowdyStudioLogLevel,
   type CrowdyStudioMods,
-  type CrowdyStudioPlayerCompute,
   type CrowdyStudioPlayerWallet,
   type CrowdyStudioState,
   type CrowdyStudioStopResult,
-  type CrowdyStudioUsageSnapshot,
   type CrowdyStudioWalletSnapshot,
 } from './controller.js';
 export {

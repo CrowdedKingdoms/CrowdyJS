@@ -8,7 +8,6 @@ import type { CrowdyStudioDshHost } from '../../crowdy-dsh/bridge.js';
 import type {
   CrowdyStudioController,
   CrowdyStudioMods,
-  CrowdyStudioPlayerCompute,
   CrowdyStudioPlayerWallet,
 } from '../controller.js';
 import type { CrowdyStudioProjectProvider } from '../models.js';
@@ -42,10 +41,8 @@ export type CrowdyStudioEmbedDisplayMode = 'docked' | 'fullscreen';
  */
 export interface CrowdyStudioEmbedServices {
   crowdyStudio: CrowdyStudioProjectProvider;
-  /** The SERVER target: ck-exec mods. `CrowdyClient` provides it. */
+  /** ck-exec mods and their CLIENT halves, what runs a project. `CrowdyClient` provides it. */
   exec: CrowdyStudioMods;
-  /** The CLIENT target's compiles and artifacts. `CrowdyClient` provides it. */
-  playerCompute: CrowdyStudioPlayerCompute;
   playerWallet?: CrowdyStudioPlayerWallet;
   /** GitHub repository loop; omission hides the card. `CrowdyClient` provides it. */
   crowdyStudioGitHub?: CrowdyStudioGitHubTransport;
@@ -497,7 +494,6 @@ export class CrowdyStudioEmbed {
     }
     const handle = await mountCrowdyStudio(element, {
       projectProvider: client.crowdyStudio,
-      playerCompute: client.playerCompute,
       mods: client.exec,
       ...((this.options.github ?? client.crowdyStudioGitHub)
         ? { github: this.options.github ?? client.crowdyStudioGitHub }

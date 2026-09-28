@@ -23,7 +23,7 @@ function project(kind = 'FULL_STACK', revision = 'r1') {
       ...(targets.includes('CLIENT')
         ? { clientModuleName: 'weather-client' }
         : {}),
-      pairingPreference: kind === 'FULL_STACK' ? 'REQUIRED' : 'NONE',
+      pairingPreference: 'NONE',
     },
     files: targets.flatMap((target) => [
       { target, path: 'Cargo.toml', content: `[package]\nname="${target.toLowerCase()}"` },
@@ -140,63 +140,9 @@ function providerFor(initial = project()) {
   };
 }
 
-function playerCompute(overrides = {}) {
-  return {
-    async deploy(input) {
-      return {
-        versionId: input.target === 'CLIENT' ? 'client-v1' : 'server-v1',
-      };
-    },
-    async versions({ name }) {
-      return [{
-        versionId: name.includes('client') ? 'client-v1' : 'server-v1',
-        compileStatus: 'succeeded',
-        compileLog: null,
-      }];
-    },
-    async setEnabled() {
-      return {};
-    },
-    async setRequires() {
-      return true;
-    },
-    async artifactBytes({ versionId }) {
-      return {
-        bytes: new Uint8Array([0, 97, 115, 109]).buffer,
-        artifactHash: 'a'.repeat(64),
-        fuelPerDispatch: 1000n,
-        versionId,
-      };
-    },
-    async usage() {
-      return {
-        hourUnitsUsed: '5',
-        dayUnitsUsed: '9',
-        unitsPerHour: '1000',
-        unitsPerDay: '5000',
-        compilesThisHour: 1,
-        maxCompilesPerHour: 20,
-        gateStatus: 'active',
-        gateReason: null,
-      };
-    },
-    async runs() {
-      return [];
-    },
-    async logs() {
-      return [];
-    },
-    async invoke() {
-      return { resultJson: '{"ok":true}', fuelUsed: '4', durationUs: 2 };
-    },
-    ...overrides,
-  };
-}
-
-function options(provider, compute, extra = {}) {
+function options(provider, extra = {}) {
   return {
     projectProvider: provider,
-    playerCompute: compute,
     mods: execMods([]),
     appId: '42',
     gridId: '500',
@@ -212,6 +158,9 @@ function options(provider, compute, extra = {}) {
 
 const MOD_STARTER_CARGO =
   '[package]\nname = "grid-mod"\nversion = "0.1.0"\nedition = "2024"\n\n[lib]\ncrate-type = ["cdylib"]\n\n[dependencies]\nckx-sdk = { path = "../../crates/ckx-sdk" }\n';
+
+const CLIENT_DIGEST = 'd'.repeat(64);
+const CLIENT_HASH = 'e'.repeat(64);
 
 /** A `client.exec` stand-in: every mod call is recorded in `calls`. */
 function execMods(calls, overrides = {}) {
@@ -263,29 +212,75 @@ function execMods(calls, overrides = {}) {
         },
       };
     },
+    async myMods(appId) {
+      calls.push(['myMods', appId]);
+      return [];
+    },
+    async modClientBuild(appId, crate) {
+      calls.push(['clientBuild', appId, crate]);
+      return { buildId: 'cb1', status: 'queued', kind: 'client', log: null, artifacts: [] };
+    },
+    async modClientDeploy(appId, gridId, name, buildId) {
+      calls.push(['attach', appId, gridId, name, buildId]);
+      return {
+        modId: '900', gridId, name, ownerId: '42', clientVersion: 4, digest: CLIENT_DIGEST, sizeBytes: 4,
+        capabilitySummaryJson: '{}', capabilitySummary: {}, capabilityHash: CLIENT_HASH, tickIntervalMs: 250, updatedAt: 't',
+      };
+    },
+    async consentClientMod(appId, modId, hash) {
+      calls.push(['consent', appId, modId, hash]);
+      return true;
+    },
+    async modClientArtifactBytes(appId, modId) {
+      calls.push(['artifact', appId, modId]);
+      return {
+        modId, name: 'weather-server', gridId: '500', clientVersion: 4, bytes: new Uint8Array([0, 97, 115, 109]).buffer,
+        digest: CLIENT_DIGEST, sizeBytes: 4, fuelPerDispatch: 7_000n, tickIntervalMs: 250,
+        capabilitySummaryJson: '{"hostFunctions":["hud_set"]}', capabilitySummary: { hostFunctions: ['hud_set'] },
+        capabilityHash: CLIENT_HASH, abiVersion: 0,
+      };
+    },
     ...overrides,
   };
 }
 
-/** Player compute whose every call fails: a SERVER-only project must not reach it. */
-function clientOnly(except = {}) {
-  const refuse = (what) => async () => {
-    throw new Error(`player compute ${what} is for the CLIENT target`);
+const CLIENT_HALF_CARGO =
+  '[package]\nname = "weather-client"\nversion = "0.1.0"\nedition = "2021"\n\n[lib]\ncrate-type = ["cdylib"]\n\n' +
+  '[package.metadata.crowdy]\ntick_interval_ms = 250\n\n[dependencies]\ncrowdy-client-sdk = "0.1.0"\nserde_json = "1"\n';
+
+/** A project whose CLIENT crate is a crowdy-client-sdk CLIENT half beside the SERVER mod crate. */
+function execProject(kind) {
+  const p = project(kind);
+  p.files = p.files.map((file) =>
+    file.target === 'CLIENT' && file.path === 'Cargo.toml' ? { ...file, content: CLIENT_HALF_CARGO } : file,
+  );
+  return p;
+}
+
+/** Records every broker Studio makes. */
+function recordingBrokers(calls) {
+  const made = [];
+  return {
+    made,
+    brokerFactory: (brokerOptions) => {
+      made.push(brokerOptions);
+      return {
+        async start(bytes) {
+          calls.push(['broker:start', bytes.byteLength]);
+        },
+        stop() {
+          calls.push(['broker:stop']);
+        },
+      };
+    },
   };
-  return playerCompute({
-    deploy: refuse('deploy'),
-    versions: refuse('versions'),
-    artifactBytes: refuse('artifactBytes'),
-    usage: refuse('usage'),
-    ...except,
-  });
 }
 
 test('project file CRUD is target-scoped and debounced into one atomic save', async () => {
   const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   const controller = new CrowdyStudioController(
-    options(provider, playerCompute()),
+    options(provider),
   );
   await controller.initialize();
 
@@ -313,7 +308,7 @@ test('common files import by value and project files save into My Library', asyn
   const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   const controller = new CrowdyStudioController(
-    options(provider, playerCompute(), { autosaveMs: 10_000 }),
+    options(provider, { autosaveMs: 10_000 }),
   );
   await controller.initialize();
 
@@ -368,7 +363,7 @@ test('revision conflicts preserve local files and support explicit overwrite', a
     return normalSave(input);
   };
   const controller = new CrowdyStudioController(
-    options(provider, playerCompute(), { autosaveMs: 10_000 }),
+    options(provider, { autosaveMs: 10_000 }),
   );
   await controller.initialize();
   controller.updateFile('SERVER', 'src/lib.rs', 'fn local_edit() {}');
@@ -399,7 +394,7 @@ test('offline saves retain edits and retry against the same revision', async () 
     return normalSave(input);
   };
   const controller = new CrowdyStudioController(
-    options(provider, playerCompute(), {
+    options(provider, {
       autosaveMs: 10_000,
       retryMs: 10_000,
     }),
@@ -416,82 +411,10 @@ test('offline saves retain edits and retry against the same revision', async () 
   controller.destroy();
 });
 
-test('full-stack deploy saves once and orders client compile, server mod, enable, client run', async () => {
-  const { CrowdyStudioController } = await loadSdk();
-  const provider = providerFor();
-  const calls = [];
-  const compute = playerCompute({
-    async deploy(input) {
-      calls.push(`deploy:${input.name}:${input.draft}`);
-      // The server resolves the source from the project; no bodies travel.
-      assert.equal(input.projectId, 'project-1');
-      assert.equal('sourceFilesJson' in input, false);
-      assert.equal('commitSha' in input, false, 'a STUDIO project pins no commit');
-      assert.equal('target' in input, false, 'playerCompute.deploy is CLIENT-only');
-      return { versionId: 'client-v1' };
-    },
-    async versions({ name }) {
-      calls.push(`poll:${name}`);
-      return [{ versionId: 'client-v1', compileStatus: 'succeeded', compileLog: null }];
-    },
-    async artifactBytes(input) {
-      calls.push(`artifact:${input.name}:${input.versionId}`);
-      return {
-        bytes: new Uint8Array([1]).buffer,
-        artifactHash: 'b'.repeat(64),
-        fuelPerDispatch: 500n,
-        versionId: input.versionId,
-      };
-    },
-  });
-  const mods = execMods([], {
-    async modBuild(_appId, crate) {
-      calls.push(`build:${crate.name}`);
-      return { buildId: 'b1', status: 'queued', log: null, artifacts: [] };
-    },
-    async modDeploy(_appId, _gridId, name) {
-      calls.push(`mod:${name}`);
-      return { version: 1, name };
-    },
-    async modSetEnabled(_appId, _gridId, name, enabled) {
-      calls.push(`enabled:${name}:${enabled}`);
-      return { enabled };
-    },
-  });
-  const brokerFactory = () => ({
-    async start() {
-      calls.push('broker:start');
-    },
-    stop() {
-      calls.push('broker:stop');
-    },
-  });
-  const controller = new CrowdyStudioController(
-    options(provider, compute, { mods, brokerFactory, autosaveMs: 10_000 }),
-  );
-  await controller.initialize();
-  controller.updateFile('CLIENT', 'src/lib.rs', 'fn edited() {}');
-  await controller.deployLive();
-
-  assert.equal(provider.saves.length, 1);
-  assert.deepEqual(calls, [
-    'deploy:weather-client:false',
-    'poll:weather-client',
-    'build:weather-server',
-    'mod:weather-server',
-    'enabled:weather-server:true',
-    'artifact:weather-client:client-v1',
-    'broker:start',
-  ]);
-  assert.equal(controller.getState().runtime.phase, 'RUNNING');
-  controller.destroy();
-});
-
 test('the SERVER target builds the crate, deploys it as the grid\u2019s mod, enables and stops it', async () => {
   const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor(project('SERVER'));
   const calls = [];
-  const compute = clientOnly();
   const statuses = ['building', 'succeeded'];
   const mods = {
     async modBuild(appId, crate) {
@@ -511,7 +434,7 @@ test('the SERVER target builds the crate, deploys it as the grid\u2019s mod, ena
       return { enabled };
     },
   };
-  const controller = new CrowdyStudioController(options(provider, compute, { mods }));
+  const controller = new CrowdyStudioController(options(provider, { mods }));
   await controller.initialize();
   const result = await controller.deployLive();
   assert.equal(result.status, 'RUNNING', result.message);
@@ -536,7 +459,7 @@ test('the SERVER target builds the crate, deploys it as the grid\u2019s mod, ena
   // A name that cannot be a mod's is refused before anything is built.
   const bad = project('SERVER');
   bad.metadata.serverModuleName = 'Weather Server';
-  const refused = new CrowdyStudioController(options(providerFor(bad), compute, { mods }));
+  const refused = new CrowdyStudioController(options(providerFor(bad), { mods }));
   await refused.initialize();
   calls.length = 0;
   const r = await refused.deployLive();
@@ -552,7 +475,7 @@ test('a new SERVER target starts from the mod starter, named for the project', a
   const calls = [];
   const provider = providerFor();
   const controller = new CrowdyStudioController(
-    options(provider, clientOnly(), { mods: execMods(calls) }),
+    options(provider, { mods: execMods(calls) }),
   );
   await controller.initialize();
 
@@ -573,20 +496,25 @@ test('a new SERVER target starts from the mod starter, named for the project', a
     [['SERVER', 'Cargo.toml'], ['SERVER', 'src/lib.rs']],
   );
 
-  // Full stack: the mod starter for SERVER, the legacy client crate for CLIENT, no pairing.
+  // Full stack: the mod starter for SERVER, a crowdy-client-sdk CLIENT half, no pairing.
   calls.length = 0;
   const full = await controller.createProject({ name: 'Weather Tools', kind: 'FULL_STACK' });
   assert.deepEqual(calls, [['starter', '42']]);
   assert.equal(full.metadata.pairingPreference, 'NONE');
+  assert.equal(full.metadata.clientModuleName, 'weather-tools-client');
   const cargoOf = (target) =>
     full.files.find((file) => file.target === target && file.path === 'Cargo.toml').content;
   assert.match(cargoOf('SERVER'), /ckx-sdk/);
-  assert.match(cargoOf('CLIENT'), /crowdy-compute-sdk = "0\.1\.8"/);
+  assert.match(cargoOf('CLIENT'), /^crowdy-client-sdk = "0\.1\.0"$/m);
+  assert.doesNotMatch(cargoOf('CLIENT'), /crowdy-compute-sdk/);
 
-  // A CLIENT project has no SERVER target, so no starter is asked for.
+  // A CLIENT project has no SERVER target, so no starter is asked for; its module name is the
+  // mod its CLIENT half rides, so it fits a mod's.
   calls.length = 0;
-  await controller.createProject({ name: 'Hud', kind: 'CLIENT' });
+  const hud = await controller.createProject({ name: 'H'.repeat(60), kind: 'CLIENT' });
   assert.deepEqual(calls, []);
+  assert.equal(hud.metadata.clientModuleName, `${'h'.repeat(41)}-client`);
+  assert.match(hud.files.find((file) => file.path === 'Cargo.toml').content, /crowdy-client-sdk/);
 
   // Names fit a mod (48 characters) and a build's crate names (a leading letter).
   const long = await controller.createProject({ name: 'x'.repeat(60), kind: 'SERVER' });
@@ -599,17 +527,17 @@ test('a new SERVER target starts from the mod starter, named for the project', a
 test('the controller refuses to start without mods', async () => {
   const { CrowdyStudioController } = await loadSdk();
   assert.throws(
-    () => new CrowdyStudioController(options(providerFor(), playerCompute(), { mods: undefined })),
+    () => new CrowdyStudioController(options(providerFor(), { mods: undefined })),
     /needs mods \(client\.exec\)/,
   );
 });
 
-test('Invoke calls the mod over one exec connection, Logs are its log lines, and a SERVER-only project reads no player compute', async () => {
+test('Invoke calls the mod over one exec connection, Logs are its log lines, and the usage surface reads the wallet', async () => {
   const { CrowdyStudioController } = await loadSdk();
   const calls = [];
   const wallet = [];
   const controller = new CrowdyStudioController(
-    options(providerFor(project('SERVER')), clientOnly(), {
+    options(providerFor(project('SERVER')), {
       mods: execMods(calls),
       playerWallet: {
         async balance() {
@@ -640,26 +568,16 @@ test('Invoke calls the mod over one exec connection, Logs are its log lines, and
     { id: 'l1', moduleName: 'weather-server', level: 'info', at: '2026-09-26T00:00:01Z', text: 'visited' },
   ]);
 
+  calls.length = 0;
   await controller.refreshSurface('usage');
-  assert.equal(controller.getState().usage, null, 'a SERVER-only mod spends no player compute');
+  assert.deepEqual(wallet, ['balance']);
+  assert.deepEqual(calls, [], 'nothing but the wallet');
   assert.equal(controller.getState().wallet.balanceCents, '250');
+  assert.equal('usage' in controller.getState(), false);
 
   controller.destroy();
   await sleep(0);
   assert.deepEqual(calls.at(-1), ['close']);
-});
-
-test('a full-stack project reads player compute usage for its CLIENT compiles', async () => {
-  const { CrowdyStudioController } = await loadSdk();
-  const controller = new CrowdyStudioController(
-    options(providerFor(project('FULL_STACK')), clientOnly({ usage: playerCompute().usage }), {
-      mods: execMods([]),
-    }),
-  );
-  await controller.initialize();
-  await controller.refreshSurface('usage');
-  assert.equal(controller.getState().usage.gateStatus, 'active');
-  controller.destroy();
 });
 
 test('the mod build sends only crate files, under a crate name a build accepts', async () => {
@@ -673,7 +591,7 @@ test('the mod build sends only crate files, under a crate name a build accepts',
     { target: 'SERVER', path: 'src/sky.rs', content: 'pub fn sky() {}' },
   );
   const controller = new CrowdyStudioController(
-    options(providerFor(withAssets), clientOnly(), { mods: execMods(calls) }),
+    options(providerFor(withAssets), { mods: execMods(calls) }),
   );
   await controller.initialize();
   const result = await controller.deployLive();
@@ -690,43 +608,23 @@ test('the mod build sends only crate files, under a crate name a build accepts',
 
 test('full-stack partial compile never enables either target', async () => {
   const { CrowdyStudioController } = await loadSdk();
-  const provider = providerFor();
   const calls = [];
-  const compute = playerCompute({
-    async deploy(input) {
-      calls.push(`deploy:${input.name}`);
-      return { versionId: 'client-v1' };
-    },
-    async versions({ name }) {
-      calls.push(`poll:${name}`);
-      return [{ versionId: 'client-v1', compileStatus: 'succeeded', compileLog: null }];
-    },
-    async artifactBytes() {
-      calls.push('artifact');
-    },
-  });
-  const mods = execMods([], {
-    async modBuild(_appId, crate) {
-      calls.push(`build:${crate.name}`);
-      return { buildId: 'b1', status: 'queued', log: null, artifacts: [] };
-    },
+  const mods = execMods(calls, {
     async modBuildStatus(_appId, buildId) {
-      return { buildId, status: 'failed', log: 'error[E0425]: missing\n --> src/lib.rs:3:7', artifacts: [] };
-    },
-    async modDeploy() {
-      calls.push('mod');
-    },
-    async modSetEnabled() {
-      calls.push('enabled');
+      calls.push(['status', buildId]);
+      return buildId === 'cb1'
+        ? { buildId, status: 'succeeded', kind: 'client', log: null, artifacts: [] }
+        : { buildId, status: 'failed', log: 'error[E0425]: missing\n --> src/lib.rs:3:7', artifacts: [] };
     },
   });
-  const controller = new CrowdyStudioController(options(provider, compute, { mods }));
+  const controller = new CrowdyStudioController(options(providerFor(execProject('FULL_STACK')), { mods }));
   await controller.initialize();
   await controller.deployLive();
 
-  assert.deepEqual(calls, ['deploy:weather-client', 'poll:weather-client', 'build:weather-server']);
+  assert.deepEqual(calls.map(([op]) => op), ['clientBuild', 'status', 'build', 'status']);
   assert.equal(controller.getState().runtime.phase, 'COMPILE_FAILED');
   assert.equal(controller.getState().authoritativeDiagnostics[0].path, 'src/lib.rs');
+  assert.equal(controller.getState().authoritativeDiagnostics[0].target, 'SERVER');
   controller.destroy();
 });
 
@@ -735,7 +633,7 @@ test('target permissions prevent unavailable authoring before deploy', async () 
   const provider = providerFor(project('SERVER'));
   const calls = [];
   const controller = new CrowdyStudioController(
-    options(provider, clientOnly(), {
+    options(provider, {
       mods: execMods(calls),
       targetPermissions: {
         SERVER: { canWrite: false, canRun: false },
@@ -753,30 +651,30 @@ test('target permissions prevent unavailable authoring before deploy', async () 
   controller.destroy();
 });
 
-test('client deploy hot-swaps the exact version and stop reports partial failures', async () => {
+test('client deploy hot-swaps the attached CLIENT version and stop reports partial failures', async () => {
   const { CrowdyStudioController } = await loadSdk();
-  const provider = providerFor();
   const events = [];
   let deployNo = 0;
-  const compute = playerCompute({
-    async deploy() {
+  const mods = execMods([], {
+    async modClientBuild() {
       deployNo++;
-      return { versionId: `client-v${deployNo}` };
+      return { buildId: `cb${deployNo}`, status: 'queued', kind: 'client', log: null, artifacts: [] };
     },
-    async versions() {
-      return [{ versionId: `client-v${deployNo}`, compileStatus: 'succeeded', compileLog: null }];
-    },
-    async artifactBytes(input) {
-      events.push(`artifact:${input.versionId}`);
+    async modClientDeploy(_appId, gridId, name, buildId) {
+      events.push(`attach:${buildId}`);
       return {
-        bytes: new Uint8Array([deployNo]).buffer,
-        artifactHash: 'c'.repeat(64),
-        fuelPerDispatch: 10n,
-        versionId: input.versionId,
+        modId: '900', gridId, name, ownerId: '42', clientVersion: deployNo, digest: CLIENT_DIGEST, sizeBytes: 1,
+        capabilitySummaryJson: '{}', capabilitySummary: {}, capabilityHash: CLIENT_HASH, tickIntervalMs: 250, updatedAt: 't',
       };
     },
-  });
-  const mods = execMods([], {
+    async modClientArtifactBytes(_appId, modId) {
+      return {
+        modId, name: 'weather-server', gridId: '500', clientVersion: deployNo, bytes: new Uint8Array([deployNo]).buffer,
+        digest: CLIENT_DIGEST, sizeBytes: 1, fuelPerDispatch: 10n, tickIntervalMs: 250,
+        capabilitySummaryJson: '{"hostFunctions":[]}', capabilitySummary: { hostFunctions: [] },
+        capabilityHash: CLIENT_HASH, abiVersion: 0,
+      };
+    },
     async modSetEnabled(_appId, _gridId, _name, enabled) {
       if (!enabled) throw new Error('disable unavailable');
       return { enabled };
@@ -786,8 +684,8 @@ test('client deploy hot-swaps the exact version and stop reports partial failure
   const brokerFactory = () => {
     const id = ++brokerNo;
     return {
-      async start() {
-        events.push(`start:${id}`);
+      async start(bytes) {
+        events.push(`start:${id}:v${new Uint8Array(bytes)[0]}`);
       },
       stop() {
         events.push(`stop:${id}`);
@@ -795,13 +693,15 @@ test('client deploy hot-swaps the exact version and stop reports partial failure
     };
   };
   const controller = new CrowdyStudioController(
-    options(provider, compute, { mods, brokerFactory }),
+    options(providerFor(execProject('FULL_STACK')), { mods, brokerFactory }),
   );
   await controller.initialize();
   await controller.deployLive();
   await controller.deployLive();
+  assert.deepEqual(events.filter((e) => e.startsWith('attach:')), ['attach:cb1', 'attach:cb2']);
+  assert.ok(events.includes('start:2:v2'), 'the second broker runs the second attached version');
   assert.ok(
-    events.indexOf('start:2') < events.indexOf('stop:1'),
+    events.indexOf('start:2:v2') < events.indexOf('stop:1'),
     'new broker starts before the old broker stops',
   );
 
@@ -824,7 +724,7 @@ test('logs polling occurs only while visible and cleans up', async () => {
     },
   });
   const controller = new CrowdyStudioController(
-    options(provider, clientOnly(), { mods, monitorPollMs: 5 }),
+    options(provider, { mods, monitorPollMs: 5 }),
   );
   await controller.initialize();
   controller.setSurfaceVisible('logs', true);
@@ -920,7 +820,7 @@ test('GitHub: "create repository" opens GitHub prefilled under the connected log
   const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   const github = githubTransport(CONNECTED_UNBOUND);
-  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github }));
+  const controller = new CrowdyStudioController(options(provider, { github }));
   await controller.initialize();
   await sleep(5);
   const opened = [];
@@ -945,7 +845,7 @@ test('GitHub: "create repository" opens GitHub prefilled under the connected log
 
   // Not connected: refused before opening anything.
   const github2 = githubTransport({ ...CONNECTED_UNBOUND, connected: false, accountLogin: null });
-  const c2 = new CrowdyStudioController(options(provider, playerCompute(), { github: github2 }));
+  const c2 = new CrowdyStudioController(options(provider, { github: github2 }));
   await c2.initialize();
   await sleep(5);
   assert.throws(() => c2.createGitHubRepository(), /Connect GitHub first/);
@@ -955,7 +855,7 @@ test('GitHub: status is fetched on open, nothing else happens until asked', asyn
   const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   const github = githubTransport(CONNECTED_UNBOUND);
-  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github }));
+  const controller = new CrowdyStudioController(options(provider, { github }));
   await controller.initialize();
   await sleep(5);
   assert.equal(controller.getState().github?.connected, true);
@@ -967,7 +867,7 @@ test('GitHub: bind names which side is the truth, is scoped to the project, refu
   const { CrowdyStudioController } = await loadSdk();
   const provider = providerFor();
   const github = githubTransport(CONNECTED_UNBOUND);
-  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github, autosaveMs: 10_000 }));
+  const controller = new CrowdyStudioController(options(provider, { github, autosaveMs: 10_000 }));
   await controller.initialize();
   await sleep(5);
 
@@ -992,7 +892,7 @@ test('GitHub: refresh brings the project to the branch head and refuses over uns
   const bound = { ...project(), source: 'GITHUB', github: { owner: 'modder', repo: 'my-mod', branch: 'main', sha: SHA_A } };
   const provider = providerFor(bound);
   const github = githubTransport({ ...CONNECTED_UNBOUND, owner: 'modder', repo: 'my-mod', branch: 'main', githubSha: SHA_A });
-  const controller = new CrowdyStudioController(options(provider, playerCompute(), { github, autosaveMs: 10_000 }));
+  const controller = new CrowdyStudioController(options(provider, { github, autosaveMs: 10_000 }));
   await controller.initialize();
   await sleep(5);
 
@@ -1007,21 +907,14 @@ test('GitHub: refresh brings the project to the branch head and refuses over uns
   assert.match(controller.getState().githubMessage, /Refreshed to bbbbbbb/);
 });
 
-test('GitHub: a bound project deploys the commit the mirror is at, and its files reach the provider as a normal save', async () => {
+test('GitHub: a bound project builds the files the mirror holds, and its files reach the provider as a normal save', async () => {
   const { CrowdyStudioController } = await loadSdk();
-  const bound = { ...project(), source: 'GITHUB', github: { owner: 'modder', repo: 'my-mod', branch: 'main', sha: SHA_A } };
+  const bound = { ...execProject('FULL_STACK'), source: 'GITHUB', github: { owner: 'modder', repo: 'my-mod', branch: 'main', sha: SHA_A } };
   const provider = providerFor(bound);
-  const deploys = [];
   const calls = [];
-  const compute = playerCompute({
-    async deploy(input) {
-      deploys.push(input);
-      return { versionId: 'client-v1' };
-    },
-  });
   const github = githubTransport({ ...CONNECTED_UNBOUND, owner: 'modder', repo: 'my-mod', branch: 'main', githubSha: SHA_A });
   const controller = new CrowdyStudioController(
-    options(provider, compute, {
+    options(provider, {
       github,
       mods: execMods(calls),
       brokerFactory: () => ({ async start() {}, stop() {} }),
@@ -1037,15 +930,258 @@ test('GitHub: a bound project deploys the commit the mirror is at, and its files
   assert.equal(github.calls.some(([op]) => op === 'putFile'), false);
   const result = await controller.deployLive();
   assert.equal(result.status, 'RUNNING', result.message);
-  // The CLIENT compile pins the mirror's commit; the mod builds the files at it.
-  assert.equal(deploys.length, 1);
-  assert.equal(deploys[0].projectId, 'project-1');
-  assert.equal(deploys[0].commitSha, SHA_A);
-  assert.equal('sourceFilesJson' in deploys[0], false);
+  // Both builds take the files the mirror holds at its commit, the saved edit included.
   const build = calls.find(([op]) => op === 'build');
   assert.equal(
     build[2].files.find((file) => file.path === 'src/lib.rs').content,
     'fn committed() {}',
   );
+  const clientBuild = calls.find(([op]) => op === 'clientBuild');
+  assert.equal(
+    clientBuild[2].files.find((file) => file.path === 'Cargo.toml').content,
+    CLIENT_HALF_CARGO,
+  );
+  controller.destroy();
+});
+
+// ---- the CLIENT target: a mod's CLIENT half ----
+
+test('a full-stack deploy saves once, builds the CLIENT half first, then the mod, attaches, consents and previews the served module', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  const { made, brokerFactory } = recordingBrokers(calls);
+  const provider = providerFor(execProject('FULL_STACK'));
+  const controller = new CrowdyStudioController(
+    options(provider, {
+      autosaveMs: 10_000,
+      mods: execMods(calls, {
+        async modBuildStatus(appId, buildId) {
+          calls.push(['status', appId, buildId]);
+          return {
+            buildId,
+            status: 'succeeded',
+            kind: buildId === 'cb1' ? 'client' : 'exec',
+            log: buildId === 'cb1' ? 'weather-client: capabilities eee; host calls: hud_set; ticks every 250 ms' : 'Finished release',
+            artifacts: [],
+          };
+        },
+      }),
+      brokerFactory,
+    }),
+  );
+  await controller.initialize();
+  controller.updateFile('CLIENT', 'src/lib.rs', 'fn edited() {}');
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'RUNNING', result.message);
+  assert.equal(provider.saves.length, 1);
+  assert.deepEqual(calls.map(([op, ...rest]) => [op, ...rest.filter((v) => typeof v !== 'object')]), [
+    ['clientBuild', '42'],
+    ['status', '42', 'cb1'],
+    ['build', '42'],
+    ['status', '42', 'b1'],
+    ['deploy', '42', '500', 'weather-server', 'b1'],
+    ['enabled', '42', '500', 'weather-server', true],
+    ['attach', '42', '500', 'weather-server', 'cb1'],
+    ['consent', '42', '900', CLIENT_HASH],
+    ['artifact', '42', '900'],
+    ['broker:start', 4],
+  ]);
+  const clientBuild = calls.find(([op]) => op === 'clientBuild')[2];
+  assert.equal(clientBuild.name, 'weather-client');
+  assert.deepEqual(clientBuild.files.map((f) => f.path), ['Cargo.toml', 'src/lib.rs']);
+  assert.equal(made.length, 1);
+  assert.equal(made[0].engine, 'ck-exec');
+  assert.equal(made[0].artifactHash, CLIENT_DIGEST);
+  assert.equal(made[0].fuelPerDispatch, 7_000n);
+  assert.equal(made[0].tickIntervalMs, 250, 'the served CLIENT half\u2019s tick interval');
+  assert.equal(made[0].moduleName, 'weather-server', 'its name on the grid event bus is its mod\u2019s');
+  assert.deepEqual(made[0].consentedHostCalls, ['hud_set'], 'bounded to the summary the author consented to');
+  const log = controller.getState().buildOutput;
+  assert.match(log, /## CLIENT\nweather-client: capabilities/);
+  assert.match(log, /Attached to mod 'weather-server' as CLIENT version 4/);
+  assert.match(log, /you consented to it as its author/);
+  controller.destroy();
+});
+
+test('a CLIENT-only project with no mod deploys the mod starter first and says so', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  const { made, brokerFactory } = recordingBrokers(calls);
+  const controller = new CrowdyStudioController(
+    options(providerFor(execProject('CLIENT')), {
+      mods: execMods(calls),
+      brokerFactory,
+    }),
+  );
+  await controller.initialize();
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'RUNNING', result.message);
+  assert.deepEqual(calls.map(([op]) => op), [
+    'clientBuild', 'status',
+    'myMods',
+    'starter', 'build', 'status', 'deploy', 'enabled',
+    'attach', 'consent', 'artifact', 'broker:start',
+  ]);
+  const starterBuild = calls.find(([op]) => op === 'build');
+  assert.equal(starterBuild[2].name, 'weather-client');
+  assert.deepEqual(starterBuild[2].files.map((f) => f.path), ['Cargo.toml', 'src/lib.rs']);
+  assert.deepEqual(calls.find(([op]) => op === 'deploy'), ['deploy', '42', '500', 'weather-client', 'b1']);
+  assert.deepEqual(calls.find(([op]) => op === 'enabled'), ['enabled', '42', '500', 'weather-client', true]);
+  assert.deepEqual(calls.find(([op]) => op === 'attach'), ['attach', '42', '500', 'weather-client', 'cb1']);
+  assert.equal(made[0].engine, 'ck-exec');
+  assert.match(
+    controller.getState().buildOutput,
+    /## SERVER\nGrid 500 had no mod 'weather-client' of yours, and a CLIENT half rides a mod: deployed the ck-exec mod starter \(grid-mod\) as 'weather-client', its server half\./,
+  );
+
+  // Stop switches that mod off, so its CLIENT half is no longer served.
+  calls.length = 0;
+  const stopped = await controller.stopProject();
+  assert.deepEqual([stopped.clientStopped, stopped.serverStopped, stopped.failures], [true, true, []]);
+  assert.deepEqual(calls, [['broker:stop'], ['enabled', '42', '500', 'weather-client', false]]);
+  controller.destroy();
+});
+
+test('a CLIENT-only project rides the mod of that name the player already has', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  for (const enabled of [false, true]) {
+    const calls = [];
+    const { brokerFactory } = recordingBrokers(calls);
+    const controller = new CrowdyStudioController(
+      options(providerFor(execProject('CLIENT')), {
+        mods: execMods(calls, {
+          async myMods(appId) {
+            calls.push(['myMods', appId]);
+            return [
+              { modId: '1', gridId: '501', name: 'weather-client', ownerId: '42', enabled: true },
+              { modId: '900', gridId: '500', name: 'weather-client', ownerId: '42', enabled },
+            ];
+          },
+        }),
+        brokerFactory,
+      }),
+    );
+    await controller.initialize();
+    const result = await controller.deployLive();
+    assert.equal(result.status, 'RUNNING', result.message);
+    assert.deepEqual(
+      calls.map(([op]) => op),
+      ['clientBuild', 'status', 'myMods', ...(enabled ? [] : ['enabled']), 'attach', 'consent', 'artifact', 'broker:start'],
+    );
+    assert.equal(/deployed the ck-exec mod starter/.test(controller.getState().buildOutput), false);
+    assert.equal(
+      /Switched mod 'weather-client' on/.test(controller.getState().buildOutput),
+      !enabled,
+    );
+    controller.destroy();
+  }
+});
+
+test('a legacy compute-SDK CLIENT crate is refused before any build, with what to change', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  const legacyCrate = project('CLIENT');
+  legacyCrate.files[0].content =
+    '[package]\nname = "weather-client"\n\n[lib]\ncrate-type = ["cdylib"]\n\n[dependencies]\ncrowdy-compute-sdk = "0.1.8"\n';
+  const controller = new CrowdyStudioController(
+    options(providerFor(legacyCrate), { mods: execMods(calls) }),
+  );
+  await controller.initialize();
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'COMPILE_FAILED');
+  assert.deepEqual(calls, []);
+  assert.match(controller.getState().buildOutput, /crowdy-client-sdk = "0\.1\.0"/);
+  assert.match(controller.getState().runtime.message, /legacy player compute crate/);
+  controller.destroy();
+});
+
+test('a CLIENT build that fails attaches nothing', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  const controller = new CrowdyStudioController(
+    options(providerFor(execProject('CLIENT')), {
+      mods: execMods(calls, {
+        async modBuildStatus(appId, buildId) {
+          calls.push(['status', appId, buildId]);
+          return { buildId, status: 'failed', kind: 'client', log: 'error[E0425]: cannot find value\n --> src/lib.rs:3:7', artifacts: [] };
+        },
+      }),
+    }),
+  );
+  await controller.initialize();
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'COMPILE_FAILED');
+  assert.deepEqual(calls.map(([op]) => op), ['clientBuild', 'status']);
+  assert.equal(controller.getState().authoritativeDiagnostics[0].target, 'CLIENT');
+  controller.destroy();
+});
+
+test('a preview the API will not serve says the CLIENT half is attached and why', async () => {
+  const { CrowdyStudioController, CrowdyGraphQLError } = await loadSdk();
+  const calls = [];
+  const controller = new CrowdyStudioController(
+    options(providerFor(execProject('FULL_STACK')), {
+      mods: execMods(calls, {
+        async modClientArtifactBytes() {
+          throw new CrowdyGraphQLError([{ message: 'no CLIENT half of that mod is served to you', extensions: { code: 'NOT_FOUND' } }]);
+        },
+      }),
+      brokerFactory: () => {
+        throw new Error('no broker without a module');
+      },
+    }),
+  );
+  await controller.initialize();
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'FAILED');
+  assert.match(result.message, /attached to mod 'weather-server'/);
+  assert.match(result.message, /run_client_code who stands in grid 500/);
+  assert.ok(calls.some(([op]) => op === 'attach'));
+  controller.destroy();
+});
+
+test('a CLIENT-only project whose module name cannot be a mod\u2019s is refused before anything is built', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  const bad = execProject('CLIENT');
+  bad.metadata.clientModuleName = 'Weather HUD';
+  const controller = new CrowdyStudioController(
+    options(providerFor(bad), { mods: execMods(calls) }),
+  );
+  await controller.initialize();
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'FAILED');
+  assert.match(result.message, /names the mod its CLIENT half rides/);
+  assert.deepEqual(calls, []);
+  controller.destroy();
+});
+
+test('a CLIENT-only project without SERVER permissions cannot get a mod to ride', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  const controller = new CrowdyStudioController(
+    options(providerFor(execProject('CLIENT')), {
+      mods: execMods(calls),
+      targetPermissions: { SERVER: { canWrite: false, canRun: false }, CLIENT: { canWrite: true, canRun: true } },
+    }),
+  );
+  await controller.initialize();
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'FAILED');
+  assert.match(result.message, /needs SERVER write and run permissions/);
+  assert.deepEqual(calls.map(([op]) => op), ['clientBuild', 'status', 'myMods']);
+  controller.destroy();
+});
+
+test('a CLIENT-only project\u2019s Logs read the mod its CLIENT half rides', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  const controller = new CrowdyStudioController(
+    options(providerFor(execProject('CLIENT')), { mods: execMods(calls) }),
+  );
+  await controller.initialize();
+  await controller.refreshSurface('logs');
+  assert.deepEqual(calls, [['logs', '42', '500', 'weather-client', { limit: 50 }]]);
+  assert.equal(controller.getState().logs[0].moduleName, 'weather-client');
   controller.destroy();
 });

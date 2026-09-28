@@ -7,7 +7,6 @@ import {
   waitFor,
   recorder,
   sampleProvider,
-  sampleCompute,
   sampleExec,
 } from './fixtures/embed-dom.mjs';
 
@@ -40,7 +39,6 @@ function makeEmbed(overrides = {}) {
   const embed = new CrowdyStudioEmbed({
     client: {
       crowdyStudio: provider,
-      playerCompute: sampleCompute(),
       exec: sampleExec(),
       ...overrides.client,
     },
@@ -507,7 +505,6 @@ test('createCrowdyStudioEmbed returns a working embed instance', () => {
   const embed = createCrowdyStudioEmbed({
     client: {
       crowdyStudio: sampleProvider(),
-      playerCompute: sampleCompute(),
       exec: sampleExec(),
     },
     appId: '2',

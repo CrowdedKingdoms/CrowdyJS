@@ -182,7 +182,6 @@ test('mount fallback edits one target file instead of a JSON blob', async () => 
   try {
     const handle = await mountCrowdyStudio(host, {
       projectProvider: provider,
-      playerCompute: sampleCompute(),
       mods: sampleExec(),
       appId: '1',
       gridId: '2',
@@ -286,33 +285,6 @@ function sampleProvider(project) {
     },
     async listCommonFiles() {
       return [];
-    },
-  };
-}
-
-function sampleCompute() {
-  return {
-    async deploy() { return { versionId: 'v1' }; },
-    async versions() { return []; },
-    async artifactBytes() {
-      return {
-        bytes: new ArrayBuffer(1),
-        artifactHash: 'a',
-        fuelPerDispatch: 1n,
-        versionId: 'v1',
-      };
-    },
-    async usage() {
-      return {
-        hourUnitsUsed: '0',
-        dayUnitsUsed: '0',
-        unitsPerHour: null,
-        unitsPerDay: null,
-        compilesThisHour: 0,
-        maxCompilesPerHour: 1,
-        gateStatus: 'active',
-        gateReason: null,
-      };
     },
   };
 }

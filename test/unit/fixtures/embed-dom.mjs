@@ -156,37 +156,6 @@ export function sampleProvider(project = sampleProject()) {
   };
 }
 
-export function sampleCompute() {
-  return {
-    async deploy() {
-      return { versionId: 'v1' };
-    },
-    async versions() {
-      return [];
-    },
-    async artifactBytes() {
-      return {
-        bytes: new ArrayBuffer(1),
-        artifactHash: 'a',
-        fuelPerDispatch: 1n,
-        versionId: 'v1',
-      };
-    },
-    async usage() {
-      return {
-        hourUnitsUsed: '0',
-        dayUnitsUsed: '0',
-        unitsPerHour: null,
-        unitsPerDay: null,
-        compilesThisHour: 0,
-        maxCompilesPerHour: 1,
-        gateStatus: 'active',
-        gateReason: null,
-      };
-    },
-  };
-}
-
 /** Enough of `client.exec` for a Studio that opens and polls; no project is built here. */
 export function sampleExec() {
   return {

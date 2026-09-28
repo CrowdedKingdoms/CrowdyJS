@@ -58,7 +58,9 @@ const SPATIAL_KINDS = new Set(['actor', 'client_event', 'server_event', 'text'])
  * through ordinary CrowdyJS confined to one grid (DN-10 §4). Hand the result
  * to `PlayerCodeBroker({ onHostCall })`; the broker has already applied the
  * allowlist, rate caps and chunk clamps, and answers `grid_info`, `emit_event`,
- * `hud_set` and `overlay_draw` itself.
+ * `hud_set` and `overlay_draw` itself. A ck-exec CLIENT half (`engine:
+ * 'ck-exec'`) reaches only the crowdy-client-sdk calls: the model and sessions
+ * cases below serve legacy CLIENT modules until 18.0.
  */
 export function createGridHostCalls(
   options: GridHostCallsOptions,

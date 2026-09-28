@@ -365,13 +365,29 @@ export {
   type ExecCrate,
   type ExecSourceFile,
   type ExecBuild,
+  type ExecBuildArtifact,
   type ExecStarter,
   type ExecStarterPack,
+  type ExecLogLine,
+  type ExecLogsOptions,
+  type ExecInstance,
+  type ExecVersion,
+  type ExecManifest,
+  type ExecManifestType,
+  type ExecAppStatus,
+  type ExecEndpointStat,
+  type ExecEndpointStatsOptions,
   ExecModScope,
   execModType,
+  EXEC_CLIENT_ABI_VERSION,
   type ExecMod,
   type ExecModListing,
   type ExecModSwitch,
+  type ExecClientCapabilitySummary,
+  type ExecModClient,
+  type ExecGridClientMod,
+  type ExecModClientArtifact,
+  type ExecModClientArtifactBytes,
 } from './domains/exec.js';
 export {
   PlayerComputeAPI,
@@ -383,6 +399,8 @@ export { MarketplaceAPI } from './domains/marketplace.js';
 export {
   PlayerCodeBroker,
   ALLOWED_HOST_CALLS,
+  EXEC_CLIENT_HOST_CALLS,
+  type PlayerCodeEngine,
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
   type PlayerCodeHostCall,
@@ -420,6 +438,7 @@ export {
   type GlueDispatchResult,
 } from './player-runtime/player-glue-worker.js';
 export {
+  EXEC_CLIENT_ABI_IMPORTS,
   type GuestExports,
   type GlueRuntimeOptions,
 } from './player-runtime/glue-runtime.js';

@@ -6,7 +6,8 @@ import {
   type CrowdyStudioProjectMetadata,
 } from './models.js';
 
-const SDK_VERSION = '0.1.8';
+/** crowdy-client-sdk, what a ck-exec mod's CLIENT half builds on; the build points it at the platform's copy. */
+const CLIENT_SDK_VERSION = '0.1.0';
 
 /** A mod's name is at most 48 characters, and the SERVER module name is `<base>-server`. */
 const MOD_BASE_MAX = 48 - '-server'.length;
@@ -31,19 +32,20 @@ export interface CrowdyStudioNewProjectOptions {
 }
 
 /**
- * Create a compile-oriented starter without introducing a raw JSON source map. The SERVER
- * target is the mod starter's crate and its module name fits a mod's (a mod has no client
- * pairing, so the preference is `NONE`); the CLIENT target is a `crowdy-compute-sdk` crate.
+ * Create a compile-oriented starter without introducing a raw JSON source map. The project is a
+ * ck-exec mod: the SERVER target is the mod starter's crate, the CLIENT target a
+ * `crowdy-client-sdk` crate (the mod's CLIENT half), and both module names fit a mod's (a mod has
+ * no client pairing, so the preference is `NONE`).
  */
 export function createCrowdyStudioStarterProject(
   options: CrowdyStudioNewProjectOptions,
 ): CreateCrowdyStudioProjectInput {
-  const targets = projectTargets(options.kind);
   const mod = options.modStarter;
+  const targets = projectTargets(options.kind);
   if (targets.includes('SERVER') && !mod) {
     throw new Error('A SERVER target starts from the mod starter (client.exec.modStarter)');
   }
-  const base = mod ? modModuleBase(options.name) : moduleName(options.name);
+  const base = modModuleBase(options.name);
   const metadata: CrowdyStudioProjectMetadata = {
     name: options.name.trim() || 'Untitled mod',
     ...(options.description?.trim()
@@ -65,9 +67,76 @@ export function createCrowdyStudioStarterProject(
     files: targets.flatMap((target) =>
       target === 'SERVER'
         ? modStarterFiles(mod!, metadata.serverModuleName!)
-        : clientStarterFiles(metadata.clientModuleName!),
+        : clientHalfStarterFiles(metadata.clientModuleName!),
     ),
   };
+}
+
+/**
+ * A ck-exec mod's CLIENT half: one `crowdy-client-sdk` crate within the build's rules (only
+ * `[package]`, `[lib]` as a cdylib, the SDK and serde dependencies, and
+ * `[package.metadata.crowdy] tick_interval_ms`).
+ */
+function clientHalfStarterFiles(name: string): CrowdyStudioProjectFile[] {
+  return [
+    {
+      target: 'CLIENT',
+      path: 'Cargo.toml',
+      content: `[package]
+name = "${name}"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+# How often visitors' browsers call tick (clamped 16–1000 ms).
+# 1000 = HUD/text. 50 = physics minigames (pool). 16 = shooters, if a tick stays cheap.
+[package.metadata.crowdy]
+tick_interval_ms = 1000
+
+[dependencies]
+crowdy-client-sdk = "${CLIENT_SDK_VERSION}"
+serde_json = "1"
+`,
+    },
+    {
+      target: 'CLIENT',
+      path: 'src/lib.rs',
+      content: `use crowdy_client_sdk as crowdy;
+
+fn init() {
+    // Runs once in each visitor's browser, after they consent to this CLIENT half
+    // (or trust you) and while they stand in this grid.
+    crowdy::log(1, "ready");
+}
+
+fn tick(_dt_ms: u32) {
+    // Every tick_interval_ms (Cargo.toml). The state blob lasts as long as the page's worker.
+    let ticks = u32::from_le_bytes(crowdy::state_get().try_into().unwrap_or([0; 4])).wrapping_add(1);
+    crowdy::state_set(&ticks.to_le_bytes());
+    // Host calls cross the page's broker as the visiting player, inside this grid: the HUD and
+    // overlay, chunk and actor reads, voxel writes, spatial and channel sends, grid events.
+    // Type "crowdy::api::" for the rest. The page's DOM and tokens are never reachable.
+    let _ = crowdy::api::hud_set(serde_json::json!({ "text": format!("Ticks here: {ticks}") }));
+    //
+    // Mouse (holodeck canvas only; Studio chrome is omitted). Drain every tick:
+    //   let data = crowdy::api::pointer_clicks().unwrap_or(serde_json::json!({}));
+    // data["clicks"] = [{ "t": "down"|"up", "button": 0, "atMs", "heldMs", "nx", "ny" }]
+}
+
+fn invoke(payload: &[u8]) -> Vec<u8> {
+    payload.to_vec()
+}
+
+fn event(_payload: &[u8]) {
+    // Grid events from the other CLIENT halves on this page (crowdy::api::emit_event).
+}
+
+crowdy::register_module!(init: init, tick: tick, invoke: invoke, event: event);
+`,
+    },
+  ];
 }
 
 function modStarterFiles(
@@ -109,14 +178,9 @@ function renamePackage(manifest: string, name: string): string {
     .join('\n');
 }
 
-function moduleName(value: string): string {
-  const slug = slugModuleName(value).slice(0, 48);
-  return slug || 'player-mod';
-}
-
 /**
- * A mod module base: short enough for `<base>-server` to be a mod name, and starting with a
- * letter, as a build's crate names must.
+ * A mod module base: short enough for `<base>-server` and `<base>-client` to be mod names, and
+ * starting with a letter, as a build's crate names must.
  */
 function modModuleBase(value: string): string {
   const slug = slugModuleName(value);
@@ -124,71 +188,6 @@ function modModuleBase(value: string): string {
   const cut = (/^[a-z]/u.test(slug) ? slug : `mod-${slug}`).slice(0, MOD_BASE_MAX);
   // The slug has no runs of dashes, so the cut leaves at most one at the end.
   return cut.endsWith('-') ? cut.slice(0, -1) : cut;
-}
-
-function clientStarterFiles(name: string): CrowdyStudioProjectFile[] {
-  return [
-    {
-      target: 'CLIENT',
-      path: 'Cargo.toml',
-      content: clientCargoToml(name),
-    },
-    {
-      target: 'CLIENT',
-      path: 'src/lib.rs',
-      content: clientSource(),
-    },
-  ];
-}
-
-function clientCargoToml(name: string): string {
-  return `[package]
-name = "${name}"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-# How often the browser calls CLIENT on_tick (clamped 16–1000 ms).
-# 1000 = HUD/text. 50 = physics minigames (pool). 16 = shooters, if a tick stays cheap.
-[package.metadata.crowdy]
-tick_interval_ms = 1000
-
-[dependencies]
-crowdy-compute-sdk = "${SDK_VERSION}"
-serde_json = "1"
-`;
-}
-
-function clientSource(): string {
-  return `use crowdy_compute_sdk as crowdy;
-
-fn on_init() {
-    // Runs after the hash-bound CLIENT artifact enters the browser sandbox.
-}
-
-fn on_tick(_dt_ms: u32) {
-    // dt_ms is wall time since the last tick. The host interval comes from
-    // Cargo.toml [package.metadata.crowdy] tick_interval_ms (default 1000).
-    // Client host calls are allow-listed by PlayerCodeBroker. Presentation
-    // effects (for example HUD updates) never receive the page's app token.
-    // Type "crowdy::" for lifecycle and host-call completions.
-    //
-    // Mouse (holodeck canvas only; Studio chrome is omitted). Drain every tick:
-    //   let data = crowdy::api::pointer_clicks().unwrap_or(serde_json::json!({}));
-    // data["clicks"] = [{ "t": "down"|"up", "button": 0, "atMs", "heldMs", "nx", "ny" }]
-    // data["buttons"] is MouseEvent.buttons (1 = left held).
-    // data["holdingMs"]["0"] is ms the left button has been down (power meter).
-    // Click-to-charge: start on left down, read holdingMs while held, fire on up.
-}
-
-fn on_invoke(payload: &[u8]) -> Vec<u8> {
-    payload.to_vec()
-}
-
-crowdy::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);
-`;
 }
 
 /**
