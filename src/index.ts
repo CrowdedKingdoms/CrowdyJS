@@ -326,7 +326,7 @@ export { OrganizationsAPI } from './domains/organizations.js';
 export { AppAccessAPI } from './domains/appAccess.js';
 export { BillingAPI } from './domains/billing.js';
 export { PaymentsAPI } from './domains/payments.js';
-export { QuotasAPI } from './domains/quotas.js';
+export { QuotasAPI, type ScopedSetQuotaInput } from './domains/quotas.js';
 export { UsageAPI } from './domains/usage.js';
 export { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
 export { AdminAPI } from './domains/admin.js';

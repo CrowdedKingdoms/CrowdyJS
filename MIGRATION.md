@@ -79,6 +79,38 @@ as a GraphQL validation error.
 - `ENGINE_SWITCHED_OFF` left `CrowdyFaultCode`: nothing raises it now.
 - The kit's type-98 parser is `parseZoneChangeEvent` beside the other wire parsers.
 
+## Platform administration is not in the SDK
+
+The SDK is for normal clients and designed for production: it carries what players,
+developers and org-admins call, and nothing only a super-admin or a platform operator can
+call. 18.0.0 removes the wrappers that were left. The API still has every one of these
+fields; **use the API directly from your own tooling** (a GraphQL request with an operator's or
+super-admin's session). There is no SDK replacement.
+
+| Removed | Root field |
+| --- | --- |
+| `client.users.paginated`, `client.users.listConnection` | `usersPaginated`, `usersConnection` |
+| `client.users.setSuperAdmin` | `setSuperAdmin` |
+| `client.users.setOperator` | `setOperator` |
+| `client.users.setEarlyAccessOverride` | `setEarlyAccessOverride` |
+| `client.users.updateType` | `updateUserType` |
+| `client.users.forceLogout` | `forceLogoutUser` |
+| `client.payments.all`, `allConnection` (also `client.admin.payments`) | `checkouts`, `checkoutsConnection` |
+| `client.payments.events`, `eventsConnection` | `paymentEvents`, `paymentEventsConnection` |
+| `client.organizations.setStatus` | `setOrgStatus` |
+| `client.apps.setVisibility` | `setAppVisibility` |
+| `client.hosting.all` | `allHostedGames` |
+| `client.hosting.setListing` | `setHostedGameListing` |
+| `client.hosting.takeDown` | `takeDownHostedGame` |
+
+- `client.quotas.set` takes a `ScopedSetQuotaInput`: an `appId` or an `orgId` (and optionally a
+  `tierId`) is required, and it refuses a platform-global rule before any request.
+  `client.quotas.remove` is unchanged; it removes a rule on an org or app the caller manages.
+- `client.users.get` and `client.users.updateState` stay: any session can call them
+  (`updateState` writes only the caller); their docs had said super-admin only.
+- The generated types and documents for those operations are gone from
+  `@crowdedkingdoms/crowdyjs/generated` as well.
+
 `schema.gql` and the generated types follow the game API: the release carries cks-game-api
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
