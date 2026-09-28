@@ -1,10 +1,12 @@
 /**
  * What a CLIENT half says and answers, on the page: its `crowdy::log` lines reach the broker's
  * `onLog` within a rate and size bound, and the page can call its `handle_invoke` export with
- * `invoke`. The worker cases run the production glue over a worker_threads Worker.
+ * `invoke`. The worker cases run the production glue over a worker_threads Worker; the last one
+ * runs a real crowdy-client-sdk build when CROWDY_EXEC_CLIENT_WASM names one.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -256,3 +258,41 @@ test('the glue reads at most 4 KiB of a log message and refuses one outside gues
   assert.equal(seen[0][1].length, GLUE_LOG_MAX_BYTES);
   assert.throws(() => imports.ck.log(1, 60 * 1024, 10_000), /outside guest memory/);
 });
+
+const realArtifact = process.env.CROWDY_EXEC_CLIENT_WASM;
+
+test(
+  'a real crowdy-client-sdk build on the page: its log line, a HUD each tick, and invoke',
+  {
+    skip: realArtifact
+      ? false
+      : 'set CROWDY_EXEC_CLIENT_WASM to Studio\u2019s CLIENT starter built by the platform pipeline (cargo, instrument, wasm-opt)',
+  },
+  async () => {
+    const bytes = readFileSync(realArtifact);
+    const presentations = [];
+    const worker = new NodeWorkerAdapter();
+    const { broker, lines } = await makeBroker(
+      {
+        fuelPerDispatch: 100_000_000n,
+        consentedHostCalls: ['hud_set'],
+        tickIntervalMs: 20,
+        onPresentation: (presentation) => presentations.push(presentation),
+      },
+      worker,
+    );
+    try {
+      await broker.start(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length));
+      await until(() => presentations.length >= 2);
+      assert.deepEqual(lines[0], { level: 'info', message: 'ready', moduleName: 'hud' });
+      assert.deepEqual(presentations.slice(0, 2), [
+        { channel: 'hud', payload: { text: 'Ticks here: 1' } },
+        { channel: 'hud', payload: { text: 'Ticks here: 2' } },
+      ]);
+      const reply = await broker.invoke(new TextEncoder().encode('echo'));
+      assert.equal(new TextDecoder().decode(reply), 'echo');
+    } finally {
+      broker.stop();
+    }
+  },
+);
