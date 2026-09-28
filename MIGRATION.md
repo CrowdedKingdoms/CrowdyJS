@@ -7,6 +7,11 @@ code moves to ck-exec (`client.exec`): an app's server code as hubs and spokes, 
 code as mods, and a mod's browser code as its CLIENT half. Nothing is migrated for you; port the
 code, then upgrade.
 
+**Which 18.** 18.0.0 was published only on the `dev` channel (`18.0.0-dev.1`). **18.0.1 is the
+first 18.x a client on the production channel will see**, and it carries everything on this page:
+the legacy engines' removal (18.0.0) and the platform-administration removal
+([below](#platform-administration-is-not-in-the-sdk), 18.0.1).
+
 **What it needs.** 18.0.0 calls nothing the legacy engines served, so it runs against any API
 with ck-exec CLIENT halves (ck-api `v2.24.0`, as 17.14.0 did). **Crowdy Studio's CLIENT
 projects need ck-api `v2.25.1` or later:** `v2.24.0` and `v2.25.0` refuse to save a
@@ -78,6 +83,38 @@ as a GraphQL validation error.
   grid state (`grid_state_get` / `grid_state_set`).
 - `ENGINE_SWITCHED_OFF` left `CrowdyFaultCode`: nothing raises it now.
 - The kit's type-98 parser is `parseZoneChangeEvent` beside the other wire parsers.
+
+## Platform administration is not in the SDK
+
+The SDK is for normal clients and designed for production: it carries what players,
+developers and org-admins call, and nothing only a super-admin or a platform operator can
+call. **18.0.1** removes the wrappers that were left (18.0.0 still had them). The API still has every one of these
+fields; **use the API directly from your own tooling** (a GraphQL request with an operator's or
+super-admin's session). There is no SDK replacement.
+
+| Removed | Root field |
+| --- | --- |
+| `client.users.paginated`, `client.users.listConnection` | `usersPaginated`, `usersConnection` |
+| `client.users.setSuperAdmin` | `setSuperAdmin` |
+| `client.users.setOperator` | `setOperator` |
+| `client.users.setEarlyAccessOverride` | `setEarlyAccessOverride` |
+| `client.users.updateType` | `updateUserType` |
+| `client.users.forceLogout` | `forceLogoutUser` |
+| `client.payments.all`, `allConnection` (also `client.admin.payments`) | `checkouts`, `checkoutsConnection` |
+| `client.payments.events`, `eventsConnection` | `paymentEvents`, `paymentEventsConnection` |
+| `client.organizations.setStatus` | `setOrgStatus` |
+| `client.apps.setVisibility` | `setAppVisibility` |
+| `client.hosting.all` | `allHostedGames` |
+| `client.hosting.setListing` | `setHostedGameListing` |
+| `client.hosting.takeDown` | `takeDownHostedGame` |
+
+- `client.quotas.set` takes a `ScopedSetQuotaInput`: an `appId` or an `orgId` (and optionally a
+  `tierId`) is required, and it refuses a platform-global rule before any request.
+  `client.quotas.remove` is unchanged; it removes a rule on an org or app the caller manages.
+- `client.users.get` and `client.users.updateState` stay: any session can call them
+  (`updateState` writes only the caller); their docs had said super-admin only.
+- The generated types and documents for those operations are gone from
+  `@crowdedkingdoms/crowdyjs/generated` as well.
 
 `schema.gql` and the generated types follow the game API: the release carries cks-game-api
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then

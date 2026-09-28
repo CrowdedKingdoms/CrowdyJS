@@ -9,7 +9,6 @@ import {
   CreateAppDocument,
   UpdateAppDocument,
   ArchiveAppDocument,
-  SetAppVisibilityDocument,
   AppCodeAdmissionModeDocument,
   AppCodeAdmissionsDocument,
   SetAppCodeAdmissionModeDocument,
@@ -29,7 +28,6 @@ import {
   type CreateAppMutation,
   type UpdateAppMutation,
   type ArchiveAppMutation,
-  type SetAppVisibilityMutation,
   type AppCodeAdmissionModeQuery,
   type AppCodeAdmissionsQuery,
   type SetAppCodeAdmissionModeMutation,
@@ -40,7 +38,6 @@ import {
   type CreateAppInput,
   type UpdateAppInput,
   type AdmitAppCodeInput,
-  type AppVisibility,
   type CodeAdmissionMode,
 } from '../generated/graphql.js';
 
@@ -414,24 +411,5 @@ export class AppsAPI {
   ): Promise<ArchiveAppMutation['archiveApp']> {
     const data = await this.api.request(ArchiveAppDocument, { appId });
     return data.archiveApp;
-  }
-
-  /**
-   * Override an app's marketplace visibility. **Super-admin only.**
-   *
-   * @param appId - Numeric app id.
-   * @param visibility - The new {@link AppVisibility}.
-   * @returns The app's updated visibility.
-   * @throws {CrowdyGraphQLError} `FORBIDDEN` for non-super-admins.
-   */
-  async setVisibility(
-    appId: string,
-    visibility: AppVisibility,
-  ): Promise<SetAppVisibilityMutation['setAppVisibility']> {
-    const data = await this.api.request(SetAppVisibilityDocument, {
-      appId,
-      visibility,
-    });
-    return data.setAppVisibility;
   }
 }

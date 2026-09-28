@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.0.0';
+export const VERSION = '18.0.1';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -326,7 +326,7 @@ export { OrganizationsAPI } from './domains/organizations.js';
 export { AppAccessAPI } from './domains/appAccess.js';
 export { BillingAPI } from './domains/billing.js';
 export { PaymentsAPI } from './domains/payments.js';
-export { QuotasAPI } from './domains/quotas.js';
+export { QuotasAPI, type ScopedSetQuotaInput } from './domains/quotas.js';
 export { UsageAPI } from './domains/usage.js';
 export { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
 export { AdminAPI } from './domains/admin.js';

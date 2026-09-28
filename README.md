@@ -221,7 +221,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.users` | `me`, `updateGamertag`, profile reads. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
-| `client.hosting` | Third-party hosting on Crowdy Games (17.2.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`; operator `all` / `setListing` / `takeDown`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
+| `client.hosting` | Third-party hosting on Crowdy Games (17.2.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
 | `client.platform` | Public platform configuration (`config()`). |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
 | `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes: terrain/LODs, voxel edit + history/rollback, durable actors, avatars, per-user app state blobs. |
@@ -255,9 +255,11 @@ grouped under `client.admin` and mirrored at the top level):
 | `client.sharedEnvironment` | Publish to shared, runtime gating, spend caps, auto-billing. |
 | `client.gameApps` | App grids (`createGrid` / `deleteGrid`), first-class grid ownership (`ownership` / `assignOwnership` / `transferOwnership`), and grid runtime-permission administration. |
 
-There is no operator surface: `client.operator` held only the legacy compute ceilings and
-went with them in 18.0.0 (ck-exec code is bounded by its manifest limits within the
-platform's), and infrastructure operations live in the separate infra-control-plane service.
+**The SDK is for normal clients, and designed for production.** It carries what players,
+developers and org-admins call, and nothing only a super-admin or a platform operator can
+call: those fields are in the API, and platform tooling calls them directly (18.0.1 removed
+the last wrappers; see [MIGRATION.md](MIGRATION.md)). There is no `client.operator`, and
+infrastructure operations live in the separate infra-control-plane service.
 
 Auth, user reads and the studio-admin surface use the **identity session token**; the
 world/UDP surfaces require an **app-scoped token** for that app. Both go to the same
@@ -747,7 +749,7 @@ uploads with the exact signed headers, and `completeGamePublish` verifies every
 object, promotes it and invalidates the CDN. The slug is a DNS label, global on the
 tier, and first-party names are reserved (`HOSTED_SLUG_UNAVAILABLE`); a tier without
 a content CDN answers `CONTENT_HOSTING_DISABLED`. Being *listed* in the lobby is an
-operator decision (`setListing`); publishing is self-serve. `the-construct`'s
+operator decision, made outside the SDK; publishing is self-serve. `the-construct`'s
 `npm run publish` is this section as a command.
 
 ## Crowdy Studio

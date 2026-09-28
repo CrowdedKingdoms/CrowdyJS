@@ -4,12 +4,31 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.0.0**. Whether that is *published* is
+**Current package:** `package.json` is **18.0.1** (18.0.0 was published only as
+`18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**RULE: THE SDK IS FOR NORMAL CLIENTS, AND IT IS DESIGNED FOR PRODUCTION (operator decision,
+2026-09-28).** It may carry org-admin features — there will be many org-admins — but NEVER a
+wrapper for something only a super-admin or a platform operator can call, and no testing
+helper. Platform tooling and test helpers live in our own repos as scripts that call GraphQL
+directly. So, before adding a wrapper:
+
+- Read the field's resolver in cks-game-api. `@RequiresSuperAdmin()`, `@RequiresOperator()`,
+  `OperatorGuard`, or a body that refuses everyone but a super-admin means it does not belong
+  here. A field with an org-admin path and a super-admin path (quotas: `setQuota` /
+  `deleteQuota` without an org or app are platform-global) is wrapped for the org-admin path
+  only, and the SDK refuses the other (`quotas.set` needs an `appId` or an `orgId`).
+- `test/unit/sdk-audience.test.mjs` fails when any operation document names a root field on
+  its platform-only list, or one whose schema description says operator- or super-admin-only.
+  When cks-game-api adds such a field, add it to that list; do not wrap it.
+- 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
+  moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
+  (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
 **18.0.0 removes the legacy engines' SDK surface (P3 W2, HS-42, 2026-09-28): it lands on `dev`
 with the game API's deletion (cks-game-api #417, ck-api `dev/v2.27.0`).** Gone:
