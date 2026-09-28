@@ -1410,7 +1410,7 @@ export class CrowdyStudioController {
           await this.enableServer(compiled.name, operation);
         } else {
           await this.runClient(compiled, operation);
-          await this.enableClient(compiled.name, operation);
+          if (!this.mods) await this.enableClient(compiled.name, operation);
         }
       } else {
         // Compile the client first so a client failure never publishes a new
@@ -1461,7 +1461,7 @@ export class CrowdyStudioController {
         }
         await this.enableServer(server.name, operation);
         await this.runClient(client, operation);
-        await this.enableClient(client.name, operation);
+        if (!this.mods) await this.enableClient(client.name, operation);
       }
       this.update({
         runtime: {
@@ -1935,14 +1935,16 @@ export class CrowdyStudioController {
       } finally {
         this.broker = null;
       }
-      try {
-        await this.options.playerCompute.setEnabled({
-          ...this.scope(),
-          name: moduleNameFor(project, 'CLIENT'),
-          enabled: false,
-        });
-      } catch (error) {
-        failures.push(`Client publish: ${errorMessage(error)}`);
+      if (!this.mods) {
+        try {
+          await this.options.playerCompute.setEnabled({
+            ...this.scope(),
+            name: moduleNameFor(project, 'CLIENT'),
+            enabled: false,
+          });
+        } catch (error) {
+          failures.push(`Client publish: ${errorMessage(error)}`);
+        }
       }
     }
 

@@ -21,22 +21,54 @@ import {
   makeForbiddenImportArtifact,
 } from './fixtures/d13-wasm-corpus.mjs';
 
-/** Every host call crowdy-client-sdk 0.1.0 makes (its `api` module, plus nothing else). */
+/**
+ * Every client host call the ck-exec allowlist is built from: crowdy-client-sdk's `api`
+ * module, plus the mesh and skin presentation calls this branch's catalog adds.
+ */
 const CLIENT_SDK_CALLS = [
+  'actor_despawn',
+  'actor_pose',
+  'actor_spawn',
   'actors_list',
   'actors_list_radius',
+  'avatar_appearance',
   'avatar_state_get',
+  'avatar_state_set',
   'chunk_get',
+  'clock',
   'emit_channel',
   'emit_event',
   'emit_spatial',
+  'events_poll',
   'grid_info',
   'grid_permission_check',
+  'grid_skin_clear',
+  'grid_skin_set',
   'hud_set',
+  'input_axes',
+  'input_key',
+  'input_look',
+  'mechanics_emit',
+  'mesh_asset_attach',
+  'mesh_asset_clear',
+  'mesh_asset_register',
+  'mesh_asset_spawn',
   'overlay_draw',
   'pointer_clicks',
+  'pose_get',
+  'pose_release',
+  'pose_set',
+  'scene_catalog',
+  'scene_instances',
+  'send_actor_message',
+  'send_channel_message',
+  'send_client_event',
+  'send_text',
+  'teleport_request',
   'user_state_get',
   'user_state_set',
+  'video_set',
+  'voice_set',
   'voxel_set',
   'voxels_list',
 ];
@@ -61,7 +93,25 @@ test('the ck-exec allowlist is exactly crowdy-client-sdk\u2019s calls; the legac
   assert.deepEqual(flat(EXEC_CLIENT_HOST_CALLS), CLIENT_SDK_CALLS);
   assert.equal(EXEC_CLIENT_HOST_CALLS.model, undefined);
   assert.equal(EXEC_CLIENT_HOST_CALLS.sessions, undefined);
-  assert.deepEqual([...EXEC_CLIENT_HOST_CALLS.present].sort(), ['hud_set', 'overlay_draw']);
+  assert.deepEqual(
+    [...EXEC_CLIENT_HOST_CALLS.present].sort(),
+    [
+      'avatar_appearance',
+      'grid_skin_clear',
+      'grid_skin_set',
+      'hud_set',
+      'mechanics_emit',
+      'mesh_asset_attach',
+      'mesh_asset_clear',
+      'mesh_asset_register',
+      'mesh_asset_spawn',
+      'overlay_draw',
+      'scene_catalog',
+      'scene_instances',
+      'video_set',
+      'voice_set',
+    ],
+  );
   assert.deepEqual(flat(ALLOWED_HOST_CALLS), [...CLIENT_SDK_CALLS, ...LEGACY_ONLY].sort());
 });
 
