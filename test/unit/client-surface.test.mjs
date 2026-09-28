@@ -50,18 +50,15 @@ test('client exposes the full management + game sub-client surface', async () =>
   }
 
   // The legacy engines' domains went in 18.0.0: ck-exec (`client.exec`) replaced the game
-  // model, its automations, Studio compute and player compute's SERVER side.
-  for (const removed of ['gameModel', 'compute', 'playerModel']) {
+  // model, its automations, Studio compute and player compute (its CLIENT modules too, by a
+  // mod's CLIENT half); the operator surface held only the legacy compute ceilings.
+  for (const removed of ['gameModel', 'compute', 'playerModel', 'playerCompute', 'operator']) {
     assert.equal(client[removed], undefined, `client.${removed} was removed in 18.0.0`);
   }
-  // Players' CLIENT modules keep their compile and artifact path.
-  assertMethods(client.playerCompute, 'playerCompute', [
-    'deploy', 'myModules', 'versions', 'delete', 'usage', 'setSwitch', 'switches',
-    'artifact', 'artifactBytes',
+  assertMethods(client.exec, 'exec', [
+    'modClientBuild', 'modClientDeploy', 'modClientDelete', 'gridClientMods',
+    'consentClientMod', 'trustAuthor', 'modClientArtifact', 'modClientArtifactBytes',
   ]);
-  for (const removed of ['setEnabled', 'setRequires', 'invoke', 'runs', 'logs']) {
-    assert.equal(client.playerCompute[removed], undefined, `playerCompute.${removed} was removed in 18.0.0`);
-  }
   assertMethods(client.crowdyStudio, 'crowdyStudio', [
     'listProjects', 'getProject', 'createProject', 'saveProject',
     'listPersonalLibraryFiles', 'listCommonFiles',
@@ -102,8 +99,10 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.usage, 'usage', ['appGraphqlOperations', 'appSummary', 'playerPulse']);
   assertMethods(client.sharedEnvironment, 'sharedEnvironment', ['plans', 'freeAppQuota', 'appRuntimeState', 'publishApp', 'setSpendCaps', 'setAutoBilling']);
 
-  // Operator (control-plane) surface.
-  assertMethods(client.operator, 'operator', ['computePlatformCeilings', 'setComputePlatformCeilings']);
+  // The player WASM policies went with player compute; the wallet stays.
+  for (const removed of ['policies', 'setPolicy', 'deletePolicy']) {
+    assert.equal(client.playerWallet[removed], undefined, `playerWallet.${removed} was removed in 18.0.0`);
+  }
 
   // New game-side sub-clients.
   assertMethods(client.avatars, 'avatars', ['listForUser', 'get', 'mine', 'appState', 'create', 'update', 'delete', 'updateState', 'updateAppState']);
@@ -288,7 +287,7 @@ test('marketplace chunk claim wrappers map variables, results, and documents', a
 // there is one endpoint, so what is worth pinning is that every wrapper still sends
 // the right variables — and that both families reach the SAME client, which is what
 // actually broke when the management client was removed.
-test('player runtime and app-admission wrappers send the right variables on one client', async () => {
+test('grid ownership and app-admission wrappers send the right variables on one client', async () => {
   const { createCrowdyClient, CodeAdmissionMode } = await loadSdk();
   const client = createCrowdyClient({
     httpUrl: 'https://game.invalid',
@@ -298,10 +297,6 @@ test('player runtime and app-admission wrappers send the right variables on one 
     { gridOwnership: { gridOwnershipId: 'ownership-1' } },
     { assignGridOwnership: { gridOwnershipId: 'ownership-2' } },
     { transferGridOwnership: { gridOwnershipId: 'ownership-3' } },
-    { playerComputeDeploy: { versionId: 'version-1' } },
-    { playerComputeMyModules: [{ moduleId: 'module-1' }] },
-    { playerComputeVersions: [{ versionId: 'version-1' }] },
-    { playerComputeDelete: true },
     { appCodeAdmissionMode: CodeAdmissionMode.ImplicitAllow },
     { appCodeAdmissions: [{ admissionId: 'admission-1' }] },
     { setAppCodeAdmissionMode: CodeAdmissionMode.AllowList },
@@ -316,12 +311,6 @@ test('player runtime and app-admission wrappers send the right variables on one 
   await client.gameApps.ownership('1', '2');
   await client.gameApps.assignOwnership({ appId: '1', gridId: '2', ownerUserId: '3' });
   await client.gameApps.transferOwnership({ appId: '1', gridId: '2', newOwnerUserId: '4' });
-  await client.playerCompute.deploy({
-    appId: '1', gridId: '2', projectId: 'p1', name: 'weather',
-  });
-  await client.playerCompute.myModules({ appId: '1' });
-  await client.playerCompute.versions({ appId: '1', gridId: '2', name: 'weather' });
-  await client.playerCompute.delete({ appId: '1', gridId: '2', name: 'weather' });
 
   await client.apps.codeAdmissionMode('1');
   await client.apps.codeAdmissions('1', true);
@@ -331,15 +320,11 @@ test('player runtime and app-admission wrappers send the right variables on one 
   });
   await client.apps.revokeCodeAdmission('1', 'admission-2');
 
-  // All 12 landed on the one client; a wrapper wired to a second client would
+  // All 8 landed on the one client; a wrapper wired to a second client would
   // short this list rather than fail an assertion.
-  assert.equal(calls.length, 12);
+  assert.equal(calls.length, 8);
   assert.deepEqual(calls[0], { appId: '1', gridId: '2' });
-  // playerCompute.deploy is the CLIENT target's.
-  assert.deepEqual(calls[3], {
-    input: { appId: '1', gridId: '2', projectId: 'p1', name: 'weather', target: 'CLIENT' },
-  });
-  assert.deepEqual(calls.slice(7), [
+  assert.deepEqual(calls.slice(3), [
     { appId: '1' },
     { appId: '1', includeRevoked: true },
     { appId: '1', mode: CodeAdmissionMode.AllowList },

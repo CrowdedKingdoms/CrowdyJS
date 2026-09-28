@@ -55,7 +55,6 @@ import { PaymentsAPI } from './domains/payments.js';
 import { QuotasAPI } from './domains/quotas.js';
 import { UsageAPI } from './domains/usage.js';
 import { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
-import { ControlPlaneAPI } from './domains/controlPlane.js';
 import { AdminAPI } from './domains/admin.js';
 import { ChunksAPI } from './domains/chunks.js';
 import { AvatarsAPI } from './domains/avatars.js';
@@ -72,7 +71,6 @@ import { GridScope, type GridBox } from './grid-scope.js';
 import { TeamsAPI } from './domains/teams.js';
 import { UdpAPI } from './domains/udp.js';
 import { ExecAPI } from './domains/exec.js';
-import { PlayerComputeAPI } from './domains/playerCompute.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 import { CrowdyStudioGitHubTransport } from './crowdy-studio/github/transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
@@ -275,8 +273,6 @@ export class CrowdyClient {
   readonly usage: UsageAPI;
   /** Shared-environment publishing, runtime gating, auto-billing (studio admin). */
   readonly sharedEnvironment: SharedEnvironmentAPI;
-  /** Operator (control-plane) surface — requires `is_operator`. */
-  readonly operator: ControlPlaneAPI;
   /**
    * Studio-admin facade grouping the privileged management-surface sub-clients
    * (`organizations`, `appAccess`, `billing`, `payments`, `quotas`,
@@ -310,8 +306,6 @@ export class CrowdyClient {
    * deploy, operate) and players' mods on the grids they own.
    */
   readonly exec: ExecAPI;
-  /** Players' CLIENT modules: browser WASM compiled from Crowdy Studio projects. */
-  readonly playerCompute: PlayerComputeAPI;
   /** Crowdy Studio cloud projects, libraries, and common source files. */
   readonly crowdyStudio: CrowdyStudioAPI;
   /** GitHub repository loop for Crowdy Studio projects (same session; the API resolves the repo from the bind). */
@@ -489,7 +483,6 @@ export class CrowdyClient {
     this.quotas = new QuotasAPI(this.graphql);
     this.usage = new UsageAPI(this.graphql);
     this.sharedEnvironment = new SharedEnvironmentAPI(this.graphql);
-    this.operator = new ControlPlaneAPI(this.graphql);
 
     this.chunks = new ChunksAPI(this.graphql);
     this.voxels = new VoxelsAPI(this.graphql);
@@ -507,7 +500,6 @@ export class CrowdyClient {
       () => this.gameplayTokenRefresh,
     );
     this.exec = new ExecAPI(this.graphql);
-    this.playerCompute = new PlayerComputeAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
     this.crowdyStudioGitHub = new CrowdyStudioGitHubTransport(this.graphql);
     this.playerWallet = new PlayerWalletAPI(this.graphql);

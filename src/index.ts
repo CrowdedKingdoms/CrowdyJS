@@ -330,7 +330,6 @@ export { PaymentsAPI } from './domains/payments.js';
 export { QuotasAPI } from './domains/quotas.js';
 export { UsageAPI } from './domains/usage.js';
 export { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
-export { ControlPlaneAPI } from './domains/controlPlane.js';
 export { AdminAPI } from './domains/admin.js';
 export { AvatarsAPI } from './domains/avatars.js';
 export { HostAPI } from './domains/host.js';
@@ -389,10 +388,6 @@ export {
   type ExecModClientArtifact,
   type ExecModClientArtifactBytes,
 } from './domains/exec.js';
-export {
-  PlayerComputeAPI,
-  type PlayerClientModuleDeployInput,
-} from './domains/playerCompute.js';
 export { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 export { PlayerWalletAPI } from './domains/playerWallet.js';
 export { MarketplaceAPI } from './domains/marketplace.js';
@@ -480,9 +475,6 @@ export type {
   UdpProxyConnectionStatus,
   RealtimeConnectionEvent,
   GameClientBootstrap,
-  PlayerWasmModule,
-  PlayerWasmModuleVersion,
-  DeployPlayerComputeInput,
   GridOwnership,
   AssignGridOwnershipInput,
   TransferGridOwnershipInput,
@@ -568,7 +560,6 @@ export type {
 export {
   ServerState,
   AppVisibility,
-  PlayerComputeTarget,
   GridOwnerKind,
   GridTenure,
   CodeAdmissionMode,

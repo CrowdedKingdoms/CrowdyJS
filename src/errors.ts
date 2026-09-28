@@ -232,8 +232,6 @@ export type CrowdyFaultCode =
   | 'UNAUTHENTICATED'
   | 'WRONG_DATACENTER'
   | 'APP_UNAVAILABLE'
-  /** The tier switched the legacy engine off (compute, player compute, game model); never retryable. */
-  | 'ENGINE_SWITCHED_OFF'
   | (string & {});
 
 /** What the platform says about a failure, in the only vocabulary a player is shown. */
@@ -332,8 +330,8 @@ function faultFields(
  *
  * There are two. A refused or failed call THROWS, and the fault arrives in the GraphQL
  * error's extensions. A result may instead RETURN one: a verdict that still carries
- * whatever did apply comes back as `success: false` with a `fault` field (the legacy
- * `gameModelInvoke` did). This function accepts both and gives you one thing to switch on.
+ * whatever did apply comes back as `success: false` with a `fault` field. This function
+ * accepts both and gives you one thing to switch on.
  *
  * Returns `null` when there is no fault: a successful result, or an error that is not an
  * attributed one (a network drop, a timeout, an ordinary validation error elsewhere in
