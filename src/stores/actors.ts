@@ -103,11 +103,21 @@ export interface AckedActorUpdate<T> {
   receivedAt: number;
 }
 
-/** The record of the most recent send error attributed to this actor. */
+/**
+ * The record of the most recent send error attributed to this actor: one the
+ * server reported for a sequence number, or a send that failed before
+ * reaching it (`errorCode` is then the SDK error's code, e.g.
+ * `PLATFORM_BUSY`, or `SEND_FAILED`).
+ */
 export interface ActorSendError {
   errorCode: string;
   sequenceNumber: number;
   receivedAt: number;
+}
+
+function sendErrorCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && code !== '' ? code : 'SEND_FAILED';
 }
 
 /** Lifecycle of the local actor's replication. */
@@ -178,6 +188,8 @@ export class LocalActorStore<T> {
   private lastSentRecord: SentActorUpdate<T> | null = null;
   private lastAckRecord: AckedActorUpdate<T> | null = null;
   private lastErrorRecord: ActorSendError | null = null;
+  /** The last send failed before reaching the server: the next tick sends even if unchanged. */
+  private resendDue = false;
   private readonly inFlight = new Map<number, number>(); // seq → sentAt
   private readonly sequences = new SequenceAllocator();
   private readonly now: () => number;
@@ -238,7 +250,9 @@ export class LocalActorStore<T> {
     const doc = (globalThis as { document?: Document }).document;
     if ((config.refreshOnVisibility ?? true) && doc?.addEventListener) {
       const onVisibility = () => {
-        if (doc.visibilityState === 'visible') void this.refresh('visibility');
+        if (doc.visibilityState === 'visible') {
+          this.refresh('visibility').catch(() => {});
+        }
       };
       doc.addEventListener('visibilitychange', onVisibility);
       ctx.onDispose(() => doc.removeEventListener('visibilitychange', onVisibility));
@@ -331,22 +345,25 @@ export class LocalActorStore<T> {
     await this.send(reason);
   }
 
-  /** One send-loop tick: dedup unchanged state, keyframe when quiet. */
+  /**
+   * One send-loop tick: dedup unchanged state, keyframe when quiet. A failed
+   * loop send lands on {@link lastError} and the next tick sends again.
+   */
   private tick(): void {
     if (!this.currentChunk) return;
     const encoded = this.config.codec.encode(this.currentState);
-    if ((this.config.sendOnChange ?? true) && this.lastSentRecord) {
+    if ((this.config.sendOnChange ?? true) && this.lastSentRecord && !this.resendDue) {
       const quietFor = this.now() - this.lastSentRecord.sentAt;
       const keyframeEvery = this.config.keyframeEveryMs ?? 3000;
       if (encoded === this.lastSentRecord.encoded && quietFor < keyframeEvery) {
         return;
       }
       if (encoded === this.lastSentRecord.encoded) {
-        void this.send('keyframe', encoded);
+        this.send('keyframe', encoded).catch(() => {});
         return;
       }
     }
-    void this.send('interval', encoded);
+    this.send('interval', encoded).catch(() => {});
   }
 
   private async send(reason: SendReason, preEncoded?: string): Promise<void> {
@@ -359,7 +376,9 @@ export class LocalActorStore<T> {
     const sequenceNumber = this.sequences.next();
     const sentAt = this.now();
 
-    this.lastSentRecord = { state, encoded, chunk, sequenceNumber, sentAt, reason };
+    const record: SentActorUpdate<T> = { state, encoded, chunk, sequenceNumber, sentAt, reason };
+    this.lastSentRecord = record;
+    this.resendDue = false;
     this.inFlight.set(sequenceNumber, sentAt);
     if (this.inFlight.size > 256) {
       const oldest = this.inFlight.keys().next().value;
@@ -373,17 +392,28 @@ export class LocalActorStore<T> {
       detail: { reason },
     });
 
-    await this.ctx.client.udp.sendActorUpdate({
-      appId: this.ctx.appId,
-      chunk,
-      uuid: this.uuid,
-      state: encoded,
-      sequenceNumber,
-      ...(this.config.distance !== undefined ? { distance: this.config.distance } : {}),
-      ...(this.config.decayRate !== undefined
-        ? { decayRate: this.config.decayRate }
-        : {}),
-    });
+    try {
+      await this.ctx.client.udp.sendActorUpdate({
+        appId: this.ctx.appId,
+        chunk,
+        uuid: this.uuid,
+        state: encoded,
+        sequenceNumber,
+        ...(this.config.distance !== undefined ? { distance: this.config.distance } : {}),
+        ...(this.config.decayRate !== undefined
+          ? { decayRate: this.config.decayRate }
+          : {}),
+      });
+    } catch (error) {
+      this.inFlight.delete(sequenceNumber);
+      this.lastErrorRecord = {
+        errorCode: sendErrorCode(error),
+        sequenceNumber,
+        receivedAt: this.now(),
+      };
+      if (this.lastSentRecord === record) this.resendDue = true;
+      throw error;
+    }
   }
 }
 

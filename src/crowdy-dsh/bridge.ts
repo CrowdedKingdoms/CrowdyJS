@@ -603,6 +603,7 @@ function clampLimit(value: number | undefined, fallback: number): number {
 }
 
 function formatRunLine(run: CrowdyStudioState['logs'][number]): string {
+  if (run.level) return `${run.startedAt} ${run.moduleName} ${run.level}: ${run.errorMessage ?? ''}`;
   const status = run.success ? 'ok' : 'FAILED';
   const error = run.errorMessage ? ` — ${run.errorMessage}` : '';
   return `${run.startedAt} ${run.moduleName} ${run.triggerSource} ${status} ${Math.round(run.durationUs / 1000)}ms fuel=${run.fuelUsed}${error}`;

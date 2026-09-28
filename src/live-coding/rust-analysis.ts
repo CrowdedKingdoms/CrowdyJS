@@ -193,7 +193,7 @@ export class RustAnalysis {
     }
     const target = targetForDocument(document);
     if (target) {
-      for (const snippet of TARGET_SNIPPETS[target]) add(snippet);
+      for (const snippet of targetSnippets(target, document.text)) add(snippet);
     }
     for (const symbol of this.platformIndex.symbols) {
       add(platformCompletion(symbol, this.platformIndex));
@@ -333,6 +333,20 @@ export class RustAnalysis {
       tree.delete();
     }
   }
+}
+
+/** A CLIENT file on crowdy-client-sdk, a ck-exec mod's CLIENT half, registers through that crate. */
+function targetSnippets(target: 'server' | 'client', text: string): CompletionItem[] {
+  const snippets = TARGET_SNIPPETS[target];
+  if (target !== 'client' || !text.includes('crowdy_client_sdk')) return snippets;
+  return snippets.map((snippet) =>
+    snippet.insertText?.includes('crowdy_compute_sdk::')
+      ? {
+          ...snippet,
+          insertText: snippet.insertText.replace('crowdy_compute_sdk::', 'crowdy_client_sdk::'),
+        }
+      : snippet,
+  );
 }
 
 function targetForDocument(

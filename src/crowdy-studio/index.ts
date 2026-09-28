@@ -12,10 +12,13 @@ export {
   type CrowdyStudioRuntimeStatus,
   type CrowdyStudioRuntimeSync,
   type CrowdyStudioRuntimeSyncState,
+  type CrowdyStudioLogLevel,
+  type CrowdyStudioMods,
   type CrowdyStudioPlayerCompute,
   type CrowdyStudioPlayerWallet,
   type CrowdyStudioMeshArtifact,
   type CrowdyStudioMeshArtifacts,
+  type CrowdyStudioServerEngine,
   type CrowdyStudioState,
   type CrowdyStudioStopResult,
   type CrowdyStudioUsageSnapshot,
@@ -65,6 +68,7 @@ export {
 } from './models.js';
 export {
   createCrowdyStudioStarterProject,
+  type CrowdyStudioModStarter,
   type CrowdyStudioNewProjectOptions,
 } from './starter-projects.js';
 export {

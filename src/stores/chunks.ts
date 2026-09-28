@@ -20,6 +20,34 @@ import {
 } from './keys.js';
 import type { WorldSessionContext } from './session.js';
 
+/**
+ * Hydrations in flight at once. Each is one request, and a bulk load returns hundreds of
+ * chunks: sent together, the API refuses a share of them as busy.
+ */
+const HYDRATE_CONCURRENCY = 8;
+/** Attempts for a request the platform refused before running it. */
+const BUSY_ATTEMPTS = 4;
+/** A chunk whose hydration failed this many times in a row is not asked for again. */
+const HYDRATE_GIVE_UP = 3;
+
+/** The platform refused the call before running it: asking again can succeed. */
+function refusedBeforeRunning(error: unknown): boolean {
+  const e = error as { code?: unknown; extensions?: { code?: unknown; retryable?: unknown } };
+  const code = e?.code ?? e?.extensions?.code;
+  return code === 'PLATFORM_BUSY' || e?.extensions?.retryable === true;
+}
+
+async function whenNotBusy<T>(call: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await call();
+    } catch (error) {
+      if (attempt >= BUSY_ATTEMPTS || !refusedBeforeRunning(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** (attempt - 1)));
+    }
+  }
+}
+
 /** Load lifecycle of a cached chunk. */
 export type ChunkLoadState =
   | 'loading' // fetch in flight
@@ -140,6 +168,9 @@ export interface SetVoxelInput<TVoxelState> {
 export class ChunkStore<TVoxelState = string, TChunkState = string> {
   private readonly chunks = new Map<string, CachedChunk<TVoxelState, TChunkState>>();
   private readonly inFlight = new Set<string>();
+  private readonly hydrating = new Set<string>();
+  /** Consecutive failed hydrations per chunk key. */
+  private readonly hydrateFailures = new Map<string, number>();
   private readonly writeBackQueue: string[] = [];
   private readonly changeListeners = new Set<
     (chunk: CachedChunk<TVoxelState, TChunkState>) => void
@@ -241,53 +272,97 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
    * configured, marks server-unknown chunks `missing`, and seeds them via
    * `onMissing`. In-flight requests are deduped; safe to call every time the
    * player crosses a chunk boundary.
+   *
+   * Requests the platform refuses as busy are asked again with backoff, and
+   * at most 8 hydrations run at once. Hydration is best effort: a chunk whose
+   * states could not be fetched keeps the voxels the bulk load gave it
+   * (`hydrated` stays false) and is hydrated on a later call. A chunk whose
+   * bulk load failed is `failed` and is requested again by a later call. The
+   * promise rejects only when the bulk load itself fails.
    */
   async ensureAround(center: ChunkCoord, radius: number): Promise<void> {
-    const wanted = chunksAround(center, radius).filter((coord) => {
+    const around = chunksAround(center, radius);
+    const wanted = around.filter((coord) => {
       const key = chunkKey(coord);
-      return !this.chunks.has(key) && !this.inFlight.has(key);
+      if (this.inFlight.has(key)) return false;
+      const chunk = this.chunks.get(key);
+      return !chunk || chunk.loadState === 'failed';
     });
-    if (wanted.length === 0) return;
-    for (const coord of wanted) this.inFlight.add(chunkKey(coord));
-
-    try {
-      const response = await this.ctx.client.chunks.byDistance({
-        appId: this.ctx.appId,
-        centerCoordinate: toChunkInput(center),
-        maxDistance: Math.max(1, Math.min(8, radius)),
-        limit: (2 * radius + 1) ** 3,
-      });
-      const returned = new Set<string>();
-      for (const chunk of response.chunks) {
-        const coord = fromChunkInput(chunk.coordinates);
-        returned.add(chunkKey(coord));
-        this.applyServerChunk(coord, chunk.voxels ?? null, chunk.chunkState ?? null);
-      }
-      // Requested-but-absent chunks have never been stored server-side.
-      for (const coord of wanted) {
-        if (returned.has(chunkKey(coord))) continue;
-        this.markMissing(coord);
-      }
-      if (this.hydrateStates) {
-        await Promise.all(
-          wanted
-            .filter((coord) => returned.has(chunkKey(coord)))
-            .map((coord) => this.hydrate(coord)),
+    const returned = new Set<string>();
+    if (wanted.length > 0) {
+      for (const coord of wanted) this.inFlight.add(chunkKey(coord));
+      try {
+        const response = await whenNotBusy(() =>
+          this.ctx.client.chunks.byDistance({
+            appId: this.ctx.appId,
+            centerCoordinate: toChunkInput(center),
+            maxDistance: Math.max(1, Math.min(8, radius)),
+            limit: (2 * radius + 1) ** 3,
+          }),
         );
+        for (const chunk of response.chunks) {
+          const coord = fromChunkInput(chunk.coordinates);
+          returned.add(chunkKey(coord));
+          this.applyServerChunk(coord, chunk.voxels ?? null, chunk.chunkState ?? null);
+        }
+        // Requested-but-absent chunks have never been stored server-side.
+        for (const coord of wanted) {
+          if (returned.has(chunkKey(coord))) continue;
+          this.markMissing(coord);
+        }
+      } catch (error) {
+        for (const coord of wanted) {
+          const key = chunkKey(coord);
+          const chunk = this.chunks.get(key);
+          if (!chunk || chunk.loadState === 'failed') {
+            const entry = this.ensureEntry(coord);
+            entry.loadState = 'failed';
+            this.touch(entry);
+          }
+        }
+        throw error;
+      } finally {
+        for (const coord of wanted) this.inFlight.delete(chunkKey(coord));
       }
-    } catch (error) {
-      for (const coord of wanted) {
+    }
+    if (this.hydrateStates) {
+      // What the bulk load just returned, and what an earlier call failed to hydrate.
+      // Chunks seeded here and written back are the server's copy already.
+      await this.hydrateAll(
+        around.filter((coord) => {
+          const key = chunkKey(coord);
+          const chunk = this.chunks.get(key);
+          const failures = this.hydrateFailures.get(key) ?? 0;
+          return (
+            chunk?.loadState === 'loaded' &&
+            !chunk.hydrated &&
+            !this.hydrating.has(key) &&
+            (returned.has(key) || (failures > 0 && failures < HYDRATE_GIVE_UP))
+          );
+        }),
+      );
+    }
+  }
+
+  /** Hydrates chunks with at most {@link HYDRATE_CONCURRENCY} requests in flight. */
+  private async hydrateAll(coords: ChunkCoord[]): Promise<void> {
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (next < coords.length) {
+        const coord = coords[next++];
         const key = chunkKey(coord);
-        if (!this.chunks.has(key)) {
-          const chunk = this.ensureEntry(coord);
-          chunk.loadState = 'failed';
-          this.touch(chunk);
+        this.hydrating.add(key);
+        try {
+          await whenNotBusy(() => this.hydrate(coord));
+          this.hydrateFailures.delete(key);
+        } catch {
+          this.hydrateFailures.set(key, (this.hydrateFailures.get(key) ?? 0) + 1);
+        } finally {
+          this.hydrating.delete(key);
         }
       }
-      throw error;
-    } finally {
-      for (const coord of wanted) this.inFlight.delete(chunkKey(coord));
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(HYDRATE_CONCURRENCY, coords.length) }, worker));
   }
 
   /**
@@ -411,6 +486,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
       if (chunk.dirty) continue;
       if (chunkDistance(chunk.coord, center) > radius) {
         this.chunks.delete(key);
+        this.hydrateFailures.delete(key);
         this.revisionValue += 1;
       }
     }
