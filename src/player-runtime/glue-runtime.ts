@@ -32,6 +32,18 @@ export const GLUE_HOST_FUNCTIONS: readonly string[] = Object.values(EXEC_CLIENT_
 /** The most of one `ck.log` message read out of guest memory, in bytes. */
 export const GLUE_LOG_MAX_BYTES = 4096;
 
+/**
+ * The largest `ck.host_call` request read out of guest memory, in bytes: the broker's 256 KiB
+ * args limit and room for the envelope. A longer one is answered `request_too_large` unread.
+ */
+export const GLUE_HOST_CALL_REQUEST_MAX_BYTES = 256 * 1024 + 1024;
+
+/** The largest blob `ck.state_set` keeps, in bytes; a larger one is refused (returns 1). */
+export const GLUE_STATE_MAX_BYTES = 1024 * 1024;
+
+/** The largest `handle_invoke` reply read out of guest memory, in bytes. */
+export const GLUE_INVOKE_REPLY_MAX_BYTES = 256 * 1024;
+
 /** Every import a ck-exec CLIENT half may have (CLIENT ABI 0), by module. */
 export const EXEC_CLIENT_ABI_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   ck: ['log', 'now_ms', 'state_get', 'state_set', 'host_call'],
@@ -131,6 +143,12 @@ export interface GlueRuntimeOptions {
 }
 
 const textDecoder = new TextDecoder();
+const requestTooLargeReply = new TextEncoder().encode(
+  JSON.stringify({
+    ok: false,
+    error: { kind: 'request_too_large', message: 'host call request exceeds the browser sandbox limit' },
+  }),
+);
 
 function assertMemoryRange(
   buffer: ArrayBuffer,
@@ -225,12 +243,15 @@ export class GlueRuntime {
         return len;
       },
       state_set: (ptr: number, len: number): number => {
+        if (len > GLUE_STATE_MAX_BYTES) return 1;
         this.stateBlob = bytesAt(ptr, len);
         return 0;
       },
       host_call: (ptr: number, len: number): bigint => {
-        const reqBytes = bytesAt(ptr, len);
-        const respBytes = this.options.hostCallSync(reqBytes);
+        const respBytes =
+          len > GLUE_HOST_CALL_REQUEST_MAX_BYTES
+            ? requestTooLargeReply
+            : this.options.hostCallSync(bytesAt(ptr, len));
         const ex = getExports();
         if (!ex) throw new Error('guest not instantiated');
         const outPtr = ex.ck_alloc(respBytes.length);
@@ -319,6 +340,9 @@ export class GlueRuntime {
     if (outLen === 0) return new Uint8Array(0);
     if (outPtr === 0) {
       throw new RangeError('guest returned a null invoke reply pointer');
+    }
+    if (outLen > GLUE_INVOKE_REPLY_MAX_BYTES) {
+      throw new RangeError('the invoke reply exceeds the browser sandbox limit');
     }
     assertMemoryRange(ex.memory.buffer, outPtr, outLen, 'invoke reply read');
     const out = new Uint8Array(ex.memory.buffer, outPtr, outLen).slice();

@@ -105,12 +105,13 @@ export interface StudioDshBridgeOptions {
   /** Longest screenshot side, in pixels. */
   maxCaptureSide?: number;
   /**
-   * Ask the player, on the page, whether the agent may deploy live. Resolves
-   * `true` to proceed. Without it `studio.deployLive` is refused: the approval
-   * inside the harness UI is not visible to the page and cannot stand in for
-   * this one.
+   * Ask the player, on the page, whether the agent may deploy the project to the grid: a live
+   * deploy, or a draft test (`mode`), which deploys the project's mod to the grid just the same,
+   * so players there who trust the player run it too. Resolves `true` to proceed. Without it
+   * `studio.deployLive` and `studio.draftTest` are refused: the approval inside the harness UI
+   * is not visible to the page and cannot stand in for this one.
    */
-  confirmLiveDeploy?(summary: { projectName: string }): Promise<boolean>;
+  confirmLiveDeploy?(summary: { projectName: string; mode: 'draft' | 'live' }): Promise<boolean>;
   /** Called when the worker changed a project file, after the controller reloaded. */
   onFileChanged?(change: { target: 'SERVER' | 'CLIENT'; path: string }): void;
   onWarning?(message: string): void;
@@ -400,23 +401,33 @@ export class StudioDshBridge {
       case 'studio.screenshot':
         return this.screenshot((params as { label?: string } | undefined)?.label) as never;
       case 'studio.draftTest':
-        return this.build('draft') as never;
       case 'studio.deployLive': {
+        const mode = method === 'studio.draftTest' ? 'draft' : 'live';
         const confirm = this.options.confirmLiveDeploy;
-        if (!confirm) throw new Error('Live deploys from the agent are not enabled on this page; use the Deploy button in Crowdy Studio.');
-        // Serialized: two concurrent requests would share one prompt and the
+        if (!confirm) {
+          throw new Error(
+            mode === 'draft'
+              ? 'Draft tests from the agent are not enabled on this page (a draft test deploys the project to the grid); use Test draft in Crowdy Studio.'
+              : 'Live deploys from the agent are not enabled on this page; use the Deploy button in Crowdy Studio.',
+          );
+        }
+        // Serialized, through the deploy: two concurrent requests would share one prompt and the
         // player could answer a question other than the one on screen.
-        if (this.liveDeployPending) throw new Error('A live deploy is already waiting for the player to answer. Wait for that answer before asking again.');
+        if (this.liveDeployPending) throw new Error('A deploy is already waiting for the player to answer or running. Wait for it before asking again.');
         this.liveDeployPending = true;
-        let approved: boolean;
         try {
           const projectName = controller.getState().project?.metadata.name ?? 'this project';
-          approved = await confirm({ projectName });
+          if (!(await confirm({ projectName, mode }))) {
+            throw new Error(
+              mode === 'draft'
+                ? 'The player declined the draft test. Ask them before testing again.'
+                : 'The player declined the live deploy. Keep working with draft tests.',
+            );
+          }
+          return (await this.build(mode)) as never;
         } finally {
           this.liveDeployPending = false;
         }
-        if (!approved) throw new Error('The player declined the live deploy. Keep working with draft tests.');
-        return this.build('live') as never;
       }
       case 'studio.runtimeStatus':
         return { runtime: this.runtimeStatus(controller.getState()) } as never;

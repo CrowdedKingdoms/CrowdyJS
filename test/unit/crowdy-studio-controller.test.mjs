@@ -1003,6 +1003,50 @@ test('a full-stack deploy saves once, builds the CLIENT half first, then the mod
   controller.destroy();
 });
 
+test('a preview stopped while its broker starts is stopped, not left running', async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const calls = [];
+  let release;
+  const started = new Promise((resolve) => (release = resolve));
+  let starting;
+  const reachedStart = new Promise((resolve) => (starting = resolve));
+  const brokers = [];
+  const controller = new CrowdyStudioController(
+    options(providerFor(execProject('CLIENT')), {
+      mods: execMods(calls, {
+        async myMods() {
+          return [{ gridId: '500', name: 'weather-client', enabled: true }];
+        },
+      }),
+      brokerFactory: () => {
+        const broker = {
+          stopped: false,
+          async start() {
+            starting();
+            await started;
+          },
+          stop() {
+            broker.stopped = true;
+          },
+        };
+        brokers.push(broker);
+        return broker;
+      },
+    }),
+  );
+  await controller.initialize();
+  const deploy = controller.testDraft();
+  await reachedStart;
+  await controller.stopProject();
+  release();
+  const result = await deploy;
+  assert.equal(result.status, 'FAILED');
+  assert.match(result.message, /cancelled/);
+  assert.equal(brokers.length, 1);
+  assert.equal(brokers[0].stopped, true, 'the broker that finished starting after Stop was stopped');
+  controller.destroy();
+});
+
 test('a CLIENT-only project with no mod deploys the mod starter first and says so', async () => {
   const { CrowdyStudioController } = await loadSdk();
   const calls = [];

@@ -21,9 +21,10 @@ export interface GridHostLocal {
    */
   avatarChunk?(avatarId: string): GridChunk | null | undefined | Promise<GridChunk | null | undefined>;
   /**
-   * The runtime permission keys the visiting player holds on this grid, as the game knows them
+   * The code-permission keys the visiting player holds on this grid, as the game knows them
    * (where Crowdy Studio's `targetPermissions` come from). `grid_permission_check` answers from
-   * these, for that player and this grid only; the server still enforces the permissions.
+   * these, for that player, this grid and {@link GRID_PERMISSION_CHECK_KEYS} only, and refuses
+   * any other key; the server still enforces the permissions.
    */
   gridPermissionKeys?(): Iterable<string> | Promise<Iterable<string>>;
   setVoxel?(input: {
@@ -60,8 +61,34 @@ export interface GridHostCallsOptions {
    * can post to anyway.
    */
   channelFilter?: (channelId: string) => boolean | Promise<boolean>;
-  /** Stable 32-hex actor uuid the mod's spatial sends are attributed to. */
+  /**
+   * The name of the actor a mod's spatial and channel sends go out as when it names none (its
+   * `uuidHex` otherwise). Either way the wire uuid is {@link clientHalfActorUuid} of that name
+   * on this grid, so a mod never sends as the player's avatar or as anyone else's.
+   */
   actorUuid?: string;
+}
+
+/**
+ * The permission keys `grid_permission_check` answers for: the player's code-permission keys,
+ * the only ones a game knows for a grid. Any other key is refused rather than answered false.
+ */
+export const GRID_PERMISSION_CHECK_KEYS: readonly string[] = [
+  'write_server_code',
+  'run_server_code',
+  'write_client_code',
+  'run_client_code',
+];
+
+/**
+ * The actor uuid a mod's spatial and channel sends carry on grid `gridId` for the actor it calls
+ * `name`: the first 16 bytes of SHA-256 over both, as 32 lowercase hex characters. No name a mod
+ * chooses maps to another uuid, so it cannot move a player's avatar or speak as one.
+ */
+export async function clientHalfActorUuid(gridId: string, name: string): Promise<string> {
+  const input = new TextEncoder().encode(`crowdy/client-half-actor/v1\u0000${gridId}\u0000${name}`);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', input));
+  return Array.from(digest.subarray(0, 16), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Thrown for a host call this game does not offer in the browser. */
@@ -101,9 +128,12 @@ export function createGridHostCalls(
       ? options.channelFilter(channelId)
       : (await ownChannels()).has(channelId);
   const uuid = (args: Record<string, unknown>) =>
-    typeof args.uuidHex === 'string' && /^[0-9a-f]{64}$/i.test(args.uuidHex)
-      ? hexToAscii(args.uuidHex)
-      : (options.actorUuid ?? '0'.repeat(32));
+    clientHalfActorUuid(
+      scope.gridId,
+      typeof args.uuidHex === 'string' && /^[0-9a-f]{64}$/i.test(args.uuidHex)
+        ? hexToAscii(args.uuidHex)
+        : (options.actorUuid ?? ''),
+    );
 
   return async ({ fn, args }) => {
     switch (fn) {
@@ -147,12 +177,14 @@ export function createGridHostCalls(
       case 'voxel_set': {
         const chunk = coords(args.chunkX, args.chunkY, args.chunkZ);
         scope.assertContains({ x: chunk[0], y: chunk[1], z: chunk[2] });
-        const voxel = {
-          x: Number(args.voxelX ?? 0),
-          y: Number(args.voxelY ?? 0),
-          z: Number(args.voxelZ ?? 0),
-        };
-        const voxelType = Number(args.voxelType ?? 0);
+        const vx = intIn(args.voxelX ?? 0, 0, 15);
+        const vy = intIn(args.voxelY ?? 0, 0, 15);
+        const vz = intIn(args.voxelZ ?? 0, 0, 15);
+        const voxelType = intIn(args.voxelType ?? 0, 0, 255);
+        if (vx === null || vy === null || vz === null || voxelType === null) {
+          throw new GridHostCallRefused(fn, 'needs a voxel inside its chunk (0-15) and a voxel type 0-255');
+        }
+        const voxel = { x: vx, y: vy, z: vz };
         const state = typeof args.stateBase64 === 'string' ? args.stateBase64 : undefined;
         if (local?.setVoxel) {
           return {
@@ -180,7 +212,7 @@ export function createGridHostCalls(
         const chunk = { x: x.toString(), y: y.toString(), z: z.toString() };
         const payload = String(args.payloadBase64 ?? '');
         const distance = Math.max(0, Math.min(8, Number(args.distance ?? 0) | 0));
-        const common = { chunk, uuid: uuid(args), distance };
+        const common = { chunk, uuid: await uuid(args), distance };
         if (kind === 'actor') return scope.send.actorUpdate({ ...common, state: payload });
         if (kind === 'text') {
           return scope.send.text({ ...common, text: atob(payload) });
@@ -199,7 +231,7 @@ export function createGridHostCalls(
         if (!(await channelAllowed(channelId))) {
           throw new GridHostCallRefused(fn, 'targets a channel outside this grid');
         }
-        return scope.channels.send(channelId, uuid(args), String(args.payloadBase64 ?? ''));
+        return scope.channels.send(channelId, await uuid(args), String(args.payloadBase64 ?? ''));
       }
       case 'avatar_state_get': {
         const avatarId = decimalId(args.avatarId);
@@ -224,6 +256,12 @@ export function createGridHostCalls(
         const key = args.permissionKey;
         if (typeof key !== 'string' || !PERMISSION_KEY.test(key)) {
           throw new GridHostCallRefused(fn, 'needs a permission key');
+        }
+        if (!GRID_PERMISSION_CHECK_KEYS.includes(key)) {
+          throw new GridHostCallRefused(
+            fn,
+            `cannot answer for '${key}': the page knows only the player's code-permission keys (${GRID_PERMISSION_CHECK_KEYS.join(', ')})`,
+          );
         }
         return new Set(await local.gridPermissionKeys()).has(key);
       }
@@ -255,6 +293,13 @@ function decimalId(value: unknown): string | null {
 
 function coords(x: unknown, y: unknown, z: unknown): [bigint, bigint, bigint] {
   return [BigInt(x as string), BigInt(y as string), BigInt(z as string)];
+}
+
+/** An integer in [lo, hi] (a number, or a decimal string), else null. */
+function intIn(value: unknown, lo: number, hi: number): number | null {
+  const n =
+    typeof value === 'number' ? value : typeof value === 'string' && /^-?\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isInteger(n) && n >= lo && n <= hi ? n : null;
 }
 
 function clampInt(value: unknown, lo: number, hi: number): number {

@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.0.1** (18.0.0 was published only as
+**Current package:** `package.json` is **18.0.2** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,18 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.0.2 is the P3 W5 client security review (2026-09-29; MIGRATION.md has the list).** A
+CLIENT half is someone else's code in the player's browser, so the page holds it to rules its
+consent never waived: `createGridHostCalls` answers `grid_permission_check` only for the four
+code-permission keys (`GRID_PERMISSION_CHECK_KEYS`, OI-2026-09-28-004) and refuses any other
+key, sends a half's spatial and channel messages as `clientHalfActorUuid(gridId, name)` (never
+a uuid the half names), and takes `voxel_set` voxels 0-15 of type 0-255; the broker refuses a
+chunk named a second way (`chunk`, `chunk_x`, …); the glue caps what it copies out of a module
+(`GLUE_HOST_CALL_REQUEST_MAX_BYTES`, `GLUE_STATE_MAX_BYTES`, `GLUE_INVOKE_REPLY_MAX_BYTES`);
+the agent's `studio.draftTest` needs the page-side `confirmLiveDeploy` (`mode: 'draft'`),
+because on ck-exec a draft test deploys the mod to the grid like a live deploy. A game router
+must route on the fields the broker checks (`x`/`y`/`z`, `chunkX`/`chunkY`/`chunkZ`).
 
 **18.0.0 removes the legacy engines' SDK surface (P3 W2, HS-42, 2026-09-28): it lands on `dev`
 with the game API's deletion (cks-game-api #417, ck-api `dev/v2.27.0`).** Gone:

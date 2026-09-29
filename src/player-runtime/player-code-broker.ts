@@ -5,6 +5,7 @@ import {
   writeGlueResult,
 } from './glue-sab.js';
 import { EXEC_CLIENT_HOST_CALLS } from './client-host-calls.js';
+import { GLUE_INVOKE_REPLY_MAX_BYTES } from './glue-runtime.js';
 import {
   ClientGridEvent,
   ClientGridEventBus,
@@ -72,7 +73,7 @@ export const PLAYER_CODE_LOG_LINES_PER_SECOND = 20;
 /** The longest log line forwarded, in characters. */
 export const PLAYER_CODE_LOG_MAX_CHARS = 1000;
 /** The largest `invoke` payload, and the largest reply accepted, in bytes. */
-export const PLAYER_CODE_INVOKE_MAX_BYTES = 256 * 1024;
+export const PLAYER_CODE_INVOKE_MAX_BYTES = GLUE_INVOKE_REPLY_MAX_BYTES;
 
 /**
  * What built a player module: the CLIENT half of a ck-exec mod, a `crowdy-client-sdk` crate.
@@ -177,6 +178,14 @@ const CHUNK_FUNCTIONS = new Set([
 ]);
 
 const PRESENTATION_FUNCTIONS = new Set(['hud_set', 'overlay_draw']);
+
+/**
+ * Other spellings of the chunk a grid-confined call names. The clamp checks `x`/`y`/`z` (reads)
+ * or `chunkX`/`chunkY`/`chunkZ` (`voxel_set`, `emit_spatial`) only, so a call carrying one of
+ * these is refused: a game router that also read them could be pointed outside the grid.
+ */
+const READ_CHUNK_ALIASES = ['chunk', 'chunkX', 'chunkY', 'chunkZ', 'chunk_x', 'chunk_y', 'chunk_z'];
+const WRITE_CHUNK_ALIASES = ['chunk', 'chunk_x', 'chunk_y', 'chunk_z'];
 
 function groupsByFunction(
   allowed: Readonly<Record<string, ReadonlySet<string>>>,
@@ -909,8 +918,10 @@ export class PlayerCodeBroker {
 
   private assertGridScope(fn: string, args: Record<string, unknown>): void {
     if (CHUNK_FUNCTIONS.has(fn)) {
+      refuseAliases(args, READ_CHUNK_ALIASES);
       this.assertChunk(args.x, args.y, args.z);
     } else if (fn === 'voxel_set' || fn === 'emit_spatial') {
+      refuseAliases(args, WRITE_CHUNK_ALIASES);
       this.assertChunk(args.chunkX, args.chunkY, args.chunkZ);
     } else if (SELF_GRID_FUNCTIONS.has(fn)) {
       // Hosts that predate grid ids leave the check to their onHostCall.
@@ -944,6 +955,14 @@ export class PlayerCodeBroker {
     return [...new Uint8Array(digest)]
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
+  }
+}
+
+function refuseAliases(args: Record<string, unknown>, aliases: readonly string[]): void {
+  for (const key of aliases) {
+    if (Object.prototype.hasOwnProperty.call(args, key)) {
+      throw new Error(`host call cannot carry '${key}': the grid is checked on the call's own chunk fields`);
+    }
   }
 }
 

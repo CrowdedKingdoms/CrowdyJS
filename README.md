@@ -518,6 +518,17 @@ the game can answer need its knowledge: `local.actorsInChunk` for
 Game Model, sessions and grid state calls went with the legacy engines in
 18.0.0: the broker refuses them.
 
+What a CLIENT half is told and sent is someone else's code talking, so the page
+holds it to rules of its own (18.0.2): `grid_permission_check` answers only for
+the player's four code-permission keys (`GRID_PERMISSION_CHECK_KEYS`) and
+refuses any other key instead of answering false, because a game knows no other
+key for a grid; `voxel_set` takes a voxel inside its chunk (0-15) and a type
+0-255; and a half's spatial and channel sends go out as an actor uuid the page
+derives for the grid from the one the half names (`clientHalfActorUuid`), so a
+half can never move the player's avatar or speak as another player. The broker
+refuses a call that names its chunk a second way (`chunk`, `chunk_x`, …): route
+on the fields the broker checks, `x`/`y`/`z` or `chunkX`/`chunkY`/`chunkZ`.
+
 ## World Stores
 
 The core client is a thin transport; the **World Stores** layer
