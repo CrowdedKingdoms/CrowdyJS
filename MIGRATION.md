@@ -120,6 +120,25 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.0.3: a player takes back their consent and their trust
+
+Additive (OI-2026-09-28-001). It needs a game API with cks-game-api #431 (ck-api
+`dev/v2.28.0`) for the two new calls; nothing else calls them.
+
+- `client.exec.revokeClientModConsent(appId, modId)` takes back the player's consent to one
+  CLIENT half, whatever hash they consented to (true when they had). While they trust its author
+  on the grid it is still served to them.
+- `client.exec.revokeAuthorTrust(appId, gridId, authorId)` stops trusting an author on a grid and
+  takes back the player's consent to each of their CLIENT halves there (true when anything was
+  taken back). It works from anywhere, not only inside the grid.
+- `ExecClientHalves.revoke(modId)` stops a running CLIENT half and takes back the player's
+  agreement to it: the consent, and when it ran through trust, the trust as well, consenting
+  instead to the author's other running halves so those keep running. `forgetAuthor(authorId)`
+  stops every CLIENT half of the author on the grid and takes the trust back. What was taken back
+  is not asked about again on the grid until it changes; a new visit asks again. The runner's
+  `exec` needs the two calls for these (`client.exec` has them); a stop for either reason is
+  `'revoked'` (`ExecClientHalfStopReason`).
+
 ## 18.0.2: a CLIENT half holds to the page's rules
 
 The P3 W5 security review of the clients. A CLIENT half is another player's code in your

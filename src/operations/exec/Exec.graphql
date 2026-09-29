@@ -432,6 +432,14 @@ mutation ExecTrustAuthor(
   )
 }
 
+mutation ExecRevokeClientModConsent($appId: BigInt!, $modId: String!) {
+  execRevokeClientModConsent(appId: $appId, modId: $modId)
+}
+
+mutation ExecRevokeAuthorTrust($appId: BigInt!, $gridId: BigInt!, $authorId: BigInt!) {
+  execRevokeAuthorTrust(appId: $appId, gridId: $gridId, authorId: $authorId)
+}
+
 query ExecModClientArtifact($appId: BigInt!, $modId: String!) {
   execModClientArtifact(appId: $appId, modId: $modId) {
     modId

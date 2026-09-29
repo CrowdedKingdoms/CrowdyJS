@@ -228,7 +228,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.host` | Game-host election (`get`, `amIHost`) + actor liveness `heartbeat`. `amIHost` is UI convenience only — a hub decides host-only actions from its caller. |
 | `client.teleport` | Teleport requests. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
-| `client.exec` | **ck-exec (dev-tier preview):** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion` and `setEnabled` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod` and `trustAuthor` their CLIENT halves. See [ck-exec](#ck-exec-dev-tier-preview). |
+| `client.exec` | **ck-exec (dev-tier preview):** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion` and `setEnabled` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec-dev-tier-preview). |
 | `client.playerWallet` | Player spend: balance, ledger, hourly charges, spend caps, card setup, auto-recharge. A ck-exec mod's compute is billed here, to its owner. |
 | `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
@@ -715,7 +715,19 @@ setInterval(() => void halves.refresh().catch(console.warn), 10_000);
 
 // The page calls a running CLIENT half's handle_invoke; the reply is the module's bytes.
 const reply = await halves.invoke(modId, new TextEncoder().encode('{"ask":"score"}'));
+
+// The player takes an agreement back: one CLIENT half, or everything by its author here.
+await halves.revoke(modId);
+await halves.forgetAuthor(authorId);
 ```
+
+The player can take back what they agreed to (18.0.3): `revoke(modId)` stops a CLIENT half
+and takes back their consent to it (`exec.revokeClientModConsent`), and when it ran because they
+trust its author, that trust too, consenting instead to the author's other running halves so
+those keep running; `forgetAuthor(authorId)` stops all of the author's halves on the grid and
+takes back the trust with every consent to them there (`exec.revokeAuthorTrust`). Either way
+what was taken back is not asked about again on the grid until it changes (a new visit asks
+again). A game shows both beside each running CLIENT half.
 
 Each refresh stops the CLIENT halves whose mod is gone or whose digest, capability hash or
 tick interval changed, asks about the rest, and starts the consented ones in a broker. The

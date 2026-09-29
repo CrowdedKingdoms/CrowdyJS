@@ -50,6 +50,8 @@ import {
   ExecModUnpublishDocument,
   ExecModsDocument,
   ExecMyModsDocument,
+  ExecRevokeAuthorTrustDocument,
+  ExecRevokeClientModConsentDocument,
   ExecSetEnabledDocument,
   ExecStartersDocument,
   ExecTrustAuthorDocument,
@@ -1388,6 +1390,27 @@ export class ExecAPI {
   async trustAuthor(appId: string, gridId: string, authorId: string, capabilityHash: string): Promise<boolean> {
     const data = await this.graphql.request(ExecTrustAuthorDocument, { appId, gridId, authorId, capabilityHash });
     return data.execTrustAuthor;
+  }
+
+  /**
+   * Takes back your consent to one mod's CLIENT half, whatever hash you consented to; true when
+   * you had consented. While you trust its author on its grid it is still served to you:
+   * {@link revokeAuthorTrust} takes that back. Needs only the app's app-scoped token.
+   */
+  async revokeClientModConsent(appId: string, modId: string): Promise<boolean> {
+    const data = await this.graphql.request(ExecRevokeClientModConsentDocument, { appId, modId });
+    return data.execRevokeClientModConsent;
+  }
+
+  /**
+   * Stops trusting an author on a grid and takes back your consent to each of their CLIENT halves
+   * there, so none is served to you until you consent or trust again; true when anything was
+   * taken back. Works from anywhere, not only inside the grid. Needs only the app's app-scoped
+   * token.
+   */
+  async revokeAuthorTrust(appId: string, gridId: string, authorId: string): Promise<boolean> {
+    const data = await this.graphql.request(ExecRevokeAuthorTrustDocument, { appId, gridId, authorId });
+    return data.execRevokeAuthorTrust;
   }
 
   /**

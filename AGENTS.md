@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.0.2** (18.0.0 was published only as
+**Current package:** `package.json` is **18.0.3** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,12 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.0.3 lets a player take back a CLIENT half (OI-2026-09-28-001, 2026-09-29).**
+`exec.revokeClientModConsent` / `revokeAuthorTrust` wrap cks-game-api #431 (ck-api
+`dev/v2.28.0`); `ExecClientHalves.revoke(modId)` and `forgetAuthor(authorId)` stop what runs and
+take the agreement back (a trusted half's revoke drops the trust and re-consents the author's
+other running halves). A game puts both controls beside each running CLIENT half.
 
 **18.0.2 is the P3 W5 client security review (2026-09-29; MIGRATION.md has the list).** A
 CLIENT half is someone else's code in the player's browser, so the page holds it to rules its

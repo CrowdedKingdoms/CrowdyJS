@@ -7236,7 +7236,7 @@ type Query {
     appId: BigInt!
   ): ExecStarterPack! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  A ck-exec build's status, compiler log and modules (dev-tier preview); null when this app has no such build. Builds are kept for 7 days. Requires the org 'view_compute_diagnostics' permission.
+  A ck-exec build's status, compiler log and modules (dev-tier preview); null when this app has no such build, or it is a player's (a mod's builds are read with `execModBuildStatus`, by the player alone). Builds are kept for 7 days. Requires the org 'view_compute_diagnostics' permission.
   """
   execBuildStatus(
     """The app the build is for."""
@@ -9252,6 +9252,26 @@ type Mutation {
     The `authorCapabilityHash` you were shown, as `execGridClientMods` returned it.
     """
     capabilityHash: String!
+  ): Boolean!
+  """
+  Take back your consent to a mod's CLIENT half (dev-tier preview), whatever hash you consented to; true when you had consented. While you trust the mod's author on its grid, their CLIENT halves there are still served to you: take that back with `execRevokeAuthorTrust`. Needs only the app-scoped token of the app, not access to it.
+  """
+  execRevokeClientModConsent(
+    """The app the mod is in."""
+    appId: BigInt!
+    """The mod’s id (`modId` of `execGridClientMods`)."""
+    modId: String!
+  ): Boolean!
+  """
+  Stop trusting an author on a grid (dev-tier preview), and take back your consent to each of their CLIENT halves there, so none is served to you until you consent or trust again; true when anything was taken back. Works from anywhere, not only inside the grid. Needs only the app-scoped token of the app, not access to it.
+  """
+  execRevokeAuthorTrust(
+    """The app the grid is in."""
+    appId: BigInt!
+    """The grid you trusted the author on."""
+    gridId: BigInt!
+    """The author: `authorId` of `execGridClientMods`."""
+    authorId: BigInt!
   ): Boolean!
   """
   Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically.
