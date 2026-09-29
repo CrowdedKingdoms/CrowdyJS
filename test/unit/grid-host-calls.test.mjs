@@ -74,23 +74,33 @@ test('avatar_state_get is refused where the game cannot place avatars', async ()
   }
 });
 
-test('grid_permission_check answers for the visiting player on this grid, from what the game knows', async () => {
-  const { GridHostCallRefused } = await loadSdk();
+test('grid_permission_check answers for the visiting player on this grid, from the code keys the game knows', async () => {
+  const { GridHostCallRefused, GRID_PERMISSION_CHECK_KEYS } = await loadSdk();
+  assert.deepEqual(GRID_PERMISSION_CHECK_KEYS, [
+    'write_server_code',
+    'run_server_code',
+    'write_client_code',
+    'run_client_code',
+  ]);
   const { call } = await hostCalls({
     userId: '31',
-    local: { gridPermissionKeys: async () => ['access', 'update_voxel_data'] },
+    local: { gridPermissionKeys: async () => ['run_client_code', 'update_voxel_data'] },
   });
   const ask = (args) => call({ fn: 'grid_permission_check', args });
 
-  assert.equal(await ask({ userId: '31', gridId: '500', permissionKey: 'update_voxel_data' }), true);
+  assert.equal(await ask({ userId: '31', gridId: '500', permissionKey: 'run_client_code' }), true);
   assert.equal(await ask({ userId: '31', gridId: '500', permissionKey: 'run_server_code' }), false);
   for (const [args, reason] of [
-    [{ userId: '32', gridId: '500', permissionKey: 'access' }, /asks about another player/],
-    [{ gridId: '500', permissionKey: 'access' }, /asks about another player/],
-    [{ userId: '31', gridId: '501', permissionKey: 'access' }, /names another grid/],
-    [{ userId: '31', permissionKey: 'access' }, /names another grid/],
+    [{ userId: '32', gridId: '500', permissionKey: 'run_client_code' }, /asks about another player/],
+    [{ gridId: '500', permissionKey: 'run_client_code' }, /asks about another player/],
+    [{ userId: '31', gridId: '501', permissionKey: 'run_client_code' }, /names another grid/],
+    [{ userId: '31', permissionKey: 'run_client_code' }, /names another grid/],
     [{ userId: '31', gridId: '500', permissionKey: 'Access; drop' }, /needs a permission key/],
     [{ userId: '31', gridId: '500' }, /needs a permission key/],
+    // A key the page does not know is refused, not answered false (OI-2026-09-28-004), even
+    // when the game happens to list it.
+    [{ userId: '31', gridId: '500', permissionKey: 'update_voxel_data' }, /knows only the player's code-permission keys/],
+    [{ userId: '31', gridId: '500', permissionKey: 'access' }, /knows only the player's code-permission keys/],
   ]) {
     await assert.rejects(
       ask(args),
@@ -109,11 +119,94 @@ test('grid_permission_check is refused without the game\u2019s permissions or th
   ]) {
     const { call } = await hostCalls(setup);
     await assert.rejects(
-      call({ fn: 'grid_permission_check', args: { userId: '31', gridId: '500', permissionKey: 'access' } }),
+      call({ fn: 'grid_permission_check', args: { userId: '31', gridId: '500', permissionKey: 'run_client_code' } }),
       (e) => e instanceof GridHostCallRefused && /not offered in the browser/.test(e.message),
       JSON.stringify(setup),
     );
   }
+});
+
+test('voxel_set writes only a voxel inside its chunk, of a type 0-255', async () => {
+  const { GridScope, createGridHostCalls, GridHostCallRefused } = await loadSdk();
+  const scope = new GridScope({ grids: {}, channels: {}, udp: {} }, '42', '500', BOX);
+  const local = [];
+  const server = [];
+  const make = (withLocal) =>
+    createGridHostCalls({
+      scope,
+      client: { chunks: {}, state: {}, voxels: { update: async (input) => (server.push(input), true) } },
+      ...(withLocal ? { local: { setVoxel: async (input) => (local.push(input), true) } } : {}),
+    });
+  const voxel = (over) => ({
+    fn: 'voxel_set',
+    args: { chunkX: 1, chunkY: 0, chunkZ: 2, voxelX: 3, voxelY: 4, voxelZ: 5, voxelType: 7, ...over },
+  });
+  for (const withLocal of [true, false]) {
+    const call = make(withLocal);
+    assert.deepEqual(await call(voxel({})), { ok: true });
+    for (const over of [
+      { voxelX: 16 },
+      { voxelY: -1 },
+      { voxelZ: 1e9 },
+      { voxelX: 1.5 },
+      { voxelX: 'NaN' },
+      { voxelType: 256 },
+      { voxelType: -3 },
+      { voxelType: 2.5 },
+    ]) {
+      await assert.rejects(
+        call(voxel(over)),
+        (e) => e instanceof GridHostCallRefused && /inside its chunk/.test(e.message),
+        JSON.stringify(over),
+      );
+    }
+  }
+  assert.equal(local.length, 1, 'the game wrote only the valid voxel');
+  assert.equal(server.length, 1, 'the API was asked only for the valid voxel');
+  assert.deepEqual(local[0], {
+    chunk: { x: 1, y: 0, z: 2 },
+    x: 3,
+    y: 4,
+    z: 5,
+    voxelType: 7,
+    state: undefined,
+  });
+  assert.deepEqual(server[0].location, { x: 3, y: 4, z: 5 });
+});
+
+test('spatial and channel sends go out under a uuid derived for the grid, never one the mod names', async () => {
+  const { GridScope, createGridHostCalls, clientHalfActorUuid } = await loadSdk();
+  const sent = [];
+  const udp = {
+    sendActorUpdate: async (input) => (sent.push(['actor', input]), true),
+    sendTextPacket: async (input) => (sent.push(['text', input]), true),
+    sendClientEvent: async (input) => (sent.push(['event', input]), true),
+    sendChannelMessage: async (input) => (sent.push(['channel', input]), true),
+  };
+  const grids = { channels: async () => [{ groupId: '77' }] };
+  const scope = new GridScope({ grids, channels: {}, udp }, '42', '500', BOX);
+  const victim = 'a'.repeat(32);
+  const victimHex = Buffer.from(victim, 'ascii').toString('hex');
+  const call = createGridHostCalls({ scope, client: { chunks: {}, voxels: {}, state: {} } });
+
+  const spatial = { chunkX: 1, chunkY: 0, chunkZ: 1, uuidHex: victimHex, payloadBase64: 'aGk=', distance: 2 };
+  await call({ fn: 'emit_spatial', args: { kind: 'actor', ...spatial } });
+  await call({ fn: 'emit_spatial', args: { kind: 'text', ...spatial } });
+  await call({ fn: 'emit_spatial', args: { kind: 'client_event', ...spatial, payloadBase64: 'AQAB' } });
+  await call({ fn: 'emit_channel', args: { channelId: '77', payloadBase64: 'aGk=' } });
+
+  const own = await clientHalfActorUuid('500', victim);
+  const unnamed = await clientHalfActorUuid('500', '');
+  assert.match(own, /^[0-9a-f]{32}$/);
+  assert.notEqual(own, victim, 'the mod cannot send as the uuid it names');
+  assert.notEqual(await clientHalfActorUuid('501', victim), own, 'the uuid is per grid');
+  const uuids = sent.map(([, input]) => JSON.stringify(input));
+  assert.equal(sent.length, 4);
+  for (const text of uuids.slice(0, 3)) {
+    assert.ok(text.includes(own), text);
+    assert.ok(!text.includes(victim), text);
+  }
+  assert.ok(uuids[3].includes(unnamed), uuids[3]);
 });
 
 test('every call in the CLIENT allowlist has an answer here or in the broker; the legacy ones are refused', async () => {

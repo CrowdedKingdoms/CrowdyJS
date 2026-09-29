@@ -206,6 +206,11 @@ test('modClientArtifactBytes refuses bytes that differ from the digest, and an A
 test('modClientArtifactBytes refuses a capability summary that does not parse: nothing would bound the module', async () => {
   const { exec } = fakeExec({ ExecModClientArtifact: artifactAnswer({ capabilitySummaryJson: '{"version":1' }) });
   await assert.rejects(exec.modClientArtifactBytes('77', '900'), (e) => e instanceof CrowdyProtocolError && /does not parse/.test(e.message));
+  // A host-function list with anything but names is refused as CrowdyCPP refuses it.
+  const odd = fakeExec({
+    ExecModClientArtifact: artifactAnswer({ capabilitySummaryJson: '{"hostFunctions":["hud_set",{"fn":"voxel_set"}]}' }),
+  });
+  await assert.rejects(odd.exec.modClientArtifactBytes('77', '900'), (e) => e instanceof CrowdyProtocolError && /does not parse/.test(e.message));
 });
 
 test('modClientArtifactBytes passes NOT_FOUND and RATE_LIMITED through untouched', async () => {

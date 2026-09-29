@@ -962,6 +962,11 @@ function parseManifest(json: string | null | undefined): ExecManifest | null {
   }
 }
 
+/** An array of strings, as a capability summary's `hostFunctions` must be. */
+export function isNameList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((name) => typeof name === 'string');
+}
+
 function parseCapabilities(json: string | null | undefined): ExecClientCapabilitySummary | null {
   if (!json) return null;
   try {
@@ -1415,7 +1420,7 @@ export class ExecAPI {
       });
     }
     const capabilitySummary = a.capabilitySummary;
-    if (!capabilitySummary || !Array.isArray(capabilitySummary.hostFunctions)) {
+    if (!capabilitySummary || !isNameList(capabilitySummary.hostFunctions)) {
       throw new CrowdyProtocolError({
         message: `CLIENT half of mod ${a.modId}: its capability summary does not parse, so nothing bounds its host calls`,
       });

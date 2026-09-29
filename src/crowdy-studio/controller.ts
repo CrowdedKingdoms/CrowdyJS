@@ -1642,7 +1642,13 @@ export class CrowdyStudioController {
       this.options.brokerFactory?.(brokerOptions) ??
       new PlayerCodeBroker(brokerOptions);
     await broker.start(half.bytes);
-    this.checkOperation(operation);
+    try {
+      this.checkOperation(operation);
+    } catch (error) {
+      // Stopped, replaced or destroyed while it started: nothing else holds this broker.
+      broker.stop();
+      throw error;
+    }
     const previous = this.broker;
     this.broker = broker;
     previous?.stop();

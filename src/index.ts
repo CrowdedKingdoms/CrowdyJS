@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.0.1';
+export const VERSION = '18.0.2';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -437,7 +437,10 @@ export {
 } from './player-runtime/player-glue-worker.js';
 export {
   EXEC_CLIENT_ABI_IMPORTS,
+  GLUE_HOST_CALL_REQUEST_MAX_BYTES,
+  GLUE_INVOKE_REPLY_MAX_BYTES,
   GLUE_LOG_MAX_BYTES,
+  GLUE_STATE_MAX_BYTES,
   type GuestExports,
   type GlueRuntimeOptions,
 } from './player-runtime/glue-runtime.js';

@@ -1,7 +1,8 @@
-import type {
-  ExecAPI,
-  ExecClientCapabilitySummary,
-  ExecGridClientMod,
+import {
+  isNameList,
+  type ExecAPI,
+  type ExecClientCapabilitySummary,
+  type ExecGridClientMod,
 } from '../domains/exec.js';
 import { CrowdyGraphQLError, CrowdyProtocolError } from '../errors.js';
 import {
@@ -352,7 +353,7 @@ export class ExecClientHalves {
     // What the player consented to, and what the served artifact itself lists, bound the
     // module's host calls in the broker.
     const consented = mod.capabilitySummary?.hostFunctions;
-    if (!Array.isArray(consented)) {
+    if (!isNameList(consented)) {
       this.fail(
         mod,
         'start',

@@ -120,6 +120,38 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.0.2: a CLIENT half holds to the page's rules
+
+The P3 W5 security review of the clients. A CLIENT half is another player's code in your
+player's browser; these close what it could reach that its consent never covered. Nothing else
+changes, and no schema change.
+
+- **`grid_permission_check` answers only for the code-permission keys**
+  (`GRID_PERMISSION_CHECK_KEYS`: `write_server_code`, `run_server_code`, `write_client_code`,
+  `run_client_code`) and refuses any other key as one the page cannot answer. It used to answer
+  false, which a half could not tell from "not held": a game knows no other key for a grid.
+- **A half's spatial and channel sends go out as an actor uuid the page derives**
+  (`clientHalfActorUuid(gridId, name)`, 32 hex characters) from the one it names
+  (`uuidHex`) or from `actorUuid`. It used to send as whatever uuid it named, the player's
+  avatar or another player's included. The old all-zero default is gone.
+- **`voxel_set`** takes a voxel inside its chunk (`voxelX/Y/Z` integers 0-15) and a type 0-255,
+  on both the game's `local.setVoxel` and the API path; anything else is refused.
+- **The broker refuses a call that names its chunk a second way** (`chunk`, `chunk_x`,
+  `chunk_y`, `chunk_z`, and `chunkX/Y/Z` on a read). It checks `x`/`y`/`z` (reads) or
+  `chunkX`/`chunkY`/`chunkZ` (`voxel_set`, `emit_spatial`); a game router must use those.
+- **The glue bounds what it copies out of a module** before the copy: a host-call request over
+  `GLUE_HOST_CALL_REQUEST_MAX_BYTES` is answered `request_too_large` unread, `state_set` refuses
+  a blob over `GLUE_STATE_MAX_BYTES` (1 MiB; it returns 1), and a `handle_invoke` reply over
+  `GLUE_INVOKE_REPLY_MAX_BYTES` (256 KiB, `PLAYER_CODE_INVOKE_MAX_BYTES`) fails the invoke.
+- **`modClientArtifactBytes` refuses a summary whose `hostFunctions` are not all names**, as
+  CrowdyCPP does.
+- **The agent's draft tests need the player's OK on the page.** On ck-exec a draft test deploys
+  the project's mod to the grid like a live deploy (players there who trust you run its CLIENT
+  half), so `StudioDshBridge` asks `confirmLiveDeploy` for `studio.draftTest` too, with
+  `mode: 'draft'`, and refuses it without the hook. The pane words the question for a draft.
+- **Crowdy Studio stops a preview that finished starting after Stop**, a new run or a project
+  switch; it used to keep running unseen.
+
 # 17.14.0 ck-exec CLIENT halves
 
 Dev-tier preview (cks-game-api #422, P3 W1). **The release needs a game API that has #422:**
