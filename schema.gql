@@ -1264,6 +1264,10 @@ type App {
   Player user ids allowed to approve grid claim requests in "approval" mode. When empty, approval falls back to org staff holding manage_compute.
   """
   gridClaimApproverUserIds: [String!]!
+  """
+  Whether players may write the app's wilderness: chunks that no grid but the app's world grid covers. True (the default) leaves those writes to the ordinary voxel permission; false refuses every voxel and chunk write there (updateVoxel, sendVoxelUpdate, updateChunk, ck-exec's world.set_voxels), whoever makes it. Set with updateApp (manage_apps).
+  """
+  wildernessWritesOpen: Boolean!
   """Timestamp when the app was created."""
   createdAt: DateTime!
   """Timestamp when the app was last updated."""
@@ -8168,7 +8172,7 @@ type Mutation {
     input: CreateAppInput!
   ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
-  Update mutable fields of an existing app (name, description, visibility, status, metadata); only fields present in the input are changed. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
+  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen); only fields present in the input are changed. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
   """
   updateApp(
     """Numeric id of the app to update."""
@@ -8625,7 +8629,7 @@ type Mutation {
     appId: BigInt!
   ): GameHost
   """
-  Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. Leaves chunkState and LODs untouched. Requires a valid bearer token (app-scoped tokens are limited to their own app); no additional org/app permission is enforced on this field.
+  Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. Leaves chunkState and LODs untouched. Requires an app token for the app and either the 'manage_apps' permission on the app (resolved via its org; super admins bypass) or the voxel edit permission for this chunk that updateVoxel checks (app access, the tier's update_voxel_data, and update_voxel_data on a grid covering the chunk). Throws FORBIDDEN otherwise, and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
   """
   updateChunk(input: ChunkUpdateInput!): Chunk!
   """
@@ -8637,7 +8641,7 @@ type Mutation {
   """
   updateChunkLods(input: UpdateChunkLodsInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
-  Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and (when grids cover the chunk) `update_voxel_data` on a covering grid.
+  Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and (when grids cover the chunk) `update_voxel_data` on a covering grid. A chunk only the app's world grid covers is refused while the app's wilderness is closed (App.wildernessWritesOpen false).
   """
   updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
   """
@@ -9400,7 +9404,7 @@ type Mutation {
     input: ActorUpdateRequestInput!
   ): Boolean!
   """
-  Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
+  Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Throws FORBIDDEN synchronously for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
   """
   sendVoxelUpdate(
     """
@@ -9916,6 +9920,10 @@ input UpdateAppInput {
   New JSON-encoded marketplace metadata string, replacing the existing value (see App.metadata). Omit to leave unchanged.
   """
   metadata: String
+  """
+  Open (true) or close (false) the app's wilderness to voxel and chunk writes: chunks that no grid but the app's world grid covers. Closing refuses every write there, whoever makes it; each game API replica acts on the change within 15 seconds. Omit to leave unchanged.
+  """
+  wildernessWritesOpen: Boolean
 }
 
 input AdmitAppCodeInput {
@@ -10459,9 +10467,13 @@ input ChunkUpdateInput {
 
 """One per-voxel state entry to write to a chunk."""
 input VoxelStateInput {
-  """Local voxel position within the chunk (0-15 per axis)."""
+  """
+  Local voxel position within the chunk, 0-15 per axis; anything else is refused.
+  """
   voxelCoord: VoxelCoordinatesInput!
-  """Voxel type id to set at this position (0-255)."""
+  """
+  Voxel type id to set at this position, 0-255; anything else is refused.
+  """
   voxelType: Int!
   """
   BASE64-encoded binary state blob for this voxel; omit/null for no extra state.
@@ -10514,10 +10526,10 @@ input UpdateVoxelInput {
   """Address of the chunk that contains the voxel to edit."""
   coordinates: ChunkCoordinatesInput!
   """
-  Local voxel position within the chunk (0-15 per axis; validated to the signed 16-bit range).
+  Local voxel position within the chunk, 0-15 per axis; anything else is refused.
   """
   location: VoxelCoordinatesInput!
-  """Voxel type id to write (0-255)."""
+  """Voxel type id to write, 0-255; anything else is refused."""
   voxelType: Float!
   """
   Optional BASE64-encoded binary state blob for the voxel; omit for none.
@@ -11348,11 +11360,11 @@ input VoxelUpdateRequestInput {
   """
   uuid: String!
   """
-  The voxel coordinates within the chunk. Values must be between -32768 and 32767 (int16 range).
+  The voxel coordinates within the chunk, 0-15 on each axis; anything else is refused.
   """
   voxel: VoxelCoordinatesInput!
   """
-  The new voxel type ID. This determines the appearance and properties of the voxel.
+  The new voxel type ID, 0-255 (anything else is refused). This determines the appearance and properties of the voxel.
   """
   voxelType: Int!
   """

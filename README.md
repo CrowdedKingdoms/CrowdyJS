@@ -587,6 +587,10 @@ write-back), `channelInbox` / `actorInbox` (message inboxes), `events` (typed
 event router), `host` (host tracking), and `save` / `avatar` (typed durable
 state).
 
+A chunk write-back the server refuses (a visitor on someone else's plot, a safe zone, a closed
+wilderness) is dropped, not retried; one that fails for a reason that can clear is tried five
+times. Listen with `session.chunks.onWriteBackFailed(...)` to undo or flag the edit (18.0.4).
+
 Every store is **opt-in twice over**: only configured stores are constructed
 (and only they exist on the session's TYPE — `session.host` without
 `host: ...` in the config is a compile error), and the layer lives behind the

@@ -381,6 +381,10 @@ export class AppsAPI {
   /**
    * Update an app's mutable fields. Requires the `manage_apps` app permission.
    *
+   * `wildernessWritesOpen: false` closes the app's wilderness (chunks no grid but the
+   * world grid covers): every voxel and chunk write there is refused with `FORBIDDEN`,
+   * whoever makes it, within 15 seconds on every game API replica. Apps start open.
+   *
    * @param appId - Numeric app id.
    * @param input - {@link UpdateAppInput} fields to change.
    * @returns The updated {@link App}.

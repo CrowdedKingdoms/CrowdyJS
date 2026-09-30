@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.0.3** (18.0.0 was published only as
+**Current package:** `package.json` is **18.0.4** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,13 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.0.4: `ChunkStore` drops a refused write-back (P3 W5 review B, 2026-09-29).** `updateChunk`
+refuses a visitor on someone else's plot or a closed wilderness, so a store that retried forever
+would hammer the API for the rest of the session. The store drops a refusal at once, retries
+what can clear five times with backoff, and reports both through `onWriteBackFailed`;
+`flush()` resolves with what it dropped. Also `App.wildernessWritesOpen` (cks-game-api #434) on
+the app reads and `apps.update`.
 
 **18.0.3 lets a player take back a CLIENT half (OI-2026-09-28-001, 2026-09-29).**
 `exec.revokeClientModConsent` / `revokeAuthorTrust` wrap cks-game-api #431 (ck-api

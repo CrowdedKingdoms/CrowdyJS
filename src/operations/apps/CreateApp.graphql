@@ -8,6 +8,7 @@ mutation CreateApp($input: CreateAppInput!) {
     visibility
     status
     metadata
+    wildernessWritesOpen
     createdAt
   }
 }
