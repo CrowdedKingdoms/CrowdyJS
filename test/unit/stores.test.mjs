@@ -924,6 +924,74 @@ test('ChunkStore: a chunk whose bulk load failed is requested again', async () =
   session.dispose();
 });
 
+test('ChunkStore: a refused write-back is dropped and reported; a retryable one is bounded', async () => {
+  const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
+  const { api, calls } = fakeChunks();
+  const graphqlRefusal = (code, httpStatus) =>
+    Object.assign(new Error(code), {
+      graphqlErrors: [{ message: code, extensions: { code, httpStatus } }],
+      code,
+      extensions: { code, httpStatus },
+    });
+  const failWith = {
+    '1:0:0': () => graphqlRefusal('FORBIDDEN', 403), // someone else's plot
+    '2:0:0': () => graphqlRefusal('BAD_REQUEST', 400), // an invalid grid
+    '4:0:0': () => Object.assign(new Error('Network error: ECONNRESET'), { name: 'CrowdyNetworkError' }),
+  };
+  let busyLeft = 2;
+  const update = api.update;
+  const attempts = new Map();
+  api.update = async (input) => {
+    const key = `${input.coordinates.x}:${input.coordinates.y}:${input.coordinates.z}`;
+    attempts.set(key, (attempts.get(key) ?? 0) + 1);
+    if (failWith[key]) throw failWith[key]();
+    if (key === '3:0:0' && busyLeft-- > 0) {
+      throw Object.assign(new Error('The service is busy'), { code: 'PLATFORM_BUSY' });
+    }
+    return update(input);
+  };
+  const { client } = fakeClient({ chunks: api });
+  const ticker = manualTicker();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    chunks: { writeBackIntervalMs: 100, now: () => ticker.now },
+  });
+  const store = session.chunks;
+  const failures = [];
+  store.onWriteBackFailed((failure) => failures.push(failure));
+  for (const x of [1, 2, 3, 4]) store.seed({ x, y: 0, z: 0 }, new Uint8Array(CHUNK_VOLUME));
+
+  for (let t = 0; t < 30_000; t += 100) {
+    ticker.advance(100);
+    await sleep(0);
+  }
+
+  assert.equal(attempts.get('1:0:0'), 1, 'FORBIDDEN is not retried');
+  assert.equal(attempts.get('2:0:0'), 1, 'a validation refusal is not retried');
+  assert.equal(attempts.get('3:0:0'), 3, 'PLATFORM_BUSY is retried until it goes through');
+  assert.equal(attempts.get('4:0:0'), 5, 'a network failure is retried a bounded number of times');
+  assert.equal(store.pendingWriteBacks, 0);
+  assert.equal(store.get({ x: 3, y: 0, z: 0 }).loadState, 'loaded');
+  assert.equal(calls.update.length, 1, 'only the busy chunk reached the server');
+
+  const byKey = Object.fromEntries(failures.map((f) => [f.chunk.key, f]));
+  assert.equal(failures.length, 3);
+  assert.equal(byKey['1:0:0'].reason, 'refused');
+  assert.equal(byKey['1:0:0'].error.code, 'FORBIDDEN');
+  assert.equal(byKey['2:0:0'].reason, 'refused');
+  assert.equal(byKey['4:0:0'].reason, 'exhausted');
+  assert.equal(byKey['4:0:0'].attempts, 5);
+  for (const failure of failures) assert.equal(failure.chunk.dirty, false);
+
+  // flush reports what it dropped and does not reject.
+  store.seed({ x: 1, y: 0, z: 0 }, new Uint8Array(CHUNK_VOLUME));
+  const flushed = await store.flush();
+  assert.equal(flushed.length, 1);
+  assert.equal(flushed[0].reason, 'refused');
+  assert.equal(attempts.get('1:0:0'), 2, 'a new edit is written back once more');
+  session.dispose();
+});
+
 test('ChunkStore: onMissing can seed without write-back', async () => {
   const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
   const { api: chunksApi } = fakeChunks();

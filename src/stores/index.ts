@@ -99,6 +99,7 @@ export {
   type CachedChunk,
   type ChunkLoadState,
   type ChunkStoreConfig,
+  type ChunkWriteBackFailure,
   type SetVoxelInput,
 } from './chunks.js';
 export {

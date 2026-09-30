@@ -120,6 +120,27 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.0.4: a refused chunk write-back is dropped, and the wilderness setting
+
+The P3 W5 security review's notes for the SDKs. The game API now refuses `updateChunk` with
+`FORBIDDEN` for a player without edit permission on the chunk (someone else's claimed plot, a safe
+zone) and while the app's wilderness is closed (cks-game-api #434, ck-api `dev/v2.30.0`).
+
+- `ChunkStore` no longer retries a write-back forever. A write the server refuses (`FORBIDDEN`,
+  `SCOPE_MISSING`, `BAD_REQUEST`, `BAD_USER_INPUT`, `NOT_FOUND`, `extensions.retryable: false`, or
+  HTTP 400/403/404/413/422) is dropped after one attempt. One that can clear (`PLATFORM_BUSY`, a
+  network drop, a timeout, a server error) is tried five times, 0.7 s, 1.4 s, 2.8 s and 5.6 s
+  apart, then dropped. A dropped chunk keeps its local voxels and is no longer `dirty`.
+- `ChunkStore.onWriteBackFailed(listener)` reports each dropped write-back as a
+  `ChunkWriteBackFailure` (`chunk`, `coord`, `error`, `reason: 'refused' | 'exhausted'`,
+  `attempts`). The store does not undo the edit: undo it, or prune the chunk and load it again.
+- `ChunkStore.flush()` waits out the backoff and resolves with the write-backs it dropped
+  (it resolved with nothing before, and looped forever on a refusal).
+- `App.wildernessWritesOpen` is selected by `apps.app`, `appBySlug`, `forOrg`, `myApps`, `create`
+  and `update`; `apps.update(appId, { wildernessWritesOpen: false })` closes the wilderness
+  (`manage_apps`). The marketplace listings do not select it. Selecting it needs a game API with
+  #434.
+
 ## 18.0.3: a player takes back their consent and their trust
 
 Additive (OI-2026-09-28-001). It needs a game API with cks-game-api #431 (ck-api

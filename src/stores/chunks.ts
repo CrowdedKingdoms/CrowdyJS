@@ -37,6 +37,44 @@ function refusedBeforeRunning(error: unknown): boolean {
   return code === 'PLATFORM_BUSY' || e?.extensions?.retryable === true;
 }
 
+/** Attempts for one chunk write-back whose failures could clear (busy, network, 5xx). */
+const WRITE_BACK_ATTEMPTS = 5;
+/** Wait before the second write-back attempt; doubles for each one after it. */
+const WRITE_BACK_BACKOFF_MS = 700;
+
+/** Codes for a request the server read and will refuse again unchanged. */
+const WRITE_BACK_REFUSAL_CODES = new Set([
+  'FORBIDDEN',
+  'SCOPE_MISSING',
+  'NOT_ALLOWED',
+  'BAD_REQUEST',
+  'BAD_USER_INPUT',
+  'INVALID_REQUEST',
+  'GRAPHQL_VALIDATION_FAILED',
+  'NOT_FOUND',
+]);
+const WRITE_BACK_REFUSAL_STATUSES = new Set([400, 403, 404, 413, 422]);
+
+/**
+ * Whether a failed write-back can succeed if sent again unchanged. A permission or
+ * validation refusal cannot; a busy platform, a network drop or a server error can.
+ */
+function writeBackRetryable(error: unknown): boolean {
+  if (refusedBeforeRunning(error)) return true;
+  const e = error as {
+    code?: unknown;
+    status?: unknown;
+    retryable?: unknown;
+    extensions?: { code?: unknown; retryable?: unknown; httpStatus?: unknown };
+  };
+  if (e?.extensions?.retryable === false || e?.retryable === false) return false;
+  const code = e?.code ?? e?.extensions?.code;
+  if (typeof code === 'string' && WRITE_BACK_REFUSAL_CODES.has(code)) return false;
+  const status = e?.status ?? e?.extensions?.httpStatus;
+  if (typeof status === 'number' && WRITE_BACK_REFUSAL_STATUSES.has(status)) return false;
+  return true;
+}
+
 async function whenNotBusy<T>(call: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -83,6 +121,25 @@ export interface CachedChunk<TVoxelState = string, TChunkState = string> {
   dirty: boolean;
 }
 
+/**
+ * A chunk write-back the store stopped trying. The chunk keeps its local voxels and is
+ * no longer dirty, so it can be pruned and loaded again from the server's copy.
+ */
+export interface ChunkWriteBackFailure<TVoxelState = string, TChunkState = string> {
+  readonly chunk: CachedChunk<TVoxelState, TChunkState>;
+  readonly coord: ChunkCoord;
+  /** The error of the last attempt. */
+  readonly error: unknown;
+  /**
+   * `refused`: the server will refuse it again unchanged (no permission on the chunk,
+   * a closed wilderness, an invalid grid). `exhausted`: every attempt failed with an
+   * error that could have cleared (busy, network, a server error).
+   */
+  readonly reason: 'refused' | 'exhausted';
+  /** Attempts made, the last one included. */
+  readonly attempts: number;
+}
+
 /** Options for {@link attachChunkStore}. */
 export interface ChunkStoreConfig<TVoxelState = string, TChunkState = string> {
   /** Codec for per-voxel state blobs. Defaults to raw base64 strings. */
@@ -111,6 +168,11 @@ export interface ChunkStoreConfig<TVoxelState = string, TChunkState = string> {
    * Write-back cadence: one dirty chunk persists per tick (throttled, like
    * the proven BWF pattern). Defaults to 700 ms; `false` disables the timer
    * (call {@link ChunkStore.flush} yourself). Runs on the session ticker.
+   *
+   * A write the server refuses (FORBIDDEN, a validation error) is dropped at once. One
+   * that fails for a reason that can clear (PLATFORM_BUSY, network, a server error) is
+   * tried again after 0.7 s, 1.4 s, 2.8 s and 5.6 s, then dropped. Both are reported
+   * through {@link ChunkStore.onWriteBackFailed}.
    */
   writeBackIntervalMs?: number | false;
   /** Replication radius for outbound voxel updates (0-8). */
@@ -172,8 +234,15 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   /** Consecutive failed hydrations per chunk key. */
   private readonly hydrateFailures = new Map<string, number>();
   private readonly writeBackQueue: string[] = [];
+  /** Failed attempts so far per queued chunk key. */
+  private readonly writeBackAttempts = new Map<string, number>();
+  /** When a chunk key whose write-back failed may be tried again. */
+  private readonly writeBackDueAt = new Map<string, number>();
   private readonly changeListeners = new Set<
     (chunk: CachedChunk<TVoxelState, TChunkState>) => void
+  >();
+  private readonly writeBackFailureListeners = new Set<
+    (failure: ChunkWriteBackFailure<TVoxelState, TChunkState>) => void
   >();
   private readonly voxelStateCodec: StateCodec<TVoxelState>;
   private readonly chunkStateCodec: StateCodec<TChunkState>;
@@ -264,6 +333,19 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   ): () => void {
     this.changeListeners.add(listener);
     return () => this.changeListeners.delete(listener);
+  }
+
+  /**
+   * Subscribe to write-backs the store gave up on: refused by the server (a visitor
+   * editing someone else's claimed plot or a safe zone, a closed wilderness) or out of
+   * attempts. Undo or flag the local edit here; the store does not revert it.
+   * @returns off.
+   */
+  onWriteBackFailed(
+    listener: (failure: ChunkWriteBackFailure<TVoxelState, TChunkState>) => void,
+  ): () => void {
+    this.writeBackFailureListeners.add(listener);
+    return () => this.writeBackFailureListeners.delete(listener);
   }
 
   /**
@@ -473,11 +555,21 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     return this.writeBackQueue.length;
   }
 
-  /** Persist every queued chunk now (awaits all writes). */
-  async flush(): Promise<void> {
+  /**
+   * Persist every queued chunk now, waiting out the backoff of chunks whose last attempt
+   * failed. Resolves with the write-backs dropped along the way (also reported through
+   * {@link onWriteBackFailed}); it does not reject for them.
+   */
+  async flush(): Promise<Array<ChunkWriteBackFailure<TVoxelState, TChunkState>>> {
+    const failures: Array<ChunkWriteBackFailure<TVoxelState, TChunkState>> = [];
     while (this.writeBackQueue.length > 0) {
-      await this.persistNext();
+      const dueAt = this.writeBackDueAt.get(this.writeBackQueue[0]);
+      const wait = dueAt === undefined ? 0 : dueAt - this.now();
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      const failure = await this.persistNext(true);
+      if (failure) failures.push(failure);
     }
+    return failures;
   }
 
   /** Drop tracked chunks farther than `radius` from `center` (dirty ones kept). */
@@ -494,25 +586,64 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
 
   // -- internals --------------------------------------------------------------
 
-  private async persistNext(): Promise<void> {
-    const key = this.writeBackQueue.shift();
-    if (!key) return;
+  /**
+   * Write back the first queued chunk that is due (the head of the queue when `now`).
+   * @returns the failure when the store gave up on it.
+   */
+  private async persistNext(
+    now = false,
+  ): Promise<ChunkWriteBackFailure<TVoxelState, TChunkState> | undefined> {
+    const at = this.now();
+    const index = now
+      ? 0
+      : this.writeBackQueue.findIndex((queued) => (this.writeBackDueAt.get(queued) ?? 0) <= at);
+    if (index < 0 || index >= this.writeBackQueue.length) return undefined;
+    const [key] = this.writeBackQueue.splice(index, 1);
     const chunk = this.chunks.get(key);
-    if (!chunk || !chunk.voxels) return;
+    if (!chunk || !chunk.voxels) {
+      this.forgetWriteBack(key);
+      return undefined;
+    }
     try {
       await this.ctx.client.chunks.update({
         appId: this.ctx.appId,
         coordinates: toChunkInput(chunk.coord),
         voxels: encodeBase64(chunk.voxels),
       });
+      this.forgetWriteBack(key);
       chunk.dirty = false;
       if (chunk.loadState === 'seeded') chunk.loadState = 'loaded';
       this.touch(chunk);
-    } catch {
-      // Requeue at the back; the next tick retries.
-      chunk.dirty = true;
-      this.writeBackQueue.push(key);
+      return undefined;
+    } catch (error) {
+      const attempts = (this.writeBackAttempts.get(key) ?? 0) + 1;
+      const retryable = writeBackRetryable(error);
+      if (retryable && attempts < WRITE_BACK_ATTEMPTS) {
+        this.writeBackAttempts.set(key, attempts);
+        this.writeBackDueAt.set(key, this.now() + WRITE_BACK_BACKOFF_MS * 2 ** (attempts - 1));
+        chunk.dirty = true;
+        if (!this.writeBackQueue.includes(key)) this.writeBackQueue.push(key);
+        return undefined;
+      }
+      this.forgetWriteBack(key);
+      const queuedAgain = this.writeBackQueue.indexOf(key);
+      if (queuedAgain >= 0) this.writeBackQueue.splice(queuedAgain, 1);
+      chunk.dirty = false;
+      const failure: ChunkWriteBackFailure<TVoxelState, TChunkState> = {
+        chunk,
+        coord: chunk.coord,
+        error,
+        reason: retryable ? 'exhausted' : 'refused',
+        attempts,
+      };
+      for (const listener of [...this.writeBackFailureListeners]) listener(failure);
+      return failure;
     }
+  }
+
+  private forgetWriteBack(key: string): void {
+    this.writeBackAttempts.delete(key);
+    this.writeBackDueAt.delete(key);
   }
 
   private applyServerChunk(
