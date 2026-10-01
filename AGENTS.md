@@ -380,7 +380,10 @@ field on `CrowdyModelRefusal`. **15.2.0** was the release before it.
 Crowdy-Games use `scripts/ci/check-sdk-pins.mjs` /
 `grep '"@crowdedkingdoms/crowdyjs"' */package.json` for what each game actually
 pins. CrowdyCPP's parity pin is `crowdyjsParityTarget` in
-`CrowdyCPP/package.json` — read it there, not from this page.
+`CrowdyCPP/package.json`, and CrowdyPy's is `[tool.crowdypy.crowdyjs]` in
+`CrowdyPy/pyproject.toml` — read them there, not from this page. Both SDKs follow
+this one's public surface under a strict parity gate, so a surface change here is
+ported in CrowdyCPP and then CrowdyPy (which vendors CrowdyCPP's native core).
 
 `dev/vX.Y.Z` / `test/vX.Y.Z` publish
 `X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
@@ -389,8 +392,8 @@ caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
 `gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
 
 **TIER ALIGNMENT (hard rule for consumers).** A consumer branch may only
-reference CrowdyJS artifacts from the **same** tier: Crowdy-Games / CrowdyCPP
-`dev` → `@dev` / the `dev/` tag’s commit; `test` → `@test`; `prod` → `latest`.
+reference CrowdyJS artifacts from the **same** tier: Crowdy-Games / CrowdyCPP /
+CrowdyPy `dev` → `@dev` / the `dev/` tag’s commit; `test` → `@test`; `prod` → `latest`.
 Publishing `prod/vX.Y.Z` does **not** authorize bumping Games-`dev` or
 CPP-`dev` to that plain version — those ladders promote separately
 (`test`↔`test`, `prod`↔`prod`).
