@@ -120,6 +120,39 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.1.0: open grids, and where a connect token may go
+
+Additive, except that `client.exec.connect` refuses a gateway it would once have dialed (below).
+The two grid calls need a game API with cks-game-api #436 (ck-api `dev/v2.31.0`); nothing else
+calls them.
+
+- `client.gameApps.setOpenPermissions({ appId, gridId, permissionKeys })` (also
+  `client.admin.grids`) opens a grid to every player with active access to the app: it replaces
+  the keys the grid grants each of them, within its limits, and players who gain access later get
+  them too. An empty `permissionKeys` closes it; `openPermissions(appId, gridId)` reads them. Both
+  need `manage_apps`. Since #436 the most specific grid covering a chunk decides who may build
+  there, so a zone nested in the world grid that everyone should build in must grant
+  `update_voxel_data` itself. `BAD_REQUEST` refuses the world grid (open already), the four
+  player-code keys, a key that is not an active grid key, and a 33rd open grid in one app.
+  (OI-2026-09-30-007)
+- `client.exec.connect` and `connectAsDeveloper` send the connect token only to a gateway that
+  `execGatewayRefusal(gameApiUrl, gatewayUrl)` passes: `ws:` or `wss:`, `wss:` whenever the game
+  API is `https:`, no credentials in the URL, and on the estate of the game API or of this
+  release's default origin, as `BinaryRelayTransport` holds a reconnect directive to its estate.
+  A loopback game API may name a loopback gateway (ck-exec's local cluster). Any other gateway is
+  never dialed: the attempt fails `Unavailable` ("refusing the gateway …"), and a reconnect asks
+  the game API again. `ExecConnection.open(gatewayUrl, token)` still dials what it is given.
+  (OI-2026-09-30-010)
+- A gateway's refusal of the connect token is `Denied` again under Node's `ws` package. Since
+  ck-exec 0.10.0 a gateway answers the upgrade `HTTP 401` with the reason as its body, which
+  `connect` now reads: `Denied: the gateway refused the connection (HTTP 401: <reason>)`.
+  `HTTP 429` (a player past 16 sessions to one app through a gateway, or a gateway past its
+  total) is `Unavailable` with its reason. A browser, and Node's built-in WebSocket, cannot read a
+  refused upgrade, so there both stay `Unavailable`. A gateway before 0.10.0 closed with 4401,
+  which is `Denied` everywhere, now for a call in flight when it closes as well.
+  (OI-2026-09-29-002)
+- `schema.gql` and the generated types are cks-game-api `dev`'s after #436.
+
 ## 18.0.4: a refused chunk write-back is dropped, and the wilderness setting
 
 The P3 W5 security review's notes for the SDKs. The game API now refuses `updateChunk` with

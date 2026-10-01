@@ -253,7 +253,7 @@ grouped under `client.admin` and mirrored at the top level):
 | `client.quotas` | Usage quotas at the org/app scope. |
 | `client.usage` | Replication + GraphQL usage reporting. |
 | `client.sharedEnvironment` | Publish to shared, runtime gating, spend caps, auto-billing. |
-| `client.gameApps` | App grids (`createGrid` / `deleteGrid`), first-class grid ownership (`ownership` / `assignOwnership` / `transferOwnership`), and grid runtime-permission administration. |
+| `client.gameApps` | App grids (`createGrid` / `deleteGrid`), first-class grid ownership (`ownership` / `assignOwnership` / `transferOwnership`), and grid runtime-permission administration, including open grids (`setOpenPermissions` / `openPermissions`, 18.1.0): the keys a grid grants every player, which a zone everyone may build in needs, since the most specific grid over a chunk decides who builds there. |
 
 **The SDK is for normal clients, and designed for production.** It carries what players,
 developers and org-admins call, and nothing only a super-admin or a platform operator can
@@ -643,6 +643,14 @@ exec.onReconnect((host) => console.log('moved to', host));
 - `connect` asks the game API for a host (`execConnect`) and opens a WebSocket to its gateway.
   With `nodeType` and `key`, the player lands on the host that runs that instance. On runtimes
   without a global `WebSocket` (Node before 22), pass one: `{ WebSocket }` from the `ws` package.
+- The connect token rides in the gateway URL, so `connect` dials only a gateway
+  `execGatewayRefusal(gameApiUrl, gatewayUrl)` passes: `wss:` when the game API is `https:`, and on
+  the game API's estate or the platform's (a loopback game API may name a loopback gateway, as
+  ck-exec's local cluster does). Any other is refused `Unavailable` without being dialed (18.1.0).
+- A gateway that refuses the connect token answers the upgrade `HTTP 401` with its reason. Under
+  Node's `ws` package `connect` throws `Denied` with that reason; a browser cannot read a refused
+  upgrade, so there it is `Unavailable`. `HTTP 429` (more than 16 sessions to one app through
+  one gateway) is `Unavailable` with its reason under `ws` (18.1.0).
 - A refused call throws `CrowdyExecError`: `status` is the platform's (`AppError` carries the
   handler's own message; `Busy`, `Moved`, `Unavailable` and `RateLimited` are `retryable`).
   The SDK does not retry `Busy`. A gateway refuses a player's calls over 120 per 10 s (per app
@@ -660,7 +668,7 @@ exec.onReconnect((host) => console.log('moved to', host));
 - When the host goes away, the connection asks for a host again, reconnects and renews every
   subscription; a call caught by it, or answered `Moved`, is tried once more.
 - `ExecConnection.open(gatewayUrl, token)` connects with a connect token you already have
-  (tools and tests), without reconnecting.
+  (tools and tests), without reconnecting. It dials the URL it is given.
 - `client.exec.deploy({ appId, root, types })` takes each node type's compiled module
   (`wasm: Uint8Array`) with its manifest fields, sends each distinct module once, and makes
   the version active.
@@ -1027,6 +1035,11 @@ Two endpoint shapes are both correct and are not interchangeable:
 while `mintAppToken` under direct connect hands back one instance
 (`ck-api-<dc>-<n>.<zone>`). They agree on the datacenter, not on the host, which
 is why the mint also returns `discoveryUrl`.
+
+`test/e2e/open-grid-and-exec-gateway.test.mjs` needs no account at all: with
+`CROWDY_HTTP_URL` and `CROWDY_E2E_THROWAWAY_OWNER=1` it registers a throwaway org admin (its own
+org and app) and a player, opens and closes a grid, and checks the tier's ck-exec gateway. It
+leaves the org behind and archives the app, so it runs only when asked to.
 
 ## Maintainers: schema artifacts and fixtures
 

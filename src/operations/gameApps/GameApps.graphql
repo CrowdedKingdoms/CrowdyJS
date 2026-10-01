@@ -81,6 +81,14 @@ query GridPermissionLimits($appId: BigInt!, $gridId: BigInt!) {
   }
 }
 
+query GridOpenPermissions($appId: BigInt!, $gridId: BigInt!) {
+  gridOpenPermissions(appId: $appId, gridId: $gridId) {
+    appId
+    gridId
+    permissionKeys
+  }
+}
+
 query GridGroupGrants($appId: BigInt!, $gridId: BigInt!, $groupId: BigInt!) {
   gridGroupGrants(appId: $appId, gridId: $gridId, groupId: $groupId) {
     appId
@@ -139,6 +147,14 @@ mutation RevokeGridPermissions($input: RevokeGridPermissionsInput!) {
 
 mutation SetGridPermissionLimits($input: SetGridPermissionLimitsInput!) {
   setGridPermissionLimits(input: $input) {
+    appId
+    gridId
+    permissionKeys
+  }
+}
+
+mutation SetGridOpenPermissions($input: SetGridOpenPermissionsInput!) {
+  setGridOpenPermissions(input: $input) {
     appId
     gridId
     permissionKeys

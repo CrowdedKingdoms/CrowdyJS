@@ -123,7 +123,7 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.gameApps, 'gameApps', [
     'ownership', 'assignOwnership', 'transferOwnership', 'userPermissions',
     'nearbyPermissions', 'permissionLimits', 'createGrid', 'grantPermissions',
-    'assignGroup',
+    'assignGroup', 'openPermissions', 'setOpenPermissions',
   ]);
   assertMethods(client.udp, 'udp', [
     'connect', 'disconnect', 'connectionStatus', 'subscribe',
@@ -343,6 +343,36 @@ test('grid ownership and app-admission wrappers send the right variables on one 
     { appId: '1', mode: CodeAdmissionMode.AllowList },
     { input: { appId: '1', subjectKind: 'AUTHOR', subjectRef: '3' } },
     { appId: '1', admissionId: 'admission-2' },
+  ]);
+  client.close();
+});
+
+// cks-game-api #436: a grid that grants no player update_voxel_data is closed to everyone, so a
+// zone everyone may build in is opened with setGridOpenPermissions (manage_apps).
+test('open grid wrappers send their documents and variables, and return the open keys', async () => {
+  const { createCrowdyClient } = await loadSdk();
+  const client = createCrowdyClient({ httpUrl: 'https://game.invalid' });
+  const calls = [];
+  const opened = { appId: '1', gridId: '10', permissionKeys: ['access', 'update_voxel_data'] };
+  client.graphql.request = async (document, variables) => {
+    const op = document.definitions.find((d) => d.kind === 'OperationDefinition');
+    calls.push([op.operation, op.name.value, variables]);
+    return op.name.value === 'SetGridOpenPermissions'
+      ? { setGridOpenPermissions: variables.input.permissionKeys.length ? opened : { ...opened, permissionKeys: [] } }
+      : { gridOpenPermissions: opened };
+  };
+
+  const set = await client.gameApps.setOpenPermissions({
+    appId: '1', gridId: '10', permissionKeys: ['access', 'update_voxel_data'],
+  });
+  assert.deepEqual(set, opened);
+  assert.deepEqual(await client.admin.grids.openPermissions('1', '10'), opened);
+  const closed = await client.gameApps.setOpenPermissions({ appId: '1', gridId: '10', permissionKeys: [] });
+  assert.deepEqual(closed.permissionKeys, []);
+  assert.deepEqual(calls, [
+    ['mutation', 'SetGridOpenPermissions', { input: { appId: '1', gridId: '10', permissionKeys: ['access', 'update_voxel_data'] } }],
+    ['query', 'GridOpenPermissions', { appId: '1', gridId: '10' }],
+    ['mutation', 'SetGridOpenPermissions', { input: { appId: '1', gridId: '10', permissionKeys: [] } }],
   ]);
   client.close();
 });
