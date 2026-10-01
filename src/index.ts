@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.0.4';
+export const VERSION = '18.1.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -348,6 +348,7 @@ export {
   CrowdyExecError,
   EXEC_STATUSES,
   execStatus,
+  execGatewayRefusal,
   encodeExecFrame,
   decodeExecFrame,
   type ExecStatus,

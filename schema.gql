@@ -1265,7 +1265,7 @@ type App {
   """
   gridClaimApproverUserIds: [String!]!
   """
-  Whether players may write the app's wilderness: chunks that no grid but the app's world grid covers. True (the default) leaves those writes to the ordinary voxel permission; false refuses every voxel and chunk write there (updateVoxel, sendVoxelUpdate, updateChunk, ck-exec's world.set_voxels), whoever makes it. Set with updateApp (manage_apps).
+  Whether players may write the app's wilderness: chunks that no grid but the app's world grid covers. True (the default) leaves those writes to the ordinary voxel permission; false refuses every voxel and chunk write there (updateVoxel, sendVoxelUpdate, updateChunk, ck-exec's world.set_voxels, and a client's voxel updates sent straight to the realtime servers), whoever makes it. Set with updateApp (manage_apps).
   """
   wildernessWritesOpen: Boolean!
   """Timestamp when the app was created."""
@@ -5252,6 +5252,20 @@ type GridPermissionLimits {
 }
 
 """
+The permission keys a grid grants every player with active access to the app (the grid_open_permissions input table).
+"""
+type GridOpenPermissions {
+  """The app (tenant) that owns the grid."""
+  appId: BigInt!
+  """The grid."""
+  gridId: BigInt!
+  """
+  The keys every player with active access holds on this grid (its limits still cap them). Empty means the grid is not open.
+  """
+  permissionKeys: [String!]!
+}
+
+"""
 A single group/role -> permission-key grant on a grid (one row of the grid_group_grants input table).
 """
 type GridGroupGrant {
@@ -7059,6 +7073,15 @@ type Query {
     gridId: BigInt!
   ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
+  Read the permission keys a grid grants every player with active access to the app (an open build area, a public arena). An empty list means the grid is not open. Requires app-admin ('manage_apps').
+  """
+  gridOpenPermissions(
+    """The app (tenant) that owns the grid."""
+    appId: BigInt!
+    """The grid whose open keys to read."""
+    gridId: BigInt!
+  ): GridOpenPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
+  """
   List the group/role -> permission-key grants configured on a grid for one group (rows of the `grid_group_grants` input table). These are inputs to the effective ACL, not the materialized result — use `gridUserPermissions` for a specific user's effective keys. Requires app-admin ('manage_apps').
   """
   gridGroupGrants(
@@ -8629,7 +8652,7 @@ type Mutation {
     appId: BigInt!
   ): GameHost
   """
-  Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. Leaves chunkState and LODs untouched. Requires an app token for the app and either the 'manage_apps' permission on the app (resolved via its org; super admins bypass) or the voxel edit permission for this chunk that updateVoxel checks (app access, the tier's update_voxel_data, and update_voxel_data on a grid covering the chunk). Throws FORBIDDEN otherwise, and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
+  Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. Leaves chunkState and LODs untouched. Requires an app token for the app and either the 'manage_apps' permission on the app (resolved via its org; super admins bypass) or the voxel edit permission for this chunk that updateVoxel checks (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk). Throws FORBIDDEN otherwise, and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
   """
   updateChunk(input: ChunkUpdateInput!): Chunk!
   """
@@ -8641,7 +8664,7 @@ type Mutation {
   """
   updateChunkLods(input: UpdateChunkLodsInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
-  Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and (when grids cover the chunk) `update_voxel_data` on a covering grid. A chunk only the app's world grid covers is refused while the app's wilderness is closed (App.wildernessWritesOpen false).
+  Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and `update_voxel_data` on the most specific grid covering the chunk (the smallest by volume; of equal ones the lowest grid id), so a claim, a plot or a safe zone decides its chunks and the app's world grid decides only the wilderness. A chunk no grid covers is refused, and so is a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
   """
   updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
   """
@@ -8705,6 +8728,15 @@ type Mutation {
     """
     input: SetGridPermissionLimitsInput!
   ): GridPermissionLimits! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
+  """
+  Open a grid to every player: replace the permission keys it grants each player with active access to the app (writes the `grid_open_permissions` input table), then recompute the grid's materialized effective ACL for all of them. The most specific grid covering a chunk decides a voxel write there, so a zone inside the world grid that everyone may build in must grant `update_voxel_data` itself. The grid's limits still cap these keys; players who get access later receive them when they connect. Pass an empty array to close the grid. Refuses the app's world grid (already open), the four player-code keys, and a 33rd open grid in one app. Requires app-admin ('manage_apps').
+  """
+  setGridOpenPermissions(
+    """
+    The app, grid, and the keys it grants every player (empty array = close it).
+    """
+    input: SetGridOpenPermissionsInput!
+  ): GridOpenPermissions! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
   Grant runtime permission keys to a group (optionally scoped to a single group role) on a grid by writing the `grid_group_grants` input table, then recompute the materialized effective ACL so every affected member gains the keys. Requires app-admin ('manage_apps'). Returns the grid's current group grants for the group. Use `grantGridPermissions` for per-user grants instead.
   """
@@ -8989,7 +9021,7 @@ type Mutation {
     gridId: BigInt!
   ): GridClaimResult!
   """
-  Claim one currently unclaimed chunk as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus the player-code keys and use_video_chat where the caller's tier already carries them, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain.
+  Claim one wilderness chunk (a chunk no grid but the app's world grid covers) as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. A chunk inside another grid (a plot, a zone or another claim) is refused FORBIDDEN (GRID_NOT_CLAIMABLE): the claim would be the most specific grid there and take the chunk from whoever that grid grants. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus the player-code keys and use_video_chat where the caller's tier already carries them, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain.
   """
   claimGridChunk(
     """
@@ -9404,7 +9436,7 @@ type Mutation {
     input: ActorUpdateRequestInput!
   ): Boolean!
   """
-  Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Throws FORBIDDEN synchronously for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
+  Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Throws FORBIDDEN synchronously, before anything is sent, without the voxel edit permission updateVoxel checks for the chunk (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk), and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
   """
   sendVoxelUpdate(
     """
@@ -9921,7 +9953,7 @@ input UpdateAppInput {
   """
   metadata: String
   """
-  Open (true) or close (false) the app's wilderness to voxel and chunk writes: chunks that no grid but the app's world grid covers. Closing refuses every write there, whoever makes it; each game API replica acts on the change within 15 seconds. Omit to leave unchanged.
+  Open (true) or close (false) the app's wilderness to voxel and chunk writes: chunks that no grid but the app's world grid covers. Closing refuses every write there, whoever makes it; each game API replica, and each realtime server for a client's direct voxel updates, acts on the change within about 15 seconds. Omit to leave unchanged.
   """
   wildernessWritesOpen: Boolean
 }
@@ -10663,6 +10695,22 @@ input SetGridPermissionLimitsInput {
   gridId: BigInt!
   """
   The whitelist of permission keys allowed on this grid. Empty array removes all limits (every active grid permission becomes grantable again). Each key must be a known runtime permission key, unique, and at most 64 chars.
+  """
+  permissionKeys: [String!]!
+}
+
+"""
+Set the permission keys a grid grants every player with active access to the app (writes the grid_open_permissions input table): an open build area, a public arena.
+"""
+input SetGridOpenPermissionsInput {
+  """The app (tenant) that owns the grid."""
+  appId: BigInt!
+  """
+  The grid to open (or close). Not the app's world grid, which is open by default.
+  """
+  gridId: BigInt!
+  """
+  The keys every player with active access holds on this grid, capped by its limits. Empty array closes it (players keep only what they are granted directly or through a group). Each must be an active grid permission key, unique, at most 64 chars, and not one of the four player-code keys.
   """
   permissionKeys: [String!]!
 }

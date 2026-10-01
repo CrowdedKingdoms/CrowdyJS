@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.0.4** (18.0.0 was published only as
+**Current package:** `package.json` is **18.1.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,18 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.1.0: open grids, and where a connect token may go (the W5 review's SDK follow-ups,
+2026-10-01).** `client.gameApps.setOpenPermissions` / `openPermissions` wrap cks-game-api #436's
+`setGridOpenPermissions` / `gridOpenPermissions` (ck-api `dev/v2.31.0`, `manage_apps`): since
+#436 a zone everyone may build in must grant `update_voxel_data` itself. `client.exec.connect`
+and `connectAsDeveloper` dial only a gateway `execGatewayRefusal(gameApiUrl, gatewayUrl)` passes
+(`wss:` under an `https:` game API, the game API's estate or the default origin's, loopback for
+a loopback game API; the cases are `test/unit/fixtures/exec-gateway-cases.json`, which
+CrowdyCPP copies). Under Node's `ws` a gateway's `HTTP 401` is `Denied` with its body as the
+reason (`unexpected-response`), and 4401 still is; a browser cannot read a refused upgrade.
+`test/e2e/open-grid-and-exec-gateway.test.mjs` runs both against a tier as a throwaway org admin
+(`CROWDY_E2E_THROWAWAY_OWNER=1`). The schema is cks-game-api `dev`'s after #436.
 
 **18.0.4: `ChunkStore` drops a refused write-back (P3 W5 review B, 2026-09-29).** `updateChunk`
 refuses a visitor on someone else's plot or a closed wilderness, so a store that retried forever

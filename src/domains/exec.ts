@@ -1,7 +1,9 @@
 import { decode, encode } from '@msgpack/msgpack';
 import type { DecoderOptions } from '@msgpack/msgpack';
 
+import { isSameEstate } from '../binary-relay.js';
 import type { GraphQLClient } from '../client.js';
+import { CROWDY_DEFAULT_HTTP_ORIGIN } from '../default-origin.js';
 import { CrowdyError, CrowdyProtocolError } from '../errors.js';
 import {
   ExecActivateVersionDocument,
@@ -75,7 +77,8 @@ export { ExecModScope };
  * ```
  *
  * `connect` asks the game API for a host (`execConnect`, with the app-scoped token
- * of `appId` as the session token) and opens a WebSocket to its gateway. Frames are
+ * of `appId` as the session token) and opens a WebSocket to its gateway, once the
+ * gateway passes {@link execGatewayRefusal}. Frames are
  * ck-exec's client protocol (`ckx-proto/src/client.rs`); payloads are MessagePack.
  * The connection recovers by itself: a closed socket or a `Moved` reply asks for a
  * host again, renews every subscription, and retries the call once.
@@ -326,7 +329,13 @@ export interface ExecConnectOptions {
   callTimeoutMs?: number;
   /** Connect again when the socket closes unexpectedly. Default true. */
   reconnect?: boolean;
-  /** A WebSocket implementation where there is no global one (older Node). */
+  /**
+   * A WebSocket implementation where there is no global one (older Node). With Node's `ws`
+   * package, a gateway that refuses the connect token (`HTTP 401`) is reported as `Denied`
+   * with the gateway's reason; a browser, and Node's built-in WebSocket, cannot read a refused
+   * upgrade, so there it is `Unavailable`. A gateway before ck-exec 0.10.0 closed with 4401,
+   * which is `Denied` everywhere.
+   */
   WebSocket?: ExecWebSocketCtor;
   /** MessagePack decoding options, e.g. `{ useBigInt64: true }` for 64-bit integers above 2^53. */
   decode?: DecoderOptions;
@@ -352,6 +361,125 @@ const MAX_BACKOFF_MS = 5_000;
 
 function subKey(nodeType: string, key: string, topic: string): string {
   return `${nodeType}\u0000${key}\u0000${topic}`;
+}
+
+// ---- where a connect token may go ----
+
+function parseUrl(raw: string, base?: string): URL | null {
+  try {
+    return new URL(raw, base);
+  } catch {
+    return null;
+  }
+}
+
+function isIpLiteral(host: string): boolean {
+  return host.startsWith('[') || /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+}
+
+function isLoopback(host: string): boolean {
+  return (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host === '[::1]' ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+  );
+}
+
+/** One host, or two DNS names that {@link isSameEstate} puts on one estate. Never two IPs. */
+function sameEstate(a: URL, b: URL): boolean {
+  if (a.hostname === b.hostname) return true;
+  if (isIpLiteral(a.hostname) || isIpLiteral(b.hostname)) return false;
+  return isSameEstate(a.href, b.href);
+}
+
+/**
+ * Why {@link ExecAPI.connect} will not send a connect token to `gatewayUrl`, or null when it
+ * will. The game API names the gateway, and the token rides in its query string, so a gateway
+ * must be `ws:` or `wss:` (`wss:` whenever the game API is `https:`), carry no credentials,
+ * and be on the estate of the game API or of this release's default origin
+ * (`CROWDY_DEFAULT_HTTP_ORIGIN`, the tier the SDK was published for), as
+ * `BinaryRelayTransport` holds a reconnect directive to its estate. A game API on loopback
+ * (ck-exec's local cluster) may also name a loopback gateway. `gameApiUrl` may be relative to
+ * the page.
+ */
+export function execGatewayRefusal(gameApiUrl: string, gatewayUrl: string): string | null {
+  const gateway = parseUrl(gatewayUrl);
+  if (!gateway) return 'it is not an absolute URL';
+  if (gateway.protocol !== 'ws:' && gateway.protocol !== 'wss:') {
+    return `${gateway.protocol} is not a WebSocket scheme`;
+  }
+  if (gateway.username || gateway.password) return 'it carries credentials';
+  const page = (globalThis as { location?: { href?: string } }).location?.href;
+  const api = parseUrl(gameApiUrl, page);
+  if (!api) return `the game API URL ${gameApiUrl} is not absolute`;
+  if (api.protocol === 'https:' && gateway.protocol !== 'wss:') {
+    return 'a game API on https: hands out wss: gateways only';
+  }
+  if (sameEstate(api, gateway)) return null;
+  const tier = parseUrl(CROWDY_DEFAULT_HTTP_ORIGIN);
+  if (tier && sameEstate(tier, gateway)) return null;
+  if (isLoopback(api.hostname) && isLoopback(gateway.hostname)) return null;
+  const estates = tier && tier.hostname !== api.hostname ? `${api.hostname} and ${tier.hostname}` : api.hostname;
+  return `${gateway.hostname} is outside the estate of ${estates}`;
+}
+
+/**
+ * A gateway's close as an error. 4401 is how a gateway before ck-exec 0.10.0 refused a token:
+ * it upgraded, then closed, so a call already in flight learns of it here.
+ */
+function closedError(ev: { code: number; reason?: string }): CrowdyExecError {
+  return new CrowdyExecError(
+    ev.code === 4401 ? 'Denied' : 'Unavailable',
+    `the gateway closed the connection (${ev.code}${ev.reason ? `: ${ev.reason}` : ''})`,
+  );
+}
+
+const REFUSAL_REASON_MAX_CHARS = 500;
+const REFUSAL_BODY_WAIT_MS = 1_000;
+
+/** The answer to a refused upgrade, as Node's `ws` package hands it to `unexpected-response`. */
+interface UpgradeAnswer {
+  statusCode?: number;
+  setEncoding?(encoding: string): void;
+  on(event: 'data', listener: (chunk: string) => void): void;
+  on(event: 'end' | 'error' | 'close', listener: () => void): void;
+}
+
+/**
+ * Calls `refused` with the status and body of an upgrade the gateway answered with something
+ * other than 101. Since ck-exec 0.10.0 a gateway answers a refused connect token `401` and a
+ * player past their session cap `429`, each with the reason as its body, before any
+ * WebSocket exists. Only Node's `ws` package can read that answer; a browser's WebSocket, and
+ * Node's built-in one, see a failed connection and nothing else.
+ */
+function onUpgradeRefused(ws: WebSocket, refused: (status: number, reason: string) => void): void {
+  const node = ws as unknown as {
+    on?: (event: 'unexpected-response', listener: (req: unknown, res: UpgradeAnswer) => void) => void;
+    terminate?: () => void;
+  };
+  if (typeof node.on !== 'function') return;
+  node.on('unexpected-response', (_req, res) => {
+    let body = '';
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      refused(res.statusCode ?? 0, body.replace(/\s+/g, ' ').trim().slice(0, REFUSAL_REASON_MAX_CHARS));
+      // With a listener, `ws` leaves the handshake to it: end it, which also closes the socket.
+      node.terminate?.();
+    };
+    const timer = setTimeout(finish, REFUSAL_BODY_WAIT_MS);
+    res.setEncoding?.('utf8');
+    res.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > REFUSAL_REASON_MAX_CHARS) finish();
+    });
+    res.on('end', finish);
+    res.on('error', finish);
+    res.on('close', finish);
+  });
 }
 
 /**
@@ -389,7 +517,8 @@ export class ExecConnection {
 
   /**
    * Opens a connection to a known gateway with a connect token, without the game API
-   * (tools and tests; a game uses {@link ExecAPI.connect}). It does not reconnect.
+   * (tools and tests; a game uses {@link ExecAPI.connect}). It does not reconnect, and it
+   * dials the URL it is given: {@link execGatewayRefusal} judges only what the game API names.
    */
   static async open(
     gatewayUrl: string,
@@ -440,6 +569,15 @@ export class ExecConnection {
           /* already closed */
         }
       }, OPEN_TIMEOUT_MS);
+      onUpgradeRefused(ws, (status, reason) => {
+        clearTimeout(timer);
+        reject(
+          new CrowdyExecError(
+            status === 401 ? 'Denied' : 'Unavailable',
+            `the gateway refused the connection (HTTP ${status}${reason ? `: ${reason}` : ''})`,
+          ),
+        );
+      });
       ws.onopen = () => {
         clearTimeout(timer);
         resolve();
@@ -450,12 +588,7 @@ export class ExecConnection {
       };
       ws.onclose = (ev: CloseEvent) => {
         clearTimeout(timer);
-        reject(
-          new CrowdyExecError(
-            ev.code === 4401 ? 'Denied' : 'Unavailable',
-            `the gateway closed the connection (${ev.code}${ev.reason ? `: ${ev.reason}` : ''})`,
-          ),
-        );
+        reject(closedError(ev));
       };
     });
     this.ws = ws;
@@ -463,7 +596,7 @@ export class ExecConnection {
     this.backoffMs = 250;
     ws.onmessage = (ev: MessageEvent) => this.onMessage(ev.data);
     ws.onerror = () => {};
-    ws.onclose = () => this.onClosed(ws);
+    ws.onclose = (ev: CloseEvent) => this.onClosed(ws, ev);
   }
 
   private onMessage(data: unknown): void {
@@ -510,17 +643,17 @@ export class ExecConnection {
     }
   }
 
-  private rejectPending(ws: WebSocket, why: string): void {
+  private rejectPending(ws: WebSocket, why: string | CrowdyExecError): void {
     for (const [rid, p] of this.pending) {
       if (p.ws !== ws) continue;
       this.pending.delete(rid);
       clearTimeout(p.timer);
-      p.reject(new CrowdyExecError('Unavailable', why));
+      p.reject(typeof why === 'string' ? new CrowdyExecError('Unavailable', why) : why);
     }
   }
 
-  private onClosed(ws: WebSocket): void {
-    this.rejectPending(ws, 'the connection to the execution host closed');
+  private onClosed(ws: WebSocket, ev?: CloseEvent): void {
+    this.rejectPending(ws, ev?.code === 4401 ? closedError(ev) : 'the connection to the execution host closed');
     if (this.ws !== ws) return;
     this.ws = null;
     this.ready = null;
@@ -1016,6 +1149,16 @@ function crateInput(crate: ExecCrate): { name: string; files: ExecSourceFile[] }
 export class ExecAPI {
   constructor(private readonly graphql: GraphQLClient) {}
 
+  /** `fetch`, refusing a gateway {@link execGatewayRefusal} will not send a token to. */
+  private checked(fetch: () => Promise<ExecEndpoint>): () => Promise<ExecEndpoint> {
+    return async () => {
+      const endpoint = await fetch();
+      const why = execGatewayRefusal(this.graphql.endpoint ?? CROWDY_DEFAULT_HTTP_ORIGIN, endpoint.gatewayUrl);
+      if (why) throw new CrowdyExecError('Unavailable', `refusing the gateway ${endpoint.gatewayUrl}: ${why}`);
+      return endpoint;
+    };
+  }
+
   /**
    * A host and a developer connect token for `appId` (valid for about a minute). The
    * session's calls arrive as `Caller::Developer` with your user id and may reach any
@@ -1041,7 +1184,7 @@ export class ExecAPI {
    */
   async connectAsDeveloper(appId: string, options: ExecConnectOptions = {}): Promise<ExecConnection> {
     const c = new ExecConnection(
-      () => this.developerEndpoint(appId, { nodeType: options.nodeType, key: options.key }),
+      this.checked(() => this.developerEndpoint(appId, { nodeType: options.nodeType, key: options.key })),
       options,
     );
     await c.connect();
@@ -1473,7 +1616,11 @@ export class ExecAPI {
     };
   }
 
-  /** A host for this player and its connect token (valid for about a minute). */
+  /**
+   * A host for this player and its connect token (valid for about a minute). {@link connect}
+   * dials its gateway only when {@link execGatewayRefusal} passes it; dialing it any other way,
+   * apply the same check.
+   */
   async endpoint(
     appId: string,
     options: { nodeType?: string; key?: string } = {},
@@ -1489,11 +1636,14 @@ export class ExecAPI {
   /**
    * Connects the signed-in player to ck-exec for `appId`. The session token must be
    * that app's app-scoped token. With `nodeType` (and `key`) the player lands on the
-   * host that runs that instance.
+   * host that runs that instance. A gateway that {@link execGatewayRefusal} refuses is never
+   * dialed: the attempt fails `Unavailable`, and a reconnect asks the game API again.
+   * @throws {CrowdyExecError} `Denied` when the gateway refuses the connect token (see
+   * {@link ExecConnectOptions.WebSocket}), `Unavailable` when no host could be reached.
    */
   async connect(appId: string, options: ExecConnectOptions = {}): Promise<ExecConnection> {
     const c = new ExecConnection(
-      () => this.endpoint(appId, { nodeType: options.nodeType, key: options.key }),
+      this.checked(() => this.endpoint(appId, { nodeType: options.nodeType, key: options.key })),
       options,
     );
     await c.connect();
