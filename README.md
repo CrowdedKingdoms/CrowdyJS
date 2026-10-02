@@ -12,18 +12,22 @@ gameplay, minted per app through `client.portal`.
 
 Start here:
 
-- [SDK guide](https://docs.crowdedkingdoms.com/crowdyjs/readme) — the canonical
+- [SDK guide](https://docs.dev.crowdedkingdoms.com/crowdyjs/readme) — the canonical
   walkthrough of everything in this README.
-- [Build a game](https://docs.crowdedkingdoms.com/build-a-game/intro) — a
+- [Build a game](https://docs.dev.crowdedkingdoms.com/build-a-game/intro) — a
   hands-on tutorial from sign-in to a playable voxel game.
-- [Platform overview](https://docs.crowdedkingdoms.com/overview/client-workflow)
+- [Platform overview](https://docs.dev.crowdedkingdoms.com/overview/client-workflow)
   — how a client session flows through the platform.
 
 ## Install
 
 ```bash
-npm install @crowdedkingdoms/crowdyjs
+npm install @crowdedkingdoms/crowdyjs@dev
 ```
+
+This README is the `dev` branch's: it documents the release on the `dev` dist-tag
+(`npm view @crowdedkingdoms/crowdyjs dist-tags`), and its links go to the dev docs site. A
+plain `npm install` resolves `latest`, the production release, which has no `client.exec`.
 
 CrowdyJS targets browsers by default and uses native `fetch`, `WebSocket`,
 `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must
@@ -171,8 +175,8 @@ Notes:
 - Use `client.auth.setToken(token)` to seed a token externally (e.g. when
   restoring auth from a non-default storage).
 
-Deeper reading: [Portals & app-scoped tokens](https://docs.crowdedkingdoms.com/management-api/portals-and-app-tokens)
-and [Sign in](https://docs.crowdedkingdoms.com/management-api/authentication).
+Deeper reading: [Portals & app-scoped tokens](https://docs.dev.crowdedkingdoms.com/management-api/portals-and-app-tokens)
+and [Sign in](https://docs.dev.crowdedkingdoms.com/management-api/authentication).
 
 ### Token refresh during gameplay
 
@@ -295,7 +299,7 @@ query AppForRouting($appId: BigInt!) {
 `CrowdyClient` with `httpUrl: gameApiUrl` (and the matching `wsUrl`) holding
 that app's app-scoped token, then drive gameplay through that client. Apps
 with no `gameApiUrl` keep working against the default `httpUrl` you
-configured. See [Loading an app's Game API](https://docs.crowdedkingdoms.com/crowdyjs/shared-environment-routing).
+configured. See [Loading an app's Game API](https://docs.dev.crowdedkingdoms.com/crowdyjs/shared-environment-routing).
 
 ## Realtime notifications
 
@@ -599,7 +603,7 @@ reach your bundle. Reads are synchronous snapshots and writes happen on
 WebSocket events (not `requestAnimationFrame`), so render loops read freely
 and a backgrounded tab keeps ingesting updates; pass `workerTicker()` to also
 keep timer-driven sends at full rate while hidden. See the
-[World Stores guide](https://docs.crowdedkingdoms.com/crowdyjs/stores).
+[World Stores guide](https://docs.dev.crowdedkingdoms.com/crowdyjs/stores).
 
 ## Game Kit
 
@@ -626,7 +630,8 @@ model in 18.0.0; see [MIGRATION.md](MIGRATION.md).
 ## ck-exec (dev-tier preview)
 
 ck-exec runs an app's server code as **hubs** (stateful, one instance per key) and **spokes**
-(stateless, replicated) on execution hosts, on the dev environment only for now. A player
+(stateless, replicated) on execution hosts, on the dev environment only for now, so it needs
+the `@dev` release (`npm install @crowdedkingdoms/crowdyjs@dev`). A player
 connects to one host and calls any node of the app through it:
 
 ```ts
@@ -873,7 +878,7 @@ CLIENT project needs ck-api `v2.25.1` or later. A CLIENT crate still on the lega
 on legacy player compute since 18.0.0.
 
 See [CLIENT halves](https://docs.dev.crowdedkingdoms.com/exec/client-halves), [mods](https://docs.dev.crowdedkingdoms.com/exec/mods)
-and [Embed Crowdy Studio in your game](https://docs.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).
+and [Embed Crowdy Studio in your game](https://docs.dev.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).
 
 ### The Studio agent (DeepSeek Harness in the browser)
 
@@ -1051,7 +1056,7 @@ no other repositories and no network access required:
 - `src/generated/graphql.ts` — generated TypeScript operation types.
 
 Schema refresh is explicit, from the published
-[SDL](https://docs.crowdedkingdoms.com/schema/game-api.graphql):
+[SDL](https://docs.dev.crowdedkingdoms.com/schema/game-api.graphql):
 
 ```bash
 npm run schema:sync:prod

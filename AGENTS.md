@@ -649,6 +649,10 @@ is set — that is the contract, not a bug; the README example now sets it.
 ## Docs
 
 Canonical: <https://docs.crowdedkingdoms.com> ([/llms.txt](https://docs.crowdedkingdoms.com/llms.txt)).
+Each tier has its own site (`docs.dev.crowdedkingdoms.com`, `docs.test.crowdedkingdoms.com`). The README
+links the site of the tier its branch releases to, because the npm package carries it; a
+promotion re-points those links (`docs.dev.` → `docs.test.` → `docs.`), and `promote.mjs`
+does not do it for you.
 Published SDLs: `/schema/game-api.graphql` (whole schema),
 `/schema/management-api.graphql` (management surface **derived** from that
 schema — not a second source repo), `/schema/crowdyjs.graphql`.
