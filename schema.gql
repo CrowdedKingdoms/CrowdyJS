@@ -745,11 +745,13 @@ type AppUserAccessConnection {
   totalCount: Int
 }
 
-"""An app feature key that functions can gate on and tiers can grant."""
+"""
+An app feature key that access tiers can grant. ck-exec code reads the keys a player's tier grants with `ctx.players().features(player)`.
+"""
 type GmAppFeature {
   """The app (tenant) that defines the feature."""
   appId: BigInt!
-  """The feature key (referenced by tier_feature authority rules)."""
+  """The feature key, as ck-exec code reads it among a player's features."""
   featureKey: String!
   """Optional description of the feature."""
   description: String
@@ -1778,7 +1780,7 @@ enum CheckoutPurpose {
   """
   ORG_WALLET_TOPUP
   """
-  Add funds to the caller's own player wallet (player compute P2). Requires amountCents only — any authenticated user may fund their own wallet; no org permission is involved. Credits the player wallet idempotently on completion.
+  Add funds to the caller's own player wallet, which pays for their mods past the monthly trial (see PlayerWallet). Requires amountCents only — any authenticated user may fund their own wallet; no org permission is involved. Credits the player wallet idempotently on completion.
   """
   PLAYER_WALLET_TOPUP
   """
@@ -2386,7 +2388,7 @@ type ServiceQuota {
 }
 
 """
-The caller's player wallet (player compute P2, DN-5): a platform-scoped balance funding that player's grid compute across every org/app they play in. Out-of-band from org wallets — player usage never touches an org's money.
+The caller's player wallet: one platform-scoped balance, across every org and app they play in, that pays for the player's mods past their monthly trial (250,000 compute units in each app) and for any Agentic Studio model requests charged to them. Out-of-band from org wallets — player usage never touches an org's money.
 """
 type PlayerWallet {
   """Wallet id."""
@@ -2547,9 +2549,13 @@ type AppPlayerUsageRow {
   userId: BigInt!
   """Player compute units used."""
   computeUnits: BigInt!
-  """Player automation units used."""
+  """
+  Legacy: the removed engines' player automation units. Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration.
+  """
   automationUnits: BigInt!
-  """Compile submissions."""
+  """
+  Legacy: compile submissions of the removed player-compute engine (mod builds are not counted). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration.
+  """
   compileCount: Int!
   """Micro-USD charged to the player for this app in the window (exact)."""
   chargedMicrousd: BigInt!
@@ -4336,14 +4342,16 @@ type AppUsageSummary {
   graphqlRecvBytes: String!
   """Top GraphQL operations by bytes (capped by operationLimit)."""
   topGraphqlOperations: [GraphqlOperationUsageRow!]!
-  """Autonomous-process (NPC) runs over the window (string counter)."""
+  """
+  Legacy: runs of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration.
+  """
   automationRuns: String!
   """
-  Autonomous-process function invocations over the window (string counter).
+  Legacy: function invocations of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration.
   """
   automationInvocations: String!
   """
-  Billed autonomous-process compute units over the window (string counter).
+  Legacy: billed compute units of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration.
   """
   automationComputeUnits: String!
 }
@@ -6700,7 +6708,7 @@ type Query {
     tierId: BigInt
   ): ServiceQuota
   """
-  The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet funds the player's grid compute across every org/app (DN-5); org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP.
+  The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet, across every org and app, pays for the player's mods past their monthly trial and any Agentic Studio model requests charged to them; org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP.
   """
   playerWalletBalance: PlayerWallet!
   """
@@ -6741,7 +6749,7 @@ type Query {
     appId: BigInt!
   ): Int! @requiresPermission(scope: "app", permission: "view_billing", scopeArg: "appId")
   """
-  Per-player usage aggregate for an app over a trailing window (top spenders / quota utilization, 06 §5): compute units, automation units, compiles, and cents charged per player. Requires 'view_compute_diagnostics'.
+  Per-player usage aggregate for an app over a trailing window (top spenders / quota utilization): the compute units each player's mods used, and what the player was charged for this app. automationUnits and compileCount are legacy and always 0 for usage since the legacy engines were removed. Requires 'view_compute_diagnostics'.
   """
   appPlayerUsage(
     """App whose player usage to aggregate."""
@@ -7945,14 +7953,14 @@ type Mutation {
     appId: BigInt!
   ): AppUserAccess!
   """
-  Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps').
+  Define an app feature key that access tiers can be granted. ck-exec code reads the keys a player's tier grants with `ctx.players().features(player)` (scope `players.read`) and gates on them itself. The `gameModel` prefix is a legacy name. Idempotent on (app, featureKey). Requires app-admin ('manage_apps').
   """
   gameModelDefineFeature(
     """The app, the feature key, and an optional description."""
     input: DefineAppFeatureInput!
   ): GmAppFeature! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
-  Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps').
+  Grant a feature key to an access tier, so it is among the features ck-exec code reads with `ctx.players().features(player)` for every player with active access on that tier. The `gameModel` prefix is a legacy name. Requires app-admin ('manage_apps').
   """
   gameModelGrantTierFeature(
     """The app, the tier id, and the feature key to grant to that tier."""
@@ -9642,14 +9650,20 @@ input TeleportRequestInput {
 }
 
 """
-Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). Signed 16-bit integers; in-bounds positions are 0-15 on each axis for a 16x16x16 chunk.
+Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). Each coordinate is 0-15 on a 16x16x16 chunk, and the voxel writes (updateVoxel, sendVoxelUpdate, updateChunk's voxelStates) refuse any other value. Teleport's voxelAddress, which is not a write, takes any signed 16-bit value.
 """
 input VoxelCoordinatesInput {
-  """Local voxel X within the chunk (0-15 for in-bounds voxels)."""
+  """
+  Local voxel X within the chunk, 0-15; voxel writes refuse other values.
+  """
   x: Int!
-  """Local voxel Y within the chunk (0-15 for in-bounds voxels)."""
+  """
+  Local voxel Y within the chunk, 0-15; voxel writes refuse other values.
+  """
   y: Int!
-  """Local voxel Z within the chunk (0-15 for in-bounds voxels)."""
+  """
+  Local voxel Z within the chunk, 0-15; voxel writes refuse other values.
+  """
   z: Int!
 }
 
@@ -9733,7 +9747,7 @@ input GrantAppAccessInput {
 input DefineAppFeatureInput {
   """The app (tenant) defining the feature."""
   appId: BigInt!
-  """The feature key (referenced by tier_feature authority rules)."""
+  """The feature key, as ck-exec code reads it among a player's features."""
   featureKey: String!
   """Optional description of the feature."""
   description: String
