@@ -1110,7 +1110,7 @@ export type AppMarketplaceFilterInput = {
 /** Per-player usage row for studio diagnostics (top spenders / quota utilization): one (player, app) aggregate over a window. */
 export type AppPlayerUsageRow = {
   __typename?: 'AppPlayerUsageRow';
-  /** Player automation units used. */
+  /** Legacy: the removed engines' player automation units. Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
   automationUnits: Scalars['BigInt']['output'];
   /**
    * DEPRECATED. chargedMicrousd / 10,000 truncated toward zero.
@@ -1119,7 +1119,7 @@ export type AppPlayerUsageRow = {
   chargedCents: Scalars['BigInt']['output'];
   /** Micro-USD charged to the player for this app in the window (exact). */
   chargedMicrousd: Scalars['BigInt']['output'];
-  /** Compile submissions. */
+  /** Legacy: compile submissions of the removed player-compute engine (mod builds are not counted). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
   compileCount: Scalars['Int']['output'];
   /** Player compute units used. */
   computeUnits: Scalars['BigInt']['output'];
@@ -1240,11 +1240,11 @@ export type AppUsageSummary = {
   __typename?: 'AppUsageSummary';
   /** App id (as a string). */
   appId: Scalars['String']['output'];
-  /** Billed autonomous-process compute units over the window (string counter). */
+  /** Legacy: billed compute units of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
   automationComputeUnits: Scalars['String']['output'];
-  /** Autonomous-process function invocations over the window (string counter). */
+  /** Legacy: function invocations of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
   automationInvocations: Scalars['String']['output'];
-  /** Autonomous-process (NPC) runs over the window (string counter). */
+  /** Legacy: runs of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
   automationRuns: Scalars['String']['output'];
   /** Total GraphQL bytes received (string counter). */
   graphqlRecvBytes: Scalars['String']['output'];
@@ -1663,7 +1663,7 @@ export enum CheckoutPurpose {
   Donation = 'DONATION',
   /** Add funds to an organization wallet. Requires orgId and amountCents, and the caller must hold the org "manage_billing" permission. Credits the org wallet on completion. */
   OrgWalletTopup = 'ORG_WALLET_TOPUP',
-  /** Add funds to the caller's own player wallet (player compute P2). Requires amountCents only — any authenticated user may fund their own wallet; no org permission is involved. Credits the player wallet idempotently on completion. */
+  /** Add funds to the caller's own player wallet, which pays for their mods past the monthly trial (see PlayerWallet). Requires amountCents only — any authenticated user may fund their own wallet; no org permission is involved. Credits the player wallet idempotently on completion. */
   PlayerWalletTopup = 'PLAYER_WALLET_TOPUP',
   /**
    * Deprecated. Historically a purchase of in-world property tokens. No longer purchasable and rejected at runtime by createCheckout.
@@ -3401,7 +3401,7 @@ export type DefineAppFeatureInput = {
   appId: Scalars['BigInt']['input'];
   /** Optional description of the feature. */
   description?: InputMaybe<Scalars['String']['input']>;
-  /** The feature key (referenced by tier_feature authority rules). */
+  /** The feature key, as ck-exec code reads it among a player's features. */
   featureKey: Scalars['String']['input'];
 };
 
@@ -4035,14 +4035,14 @@ export type GetVoxelListInput = {
   coordinates: ChunkCoordinatesInput;
 };
 
-/** An app feature key that functions can gate on and tiers can grant. */
+/** An app feature key that access tiers can grant. ck-exec code reads the keys a player's tier grants with `ctx.players().features(player)`. */
 export type GmAppFeature = {
   __typename?: 'GmAppFeature';
   /** The app (tenant) that defines the feature. */
   appId: Scalars['BigInt']['output'];
   /** Optional description of the feature. */
   description: Maybe<Scalars['String']['output']>;
-  /** The feature key (referenced by tier_feature authority rules). */
+  /** The feature key, as ck-exec code reads it among a player's features. */
   featureKey: Scalars['String']['output'];
 };
 
@@ -4754,9 +4754,9 @@ export type Mutation = {
   forceLogoutUser: Scalars['Boolean']['output'];
   /** Operator only (is_operator). Deletes the stored deliverability rows for one address (email_status and email_events) and returns how many rows went. Exists so a verification run is not reading the previous run's events, and so an address suppressed by a bounce that has since been fixed can be given another chance. Returns 0 when there was nothing stored. */
   forgetEmailDeliverability: Scalars['Int']['output'];
-  /** Define an app feature key that functions can gate on (via a tier_feature authority rule) and that access tiers can be granted. Idempotent on (app, featureKey). Requires app-admin ('manage_apps'). */
+  /** Define an app feature key that access tiers can be granted. ck-exec code reads the keys a player's tier grants with `ctx.players().features(player)` (scope `players.read`) and gates on them itself. The `gameModel` prefix is a legacy name. Idempotent on (app, featureKey). Requires app-admin ('manage_apps'). */
   gameModelDefineFeature: GmAppFeature;
-  /** Grant a feature key to an access tier, so users on that tier satisfy tier_feature authority checks for it. Requires app-admin ('manage_apps'). */
+  /** Grant a feature key to an access tier, so it is among the features ck-exec code reads with `ctx.players().features(player)` for every player with active access on that tier. The `gameModel` prefix is a legacy name. Requires app-admin ('manage_apps'). */
   gameModelGrantTierFeature: GmTierFeature;
   /** Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed. */
   gameModelRevokeTierFeature: Scalars['Boolean']['output'];
@@ -6786,7 +6786,7 @@ export type PlayerUsageCharge = {
   userId: Scalars['BigInt']['output'];
 };
 
-/** The caller's player wallet (player compute P2, DN-5): a platform-scoped balance funding that player's grid compute across every org/app they play in. Out-of-band from org wallets — player usage never touches an org's money. */
+/** The caller's player wallet: one platform-scoped balance, across every org and app they play in, that pays for the player's mods past their monthly trial (250,000 compute units in each app) and for any Agentic Studio model requests charged to them. Out-of-band from org wallets — player usage never touches an org's money. */
 export type PlayerWallet = {
   __typename?: 'PlayerWallet';
   /**
@@ -6991,7 +6991,7 @@ export type Query = {
   appPlayerMarkupAccrued: Scalars['BigInt']['output'];
   /** Total player rate-card markup credited to this app's org wallet (`markup_payout` rows, mirrored as CREDIT events on the ledger), in micro-USD, exact. Cents-era accruals from before the ledger are included. Requires 'view_billing'. */
   appPlayerMarkupAccruedMicrousd: Scalars['BigInt']['output'];
-  /** Per-player usage aggregate for an app over a trailing window (top spenders / quota utilization, 06 §5): compute units, automation units, compiles, and cents charged per player. Requires 'view_compute_diagnostics'. */
+  /** Per-player usage aggregate for an app over a trailing window (top spenders / quota utilization): the compute units each player's mods used, and what the player was charged for this app. automationUnits and compileCount are legacy and always 0 for usage since the legacy engines were removed. Requires 'view_compute_diagnostics'. */
   appPlayerUsage: Array<AppPlayerUsageRow>;
   /** Shared-environment runtime gate decision plus current hour/day billing-window usage for an app. Read this to learn why an app is not running (runtimeDenialReason). Caller must be a member of the app's org. */
   appRuntimeState: AppRuntimeState;
@@ -7253,7 +7253,7 @@ export type Query = {
   playerSpendCaps: Array<PlayerSpendCap>;
   /** The caller's posted hourly player-usage charges, newest first, optionally filtered by app. Each charge splits platformCents (base rate card) from markupCents (the studio's configured markup) with a per-metric snapshot — players always see what the platform charges and what the studio adds. */
   playerUsageCharges: Array<PlayerUsageCharge>;
-  /** The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet funds the player's grid compute across every org/app (DN-5); org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP. */
+  /** The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet, across every org and app, pays for the player's mods past their monthly trial and any Agentic Studio model requests charged to them; org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP. */
   playerWalletBalance: PlayerWallet;
   /** The caller's player-wallet ledger, newest first: top-ups, hourly usage debits (per app), auto-recharges, refunds, and adjustments. Usage-debit hours are broken down by playerUsageCharges, whose snapshot splits the platform and studio-markup components. */
   playerWalletTransactions: Array<PlayerWalletTransaction>;
@@ -9446,13 +9446,13 @@ export type VoxelCoordinates = {
   z: Scalars['Int']['output'];
 };
 
-/** Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). Signed 16-bit integers; in-bounds positions are 0-15 on each axis for a 16x16x16 chunk. */
+/** Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). Each coordinate is 0-15 on a 16x16x16 chunk, and the voxel writes (updateVoxel, sendVoxelUpdate, updateChunk's voxelStates) refuse any other value. Teleport's voxelAddress, which is not a write, takes any signed 16-bit value. */
 export type VoxelCoordinatesInput = {
-  /** Local voxel X within the chunk (0-15 for in-bounds voxels). */
+  /** Local voxel X within the chunk, 0-15; voxel writes refuse other values. */
   x: Scalars['Int']['input'];
-  /** Local voxel Y within the chunk (0-15 for in-bounds voxels). */
+  /** Local voxel Y within the chunk, 0-15; voxel writes refuse other values. */
   y: Scalars['Int']['input'];
-  /** Local voxel Z within the chunk (0-15 for in-bounds voxels). */
+  /** Local voxel Z within the chunk, 0-15; voxel writes refuse other values. */
   z: Scalars['Int']['input'];
 };
 
