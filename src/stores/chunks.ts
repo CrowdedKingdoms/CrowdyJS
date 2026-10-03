@@ -147,10 +147,13 @@ export interface ChunkStoreConfig<TVoxelState = string, TChunkState = string> {
   /** Codec for the chunk-level state blob. Defaults to raw base64 strings. */
   chunkStateCodec?: StateCodec<TChunkState>;
   /**
-   * After a bulk load, fetch each chunk individually to hydrate its sparse
-   * `voxelStates` (`getChunksByDistance` does NOT return them — a platform
-   * trap this store encapsulates). Defaults to true when a
-   * `voxelStateCodec` is configured, else false.
+   * After a bulk load, fetch each newly loaded chunk with `chunks.get` and
+   * apply its `voxelStates`: each entry's voxel type at its voxel, and its
+   * state. The bulk load reads only `voxels`, and since ck-api v2.33.0 every
+   * voxel edit recorded for a chunk (a hub's or mod's `world.set_voxels`,
+   * `updateVoxel`, realtime voxel updates) arrives only in `voxelStates`, so
+   * without hydration none of them shows after a reload. Defaults to true
+   * when a `voxelStateCodec` is configured, else false.
    */
   hydrateVoxelStates?: boolean;
   /**
@@ -355,6 +358,10 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
    * `onMissing`. In-flight requests are deduped; safe to call every time the
    * player crosses a chunk boundary.
    *
+   * A chunk already loaded keeps what the store holds for it when a later
+   * bulk load returns it again: its stored `voxels` carry none of the edits
+   * hydration and realtime merges applied. Prune it to load it afresh.
+   *
    * Requests the platform refuses as busy are asked again with backoff, and
    * at most 8 hydrations run at once. Hydration is best effort: a chunk whose
    * states could not be fetched keeps the voxels the bulk load gave it
@@ -384,7 +391,10 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         );
         for (const chunk of response.chunks) {
           const coord = fromChunkInput(chunk.coordinates);
-          returned.add(chunkKey(coord));
+          const key = chunkKey(coord);
+          // The cube around a new center includes chunks loaded from an earlier one.
+          if (this.chunks.get(key)?.loadState === 'loaded') continue;
+          returned.add(key);
           this.applyServerChunk(coord, chunk.voxels ?? null, chunk.chunkState ?? null);
         }
         // Requested-but-absent chunks have never been stored server-side.
@@ -465,13 +475,17 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     chunk.chunkState = this.decodeChunkState(full.chunkState ?? null);
     for (const entry of full.voxelStates ?? []) {
       const index = this.voxelIndex(entry.voxelCoord.x, entry.voxelCoord.y, entry.voxelCoord.z);
-      if (chunk.voxels) chunk.voxels[index] = entry.voxelType;
+      // A chunk stored with `voxels: null` still carries its recorded edits.
+      if (!chunk.voxels) chunk.voxels = new Uint8Array(CHUNK_VOLUME);
+      chunk.voxels[index] = entry.voxelType;
       if (entry.state) {
         try {
           chunk.voxelStates.set(index, this.voxelStateCodec.decode(entry.state));
         } catch {
           // Foreign/legacy blobs skip silently; the dense type still applied.
         }
+      } else {
+        chunk.voxelStates.delete(index);
       }
     }
     chunk.loadState = 'loaded';

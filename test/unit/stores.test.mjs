@@ -924,6 +924,78 @@ test('ChunkStore: a chunk whose bulk load failed is requested again', async () =
   session.dispose();
 });
 
+test('ChunkStore: a later bulk load keeps the recorded edits and realtime merges of a chunk it already loaded', async () => {
+  const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
+  // Since ck-api v2.33.0 a hub's world.set_voxels, updateVoxel and realtime voxel updates come
+  // back only as voxelStates entries: the stored voxels never hold them.
+  const { api, calls } = fakeChunks({
+    '0:0:0': {
+      voxels: Buffer.from(new Uint8Array(CHUNK_VOLUME)).toString('base64'),
+      voxelStates: [{ voxelCoord: { x: 10, y: 0, z: 8 }, voxelType: 3, state: null }],
+    },
+  });
+  const { client, net } = fakeClient({ chunks: api });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { hydrateVoxelStates: true, writeBackIntervalMs: false },
+  });
+  const store = session.chunks;
+  const at = { x: 0, y: 0, z: 0 };
+
+  // The cube around (0,0,-1) loads and hydrates 0:0:0; then another player's edit merges in.
+  await store.ensureAround({ x: 0, y: 0, z: -1 }, 1);
+  assert.equal(store.voxelTypeAt(at, 10, 0, 8), 3);
+  net.handlers.voxelUpdate({
+    chunkX: '0', chunkY: '0', chunkZ: '0',
+    voxelX: 2, voxelY: 2, voxelZ: 2, voxelType: 5, voxelState: '',
+    uuid: 'w'.repeat(32), sequenceNumber: 1, epochMillis: '2',
+  });
+  assert.equal(store.voxelTypeAt(at, 2, 2, 2), 5);
+
+  // Moving to (0,0,0) asks for its cube, which returns 0:0:0 again.
+  const bulkLoads = calls.byDistance;
+  await store.ensureAround(at, 1);
+  assert.equal(calls.byDistance, bulkLoads + 1);
+  assert.equal(store.voxelTypeAt(at, 10, 0, 8), 3, 'the hydrated edit stays');
+  assert.equal(store.voxelTypeAt(at, 2, 2, 2), 5, 'the realtime merge stays');
+  assert.equal(calls.get, 1, 'a hydrated chunk is not fetched again');
+  session.dispose();
+});
+
+test('ChunkStore: hydration puts recorded edits on a chunk stored with voxels: null; an entry without a state clears it', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const codec = jsonCodec();
+  const { api } = fakeChunks({
+    '0:0:0': {
+      voxels: null,
+      voxelStates: [
+        { voxelCoord: { x: 1, y: 1, z: 1 }, voxelType: 4, state: codec.encode({ placedBy: 'hub' }) },
+        { voxelCoord: { x: 2, y: 2, z: 2 }, voxelType: 0, state: null },
+      ],
+    },
+  });
+  const { client } = fakeClient({ chunks: api });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { voxelStateCodec: codec, writeBackIntervalMs: false },
+  });
+  const store = session.chunks;
+  const at = { x: 0, y: 0, z: 0 };
+
+  await store.ensureAround(at, 1);
+  assert.ok(store.get(at).voxels, 'the entries made a grid');
+  assert.equal(store.voxelTypeAt(at, 1, 1, 1), 4);
+  assert.deepEqual(store.voxelStateAt(at, 1, 1, 1), { placedBy: 'hub' });
+
+  // The server says the block at (2,2,2) was mined (type 0, no state): the state goes too.
+  await store.setVoxel({ chunk: at, x: 2, y: 2, z: 2, voxelType: 7, state: { placedBy: 'me' } });
+  assert.deepEqual(store.voxelStateAt(at, 2, 2, 2), { placedBy: 'me' });
+  await store.hydrate(at);
+  assert.equal(store.voxelTypeAt(at, 2, 2, 2), 0);
+  assert.equal(store.voxelStateAt(at, 2, 2, 2), undefined);
+  session.dispose();
+});
+
 test('ChunkStore: a refused write-back is dropped and reported; a retryable one is bounded', async () => {
   const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
   const { api, calls } = fakeChunks();
