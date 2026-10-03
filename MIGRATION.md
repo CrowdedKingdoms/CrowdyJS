@@ -120,6 +120,25 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.2.0: `ChunkStore` keeps the voxel edits it hydrated
+
+No API change. Every voxel write but a chunk write-back lands only in the chunk's edit log: a
+hub's or mod's `world.set_voxels`, `updateVoxel`, and realtime voxel updates. Since ck-api
+`dev/v2.33.0` (cks-game-api #445) `getChunk` returns each recorded edit as a `voxelStates` entry
+with its type, over a stored `voxels` that holds none of them. `ChunkStore` applies them when it
+hydrates a loaded chunk: set `hydrateVoxelStates: true` unless you configure a
+`voxelStateCodec` (the-construct does since construct 0.3.6), or a reload shows none of them.
+(OI-2026-10-02-006)
+
+- `ensureAround` no longer applies a chunk it has already loaded when the bulk load returns it
+  again: the cube around a new center overlaps the old one, and the stored `voxels` put back
+  over the cache wiped the hydrated edits (a hub's block vanished the moment the player crossed
+  into a new chunk) and every realtime merge, and the chunk was never hydrated again. To load a
+  chunk afresh, `pruneBeyond` it first, or call `hydrate(coord)`.
+- `hydrate` puts the entries on a chunk stored with `voxels: null` (a zero grid under them); it
+  used to drop their types. An entry without a state clears the state cached at its voxel, as a
+  realtime merge without one does.
+
 ## 18.1.0: open grids, and where a connect token may go
 
 Additive, except that `client.exec.connect` refuses a gateway it would once have dialed (below).

@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.1.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.2.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,18 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.2.0: `ChunkStore` keeps the voxel edits it hydrated (OI-2026-10-02-006, 2026-10-03).**
+Since ck-api `dev/v2.33.0` (cks-game-api #445) every voxel edit recorded for a chunk (a hub's or
+mod's `world.set_voxels`, `updateVoxel`, realtime voxel updates) comes back only in `getChunk`'s
+`voxelStates`; the bulk load's `voxels` hold none of them, so a store shows them only when it
+hydrates (`hydrateVoxelStates`, on with a `voxelStateCodec`). `ensureAround` used to apply every
+chunk the bulk response returned, also one it had already loaded and hydrated, which put the
+stored grid back over the edits and never hydrated it again: a hub's block vanished as soon as
+the player crossed into a new chunk, and so did realtime merges. A loaded chunk now keeps its
+cache. `hydrate` also puts the edits on a chunk stored with `voxels: null` (it dropped their
+types), and an entry without a state clears the cached state there. CrowdyCPP 0.56.0 selects
+`voxelStates` in its one bulk load instead.
 
 **18.1.0: open grids, and where a connect token may go (the W5 review's SDK follow-ups,
 2026-10-01).** `client.gameApps.setOpenPermissions` / `openPermissions` wrap cks-game-api #436's

@@ -591,6 +591,11 @@ write-back), `channelInbox` / `actorInbox` (message inboxes), `events` (typed
 event router), `host` (host tracking), and `save` / `avatar` (typed durable
 state).
 
+A voxel edit that is not a chunk write-back (a hub's or mod's `world.set_voxels`, `updateVoxel`,
+another player's realtime voxel update) reaches a reload only through hydration: `getChunk`
+returns it in `voxelStates`, and the bulk load's `voxels` never hold it. The store hydrates when
+it has a `voxelStateCodec`; without one, set `chunks: { hydrateVoxelStates: true }`.
+
 A chunk write-back the server refuses (a visitor on someone else's plot, a safe zone, a closed
 wilderness) is dropped, not retried; one that fails for a reason that can clear is tried five
 times. Listen with `session.chunks.onWriteBackFailed(...)` to undo or flag the edit (18.0.4).
