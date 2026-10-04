@@ -1,7 +1,7 @@
 import { ensureCrowdyStudioEmbedStyles } from './embed-styles.js';
 
 /**
- * A persistent, game-owned HUD layer for player-compute CLIENT mods. A
+ * A persistent, game-owned HUD layer for CLIENT mods (ck-exec CLIENT halves). A
  * running client mod never touches the game DOM; it emits `hud_set` payloads
  * that the broker forwards here. This layer lives outside the studio panel so
  * a mod's HUD survives panel re-renders and keeps rendering after the coding

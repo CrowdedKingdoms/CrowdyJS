@@ -1,16 +1,6 @@
 import type { GridsAPI, GridChannel, GridToken } from './domains/grids.js';
-import type { GameModelAPI } from './domains/gameModel.js';
-import type { PlayerModelAPI } from './domains/playerModel.js';
-import type { PlayerComputeAPI } from './domains/playerCompute.js';
 import type { ChannelsAPI } from './domains/channels.js';
 import type { UdpAPI } from './domains/udp.js';
-import type { MarketplaceAPI } from './domains/marketplace.js';
-import type {
-  GameModelCreateSessionMutationVariables,
-  PlayerComputeDeployMutationVariables,
-  PlayerModelCreateContainerMutationVariables,
-  PlayerModelSetPropertyMutationVariables,
-} from './generated/graphql.js';
 
 /** A chunk address as CrowdyJS passes it on the wire (decimal strings). */
 export interface GridChunk {
@@ -27,12 +17,8 @@ export interface GridBox {
 /** The domain clients a GridScope binds (a CrowdyClient satisfies this). */
 export interface GridScopeClients {
   grids: GridsAPI;
-  gameModel: GameModelAPI;
-  playerModel: PlayerModelAPI;
-  playerCompute: PlayerComputeAPI;
   channels: ChannelsAPI;
   udp: UdpAPI;
-  marketplace: MarketplaceAPI;
 }
 
 /** Thrown locally, before any request, when a call would leave the grid. */
@@ -144,107 +130,6 @@ export class GridScope {
         channelId,
         uuid,
         payload: payloadBase64,
-      }),
-  };
-
-  /** Sessions hosted inside this grid (games within the game). */
-  readonly sessions = {
-    list: (options: { status?: string; limit?: number } = {}) =>
-      this.clients.gameModel.sessions({
-        appId: this.appId,
-        gridId: this.gridId,
-        ...options,
-      }),
-    create: (
-      input: Omit<
-        GameModelCreateSessionMutationVariables['input'],
-        'appId' | 'gridId'
-      > = {},
-    ) =>
-      this.clients.gameModel.createSession({
-        ...input,
-        appId: this.appId,
-        gridId: this.gridId,
-      }),
-    join: (sessionId: string, options: { role?: string; actorUuid?: string } = {}) =>
-      this.clients.gameModel.joinSession({
-        appId: this.appId,
-        sessionId,
-        ...options,
-      }),
-    leave: (sessionId: string, incarnation: number) =>
-      this.clients.gameModel.leaveSession({
-        appId: this.appId,
-        sessionId,
-        incarnation,
-      }),
-  };
-
-  /** The player-tier Game Model of this grid. */
-  readonly model = {
-    containers: () =>
-      this.clients.playerModel.containers({
-        appId: this.appId,
-        gridId: this.gridId,
-      }),
-    container: (containerId: string) =>
-      this.clients.playerModel.container({
-        appId: this.appId,
-        gridId: this.gridId,
-        containerId,
-      }),
-    create: (
-      input: Omit<
-        PlayerModelCreateContainerMutationVariables['input'],
-        'appId' | 'gridId'
-      >,
-    ) =>
-      this.clients.playerModel.createContainer({
-        ...input,
-        appId: this.appId,
-        gridId: this.gridId,
-      }),
-    set: (
-      input: Omit<
-        PlayerModelSetPropertyMutationVariables['input'],
-        'appId' | 'gridId'
-      >,
-    ) =>
-      this.clients.playerModel.setProperty({
-        ...input,
-        appId: this.appId,
-        gridId: this.gridId,
-      }),
-    delete: (containerId: string) =>
-      this.clients.playerModel.deleteContainer({
-        appId: this.appId,
-        gridId: this.gridId,
-        containerId,
-      }),
-  };
-
-  /** Player compute on this grid (SERVER/CLIENT modules). */
-  readonly compute = {
-    deploy: (
-      input: Omit<PlayerComputeDeployMutationVariables['input'], 'appId' | 'gridId'>,
-    ) =>
-      this.clients.playerCompute.deploy({
-        ...input,
-        appId: this.appId,
-        gridId: this.gridId,
-      } as PlayerComputeDeployMutationVariables['input']),
-    invoke: (moduleName: string, exportName: string, params?: unknown) =>
-      this.clients.playerCompute.invoke({
-        appId: this.appId,
-        gridId: this.gridId,
-        moduleName,
-        exportName,
-        ...(params !== undefined ? { paramsJson: JSON.stringify(params) } : {}),
-      }),
-    clientMods: () =>
-      this.clients.marketplace.gridClientMods({
-        appId: this.appId,
-        gridId: this.gridId,
       }),
   };
 

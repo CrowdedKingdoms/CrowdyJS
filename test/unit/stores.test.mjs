@@ -47,7 +47,7 @@ export function fakeUdp() {
 export function fakeClient(extra = {}) {
   const { udp, state } = fakeUdp();
   return {
-    client: { udp, chunks: {}, state: {}, avatars: {}, host: {}, gameModel: {}, ...extra },
+    client: { udp, chunks: {}, state: {}, avatars: {}, host: {}, ...extra },
     net: state,
   };
 }
@@ -313,6 +313,79 @@ test('LocalActorStore: identity, send loop with dedup + keyframe, ack/error reco
   self.patchState({ y: 9 });
   ticker.advance(2000);
   assert.equal(net.sent.length, 4);
+});
+
+test('LocalActorStore: a refused loop send is recorded, never unhandled, and resent on the next tick', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const { client, net } = fakeClient();
+  const busy = Object.assign(new Error('The service is busy. Please try again in a moment.'), {
+    code: 'PLATFORM_BUSY',
+  });
+  let refuse = 0;
+  const send = client.udp.sendActorUpdate;
+  client.udp.sendActorUpdate = async (input) => {
+    if (refuse > 0) {
+      refuse -= 1;
+      throw busy;
+    }
+    return send(input);
+  };
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const ticker = manualTicker();
+    let wallClock = 0;
+    const codec = jsonCodec();
+    const session = createWorldSession(client, '42', {
+      ticker,
+      self: {
+        codec,
+        initialState: { x: 0 },
+        now: () => wallClock,
+        keyframeEveryMs: 10_000,
+      },
+    });
+    const self = session.self;
+    await self.join({ x: '0', y: '1', z: '0' });
+    assert.equal(net.sent.length, 1);
+
+    // A changed state's loop send is refused before reaching the server.
+    self.patchState({ x: 1 });
+    refuse = 1;
+    wallClock = 200;
+    ticker.advance(200);
+    await sleep(0);
+    assert.equal(net.sent.length, 1, 'the refused send never went out');
+    assert.equal(self.status, 'error');
+    assert.equal(self.lastError.errorCode, 'PLATFORM_BUSY');
+    assert.equal(self.lastError.sequenceNumber, self.lastSent.sequenceNumber);
+
+    // The state is unchanged since, yet the next tick sends it again.
+    wallClock = 400;
+    ticker.advance(200);
+    await sleep(0);
+    assert.equal(net.sent.length, 2, 'resent although unchanged');
+    assert.equal(codec.decode(net.sent[1].input.state).x, 1);
+    assert.equal(self.status, 'pending');
+
+    // Then dedup applies again.
+    wallClock = 600;
+    ticker.advance(200);
+    await sleep(0);
+    assert.equal(net.sent.length, 2, 'deduped once delivered');
+
+    // An explicit send still rejects to its caller.
+    refuse = 1;
+    await assert.rejects(self.sendNow(), /service is busy/);
+    assert.equal(self.lastError.errorCode, 'PLATFORM_BUSY');
+
+    session.dispose();
+    await sleep(10);
+    assert.deepEqual(unhandled, [], 'no unhandled rejection');
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
 });
 
 test('LocalActorStore: uuid persistence, explicit uuid, manual-send mode', async () => {
@@ -775,6 +848,222 @@ test('ChunkStore: bulk load + hydration, realtime merge, optimistic edits, world
   session.dispose();
 });
 
+test('ChunkStore: hydration runs 8 at a time, retries busy refusals and is best effort', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const initial = {};
+  for (let x = -2; x <= 2; x++) for (let z = -2; z <= 1; z++) initial[`${x}:0:${z}`] = {};
+  const { api } = fakeChunks(initial);
+  const busy = () => Object.assign(new Error('The service is busy'), { code: 'PLATFORM_BUSY' });
+  const refused = () => Object.assign(new Error('Forbidden'), { code: 'FORBIDDEN' });
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const attempts = new Map();
+  const get = api.get;
+  api.get = async (input) => {
+    const key = `${input.coordinates.x}:${input.coordinates.y}:${input.coordinates.z}`;
+    attempts.set(key, (attempts.get(key) ?? 0) + 1);
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    try {
+      await sleep(5);
+      if (key === '0:0:0' && attempts.get(key) <= 2) throw busy();
+      if (key === '1:0:1') throw refused();
+      return await get(input);
+    } finally {
+      inFlight -= 1;
+    }
+  };
+  const { client } = fakeClient({ chunks: api });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { voxelStateCodec: jsonCodec(), writeBackIntervalMs: false },
+  });
+  const store = session.chunks;
+
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 2);
+  assert.ok(maxInFlight <= 8, `at most 8 hydrations at once (saw ${maxInFlight})`);
+  assert.equal(attempts.get('0:0:0'), 3, 'a busy refusal is asked again');
+  assert.equal(store.get({ x: 0, y: 0, z: 0 }).hydrated, true);
+  const stubborn = store.get({ x: 1, y: 0, z: 1 });
+  assert.equal(stubborn.loadState, 'loaded', 'its voxels from the bulk load stay');
+  assert.equal(stubborn.hydrated, false);
+  assert.equal(attempts.get('1:0:1'), 1, 'a refusal that is not busy is not retried at once');
+
+  // A later call hydrates what failed, and only that; after three failures it stops asking.
+  const before = attempts.get('0:0:0');
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 2);
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 2);
+  await store.ensureAround({ x: 0, y: 0, z: 0 }, 2);
+  assert.equal(attempts.get('1:0:1'), 3);
+  assert.equal(attempts.get('0:0:0'), before, 'a hydrated chunk is not fetched again');
+  session.dispose();
+});
+
+test('ChunkStore: a chunk whose bulk load failed is requested again', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+  const { api, calls } = fakeChunks({ '0:0:0': {} });
+  const byDistance = api.byDistance;
+  let fail = true;
+  api.byDistance = async (input) => {
+    if (fail) {
+      fail = false;
+      throw Object.assign(new Error('Internal error'), { code: 'INTERNAL_SERVER_ERROR' });
+    }
+    return byDistance(input);
+  };
+  const { client } = fakeClient({ chunks: api });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { writeBackIntervalMs: false },
+  });
+  await assert.rejects(session.chunks.ensureAround({ x: 0, y: 0, z: 0 }, 1));
+  assert.equal(session.chunks.get({ x: 0, y: 0, z: 0 }).loadState, 'failed');
+  await session.chunks.ensureAround({ x: 0, y: 0, z: 0 }, 1);
+  assert.equal(session.chunks.get({ x: 0, y: 0, z: 0 }).loadState, 'loaded');
+  assert.equal(calls.byDistance, 1, 'the retry went through the real bulk load');
+  session.dispose();
+});
+
+test('ChunkStore: a later bulk load keeps the recorded edits and realtime merges of a chunk it already loaded', async () => {
+  const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
+  // Since ck-api v2.33.0 a hub's world.set_voxels, updateVoxel and realtime voxel updates come
+  // back only as voxelStates entries: the stored voxels never hold them.
+  const { api, calls } = fakeChunks({
+    '0:0:0': {
+      voxels: Buffer.from(new Uint8Array(CHUNK_VOLUME)).toString('base64'),
+      voxelStates: [{ voxelCoord: { x: 10, y: 0, z: 8 }, voxelType: 3, state: null }],
+    },
+  });
+  const { client, net } = fakeClient({ chunks: api });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { hydrateVoxelStates: true, writeBackIntervalMs: false },
+  });
+  const store = session.chunks;
+  const at = { x: 0, y: 0, z: 0 };
+
+  // The cube around (0,0,-1) loads and hydrates 0:0:0; then another player's edit merges in.
+  await store.ensureAround({ x: 0, y: 0, z: -1 }, 1);
+  assert.equal(store.voxelTypeAt(at, 10, 0, 8), 3);
+  net.handlers.voxelUpdate({
+    chunkX: '0', chunkY: '0', chunkZ: '0',
+    voxelX: 2, voxelY: 2, voxelZ: 2, voxelType: 5, voxelState: '',
+    uuid: 'w'.repeat(32), sequenceNumber: 1, epochMillis: '2',
+  });
+  assert.equal(store.voxelTypeAt(at, 2, 2, 2), 5);
+
+  // Moving to (0,0,0) asks for its cube, which returns 0:0:0 again.
+  const bulkLoads = calls.byDistance;
+  await store.ensureAround(at, 1);
+  assert.equal(calls.byDistance, bulkLoads + 1);
+  assert.equal(store.voxelTypeAt(at, 10, 0, 8), 3, 'the hydrated edit stays');
+  assert.equal(store.voxelTypeAt(at, 2, 2, 2), 5, 'the realtime merge stays');
+  assert.equal(calls.get, 1, 'a hydrated chunk is not fetched again');
+  session.dispose();
+});
+
+test('ChunkStore: hydration puts recorded edits on a chunk stored with voxels: null; an entry without a state clears it', async () => {
+  const { createWorldSession, manualTicker, jsonCodec } = await loadStores();
+  const codec = jsonCodec();
+  const { api } = fakeChunks({
+    '0:0:0': {
+      voxels: null,
+      voxelStates: [
+        { voxelCoord: { x: 1, y: 1, z: 1 }, voxelType: 4, state: codec.encode({ placedBy: 'hub' }) },
+        { voxelCoord: { x: 2, y: 2, z: 2 }, voxelType: 0, state: null },
+      ],
+    },
+  });
+  const { client } = fakeClient({ chunks: api });
+  const session = createWorldSession(client, '42', {
+    ticker: manualTicker(),
+    chunks: { voxelStateCodec: codec, writeBackIntervalMs: false },
+  });
+  const store = session.chunks;
+  const at = { x: 0, y: 0, z: 0 };
+
+  await store.ensureAround(at, 1);
+  assert.ok(store.get(at).voxels, 'the entries made a grid');
+  assert.equal(store.voxelTypeAt(at, 1, 1, 1), 4);
+  assert.deepEqual(store.voxelStateAt(at, 1, 1, 1), { placedBy: 'hub' });
+
+  // The server says the block at (2,2,2) was mined (type 0, no state): the state goes too.
+  await store.setVoxel({ chunk: at, x: 2, y: 2, z: 2, voxelType: 7, state: { placedBy: 'me' } });
+  assert.deepEqual(store.voxelStateAt(at, 2, 2, 2), { placedBy: 'me' });
+  await store.hydrate(at);
+  assert.equal(store.voxelTypeAt(at, 2, 2, 2), 0);
+  assert.equal(store.voxelStateAt(at, 2, 2, 2), undefined);
+  session.dispose();
+});
+
+test('ChunkStore: a refused write-back is dropped and reported; a retryable one is bounded', async () => {
+  const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
+  const { api, calls } = fakeChunks();
+  const graphqlRefusal = (code, httpStatus) =>
+    Object.assign(new Error(code), {
+      graphqlErrors: [{ message: code, extensions: { code, httpStatus } }],
+      code,
+      extensions: { code, httpStatus },
+    });
+  const failWith = {
+    '1:0:0': () => graphqlRefusal('FORBIDDEN', 403), // someone else's plot
+    '2:0:0': () => graphqlRefusal('BAD_REQUEST', 400), // an invalid grid
+    '4:0:0': () => Object.assign(new Error('Network error: ECONNRESET'), { name: 'CrowdyNetworkError' }),
+  };
+  let busyLeft = 2;
+  const update = api.update;
+  const attempts = new Map();
+  api.update = async (input) => {
+    const key = `${input.coordinates.x}:${input.coordinates.y}:${input.coordinates.z}`;
+    attempts.set(key, (attempts.get(key) ?? 0) + 1);
+    if (failWith[key]) throw failWith[key]();
+    if (key === '3:0:0' && busyLeft-- > 0) {
+      throw Object.assign(new Error('The service is busy'), { code: 'PLATFORM_BUSY' });
+    }
+    return update(input);
+  };
+  const { client } = fakeClient({ chunks: api });
+  const ticker = manualTicker();
+  const session = createWorldSession(client, '42', {
+    ticker,
+    chunks: { writeBackIntervalMs: 100, now: () => ticker.now },
+  });
+  const store = session.chunks;
+  const failures = [];
+  store.onWriteBackFailed((failure) => failures.push(failure));
+  for (const x of [1, 2, 3, 4]) store.seed({ x, y: 0, z: 0 }, new Uint8Array(CHUNK_VOLUME));
+
+  for (let t = 0; t < 30_000; t += 100) {
+    ticker.advance(100);
+    await sleep(0);
+  }
+
+  assert.equal(attempts.get('1:0:0'), 1, 'FORBIDDEN is not retried');
+  assert.equal(attempts.get('2:0:0'), 1, 'a validation refusal is not retried');
+  assert.equal(attempts.get('3:0:0'), 3, 'PLATFORM_BUSY is retried until it goes through');
+  assert.equal(attempts.get('4:0:0'), 5, 'a network failure is retried a bounded number of times');
+  assert.equal(store.pendingWriteBacks, 0);
+  assert.equal(store.get({ x: 3, y: 0, z: 0 }).loadState, 'loaded');
+  assert.equal(calls.update.length, 1, 'only the busy chunk reached the server');
+
+  const byKey = Object.fromEntries(failures.map((f) => [f.chunk.key, f]));
+  assert.equal(failures.length, 3);
+  assert.equal(byKey['1:0:0'].reason, 'refused');
+  assert.equal(byKey['1:0:0'].error.code, 'FORBIDDEN');
+  assert.equal(byKey['2:0:0'].reason, 'refused');
+  assert.equal(byKey['4:0:0'].reason, 'exhausted');
+  assert.equal(byKey['4:0:0'].attempts, 5);
+  for (const failure of failures) assert.equal(failure.chunk.dirty, false);
+
+  // flush reports what it dropped and does not reject.
+  store.seed({ x: 1, y: 0, z: 0 }, new Uint8Array(CHUNK_VOLUME));
+  const flushed = await store.flush();
+  assert.equal(flushed.length, 1);
+  assert.equal(flushed[0].reason, 'refused');
+  assert.equal(attempts.get('1:0:0'), 2, 'a new edit is written back once more');
+  session.dispose();
+});
+
 test('ChunkStore: onMissing can seed without write-back', async () => {
   const { createWorldSession, manualTicker, CHUNK_VOLUME } = await loadStores();
   const { api: chunksApi } = fakeChunks();
@@ -1063,6 +1352,57 @@ test('SaveStateStore: typed load/set/save cache with debounced autosave', async 
   session.dispose();
 });
 
+test('SaveStateStore: a refused autosave stays dirty, is never unhandled, and the next autosave persists it', async () => {
+  const { createWorldSession, manualTicker } = await loadStores();
+
+  const updates = [];
+  let refuse = 1;
+  const stateApi = {
+    async getOne() {
+      return null;
+    },
+    async update(input) {
+      if (refuse > 0) {
+        refuse -= 1;
+        throw Object.assign(new Error('The service is busy. Please try again in a moment.'), {
+          code: 'PLATFORM_BUSY',
+        });
+      }
+      updates.push(input);
+      return { state: input.state };
+    },
+  };
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const { client } = fakeClient({ state: stateApi });
+    const ticker = manualTicker();
+    const session = createWorldSession(client, '42', {
+      ticker,
+      save: { autosaveMs: 500, now: () => ticker.now },
+    });
+    const save = session.save;
+
+    save.set({ level: 5 });
+    ticker.advance(500);
+    await sleep(0);
+    assert.equal(updates.length, 0, 'the refused save wrote nothing');
+    assert.equal(save.dirty, true, 'still dirty after the refusal');
+
+    ticker.advance(500);
+    await sleep(0);
+    assert.equal(updates.length, 1, 'the next autosave persisted it');
+    assert.equal(save.dirty, false);
+
+    session.dispose();
+    await sleep(10);
+    assert.deepEqual(unhandled, [], 'no unhandled rejection');
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+});
+
 test('AvatarStateStore: binds an avatar and round-trips typed public/private/app state', async () => {
   const { createWorldSession, manualTicker } = await loadStores();
 
@@ -1117,84 +1457,6 @@ test('AvatarStateStore: binds an avatar and round-trips typed public/private/app
   await store.setAppState({ progress: 3 });
   assert.deepEqual(store.appState, { progress: 3 });
   assert.equal(writes.app[0].appId, '42');
-
-  session.dispose();
-});
-
-test('ContainerMirror: typed snapshots, change-only events, channel-ping refresh', async () => {
-  const { createWorldSession, manualTicker } = await loadStores();
-
-  const containers = new Map([
-    ['c-1', { typeName: 'MatchMeta', displayName: 'Match', ownerUserId: '7', props: { state: 'lobby', round: 0 } }],
-    ['c-2', { typeName: 'Score', displayName: 'Score', ownerUserId: '8', props: { points: 0 } }],
-  ]);
-  let pulls = 0;
-  const gameModelApi = {
-    async containerState({ containerId }) {
-      pulls += 1;
-      const entry = containers.get(containerId);
-      return {
-        containerId,
-        typeName: entry.typeName,
-        displayName: entry.displayName,
-        ownerUserId: entry.ownerUserId,
-        propertiesJson: JSON.stringify(entry.props),
-      };
-    },
-  };
-  const { client, net } = fakeClient({ gameModel: gameModelApi });
-  const ticker = manualTicker();
-  const session = createWorldSession(client, '42', {
-    ticker,
-    model: { now: () => ticker.now },
-  });
-  const mirror = session.model;
-
-  const changes = [];
-  mirror.onChange((c) => changes.push([c.containerId, c.revision]));
-
-  // watch() fetches the initial typed snapshot.
-  const match = await mirror.watch('c-1', (props) => ({
-    state: String(props.state),
-    round: Number(props.round),
-  }));
-  await mirror.watch('c-2');
-  assert.deepEqual(match.value, { state: 'lobby', round: 0 });
-  assert.equal(mirror.get('c-1').revision, 1);
-  assert.equal(mirror.list().length, 2);
-  assert.deepEqual(changes, [['c-1', 1], ['c-2', 1]]);
-
-  // Unchanged refreshes bump nothing and fire nothing.
-  await mirror.refresh('c-1');
-  assert.equal(mirror.get('c-1').revision, 1);
-  assert.equal(changes.length, 2);
-
-  // A bound channel ping re-pulls everything; only changed snapshots fire.
-  const off = mirror.bindToChannel('77');
-  containers.get('c-1').props = { state: 'active', round: 1 };
-  net.handlers.channelMessage({ channelId: '77', uuid: 'u'.repeat(32), payload: 'AA==', epochMillis: '1' });
-  await sleep(0);
-  assert.equal(mirror.get('c-1').value.state, 'active');
-  assert.equal(mirror.get('c-1').revision, 2);
-  assert.equal(mirror.get('c-2').revision, 1, 'unchanged container did not bump');
-  assert.deepEqual(changes[2], ['c-1', 2]);
-
-  // Snapshot identity is stable across refreshes.
-  assert.equal(mirror.get('c-1'), match);
-
-  // Pings on unbound channels do nothing; unbinding stops refreshes.
-  const before = pulls;
-  net.handlers.channelMessage({ channelId: '99', uuid: 'u'.repeat(32), payload: 'AA==', epochMillis: '2' });
-  await sleep(0);
-  assert.equal(pulls, before);
-  off();
-  net.handlers.channelMessage({ channelId: '77', uuid: 'u'.repeat(32), payload: 'AA==', epochMillis: '3' });
-  await sleep(0);
-  assert.equal(pulls, before);
-
-  // unwatch drops the snapshot.
-  mirror.unwatch('c-2');
-  assert.equal(mirror.get('c-2'), undefined);
 
   session.dispose();
 });

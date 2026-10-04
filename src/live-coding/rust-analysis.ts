@@ -91,23 +91,22 @@ const RUST_KEYWORDS = [
 const TARGET_SNIPPETS: Record<'server' | 'client', CompletionItem[]> = {
   server: [
     {
-      label: 'server lifecycle',
+      label: 'mod hub',
       kind: 15,
-      detail: 'SERVER init, tick, and invoke entry points',
+      detail: 'SERVER: a ck-exec mod (spawn, load, persist, handle)',
       documentation:
-        'Runs in the platform sandbox as the grid owner. Host effects remain permission checked and grid-clamped.',
+        'Runs on the platform as a hub keyed by the grid, in its owner\u2019s sandbox; its node API calls reach only this grid. Crowdy Studio Invoke calls one of its endpoints (`state` by default).',
       insertText:
-        'fn on_init() {\n    $1\n}\n\nfn on_tick(dt_ms: u32) {\n    $2\n}\n\nfn on_invoke(payload: &[u8]) -> Vec<u8> {\n    $3\n}\n\ncrowdy_compute_sdk::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);',
+        'use ckx_sdk::prelude::*;\n\n#[derive(Serialize, Deserialize, Default)]\npub struct Mod {\n    $1\n}\n\nimpl Hub for Mod {\n    fn spawn(_ctx: &Ctx, _seed: &[u8]) -> Result<Self> {\n        Ok(Self::default())\n    }\n\n    fn load(_ctx: &Ctx, snapshot: &[u8], _from_version: u64) -> Result<Self> {\n        decode(snapshot)\n    }\n\n    fn persist(&mut self, _ctx: &Ctx) -> Result<Vec<u8>> {\n        encode(self)\n    }\n\n    fn handle(&mut self, _ctx: &Ctx, call: Call<\'_>) -> Result<Vec<u8>> {\n        match call.method {\n            "state" => encode(&*self),\n            m => Err(Error(format!("no endpoint `{m}`"))),\n        }\n    }\n}\n\nckx_sdk::export_hub!(Mod);',
       sortText: '0-server-lifecycle',
     },
     {
-      label: 'server invoke export',
+      label: 'mod endpoint',
       kind: 15,
-      detail: 'SERVER export callable from Crowdy Studio Invoke',
+      detail: 'SERVER: an endpoint in handle, called over an exec connection',
       documentation:
-        'The caller and owned grid are supplied by the platform runtime; author identity is never authority.',
-      insertText:
-        'fn on_invoke(payload: &[u8]) -> Vec<u8> {\n    ${1:payload.to_vec()}\n}',
+        'The platform names the caller (`call.player()`); author identity is never authority.',
+      insertText: '"${1:visit}" => {\n    $2\n    encode(&*self)\n}',
       sortText: '0-server-invoke',
     },
   ],
@@ -115,11 +114,11 @@ const TARGET_SNIPPETS: Record<'server' | 'client', CompletionItem[]> = {
     {
       label: 'client lifecycle',
       kind: 15,
-      detail: 'CLIENT init, tick, and invoke entry points',
+      detail: 'CLIENT half: init, tick, invoke and event entry points',
       documentation:
-        'Runs in the browser Rust sandbox. Page capabilities are exposed only through the broker allow-list. The host only ticks when PlayerCodeBroker.tickIntervalMs is set.',
+        'Runs in the visitor\u2019s browser sandbox. Page capabilities are exposed only through the broker allow-list, narrowed to what the visitor consented to. It ticks every tick_interval_ms (Cargo.toml).',
       insertText:
-        'fn on_init() {\n    $1\n}\n\nfn on_tick(dt_ms: u32) {\n    $2\n}\n\nfn on_invoke(payload: &[u8]) -> Vec<u8> {\n    $3\n}\n\ncrowdy_compute_sdk::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);',
+        'fn init() {\n    $1\n}\n\nfn tick(_dt_ms: u32) {\n    $2\n}\n\nfn invoke(payload: &[u8]) -> Vec<u8> {\n    ${3:payload.to_vec()}\n}\n\nfn event(_payload: &[u8]) {}\n\ncrowdy_client_sdk::register_module!(init: init, tick: tick, invoke: invoke, event: event);',
       sortText: '0-client-lifecycle',
     },
     {
@@ -127,9 +126,9 @@ const TARGET_SNIPPETS: Record<'server' | 'client', CompletionItem[]> = {
       kind: 15,
       detail: 'CLIENT tick for allow-listed HUD/presentation effects',
       documentation:
-        'Presentation calls cross PlayerCodeBroker; the language worker and guest module never receive page credentials. The host only ticks when tickIntervalMs is set.',
+        'Presentation calls cross PlayerCodeBroker to the HUD the game offers; the language worker and guest module never receive page credentials.',
       insertText:
-        'fn on_tick(dt_ms: u32) {\n    // Call an allow-listed presentation host function here.\n    $1\n}',
+        'fn tick(_dt_ms: u32) {\n    let _ = crowdy_client_sdk::api::hud_set(serde_json::json!({ "text": "${1:hello}" }));\n}',
       sortText: '0-client-presentation',
     },
   ],
@@ -193,7 +192,7 @@ export class RustAnalysis {
     }
     const target = targetForDocument(document);
     if (target) {
-      for (const snippet of TARGET_SNIPPETS[target]) add(snippet);
+      for (const snippet of targetSnippets(target)) add(snippet);
     }
     for (const symbol of this.platformIndex.symbols) {
       add(platformCompletion(symbol, this.platformIndex));
@@ -335,6 +334,10 @@ export class RustAnalysis {
   }
 }
 
+function targetSnippets(target: 'server' | 'client'): CompletionItem[] {
+  return TARGET_SNIPPETS[target];
+}
+
 function targetForDocument(
   document: VirtualDocument,
 ): 'server' | 'client' | null {
@@ -342,22 +345,28 @@ function targetForDocument(
   return first === 'server' || first === 'client' ? first : null;
 }
 
+const SERVER_LIFECYCLE = ['spawn', 'load', 'persist', 'handle', 'on_world', 'on_timer'];
+const CLIENT_LIFECYCLE = ['init', 'tick', 'invoke', 'event'];
+
 function targetLifecycleNote(
   document: VirtualDocument,
   word: string,
 ): string | null {
   const target = targetForDocument(document);
-  if (!target || !['on_init', 'on_tick', 'on_invoke'].includes(word)) {
-    return null;
+  if (target === 'server' && SERVER_LIFECYCLE.includes(word)) {
+    return word === 'handle'
+      ? 'SERVER lifecycle: a mod endpoint runs for the caller the platform names (`call.player()`); its node API calls reach only this grid.'
+      : 'SERVER lifecycle: the mod runs on the platform as a hub keyed by the grid, in its owner\u2019s sandbox, once its build succeeds.';
   }
-  if (target === 'server') {
-    return word === 'on_invoke'
-      ? 'SERVER invoke exports execute as the current grid owner; host effects remain permission checked and grid-confined.'
-      : 'SERVER lifecycle code executes in the platform sandbox and is activated only after an authoritative compile succeeds.';
+  if (target === 'client' && CLIENT_LIFECYCLE.includes(word)) {
+    if (word === 'tick') {
+      return 'CLIENT ticks run in the visitor\u2019s browser sandbox every tick_interval_ms (Cargo.toml); all page effects cross the PlayerCodeBroker allow-list, narrowed to what the visitor consented to.';
+    }
+    return word === 'invoke'
+      ? 'CLIENT invoke answers the page (PlayerCodeBroker.invoke); its reply goes back to the game as bytes.'
+      : 'CLIENT code is loaded from the exact hash-bound artifact the grid serves for this CLIENT half.';
   }
-  return word === 'on_tick'
-    ? 'CLIENT ticks execute inside the browser guest sandbox only when PlayerCodeBroker.tickIntervalMs is set; all page effects cross the PlayerCodeBroker allow-list.'
-    : 'CLIENT lifecycle code is loaded from the exact hash-bound artifact produced for this project version.';
+  return null;
 }
 
 function visit(node: TreeSitterNode, callback: (node: TreeSitterNode) => void): void {

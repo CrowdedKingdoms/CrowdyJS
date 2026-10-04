@@ -1,5 +1,7 @@
 import {
   PlayerCodeBroker,
+  type PlayerCodeEngine,
+  type PlayerCodeLogLine,
   type PlayerCodePresentation,
 } from '../player-runtime/player-code-broker.js';
 import { hostGridProgram, type GridProgramHost } from '../grid-program/host.js';
@@ -11,14 +13,22 @@ import {
   type GridHostLocal,
 } from './grid-host-calls.js';
 
-/** A Rust CLIENT mod: platform-built WASM run in the tokenless glue worker. */
+/**
+ * A ck-exec mod's CLIENT half: platform-built WASM run in the tokenless glue worker, with the
+ * `digest` (as `artifactHash`), `fuelPerDispatch`, `tickIntervalMs` and summary host calls of
+ * `exec.modClientArtifactBytes` (`ExecClientHalves` runs a whole grid's).
+ */
 export interface WasmGridModSpec {
   kind: 'wasm';
   moduleName: string;
   artifact: ArrayBuffer;
-  artifactHash?: string;
-  fuelPerDispatch?: bigint;
+  artifactHash: string;
+  fuelPerDispatch: bigint;
   tickIntervalMs?: number;
+  /** `'ck-exec'`, the only engine. */
+  engine?: PlayerCodeEngine;
+  /** The CLIENT half's `capabilitySummary.hostFunctions` the player consented to. */
+  consentedHostCalls: readonly string[];
   /** The platform glue worker URL (`@crowdedkingdoms/crowdyjs/player-glue-worker`). */
   workerUrl: string | URL;
 }
@@ -44,8 +54,11 @@ export interface StartGridModOptions {
   graphqlUrl?: string;
   graphqlWsUrl?: string;
   local?: GridHostLocal;
-  allowModelInvoke?: boolean;
+  /** Forwarded to `createGridHostCalls`: the visiting player, for `grid_permission_check`. */
+  userId?: string;
   onPresentation?: (presentation: PlayerCodePresentation) => void;
+  /** A CLIENT half's `crowdy::log` lines, bounded by the broker. Render them as text. */
+  onLog?: (line: PlayerCodeLogLine) => void;
   onStopped?: (reason: string) => void;
 }
 
@@ -53,11 +66,13 @@ export interface RunningGridMod {
   kind: GridModSpec['kind'];
   moduleName: string;
   stop(): void;
+  /** A CLIENT half's `handle_invoke` (`PlayerCodeBroker.invoke`); absent for a grid program. */
+  invoke?(payload: Uint8Array, options?: { timeoutMs?: number }): Promise<Uint8Array>;
 }
 
 /**
  * One way to run player code inside a grid, whatever it is written in (DN-10
- * §4-5). Rust CLIENT mods get the full client host catalog through
+ * §4-5). A ck-exec CLIENT half gets the host calls it was consented through
  * {@link createGridHostCalls}; JS grid programs get real CrowdyJS through a
  * grid-token relay. Both are confined to `scope`'s grid, locally for UX and by
  * the server for authority.
@@ -70,6 +85,8 @@ export async function startGridMod(
   const box = scope.bounds!;
   if (spec.kind === 'wasm') {
     const broker = new PlayerCodeBroker({
+      engine: spec.engine,
+      consentedHostCalls: spec.consentedHostCalls,
       workerUrl: spec.workerUrl,
       grid: { low: box.low, high: box.high, gridId: scope.gridId },
       moduleName: spec.moduleName,
@@ -80,9 +97,10 @@ export async function startGridMod(
         scope,
         client: options.client,
         local: options.local,
-        allowModelInvoke: options.allowModelInvoke,
+        ...(options.userId !== undefined ? { userId: options.userId } : {}),
       }),
       onPresentation: options.onPresentation,
+      onLog: options.onLog,
       onCircuitOpen: (reason) => options.onStopped?.(reason),
     });
     await broker.start(spec.artifact);
@@ -90,6 +108,7 @@ export async function startGridMod(
       kind: 'wasm',
       moduleName: spec.moduleName,
       stop: () => broker.stop(),
+      invoke: (payload, invokeOptions) => broker.invoke(payload, invokeOptions),
     };
   }
   if (!options.graphqlUrl || !options.graphqlWsUrl) {

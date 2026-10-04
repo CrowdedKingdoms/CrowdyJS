@@ -5,10 +5,9 @@ export type CrowdyStudioTarget = 'SERVER' | 'CLIENT';
 export type CrowdyStudioProjectKind = 'SERVER' | 'CLIENT' | 'FULL_STACK';
 
 /**
- * Whether a full-stack server should advertise its client companion.
- * `OPTIONAL` records author intent without creating a runtime requirement;
- * `REQUIRED` is applied with `playerCompute.setRequires` after both targets
- * compile successfully.
+ * The pairing a project records (the API's field). A ck-exec mod has no pairing: its CLIENT
+ * half rides it and players call it by name, so Crowdy Studio creates projects with `NONE`, and
+ * `OPTIONAL` or `REQUIRED` on an older project changes nothing.
  */
 export type CrowdyStudioPairingPreference = 'NONE' | 'OPTIONAL' | 'REQUIRED';
 

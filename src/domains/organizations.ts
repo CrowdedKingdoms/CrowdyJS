@@ -9,7 +9,6 @@ import {
   OrgPermissionsDocument,
   OrgTokensDocument,
   CreateOrganizationDocument,
-  SetOrgStatusDocument,
   CreateOrgTokenDocument,
   UpdateOrgTokenDocument,
   RevokeOrgTokenDocument,
@@ -28,7 +27,6 @@ import {
   type OrgPermissionsQuery,
   type OrgTokensQuery,
   type CreateOrganizationMutation,
-  type SetOrgStatusMutation,
   type CreateOrgTokenMutation,
   type UpdateOrgTokenMutation,
   type RevokeOrgTokenMutation,
@@ -183,24 +181,6 @@ export class OrganizationsAPI {
       input,
     });
     return data.createOrganization;
-  }
-
-  /**
-   * Set an organization's lifecycle status. **Super-admin only.**
-   *
-   * @param orgId - Numeric org id.
-   * @param status - The new status (e.g. `"active"`, `"suspended"`).
-   * @returns The updated {@link Organization}.
-   */
-  async setStatus(
-    orgId: string,
-    status: string,
-  ): Promise<SetOrgStatusMutation['setOrgStatus']> {
-    const data = await this.api.request(SetOrgStatusDocument, {
-      orgId,
-      status,
-    });
-    return data.setOrgStatus;
   }
 
   /**
