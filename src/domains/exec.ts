@@ -64,7 +64,7 @@ import {
 export { ExecModScope };
 
 /**
- * ck-exec, the hub-and-spoke execution service (dev-tier preview).
+ * ck-exec, the hub-and-spoke execution service.
  *
  * An app's code runs as **hubs** (stateful nodes, one per key, one handler at a
  * time) and **spokes** (stateless, replicated) on execution hosts. A player

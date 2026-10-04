@@ -4840,7 +4840,7 @@ type CrowdyStudioGitHubLayout {
 }
 
 """
-A single voxel's state override stored on a chunk: its local position, its voxel type, and an opaque base64-encoded state blob.
+A single voxel's override on a chunk, stored with it or recorded as a voxel edit: its local position, its voxel type, and an opaque base64-encoded state blob.
 """
 type VoxelState {
   """Local voxel position within the chunk (0-15 per axis)."""
@@ -4876,7 +4876,7 @@ type Chunk {
   """
   voxels: String
   """
-  Sparse list of per-voxel state overrides (e.g. rotation, atlas, flags) for voxels that need more than a plain type byte. Empty when no voxel carries extra state.
+  Sparse list of per-voxel overrides: the states stored with the chunk (e.g. rotation, atlas, flags) and every voxel edit recorded for it since (the voxel_updates log), each with its voxel type, which takes precedence over the type byte in `voxels`. Empty when the chunk has neither.
   """
   voxelStates: [VoxelState!]!
   """
@@ -4902,7 +4902,7 @@ type Chunk {
 }
 
 """
-A recorded edit to a single voxel (one row of the voxel_updates log): the app/chunk/local-position that changed, the new voxel type, an optional state blob, and who/when. Returned by listVoxels, getVoxelList and listVoxelUpdatesByDistance; created by updateVoxel. A background maintenance job later folds these edits into the chunk grid.
+A recorded edit to a single voxel (one row of the voxel_updates log): the app/chunk/local-position that changed, the new voxel type, an optional state blob, and who/when. Returned by listVoxels, getVoxelList and listVoxelUpdatesByDistance; created by updateVoxel, sendVoxelUpdate, updateChunk (for each voxel state it stores) and world.set_voxels on the node API. getChunk applies these edits to the chunk it returns, as entries of its voxelStates.
 """
 type Voxel {
   """Unique id of this voxel-update row (decimal string)."""
@@ -5446,7 +5446,7 @@ type AppComputeBudgetInfo {
 }
 
 """
-Where and how a game client connects to ck-exec, the hub-and-spoke execution service (dev-tier preview). Open a WebSocket to `{gatewayUrl}/v1/connect?token={token}` before `expiresAt`.
+Where and how a game client connects to ck-exec, the hub-and-spoke execution service. Open a WebSocket to `{gatewayUrl}/v1/connect?token={token}` before `expiresAt`.
 """
 type ExecConnection {
   """
@@ -5490,7 +5490,7 @@ type ExecBuildArtifact {
 }
 
 """
-A ck-exec build (dev-tier preview): queued, building, succeeded or failed, with the compiler’s log and, once it succeeds, one module per crate.
+A ck-exec build: queued, building, succeeded or failed, with the compiler’s log and, once it succeeds, one module per crate.
 """
 type ExecBuild {
   """
@@ -5540,7 +5540,7 @@ type ExecStarter {
 }
 
 """
-The starter packs (dev-tier preview): four crates and a manifest that deploys them as one app.
+The starter packs: four crates and a manifest that deploys them as one app.
 """
 type ExecStarterPack {
   """
@@ -5562,7 +5562,7 @@ type ExecDeployResult {
 }
 
 """
-One guest log line from an app’s ck-exec instances (`ctx.log`), kept for 24 hours (dev-tier preview).
+One guest log line from an app’s ck-exec instances (`ctx.log`), kept for 24 hours.
 """
 type ExecLogLine {
   """
@@ -5590,7 +5590,7 @@ type ExecLogLine {
 }
 
 """
-Calls to one endpoint (a node type's method) of an app's ck-exec code over a window, by outcome (dev-tier preview). A client's or an instance's call is counted once, by the host it entered on, with the status its caller got; a platform event (`$timer`, `$topic`, `$presence`, `$session`, `$world`) is counted by the host that ran it. Counts are whole numbers.
+Calls to one endpoint (a node type's method) of an app's ck-exec code over a window, by outcome. A client's or an instance's call is counted once, by the host it entered on, with the status its caller got; a platform event (`$timer`, `$topic`, `$presence`, `$session`, `$world`) is counted by the host that ran it. Counts are whole numbers.
 """
 type ExecEndpointStat {
   """
@@ -5637,9 +5637,7 @@ type ExecEndpointStat {
   lastMinute: DateTime!
 }
 
-"""
-An instance the execution manager has placed for an app (dev-tier preview).
-"""
+"""An instance the execution manager has placed for an app."""
 type ExecInstance {
   """The instance id."""
   instanceId: String!
@@ -5681,7 +5679,7 @@ type ExecVersion {
 }
 
 """
-Whether an app’s ck-exec code may run: its active version and its switches (dev-tier preview).
+Whether an app’s ck-exec code may run: its active version and its switches.
 """
 type ExecAppStatus {
   """The active version; null before the first deploy."""
@@ -5697,7 +5695,7 @@ type ExecAppStatus {
 }
 
 """
-The CLIENT half of a mod (dev-tier preview): browser WASM built from a crowdy-client-sdk crate and attached to the mod, which the mod’s grid serves to visitors who consent to it.
+The CLIENT half of a mod: browser WASM built from a crowdy-client-sdk crate and attached to the mod, which the mod’s grid serves to visitors who consent to it.
 """
 type ExecModClient {
   """The mod it is attached to."""
@@ -5731,7 +5729,7 @@ type ExecModClient {
 }
 
 """
-A CLIENT half a grid serves (dev-tier preview): of a mod on it that is switched on, not stopped by the kill ladder and admitted, running as the grid’s owner. Carries the caller’s consent and trust in its author.
+A CLIENT half a grid serves: of a mod on it that is switched on, not stopped by the kill ladder and admitted, running as the grid’s owner. Carries the caller’s consent and trust in its author.
 """
 type ExecGridClientMod {
   """The mod, for `execConsentClientMod` and `execModClientArtifact`."""
@@ -5779,7 +5777,7 @@ type ExecGridClientMod {
 }
 
 """
-A CLIENT half’s module and what the browser broker needs to run it (dev-tier preview): the fuel-metered wasm32-unknown-unknown module, its digest to check the bytes against, and the per-dispatch fuel budget to load into its `ck_fuel` global.
+A CLIENT half’s module and what the browser broker needs to run it: the fuel-metered wasm32-unknown-unknown module, its digest to check the bytes against, and the per-dispatch fuel budget to load into its `ck_fuel` global.
 """
 type ExecModClientArtifact {
   """The mod."""
@@ -5813,7 +5811,7 @@ type ExecModClientArtifact {
 }
 
 """
-A mod: a player’s code on a grid they own, run by ck-exec as the hub `mod:<name>` keyed by the grid id, in its owner’s own sandbox (dev-tier preview).
+A mod: a player’s code on a grid they own, run by ck-exec as the hub `mod:<name>` keyed by the grid id, in its owner’s own sandbox.
 """
 type ExecMod {
   modId: String!
@@ -5842,7 +5840,7 @@ type ExecMod {
   updatedAt: DateTime!
 }
 
-"""A rung of the mods kill ladder that is off (dev-tier preview)."""
+"""A rung of the mods kill ladder that is off."""
 type ExecModSwitch {
   scope: ExecModScope!
   """The id it names; empty for `ALL`."""
@@ -5865,7 +5863,7 @@ enum ExecModScope {
 }
 
 """
-A mod version its owner published, which any grid owner in the app may install as a mod of their own (dev-tier preview; no payments).
+A mod version its owner published, which any grid owner in the app may install as a mod of their own (no payments).
 """
 type ExecModListing {
   listingId: BigInt!
@@ -6958,7 +6956,7 @@ type Query {
     appId: BigInt!
   ): Boolean!
   """
-  Fetches one chunk (its base64 voxel grid, per-voxel states, chunk state and LODs) by app id and chunk coordinates. Returns null if the chunk does not exist. Use the input's LOD options to limit which LODs come back. Requires a valid bearer token in the Authorization header; a token scoped to an app may only read that app's chunks. Read-only (no world state is changed).
+  Fetches one chunk (its base64 voxel grid, per-voxel states, chunk state and LODs) by app id and chunk coordinates. `voxelStates` holds the states stored with the chunk and every voxel edit recorded for it (the voxel_updates log: updateVoxel, sendVoxelUpdate and a hub's or mod's world.set_voxels), each with its voxel type; `voxels` is the grid as last written by updateChunk, so apply each entry's voxelType over it. Returns null if the chunk does not exist. Use the input's LOD options to limit which LODs come back. Requires a valid bearer token in the Authorization header; a token scoped to an app may only read that app's chunks. Read-only (no world state is changed).
   """
   getChunk(input: GetChunkInput!): Chunk
   """
@@ -6970,7 +6968,7 @@ type Query {
   """
   getVoxelList(input: GetVoxelListInput!): ChunkVoxelResponse!
   """
-  Returns all chunks for an app within a cubic (Chebyshev-distance) radius of a center chunk, paginated. The cube spans center +/- maxDistance chunks on each axis. Use this for bulk region loads; use getChunk for a single chunk. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only.
+  Returns all chunks for an app within a cubic (Chebyshev-distance) radius of a center chunk, paginated. The cube spans center +/- maxDistance chunks on each axis. Each chunk's `voxelStates`, when selected, include its recorded voxel edits as in getChunk (selecting them costs one more read). Use this for bulk region loads; use getChunk for a single chunk. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only.
   """
   getChunksByDistance(input: GetChunksByDistanceInput!): ChunksByDistanceResponse!
   """
@@ -7207,7 +7205,7 @@ type Query {
     appId: BigInt!
   ): [GridClaimRequest!]!
   """
-  Guest log lines from an app's ck-exec instances (`ctx.log`), newest first, kept for 24 hours (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  Guest log lines from an app's ck-exec instances (`ctx.log`), newest first, kept for 24 hours. Requires the org 'view_compute_diagnostics' permission.
   """
   execLogs(
     """The app whose ck-exec code this is about."""
@@ -7230,7 +7228,7 @@ type Query {
     flow: String
   ): [ExecLogLine!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  Calls to each endpoint of an app's ck-exec code over the last minutes, by outcome, with their latency, most called first (dev-tier preview). Each execution host reports a minute once it ends; counters are kept 7 days. Requires the org 'view_compute_diagnostics' permission.
+  Calls to each endpoint of an app's ck-exec code over the last minutes, by outcome, with their latency, most called first. Each execution host reports a minute once it ends; counters are kept 7 days. Requires the org 'view_compute_diagnostics' permission.
   """
   execEndpointStats(
     """The app whose ck-exec code this is about."""
@@ -7243,35 +7241,35 @@ type Query {
     sinceMinutes: Int
   ): [ExecEndpointStat!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  What the execution manager has placed for an app: every instance, its phase and host (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  What the execution manager has placed for an app: every instance, its phase and host. Requires the org 'view_compute_diagnostics' permission.
   """
   execInstances(
     """The app whose ck-exec code this is about."""
     appId: BigInt!
   ): [ExecInstance!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  An app's deployed ck-exec versions, newest first, and which is active (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  An app's deployed ck-exec versions, newest first, and which is active. Requires the org 'view_compute_diagnostics' permission.
   """
   execVersions(
     """The app whose ck-exec code this is about."""
     appId: BigInt!
   ): [ExecVersion!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  Whether an app's ck-exec code may run: its active version, kill switches and budget pause (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  Whether an app's ck-exec code may run: its active version, kill switches and budget pause. Requires the org 'view_compute_diagnostics' permission.
   """
   execAppStatus(
     """The app whose ck-exec code this is about."""
     appId: BigInt!
   ): ExecAppStatus! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  The starter packs (dev-tier preview), which replace the compute templates: a world tick (the root hub: clock, weather, resource nodes, liveops events), a matchmaker, game sessions (lobby, host, turns, scores) and an NPC and mob engine, as ckx-sdk crates to pass to `execBuild` and a manifest for `execDeploy`. Requires the org 'manage_compute' permission.
+  The starter packs, which replace the compute templates: a world tick (the root hub: clock, weather, resource nodes, liveops events), a matchmaker, game sessions (lobby, host, turns, scores) and an NPC and mob engine, as ckx-sdk crates to pass to `execBuild` and a manifest for `execDeploy`. Requires the org 'manage_compute' permission.
   """
   execStarters(
     """The app they are for."""
     appId: BigInt!
   ): ExecStarterPack! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  A ck-exec build's status, compiler log and modules (dev-tier preview); null when this app has no such build, or it is a player's (a mod's builds are read with `execModBuildStatus`, by the player alone). Builds are kept for 7 days. Requires the org 'view_compute_diagnostics' permission.
+  A ck-exec build's status, compiler log and modules; null when this app has no such build, or it is a player's (a mod's builds are read with `execModBuildStatus`, by the player alone). Builds are kept for 7 days. Requires the org 'view_compute_diagnostics' permission.
   """
   execBuildStatus(
     """The app the build is for."""
@@ -7280,14 +7278,14 @@ type Query {
     buildId: String!
   ): ExecBuild @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  The mod starter (dev-tier preview): a ckx-sdk crate that greets visitors and follows what happens in its grid (`Hub::on_world`), to pass to `execModBuild`. Requires access to the app.
+  The mod starter: a ckx-sdk crate that greets visitors and follows what happens in its grid (`Hub::on_world`), to pass to `execModBuild`. Requires access to the app.
   """
   execModStarter(
     """The app the grid is in."""
     appId: BigInt!
   ): ExecStarter!
   """
-  A mod build of yours: its status, compiler log and module (dev-tier preview). Builds are kept for 7 days.
+  A mod build of yours: its status, compiler log and module. Builds are kept for 7 days.
   """
   execModBuildStatus(
     """The app the grid is in."""
@@ -7296,7 +7294,7 @@ type Query {
     buildId: String!
   ): ExecBuild!
   """
-  A grid's mods (dev-tier preview), which players in the grid call by name as the node type `mod:<name>` with the grid id as key. Requires access to the app.
+  A grid's mods, which players in the grid call by name as the node type `mod:<name>` with the grid id as key. Requires access to the app.
   """
   execMods(
     """The app the grid is in."""
@@ -7304,13 +7302,13 @@ type Query {
     """The grid the mod runs on."""
     gridId: BigInt!
   ): [ExecMod!]!
-  """Your mods in an app, on every grid (dev-tier preview)."""
+  """Your mods in an app, on every grid."""
   execMyMods(
     """The app the grid is in."""
     appId: BigInt!
   ): [ExecMod!]!
   """
-  A mod of yours' guest log lines (`ctx.log`), newest first, kept for 24 hours (dev-tier preview).
+  A mod of yours' guest log lines (`ctx.log`), newest first, kept for 24 hours.
   """
   execModLogs(
     """The app the grid is in."""
@@ -7329,14 +7327,14 @@ type Query {
     limit: Int
   ): [ExecLogLine!]!
   """
-  The app's mod marketplace: listed mods, most installed first (dev-tier preview). Requires access to the app.
+  The app's mod marketplace: listed mods, most installed first. Requires access to the app.
   """
   execModListings(
     """The app the grid is in."""
     appId: BigInt!
   ): [ExecModListing!]!
   """
-  An app's mods, by grid or by owner, or all of them (at most 1000) (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  An app's mods, by grid or by owner, or all of them (at most 1000). Requires the org 'view_compute_diagnostics' permission.
   """
   execAppMods(
     """The app the grid is in."""
@@ -7347,14 +7345,14 @@ type Query {
     ownerId: BigInt
   ): [ExecMod!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  The app's mod switches that are off (dev-tier preview). Requires the org 'view_compute_diagnostics' permission.
+  The app's mod switches that are off. Requires the org 'view_compute_diagnostics' permission.
   """
   execModSwitches(
     """The app the grid is in."""
     appId: BigInt!
   ): [ExecModSwitch!]! @requiresPermission(scope: "app", permission: "view_compute_diagnostics", scopeArg: "appId")
   """
-  The CLIENT halves a grid serves (dev-tier preview): those of its mods that are switched on, not stopped by the kill ladder, running as the grid's owner and admitted, each with its capability summary and hash and whether you consented to it, and its author's union summary and hash and whether you trust them. Show one prompt per author and call `execTrustAuthor` (or `execConsentClientMod` per CLIENT half), fetch with `execModClientArtifact`, cache by digest, and poll this to stop CLIENT halves that were removed or changed. Requires access to the app.
+  The CLIENT halves a grid serves: those of its mods that are switched on, not stopped by the kill ladder, running as the grid's owner and admitted, each with its capability summary and hash and whether you consented to it, and its author's union summary and hash and whether you trust them. Show one prompt per author and call `execTrustAuthor` (or `execConsentClientMod` per CLIENT half), fetch with `execModClientArtifact`, cache by digest, and poll this to stop CLIENT halves that were removed or changed. Requires access to the app.
   """
   execGridClientMods(
     """The app the grid is in."""
@@ -7363,7 +7361,7 @@ type Query {
     gridId: BigInt!
   ): [ExecGridClientMod!]!
   """
-  A served CLIENT half's module, for the browser broker (dev-tier preview). Served only to a player holding 'run_client_code' in the app, standing in the mod's grid now, who consented to it at its current hash or trusts its author at a union no wider; every refusal answers NOT_FOUND. At most 12 fetches a minute per player and mod on each API instance (RATE_LIMITED); the module never changes for its digest, so cache it.
+  A served CLIENT half's module, for the browser broker. Served only to a player holding 'run_client_code' in the app, standing in the mod's grid now, who consented to it at its current hash or trusts its author at a union no wider; every refusal answers NOT_FOUND. At most 12 fetches a minute per player and mod on each API instance (RATE_LIMITED); the module never changes for its digest, so cache it.
   """
   execModClientArtifact(
     """The app the mod is in."""
@@ -8672,7 +8670,7 @@ type Mutation {
   """
   updateChunkLods(input: UpdateChunkLodsInput!): Chunk @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
-  Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; a background maintenance job later folds these edits into the chunk's packed grid. Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and `update_voxel_data` on the most specific grid covering the chunk (the smallest by volume; of equal ones the lowest grid id), so a claim, a plot or a safe zone decides its chunks and the app's world grid decides only the wilderness. A chunk no grid covers is refused, and so is a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
+  Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; getChunk returns the edit in the chunk's voxelStates (the packed grid itself is written only by updateChunk). Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and `update_voxel_data` on the most specific grid covering the chunk (the smallest by volume; of equal ones the lowest grid id), so a claim, a plot or a safe zone decides its chunks and the app's world grid decides only the wilderness. A chunk no grid covers is refused, and so is a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
   """
   updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
   """
@@ -9077,7 +9075,7 @@ type Mutation {
     inviteeUserId: BigInt!
   ): Boolean!
   """
-  Connect a player to ck-exec (dev-tier preview): the execution manager picks a host (the one running `nodeType`/`key` when given, placing it if needed) and this returns its gateway and a 60-second connect token bound to this player, this app and that host. Requires the app-scoped token of the app named.
+  Connect a player to ck-exec: the execution manager picks a host (the one running `nodeType`/`key` when given, placing it if needed) and this returns its gateway and a 60-second connect token bound to this player, this app and that host. Requires the app-scoped token of the app named.
   """
   execConnect(
     """The app to connect to; must match the app token."""
@@ -9090,14 +9088,14 @@ type Mutation {
     key: String
   ): ExecConnection!
   """
-  Deploy a new version of an app's ck-exec topology (dev-tier preview): the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active; running instances pick it up when they next start. Requires the org 'manage_compute' permission.
+  Deploy a new version of an app's ck-exec topology: the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active; running instances pick it up when they next start. Requires the org 'manage_compute' permission.
   """
   execDeploy(
     """The app, its manifest and new modules."""
     input: ExecDeployInput!
   ): ExecDeployResult! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
   """
-  Make an earlier ck-exec version active again, a rollback (dev-tier preview). Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission.
+  Make an earlier ck-exec version active again, a rollback. Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission.
   """
   execActivateVersion(
     """The app whose ck-exec code this is about."""
@@ -9106,7 +9104,7 @@ type Mutation {
     version: Int!
   ): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  The kill switch for an app's ck-exec code, or one node type of it (dev-tier preview). Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. Requires the org 'manage_compute' permission.
+  The kill switch for an app's ck-exec code, or one node type of it. Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. Requires the org 'manage_compute' permission.
   """
   execSetEnabled(
     """The app whose ck-exec code this is about."""
@@ -9117,7 +9115,7 @@ type Mutation {
     nodeType: String
   ): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints (dev-tier preview). The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token.
+  Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints. The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token.
   """
   execConnectAsDeveloper(
     """The app whose ck-exec code this is about."""
@@ -9130,14 +9128,14 @@ type Mutation {
     key: String
   ): ExecConnection! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  Build ck-exec modules from Rust source (dev-tier preview): each crate is compiled with the platform's pinned toolchain and `ckx-sdk`, for wasm32-unknown-unknown, and checked against the guest ABI. Returns at once with the build queued; poll `execBuildStatus`, then pass its id to `execDeploy`. Requires the org 'manage_compute' permission.
+  Build ck-exec modules from Rust source: each crate is compiled with the platform's pinned toolchain and `ckx-sdk`, for wasm32-unknown-unknown, and checked against the guest ABI. Returns at once with the build queued; poll `execBuildStatus`, then pass its id to `execDeploy`. Requires the org 'manage_compute' permission.
   """
   execBuild(
     """The app and the crates to build."""
     input: ExecBuildInput!
   ): ExecBuild! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
   """
-  Build a mod from one ckx-sdk crate (dev-tier preview), as `execBuild` builds a developer's crates. Returns at once with the build queued; poll `execModBuildStatus`, then pass its id to `execModDeploy`. One build at a time per player. Requires the 'write_server_code' permission in the app.
+  Build a mod from one ckx-sdk crate, as `execBuild` builds a developer's crates. Returns at once with the build queued; poll `execModBuildStatus`, then pass its id to `execModDeploy`. One build at a time per player. Requires the 'write_server_code' permission in the app.
   """
   execModBuild(
     """The app the grid is in."""
@@ -9146,7 +9144,7 @@ type Mutation {
     crate: ExecBuildCrateInput!
   ): ExecBuild!
   """
-  Deploy a mod build of yours to a grid you own (dev-tier preview): a new mod starts switched off; a running one restarts on the new version. Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
+  Deploy a mod build of yours to a grid you own: a new mod starts switched off; a running one restarts on the new version. Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
   """
   execModDeploy(
     """The app the grid is in."""
@@ -9159,7 +9157,7 @@ type Mutation {
     buildId: String!
   ): ExecMod!
   """
-  Switch a mod on your grid on or off (dev-tier preview). On, it runs as you once the app's code admission admits it. Requires being the grid's current owner and 'run_server_code' on both the app tier and the grid.
+  Switch a mod on your grid on or off. On, it runs as you once the app's code admission admits it. Requires being the grid's current owner and 'run_server_code' on both the app tier and the grid.
   """
   execModSetEnabled(
     """The app the grid is in."""
@@ -9172,7 +9170,7 @@ type Mutation {
     enabled: Boolean!
   ): ExecMod!
   """
-  Stop and remove a mod on your grid, with its state and versions (dev-tier preview). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
+  Stop and remove a mod on your grid, with its state and versions. Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
   """
   execModDelete(
     """The app the grid is in."""
@@ -9183,7 +9181,7 @@ type Mutation {
     name: String!
   ): Boolean!
   """
-  Publish a mod of yours, at its current version, for other grid owners in the app to install (dev-tier preview; no payments). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
+  Publish a mod of yours, at its current version, for other grid owners in the app to install (no payments). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
   """
   execModPublish(
     """The app the grid is in."""
@@ -9198,7 +9196,7 @@ type Mutation {
     description: String
   ): ExecModListing!
   """
-  Delist a listing you published (dev-tier preview): nobody installs it any more; installed copies keep running.
+  Delist a listing you published: nobody installs it any more; installed copies keep running.
   """
   execModUnpublish(
     """The app the grid is in."""
@@ -9207,7 +9205,7 @@ type Mutation {
     listingId: BigInt!
   ): Boolean!
   """
-  Install a listing onto a grid you own as your own mod, switched off (dev-tier preview; no payments). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
+  Install a listing onto a grid you own as your own mod, switched off (no payments). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid.
   """
   execModInstall(
     """The app the grid is in."""
@@ -9220,7 +9218,7 @@ type Mutation {
     listingId: BigInt!
   ): ExecMod!
   """
-  The mods kill ladder (dev-tier preview): switch off one mod, a player's mods, a grid's mods, a listing's installs or every mod in the app, or back on. Off stops what runs at once and refuses calls. Returns the switches that are off. Requires the org 'manage_compute' permission.
+  The mods kill ladder: switch off one mod, a player's mods, a grid's mods, a listing's installs or every mod in the app, or back on. Off stops what runs at once and refuses calls. Returns the switches that are off. Requires the org 'manage_compute' permission.
   """
   execModSetSwitch(
     """The app the grid is in."""
@@ -9235,7 +9233,7 @@ type Mutation {
     reason: String
   ): [ExecModSwitch!]! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  Build the CLIENT half of a mod from one crowdy-client-sdk crate (dev-tier preview): compiled for wasm32-unknown-unknown in the build sandbox, fuel-metered and optimized there, checked against the client ABI and at most 512 KiB, with its capability summary derived from the module. Returns at once with the build queued (`kind` `client`); poll `execModBuildStatus`, then attach it with `execModClientDeploy`. One build, server or CLIENT, at a time per player. Requires the 'write_client_code' permission in the app.
+  Build the CLIENT half of a mod from one crowdy-client-sdk crate: compiled for wasm32-unknown-unknown in the build sandbox, fuel-metered and optimized there, checked against the client ABI and at most 512 KiB, with its capability summary derived from the module. Returns at once with the build queued (`kind` `client`); poll `execModBuildStatus`, then attach it with `execModClientDeploy`. One build, server or CLIENT, at a time per player. Requires the 'write_client_code' permission in the app.
   """
   execModClientBuild(
     """The app the grid is in."""
@@ -9246,7 +9244,7 @@ type Mutation {
     crate: ExecBuildCrateInput!
   ): ExecBuild!
   """
-  Attach a CLIENT build of yours to your mod on a grid you own (dev-tier preview), replacing the CLIENT half it had; its version rises by one. A visitor's consent carries over only while the capability hash is unchanged. Requires being the grid's current owner, 'write_client_code' on both the app tier and the grid, the mod running as you, and the app's code admission admitting the new CLIENT version (an admission naming the mod, its listing or you).
+  Attach a CLIENT build of yours to your mod on a grid you own, replacing the CLIENT half it had; its version rises by one. A visitor's consent carries over only while the capability hash is unchanged. Requires being the grid's current owner, 'write_client_code' on both the app tier and the grid, the mod running as you, and the app's code admission admitting the new CLIENT version (an admission naming the mod, its listing or you).
   """
   execModClientDeploy(
     """The app the grid is in."""
@@ -9259,7 +9257,7 @@ type Mutation {
     buildId: String!
   ): ExecModClient!
   """
-  Detach the CLIENT half of a mod on your grid (dev-tier preview), with every visitor's consent to it; the mod itself keeps running. Requires being the grid's current owner and 'write_client_code' on both the app tier and the grid.
+  Detach the CLIENT half of a mod on your grid, with every visitor's consent to it; the mod itself keeps running. Requires being the grid's current owner and 'write_client_code' on both the app tier and the grid.
   """
   execModClientDelete(
     """The app the grid is in."""
@@ -9270,7 +9268,7 @@ type Mutation {
     name: String!
   ): Boolean!
   """
-  Consent to run a mod's CLIENT half in your browser (dev-tier preview) at its current capability hash. A CLIENT half whose capabilities change carries a new hash, and the consent stops holding until you consent again. Answers CONFLICT when the hash is not the current one. Requires access to the app.
+  Consent to run a mod's CLIENT half in your browser at its current capability hash. A CLIENT half whose capabilities change carries a new hash, and the consent stops holding until you consent again. Answers CONFLICT when the hash is not the current one. Requires access to the app.
   """
   execConsentClientMod(
     """The app the mod is in."""
@@ -9283,7 +9281,7 @@ type Mutation {
     capabilityHash: String!
   ): Boolean!
   """
-  Trust one author's CLIENT halves on a grid you stand in (dev-tier preview), at the hash of their union (`authorCapabilityHash`): it covers the author's CLIENT halves there while their union is no wider, and consents to each current one at its own hash. Answers CONFLICT when the hash is not the current one. Requires access to the app.
+  Trust one author's CLIENT halves on a grid you stand in, at the hash of their union (`authorCapabilityHash`): it covers the author's CLIENT halves there while their union is no wider, and consents to each current one at its own hash. Answers CONFLICT when the hash is not the current one. Requires access to the app.
   """
   execTrustAuthor(
     """The app the grid is in."""
@@ -9298,7 +9296,7 @@ type Mutation {
     capabilityHash: String!
   ): Boolean!
   """
-  Take back your consent to a mod's CLIENT half (dev-tier preview), whatever hash you consented to; true when you had consented. While you trust the mod's author on its grid, their CLIENT halves there are still served to you: take that back with `execRevokeAuthorTrust`. Needs only the app-scoped token of the app, not access to it.
+  Take back your consent to a mod's CLIENT half, whatever hash you consented to; true when you had consented. While you trust the mod's author on its grid, their CLIENT halves there are still served to you: take that back with `execRevokeAuthorTrust`. Needs only the app-scoped token of the app, not access to it.
   """
   execRevokeClientModConsent(
     """The app the mod is in."""
@@ -9307,7 +9305,7 @@ type Mutation {
     modId: String!
   ): Boolean!
   """
-  Stop trusting an author on a grid (dev-tier preview), and take back your consent to each of their CLIENT halves there, so none is served to you until you consent or trust again; true when anything was taken back. Works from anywhere, not only inside the grid. Needs only the app-scoped token of the app, not access to it.
+  Stop trusting an author on a grid, and take back your consent to each of their CLIENT halves there, so none is served to you until you consent or trust again; true when anything was taken back. Works from anywhere, not only inside the grid. Needs only the app-scoped token of the app, not access to it.
   """
   execRevokeAuthorTrust(
     """The app the grid is in."""
@@ -10506,7 +10504,7 @@ input ChunkUpdateInput {
   """
   voxels: String
   """
-  Optional per-voxel state overrides to write; each entry is also recorded as an individual voxel update. Omit to leave existing states unchanged.
+  Optional per-voxel state overrides to write, at most 4096 (one per voxel); each entry is also recorded as an individual voxel update. Omit to leave existing states unchanged.
   """
   voxelStates: [VoxelStateInput!]
 }
@@ -10522,7 +10520,7 @@ input VoxelStateInput {
   """
   voxelType: Int!
   """
-  BASE64-encoded binary state blob for this voxel; omit/null for no extra state.
+  BASE64-encoded binary state blob for this voxel, at most 1 KiB decoded; omit/null for no extra state.
   """
   state: String
 }
