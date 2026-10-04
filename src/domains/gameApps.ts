@@ -7,12 +7,14 @@ import {
   NearbyGridPermissionsDocument,
   NearbyGridsDocument,
   GridPermissionLimitsDocument,
+  GridOpenPermissionsDocument,
   GridGroupGrantsDocument,
   CreateGridDocument,
   DeleteGridDocument,
   GrantGridPermissionsDocument,
   RevokeGridPermissionsDocument,
   SetGridPermissionLimitsDocument,
+  SetGridOpenPermissionsDocument,
   AssignGroupToGridDocument,
   RevokeGroupFromGridDocument,
   type GridOwnershipQuery,
@@ -22,12 +24,14 @@ import {
   type NearbyGridPermissionsQuery,
   type NearbyGridsQuery,
   type GridPermissionLimitsQuery,
+  type GridOpenPermissionsQuery,
   type GridGroupGrantsQuery,
   type CreateGridMutation,
   type DeleteGridMutation,
   type GrantGridPermissionsMutation,
   type RevokeGridPermissionsMutation,
   type SetGridPermissionLimitsMutation,
+  type SetGridOpenPermissionsMutation,
   type AssignGroupToGridMutation,
   type RevokeGroupFromGridMutation,
   type AssignGridOwnershipInput,
@@ -39,6 +43,7 @@ import {
   type GrantGridPermissionsInput,
   type RevokeGridPermissionsInput,
   type SetGridPermissionLimitsInput,
+  type SetGridOpenPermissionsInput,
   type AssignGroupToGridInput,
   type RevokeGroupFromGridInput,
 } from '../generated/graphql.js';
@@ -167,6 +172,25 @@ export class GameAppsAPI {
   }
 
   /**
+   * Read the keys a grid grants every player with active access to the app
+   * (an open build area, a public arena). Empty means the grid is not open.
+   *
+   * @param appId - App that owns the grid.
+   * @param gridId - Grid whose open keys to read.
+   * @returns The grid's open keys.
+   */
+  async openPermissions(
+    appId: string,
+    gridId: string,
+  ): Promise<GridOpenPermissionsQuery['gridOpenPermissions']> {
+    const data = await this.graphql.request(GridOpenPermissionsDocument, {
+      appId,
+      gridId,
+    });
+    return data.gridOpenPermissions;
+  }
+
+  /**
    * List a group's grants on a grid (rows of the group-grants input table).
    *
    * @param appId - App that owns the grid.
@@ -266,6 +290,30 @@ export class GameAppsAPI {
       input,
     });
     return data.setGridPermissionLimits;
+  }
+
+  /**
+   * Open a grid to every player: replace the keys it grants each player with
+   * active access to the app, within its limits, then recompute the effective
+   * ACL for all of them. Players who gain access later get them too. The most
+   * specific grid covering a chunk decides a voxel write there, so a zone
+   * nested in the world grid that everyone may build in must grant
+   * `update_voxel_data` itself. An empty `permissionKeys` closes the grid.
+   *
+   * Refused with `BAD_REQUEST` for the app's world grid (open already), any of
+   * the four player-code keys, a key that is not an active grid key, and a
+   * 33rd open grid in one app.
+   *
+   * @param input - {@link SetGridOpenPermissionsInput}.
+   * @returns The grid's open keys after the change.
+   */
+  async setOpenPermissions(
+    input: SetGridOpenPermissionsInput,
+  ): Promise<SetGridOpenPermissionsMutation['setGridOpenPermissions']> {
+    const data = await this.graphql.request(SetGridOpenPermissionsDocument, {
+      input,
+    });
+    return data.setGridOpenPermissions;
   }
 
   /**

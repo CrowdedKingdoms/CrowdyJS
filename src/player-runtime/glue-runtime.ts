@@ -1,17 +1,19 @@
 /**
- * Factored, environment-agnostic core of the platform glue (player compute
- * P3/P5). This is the ONLY platform code that shares an execution context
+ * Factored, environment-agnostic core of the platform glue for a ck-exec mod's
+ * CLIENT half. This is the ONLY platform code that shares an execution context
  * with an untrusted player module, so it is deliberately tiny and auditable
  * and has NO dependency on worker globals, the DOM, or the SDK client — the
  * browser worker entry ([player-glue-worker.ts]) and the Node integration
  * test both drive this same core.
  *
- * ABI (matches crowdy-compute-sdk `lib.rs`): the guest imports module `ck`
- * with `log`, `now_ms`, `state_get`, `state_set`, and the JSON gateway
+ * ABI (crowdy-client-sdk `lib.rs`, CLIENT ABI 0): the guest imports module
+ * `ck` with `log`, `now_ms`, `state_get`, `state_set`, and the JSON gateway
  * `host_call(ptr,len) -> u64` (packed `resp_ptr<<32 | resp_len`, guest frees
- * with `ck_free`), plus `wasi_snapshot_preview1.random_get`. The guest
- * exports `memory`, `ck_alloc`, `ck_free`, and the module hooks `init`,
- * `tick(dt_ms)`, `handle_invoke(ptr,len)->u64`, optional `on_event(ptr,len)`.
+ * with `ck_free`), plus `wasi_snapshot_preview1.random_get`, and nothing else.
+ * The guest exports `memory`, `ck_alloc`, `ck_free`, the `ck_fuel` meter the
+ * build's instrument step injects, and the module hooks `init`,
+ * `tick(dt_ms)`, `handle_invoke(ptr,len)->u64` and optional
+ * `on_event(ptr,len)`.
  *
  * `host_call` is SYNCHRONOUS from the guest's view. The single synchronous
  * dependency this core takes is `hostCallSync(reqBytes) -> respBytes`; the
@@ -20,19 +22,41 @@
  * the reply back). Everything else here is pure.
  */
 
-import { GENERATED_HOST_CATALOG } from './host-catalog.generated.js';
+import { EXEC_CLIENT_HOST_CALLS } from './client-host-calls.js';
 
-/** The host-call names surfaced to a guest: the client half of the host catalog (the broker allowlist). */
-export const GLUE_HOST_FUNCTIONS: readonly string[] =
-  GENERATED_HOST_CATALOG.functions
-    .filter((fn) => fn.targets.includes('client'))
-    .map((fn) => fn.name);
+/** The host-call names a guest may send: the broker's allowlist, {@link EXEC_CLIENT_HOST_CALLS}. */
+export const GLUE_HOST_FUNCTIONS: readonly string[] = Object.values(EXEC_CLIENT_HOST_CALLS).flatMap(
+  (fns) => [...fns],
+);
+
+/** The most of one `ck.log` message read out of guest memory, in bytes. */
+export const GLUE_LOG_MAX_BYTES = 4096;
+
+/**
+ * The largest `ck.host_call` request read out of guest memory, in bytes: the broker's 256 KiB
+ * args limit and room for the envelope. A longer one is answered `request_too_large` unread.
+ */
+export const GLUE_HOST_CALL_REQUEST_MAX_BYTES = 256 * 1024 + 1024;
+
+/** The largest blob `ck.state_set` keeps, in bytes; a larger one is refused (returns 1). */
+export const GLUE_STATE_MAX_BYTES = 1024 * 1024;
+
+/** The largest `handle_invoke` reply read out of guest memory, in bytes. */
+export const GLUE_INVOKE_REPLY_MAX_BYTES = 256 * 1024;
+
+/** Every import a ck-exec CLIENT half may have (CLIENT ABI 0), by module. */
+export const EXEC_CLIENT_ABI_IMPORTS: Readonly<Record<string, readonly string[]>> = {
+  ck: ['log', 'now_ms', 'state_get', 'state_set', 'host_call'],
+  wasi_snapshot_preview1: ['random_get'],
+};
 
 export interface GlueInitMessage {
   type: 'init';
   artifact: ArrayBuffer;
   authority: 'player';
-  /** Server-authored budget loaded into an injected mutable `ck_fuel` global. */
+  /** A mod's CLIENT half, offered exactly {@link EXEC_CLIENT_ABI_IMPORTS}: the only engine. */
+  engine?: 'ck-exec';
+  /** Server-authored budget loaded into the module's mutable `ck_fuel` global; required. */
   fuelPerDispatch?: string;
   /** Legacy metadata; the hard watchdog is owned by the page-side broker. */
   watchdogMs?: number;
@@ -101,15 +125,30 @@ export interface GuestExports {
 export interface GlueRuntimeOptions {
   /** Synchronous host-API gateway: JSON request bytes in, SDK Response-envelope bytes out. */
   hostCallSync: (reqBytes: Uint8Array) => Uint8Array;
-  /** debug/info/warn/error sink for guest `ck.log` (optional). */
+  /**
+   * Sink for guest `ck.log` (optional): crowdy-client-sdk's level (0 debug, 1 info, 2 warn,
+   * 3 error) and at most {@link GLUE_LOG_MAX_BYTES} of the message.
+   */
   onLog?: (level: number, message: string) => void;
   /** Deterministic-enough randomness for the guest `random_get` (defaults to crypto). */
   randomFill?: (buf: Uint8Array) => void;
   now?: () => number;
+  /** The per-dispatch budget; a module is refused without one. */
   fuelPerDispatch?: bigint | null;
+  /**
+   * `'ck-exec'`, the only engine: offer exactly {@link EXEC_CLIENT_ABI_IMPORTS} and refuse a
+   * module that does not export the `ck_fuel` meter, or a missing budget.
+   */
+  engine?: 'ck-exec';
 }
 
 const textDecoder = new TextDecoder();
+const requestTooLargeReply = new TextEncoder().encode(
+  JSON.stringify({
+    ok: false,
+    error: { kind: 'request_too_large', message: 'host call request exceeds the browser sandbox limit' },
+  }),
+);
 
 function assertMemoryRange(
   buffer: ArrayBuffer,
@@ -165,11 +204,6 @@ export class GlueRuntime {
 
   /** The import object handed to `WebAssembly.instantiate`. Guest sees only these. */
   buildImports(getExports: () => GuestExports | null): WebAssembly.Imports {
-    const mem = (): DataView => {
-      const ex = getExports();
-      if (!ex) throw new Error('guest not instantiated');
-      return new DataView(ex.memory.buffer);
-    };
     const bytesAt = (ptr: number, len: number): Uint8Array => {
       const ex = getExports();
       if (!ex) throw new Error('guest not instantiated');
@@ -193,8 +227,11 @@ export class GlueRuntime {
 
     const ck: Record<string, (...args: number[]) => number | bigint | void> = {
       log: (level: number, ptr: number, len: number): void => {
+        const ex = getExports();
+        if (!ex) throw new Error('guest not instantiated');
+        assertMemoryRange(ex.memory.buffer, ptr, len, 'guest log read');
         if (this.options.onLog) {
-          this.options.onLog(level, textDecoder.decode(bytesAt(ptr, len)));
+          this.options.onLog(level, textDecoder.decode(bytesAt(ptr, Math.min(len, GLUE_LOG_MAX_BYTES))));
         }
       },
       now_ms: (): bigint => BigInt(now()),
@@ -206,12 +243,15 @@ export class GlueRuntime {
         return len;
       },
       state_set: (ptr: number, len: number): number => {
+        if (len > GLUE_STATE_MAX_BYTES) return 1;
         this.stateBlob = bytesAt(ptr, len);
         return 0;
       },
       host_call: (ptr: number, len: number): bigint => {
-        const reqBytes = bytesAt(ptr, len);
-        const respBytes = this.options.hostCallSync(reqBytes);
+        const respBytes =
+          len > GLUE_HOST_CALL_REQUEST_MAX_BYTES
+            ? requestTooLargeReply
+            : this.options.hostCallSync(bytesAt(ptr, len));
         const ex = getExports();
         if (!ex) throw new Error('guest not instantiated');
         const outPtr = ex.ck_alloc(respBytes.length);
@@ -224,35 +264,18 @@ export class GlueRuntime {
       },
     };
 
-    const wasi = {
-      random_get: (ptr: number, len: number): number => {
-        const ex = getExports();
-        if (!ex) throw new Error('guest not instantiated');
-        const buffer = ex.memory.buffer;
-        assertMemoryRange(buffer, ptr, len, 'random_get write');
-        const buf = new Uint8Array(buffer, ptr, len);
-        randomFill(buf);
-        return 0;
-      },
-      // A player artifact may pull in a few benign wasi stubs; keep them inert.
-      proc_exit: (): void => {
-        throw new Error('proc_exit called (guest trap)');
-      },
-      fd_write: (): number => 0,
-      environ_get: (): number => 0,
-      environ_sizes_get: (envcPtr: number, envBufSzPtr: number): number => {
-        const dv = mem();
-        dv.setUint32(envcPtr, 0, true);
-        dv.setUint32(envBufSzPtr, 0, true);
-        return 0;
-      },
+    const random_get = (ptr: number, len: number): number => {
+      const ex = getExports();
+      if (!ex) throw new Error('guest not instantiated');
+      const buffer = ex.memory.buffer;
+      assertMemoryRange(buffer, ptr, len, 'random_get write');
+      const buf = new Uint8Array(buffer, ptr, len);
+      randomFill(buf);
+      return 0;
     };
-
     return {
       ck,
-      wasi_snapshot_preview1: wasi,
-      // Some toolchains name the module `wasi_unstable`; alias defensively.
-      wasi_unstable: wasi,
+      wasi_snapshot_preview1: { random_get },
     } as unknown as WebAssembly.Imports;
   }
 
@@ -262,6 +285,12 @@ export class GlueRuntime {
     const ex = instance.exports as unknown as GuestExports;
     if (!ex.memory || typeof ex.ck_alloc !== 'function') {
       throw new Error('artifact is missing the ck ABI (memory / ck_alloc)');
+    }
+    if (!(ex.ck_fuel instanceof WebAssembly.Global)) {
+      throw new Error('a ck-exec CLIENT half must export the ck_fuel meter; it was not instrumented');
+    }
+    if (this.options.fuelPerDispatch == null) {
+      throw new Error('a ck-exec CLIENT half needs its fuel budget');
     }
     this.exports = ex;
   }
@@ -311,6 +340,9 @@ export class GlueRuntime {
     if (outLen === 0) return new Uint8Array(0);
     if (outPtr === 0) {
       throw new RangeError('guest returned a null invoke reply pointer');
+    }
+    if (outLen > GLUE_INVOKE_REPLY_MAX_BYTES) {
+      throw new RangeError('the invoke reply exceeds the browser sandbox limit');
     }
     assertMemoryRange(ex.memory.buffer, outPtr, outLen, 'invoke reply read');
     const out = new Uint8Array(ex.memory.buffer, outPtr, outLen).slice();

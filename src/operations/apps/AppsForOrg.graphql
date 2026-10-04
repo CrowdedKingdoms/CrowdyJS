@@ -8,6 +8,7 @@ query AppsForOrg($orgSlug: String!) {
     visibility
     status
     metadata
+    wildernessWritesOpen
     splitMode
     gameApiUrl
     createdAt

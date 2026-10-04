@@ -4,10 +4,10 @@
  * server-refereed action client hand-rolls (the reference implementation was
  * Blocks with Friends' `ActionService`).
  *
- * The referee side (a compute-module invoke export or a Model function) is
- * expected to be **idempotent on `actionId`**: the helper generates one per
- * attempt so a client retry of the same action returns the prior verdict
- * instead of double-applying (the BWF receipt pattern).
+ * The referee side (a hub endpoint, say) is expected to be **idempotent on
+ * `actionId`**: the helper generates one per attempt so a client retry of the
+ * same action returns the prior verdict instead of double-applying (the BWF
+ * receipt pattern).
  *
  * ```ts
  * const outcome = await runOptimisticAction({
@@ -16,11 +16,7 @@
  *     world.setBlock(pos, BLOCK_AIR);            // instant local feedback
  *     return () => world.setBlock(pos, previous); // rollback closure
  *   },
- *   invoke: ({ actionId }) =>
- *     client.compute.invoke({
- *       appId, moduleName: 'bwf-actions', exportName: 'mine',
- *       paramsJson: JSON.stringify({ actionId, ...coords }),
- *     }).then((r) => JSON.parse(r.resultJson ?? '{}')),
+ *   invoke: ({ actionId }) => exec.call('player', playerId, 'mine', { actionId, ...coords }),
  *   validate: (r) => r.success !== false,
  * });
  * if (!outcome.ok) showToast(outcome.errorMessage);

@@ -66,7 +66,7 @@ test('completion and hover merge workspace and generated platform symbols', () =
   const document = open(
     vfs,
     'src/lib.rs',
-    'fn run() { hel }\ncrowdy_compute_sdk::register_module!();\n',
+    'fn run() { hel }\ncrowdy_client_sdk::register_module!();\n',
   );
   const completions = analysis.completions(
     document,
@@ -87,10 +87,10 @@ test('completion and hover merge workspace and generated platform symbols', () =
     { line: 1, character: 28 },
     vfs.documents(),
   );
-  assert.match(hover.contents.value, /Wires user functions to the ABI exports/u);
-  assert.match(hover.contents.value, /Crate crowdy-compute-sdk 0\.1\.8/u);
-  assert.match(hover.contents.value, /source bbd0a38014a0/u);
-  assert.match(hover.contents.value, /SDK 0\.1\.8/u);
+  assert.match(hover.contents.value, /Wires a CLIENT half's functions to the exports the browser calls/u);
+  assert.match(hover.contents.value, /Crate crowdy-client-sdk 0\.1\.0/u);
+  assert.match(hover.contents.value, /source 2d21f7c4f1fe/u);
+  assert.match(hover.contents.value, /SDK 0\.1\.0/u);
 
   const fieldDocument = open(
     vfs,
@@ -105,13 +105,13 @@ test('completion and hover merge workspace and generated platform symbols', () =
     )
     .find((item) => item.label === 'message');
   assert.equal(fieldCompletion?.kind, 5);
-  assert.match(fieldCompletion?.detail ?? '', /crowdy-compute-sdk@0\.1\.8/u);
+  assert.match(fieldCompletion?.detail ?? '', /(ckx-sdk@0\.7\.0|crowdy-client-sdk@0\.1\.0)/u);
   const fieldHover = analysis.hover(
     fieldDocument,
     { line: 0, character: 12 },
     vfs.documents(),
   );
-  assert.match(fieldHover?.contents.value ?? '', /pub message: Option<String>/u);
+  assert.match(fieldHover?.contents.value ?? '', /pub message: /u);
 });
 
 test('target-prefixed workspaces expose cross-file symbols and lifecycle guidance', () => {
@@ -120,7 +120,7 @@ test('target-prefixed workspaces expose cross-file symbols and lifecycle guidanc
   const server = open(
     vfs,
     'server/src/lib.rs',
-    'fn on_tick(_dt: u32) { server_helper(); }\n',
+    'fn handle(_dt: u32) { server_helper(); }\n',
   );
   open(vfs, 'client/src/helpers.rs', 'pub fn client_helper() {}\n');
   const client = open(vfs, 'client/src/lib.rs', 'fn client_main() {}\n');
@@ -130,7 +130,9 @@ test('target-prefixed workspaces expose cross-file symbols and lifecycle guidanc
     { line: 0, character: 0 },
     vfs.documents(),
   );
-  assert.ok(serverItems.some((item) => item.label === 'server lifecycle'));
+  const hub = serverItems.find((item) => item.label === 'mod hub');
+  assert.match(hub?.insertText ?? '', /impl Hub for Mod[\s\S]*ckx_sdk::export_hub!\(Mod\);/u);
+  assert.doesNotMatch(hub?.insertText ?? '', /crowdy_compute_sdk|register_module/u);
   assert.ok(serverItems.some((item) => item.label === 'client_helper'));
   const clientItems = analysis.completions(
     client,
@@ -155,21 +157,12 @@ test('target-prefixed workspaces expose cross-file symbols and lifecycle guidanc
 });
 
 test('platform index loader is strict and bounded', () => {
-  assert.equal(loadPlatformIndex(EMBEDDED_PLATFORM_INDEX).symbols.length, 748);
+  assert.equal(loadPlatformIndex(EMBEDDED_PLATFORM_INDEX).symbols.length, 338);
   assert.equal(EMBEDDED_PLATFORM_INDEX.schemaVersion, 2);
-  assert.equal(EMBEDDED_PLATFORM_INDEX.crates.length, 8);
+  assert.equal(EMBEDDED_PLATFORM_INDEX.crates.length, 4);
   assert.deepEqual(
     EMBEDDED_PLATFORM_INDEX.crates.map((crate) => crate.name),
-    [
-      'alloc',
-      'core',
-      'crowdy-compute-sdk',
-      'crowdy-game-kit-ai',
-      'crowdy-game-kit-core',
-      'crowdy-game-kit-econ',
-      'crowdy-game-kit-play',
-      'crowdy-game-kit-sim',
-    ],
+    ['alloc', 'ckx-sdk', 'core', 'crowdy-client-sdk'],
   );
   assert.ok(
     EMBEDDED_PLATFORM_INDEX.crates.every((crate) =>
@@ -178,7 +171,7 @@ test('platform index loader is strict and bounded', () => {
   );
   assert.equal(
     EMBEDDED_PLATFORM_INDEX.contentHash,
-    '5540301f69ad5ee2566e142227c2cc9730b45e6b3710189a7e1900d0877af114',
+    'c219690850999e82f66ce369a7aa13a65b48e3fcd6bfa786f0c05011650ed020',
   );
   assert.throws(
     () => loadPlatformIndex({ ...EMBEDDED_PLATFORM_INDEX, token: 'secret' }),
@@ -298,4 +291,27 @@ test('producer static symbols are accepted and mapped as variables', async () =>
   } finally {
     local.dispose();
   }
+});
+
+test('a CLIENT file gets crowdy-client-sdk\u2019s lifecycle snippet, whatever it imports', () => {
+  const vfs = new VirtualFileSystem();
+  const half = open(vfs, 'client/src/lib.rs', 'use crowdy_client_sdk as crowdy;\n');
+  const bare = open(vfs, 'client/src/other.rs', 'fn helper() {}\n');
+  const snippet = (document) =>
+    analysis
+      .completions(document, { line: 1, character: 0 }, vfs.documents())
+      .find((item) => item.label === 'client lifecycle').insertText;
+  for (const document of [half, bare]) {
+    assert.match(
+      snippet(document),
+      /crowdy_client_sdk::register_module!\(init: init, tick: tick, invoke: invoke, event: event\);/,
+    );
+    assert.doesNotMatch(snippet(document), /crowdy_compute_sdk/);
+  }
+  const hover = analysis.hover(
+    open(vfs, 'client/src/tick.rs', 'fn tick(_dt_ms: u32) {}\n'),
+    { line: 0, character: 4 },
+    vfs.documents(),
+  );
+  assert.match(hover?.contents.value ?? '', /CLIENT ticks run in the visitor/u);
 });

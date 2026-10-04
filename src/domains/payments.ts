@@ -2,42 +2,29 @@ import type { GraphQLClient } from '../client.js';
 import {
   MyCheckoutsDocument,
   MyCheckoutsConnectionDocument,
-  CheckoutsDocument,
-  CheckoutsConnectionDocument,
   CreateCheckoutDocument,
   CapturePaypalCheckoutDocument,
-  PaymentEventsDocument,
-  PaymentEventsConnectionDocument,
   type MyCheckoutsQuery,
   type MyCheckoutsConnectionQuery,
   type MyCheckoutsConnectionQueryVariables,
-  type CheckoutsQuery,
-  type CheckoutsConnectionQuery,
-  type CheckoutsConnectionQueryVariables,
   type CreateCheckoutMutation,
   type CreateCheckoutInput,
-  type CheckoutFilterInput,
   type CapturePaypalCheckoutMutation,
-  type PaymentEventsQuery,
-  type PaymentEventsQueryVariables,
-  type PaymentEventsConnectionQuery,
-  type PaymentEventsConnectionQueryVariables,
 } from '../generated/graphql.js';
 
 /**
  * Payment checkouts (wallet top-ups, plan purchases) — exposed as
  * `client.payments` (and grouped under `client.admin`).
  *
- * Part of the management surface. {@link create} and {@link mine} require an
- * authenticated caller and act on their own checkouts; {@link all} is
- * super-admin only. Amounts are minor currency units (`*Cents`).
+ * Part of the management surface. Every method requires an authenticated
+ * caller and acts on the caller's own checkouts. Amounts are minor currency
+ * units (`*Cents`).
  *
  * Note: {@link create} starts a real payment-provider checkout (Stripe /
  * PayPal). In tests use sandbox provider keys only — never trigger real
  * charges.
  *
- * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN` per the notes
- *   above.
+ * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` without a session.
  */
 export class PaymentsAPI {
   constructor(private readonly api: GraphQLClient) {}
@@ -72,29 +59,6 @@ export class PaymentsAPI {
       offset: opts.offset,
     });
     return data.myCheckouts;
-  }
-
-  /**
-   * List checkouts across all users with an optional filter. **Super-admin
-   * only.**
-   *
-   * @param opts - Optional {@link CheckoutFilterInput} `filter` and `limit` /
-   *   `offset`.
-   * @returns The matching checkouts.
-   */
-  async all(
-    opts: {
-      filter?: CheckoutFilterInput;
-      limit?: number;
-      offset?: number;
-    } = {},
-  ): Promise<CheckoutsQuery['checkouts']> {
-    const data = await this.api.request(CheckoutsDocument, {
-      filter: opts.filter,
-      limit: opts.limit,
-      offset: opts.offset,
-    });
-    return data.checkouts;
   }
 
   /**
@@ -136,58 +100,5 @@ export class PaymentsAPI {
       args,
     );
     return data.myCheckoutsConnection;
-  }
-
-  /**
-   * Relay-style cursor pagination over all checkouts (with optional filter) —
-   * the preferred alternative to {@link all}. **Super-admin only.**
-   *
-   * @param args - Optional `first`, `after`, and {@link CheckoutFilterInput}.
-   * @returns A checkouts connection.
-   */
-  async allConnection(
-    args: CheckoutsConnectionQueryVariables = {},
-  ): Promise<CheckoutsConnectionQuery['checkoutsConnection']> {
-    const data = await this.api.request(
-      CheckoutsConnectionDocument,
-      args,
-    );
-    return data.checkoutsConnection;
-  }
-
-  /**
-   * List provider webhook events (offset pagination). **Super-admin only** — an
-   * audit view of received Stripe/PayPal/SES events.
-   *
-   * @param opts - Optional `limit` / `offset`.
-   * @returns A page of {@link PaymentEventRecord}s.
-   * @remarks Prefer {@link eventsConnection} (Relay cursor pagination); the
-   *   offset args here are deprecated server-side.
-   */
-  async events(
-    opts: {
-      limit?: PaymentEventsQueryVariables['limit'];
-      offset?: PaymentEventsQueryVariables['offset'];
-    } = {},
-  ): Promise<PaymentEventsQuery['paymentEvents']> {
-    const data = await this.api.request(PaymentEventsDocument, opts);
-    return data.paymentEvents;
-  }
-
-  /**
-   * Relay-style cursor pagination over provider webhook events. **Super-admin
-   * only.** See https://docs.crowdedkingdoms.com/overview/pagination.
-   *
-   * @param args - Optional `first` and `after`.
-   * @returns A payment-events connection.
-   */
-  async eventsConnection(
-    args: PaymentEventsConnectionQueryVariables = {},
-  ): Promise<PaymentEventsConnectionQuery['paymentEventsConnection']> {
-    const data = await this.api.request(
-      PaymentEventsConnectionDocument,
-      args,
-    );
-    return data.paymentEventsConnection;
   }
 }

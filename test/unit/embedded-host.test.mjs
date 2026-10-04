@@ -153,8 +153,12 @@ test('signIn with embedded: false, or with no shell answering, runs the top-leve
 test('the hosting surface is on every client, and the Node helper is a subpath export', async () => {
   const { CrowdyClient } = await loadSdk();
   const client = new CrowdyClient({ httpUrl: 'https://game.invalid' });
-  for (const m of ['game', 'listed', 'all', 'mine', 'publishes', 'claim', 'beginPublish', 'completePublish', 'abandonPublish', 'setEnabled', 'setListing', 'takeDown']) {
+  for (const m of ['game', 'listed', 'mine', 'publishes', 'claim', 'beginPublish', 'completePublish', 'abandonPublish', 'setEnabled']) {
     assert.equal(typeof client.hosting[m], 'function', `client.hosting.${m}`);
+  }
+  // Listing and take-down are the operator's, outside the SDK (18.0.1).
+  for (const m of ['all', 'setListing', 'takeDown']) {
+    assert.equal(client.hosting[m], undefined, `client.hosting.${m}`);
   }
   assert.equal(client.embeddedHost, null, 'no window in Node: no bridge');
   client.close();
