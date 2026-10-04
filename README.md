@@ -232,7 +232,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.host` | Game-host election (`get`, `amIHost`) + actor liveness `heartbeat`. `amIHost` is UI convenience only — a hub decides host-only actions from its caller. |
 | `client.teleport` | Teleport requests. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
-| `client.exec` | **ck-exec (dev-tier preview):** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion` and `setEnabled` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec-dev-tier-preview). |
+| `client.exec` | **ck-exec:** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion` and `setEnabled` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec). |
 | `client.playerWallet` | Player spend: balance, ledger, hourly charges, spend caps, card setup, auto-recharge. A ck-exec mod's compute is billed here, to its owner. |
 | `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
@@ -632,12 +632,11 @@ and `runOptimisticAction`, which applies an action locally, asks a referee
 `kit.deploy`, the engines and the model-backed helpers went with the game
 model in 18.0.0; see [MIGRATION.md](MIGRATION.md).
 
-## ck-exec (dev-tier preview)
+## ck-exec
 
 ck-exec runs an app's server code as **hubs** (stateful, one instance per key) and **spokes**
-(stateless, replicated) on execution hosts, on the dev environment only for now, so it needs
-the `@dev` release (`npm install @crowdedkingdoms/crowdyjs@dev`). A player
-connects to one host and calls any node of the app through it:
+(stateless, replicated) on execution hosts. A player connects to one host and calls any node
+of the app through it:
 
 ```ts
 // The session token is the app's app-scoped token (client.portal.mintAppToken).
