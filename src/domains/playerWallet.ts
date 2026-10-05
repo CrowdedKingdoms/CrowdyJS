@@ -10,9 +10,6 @@ import {
   BeginPlayerCardSetupDocument,
   type BeginPlayerCardSetupMutation,
   PlayerRuntimeStatesDocument,
-  PlayerWasmPoliciesDocument,
-  SetPlayerWasmPolicyDocument,
-  DeletePlayerWasmPolicyDocument,
   PlayerRateMarkupDocument,
   SetPlayerRateMarkupDocument,
   AppPlayerUsageDocument,
@@ -30,12 +27,6 @@ import {
   type SetPlayerAutoBillingMutation,
   type SetPlayerAutoBillingMutationVariables,
   type PlayerRuntimeStatesQuery,
-  type PlayerWasmPoliciesQuery,
-  type PlayerWasmPoliciesQueryVariables,
-  type SetPlayerWasmPolicyMutation,
-  type SetPlayerWasmPolicyMutationVariables,
-  type DeletePlayerWasmPolicyMutation,
-  type DeletePlayerWasmPolicyMutationVariables,
   type PlayerRateMarkupQuery,
   type PlayerRateMarkupQueryVariables,
   type SetPlayerRateMarkupMutation,
@@ -49,17 +40,17 @@ import {
 } from "../generated/graphql.js";
 
 /**
- * The player wallet and player-billing surface (player compute P2, DN-5) —
- * exposed as `client.playerWallet` and routed to the Management API.
+ * The player wallet and player-billing surface (DN-5) — exposed as
+ * `client.playerWallet`. A ck-exec mod's compute is billed here, to its owner.
  *
  * Every viewer-scoped call operates on the CALLER's own wallet: balance,
  * ledger, hourly usage charges (platform vs studio-markup split), self-set
  * spend caps, auto-recharge config, and per-app gate states. Fund the wallet
  * via `client.payments.createCheckout` with purpose `PLAYER_WALLET_TOPUP`.
  *
- * The studio-scoped calls (policies, markup, per-player usage, accrued
- * markup) require the corresponding org permissions (`manage_compute`,
- * `manage_billing`, `view_compute_diagnostics`, `view_billing`).
+ * The studio-scoped calls (markup, per-player usage, accrued markup) require
+ * the corresponding org permissions (`manage_billing`,
+ * `view_compute_diagnostics`, `view_billing`).
  */
 export class PlayerWalletAPI {
   constructor(private readonly graphql: GraphQLClient) {}
@@ -152,39 +143,6 @@ export class PlayerWalletAPI {
   > {
     const data = await this.graphql.request(PlayerRuntimeStatesDocument, {});
     return data.playerRuntimeStates;
-  }
-
-  /** Studio: list an app's player policy rows (`view_compute_diagnostics`). */
-  async policies(
-    variables: PlayerWasmPoliciesQueryVariables,
-  ): Promise<PlayerWasmPoliciesQuery["playerWasmPolicies"]> {
-    const data = await this.graphql.request(
-      PlayerWasmPoliciesDocument,
-      variables,
-    );
-    return data.playerWasmPolicies;
-  }
-
-  /** Studio: upsert a player policy row (`manage_compute`). */
-  async setPolicy(
-    variables: SetPlayerWasmPolicyMutationVariables,
-  ): Promise<SetPlayerWasmPolicyMutation["setPlayerWasmPolicy"]> {
-    const data = await this.graphql.request(
-      SetPlayerWasmPolicyDocument,
-      variables,
-    );
-    return data.setPlayerWasmPolicy;
-  }
-
-  /** Studio: delete a player policy row (`manage_compute`). */
-  async deletePolicy(
-    variables: DeletePlayerWasmPolicyMutationVariables,
-  ): Promise<DeletePlayerWasmPolicyMutation["deletePlayerWasmPolicy"]> {
-    const data = await this.graphql.request(
-      DeletePlayerWasmPolicyDocument,
-      variables,
-    );
-    return data.deletePlayerWasmPolicy;
   }
 
   /** Studio: read the app's player rate-card markup in bps (`view_billing`). */

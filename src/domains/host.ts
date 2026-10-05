@@ -16,8 +16,8 @@ import {
  * first wins). {@link heartbeat} refreshes the caller's actor freshness (keeping
  * them host-eligible) and returns the freshly-elected host in one round-trip —
  * call it on an interval shorter than the server's freshness window.
- * {@link amIHost} is a UI convenience (not authoritative for mutations — use
- * `gameModelInvoke`'s `is_host` policy for that). All require a valid session;
+ * {@link amIHost} is a UI convenience (not authoritative for mutations — a hub
+ * decides that from the caller). All require a valid session;
  * `appId` is a `BigInt` decimal string.
  *
  * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` without a session.
@@ -40,7 +40,7 @@ export class HostAPI {
   /**
    * Return whether the authenticated caller is the currently elected host for
    * the app. Convenience for UI only — not authoritative for server mutations
-   * (use `gameModelInvoke`'s `is_host` policy for that).
+   * (a hub decides those from the caller).
    *
    * @param appId - The app to check host election for.
    * @returns `true` if the caller is the elected host; otherwise `false`.

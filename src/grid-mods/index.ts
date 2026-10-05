@@ -1,5 +1,7 @@
 export {
+  clientHalfActorUuid,
   createGridHostCalls,
+  GRID_PERMISSION_CHECK_KEYS,
   GridHostCallRefused,
   type GridHostCallsOptions,
   type GridHostLocal,

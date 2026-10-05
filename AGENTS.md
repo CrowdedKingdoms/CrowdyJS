@@ -4,12 +4,109 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **17.14.0**. Whether that is *published* is
+**Current package:** `package.json` is **18.2.0** (18.0.0 was published only as
+`18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
 `package.json` and the registry disagreeing IS the normal state between a merge
 and a release, and prose cannot tell you which state you are in. Ask:
 `npm view @crowdedkingdoms/crowdyjs dist-tags`.
+
+**RULE: THE SDK IS FOR NORMAL CLIENTS, AND IT IS DESIGNED FOR PRODUCTION (operator decision,
+2026-09-28).** It may carry org-admin features — there will be many org-admins — but NEVER a
+wrapper for something only a super-admin or a platform operator can call, and no testing
+helper. Platform tooling and test helpers live in our own repos as scripts that call GraphQL
+directly. So, before adding a wrapper:
+
+- Read the field's resolver in cks-game-api. `@RequiresSuperAdmin()`, `@RequiresOperator()`,
+  `OperatorGuard`, or a body that refuses everyone but a super-admin means it does not belong
+  here. A field with an org-admin path and a super-admin path (quotas: `setQuota` /
+  `deleteQuota` without an org or app are platform-global) is wrapped for the org-admin path
+  only, and the SDK refuses the other (`quotas.set` needs an `appId` or an `orgId`).
+- `test/unit/sdk-audience.test.mjs` fails when any operation document names a root field on
+  its platform-only list, or one whose schema description says operator- or super-admin-only.
+  When cks-game-api adds such a field, add it to that list; do not wrap it.
+- 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
+  moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
+  (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.2.0: `ChunkStore` keeps the voxel edits it hydrated (OI-2026-10-02-006, 2026-10-03).**
+Since ck-api `dev/v2.33.0` (cks-game-api #445) every voxel edit recorded for a chunk (a hub's or
+mod's `world.set_voxels`, `updateVoxel`, realtime voxel updates) comes back only in `getChunk`'s
+`voxelStates`; the bulk load's `voxels` hold none of them, so a store shows them only when it
+hydrates (`hydrateVoxelStates`, on with a `voxelStateCodec`). `ensureAround` used to apply every
+chunk the bulk response returned, also one it had already loaded and hydrated, which put the
+stored grid back over the edits and never hydrated it again: a hub's block vanished as soon as
+the player crossed into a new chunk, and so did realtime merges. A loaded chunk now keeps its
+cache. `hydrate` also puts the edits on a chunk stored with `voxels: null` (it dropped their
+types), and an entry without a state clears the cached state there. CrowdyCPP 0.56.0 selects
+`voxelStates` in its one bulk load instead.
+
+**18.1.0: open grids, and where a connect token may go (the W5 review's SDK follow-ups,
+2026-10-01).** `client.gameApps.setOpenPermissions` / `openPermissions` wrap cks-game-api #436's
+`setGridOpenPermissions` / `gridOpenPermissions` (ck-api `dev/v2.31.0`, `manage_apps`): since
+#436 a zone everyone may build in must grant `update_voxel_data` itself. `client.exec.connect`
+and `connectAsDeveloper` dial only a gateway `execGatewayRefusal(gameApiUrl, gatewayUrl)` passes
+(`wss:` under an `https:` game API, the game API's estate or the default origin's, loopback for
+a loopback game API; the cases are `test/unit/fixtures/exec-gateway-cases.json`, which
+CrowdyCPP copies). Under Node's `ws` a gateway's `HTTP 401` is `Denied` with its body as the
+reason (`unexpected-response`), and 4401 still is; a browser cannot read a refused upgrade.
+`test/e2e/open-grid-and-exec-gateway.test.mjs` runs both against a tier as a throwaway org admin
+(`CROWDY_E2E_THROWAWAY_OWNER=1`). The schema is cks-game-api `dev`'s after #436.
+
+**18.0.4: `ChunkStore` drops a refused write-back (P3 W5 review B, 2026-09-29).** `updateChunk`
+refuses a visitor on someone else's plot or a closed wilderness, so a store that retried forever
+would hammer the API for the rest of the session. The store drops a refusal at once, retries
+what can clear five times with backoff, and reports both through `onWriteBackFailed`;
+`flush()` resolves with what it dropped. Also `App.wildernessWritesOpen` (cks-game-api #434) on
+the app reads and `apps.update`.
+
+**18.0.3 lets a player take back a CLIENT half (OI-2026-09-28-001, 2026-09-29).**
+`exec.revokeClientModConsent` / `revokeAuthorTrust` wrap cks-game-api #431 (ck-api
+`dev/v2.28.0`); `ExecClientHalves.revoke(modId)` and `forgetAuthor(authorId)` stop what runs and
+take the agreement back (a trusted half's revoke drops the trust and re-consents the author's
+other running halves). A game puts both controls beside each running CLIENT half.
+
+**18.0.2 is the P3 W5 client security review (2026-09-29; MIGRATION.md has the list).** A
+CLIENT half is someone else's code in the player's browser, so the page holds it to rules its
+consent never waived: `createGridHostCalls` answers `grid_permission_check` only for the four
+code-permission keys (`GRID_PERMISSION_CHECK_KEYS`, OI-2026-09-28-004) and refuses any other
+key, sends a half's spatial and channel messages as `clientHalfActorUuid(gridId, name)` (never
+a uuid the half names), and takes `voxel_set` voxels 0-15 of type 0-255; the broker refuses a
+chunk named a second way (`chunk`, `chunk_x`, …); the glue caps what it copies out of a module
+(`GLUE_HOST_CALL_REQUEST_MAX_BYTES`, `GLUE_STATE_MAX_BYTES`, `GLUE_INVOKE_REPLY_MAX_BYTES`);
+the agent's `studio.draftTest` needs the page-side `confirmLiveDeploy` (`mode: 'draft'`),
+because on ck-exec a draft test deploys the mod to the grid like a live deploy. A game router
+must route on the fields the broker checks (`x`/`y`/`z`, `chunkX`/`chunkY`/`chunkZ`).
+
+**18.0.0 removes the legacy engines' SDK surface (P3 W2, HS-42, 2026-09-28): it lands on `dev`
+with the game API's deletion (cks-game-api #417, ck-api `dev/v2.27.0`).** Gone:
+`client.gameModel`, `client.compute`, `client.playerModel`, **`client.playerCompute`** (its
+CLIENT module path too), **`client.operator`** (it held only the compute ceilings) and
+`playerWallet`'s WASM policies; the Game Kit's blueprints, `kit.deploy`, engines and
+model-backed helpers (`client.kit(appId)` keeps `social`; `kit/wire.ts` and
+`runOptimisticAction` stay); World Stores' `model` mirror; Studio's model lint; `GridScope`'s
+`sessions`, `model` and `compute`; the marketplace's player-code listings and grid attachments
+(`gridClientMods`, `consentGridClientMod`, `trustGridAuthor`, `clientArtifact(Bytes)`); and
+Crowdy Studio's `'player-compute'` engine for both targets (`mods` is required; `serverEngine`,
+`playerCompute`, the Runs panel, `state.usage` and the pairing control are gone). Each
+replacement is ck-exec's: hubs and spokes, mods, and a mod's CLIENT half (MIGRATION.md has the
+map; the docs' [from the legacy engines](https://docs.dev.crowdedkingdoms.com/exec/from-the-legacy-engines)
+page the reasoning). **The player runtime runs CLIENT
+halves only:** `PlayerCodeBroker` needs `artifactHash`, `fuelPerDispatch` and
+`consentedHostCalls`, the allowlist is `EXEC_CLIENT_HOST_CALLS` (`ALLOWED_HOST_CALLS` is gone),
+the glue refuses a module without the `ck_fuel` meter and offers only `EXEC_CLIENT_ABI_IMPORTS`.
+**New in 18.0.0 (the P3 W1 review's findings):** a CLIENT half's `crowdy::log` lines reach
+`onLog` (broker, `ExecClientHalves`, `startGridMod`; 20 a second, 1,000 characters, Studio's
+Logs shows its preview's), the page can call its `handle_invoke` (`invoke`), and
+`createGridHostCalls` answers `avatar_state_get` and `grid_permission_check` from the game's
+knowledge (`local.avatarChunk`, `local.gridPermissionKeys` + `userId`). **Kept, because the game
+API keeps their fields:** tier features (in `client.appAccess`), grid claims and the app-admin
+marketplace fields. It needs ck-api `v2.24.0` for exec (as 17.14.0) and `v2.25.1` for Studio's
+CLIENT projects. The embedded authoring index is cks-game-api `dev`'s after #417 (`ckx-sdk`
+and `crowdy-client-sdk`, 338 symbols); the host catalog is unchanged. **The release's
+`schema.gql` is cks-game-api `dev`'s after #417** (`schema:sync:paths`); a 17.x SDK against
+`v2.27.0` fails every legacy call as a GraphQL validation error. [MIGRATION.md](MIGRATION.md).
 
 **17.14.0 adds ck-exec CLIENT halves (cks-game-api #422, P3 W1, HS-40, 2026-09-27).** A mod
 may carry browser WASM from one `crowdy-client-sdk` crate, which its grid serves to visitors who
@@ -38,10 +135,11 @@ when the player has none (and says so in the build log). The legacy client-mod m
 is cks-game-api `dev`'s after #422 merged (`schema:sync:paths`).
 `test/unit/exec-client-runtime.test.mjs` runs a real CLIENT half when `CROWDY_EXEC_CLIENT_WASM`
 names one (Studio's starter built with cargo, `instrument` and `wasm-opt`, as the API builds it).
-**The Studio authoring index has no crowdy-client-sdk symbols:** the index is generated in
-cks-game-api (`compute-toolchain/scripts/generate-authoring-index.mjs`, crowdy-compute-sdk and
-the game kit only) and embedded here byte for byte, so adding them is a cks-game-api change
-followed by `authoring-index:drift -- --source ... --write`. [MIGRATION.md](MIGRATION.md).
+**The Studio authoring index is generated in cks-game-api**
+(`compute-toolchain/scripts/generate-authoring-index.mjs`) and embedded here byte for byte
+(`authoring-index:drift -- --source ... --write`, then `authoring-index:generate`); 17.14.0's
+still held only the legacy compute SDK and game kit, and 18.0.0 embeds the one #417 generated
+from `ckx-sdk` and `crowdy-client-sdk`. [MIGRATION.md](MIGRATION.md).
 
 **17.13.0 adds ck-exec observability to `client.exec` (ck-api `v2.22.0`, 2026-09-26).**
 `endpointStats(appId, { nodeType, sinceMinutes })` (`execEndpointStats`: calls per endpoint by
@@ -306,7 +404,10 @@ field on `CrowdyModelRefusal`. **15.2.0** was the release before it.
 Crowdy-Games use `scripts/ci/check-sdk-pins.mjs` /
 `grep '"@crowdedkingdoms/crowdyjs"' */package.json` for what each game actually
 pins. CrowdyCPP's parity pin is `crowdyjsParityTarget` in
-`CrowdyCPP/package.json` — read it there, not from this page.
+`CrowdyCPP/package.json`, and CrowdyPy's is `[tool.crowdypy.crowdyjs]` in
+`CrowdyPy/pyproject.toml` — read them there, not from this page. Both SDKs follow
+this one's public surface under a strict parity gate, so a surface change here is
+ported in CrowdyCPP and then CrowdyPy (which vendors CrowdyCPP's native core).
 
 `dev/vX.Y.Z` / `test/vX.Y.Z` publish
 `X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
@@ -315,8 +416,8 @@ caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
 `gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
 
 **TIER ALIGNMENT (hard rule for consumers).** A consumer branch may only
-reference CrowdyJS artifacts from the **same** tier: Crowdy-Games / CrowdyCPP
-`dev` → `@dev` / the `dev/` tag’s commit; `test` → `@test`; `prod` → `latest`.
+reference CrowdyJS artifacts from the **same** tier: Crowdy-Games / CrowdyCPP /
+CrowdyPy `dev` → `@dev` / the `dev/` tag’s commit; `test` → `@test`; `prod` → `latest`.
 Publishing `prod/vX.Y.Z` does **not** authorize bumping Games-`dev` or
 CPP-`dev` to that plain version — those ladders promote separately
 (`test`↔`test`, `prod`↔`prod`).
@@ -357,7 +458,8 @@ not a running service and is not a schema source; gameplay data lives in
 - `src/world.ts` — `client.world(appId)` facade.
 - `src/stores/` — World Stores (`@crowdedkingdoms/crowdyjs/stores`); the core
   client never imports it. See the README.
-- `src/kit/` — `client.kit(appId)` Game Kit over `gameModel`.
+- `src/kit/` — `client.kit(appId).social`, the wire codecs (`kit/wire.ts`) and
+  `runOptimisticAction`. The model-backed kit went in 18.0.0.
 - `schema.gql` + `src/generated/graphql.ts` — committed artifacts. Refresh from
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
   depend on sibling repos at build time.
@@ -509,43 +611,40 @@ reference consumer of the hosted flow.
 | Player presence & movement | `udp.subscribe` + `udp.sendActorUpdate`; `world(appId)`; World Stores `session.self` / `session.actors` |
 | Client-side bookkeeping | `createWorldSession` from `@crowdedkingdoms/crowdyjs/stores` |
 | Persistent terrain | `chunks.*` (durable) + `udp.sendVoxelUpdate` (realtime) |
-| Server-side rules (inventory, stats, NPCs) | `gameModel` containers / properties / functions with invoke policies — **admin-seeded before play** |
-| World life between requests | `gameModel` automations (`autonomousInvocable` functions) — see the presence rule below |
-| Ready-made genre mappings | `kit(appId)` blueprints + runtime helpers |
-| Client-side simulation authority | `host.heartbeat` + `is_host` invoke policy |
+| Server-side rules and state (inventory, stats, NPCs, sessions) | ck-exec hubs: `exec.connect` + `call` / `subscribe`; built and deployed with `exec.starters` / `build` / `deploy` (`manage_compute`) |
+| World life between requests | hub timers (`ctx.timer_every`, `ctx.timer_after`) — see the presence rule below |
+| Parties, guilds, chat rooms | `kit(appId).social` |
+| Client-side simulation authority | `host.heartbeat`; the hub decides from its caller |
+| Tier-gated features | `appAccess.defineFeature` / `grantTierFeature`; a hub reads `players.features` |
 | Voice / chat / guilds | `udp.sendAudioPacket`; `udp.sendTextPacket`; `channels.*`; `teams.*` |
 | Land claims | `gameApps.createGrid` / `grantPermissions` |
-| Players' code on their grids | ck-exec mods (`exec.modBuild` / `modDeploy`) and their CLIENT halves (`exec.modClientBuild` / `modClientDeploy`); visitors run a grid's with `ExecClientHalves` |
+| Players' code on their grids | ck-exec mods (`exec.modBuild` / `modDeploy`) and their CLIENT halves (`exec.modClientBuild` / `modClientDeploy`); visitors run a grid's with `ExecClientHalves` (`PlayerCodeBroker`, `createGridHostCalls`) |
 | Direct player-to-player | `udp.sendSingleActorMessage` |
 | Save / characters / teleport | `state.*`; `avatars.*`; `teleport.request` |
 | Version / capability | `serverStatus.gameClientBootstrap(appId)` |
 
 Everything realtime is addressed to a **chunk** and fanned out within
 `distance` chunks. GraphQL `chunks.*` is the durable store;
-`udp.sendVoxelUpdate` is the live edit path. The model must be seeded by a
-studio-admin token (`manage_apps`) before players can invoke it — `kit.deploy`
-or `gameModel.seed`. Host election is informational unless you put `is_host`
-on the invoke policy.
+`udp.sendVoxelUpdate` is the live edit path. An app's hubs must be deployed by a
+developer with `manage_compute` before players can call them. Host election is
+informational; a hub decides host-only actions from its caller.
 
-**Nothing runs for an app with no player in it** (platform change 2026-09-01).
-Compute modules tick only while the app has at least one player connected
-somewhere in the fleet, and `alwaysOn` is retired — `computeUpsertModule` refuses
-`true`. Scheduled work (cron and interval automations, `gm_timers`) that comes due
-while an app is empty is skipped silently and rescheduled from the moment a player
-returns; missed runs are never made up.
+**Nothing runs for an app with no player in it.** A hub's timers fire only while
+the hub runs, and a pending timer keeps an idle hub running only while players
+are present; a repeating timer's missed runs are not made up, and a one-shot
+timer that came due while the hub was stopped fires once when it starts again.
 
-This row used to read "world life with no client online", which was true and is
-not. Write automations so they are **idempotent in elapsed time**: advance the
-world by `now - lastTick` rather than by one fixed step per tick, and store
-expiries as timestamps rather than as remaining-tick counters. A blueprint that
-assumes a cadence will silently stall while nobody is playing.
+Write timers so they are **idempotent in elapsed time**: advance the world by
+`now - lastTick` rather than by one fixed step per tick, and store expiries as
+timestamps rather than as remaining-tick counters. Code that assumes a cadence
+will silently stall while nobody is playing.
 
 Blocks with Friends (crowdy.games, source not public) is the complete
-consumer of these surfaces: World Stores + kit blueprints + a hand-authored
+consumer of these surfaces: World Stores + ck-exec hubs + a hand-authored
 remainder. **The public consumer is
 [`CrowdedKingdoms/the-construct`](https://github.com/CrowdedKingdoms/the-construct)**
 (2026-09-07): an engine-agnostic starter over this SDK with two renderers, the
-Crowdy Studio embed with CLIENT mods, kit-seeded model, and an in-app org → app
+Crowdy Studio embed with mods and their CLIENT halves, ck-exec hubs, and an in-app org → app
 → tier → seed wizard, verified end to end on dev by a third-party account. It
 pins the tier's exact prerelease per branch and its `AGENTS.md` lists the
 platform facts it depends on. It is also the
@@ -562,6 +661,10 @@ is set — that is the contract, not a bug; the README example now sets it.
 ## Docs
 
 Canonical: <https://docs.crowdedkingdoms.com> ([/llms.txt](https://docs.crowdedkingdoms.com/llms.txt)).
+Each tier has its own site (`docs.dev.crowdedkingdoms.com`, `docs.test.crowdedkingdoms.com`). The README
+links the site of the tier its branch releases to, because the npm package carries it; a
+promotion re-points those links (`docs.dev.` → `docs.test.` → `docs.`), and `promote.mjs`
+does not do it for you.
 Published SDLs: `/schema/game-api.graphql` (whole schema),
 `/schema/management-api.graphql` (management surface **derived** from that
 schema — not a second source repo), `/schema/crowdyjs.graphql`.

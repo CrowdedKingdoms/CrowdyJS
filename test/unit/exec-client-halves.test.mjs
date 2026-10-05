@@ -124,6 +124,19 @@ test('modClientDeploy, modClientDelete, consentClientMod and trustAuthor pass th
   ]);
 });
 
+test('revokeClientModConsent and revokeAuthorTrust pass their arguments through', async () => {
+  const { exec, seen } = fakeExec({
+    ExecRevokeClientModConsent: { execRevokeClientModConsent: true },
+    ExecRevokeAuthorTrust: { execRevokeAuthorTrust: false },
+  });
+  assert.equal(await exec.revokeClientModConsent('77', '900'), true);
+  assert.equal(await exec.revokeAuthorTrust('77', '5', '42'), false);
+  assert.deepEqual(seen, [
+    ['ExecRevokeClientModConsent', { appId: '77', modId: '900' }],
+    ['ExecRevokeAuthorTrust', { appId: '77', gridId: '5', authorId: '42' }],
+  ]);
+});
+
 test('a stale hash is CONFLICT, surfaced as the GraphQL error it is', async () => {
   const { exec } = fakeExec({
     ExecConsentClientMod: () => {
@@ -206,6 +219,11 @@ test('modClientArtifactBytes refuses bytes that differ from the digest, and an A
 test('modClientArtifactBytes refuses a capability summary that does not parse: nothing would bound the module', async () => {
   const { exec } = fakeExec({ ExecModClientArtifact: artifactAnswer({ capabilitySummaryJson: '{"version":1' }) });
   await assert.rejects(exec.modClientArtifactBytes('77', '900'), (e) => e instanceof CrowdyProtocolError && /does not parse/.test(e.message));
+  // A host-function list with anything but names is refused as CrowdyCPP refuses it.
+  const odd = fakeExec({
+    ExecModClientArtifact: artifactAnswer({ capabilitySummaryJson: '{"hostFunctions":["hud_set",{"fn":"voxel_set"}]}' }),
+  });
+  await assert.rejects(odd.exec.modClientArtifactBytes('77', '900'), (e) => e instanceof CrowdyProtocolError && /does not parse/.test(e.message));
 });
 
 test('modClientArtifactBytes passes NOT_FOUND and RATE_LIMITED through untouched', async () => {
@@ -275,6 +293,22 @@ function fakeGrid(mods) {
       if (theirs[0].authorCapabilityHash !== hash) throw graphqlError('CONFLICT');
       for (const m of theirs) m.callerTrustsAuthor = true;
       return true;
+    },
+    async revokeClientModConsent(appId, modId) {
+      state.calls.push(['revoke', modId]);
+      const m = state.mods.find((x) => x.modId === modId);
+      const had = !!m?.callerConsented;
+      if (m) m.callerConsented = false;
+      return had;
+    },
+    async revokeAuthorTrust(appId, gridId, authorId) {
+      state.calls.push(['forget', gridId, authorId]);
+      const theirs = state.mods.filter((x) => x.authorId === authorId);
+      for (const m of theirs) {
+        m.callerTrustsAuthor = false;
+        m.callerConsented = false;
+      }
+      return theirs.length > 0;
     },
     async modClientArtifactBytes(appId, modId) {
       state.calls.push(['fetch', modId]);
@@ -657,4 +691,216 @@ test('a listing that fails rejects refresh and leaves what runs running', async 
   };
   await assert.rejects(halves.refresh(), /network down/);
   assert.deepEqual(halves.running.map((m) => m.modId), ['1']);
+});
+
+test('a CLIENT half\u2019s log lines reach onLog with the mod they came from; no sink, no onLog', async () => {
+  const { exec } = fakeGrid([listed('1', { callerConsented: true })]);
+  const seen = [];
+  const { halves, made } = runner(exec, { onLog: (line, mod) => seen.push([mod.modId, line.message]) });
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  made[0].options.onLog({ level: 'info', message: 'ready', moduleName: 'mod-1' });
+  assert.deepEqual(seen, [['1', 'ready']]);
+
+  const quiet = runner(fakeGrid([listed('2', { callerConsented: true })]).exec);
+  quiet.halves.enterGrid(GRID);
+  await quiet.halves.refresh();
+  assert.equal(quiet.made[0].options.onLog, undefined);
+});
+
+test('invoke reaches the handle_invoke of a running CLIENT half, and only a running one', async () => {
+  const { exec } = fakeGrid([listed('1', { callerConsented: true }), listed('2')]);
+  const { halves, made } = runner(exec);
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  made[0].invoke = async (payload) => new Uint8Array([...payload].reverse());
+  assert.deepEqual([...(await halves.invoke('1', new Uint8Array([1, 2, 3])))], [3, 2, 1]);
+  await assert.rejects(halves.invoke('2', new Uint8Array([1])), /mod 2 is not running/);
+  delete made[0].invoke;
+  await assert.rejects(halves.invoke('1', new Uint8Array([1])), /cannot invoke/);
+  halves.stop();
+  await assert.rejects(halves.invoke('1', new Uint8Array([1])), /not running/);
+});
+
+test('revoke stops a consented CLIENT half, takes the consent back and does not ask about it again here', async () => {
+  const { state, exec } = fakeGrid([listed('1'), listed('2', { authorId: '43', authorCapabilityHash: 'b'.repeat(64) })]);
+  const prompts = [];
+  const { halves, events, made } = runner(exec, {
+    ask: 'mod',
+    confirm: (p) => (prompts.push(p.mods[0].modId), true),
+  });
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  assert.deepEqual(halves.running.map((m) => m.modId), ['1', '2']);
+
+  assert.equal(await halves.revoke('1'), true);
+  assert.deepEqual(halves.running.map((m) => m.modId), ['2']);
+  assert.equal(made[0].stopped, 1);
+  assert.deepEqual(events.at(-1), ['stopped', '1', 'revoked']);
+  assert.deepEqual(state.calls.filter(([op]) => op === 'revoke' || op === 'forget'), [['revoke', '1']]);
+  assert.equal(state.mods[0].callerConsented, false);
+
+  await halves.refresh();
+  await halves.refresh();
+  assert.deepEqual(prompts, ['1', '2'], 'the revoked half is not asked about again on this grid');
+  assert.deepEqual(halves.running.map((m) => m.modId), ['2']);
+  assert.equal(await halves.revoke('404'), false, 'nothing listed by that id');
+
+  // Back on the grid later, it is a question again.
+  halves.enterGrid(null);
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  assert.deepEqual(prompts, ['1', '2', '1']);
+});
+
+test('revoke of a CLIENT half run through trust takes the trust back and keeps the author\u2019s others running', async () => {
+  const { state, exec } = fakeGrid([
+    listed('1', { callerTrustsAuthor: true }),
+    listed('2', { callerTrustsAuthor: true }),
+  ]);
+  const { halves, events } = runner(exec, { confirm: () => true });
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  assert.deepEqual(halves.running.map((m) => m.modId), ['1', '2']);
+
+  assert.equal(await halves.revoke('1'), true);
+  assert.deepEqual(state.calls.filter(([op]) => ['revoke', 'forget', 'consent', 'trust'].includes(op)), [
+    ['revoke', '1'],
+    ['forget', '5', '42'],
+    ['consent', '2', HASH],
+  ]);
+  await halves.refresh();
+  assert.deepEqual(halves.running.map((m) => m.modId), ['2'], 'the other half runs on its own consent');
+  assert.ok(!events.some((e) => e[0] === 'stopped' && e[1] === '2'), 'and never stopped');
+  assert.equal(state.mods[0].callerTrustsAuthor, false);
+  assert.equal(state.mods[0].callerConsented, false);
+});
+
+test('forgetAuthor stops every CLIENT half of the author here and takes the trust back', async () => {
+  const { state, exec } = fakeGrid([
+    listed('1', { callerTrustsAuthor: true }),
+    listed('2', { callerTrustsAuthor: true }),
+    listed('3', { authorId: '43', authorCapabilityHash: 'b'.repeat(64), callerConsented: true }),
+  ]);
+  const prompts = [];
+  const { halves, events } = runner(exec, { confirm: (p) => (prompts.push(p.authorId), true) });
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  assert.deepEqual(halves.running.map((m) => m.modId), ['1', '2', '3']);
+
+  assert.equal(await halves.forgetAuthor('42'), true);
+  assert.deepEqual(halves.running.map((m) => m.modId), ['3']);
+  assert.deepEqual(
+    events.filter((e) => e[0] === 'stopped').map((e) => e.slice(1)),
+    [['1', 'revoked'], ['2', 'revoked']],
+  );
+  assert.deepEqual(state.calls.filter(([op]) => op === 'forget'), [['forget', '5', '42']]);
+  await halves.refresh();
+  assert.deepEqual(prompts, [], 'the author is not asked about again on this grid');
+  assert.deepEqual(halves.running.map((m) => m.modId), ['3']);
+});
+
+test('a CLIENT half taken back while it is fetched never starts', async () => {
+  const { state, exec } = fakeGrid([listed('1', { callerConsented: true })]);
+  let release;
+  const held = new Promise((resolve) => (release = resolve));
+  const fetch = exec.modClientArtifactBytes;
+  exec.modClientArtifactBytes = async (...args) => {
+    await held;
+    return fetch(...args);
+  };
+  const { halves, made } = runner(exec);
+  halves.enterGrid(GRID);
+  const refreshed = halves.refresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(await halves.revoke('1'), true);
+  release();
+  await refreshed;
+  assert.equal(made.length, 0, 'no broker was made for it');
+  assert.deepEqual(halves.running, []);
+  assert.deepEqual(state.calls.filter(([op]) => op === 'revoke'), [['revoke', '1']]);
+});
+
+test('a yes answered after the half was taken back is not sent, and a consent on its way lands before the revoke', async () => {
+  // The player revokes while the question about the same half is still open.
+  {
+    const { state, exec } = fakeGrid([listed('1', { callerConsented: true }), listed('2')]);
+    let answer;
+    const asked = new Promise((resolve) => (answer = resolve));
+    const { halves } = runner(exec, { ask: 'mod', confirm: () => asked });
+    halves.enterGrid(GRID);
+    const refreshed = halves.refresh();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(await halves.revoke('2'), true);
+    answer(true);
+    await refreshed;
+    assert.ok(!state.calls.some(([op, modId]) => op === 'consent' && modId === '2'), 'the late yes was not sent');
+    assert.deepEqual(halves.running.map((m) => m.modId), ['1']);
+  }
+  // A consent already sent when the player revokes reaches the API first, so the revoke wins.
+  {
+    const { state, exec } = fakeGrid([listed('1')]);
+    let land;
+    const consent = exec.consentClientMod;
+    exec.consentClientMod = async (...args) => {
+      await new Promise((resolve) => (land = resolve));
+      return consent(...args);
+    };
+    const { halves } = runner(exec, { ask: 'mod', confirm: () => true });
+    halves.enterGrid(GRID);
+    const refreshed = halves.refresh();
+    while (!land) await new Promise((resolve) => setImmediate(resolve));
+    const revoked = halves.revoke('1');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(!state.calls.some(([op]) => op === 'revoke'), 'the revoke waits for the consent in flight');
+    land();
+    assert.equal(await revoked, true);
+    await refreshed;
+    const order = state.calls.filter(([op]) => op === 'consent' || op === 'revoke').map(([op]) => op);
+    assert.deepEqual(order, ['consent', 'revoke']);
+    assert.equal(state.mods[0].callerConsented, false, 'the server ends revoked');
+    assert.deepEqual(halves.running, []);
+  }
+});
+
+test('two revokes in a row of an author\u2019s trusted halves leave both taken back on the server', async () => {
+  const { state, exec } = fakeGrid([
+    listed('1', { callerTrustsAuthor: true }),
+    listed('2', { callerTrustsAuthor: true }),
+  ]);
+  const { halves } = runner(exec, { confirm: () => true });
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  await Promise.all([halves.revoke('1'), halves.revoke('2')]);
+  assert.ok(!state.calls.some(([op, modId]) => op === 'consent' && modId === '2'), 'the second half was not consented again');
+  for (const m of state.mods) {
+    assert.equal(m.callerConsented, false, m.modId);
+    assert.equal(m.callerTrustsAuthor, false, m.modId);
+  }
+  await halves.refresh();
+  assert.deepEqual(halves.running, []);
+});
+
+test('a revoke the API refuses rejects, and the half stays stopped on this visit', async () => {
+  const { exec } = fakeGrid([listed('1', { callerConsented: true })]);
+  exec.revokeClientModConsent = async () => {
+    throw graphqlError('INTERNAL_SERVER_ERROR');
+  };
+  const { halves } = runner(exec);
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  await assert.rejects(halves.revoke('1'), (e) => e instanceof CrowdyGraphQLError);
+  await halves.refresh();
+  assert.deepEqual(halves.running, [], 'still consented on the server, but not run again here');
+});
+
+test('revoke and forgetAuthor need the revoke calls on exec', async () => {
+  const { exec } = fakeGrid([listed('1', { callerConsented: true })]);
+  delete exec.revokeClientModConsent;
+  delete exec.revokeAuthorTrust;
+  const { halves } = runner(exec);
+  halves.enterGrid(GRID);
+  await halves.refresh();
+  await assert.rejects(halves.revoke('1'), /cannot take consent back/);
+  await assert.rejects(halves.forgetAuthor('42'), /cannot take consent back/);
 });

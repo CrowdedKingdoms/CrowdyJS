@@ -1,14 +1,11 @@
-import type { CrowdyStudioServerEngine } from './controller.js';
 import {
   projectTargets,
   type CreateCrowdyStudioProjectInput,
   type CrowdyStudioProjectFile,
   type CrowdyStudioProjectKind,
   type CrowdyStudioProjectMetadata,
-  type CrowdyStudioTarget,
 } from './models.js';
 
-const SDK_VERSION = '0.1.8';
 /** crowdy-client-sdk, what a ck-exec mod's CLIENT half builds on; the build points it at the platform's copy. */
 const CLIENT_SDK_VERSION = '0.1.0';
 
@@ -28,31 +25,27 @@ export interface CrowdyStudioNewProjectOptions {
   kind: CrowdyStudioProjectKind;
   description?: string;
   /**
-   * The SERVER target starts from this crate, its package named for the project, instead of
-   * the legacy compute SDK crate, and the server module name fits a mod's. A mod has no
-   * client pairing, so a full-stack project records `NONE`.
+   * The SERVER target's crate, its package named for the project; required when the kind
+   * has a SERVER target.
    */
   modStarter?: CrowdyStudioModStarter;
-  /**
-   * `'ck-exec'`: the project is a ck-exec mod. Its SERVER target starts from `modStarter`
-   * (required with one), its CLIENT target from a `crowdy-client-sdk` crate, the mod's CLIENT
-   * half, and both module names fit a mod's. Default `'player-compute'`, where the CLIENT target
-   * is a legacy compute SDK crate.
-   */
-  engine?: CrowdyStudioServerEngine;
 }
 
-/** Create a compile-oriented starter without introducing a raw JSON source map. */
+/**
+ * Create a compile-oriented starter without introducing a raw JSON source map. The project is a
+ * ck-exec mod: the SERVER target is the mod starter's crate, the CLIENT target a
+ * `crowdy-client-sdk` crate (the mod's CLIENT half), and both module names fit a mod's (a mod has
+ * no client pairing, so the preference is `NONE`).
+ */
 export function createCrowdyStudioStarterProject(
   options: CrowdyStudioNewProjectOptions,
 ): CreateCrowdyStudioProjectInput {
   const mod = options.modStarter;
-  const exec = options.engine === 'ck-exec';
   const targets = projectTargets(options.kind);
-  if (exec && targets.includes('SERVER') && !mod) {
-    throw new Error('A ck-exec SERVER target starts from the mod starter (client.exec.modStarter)');
+  if (targets.includes('SERVER') && !mod) {
+    throw new Error('A SERVER target starts from the mod starter (client.exec.modStarter)');
   }
-  const base = mod || exec ? modModuleBase(options.name) : moduleName(options.name);
+  const base = modModuleBase(options.name);
   const metadata: CrowdyStudioProjectMetadata = {
     name: options.name.trim() || 'Untitled mod',
     ...(options.description?.trim()
@@ -64,8 +57,7 @@ export function createCrowdyStudioStarterProject(
     ...(targets.includes('CLIENT')
       ? { clientModuleName: `${base}-client` }
       : {}),
-    pairingPreference:
-      options.kind === 'FULL_STACK' && !mod && !exec ? 'REQUIRED' : 'NONE',
+    pairingPreference: 'NONE',
   };
   return {
     appId: options.appId,
@@ -74,12 +66,8 @@ export function createCrowdyStudioStarterProject(
     metadata,
     files: targets.flatMap((target) =>
       target === 'SERVER'
-        ? mod
-          ? modStarterFiles(mod, metadata.serverModuleName!)
-          : starterFiles(target, metadata.serverModuleName!)
-        : exec
-          ? clientHalfStarterFiles(metadata.clientModuleName!)
-          : starterFiles(target, metadata.clientModuleName!),
+        ? modStarterFiles(mod!, metadata.serverModuleName!)
+        : clientHalfStarterFiles(metadata.clientModuleName!),
     ),
   };
 }
@@ -200,105 +188,6 @@ function modModuleBase(value: string): string {
   const cut = (/^[a-z]/u.test(slug) ? slug : `mod-${slug}`).slice(0, MOD_BASE_MAX);
   // The slug has no runs of dashes, so the cut leaves at most one at the end.
   return cut.endsWith('-') ? cut.slice(0, -1) : cut;
-}
-
-function starterFiles(
-  target: CrowdyStudioTarget,
-  name: string,
-): CrowdyStudioProjectFile[] {
-  return [
-    {
-      target,
-      path: 'Cargo.toml',
-      content: cargoToml(target, name),
-    },
-    {
-      target,
-      path: 'src/lib.rs',
-      content: target === 'SERVER' ? serverSource() : clientSource(),
-    },
-  ];
-}
-
-function cargoToml(target: CrowdyStudioTarget, name: string): string {
-  const clientTick =
-    target === 'CLIENT'
-      ? `
-# How often the browser calls CLIENT on_tick (clamped 16–1000 ms).
-# 1000 = HUD/text. 50 = physics minigames (pool). 16 = shooters, if a tick stays cheap.
-[package.metadata.crowdy]
-tick_interval_ms = 1000
-`
-      : '';
-  return `[package]
-name = "${name}"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-${clientTick}
-[dependencies]
-crowdy-compute-sdk = "${SDK_VERSION}"
-serde_json = "1"
-`;
-}
-
-function serverSource(): string {
-  return `use crowdy_compute_sdk as crowdy;
-
-fn on_init() {
-    // Runs once when this SERVER module starts on the owned grid.
-}
-
-fn on_tick(_dt_ms: u32) {
-    // The host only ticks when tickIntervalMs is set (omit/0 = invoke-only).
-    // Server host calls are permission checked and clamped to the owned grid.
-    // Type "crowdy::" for the platform-indexed host-call surface.
-}
-
-fn on_invoke(payload: &[u8]) -> Vec<u8> {
-    // Called by Crowdy Studio's Invoke panel or an allowed game caller.
-    payload.to_vec()
-}
-
-crowdy::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);
-`;
-}
-
-function clientSource(): string {
-  return `use crowdy_compute_sdk as crowdy;
-
-fn on_init() {
-    // Runs after the hash-bound CLIENT artifact enters the browser sandbox.
-}
-
-fn on_tick(_dt_ms: u32) {
-    // dt_ms is wall time since the last tick. The host interval comes from
-    // Cargo.toml [package.metadata.crowdy] tick_interval_ms (default 1000).
-    // Client host calls are allow-listed by PlayerCodeBroker. Presentation
-    // effects (for example HUD updates) never receive the page's app token.
-    // Type "crowdy::" for lifecycle and host-call completions.
-    //
-    // Mouse (holodeck canvas only; Studio chrome is omitted). Drain every tick:
-    //   let data = crowdy::api::pointer_clicks().unwrap_or(serde_json::json!({}));
-    // data["clicks"] = [{ "t": "down"|"up", "button": 0, "atMs", "heldMs", "nx", "ny" }]
-    // data["buttons"] is MouseEvent.buttons (1 = left held).
-    // data["holdingMs"]["0"] is ms the left button has been down (power meter).
-    // Click-to-charge: start on left down, read holdingMs while held, fire on up.
-}
-
-fn on_invoke(payload: &[u8]) -> Vec<u8> {
-    payload.to_vec()
-}
-
-crowdy::register_module!(init: on_init, tick: on_tick, invoke: on_invoke);
-`;
-}
-
-function moduleName(value: string): string {
-  const slug = slugModuleName(value).slice(0, 48);
-  return slug || 'player-mod';
 }
 
 /**

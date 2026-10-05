@@ -30,6 +30,10 @@ function brokerOn(sdk, { gridId, moduleName, bus, calls = [] }) {
   const broker = new sdk.PlayerCodeBroker({
     workerUrl: 'player-worker.js',
     workerFactory: () => worker,
+    artifactHash: 'a'.repeat(64),
+    hashArtifact: async () => 'a'.repeat(64),
+    fuelPerDispatch: 1000n,
+    consentedHostCalls: Object.values(sdk.EXEC_CLIENT_HOST_CALLS).flatMap((set) => [...set]),
     grid: {
       low: { x: 0n, y: 0n, z: 0n },
       high: { x: 1n, y: 1n, z: 1n },
@@ -45,22 +49,23 @@ function brokerOn(sdk, { gridId, moduleName, bus, calls = [] }) {
   return { worker, broker, calls };
 }
 
-test('the broker allowlist is the client half of the host catalog', async () => {
+test('the broker allowlist is the client half of the host catalog less the legacy engines\u2019 calls', async () => {
   const sdk = await loadSdk();
   const client = sdk.GENERATED_HOST_CATALOG.functions
     .filter((fn) => fn.targets.includes('client'))
-    .map((fn) => fn.name)
-    .sort();
-  const allowed = Object.values(sdk.ALLOWED_HOST_CALLS)
-    .flatMap((set) => [...set])
-    .sort();
-  assert.deepEqual(allowed, client);
-  for (const fn of ['emit_channel', 'emit_event', 'edge_add', 'sessions_list', 'container_get_batch']) {
-    assert.ok(allowed.includes(fn), `${fn} is offered to client mods (DN-10)`);
+    .map((fn) => fn.name);
+  const allowed = Object.values(sdk.EXEC_CLIENT_HOST_CALLS).flatMap((set) => [...set]);
+  assert.ok(allowed.every((fn) => client.includes(fn)), 'every allowed call is a client call');
+  for (const fn of ['emit_channel', 'emit_event', 'grid_permission_check', 'avatar_state_get']) {
+    assert.ok(allowed.includes(fn), `${fn} is offered to CLIENT halves (DN-10)`);
   }
+  for (const fn of ['edge_add', 'sessions_list', 'container_get_batch', 'grid_state_get']) {
+    assert.ok(!allowed.includes(fn), `${fn} went with the legacy engines`);
+  }
+  assert.equal(sdk.ALLOWED_HOST_CALLS, undefined, 'the legacy allowlist is gone');
 });
 
-test('grid parity calls reach the host; a foreign gridId is refused', async () => {
+test('grid parity calls reach the host; a foreign gridId and a legacy call are refused', async () => {
   const sdk = await loadSdk();
   const { worker, broker, calls } = brokerOn(sdk, {
     gridId: '42',
@@ -68,17 +73,21 @@ test('grid parity calls reach the host; a foreign gridId is refused', async () =
     bus: new sdk.ClientGridEventBus(),
   });
   await broker.start(new ArrayBuffer(8));
-  worker.receive({ type: 'hostcall', id: 1, fn: 'sessions_list', args: {} });
+  worker.receive({ type: 'hostcall', id: 1, fn: 'user_state_get', args: {} });
   worker.receive({ type: 'hostcall', id: 2, fn: 'emit_channel', args: { channelId: '9', payloadBase64: 'AA==' } });
-  worker.receive({ type: 'hostcall', id: 3, fn: 'grid_state_get', args: { gridId: '43' } });
+  worker.receive({ type: 'hostcall', id: 3, fn: 'grid_permission_check', args: { gridId: '43', permissionKey: 'build' } });
+  worker.receive({ type: 'hostcall', id: 4, fn: 'grid_state_get', args: { gridId: '42' } });
   await tick();
   assert.deepEqual(
     calls.map((c) => c.fn),
-    ['sessions_list', 'emit_channel'],
+    ['user_state_get', 'emit_channel'],
   );
-  const refused = worker.sent.find((m) => m.id === 3);
-  assert.equal(refused.ok, false);
-  assert.match(refused.error.message, /outside the player grid/);
+  const foreign = worker.sent.find((m) => m.id === 3);
+  assert.equal(foreign.ok, false);
+  assert.match(foreign.error.message, /outside the player grid/);
+  const legacy = worker.sent.find((m) => m.id === 4);
+  assert.equal(legacy.ok, false);
+  assert.match(legacy.error.message, /not allowed/);
   broker.stop();
 });
 

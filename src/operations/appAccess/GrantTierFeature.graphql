@@ -1,0 +1,7 @@
+mutation GrantTierFeature($input: GrantTierFeatureInput!) {
+  gameModelGrantTierFeature(input: $input) {
+    appId
+    tierId
+    featureKey
+  }
+}

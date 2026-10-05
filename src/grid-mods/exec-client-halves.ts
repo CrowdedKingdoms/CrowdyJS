@@ -1,7 +1,8 @@
-import type {
-  ExecAPI,
-  ExecClientCapabilitySummary,
-  ExecGridClientMod,
+import {
+  isNameList,
+  type ExecAPI,
+  type ExecClientCapabilitySummary,
+  type ExecGridClientMod,
 } from '../domains/exec.js';
 import { CrowdyGraphQLError, CrowdyProtocolError } from '../errors.js';
 import {
@@ -9,6 +10,7 @@ import {
   type PlayerCodeBrokerOptions,
   type PlayerCodeGridBounds,
   type PlayerCodeHostCall,
+  type PlayerCodeLogLine,
   type PlayerCodePresentation,
 } from '../player-runtime/player-code-broker.js';
 
@@ -36,14 +38,16 @@ export interface ExecClientHalfPrompt {
 /**
  * Why a CLIENT half stopped: no longer listed (`removed`), a new digest, capability hash or tick
  * interval (`changed`), listed without the player's consent or trust (`unconsented`), refused by
- * `filter` (`filtered`), the runner left the grid (`left-grid`) or was stopped (`stopped`), or
- * the broker's circuit breaker tripped (`circuit-open`).
+ * `filter` (`filtered`), the player took their agreement to it back (`revoked`: `revoke`,
+ * `forgetAuthor`), the runner left the grid (`left-grid`) or was stopped (`stopped`), or the
+ * broker's circuit breaker tripped (`circuit-open`).
  */
 export type ExecClientHalfStopReason =
   | 'removed'
   | 'changed'
   | 'unconsented'
   | 'filtered'
+  | 'revoked'
   | 'left-grid'
   | 'stopped'
   | 'circuit-open';
@@ -69,10 +73,14 @@ export interface ExecClientHalfError {
 export interface ExecClientHalfBroker {
   start(artifact: ArrayBuffer): Promise<void>;
   stop(): void;
+  /** `PlayerCodeBroker.invoke`: the module's `handle_invoke`. */
+  invoke?(payload: Uint8Array, options?: { timeoutMs?: number }): Promise<Uint8Array>;
 }
 
 export interface ExecClientHalvesOptions {
-  exec: Pick<ExecAPI, 'gridClientMods' | 'consentClientMod' | 'trustAuthor' | 'modClientArtifactBytes'>;
+  /** `client.exec`; `revoke` and `forgetAuthor` need its two revoke calls as well. */
+  exec: Pick<ExecAPI, 'gridClientMods' | 'consentClientMod' | 'trustAuthor' | 'modClientArtifactBytes'> &
+    Partial<Pick<ExecAPI, 'revokeClientModConsent' | 'revokeAuthorTrust'>>;
   appId: string;
   /** The platform glue worker (`@crowdedkingdoms/crowdyjs/player-glue-worker`), same origin. */
   workerUrl: string | URL;
@@ -82,6 +90,11 @@ export interface ExecClientHalvesOptions {
    */
   onHostCall: (call: PlayerCodeHostCall, mod: ExecGridClientMod) => Promise<unknown>;
   onPresentation?: (presentation: PlayerCodePresentation, mod: ExecGridClientMod) => void;
+  /**
+   * Each CLIENT half's `crowdy::log` lines, bounded by the broker (see
+   * `PlayerCodeBrokerOptions.onLog`). The text is the mod author's: render it as text.
+   */
+  onLog?: (line: PlayerCodeLogLine, mod: ExecGridClientMod) => void;
   /**
    * Asks the player about CLIENT halves they neither consented to nor trust the author of; true
    * consents. Without it, only what the player already agreed to runs. A declined question is
@@ -149,8 +162,7 @@ function refusal(error: unknown): ExecClientHalfError['reason'] {
  * that filled the cache; consent and trust are the listing's, on every refresh.
  *
  * `NOT_FOUND` (not served to this player now) and `RATE_LIMITED` hold that CLIENT half back for
- * a while instead of fetching on every refresh. The legacy grid-attached client mods
- * (`marketplace.gridClientMods`) are not this runner's.
+ * a while instead of fetching on every refresh.
  */
 export class ExecClientHalves {
   private grid: ExecClientHalvesGrid | null = null;
@@ -160,6 +172,11 @@ export class ExecClientHalves {
   private readonly retryAt = new Map<string, number>();
   private readonly declined = new Set<string>();
   private readonly approved = new Set<string>();
+  /** CLIENT halves the player took back on this grid, by identity: not run or asked about again. */
+  private readonly revoked = new Set<string>();
+  private listed: readonly ExecGridClientMod[] = [];
+  private pendingAgreement: Promise<unknown> | null = null;
+  private revoking: Promise<unknown> = Promise.resolve();
   private inFlight: { generation: number; done: Promise<void> } | null = null;
 
   constructor(private readonly options: ExecClientHalvesOptions) {}
@@ -170,8 +187,7 @@ export class ExecClientHalves {
     this.stopAll('left-grid');
     this.grid = grid ? { ...grid } : null;
     this.generation++;
-    this.declined.clear();
-    this.approved.clear();
+    this.forgetGrid();
   }
 
   /** The CLIENT halves running now. */
@@ -193,13 +209,127 @@ export class ExecClientHalves {
     return done;
   }
 
+  /**
+   * Calls the `handle_invoke` export of the running CLIENT half of mod `modId` with `payload`
+   * and resolves with its reply bytes (see `PlayerCodeBroker.invoke`). Rejects when that CLIENT
+   * half is not running.
+   */
+  invoke(modId: string, payload: Uint8Array, options?: { timeoutMs?: number }): Promise<Uint8Array> {
+    const worker = this.workers.get(modId);
+    if (!worker?.started) {
+      return Promise.reject(new Error(`the CLIENT half of mod ${modId} is not running`));
+    }
+    if (!worker.broker.invoke) {
+      return Promise.reject(new Error('this broker cannot invoke its module'));
+    }
+    return worker.broker.invoke(payload, options);
+  }
+
+  /**
+   * Stops the CLIENT half of mod `modId` and takes back the player's agreement to it, so it is not
+   * served to them again until they agree again: their consent to it
+   * (`exec.revokeClientModConsent`) and, when it is served because they trust its author, that
+   * trust (`exec.revokeAuthorTrust`), consenting instead to each of the author's other running
+   * halves so those keep running. It is not asked about again on this grid until it changes.
+   * Resolves false when the grid lists no such CLIENT half. It stops at once; when the API then
+   * refuses or fails, the promise rejects, the half stays stopped on this visit and the server
+   * still holds the agreement, so tell the player.
+   */
+  async revoke(modId: string): Promise<boolean> {
+    const grid = this.grid;
+    const mod =
+      this.listed.find((m) => String(m.modId) === String(modId)) ?? this.workers.get(String(modId))?.mod;
+    if (!grid || !mod) return false;
+    const exec = this.revokeCalls();
+    const { appId } = this.options;
+    const others = [...this.workers.values()]
+      .map((w) => w.mod)
+      .filter((m) => m.modId !== mod.modId && String(m.authorId) === String(mod.authorId));
+    this.revoked.add(identity(mod));
+    this.dropApprovals(mod);
+    this.stopWorker(mod.modId, 'revoked');
+    return this.inTurn(async () => {
+      await exec.revokeClientModConsent(appId, mod.modId);
+      if (mod.callerTrustsAuthor) {
+        await exec.revokeAuthorTrust(appId, grid.gridId, String(mod.authorId));
+        for (const other of others) {
+          // Taken back itself since: it keeps nothing.
+          if (this.revoked.has(identity(other))) continue;
+          try {
+            await this.options.exec.consentClientMod(appId, other.modId, other.capabilityHash);
+          } catch (error) {
+            this.options.onError?.({ mod: other, stage: 'consent', reason: refusal(error), error });
+          }
+        }
+      }
+      return true;
+    });
+  }
+
+  /**
+   * Stops every CLIENT half of author `authorId` on this grid and takes back the player's trust in
+   * them here with their consent to each (`exec.revokeAuthorTrust`). The halves listed now are
+   * not asked about again on this grid until they change. Resolves the API's answer: true when
+   * anything was taken back. As with {@link revoke}, they stop at once and a refusal rejects.
+   */
+  async forgetAuthor(authorId: string): Promise<boolean> {
+    const grid = this.grid;
+    if (!grid) return false;
+    const exec = this.revokeCalls();
+    const theirs = (m: ExecGridClientMod) => String(m.authorId) === String(authorId);
+    for (const mod of [...this.listed.filter(theirs), ...[...this.workers.values()].map((w) => w.mod).filter(theirs)]) {
+      this.revoked.add(identity(mod));
+      this.dropApprovals(mod);
+      this.stopWorker(mod.modId, 'revoked');
+    }
+    return this.inTurn(() => exec.revokeAuthorTrust(this.options.appId, grid.gridId, String(authorId)));
+  }
+
+  /**
+   * Runs `work` after every revoke before it, and after a consent or trust already on its way to
+   * the API, so the player's last word is the one the server keeps.
+   */
+  private inTurn<T>(work: () => Promise<T>): Promise<T> {
+    const turn = this.revoking
+      .catch(() => {})
+      .then(() => this.pendingAgreement?.catch(() => {}))
+      .then(work);
+    this.revoking = turn;
+    return turn;
+  }
+
   /** Stops every CLIENT half and leaves the grid; the module cache stays. */
   stop(): void {
     this.stopAll('stopped');
     this.grid = null;
     this.generation++;
+    this.forgetGrid();
+  }
+
+  private forgetGrid(): void {
     this.declined.clear();
     this.approved.clear();
+    this.revoked.clear();
+    this.listed = [];
+  }
+
+  private revokeCalls(): Pick<ExecAPI, 'revokeClientModConsent' | 'revokeAuthorTrust'> {
+    const { revokeClientModConsent, revokeAuthorTrust } = this.options.exec;
+    if (!revokeClientModConsent || !revokeAuthorTrust) {
+      throw new Error('this runner cannot take consent back: its exec has no revokeClientModConsent / revokeAuthorTrust');
+    }
+    return {
+      revokeClientModConsent: revokeClientModConsent.bind(this.options.exec),
+      revokeAuthorTrust: revokeAuthorTrust.bind(this.options.exec),
+    };
+  }
+
+  /** A question the player said yes to for `mod`, not yet gone through, is not sent after all. */
+  private dropApprovals(mod: ExecGridClientMod): void {
+    const prefixes = [`author\u0000${mod.authorId}\u0000`, `mod\u0000${mod.modId}\u0000`];
+    for (const key of [...this.approved]) {
+      if (prefixes.some((prefix) => key.startsWith(prefix))) this.approved.delete(key);
+    }
   }
 
   private async reconcile(generation: number): Promise<void> {
@@ -209,11 +339,13 @@ export class ExecClientHalves {
     const current = () => generation === this.generation;
     let listed = await exec.gridClientMods(appId, grid.gridId);
     if (!current()) return;
+    this.listed = listed;
     this.stopStale(listed);
     if (await this.askAbout(listed, grid, current)) {
       if (!current()) return;
       listed = await exec.gridClientMods(appId, grid.gridId);
       if (!current()) return;
+      this.listed = listed;
       this.stopStale(listed);
     }
     for (const mod of listed) {
@@ -302,13 +434,17 @@ export class ExecClientHalves {
         // registered is retried on the next refresh without asking again.
         this.approved.add(key);
       }
+      // Taken back while the question was open: a trust would cover the half again.
+      if (prompt.mods.some((m) => this.revoked.has(identity(m)))) continue;
+      let agreement: Promise<unknown> | null = null;
       try {
         const { exec, appId } = this.options;
-        if (prompt.kind === 'author') {
-          await exec.trustAuthor(appId, grid.gridId, prompt.authorId, prompt.capabilityHash);
-        } else {
-          await exec.consentClientMod(appId, prompt.mods[0].modId, prompt.capabilityHash);
-        }
+        agreement =
+          prompt.kind === 'author'
+            ? exec.trustAuthor(appId, grid.gridId, prompt.authorId, prompt.capabilityHash)
+            : exec.consentClientMod(appId, prompt.mods[0].modId, prompt.capabilityHash);
+        this.pendingAgreement = agreement;
+        await agreement;
         this.approved.delete(key);
         agreed = true;
       } catch (error) {
@@ -316,6 +452,8 @@ export class ExecClientHalves {
         // The hash moved on: the next listing brings the new one, and a new question.
         if (reason === 'conflict') this.approved.delete(key);
         this.options.onError?.({ mod: prompt.mods[0], stage: 'consent', reason, error });
+      } finally {
+        if (this.pendingAgreement === agreement) this.pendingAgreement = null;
       }
     }
     return agreed;
@@ -329,7 +467,7 @@ export class ExecClientHalves {
     // What the player consented to, and what the served artifact itself lists, bound the
     // module's host calls in the broker.
     const consented = mod.capabilitySummary?.hostFunctions;
-    if (!Array.isArray(consented)) {
+    if (!isNameList(consented)) {
       this.fail(
         mod,
         'start',
@@ -367,6 +505,8 @@ export class ExecClientHalves {
         return;
       }
     }
+    // Taken back while it was fetched.
+    if (!this.wanted(mod)) return;
     const served = module.hostFunctions;
     const broker: ExecClientHalfBroker = (
       this.options.brokerFactory ?? ((o) => new PlayerCodeBroker(o))
@@ -381,6 +521,7 @@ export class ExecClientHalves {
       consentedHostCalls: consented.filter((fn) => served.includes(fn)),
       onHostCall: (call) => this.options.onHostCall(call, mod),
       onPresentation: (presentation) => this.options.onPresentation?.(presentation, mod),
+      ...(this.options.onLog ? { onLog: (line: PlayerCodeLogLine) => this.options.onLog?.(line, mod) } : {}),
       onCircuitOpen: () => {
         if (this.workers.get(mod.modId)?.broker !== broker) return;
         this.retryAt.set(identity(mod), this.now() + (this.options.failedRetryMs ?? 60_000));
@@ -426,6 +567,7 @@ export class ExecClientHalves {
   }
 
   private wanted(mod: ExecGridClientMod): boolean {
+    if (this.revoked.has(identity(mod))) return false;
     return this.options.filter ? this.options.filter(mod) : true;
   }
 

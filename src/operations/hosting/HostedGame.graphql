@@ -40,12 +40,6 @@ query HostedGames {
   }
 }
 
-query AllHostedGames {
-  allHostedGames {
-    ...HostedGameFields
-  }
-}
-
 query MyHostedGames {
   myHostedGames {
     ...HostedGameFields
@@ -101,18 +95,6 @@ mutation AbandonGamePublish($slug: String!, $publishId: BigInt!) {
 
 mutation SetHostedGameEnabled($input: SetHostedGameEnabledInput!) {
   setHostedGameEnabled(input: $input) {
-    ...HostedGameFields
-  }
-}
-
-mutation SetHostedGameListing($input: SetHostedGameListingInput!) {
-  setHostedGameListing(input: $input) {
-    ...HostedGameFields
-  }
-}
-
-mutation TakeDownHostedGame($slug: String!, $takenDown: Boolean) {
-  takeDownHostedGame(slug: $slug, takenDown: $takenDown) {
     ...HostedGameFields
   }
 }

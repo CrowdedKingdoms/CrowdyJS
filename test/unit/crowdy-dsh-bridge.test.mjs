@@ -70,7 +70,7 @@ function fakeController(overrides = {}) {
   };
 }
 
-function bridgeFor(controller, host) {
+function bridgeFor(controller, host, confirmLiveDeploy) {
   return new StudioDshBridge({
     controller,
     transport: { modelBaseUrl: 'http://api.test/v1/model', models: async () => [] },
@@ -79,6 +79,7 @@ function bridgeFor(controller, host) {
     getToken: () => 'tok-1',
     graphqlUrl: 'http://api.test/graphql',
     host,
+    ...(confirmLiveDeploy ? { confirmLiveDeploy } : {}),
   });
 }
 
@@ -121,10 +122,14 @@ test('settings.yaml points the native adapter at the metered endpoint and defaul
 
 test('bridge answers worker requests through the controller and mirrors state changes', async () => {
   const controller = fakeController();
-  const bridge = bridgeFor(controller, {
-    clientLogs: () => ['[client] a', '[client] b', '[client] c'],
-    playerHost: { contractVersion: 'crowdy.player-host/1', async observe() { return { position: { x: '1', y: '2', z: '3' } }; } },
-  });
+  const bridge = bridgeFor(
+    controller,
+    {
+      clientLogs: () => ['[client] a', '[client] b', '[client] c'],
+      playerHost: { contractVersion: 'crowdy.player-host/1', async observe() { return { position: { x: '1', y: '2', z: '3' } }; } },
+    },
+    async ({ mode }) => mode === 'draft',
+  );
   bridge.connect();
   nonce = bridge.nonce;
   const worker = new BroadcastChannel(bridge.channelName);
@@ -172,8 +177,8 @@ test('bridge answers worker requests through the controller and mirrors state ch
 
     await assert.rejects(ask(worker, 'studio.screenshot', {}), /does not provide screenshots/);
 
-    // Live deploys need a page-side confirmation hook; this bridge has none.
-    await assert.rejects(ask(worker, 'studio.deployLive', {}), /not enabled on this page/);
+    // This page's confirmation answers no to live deploys.
+    await assert.rejects(ask(worker, 'studio.deployLive', {}), /declined the live deploy/);
     assert.ok(!controller.calls.includes('deployLive'));
 
     // A worker write reloads the editor's copy of the project.
@@ -185,6 +190,47 @@ test('bridge answers worker requests through the controller and mirrors state ch
     bridge.prompt('Fix the warning');
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.deepEqual(events.at(-1).payload, { text: 'Fix the warning', mode: 'queue' });
+  } finally {
+    bridge.detach();
+    worker.close();
+  }
+});
+
+test('a draft test deploys to the grid too, so it runs only after the page-side confirmation says yes', async () => {
+  const unconfirmed = fakeController();
+  const bare = bridgeFor(unconfirmed);
+  bare.connect();
+  nonce = bare.nonce;
+  let worker = new BroadcastChannel(bare.channelName);
+  try {
+    await assert.rejects(ask(worker, 'studio.draftTest', {}), /not enabled on this page/);
+    assert.ok(!unconfirmed.calls.includes('testDraft'), 'no hook, no draft test');
+  } finally {
+    bare.detach();
+    worker.close();
+  }
+
+  const controller = fakeController();
+  const asked = [];
+  let answer = false;
+  const bridge = bridgeFor(controller, undefined, async (summary) => {
+    asked.push(summary);
+    return answer;
+  });
+  bridge.connect();
+  nonce = bridge.nonce;
+  worker = new BroadcastChannel(bridge.channelName);
+  try {
+    await assert.rejects(ask(worker, 'studio.draftTest', {}), /declined the draft test/);
+    assert.ok(!controller.calls.includes('testDraft'));
+    answer = true;
+    const build = await ask(worker, 'studio.draftTest', {});
+    assert.equal(build.mode, 'draft');
+    assert.ok(controller.calls.includes('testDraft'));
+    assert.deepEqual(asked, [
+      { projectName: 'One', mode: 'draft' },
+      { projectName: 'One', mode: 'draft' },
+    ]);
   } finally {
     bridge.detach();
     worker.close();

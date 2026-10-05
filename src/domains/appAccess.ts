@@ -13,6 +13,17 @@ import {
   ArchiveAccessTierDocument,
   GrantAppAccessDocument,
   RevokeAppAccessDocument,
+  DefineAppFeatureDocument,
+  AppFeaturesDocument,
+  GrantTierFeatureDocument,
+  RevokeTierFeatureDocument,
+  TierFeaturesDocument,
+  type DefineAppFeatureInput,
+  type DefineAppFeatureMutation,
+  type AppFeaturesQuery,
+  type GrantTierFeatureInput,
+  type GrantTierFeatureMutation,
+  type TierFeaturesQuery,
   type AppAccessTiersQuery,
   type MyAppAccessQuery,
   type AppUserAccessByAppQuery,
@@ -269,5 +280,54 @@ export class AppAccessAPI {
       userId,
     });
     return data.revokeAppAccess;
+  }
+
+  // -- Tier features -----------------------------------------------------------
+  //
+  // Feature keys an access tier grants. A ck-exec hub checks a player's with the node API's
+  // `players.features`. The fields keep the game model's names (`gameModelDefineFeature`,
+  // ...); they are served beside access tiers.
+
+  /**
+   * Define (or re-describe) a feature key for an app. Idempotent on `(appId, featureKey)`.
+   * Requires the app-admin `manage_apps` permission.
+   */
+  async defineFeature(
+    input: DefineAppFeatureInput,
+  ): Promise<DefineAppFeatureMutation['gameModelDefineFeature']> {
+    const data = await this.api.request(DefineAppFeatureDocument, { input });
+    return data.gameModelDefineFeature;
+  }
+
+  /** The feature keys defined for an app. Requires `manage_apps`. */
+  async features(appId: string): Promise<AppFeaturesQuery['gameModelFeatures']> {
+    const data = await this.api.request(AppFeaturesDocument, { appId });
+    return data.gameModelFeatures;
+  }
+
+  /** Grant a feature key to an access tier. Requires `manage_apps`. */
+  async grantTierFeature(
+    input: GrantTierFeatureInput,
+  ): Promise<GrantTierFeatureMutation['gameModelGrantTierFeature']> {
+    const data = await this.api.request(GrantTierFeatureDocument, { input });
+    return data.gameModelGrantTierFeature;
+  }
+
+  /** Revoke a feature key from an access tier; `true` if a grant was removed. Requires `manage_apps`. */
+  async revokeTierFeature(input: GrantTierFeatureInput): Promise<boolean> {
+    const data = await this.api.request(RevokeTierFeatureDocument, { input });
+    return data.gameModelRevokeTierFeature;
+  }
+
+  /** Tier-to-feature grants for an app, optionally for one tier. Requires `manage_apps`. */
+  async tierFeatures(
+    appId: string,
+    tierId?: string,
+  ): Promise<TierFeaturesQuery['gameModelTierFeatures']> {
+    const data = await this.api.request(TierFeaturesDocument, {
+      appId,
+      ...(tierId !== undefined ? { tierId } : {}),
+    });
+    return data.gameModelTierFeatures;
   }
 }
