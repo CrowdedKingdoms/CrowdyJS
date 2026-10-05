@@ -73,6 +73,21 @@ const CLIENT_SDK_CALLS = [
   'voxel_set',
   'voxels_list',
 ];
+/** Calls the catalog used to offer and a ck-exec CLIENT half now refuses. */
+const LEGACY_ONLY = [
+  'container_create',
+  'container_get',
+  'container_get_batch',
+  'containers_list',
+  'container_delete',
+  'property_set',
+  'model_invoke',
+  'edge_add',
+  'edge_delete',
+  'sessions_list',
+  'grid_state_get',
+  'grid_state_set',
+];
 const flat = (groups) => Object.values(groups).flatMap((s) => [...s]).sort();
 
 test('the allowlist is exactly crowdy-client-sdk\u2019s calls, and the glue names the same', () => {
