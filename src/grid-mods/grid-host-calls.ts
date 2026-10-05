@@ -306,6 +306,13 @@ export function createGridHostCalls(
       case 'teleport_request':
       case 'video_set':
       case 'voice_set':
+      case 'grid_skin_clear':
+      case 'grid_skin_set':
+      case 'mesh_asset_attach':
+      case 'mesh_asset_clear':
+      case 'mesh_asset_register':
+      case 'mesh_asset_spawn':
+      case 'mechanics_emit':
         if (!local?.page) throw new GridHostCallRefused(fn);
         return local.page(fn, args);
       default:

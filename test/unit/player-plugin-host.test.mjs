@@ -33,7 +33,7 @@ const GRID = { low: { x: 0n, y: 0n, z: 0n }, high: { x: 2n, y: 2n, z: 2n } };
 const flush = () => new Promise((r) => setImmediate(r));
 
 async function makeBroker(overrides = {}) {
-  const { PlayerCodeBroker } = await loadSdk();
+  const { PlayerCodeBroker, PLUGIN_HOST_FUNCTIONS } = await loadSdk();
   const worker = new FakeWorker();
   const calls = [];
   const presentations = [];
@@ -41,6 +41,10 @@ async function makeBroker(overrides = {}) {
     workerUrl: 'glue.js',
     workerFactory: () => worker,
     grid: GRID,
+    artifactHash: '0'.repeat(64),
+    hashArtifact: async () => '0'.repeat(64),
+    fuelPerDispatch: 1000n,
+    consentedHostCalls: [...PLUGIN_HOST_FUNCTIONS],
     onHostCall: async (call) => {
       calls.push(call);
       return { ok: true };
