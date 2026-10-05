@@ -8,6 +8,7 @@ mutation UpdateApp($appId: BigInt!, $input: UpdateAppInput!) {
     visibility
     status
     metadata
+    wildernessWritesOpen
     updatedAt
   }
 }

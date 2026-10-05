@@ -7,7 +7,7 @@ import {
   waitFor,
   recorder,
   sampleProvider,
-  sampleCompute,
+  sampleExec,
 } from './fixtures/embed-dom.mjs';
 
 const { CrowdyStudioEmbed, createCrowdyStudioEmbed } = await import(
@@ -39,7 +39,7 @@ function makeEmbed(overrides = {}) {
   const embed = new CrowdyStudioEmbed({
     client: {
       crowdyStudio: provider,
-      playerCompute: sampleCompute(),
+      exec: sampleExec(),
       ...overrides.client,
     },
     appId: () => '2',
@@ -488,46 +488,8 @@ test('routes host calls and mirrors untrusted HUD payloads as text-only preview'
   assert.equal(document.querySelector('.ck-crowdy-studio-hud-layer'), null);
 });
 
-/** Enough of `client.exec` for a Studio that opens and polls; no project is built. */
-function sampleExec() {
-  return {
-    async modStarter() {
-      throw new Error('no project is created here');
-    },
-    async modBuild() {},
-    async modBuildStatus() {},
-    async modDeploy() {},
-    async modSetEnabled() {},
-    async modLogs() {
-      return [];
-    },
-    async connect() {
-      throw new Error('nothing is invoked here');
-    },
-  };
-}
-
-async function mountedEngine(overrides) {
-  const { embed, agentMounted } = makeEmbed(overrides);
-  embed.toggle(embedContext());
-  await waitForMounted();
-  const engine = agentMounted.calls[0][0].controller.getState().serverEngine;
-  embed.close();
-  return engine;
-}
-
-test('the SERVER engine defaults to ck-exec when the client has exec; player-compute stays selectable', async () => {
-  assert.equal(await mountedEngine({ client: { exec: sampleExec() } }), 'ck-exec');
-  assert.equal(await mountedEngine({}), 'player-compute', 'a client without exec stays on player compute');
-  assert.equal(
-    await mountedEngine({
-      client: { exec: sampleExec() },
-      options: { serverEngine: 'player-compute' },
-    }),
-    'player-compute',
-  );
-
-  const { embed, agentUnavailable } = makeEmbed({ options: { serverEngine: 'ck-exec' } });
+test('refuses to mount without the client\'s exec domain', async () => {
+  const { embed, agentUnavailable } = makeEmbed({ client: { exec: undefined } });
   embed.toggle(embedContext());
   await waitFor(() => {
     assert.match(
@@ -543,7 +505,7 @@ test('createCrowdyStudioEmbed returns a working embed instance', () => {
   const embed = createCrowdyStudioEmbed({
     client: {
       crowdyStudio: sampleProvider(),
-      playerCompute: sampleCompute(),
+      exec: sampleExec(),
     },
     appId: '2',
   });

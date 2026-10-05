@@ -8,6 +8,7 @@ query App($appId: BigInt!) {
     visibility
     status
     metadata
+    wildernessWritesOpen
     splitMode
     deploymentTarget
     reservedUdpBytesPerSec

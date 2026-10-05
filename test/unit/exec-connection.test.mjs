@@ -63,9 +63,13 @@ async function fakeGateway(onFrame) {
   return gw;
 }
 
+/** A local game API (the gateway is on loopback, as with ck-exec's local cluster). */
+const LOCAL_API = 'http://127.0.0.1:3000/graphql';
+
 function api(gw) {
   const dials = [];
   const graphql = {
+    endpoint: LOCAL_API,
     request: async (_doc, vars) => {
       dials.push(vars);
       return {
@@ -236,6 +240,7 @@ test('connectAsDeveloper dials execConnectAsDeveloper, and reconnects with a fre
   t.after(() => gw.wss.close());
   const docs = [];
   const exec = new ExecAPI({
+    endpoint: LOCAL_API,
     request: async (doc, vars) => {
       docs.push(doc.definitions[0].name.value);
       return {

@@ -1,7 +1,6 @@
 import type { GraphQLClient } from '../client.js';
 import {
   AbandonGamePublishDocument,
-  AllHostedGamesDocument,
   BeginGamePublishDocument,
   ClaimGameHostingDocument,
   CompleteGamePublishDocument,
@@ -10,8 +9,6 @@ import {
   HostedGamesDocument,
   MyHostedGamesDocument,
   SetHostedGameEnabledDocument,
-  SetHostedGameListingDocument,
-  TakeDownHostedGameDocument,
   type BeginGamePublishMutation,
   type CompleteGamePublishMutation,
   type HostedGameFieldsFragment,
@@ -57,12 +54,6 @@ export class HostingAPI {
   async listed(): Promise<HostedGame[]> {
     const data = await this.api.request(HostedGamesDocument, {});
     return data.hostedGames;
-  }
-
-  /** Operator: every hosted game on the tier. */
-  async all(): Promise<HostedGame[]> {
-    const data = await this.api.request(AllHostedGamesDocument, {});
-    return data.allHostedGames;
   }
 
   /** The hosted games the caller can manage. Session token. */
@@ -111,18 +102,6 @@ export class HostingAPI {
   async setEnabled(slug: string, enabled: boolean): Promise<HostedGame> {
     const data = await this.api.request(SetHostedGameEnabledDocument, { input: { slug, enabled } });
     return data.setHostedGameEnabled;
-  }
-
-  /** Operator: list or unlist in the lobby and the management UI. */
-  async setListing(slug: string, listed: boolean): Promise<HostedGame> {
-    const data = await this.api.request(SetHostedGameListingDocument, { input: { slug, listed } });
-    return data.setHostedGameListing;
-  }
-
-  /** Operator: take down (or restore with `false`). */
-  async takeDown(slug: string, takenDown = true): Promise<HostedGame> {
-    const data = await this.api.request(TakeDownHostedGameDocument, { slug, takenDown });
-    return data.takeDownHostedGame;
   }
 }
 

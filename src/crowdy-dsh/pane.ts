@@ -102,7 +102,7 @@ export class CrowdyStudioDshPane {
       getToken: options.getToken,
       graphqlUrl: options.graphqlUrl,
       host: options.host,
-      confirmLiveDeploy: (summary) => this.confirmLiveDeploy(summary.projectName),
+      confirmLiveDeploy: (summary) => this.confirmLiveDeploy(summary.projectName, summary.mode),
       onWarning: (text) => {
         this.say(text);
         options.onWarning?.(text);
@@ -113,20 +113,24 @@ export class CrowdyStudioDshPane {
   }
 
   /**
-   * The page-side gate on a live deploy. The harness UI has its own approval
-   * inside the iframe, but the page cannot see it and the channel is open to
-   * any same-origin script, so the player confirms here too. Auto-declines
-   * after a minute so a stale prompt cannot be accepted by accident later.
+   * The page-side gate on a deploy to the grid, live or a draft test (which deploys the mod to
+   * the grid too). The harness UI has its own approval for a live deploy inside the iframe, but
+   * the page cannot see it and the channel is open to any same-origin script, so the player
+   * confirms here. Auto-declines after a minute so a stale prompt cannot be accepted by accident
+   * later.
    */
-  private confirmLiveDeploy(projectName: string): Promise<boolean> {
+  private confirmLiveDeploy(projectName: string, mode: 'draft' | 'live'): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       this.message.hidden = false;
       this.message.replaceChildren();
       const text = el('span');
-      text.textContent = `The agent wants to deploy ${projectName} live to everyone in this grid. `;
+      text.textContent =
+        mode === 'draft'
+          ? `The agent wants to test ${projectName}: a draft test deploys it to this grid, where players who trust you run it too. `
+          : `The agent wants to deploy ${projectName} live to everyone in this grid. `;
       const approve = el('button', 'ck-crowdy-studio-dsh-confirm');
       approve.type = 'button';
-      approve.textContent = 'Deploy live';
+      approve.textContent = mode === 'draft' ? 'Run draft test' : 'Deploy live';
       const decline = el('button', 'ck-crowdy-studio-dsh-decline');
       decline.type = 'button';
       decline.textContent = 'Not now';
