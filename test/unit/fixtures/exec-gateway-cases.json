@@ -1,0 +1,24 @@
+{
+  "about": "Which gateway URLs client.exec.connect dials for a game API URL (CrowdyJS execGatewayRefusal). CrowdyCPP's tools/parity/fixtures/exec-gateway-cases.json is a copy, and its execGatewayRefusal must answer every case the same way. The cases hold on any tier whose default origin is under crowdedkingdoms.com.",
+  "cases": [
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "wss://ckx-or-1.exec.dev.crowdedkingdoms.com", "dials": true, "note": "the platform's gateway" },
+    { "gameApi": "https://ck-api-or-4.dev.crowdedkingdoms.com/graphql", "gateway": "wss://ckx-va-2.exec.dev.crowdedkingdoms.com:7443", "dials": true, "note": "a datacenter's API, a gateway with a port" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "ws://ckx-or-1.exec.dev.crowdedkingdoms.com", "dials": false, "note": "a game API on https names wss gateways only" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "wss://gw.example.org", "dials": false, "note": "off the estate" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "wss://ckx.exec.dev.crowdedkingdoms.com.example.org", "dials": false, "note": "the estate as a prefix of another" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "wss://evilcrowdedkingdoms.com", "dials": false, "note": "the estate as a suffix of a label" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "https://ckx-or-1.exec.dev.crowdedkingdoms.com", "dials": false, "note": "not a WebSocket scheme" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "wss://user:secret@ckx-or-1.exec.dev.crowdedkingdoms.com", "dials": false, "note": "credentials in the URL" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "wss://ckx-or-1.exec.dev.crowdedkingdoms.com@gw.example.org", "dials": false, "note": "the estate as userinfo before another host" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "wss://localhost:7721", "dials": false, "note": "loopback, but the game API is not" },
+    { "gameApi": "https://ck.dev.crowdedkingdoms.com/graphql", "gateway": "not a url", "dials": false, "note": "not a URL" },
+    { "gameApi": "http://localhost:3000/graphql", "gateway": "ws://127.0.0.1:7721", "dials": true, "note": "ck-exec's local cluster" },
+    { "gameApi": "http://127.0.0.1:3000/graphql", "gateway": "ws://localhost:7722", "dials": true, "note": "loopback by either name" },
+    { "gameApi": "http://[::1]:3000/graphql", "gateway": "ws://[::1]:7721", "dials": true, "note": "IPv6 loopback" },
+    { "gameApi": "http://localhost:5173/graphql", "gateway": "wss://ckx-or-1.exec.dev.crowdedkingdoms.com", "dials": true, "note": "a local dev proxy in front of the platform" },
+    { "gameApi": "http://localhost:3000/graphql", "gateway": "ws://gw.example.org:7721", "dials": false, "note": "loopback API, gateway off every estate" },
+    { "gameApi": "http://10.0.0.5:3000/graphql", "gateway": "ws://10.0.0.5:7721", "dials": true, "note": "one LAN address" },
+    { "gameApi": "http://10.0.0.5:3000/graphql", "gateway": "ws://99.1.0.5:7721", "dials": false, "note": "two addresses sharing their last two octets are not one estate" },
+    { "gameApi": "http://10.0.0.5:3000/graphql", "gateway": "ws://127.0.0.1:7721", "dials": false, "note": "loopback, but the game API is not" }
+  ]
+}

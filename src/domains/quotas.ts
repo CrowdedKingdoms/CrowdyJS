@@ -1,4 +1,5 @@
 import type { GraphQLClient } from '../client.js';
+import { CrowdyError } from '../errors.js';
 import {
   QuotasForOrgDocument,
   QuotasForAppDocument,
@@ -14,13 +15,21 @@ import {
 } from '../generated/graphql.js';
 
 /**
+ * A quota rule for {@link QuotasAPI.set}: {@link SetQuotaInput} scoped to an app
+ * or an organization (`tierId` may narrow either). The SDK does not set
+ * platform-global rules.
+ */
+export type ScopedSetQuotaInput = SetQuotaInput &
+  ({ appId: string } | { orgId: string });
+
+/**
  * Usage quotas at the org and app scope — exposed as `client.quotas` (and
  * grouped under `client.admin`).
  *
  * Part of the management surface. Reads require the `view_usage` org/app
- * permission; {@link set} / {@link remove} require `manage_quotas` (global
- * quotas are super-admin only). A quota is keyed by a `metric` string; the
- * effective value resolves app → org → platform default.
+ * permission; {@link set} / {@link remove} require `manage_quotas` on the
+ * rule's org or app. A quota is keyed by a `metric` string; the effective
+ * value resolves app → org → platform default.
  *
  * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN` / `SCOPE_MISSING`
  *   per the permission notes above.
@@ -74,18 +83,26 @@ export class QuotasAPI {
 
   /**
    * Create or update a quota at an org or app scope. Requires `manage_quotas`
-   * (super-admin for platform-global quotas).
+   * on that org or app.
    *
-   * @param input - {@link SetQuotaInput}: scope ids, `metric`, and `limitValue`.
+   * @param input - {@link ScopedSetQuotaInput}: `appId` or `orgId` (and
+   *   optionally `tierId`), `metric`, and `limitValue`.
    * @returns The created/updated quota.
+   * @throws {CrowdyError} before any request when the input names neither an
+   *   app nor an organization.
    */
-  async set(input: SetQuotaInput): Promise<SetQuotaMutation['setQuota']> {
+  async set(input: ScopedSetQuotaInput): Promise<SetQuotaMutation['setQuota']> {
+    if (!input.appId && !input.orgId) {
+      throw new CrowdyError({
+        message: 'quotas.set needs an appId or an orgId: the SDK sets app and org quotas only',
+      });
+    }
     const data = await this.api.request(SetQuotaDocument, { input });
     return data.setQuota;
   }
 
   /**
-   * Delete a quota by id. Requires `manage_quotas` on the owning scope.
+   * Delete a quota by id. Requires `manage_quotas` on the quota's org or app.
    *
    * @param quotaId - Numeric quota id.
    * @returns `true` on success.

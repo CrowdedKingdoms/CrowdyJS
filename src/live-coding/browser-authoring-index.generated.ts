@@ -2,9 +2,9 @@
 export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "schemaVersion": 2,
   "rustVersion": "1.97.1",
-  "sdkVersion": "0.1.5",
+  "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "3f5f39d46f732a346033aaf2435528a183e2ab0d0e3691f29c3fa3ecada18ffb",
+  "contentHash": "c219690850999e82f66ce369a7aa13a65b48e3fcd6bfa786f0c05011650ed020",
   "crates": [
     {
       "name": "alloc",
@@ -12,39 +12,19 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "sourceHash": "7386c02231ab279f515a3768adc6662d2f043ef8ab3a9f88af6b38c1c226a7eb"
     },
     {
+      "name": "ckx-sdk",
+      "version": "0.7.0",
+      "sourceHash": "b4583d898c102c2ff1ea677470cc41b1c72dc49dd5f14c1e9c17d13da1bb0733"
+    },
+    {
       "name": "core",
       "version": "1.97.1",
       "sourceHash": "7386c02231ab279f515a3768adc6662d2f043ef8ab3a9f88af6b38c1c226a7eb"
     },
     {
-      "name": "crowdy-compute-sdk",
-      "version": "0.1.5",
-      "sourceHash": "a43147b89a4ec0ca03cc1e7d15a7cc858df36faa2f1f486cb536342155615852"
-    },
-    {
-      "name": "crowdy-game-kit-ai",
+      "name": "crowdy-client-sdk",
       "version": "0.1.0",
-      "sourceHash": "2b79f93f0d7369ceb0aae6cf32cf6bab614170e63a389fbd5da5a1e7266ad5a0"
-    },
-    {
-      "name": "crowdy-game-kit-core",
-      "version": "0.1.0",
-      "sourceHash": "9750b5294348076d2b75cc67229cdb9e198ed6c2fbc4d76adc063e7124c9e84d"
-    },
-    {
-      "name": "crowdy-game-kit-econ",
-      "version": "0.1.0",
-      "sourceHash": "01745622dea7ef772bba6d1b0360b7cf289b54a90635de13fe38559dc4a01fed"
-    },
-    {
-      "name": "crowdy-game-kit-play",
-      "version": "0.1.0",
-      "sourceHash": "90f6eb0336be680c1eb901ae471ce3c2ab657d46dd3d186adfde25eb1c938c15"
-    },
-    {
-      "name": "crowdy-game-kit-sim",
-      "version": "0.1.0",
-      "sourceHash": "21ed84dc3f7422970c42a3e4a0824cd52b787d4c7a266bec3ccd19bfa45641ab"
+      "sourceHash": "2d21f7c4f1fee650437edbce435b3c50609be4ee49c646916be504ac2be8f6e9"
     }
   ],
   "symbols": [
@@ -82,6 +62,1931 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "struct",
       "signature": "pub struct Vec<T>",
       "docs": "A contiguous growable array."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Call",
+      "kind": "struct",
+      "signature": "pub struct Call<'a> { pub caller: Caller, pub method: &'a str, pub payload: &'a [u8], }",
+      "docs": "One incoming call."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Call::caller",
+      "kind": "field",
+      "signature": "pub caller: Caller",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Call::decode",
+      "kind": "method",
+      "signature": "pub fn decode<T: DeserializeOwned>(&self) -> Result<T>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Call::developer",
+      "kind": "method",
+      "signature": "pub fn developer(&self) -> Result<u64>",
+      "docs": "The calling developer, or an error when the caller is not one: the guard for an admin endpoint."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Call::method",
+      "kind": "field",
+      "signature": "pub method: &'a str",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Call::payload",
+      "kind": "field",
+      "signature": "pub payload: &'a [u8]",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Call::player",
+      "kind": "method",
+      "signature": "pub fn player(&self) -> Result<u64>",
+      "docs": "The calling player, or an error when the caller is not a player."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "CallError",
+      "kind": "struct",
+      "signature": "pub struct CallError { pub status: Status, pub message: String, }",
+      "docs": "A failed call made by this instance."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "CallError::fmt",
+      "kind": "method",
+      "signature": "fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "CallError::message",
+      "kind": "field",
+      "signature": "pub message: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "CallError::status",
+      "kind": "field",
+      "signature": "pub status: Status",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Caller",
+      "kind": "enum",
+      "signature": "pub enum Caller { Platform, Instance(u64), Player(u64), /// A developer of the app (the org's `manage_compute`), by user id, connected with /// `execConnectAsDeveloper`: studio tools, manual runs and admin endpoints. It may call any /// type, not only `client` ones, so check for it in handlers only developers should reach. Developer(u64), }",
+      "docs": "Who is calling. The platform sets this; a handler can trust it for authorization."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Caller::Developer",
+      "kind": "variant",
+      "signature": "Developer(u64)",
+      "docs": "A developer of the app (the org's `manage_compute`), by user id, connected with `execConnectAsDeveloper`: studio tools, manual runs and admin endpoints. It may call any type, not only `client` ones, so check for it in handlers only developers should reach."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Caller::Instance",
+      "kind": "variant",
+      "signature": "Instance(u64)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Caller::Platform",
+      "kind": "variant",
+      "signature": "Platform",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Caller::Player",
+      "kind": "variant",
+      "signature": "Player(u64)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx",
+      "kind": "struct",
+      "signature": "pub struct Ctx { pub app: u64, pub instance: u64, pub epoch: u64, /// The deployed code version. pub version: u64, pub kind: Kind, pub node_type: String, pub key: String, }",
+      "docs": "This instance's identity and its way out: calls, messages, publishing and the node API."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::app",
+      "kind": "field",
+      "signature": "pub app: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::call",
+      "kind": "method",
+      "signature": "pub fn call(&self, node_type: &str, key: &str, method: &str, payload: &[u8]) -> Result<Vec<u8>, CallError>",
+      "docs": "Calls an endpoint on another instance of this app and waits for its reply. This instance handles nothing else until the reply arrives or the deadline passes."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::call_typed",
+      "kind": "method",
+      "signature": "pub fn call_typed<Req: Serialize + ?Sized, Resp: DeserializeOwned>( &self, node_type: &str, key: &str, method: &str, req: &Req, ) -> Result<Resp>",
+      "docs": "[`Ctx::call`] with MessagePack encoding on both sides."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::call_with_deadline",
+      "kind": "method",
+      "signature": "pub fn call_with_deadline( &self, node_type: &str, key: &str, method: &str, payload: &[u8], deadline_ms: u32, ) -> Result<Vec<u8>, CallError>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::cancel_timer",
+      "kind": "method",
+      "signature": "pub fn cancel_timer(&self, name: &str) -> bool",
+      "docs": "Cancels a timer. Returns whether it was set."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::emit_actor",
+      "kind": "method",
+      "signature": "pub fn emit_actor(&self, actor: &[u8; 32], at: node::ChunkPos, distance: u8, state: &[u8]) -> Result<(), CallError>",
+      "docs": "Shows a server-driven actor (an NPC, a mob) with `state` to the players near `at`."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::emit_channel",
+      "kind": "method",
+      "signature": "pub fn emit_channel(&self, channel: u64, sender: &[u8; 32], payload: &[u8]) -> Result<(), CallError>",
+      "docs": "Sends `payload` to every member of one of the app's channels, as a channel message from `sender`."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::emit_spatial",
+      "kind": "method",
+      "signature": "pub fn emit_spatial(&self, at: node::ChunkPos, distance: u8, actor: &[u8; 32], event: emit::Spatial<'_>) -> Result<(), CallError>",
+      "docs": "Sends a spatial event to the players within `distance` chunks of `at` (at most 8), at once, through the realtime tier. `actor` is the event's actor: the actor whose state it is, or the one an [`Spatial::ActorMessage`] is for. See [`emit`]."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::epoch",
+      "kind": "field",
+      "signature": "pub epoch: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::grids",
+      "kind": "method",
+      "signature": "pub fn grids(&self) -> node::Grids<'_>",
+      "docs": "This app's grids and their permissions (scope `grids.read`)."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::instance",
+      "kind": "field",
+      "signature": "pub instance: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::key",
+      "kind": "field",
+      "signature": "pub key: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::kind",
+      "kind": "field",
+      "signature": "pub kind: Kind",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::log",
+      "kind": "method",
+      "signature": "pub fn log(&self, level: Level, msg: &str)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::node",
+      "kind": "method",
+      "signature": "pub fn node(&self, op: &str, payload: &[u8]) -> Result<Vec<u8>, CallError>",
+      "docs": "A raw node API request: `op` and a JSON body, answered with JSON. The typed operations behind [`Ctx::world`], [`Ctx::grids`], [`Ctx::players`] and [`Ctx::permissions`] use it."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::node_type",
+      "kind": "field",
+      "signature": "pub node_type: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::now_ms",
+      "kind": "method",
+      "signature": "pub fn now_ms(&self) -> u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::permissions",
+      "kind": "method",
+      "signature": "pub fn permissions(&self) -> node::Permissions<'_>",
+      "docs": "Grants and revokes grid permissions (scope `permissions.write`)."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::persist_now",
+      "kind": "method",
+      "signature": "pub fn persist_now(&self)",
+      "docs": "Snapshots this hub soon after the current call returns (at most once a second), for a change that should not wait for the snapshot interval."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::players",
+      "kind": "method",
+      "signature": "pub fn players(&self) -> node::Players<'_>",
+      "docs": "Players of this app: identity, tier features, group permissions and app state (scopes `players.read`, `players.write`)."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::publish",
+      "kind": "method",
+      "signature": "pub fn publish(&self, topic: &str, payload: &[u8])",
+      "docs": "Pushes `payload` to every subscriber of `topic` on this instance."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::send",
+      "kind": "method",
+      "signature": "pub fn send(&self, node_type: &str, key: &str, method: &str, payload: &[u8]) -> Result<(), CallError>",
+      "docs": "Sends a one-way message. Delivery is attempted once; there is no reply."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::subscribe",
+      "kind": "method",
+      "signature": "pub fn subscribe(&self, node_type: &str, key: &str, topic: &str) -> Result<(), CallError>",
+      "docs": "Subscribes this hub to `topic` on another instance of the app, if the manifest lets this type call that one. Messages arrive at [`Hub::on_topic`]. The subscription is kept in the snapshot and renewed whenever the hub starts again."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::timer_after",
+      "kind": "method",
+      "signature": "pub fn timer_after(&self, name: &str, delay_ms: u64) -> Result<()>",
+      "docs": "Runs [`Hub::on_timer`] with `name` once, `delay_ms` from now, replacing any timer of that name. Timers are kept in the snapshot, so they survive stops and moves; they run only while the hub runs, and one that came due meanwhile runs once when it is back."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::timer_every",
+      "kind": "method",
+      "signature": "pub fn timer_every(&self, name: &str, period_ms: u64) -> Result<()>",
+      "docs": "Runs [`Hub::on_timer`] with `name` every `period_ms` (at least 10), the first time one period from now. Replaces any timer of that name."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::timers",
+      "kind": "method",
+      "signature": "pub fn timers(&self) -> Vec<(String, u64)>",
+      "docs": "Pending timers and when each is next due, in Unix milliseconds."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::unsubscribe",
+      "kind": "method",
+      "signature": "pub fn unsubscribe(&self, node_type: &str, key: &str, topic: &str) -> Result<(), CallError>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::version",
+      "kind": "field",
+      "signature": "pub version: u64",
+      "docs": "The deployed code version."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Ctx::world",
+      "kind": "method",
+      "signature": "pub fn world(&self) -> node::World<'_>",
+      "docs": "Chunks, voxels and actors in this app's world (scopes `world.read`, `world.write`)."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "DEFAULT_DEADLINE_MS",
+      "kind": "const",
+      "signature": "pub const DEFAULT_DEADLINE_MS: u32 = 2_000;",
+      "docs": "Default deadline for calls made without one."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Error",
+      "kind": "struct",
+      "signature": "pub struct Error(pub String);",
+      "docs": "An error a handler returns. The caller receives its message with status `AppError`."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Error::fmt",
+      "kind": "method",
+      "signature": "fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Error::from",
+      "kind": "method",
+      "signature": "fn from(e: CallError) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Error::from",
+      "kind": "method",
+      "signature": "fn from(s: &str) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Error::from",
+      "kind": "method",
+      "signature": "fn from(s: String) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Error::new",
+      "kind": "method",
+      "signature": "pub fn new(msg: impl Into<String>) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Error::unknown_method",
+      "kind": "method",
+      "signature": "pub fn unknown_method(method: &str) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub",
+      "kind": "trait",
+      "signature": "pub trait Hub: Sized + 'static",
+      "docs": "A stateful node: one instance per key, one handler at a time."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::evict",
+      "kind": "method",
+      "signature": "fn evict(&mut self, _ctx: &Ctx)",
+      "docs": "Called once before a graceful stop, after the last persist."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::handle",
+      "kind": "method",
+      "signature": "fn handle(&mut self, ctx: &Ctx, call: Call<'_>) -> Result<Vec<u8>>;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::load",
+      "kind": "method",
+      "signature": "fn load(ctx: &Ctx, snapshot: &[u8], from_version: u64) -> Result<Self>;",
+      "docs": "An instance restored from its last snapshot, written by code version `from_version`."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::on_presence",
+      "kind": "method",
+      "signature": "fn on_presence(&mut self, _ctx: &Ctx, _presence: &Presence) -> Result<()>",
+      "docs": "Root hub only: players entered or left the app."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::on_session",
+      "kind": "method",
+      "signature": "fn on_session(&mut self, _ctx: &Ctx, _player: u64, _session: Session) -> Result<()>",
+      "docs": "A player's connection subscribed to this hub, or left it."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::on_timer",
+      "kind": "method",
+      "signature": "fn on_timer(&mut self, _ctx: &Ctx, _timer: &str) -> Result<()>",
+      "docs": "A timer set with [`Ctx::timer_after`] or [`Ctx::timer_every`] is due. An error is logged; the timer stays as scheduled."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::on_topic",
+      "kind": "method",
+      "signature": "fn on_topic(&mut self, _ctx: &Ctx, _msg: TopicMsg<'_>) -> Result<()>",
+      "docs": "A message on a topic this hub watches."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::on_world",
+      "kind": "method",
+      "signature": "fn on_world(&mut self, _ctx: &Ctx, _events: &[WorldEvent]) -> Result<()>",
+      "docs": "Mods only: things happened in the mod's grid. An actor arriving starts a mod that is not running, and this is its first call after `spawn` or `load`."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::persist",
+      "kind": "method",
+      "signature": "fn persist(&mut self, ctx: &Ctx) -> Result<Vec<u8>>;",
+      "docs": "The state to snapshot. Called on the snapshot interval, before a move and before a stop."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::spawn",
+      "kind": "method",
+      "signature": "fn spawn(ctx: &Ctx, seed: &[u8]) -> Result<Self>;",
+      "docs": "A new instance with no snapshot."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Kind",
+      "kind": "enum",
+      "signature": "pub enum Kind { Hub, Spoke, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Kind::Hub",
+      "kind": "variant",
+      "signature": "Hub",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Kind::Spoke",
+      "kind": "variant",
+      "signature": "Spoke",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Level",
+      "kind": "enum",
+      "signature": "pub enum Level { Error = 0, Warn = 1, Info = 2, Debug = 3, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Level::Debug",
+      "kind": "variant",
+      "signature": "Debug = 3",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Level::Error",
+      "kind": "variant",
+      "signature": "Error = 0",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Level::Info",
+      "kind": "variant",
+      "signature": "Info = 2",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Level::Warn",
+      "kind": "variant",
+      "signature": "Warn = 1",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Presence",
+      "kind": "struct",
+      "signature": "pub struct Presence { /// Players in the app now. pub count: u32, #[serde(default)] pub joined: Vec<PresencePlayer>, #[serde(default)] pub left: Vec<PresencePlayer>, }",
+      "docs": "Players who entered or left the app since the last event, or a new count, delivered to the root hub. Events can be lost when the root hub moves; `count` is always current."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Presence::count",
+      "kind": "field",
+      "signature": "pub count: u32",
+      "docs": "Players in the app now."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Presence::joined",
+      "kind": "field",
+      "signature": "pub joined: Vec<PresencePlayer>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Presence::left",
+      "kind": "field",
+      "signature": "pub left: Vec<PresencePlayer>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "PresencePlayer",
+      "kind": "struct",
+      "signature": "pub struct PresencePlayer { pub player: u64, /// The player's avatar in the world, when they have one. #[serde(default)] pub actor: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "PresencePlayer::actor",
+      "kind": "field",
+      "signature": "pub actor: Option<String>",
+      "docs": "The player's avatar in the world, when they have one."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "PresencePlayer::player",
+      "kind": "field",
+      "signature": "pub player: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Result",
+      "kind": "type",
+      "signature": "pub type Result<T, E = Error> = std::result::Result<T, E>;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Session",
+      "kind": "enum",
+      "signature": "pub enum Session { Joined, Left, }",
+      "docs": "A player's connection subscribing to a hub's first topic, or leaving its last. A player connected twice joins twice."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Session::Joined",
+      "kind": "variant",
+      "signature": "Joined",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Session::Left",
+      "kind": "variant",
+      "signature": "Left",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Spoke",
+      "kind": "trait",
+      "signature": "pub trait Spoke: Sized + 'static",
+      "docs": "A stateless node. Replicas may run anywhere; keep nothing here you cannot lose."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Spoke::handle",
+      "kind": "method",
+      "signature": "fn handle(&mut self, ctx: &Ctx, call: Call<'_>) -> Result<Vec<u8>>;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Spoke::start",
+      "kind": "method",
+      "signature": "fn start(ctx: &Ctx) -> Result<Self>;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status",
+      "kind": "enum",
+      "signature": "pub enum Status { Ok, AppError, Busy, Moved, NotFound, DeadlineExceeded, Denied, RateLimited, Unavailable, Internal, Trapped, BadRequest, Unknown(u8), }",
+      "docs": "The platform's status for a call this instance made. Mirrors the wire status codes."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::AppError",
+      "kind": "variant",
+      "signature": "AppError",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::BadRequest",
+      "kind": "variant",
+      "signature": "BadRequest",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::Busy",
+      "kind": "variant",
+      "signature": "Busy",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::DeadlineExceeded",
+      "kind": "variant",
+      "signature": "DeadlineExceeded",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::Denied",
+      "kind": "variant",
+      "signature": "Denied",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::Internal",
+      "kind": "variant",
+      "signature": "Internal",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::Moved",
+      "kind": "variant",
+      "signature": "Moved",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::NotFound",
+      "kind": "variant",
+      "signature": "NotFound",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::Ok",
+      "kind": "variant",
+      "signature": "Ok",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::RateLimited",
+      "kind": "variant",
+      "signature": "RateLimited",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::Trapped",
+      "kind": "variant",
+      "signature": "Trapped",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::Unavailable",
+      "kind": "variant",
+      "signature": "Unavailable",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::Unknown",
+      "kind": "variant",
+      "signature": "Unknown(u8)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::from_u8",
+      "kind": "method",
+      "signature": "pub fn from_u8(v: u8) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Status::is_retryable",
+      "kind": "method",
+      "signature": "pub fn is_retryable(self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "TopicMsg",
+      "kind": "struct",
+      "signature": "pub struct TopicMsg<'a> { /// The publishing instance's type and key. pub node_type: &'a str, pub key: &'a str, pub topic: &'a str, pub payload: &'a [u8], }",
+      "docs": "A message published on a topic this hub watches ([`Ctx::subscribe`])."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "TopicMsg::decode",
+      "kind": "method",
+      "signature": "pub fn decode<T: DeserializeOwned>(&self) -> Result<T>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "TopicMsg::key",
+      "kind": "field",
+      "signature": "pub key: &'a str",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "TopicMsg::node_type",
+      "kind": "field",
+      "signature": "pub node_type: &'a str",
+      "docs": "The publishing instance's type and key."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "TopicMsg::payload",
+      "kind": "field",
+      "signature": "pub payload: &'a [u8]",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "TopicMsg::topic",
+      "kind": "field",
+      "signature": "pub topic: &'a str",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "WorldEvent",
+      "kind": "struct",
+      "signature": "pub struct WorldEvent { pub grid: u64, /// [`WorldEvent::ACTORS`] or [`WorldEvent::VOXELS`]. pub kind: String, pub chunk: [i64; 3], }",
+      "docs": "Something that happened in a mod's grid, delivered to mods only. Events come in batches and can be lost; each names the chunk it happened in."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "WorldEvent::ACTORS",
+      "kind": "const",
+      "signature": "pub const ACTORS: &'static str = \"actors\";",
+      "docs": "Actors moved into or out of the chunk."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "WorldEvent::VOXELS",
+      "kind": "const",
+      "signature": "pub const VOXELS: &'static str = \"voxels\";",
+      "docs": "Voxels in the chunk changed."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "WorldEvent::chunk",
+      "kind": "field",
+      "signature": "pub chunk: [i64; 3]",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "WorldEvent::grid",
+      "kind": "field",
+      "signature": "pub grid: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "WorldEvent::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "[`WorldEvent::ACTORS`] or [`WorldEvent::VOXELS`]."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "cron",
+      "kind": "module",
+      "signature": "pub mod cron;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "decode",
+      "kind": "function",
+      "signature": "pub fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T>",
+      "docs": "Decodes MessagePack."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "emit",
+      "kind": "module",
+      "signature": "pub mod emit;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "encode",
+      "kind": "function",
+      "signature": "pub fn encode<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>>",
+      "docs": "Encodes a value as MessagePack with named fields."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "export_hub",
+      "kind": "macro",
+      "signature": "macro_rules! export_hub { ($t:ty) => { $crate::__export_node!($crate::rt::HubNode<$t>); }; }",
+      "docs": "Exports a [`Hub`] type as this module's node."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "export_spoke",
+      "kind": "macro",
+      "signature": "macro_rules! export_spoke { ($t:ty) => { $crate::__export_node!($crate::rt::SpokeNode<$t>); }; }",
+      "docs": "Exports a [`Spoke`] type as this module's node."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "model",
+      "kind": "module",
+      "signature": "pub mod model;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "node",
+      "kind": "module",
+      "signature": "pub mod node;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "prelude",
+      "kind": "module",
+      "signature": "pub mod prelude",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Cron",
+      "kind": "struct",
+      "signature": "pub struct Cron { source: String, seconds: u64, minutes: u64, hours: u32, /// Days of the month, bits 1-31. days: u32, /// `L` in the day of month. last_day: bool, /// Entries in the day-of-month field as legacy counted them, which decides whether it is /// unrestricted. day_entries: usize, /// Months, bits 1-12. months: u16, /// Days of the week, bits 0-6 (Sunday 0). weekdays: u8, /// `nL`: the last such weekday of the month. last_weekdays: u8, weekday_entries: usize, /// `n#k`: only the k-th week of the month (days 7k-6 to 7k); 0 when not given. nth: u8, /// Seconds east of UTC. offset_s: i64, }",
+      "docs": "A parsed cron expression. See the [module docs](self) for the syntax."
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Cron::Err",
+      "kind": "type",
+      "signature": "type Err = CronError;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Cron::fmt",
+      "kind": "method",
+      "signature": "fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Cron::from_str",
+      "kind": "method",
+      "signature": "fn from_str(s: &str) -> Result<Self, CronError>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Cron::next_after",
+      "kind": "method",
+      "signature": "pub fn next_after(&self, after_ms: u64) -> Option<u64>",
+      "docs": "The first time it fires strictly after `after_ms` (Unix milliseconds), on a whole second; `None` when it never does."
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Cron::parse",
+      "kind": "method",
+      "signature": "pub fn parse(expr: &str) -> Result<Self, CronError>",
+      "docs": "Parses an expression; see the [module docs](self) for what is accepted."
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Cron::with_utc_offset",
+      "kind": "method",
+      "signature": "pub fn with_utc_offset(mut self, minutes: i32) -> Result<Self, CronError>",
+      "docs": "The same schedule in a fixed offset from UTC, in minutes east (`-300` for UTC-5), within ±18 hours. There is no daylight saving: a zone that has it needs a new offset when its clocks change."
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "CronError",
+      "kind": "struct",
+      "signature": "pub struct CronError(pub String);",
+      "docs": "Why an expression was refused."
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "CronError::fmt",
+      "kind": "method",
+      "signature": "fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Ctx::timer_cron",
+      "kind": "method",
+      "signature": "pub fn timer_cron(&self, name: &str, cron: &Cron) -> Result<()>",
+      "docs": "Runs [`Hub::on_timer`](crate::Hub::on_timer) with `name` at the next time `cron` fires, replacing any timer of that name. Call it again from `on_timer` to keep the schedule."
+    },
+    {
+      "module": "ckx_sdk::cron",
+      "name": "Error::from",
+      "kind": "method",
+      "signature": "fn from(e: CronError) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "MAX_DISTANCE",
+      "kind": "const",
+      "signature": "pub const MAX_DISTANCE: u8 = 8;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "MAX_PAYLOAD",
+      "kind": "const",
+      "signature": "pub const MAX_PAYLOAD: usize = 1024;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "Spatial",
+      "kind": "enum",
+      "signature": "pub enum Spatial<'a> { /// An actor's state: a server-driven actor appears and moves like a player's. Actor { state: &'a [u8] }, /// A voxel edit at `(x, y, z)` within the chunk, folded into the live mesh. The durable /// write is `ctx.world().set_voxels`, which already shows it; this is for effects. Voxel { x: i16, y: i16, z: i16, voxel_type: u16, state: &'a [u8] }, /// A server event (`event_type`, then `state`), as games route server events. Event { event_type: u16, state: &'a [u8] }, /// An app-defined payload. Generic { payload: &'a [u8] }, /// A message to the one actor named as the event's actor. ActorMessage { payload: &'a [u8] }, }",
+      "docs": "What a spatial event is to the players who receive it."
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "Spatial::Actor",
+      "kind": "variant",
+      "signature": "Actor { state: &'a [u8] }",
+      "docs": "An actor's state: a server-driven actor appears and moves like a player's."
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "Spatial::ActorMessage",
+      "kind": "variant",
+      "signature": "ActorMessage { payload: &'a [u8] }",
+      "docs": "A message to the one actor named as the event's actor."
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "Spatial::Event",
+      "kind": "variant",
+      "signature": "Event { event_type: u16, state: &'a [u8] }",
+      "docs": "A server event (`event_type`, then `state`), as games route server events."
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "Spatial::Generic",
+      "kind": "variant",
+      "signature": "Generic { payload: &'a [u8] }",
+      "docs": "An app-defined payload."
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "Spatial::Voxel",
+      "kind": "variant",
+      "signature": "Voxel { x: i16, y: i16, z: i16, voxel_type: u16, state: &'a [u8] }",
+      "docs": "A voxel edit at `(x, y, z)` within the chunk, folded into the live mesh. The durable write is `ctx.world().set_voxels`, which already shows it; this is for effects."
+    },
+    {
+      "module": "ckx_sdk::emit",
+      "name": "actor_id",
+      "kind": "function",
+      "signature": "pub fn actor_id(uuid: &str) -> [u8; 32]",
+      "docs": "A 32-byte actor id, as the realtime tier addresses actors. Players' actors use their 32-character uuid; a server-driven actor (an NPC, a mob) can use any 32 bytes."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Changes",
+      "kind": "struct",
+      "signature": "pub struct Changes { pub changed: Vec<u64>, pub removed: Vec<u64>, }",
+      "docs": "What changed since the last [`Model::take_changes`]."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Changes::changed",
+      "kind": "field",
+      "signature": "pub changed: Vec<u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Changes::removed",
+      "kind": "field",
+      "signature": "pub removed: Vec<u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Container",
+      "kind": "struct",
+      "signature": "pub struct Container { pub type_name: String, /// The player who owns it, if one does: they read its `Owner` properties. pub owner: Option<u64>, /// The key it was [`Model::ensure`]d under, if it was. pub key: Option<String>, /// Properties set so far; the rest read as their defaults. props: BTreeMap<String, Value>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Container::key",
+      "kind": "field",
+      "signature": "pub key: Option<String>",
+      "docs": "The key it was [`Model::ensure`]d under, if it was."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Container::owner",
+      "kind": "field",
+      "signature": "pub owner: Option<u64>",
+      "docs": "The player who owns it, if one does: they read its `Owner` properties."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Container::type_name",
+      "kind": "field",
+      "signature": "pub type_name: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "ContainerDef",
+      "kind": "struct",
+      "signature": "pub struct ContainerDef { props: BTreeMap<String, Prop>, }",
+      "docs": "Declares one container type's properties; see [`Schema::container`]."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "ContainerDef::prop",
+      "kind": "method",
+      "signature": "pub fn prop(mut self, key: &str, kind: PropKind, default: impl Into<Value>, visibility: Visibility) -> Self",
+      "docs": "A property with its kind, its default, and who may read it. A default of the wrong kind panics when the schema is built, which is where a typo belongs."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Edge",
+      "kind": "struct",
+      "signature": "pub struct Edge { pub from: u64, pub relation: String, pub to: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Edge::from",
+      "kind": "field",
+      "signature": "pub from: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Edge::relation",
+      "kind": "field",
+      "signature": "pub relation: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Edge::to",
+      "kind": "field",
+      "signature": "pub to: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "MAX_DEPTH",
+      "kind": "const",
+      "signature": "pub const MAX_DEPTH: usize = 5;",
+      "docs": "The deepest [`Model::traverse`] walks, as the legacy graph traversal."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model",
+      "kind": "struct",
+      "signature": "pub struct Model { next_id: u64, containers: BTreeMap<u64, Container>, /// `\"<type>\\0<key>\"` to the container ensured under it. keys: BTreeMap<String, u64>, edges: BTreeSet<Edge>, #[serde(skip)] changed: BTreeSet<u64>, #[serde(skip)] removed: BTreeSet<u64>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::add",
+      "kind": "method",
+      "signature": "pub fn add(&mut self, schema: &Schema, id: u64, key: &str, delta: i64) -> Result<i64>",
+      "docs": "Adds `delta` to an integer property and returns the new value."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::container",
+      "kind": "method",
+      "signature": "pub fn container(&self, id: u64) -> Option<&Container>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::create",
+      "kind": "method",
+      "signature": "pub fn create(&mut self, schema: &Schema, type_name: &str, owner: Option<u64>) -> Result<u64>",
+      "docs": "A new container of `type_name`, with every property at its default."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::delete",
+      "kind": "method",
+      "signature": "pub fn delete(&mut self, id: u64) -> bool",
+      "docs": "Removes a container, its key and every edge touching it."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::ensure",
+      "kind": "method",
+      "signature": "pub fn ensure(&mut self, schema: &Schema, type_name: &str, key: &str, owner: Option<u64>) -> Result<u64>",
+      "docs": "The container of `type_name` under `key`, created the first time: a player's character, a match's scoreboard."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::find",
+      "kind": "method",
+      "signature": "pub fn find(&self, type_name: &str, key: &str) -> Option<u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::get",
+      "kind": "method",
+      "signature": "pub fn get(&self, schema: &Schema, id: u64, key: &str) -> Result<Value>",
+      "docs": "A property's value, or its default when it was never set."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::get_bool",
+      "kind": "method",
+      "signature": "pub fn get_bool(&self, schema: &Schema, id: u64, key: &str) -> Result<bool>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::get_f64",
+      "kind": "method",
+      "signature": "pub fn get_f64(&self, schema: &Schema, id: u64, key: &str) -> Result<f64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::get_i64",
+      "kind": "method",
+      "signature": "pub fn get_i64(&self, schema: &Schema, id: u64, key: &str) -> Result<i64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::get_str",
+      "kind": "method",
+      "signature": "pub fn get_str(&self, schema: &Schema, id: u64, key: &str) -> Result<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::link",
+      "kind": "method",
+      "signature": "pub fn link(&mut self, from: u64, relation: &str, to: u64) -> Result<()>",
+      "docs": "`from --relation--> to`, e.g. an inventory holding an item."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::linked",
+      "kind": "method",
+      "signature": "pub fn linked(&self, from: u64, relation: &str) -> Vec<u64>",
+      "docs": "The containers `from` links to by `relation`."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::new",
+      "kind": "method",
+      "signature": "pub fn new() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::of_type",
+      "kind": "method",
+      "signature": "pub fn of_type<'a>(&'a self, type_name: &'a str) -> impl Iterator<Item = u64> + 'a",
+      "docs": "Every container of `type_name`, oldest first."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::public_changes",
+      "kind": "method",
+      "signature": "pub fn public_changes(&mut self, schema: &Schema) -> Vec<Published>",
+      "docs": "The changes since the last call as what anyone may see: each changed container's public view, and each removal."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::publish_changes",
+      "kind": "method",
+      "signature": "pub fn publish_changes(&mut self, ctx: &Ctx, schema: &Schema, topic: &str)",
+      "docs": "Publishes [`Model::public_changes`] on this hub's `topic`, one message per container, for subscribed clients. Owner and hidden properties are never published."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::set",
+      "kind": "method",
+      "signature": "pub fn set(&mut self, schema: &Schema, id: u64, key: &str, value: impl Into<Value>) -> Result<()>",
+      "docs": "Sets a property, refusing a value of the wrong kind."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::take_changes",
+      "kind": "method",
+      "signature": "pub fn take_changes(&mut self) -> Changes",
+      "docs": "The containers changed and removed since the last call."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::traverse",
+      "kind": "method",
+      "signature": "pub fn traverse(&self, root: u64, relation: &str, depth: usize) -> Vec<u64>",
+      "docs": "Every container reachable from `root` by `relation`, breadth first, at most [`MAX_DEPTH`] steps away; `root` itself is not included."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::unlink",
+      "kind": "method",
+      "signature": "pub fn unlink(&mut self, from: u64, relation: &str, to: u64) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::view",
+      "kind": "method",
+      "signature": "pub fn view(&self, schema: &Schema, id: u64, viewer: Viewer) -> Result<BTreeMap<String, Value>>",
+      "docs": "The properties `viewer` may read, with defaults filled in: every one for the server, public ones for a player, and owner ones too on containers the player owns."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Prop",
+      "kind": "struct",
+      "signature": "pub struct Prop { pub kind: PropKind, pub default: Value, pub visibility: Visibility, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Prop::default",
+      "kind": "field",
+      "signature": "pub default: Value",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Prop::kind",
+      "kind": "field",
+      "signature": "pub kind: PropKind",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Prop::visibility",
+      "kind": "field",
+      "signature": "pub visibility: Visibility",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "PropKind",
+      "kind": "enum",
+      "signature": "pub enum PropKind { Bool, Int, Float, Str, Json, }",
+      "docs": "What a property holds. `Json` holds any JSON value."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "PropKind::Bool",
+      "kind": "variant",
+      "signature": "Bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "PropKind::Float",
+      "kind": "variant",
+      "signature": "Float",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "PropKind::Int",
+      "kind": "variant",
+      "signature": "Int",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "PropKind::Json",
+      "kind": "variant",
+      "signature": "Json",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "PropKind::Str",
+      "kind": "variant",
+      "signature": "Str",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Published",
+      "kind": "struct",
+      "signature": "pub struct Published { pub id: u64, #[serde(default, skip_serializing_if = \"Option::is_none\")] pub type_name: Option<String>, #[serde(default, skip_serializing_if = \"Option::is_none\")] pub props: Option<BTreeMap<String, Value>>, #[serde(default, skip_serializing_if = \"std::ops::Not::not\")] pub removed: bool, }",
+      "docs": "One published change: a container's public view, or its removal."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Published::id",
+      "kind": "field",
+      "signature": "pub id: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Published::props",
+      "kind": "field",
+      "signature": "pub props: Option<BTreeMap<String, Value>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Published::removed",
+      "kind": "field",
+      "signature": "pub removed: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Published::type_name",
+      "kind": "field",
+      "signature": "pub type_name: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Schema",
+      "kind": "struct",
+      "signature": "pub struct Schema { types: BTreeMap<String, BTreeMap<String, Prop>>, }",
+      "docs": "The declared container types and their properties."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Schema::container",
+      "kind": "method",
+      "signature": "pub fn container(mut self, name: &str, define: impl FnOnce(ContainerDef) -> ContainerDef) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Schema::new",
+      "kind": "method",
+      "signature": "pub fn new() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Viewer",
+      "kind": "enum",
+      "signature": "pub enum Viewer { /// The hub, another instance or a developer: every property. Server, /// A player: public properties, and owner ones on containers the player owns. Player(u64), /// Anyone: public properties only, as [`Model::publish_changes`] sends them. Public, }",
+      "docs": "Who a [`Model::view`] is for."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Viewer::Player",
+      "kind": "variant",
+      "signature": "Player(u64)",
+      "docs": "A player: public properties, and owner ones on containers the player owns."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Viewer::Public",
+      "kind": "variant",
+      "signature": "Public",
+      "docs": "Anyone: public properties only, as [`Model::publish_changes`] sends them."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Viewer::Server",
+      "kind": "variant",
+      "signature": "Server",
+      "docs": "The hub, another instance or a developer: every property."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Visibility",
+      "kind": "enum",
+      "signature": "pub enum Visibility { Public, Owner, Hidden, }",
+      "docs": "Who may read a property: anyone who may read the container, only its owner, or nobody but the hub itself (secret stats, seeds)."
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Visibility::Hidden",
+      "kind": "variant",
+      "signature": "Hidden",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Visibility::Owner",
+      "kind": "variant",
+      "signature": "Owner",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Visibility::Public",
+      "kind": "variant",
+      "signature": "Public",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Actor",
+      "kind": "struct",
+      "signature": "pub struct Actor { /// The 32-character actor id. pub uuid: String, pub player: Option<u64>, pub chunk: ChunkPos, /// The actor's persisted public state, where the game keeps one. pub state: Option<Vec<u8>>, }",
+      "docs": "A player's actor in the world, from live presence."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Actor::chunk",
+      "kind": "field",
+      "signature": "pub chunk: ChunkPos",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Actor::player",
+      "kind": "field",
+      "signature": "pub player: Option<u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Actor::state",
+      "kind": "field",
+      "signature": "pub state: Option<Vec<u8>>",
+      "docs": "The actor's persisted public state, where the game keeps one."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Actor::uuid",
+      "kind": "field",
+      "signature": "pub uuid: String",
+      "docs": "The 32-character actor id."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Chunk",
+      "kind": "struct",
+      "signature": "pub struct Chunk { pub id: u64, pub at: ChunkPos, pub voxels: Option<Vec<u8>>, pub chunk_state: Option<Vec<u8>>, }",
+      "docs": "A chunk as stored: the dense voxel grid and the game's own metadata blob."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Chunk::at",
+      "kind": "field",
+      "signature": "pub at: ChunkPos",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Chunk::chunk_state",
+      "kind": "field",
+      "signature": "pub chunk_state: Option<Vec<u8>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Chunk::id",
+      "kind": "field",
+      "signature": "pub id: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Chunk::voxels",
+      "kind": "field",
+      "signature": "pub voxels: Option<Vec<u8>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkPos",
+      "kind": "struct",
+      "signature": "pub struct ChunkPos { pub x: i64, pub y: i64, pub z: i64, }",
+      "docs": "A chunk's coordinates."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkPos::from",
+      "kind": "method",
+      "signature": "fn from(p: WirePos) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkPos::new",
+      "kind": "method",
+      "signature": "pub const fn new(x: i64, y: i64, z: i64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkPos::x",
+      "kind": "field",
+      "signature": "pub x: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkPos::y",
+      "kind": "field",
+      "signature": "pub y: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkPos::z",
+      "kind": "field",
+      "signature": "pub z: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid",
+      "kind": "struct",
+      "signature": "pub struct Grid { pub id: u64, pub low: ChunkPos, pub high: ChunkPos, }",
+      "docs": "A grid: a box of chunks with its own permissions."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::contains",
+      "kind": "method",
+      "signature": "pub fn contains(&self, at: ChunkPos) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::high",
+      "kind": "field",
+      "signature": "pub high: ChunkPos",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::id",
+      "kind": "field",
+      "signature": "pub id: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::low",
+      "kind": "field",
+      "signature": "pub low: ChunkPos",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridPick",
+      "kind": "enum",
+      "signature": "pub enum GridPick { /// The lowest grid id: what the realtime tier enforces. #[default] First, Smallest, Largest, }",
+      "docs": "Which grid [`Grids::at`] returns where grids overlap."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridPick::First",
+      "kind": "variant",
+      "signature": "First",
+      "docs": "The lowest grid id: what the realtime tier enforces."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridPick::Largest",
+      "kind": "variant",
+      "signature": "Largest",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridPick::Smallest",
+      "kind": "variant",
+      "signature": "Smallest",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids",
+      "kind": "struct",
+      "signature": "pub struct Grids<'a>(pub(crate) &'a Ctx);",
+      "docs": "Grid lookups: [`Ctx::grids`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::at",
+      "kind": "method",
+      "signature": "pub fn at(&self, at: ChunkPos, pick: GridPick) -> Result<Option<Grid>, CallError>",
+      "docs": "The grid covering chunk `at`, if any. Scope `grids.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::check_permission",
+      "kind": "method",
+      "signature": "pub fn check_permission(&self, grid: u64, player: u64, permission: &str) -> Result<bool, CallError>",
+      "docs": "Whether `player` holds `permission` on `grid` (granted directly or through a group, and not expired). Scope `grids.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::get",
+      "kind": "method",
+      "signature": "pub fn get(&self, grid: u64) -> Result<Option<Grid>, CallError>",
+      "docs": "One of this app's grids. Scope `grids.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "MAX_VOXEL_STATE",
+      "kind": "const",
+      "signature": "pub const MAX_VOXEL_STATE: usize = 1024;",
+      "docs": "A voxel's state bytes."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "MAX_VOXEL_WRITES",
+      "kind": "const",
+      "signature": "pub const MAX_VOXEL_WRITES: usize = 16;",
+      "docs": "Voxel writes in one [`World::set_voxels`] call."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Permissions",
+      "kind": "struct",
+      "signature": "pub struct Permissions<'a>(pub(crate) &'a Ctx);",
+      "docs": "Grid permission grants: [`Ctx::permissions`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Permissions::grant",
+      "kind": "method",
+      "signature": "pub fn grant(&self, grid: u64, player: u64, keys: &[&str], ttl_secs: Option<u32>) -> Result<Option<String>, CallError>",
+      "docs": "Grants runtime permission keys on one of this app's grids to a player with access to the app, for `ttl_secs` or until revoked. Returns when the grant expires (RFC 3339), if it does. Scope `permissions.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Permissions::revoke",
+      "kind": "method",
+      "signature": "pub fn revoke(&self, grid: u64, player: u64, keys: Option<&[&str]>) -> Result<(), CallError>",
+      "docs": "Revokes the named keys, or every key when `keys` is `None`. Scope `permissions.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Player",
+      "kind": "struct",
+      "signature": "pub struct Player { #[serde(deserialize_with = \"de_u64\")] pub player: u64, pub gamertag: String, pub disambiguation: String, }",
+      "docs": "A player's public identity."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Player::disambiguation",
+      "kind": "field",
+      "signature": "pub disambiguation: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Player::gamertag",
+      "kind": "field",
+      "signature": "pub gamertag: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Player::player",
+      "kind": "field",
+      "signature": "pub player: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Players",
+      "kind": "struct",
+      "signature": "pub struct Players<'a>(pub(crate) &'a Ctx);",
+      "docs": "Player lookups and app state: [`Ctx::players`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Players::avatar_state",
+      "kind": "method",
+      "signature": "pub fn avatar_state(&self, avatar: u64) -> Result<Option<Vec<u8>>, CallError>",
+      "docs": "An avatar's state blob for this app. Scope `players.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Players::check_permission",
+      "kind": "method",
+      "signature": "pub fn check_permission(&self, player: u64, group: u64, permission: Option<&str>) -> Result<bool, CallError>",
+      "docs": "Whether the player is an active member of one of this app's groups (teams, channels), or holds `permission` in it when one is named. Scope `players.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Players::features",
+      "kind": "method",
+      "signature": "pub fn features(&self, player: u64) -> Result<Vec<String>, CallError>",
+      "docs": "The feature keys the player's access tier grants in this app. Scope `players.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Players::get",
+      "kind": "method",
+      "signature": "pub fn get(&self, player: u64) -> Result<Player, CallError>",
+      "docs": "A player's public identity, for players currently in this app. Scope `players.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Players::set_state",
+      "kind": "method",
+      "signature": "pub fn set_state(&self, player: u64, state: Option<&[u8]>) -> Result<(), CallError>",
+      "docs": "Replaces the player's state blob for this app (at most 256 KiB; `None` clears it). The player must have access to the app. Scope `players.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Players::state",
+      "kind": "method",
+      "signature": "pub fn state(&self, player: u64) -> Result<Option<Vec<u8>>, CallError>",
+      "docs": "The player's state blob for this app, which game clients read too. Scope `players.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel",
+      "kind": "struct",
+      "signature": "pub struct Voxel { pub x: i16, pub y: i16, pub z: i16, pub voxel_type: u16, pub state: Option<Vec<u8>>, }",
+      "docs": "A voxel written into a chunk (the edits on top of its dense grid)."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::state",
+      "kind": "field",
+      "signature": "pub state: Option<Vec<u8>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::voxel_type",
+      "kind": "field",
+      "signature": "pub voxel_type: u16",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::x",
+      "kind": "field",
+      "signature": "pub x: i16",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::y",
+      "kind": "field",
+      "signature": "pub y: i16",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::z",
+      "kind": "field",
+      "signature": "pub z: i16",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "VoxelWrite",
+      "kind": "struct",
+      "signature": "pub struct VoxelWrite { pub chunk: ChunkPos, pub voxel: (i16, i16, i16), pub voxel_type: u16, pub state: Option<Vec<u8>>, }",
+      "docs": "One voxel to write: `voxel` is its position within `chunk`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "VoxelWrite::chunk",
+      "kind": "field",
+      "signature": "pub chunk: ChunkPos",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "VoxelWrite::state",
+      "kind": "field",
+      "signature": "pub state: Option<Vec<u8>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "VoxelWrite::voxel",
+      "kind": "field",
+      "signature": "pub voxel: (i16, i16, i16)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "VoxelWrite::voxel_type",
+      "kind": "field",
+      "signature": "pub voxel_type: u16",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "World",
+      "kind": "struct",
+      "signature": "pub struct World<'a>(pub(crate) &'a Ctx);",
+      "docs": "World reads and writes: [`Ctx::world`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "World::actors",
+      "kind": "method",
+      "signature": "pub fn actors(&self, at: ChunkPos) -> Result<Vec<Actor>, CallError>",
+      "docs": "The actors in one chunk. Scope `world.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "World::actors_near",
+      "kind": "method",
+      "signature": "pub fn actors_near(&self, center: ChunkPos, radius_xz: u8, radius_y: u8) -> Result<Vec<Actor>, CallError>",
+      "docs": "The actors within `radius_xz` chunks across and `radius_y` up and down (at most 3 and 1). Scope `world.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "World::chunk",
+      "kind": "method",
+      "signature": "pub fn chunk(&self, at: ChunkPos) -> Result<Option<Chunk>, CallError>",
+      "docs": "The chunk at `at`, or `None` when the app never stored it. Scope `world.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "World::set_voxels",
+      "kind": "method",
+      "signature": "pub fn set_voxels(&self, writes: &[VoxelWrite]) -> Result<Vec<u64>, CallError>",
+      "docs": "Writes up to [`MAX_VOXEL_WRITES`] voxels in one transaction, as the app, and shows them to nearby players. Returns the voxel update ids. Scope `world.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "World::voxels",
+      "kind": "method",
+      "signature": "pub fn voxels(&self, at: ChunkPos) -> Result<Vec<Voxel>, CallError>",
+      "docs": "The voxels written into a chunk, at most 2,048. Scope `world.read`."
+    },
+    {
+      "module": "ckx_sdk::prelude",
+      "name": "Cron",
+      "kind": "reexport",
+      "signature": "pub use crate::cron::Cron;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::prelude",
+      "name": "crate::emit::{Spatial, actor_id}",
+      "kind": "reexport",
+      "signature": "pub use crate::emit::{Spatial, actor_id};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::prelude",
+      "name": "crate::model::{Model, PropKind, Schema, Viewer, Visibility}",
+      "kind": "reexport",
+      "signature": "pub use crate::model::{Model, PropKind, Schema, Viewer, Visibility};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::prelude",
+      "name": "crate::node::{ChunkPos, GridPick, VoxelWrite}",
+      "kind": "reexport",
+      "signature": "pub use crate::node::{ChunkPos, GridPick, VoxelWrite};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::prelude",
+      "name": "crate::{\n        Call, CallError, Caller, Ctx, Error, Hub, Kind, Level, Presence, PresencePlayer, Result, Session, Spoke, Status, TopicMsg,\n        WorldEvent, decode, encode,\n    }",
+      "kind": "reexport",
+      "signature": "pub use crate::{ Call, CallError, Caller, Ctx, Error, Hub, Kind, Level, Presence, PresencePlayer, Result, Session, Spoke, Status, TopicMsg, WorldEvent, decode, encode, };",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::prelude",
+      "name": "serde::{Deserialize, Serialize}",
+      "kind": "reexport",
+      "signature": "pub use serde::{Deserialize, Serialize};",
+      "docs": ""
     },
     {
       "module": "core",
@@ -210,4918 +2115,284 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "docs": "Forms a slice from a pointer and element count."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "ABI_VERSION",
       "kind": "const",
       "signature": "pub const ABI_VERSION: u32 = 0;",
       "docs": ""
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "HostError",
       "kind": "struct",
       "signature": "pub struct HostError { pub kind: String, #[serde(default)] pub message: Option<String>, }",
-      "docs": "A structured error from the host API."
+      "docs": "A host call the broker or the page refused, or that failed. The browser answers a refusal (outside the allowlist, outside the grid, over a rate cap, not offered by this game) with `kind` `denied` and a message saying why."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "HostError::fmt",
       "kind": "method",
       "signature": "fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
       "docs": ""
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "HostError::kind",
       "kind": "field",
       "signature": "pub kind: String",
       "docs": ""
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "HostError::message",
       "kind": "field",
       "signature": "pub message: Option<String>",
       "docs": ""
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "api",
       "kind": "module",
       "signature": "pub mod api",
-      "docs": "Typed wrappers over the v1 host API. Everything is scoped to the module's own app by the host; ids are stringified where they may exceed 2^53."
+      "docs": "The client host calls. The broker confines each to the mod's grid (chunk coordinates inside the grid's box, `gridId` the mod's own) and the page answers it as the visiting player, with that player's permissions; a game may leave some unanswered (`denied`). Ids are strings where they may exceed 2^53."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "ck_alloc",
       "kind": "function",
       "signature": "pub extern \"C\" fn ck_alloc(len: u32) -> *mut u8",
-      "docs": "Allocate a buffer the host can write into before calling an export."
+      "docs": "Allocates a buffer the host writes into before it calls an export."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "ck_free",
       "kind": "function",
       "signature": "pub unsafe extern \"C\" fn ck_free(ptr: *mut u8, len: u32)",
-      "docs": "Release a buffer previously handed across the boundary. # Safety `ptr`/`len` must come from `ck_alloc` or a packed return value."
+      "docs": "Releases a buffer handed across the boundary. # Safety `ptr`/`len` must come from `ck_alloc` or a packed return value."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "host",
       "kind": "module",
       "signature": "pub mod host",
-      "docs": "Host imports (module namespace `ck`)."
+      "docs": "Host imports (module `ck`)."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "host_call",
       "kind": "function",
-      "signature": "pub fn host_call( fn_name: &str, args: serde_json::Value, ) -> Result<serde_json::Value, HostError>",
-      "docs": "Call a host API function with JSON args; returns the `data` payload."
+      "signature": "pub fn host_call(fn_name: &str, args: serde_json::Value) -> Result<serde_json::Value, HostError>",
+      "docs": "Calls a host function with JSON args and returns its `data`."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "input_slice",
       "kind": "function",
       "signature": "pub unsafe fn input_slice<'a>(ptr: *const u8, len: u32) -> &'a [u8]",
-      "docs": "View a host-provided buffer. # Safety `ptr`/`len` must describe a live buffer in guest memory."
+      "docs": "A host-provided buffer. # Safety `ptr`/`len` must describe a live buffer in guest memory."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "log",
       "kind": "function",
       "signature": "pub fn log(level: u32, msg: &str)",
       "docs": ""
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "now_ms",
       "kind": "function",
       "signature": "pub fn now_ms() -> u64",
       "docs": ""
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "pack_return",
       "kind": "function",
       "signature": "pub fn pack_return(bytes: Vec<u8>) -> u64",
-      "docs": "Leak `bytes` and pack its (ptr, len) into the u64 return convention."
+      "docs": "Leaks `bytes` and packs its (ptr, len) into the u64 return convention."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "random_bytes",
       "kind": "function",
       "signature": "pub fn random_bytes(len: usize) -> Vec<u8>",
-      "docs": "Host-seeded random bytes (via the deterministic WASI stub)."
+      "docs": "Random bytes from the browser's `crypto.getRandomValues`."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "register_module",
       "kind": "macro",
       "signature": "macro_rules! register_module { (init: $init:path, tick: $tick:path, invoke: $invoke:path $(,)?) => { $crate::__register_module_core!($init, $tick, $invoke); }; (init: $init:path, tick: $tick:path, invoke: $invoke:path, event: $event:path $(,)?) => { $crate::__register_module_core!($init, $tick, $invoke); #[export_name = \"on_event\"] pub extern \"C\" fn __ck_export_on_event(ptr: *const u8, len: u32) { let input = unsafe { $crate::input_slice(ptr, len) }; $event(input); } }; }",
-      "docs": "Wires user functions to the ABI exports the host calls: `init()`, `tick(dt_ms)`, `handle_invoke(ptr, len) -> packed u64`, and (4-arg form) `on_event(ptr, len)` for event triggers. Modules registered with the 3-arg form export no `on_event`; the host skips event dispatch."
+      "docs": "Wires a CLIENT half's functions to the exports the browser calls: `init()`, `tick(dt_ms)`, `handle_invoke(ptr, len) -> packed u64`, and, in the four-argument form, `on_event(ptr, len)` for grid events from the page's bus. The three-argument form exports no `on_event`. ```ignore use crowdy_client_sdk as crowdy; fn init() {} fn tick(_dt_ms: u32) { let _ = crowdy::api::hud_set(serde_json::json!({ \"text\": \"hello\" })); } fn invoke(payload: &[u8]) -> Vec<u8> { payload.to_vec() } crowdy::register_module!(init: init, tick: tick, invoke: invoke); ```"
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "state_get",
       "kind": "function",
       "signature": "pub fn state_get() -> Vec<u8>",
-      "docs": "Read the module's durable state blob (empty vec when unset)."
+      "docs": "The state blob (empty when unset)."
     },
     {
-      "module": "crowdy_compute_sdk",
+      "module": "crowdy_client_sdk",
       "name": "state_set",
       "kind": "function",
       "signature": "pub fn state_set(bytes: &[u8]) -> bool",
-      "docs": "Replace the module's durable state blob. Returns false when over the cap."
+      "docs": "Replaces the state blob."
     },
     {
-      "module": "crowdy_compute_sdk::api",
-      "name": "Predicate",
-      "kind": "struct",
-      "signature": "pub struct Predicate { pub key: String, pub op: String, pub value: Value, }",
-      "docs": "One property predicate for `containers_list_where` (the automation selector shape): compare `key` against a JSON `value` with `==`, `!=`, `<`, `>`, `<=` or `>=`. Missing properties fall back to the type default."
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "Predicate::key",
-      "kind": "field",
-      "signature": "pub key: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "Predicate::new",
-      "kind": "method",
-      "signature": "pub fn new(key: &str, op: &str, value: Value) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "Predicate::op",
-      "kind": "field",
-      "signature": "pub op: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "Predicate::value",
-      "kind": "field",
-      "signature": "pub value: Value",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "WorldWrite",
-      "kind": "struct",
-      "signature": "pub struct WorldWrite { pub chunk: (i64, i64, i64), pub voxel: (u8, u8, u8), pub voxel_type: i32, /// Optional voxel state blob (base64). pub state_base64: Option<String>, }",
-      "docs": "One atomic voxel write carried by `model_invoke_with_world` (the same shape `voxel_set` takes; committed on the Model transaction)."
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "WorldWrite::chunk",
-      "kind": "field",
-      "signature": "pub chunk: (i64, i64, i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "WorldWrite::state_base64",
-      "kind": "field",
-      "signature": "pub state_base64: Option<String>",
-      "docs": "Optional voxel state blob (base64)."
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "WorldWrite::voxel",
-      "kind": "field",
-      "signature": "pub voxel: (u8, u8, u8)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "WorldWrite::voxel_type",
-      "kind": "field",
-      "signature": "pub voxel_type: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "actors_list",
       "kind": "function",
       "signature": "pub fn actors_list(x: i64, y: i64, z: i64) -> Result<Value, HostError>",
-      "docs": ""
+      "docs": "The actors in one chunk inside the grid, as the page sees them."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "actors_list_radius",
       "kind": "function",
       "signature": "pub fn actors_list_radius( x: i64, y: i64, z: i64, radius_xz: u8, radius_y: u8, ) -> Result<Value, HostError>",
-      "docs": "Actors in a chunk box around (x,y,z): radiusXz clamped to 3, radiusY to 1 host-side; rows include chunk coords. One db-op. Requires SDK 0.1.2+ on the host."
+      "docs": "The actors in a box of chunks around (x, y, z): `radius_xz` at most 3 and `radius_y` at most 1, clipped to the grid."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "avatar_state_get",
       "kind": "function",
       "signature": "pub fn avatar_state_get(avatar_id: &str) -> Result<Value, HostError>",
-      "docs": ""
+      "docs": "An avatar's app state, for an avatar whose actor is inside the grid."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "chunk_get",
       "kind": "function",
       "signature": "pub fn chunk_get(x: i64, y: i64, z: i64) -> Result<Value, HostError>",
-      "docs": ""
+      "docs": "One chunk inside the grid: `{ voxelsBase64 }`."
     },
     {
-      "module": "crowdy_compute_sdk::api",
-      "name": "container_create",
-      "kind": "function",
-      "signature": "pub fn container_create( type_name: &str, session_id: Option<&str>, properties: Value, ) -> Result<Value, HostError>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "container_create_for",
-      "kind": "function",
-      "signature": "pub fn container_create_for( type_name: &str, display_name: &str, session_id: Option<&str>, owner_user_id: Option<&str>, properties: Value, ) -> Result<Value, HostError>",
-      "docs": "Create a container with explicit display name / owner. The module is a trusted app-scoped writer; use this for referee-created reward stacks and other durable rows that must participate in owner-gated Model transactions."
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "container_delete",
-      "kind": "function",
-      "signature": "pub fn container_delete(container_id: &str) -> Result<Value, HostError>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "container_get",
-      "kind": "function",
-      "signature": "pub fn container_get(container_id: &str) -> Result<Value, HostError>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "container_get_batch",
-      "kind": "function",
-      "signature": "pub fn container_get_batch(container_ids: &[&str]) -> Result<Value, HostError>",
-      "docs": "Batched container_get: up to 32 ids -> [{container, properties}] in one db-op. Requires SDK 0.1.2+ on the host."
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "containers_list",
-      "kind": "function",
-      "signature": "pub fn containers_list( type_name: Option<&str>, session_id: Option<&str>, ) -> Result<Value, HostError>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "containers_list_where",
-      "kind": "function",
-      "signature": "pub fn containers_list_where( type_name: Option<&str>, session_id: Option<&str>, wher: &[Predicate], limit: Option<u32>, offset: Option<u32>, ) -> Result<Value, HostError>",
-      "docs": "Filtered/paged container list: up to 8 AND-combined property predicates evaluated host-side (requires `type_name`), then offset/limit over the stable created-at ordering (limit clamps to 200). Charges 2 data ops when predicates are present (list + property batch), 1 otherwise. Requires SDK 0.1.5+ on the host."
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "edge_add",
-      "kind": "function",
-      "signature": "pub fn edge_add( from_container_id: &str, to_container_id: &str, relationship_type: &str, ) -> Result<Value, HostError>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "edge_delete",
-      "kind": "function",
-      "signature": "pub fn edge_delete( from_container_id: &str, to_container_id: &str, relationship_type: &str, ) -> Result<Value, HostError>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "emit_channel",
       "kind": "function",
       "signature": "pub fn emit_channel(channel_id: &str, payload_base64: &str) -> Result<Value, HostError>",
-      "docs": ""
+      "docs": "Posts to one of the grid's channels."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "emit_event",
       "kind": "function",
       "signature": "pub fn emit_event(name: &str, payload: Value) -> Result<Value, HostError>",
-      "docs": "Emit a compute event other modules (or this one) can subscribe to via an on_event=compute_event trigger. Cascade depth is host-bounded."
+      "docs": "Publishes an event on the page's grid event bus, which the other CLIENT mods of this grid on the same page receive through `on_event`. Nothing leaves the page."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
+      "name": "emit_event_to",
+      "kind": "function",
+      "signature": "pub fn emit_event_to(target: &str, name: &str, payload: Value) -> Result<Value, HostError>",
+      "docs": "[`emit_event`] addressed to one mod on the bus by name, whether or not it listens for `name`."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "emit_spatial",
       "kind": "function",
       "signature": "pub fn emit_spatial( kind: &str, chunk: (i64, i64, i64), uuid_hex: &str, payload_base64: &str, distance: u8, decay: u8, ) -> Result<Value, HostError>",
-      "docs": "kind: \"actor\" | \"voxel\" | \"client_event\" | \"server_event\" (host maps to the inject opcode). uuid_hex: 64 hex chars (32 bytes); payload <= 1024B."
+      "docs": "Sends a spatial message from a chunk inside the grid, as the visiting player's client. `kind` is `actor`, `client_event`, `server_event` or `text`; `uuid_hex` is 64 hex characters; `distance` is at most 8."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
+      "name": "grid_info",
+      "kind": "function",
+      "signature": "pub fn grid_info() -> Result<Value, HostError>",
+      "docs": "The mod's own grid, answered by the broker: `{ low: {x,y,z}, high: {x,y,z} }` in chunk coordinates, as decimal strings."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "grid_permission_check",
       "kind": "function",
       "signature": "pub fn grid_permission_check( user_id: &str, grid_id: &str, permission_key: &str, ) -> Result<bool, HostError>",
-      "docs": ""
+      "docs": "Whether the visiting player holds `permission_key` on this grid."
     },
     {
-      "module": "crowdy_compute_sdk::api",
-      "name": "grid_state_get",
+      "module": "crowdy_client_sdk::api",
+      "name": "hud_set",
       "kind": "function",
-      "signature": "pub fn grid_state_get(grid_id: &str) -> Result<Value, HostError>",
-      "docs": ""
+      "signature": "pub fn hud_set(payload: Value) -> Result<Value, HostError>",
+      "docs": "Hands `payload` to the game's HUD channel. The mod never touches the DOM; a game that offers no HUD answers `{ delivered: false }`."
     },
     {
-      "module": "crowdy_compute_sdk::api",
-      "name": "grid_state_set",
+      "module": "crowdy_client_sdk::api",
+      "name": "overlay_draw",
       "kind": "function",
-      "signature": "pub fn grid_state_set(grid_id: &str, state_base64: &str) -> Result<Value, HostError>",
-      "docs": ""
+      "signature": "pub fn overlay_draw(payload: Value) -> Result<Value, HostError>",
+      "docs": "Hands `payload` to the game's overlay channel, as [`hud_set`] does."
     },
     {
-      "module": "crowdy_compute_sdk::api",
-      "name": "model_invoke",
+      "module": "crowdy_client_sdk::api",
+      "name": "pointer_clicks",
       "kind": "function",
-      "signature": "pub fn model_invoke( function_name: &str, self_container_id: &str, params: Value, session_id: Option<&str>, caller_user_id: Option<&str>, ) -> Result<Value, HostError>",
-      "docs": "Invoke an autonomous-invocable Model function transactionally from a trusted compute module. With `caller_user_id`, the Model invoke policy is evaluated as that gameplay user (callerKind=automation); `None` uses the trusted server path. The returned value is the ordinary GmInvokeResult JSON shape."
+      "signature": "pub fn pointer_clicks() -> Result<Value, HostError>",
+      "docs": "Drains the mouse clicks queued since the last call: `{ nowMs, buttons, holdingMs, clicks }`. `buttons` is `MouseEvent.buttons` (1 = left held); `holdingMs` maps a button index to how long it has been held (`\"0\"` = left); each click is `{ t: \"down\"|\"up\", button, atMs, heldMs?, nx, ny }` in canvas coordinates from -1 to 1 (+ny up). Call it every tick."
     },
     {
-      "module": "crowdy_compute_sdk::api",
-      "name": "model_invoke_with_world",
-      "kind": "function",
-      "signature": "pub fn model_invoke_with_world( function_name: &str, self_container_id: &str, params: Value, session_id: Option<&str>, caller_user_id: Option<&str>, world_writes: &[WorldWrite], ) -> Result<Value, HostError>",
-      "docs": "`model_invoke` with atomic world writes: the voxel writes and the Model function's mutations commit in ONE transaction — if either side fails, both roll back. Use for referee actions that change the world and the ledger together (mine/place). Up to 16 writes per call; each write charges a db op. Requires SDK 0.1.4+ on the host."
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "property_set",
-      "kind": "function",
-      "signature": "pub fn property_set( container_id: &str, key: &str, value_type: &str, value: Value, ) -> Result<Value, HostError>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
-      "name": "sessions_list",
-      "kind": "function",
-      "signature": "pub fn sessions_list(status: Option<&str>) -> Result<Value, HostError>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "user_state_get",
       "kind": "function",
       "signature": "pub fn user_state_get(user_id: &str) -> Result<Value, HostError>",
-      "docs": ""
+      "docs": "The visiting player's app state."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "user_state_set",
       "kind": "function",
       "signature": "pub fn user_state_set(user_id: &str, state_base64: &str) -> Result<Value, HostError>",
-      "docs": "state is base64-encoded bytes."
+      "docs": "Replaces the visiting player's app state; `state_base64` is the new bytes."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "voxel_set",
       "kind": "function",
       "signature": "pub fn voxel_set( chunk: (i64, i64, i64), voxel: (u8, u8, u8), voxel_type: i32, state_base64: Option<&str>, ) -> Result<Value, HostError>",
-      "docs": ""
+      "docs": "Writes one voxel inside the grid, as the visiting player (their `update_voxel_data`)."
     },
     {
-      "module": "crowdy_compute_sdk::api",
+      "module": "crowdy_client_sdk::api",
       "name": "voxels_list",
       "kind": "function",
       "signature": "pub fn voxels_list(x: i64, y: i64, z: i64) -> Result<Value, HostError>",
-      "docs": "List the voxels recorded in one chunk (capped host-side; voxelType + optional stateBase64 per voxel). Requires SDK 0.1.1+ on the host."
+      "docs": "The voxels recorded in one chunk inside the grid."
     },
     {
-      "module": "crowdy_compute_sdk::host",
+      "module": "crowdy_client_sdk::host",
       "name": "host_call",
       "kind": "function",
       "signature": "pub fn host_call(ptr: *const u8, len: u32) -> u64;",
-      "docs": "Synchronous host API gateway: JSON request in guest memory, returns packed (resp_ptr << 32 | resp_len); the guest frees the response buffer. Carries a fuel surcharge per call + byte."
+      "docs": "The host-call gateway: a JSON request in guest memory, answered synchronously with a packed (resp_ptr << 32 | resp_len) JSON response that the guest frees."
     },
     {
-      "module": "crowdy_compute_sdk::host",
+      "module": "crowdy_client_sdk::host",
       "name": "log",
       "kind": "function",
       "signature": "pub fn log(level: u32, ptr: *const u8, len: u32);",
-      "docs": "level: 0=debug 1=info 2=warn 3=error"
+      "docs": "level: 0 debug, 1 info, 2 warn, 3 error."
     },
     {
-      "module": "crowdy_compute_sdk::host",
+      "module": "crowdy_client_sdk::host",
       "name": "now_ms",
       "kind": "function",
       "signature": "pub fn now_ms() -> u64;",
-      "docs": "Host-controlled clock (ms). Deterministic from the guest's view."
+      "docs": "Milliseconds since the Unix epoch, from the browser's clock."
     },
     {
-      "module": "crowdy_compute_sdk::host",
+      "module": "crowdy_client_sdk::host",
       "name": "state_get",
       "kind": "function",
       "signature": "pub fn state_get(dest: *mut u8, cap: u32) -> u32;",
-      "docs": "Copy up to `cap` bytes of the module's durable state blob into `dest`. Returns the blob's full length (call with cap=0 to size)."
+      "docs": "Copies up to `cap` bytes of the state blob into `dest` and returns the blob's full length (call with `cap = 0` to size it)."
     },
     {
-      "module": "crowdy_compute_sdk::host",
+      "module": "crowdy_client_sdk::host",
       "name": "state_set",
       "kind": "function",
       "signature": "pub fn state_set(ptr: *const u8, len: u32) -> u32;",
-      "docs": "Replace the module's durable state blob. Returns 0 on success, 1 when the blob exceeds the platform cap."
-    },
-    {
-      "module": "crowdy_game_kit_ai",
-      "name": "brain",
-      "kind": "module",
-      "signature": "pub mod brain;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai",
-      "name": "core",
-      "kind": "reexport",
-      "signature": "pub use crowdy_game_kit_core as core;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai",
-      "name": "flow",
-      "kind": "module",
-      "signature": "pub mod flow;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai",
-      "name": "path",
-      "kind": "module",
-      "signature": "pub mod path;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai",
-      "name": "steering",
-      "kind": "module",
-      "signature": "pub mod steering;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai",
-      "name": "turn",
-      "kind": "module",
-      "signature": "pub mod turn;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "AgentMemory",
-      "kind": "struct",
-      "signature": "pub struct AgentMemory { pub target: Option<(f32, f32)>, pub retarget_at_ms: u64, pub patrol_index: usize, pub pause_until_ms: u64, }",
-      "docs": "Per-agent mutable memory the tree reads/writes across ticks (serde-able into engine state)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "AgentMemory::patrol_index",
-      "kind": "field",
-      "signature": "pub patrol_index: usize",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "AgentMemory::pause_until_ms",
-      "kind": "field",
-      "signature": "pub pause_until_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "AgentMemory::retarget_at_ms",
-      "kind": "field",
-      "signature": "pub retarget_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "AgentMemory::target",
-      "kind": "field",
-      "signature": "pub target: Option<(f32, f32)>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Decision",
-      "kind": "enum",
-      "signature": "pub enum Decision { Idle, /// Move by this bounded step. Step(Vec2), /// Nothing matched / tree invalid — caller may fall back. None, }",
-      "docs": "What the agent decided to do this tick."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Decision::Idle",
-      "kind": "variant",
-      "signature": "Idle",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Decision::None",
-      "kind": "variant",
-      "signature": "None",
-      "docs": "Nothing matched / tree invalid — caller may fall back."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Decision::Step",
-      "kind": "variant",
-      "signature": "Step(Vec2)",
-      "docs": "Move by this bounded step."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception",
-      "kind": "struct",
-      "signature": "pub struct Perception { pub pos: Vec2, pub home: Vec2, /// Nearest player position, when one is visible. pub nearest_player: Option<Vec2>, /// Owner position (pets), when known. pub owner: Option<Vec2>, pub is_night: bool, pub speed: f32, pub dt: f32, pub now_ms: u64, /// Two uniform rolls in [0,1) for this tick (from the engine's seeded RNG). pub roll: (f32, f32), /// World half-extent for wander clamping. pub bounds: f32, }",
-      "docs": "Everything a tree evaluation may look at (the engine fills this in)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::bounds",
-      "kind": "field",
-      "signature": "pub bounds: f32",
-      "docs": "World half-extent for wander clamping."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::dt",
-      "kind": "field",
-      "signature": "pub dt: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::home",
-      "kind": "field",
-      "signature": "pub home: Vec2",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::is_night",
-      "kind": "field",
-      "signature": "pub is_night: bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::nearest_player",
-      "kind": "field",
-      "signature": "pub nearest_player: Option<Vec2>",
-      "docs": "Nearest player position, when one is visible."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::now_ms",
-      "kind": "field",
-      "signature": "pub now_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::owner",
-      "kind": "field",
-      "signature": "pub owner: Option<Vec2>",
-      "docs": "Owner position (pets), when known."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::pos",
-      "kind": "field",
-      "signature": "pub pos: Vec2",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::roll",
-      "kind": "field",
-      "signature": "pub roll: (f32, f32)",
-      "docs": "Two uniform rolls in [0,1) for this tick (from the engine's seeded RNG)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "Perception::speed",
-      "kind": "field",
-      "signature": "pub speed: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "builtin_tree",
-      "kind": "function",
-      "signature": "pub fn builtin_tree(name: &str) -> Option<Value>",
-      "docs": "Canonical trees for the built-in behavior names games store on defs (BWF's `wander_passive` / `wander_hostile` / `chase_hostile` strings finally mean something)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::brain",
-      "name": "evaluate",
-      "kind": "function",
-      "signature": "pub fn evaluate(tree: &Value, p: &Perception, memory: &mut AgentMemory) -> Decision",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField",
-      "kind": "struct",
-      "signature": "pub struct FlowField { pub min_x: i32, pub min_z: i32, pub width: i32, pub height: i32, /// Distance to the nearest goal per cell; u32::MAX = unreachable/blocked. distances: Vec<u32>, }",
-      "docs": "A baked distance field over a bounded grid window. Serde-able so engines can persist it, but rebuilding from the provider is usually cheaper than storing it durably."
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField::build",
-      "kind": "method",
-      "signature": "pub fn build( provider: &impl CostProvider, window: (i32, i32, i32, i32), // min_x, min_z, width, height goals: &[(i32, i32)], max_cells: usize, ) -> Self",
-      "docs": "Build the field inside the window from the goal cells outward, respecting the provider's blocked cells. Cost = uniform 1 per step (weighted providers still gate walkability; weighting the descent is deliberately v2). `max_cells` caps the BFS for fuel safety."
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField::distance",
-      "kind": "method",
-      "signature": "pub fn distance(&self, x: i32, z: i32) -> Option<u32>",
-      "docs": "Distance to the nearest goal (None outside the window or unreachable)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField::height",
-      "kind": "field",
-      "signature": "pub height: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField::min_x",
-      "kind": "field",
-      "signature": "pub min_x: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField::min_z",
-      "kind": "field",
-      "signature": "pub min_z: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField::step",
-      "kind": "method",
-      "signature": "pub fn step(&self, x: i32, z: i32) -> Option<(i32, i32)>",
-      "docs": "The descending step from (x, z): the 4-neighbor with the smallest distance, when strictly smaller than here. None at goals/unreachable."
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField::walk",
-      "kind": "method",
-      "signature": "pub fn walk(&self, mut x: i32, mut z: i32, max_steps: usize) -> Vec<(i32, i32)>",
-      "docs": "Follow the field from (x, z) for up to `max_steps`, returning the walked cells (excluding the start). Agents usually take 1 per tick; this helper powers tests and catch-up moves."
-    },
-    {
-      "module": "crowdy_game_kit_ai::flow",
-      "name": "FlowField::width",
-      "kind": "field",
-      "signature": "pub width: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "CostProvider",
-      "kind": "trait",
-      "signature": "pub trait CostProvider",
-      "docs": "Walkability/cost source. Implement over your world representation (obstacle grids, voxel columns, nav data in module state)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "CostProvider::cost",
-      "kind": "method",
-      "signature": "fn cost(&self, x: i32, z: i32) -> Option<u32>;",
-      "docs": "Cost to ENTER (x, z); `None` = blocked. Uniform worlds return Some(1)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "GridProvider",
-      "kind": "struct",
-      "signature": "pub struct GridProvider<'a> { pub width: i32, pub height: i32, pub blocked: &'a dyn Fn(i32, i32) -> bool, }",
-      "docs": "A grid of booleans (true = blocked) — the simplest provider, also the test fixture."
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "GridProvider::blocked",
-      "kind": "field",
-      "signature": "pub blocked: &'a dyn Fn(i32, i32) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "GridProvider::cost",
-      "kind": "method",
-      "signature": "fn cost(&self, x: i32, z: i32) -> Option<u32>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "GridProvider::height",
-      "kind": "field",
-      "signature": "pub height: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "GridProvider::width",
-      "kind": "field",
-      "signature": "pub width: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "PathCache",
-      "kind": "struct",
-      "signature": "pub struct PathCache { generation: u64, entries: std::collections::HashMap<((i32, i32), (i32, i32)), (u64, Vec<(i32, i32)>)>, }",
-      "docs": "A generation-keyed path cache: repeated queries between the same cells reuse the stored path until the world changes (`invalidate()` on any voxel/tower edit bumps the generation and lazily discards entries)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "PathCache::get",
-      "kind": "method",
-      "signature": "pub fn get( &mut self, provider: &impl CostProvider, from: (i32, i32), to: (i32, i32), config: &PathConfig, ) -> Vec<(i32, i32)>",
-      "docs": "Cached path or compute-and-store via [`a_star`]."
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "PathCache::invalidate",
-      "kind": "method",
-      "signature": "pub fn invalidate(&mut self)",
-      "docs": "Drop every cached path (world changed)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "PathCache::new",
-      "kind": "method",
-      "signature": "pub fn new() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "PathConfig",
-      "kind": "struct",
-      "signature": "pub struct PathConfig { /// Max nodes expanded before giving up (the fuel guard). ~4x the /// manhattan distance is plenty for sane worlds. pub max_expanded: usize, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "PathConfig::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "PathConfig::max_expanded",
-      "kind": "field",
-      "signature": "pub max_expanded: usize",
-      "docs": "Max nodes expanded before giving up (the fuel guard). ~4x the manhattan distance is plenty for sane worlds."
-    },
-    {
-      "module": "crowdy_game_kit_ai::path",
-      "name": "a_star",
-      "kind": "function",
-      "signature": "pub fn a_star( provider: &impl CostProvider, from: (i32, i32), to: (i32, i32), config: &PathConfig, ) -> Vec<(i32, i32)>",
-      "docs": "4-connected A*. Returns the path INCLUDING both endpoints, or empty when unreachable / budget-exhausted / endpoints blocked."
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2",
-      "kind": "struct",
-      "signature": "pub struct Vec2 { pub x: f32, pub z: f32, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2::clamped",
-      "kind": "method",
-      "signature": "pub fn clamped(self, max: f32) -> Vec2",
-      "docs": "Clamp this displacement to at most `max` length."
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2::dist",
-      "kind": "method",
-      "signature": "pub fn dist(&self, other: Vec2) -> f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2::len",
-      "kind": "method",
-      "signature": "pub fn len(&self) -> f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2::new",
-      "kind": "method",
-      "signature": "pub fn new(x: f32, z: f32) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2::to",
-      "kind": "method",
-      "signature": "pub fn to(self, other: Vec2) -> Vec2",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2::x",
-      "kind": "field",
-      "signature": "pub x: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2::yaw",
-      "kind": "method",
-      "signature": "pub fn yaw(&self) -> f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "Vec2::z",
-      "kind": "field",
-      "signature": "pub z: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "arrive",
-      "kind": "function",
-      "signature": "pub fn arrive(pos: Vec2, target: Vec2, speed: f32, dt: f32, slow_radius: f32) -> Vec2",
-      "docs": "Seek that decelerates inside `slow_radius` (smooth stops)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "flee",
-      "kind": "function",
-      "signature": "pub fn flee(pos: Vec2, threat: Vec2, speed: f32, dt: f32) -> Vec2",
-      "docs": "Step directly away from `threat`."
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "leash",
-      "kind": "function",
-      "signature": "pub fn leash(pos: Vec2, home: Vec2, leash_radius: f32, speed: f32, dt: f32) -> Option<Vec2>",
-      "docs": "Return-home pull when beyond `leash_radius`; `None` inside the leash."
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "seek",
-      "kind": "function",
-      "signature": "pub fn seek(pos: Vec2, target: Vec2, speed: f32, dt: f32, stop_at: f32) -> Vec2",
-      "docs": "Step toward `target` at up to `speed*dt`, stopping within `stop_at`."
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "separate",
-      "kind": "function",
-      "signature": "pub fn separate(pos: Vec2, neighbors: &[Vec2], min_dist: f32, speed: f32, dt: f32) -> Vec2",
-      "docs": "Push away from any neighbor closer than `min_dist` (crowd separation)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::steering",
-      "name": "wander_target",
-      "kind": "function",
-      "signature": "pub fn wander_target(anchor: Vec2, range: f32, roll_x: f32, roll_z: f32, bounds: f32) -> Vec2",
-      "docs": "A wander target picker: a point within `range` of `anchor`, clamped to `bounds` (half-extent box around origin). Pure — feed it your RNG rolls."
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "Candidate",
-      "kind": "struct",
-      "signature": "pub struct Candidate { pub x: i32, pub z: i32, /// Movement cost spent to reach it. pub cost: u32, }",
-      "docs": "One candidate destination for a turn move."
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "Candidate::cost",
-      "kind": "field",
-      "signature": "pub cost: u32",
-      "docs": "Movement cost spent to reach it."
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "Candidate::x",
-      "kind": "field",
-      "signature": "pub x: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "Candidate::z",
-      "kind": "field",
-      "signature": "pub z: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "TurnMove",
-      "kind": "struct",
-      "signature": "pub struct TurnMove { pub to: (i32, i32), pub score: f32, }",
-      "docs": "The chosen move for a turn."
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "TurnMove::score",
-      "kind": "field",
-      "signature": "pub score: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "TurnMove::to",
-      "kind": "field",
-      "signature": "pub to: (i32, i32)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "approach_scorer",
-      "kind": "function",
-      "signature": "pub fn approach_scorer(targets: Vec<(i32, i32)>) -> impl FnMut(&Candidate) -> f32",
-      "docs": "The classic melee-enemy heuristic: get adjacent to the closest target, preferring cells that minimize distance to ANY target. Returns a score function for [`best_move`]."
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "best_move",
-      "kind": "function",
-      "signature": "pub fn best_move( provider: &impl CostProvider, from: (i32, i32), move_points: u32, max_expanded: usize, mut score: impl FnMut(&Candidate) -> f32, ) -> Option<TurnMove>",
-      "docs": "Pick the best reachable cell under `move_points` by `score` (higher wins; ties prefer cheaper movement, then stable coordinate order). Returns None only when even standing still is impossible (blocked origin)."
-    },
-    {
-      "module": "crowdy_game_kit_ai::turn",
-      "name": "reachable",
-      "kind": "function",
-      "signature": "pub fn reachable( provider: &impl CostProvider, from: (i32, i32), move_points: u32, max_expanded: usize, ) -> Vec<Candidate>",
-      "docs": "Enumerate the cells reachable from `from` with at most `move_points` total entry cost (BFS/Dijkstra-lite over the provider, 4-connected), including standing still. Expansion stops at `max_expanded` cells."
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "b64",
-      "kind": "module",
-      "signature": "pub mod b64;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "clock",
-      "kind": "module",
-      "signature": "pub mod clock;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "egress",
-      "kind": "module",
-      "signature": "pub mod egress;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "events",
-      "kind": "module",
-      "signature": "pub mod events;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "invoke",
-      "kind": "module",
-      "signature": "pub mod invoke;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "model",
-      "kind": "module",
-      "signature": "pub mod model;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "presence",
-      "kind": "module",
-      "signature": "pub mod presence;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "rng",
-      "kind": "module",
-      "signature": "pub mod rng;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "sdk",
-      "kind": "reexport",
-      "signature": "pub use crowdy_compute_sdk as sdk;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "space",
-      "kind": "module",
-      "signature": "pub mod space;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "state",
-      "kind": "module",
-      "signature": "pub mod state;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core",
-      "name": "wire",
-      "kind": "module",
-      "signature": "pub mod wire;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::b64",
-      "name": "decode",
-      "kind": "function",
-      "signature": "pub fn decode(s: &str) -> Option<Vec<u8>>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::b64",
-      "name": "encode",
-      "kind": "function",
-      "signature": "pub fn encode(data: &[u8]) -> String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Cooldown",
-      "kind": "struct",
-      "signature": "pub struct Cooldown { pub until_ms: u64, }",
-      "docs": "A one-shot cooldown (\"spawn cooldown 20 s\", \"contact damage per player\")."
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Cooldown::active",
-      "kind": "method",
-      "signature": "pub fn active(&self, now_ms: u64) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Cooldown::start",
-      "kind": "method",
-      "signature": "pub fn start(&mut self, now_ms: u64, duration_ms: u64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Cooldown::try_consume",
-      "kind": "method",
-      "signature": "pub fn try_consume(&mut self, now_ms: u64, duration_ms: u64) -> bool",
-      "docs": "Try to consume: starts the cooldown and returns true when not active."
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Cooldown::until_ms",
-      "kind": "field",
-      "signature": "pub until_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Every",
-      "kind": "struct",
-      "signature": "pub struct Every { pub period_ms: u64, pub last_ms: u64, }",
-      "docs": "Fires at most once per period (\"adopt every 15 s\", \"durable sync every 12 s\"). First call fires immediately."
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Every::last_ms",
-      "kind": "field",
-      "signature": "pub last_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Every::new",
-      "kind": "method",
-      "signature": "pub fn new(period_ms: u64) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Every::period_ms",
-      "kind": "field",
-      "signature": "pub period_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::clock",
-      "name": "Every::ready",
-      "kind": "method",
-      "signature": "pub fn ready(&mut self, now_ms: u64) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::egress",
-      "name": "Budget",
-      "kind": "struct",
-      "signature": "pub struct Budget { pub max_msgs_per_min: u32, pub max_bytes_per_min: u64, window_start_ms: u64, msgs: u32, bytes: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::egress",
-      "name": "Budget::max_bytes_per_min",
-      "kind": "field",
-      "signature": "pub max_bytes_per_min: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::egress",
-      "name": "Budget::max_msgs_per_min",
-      "kind": "field",
-      "signature": "pub max_msgs_per_min: u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::egress",
-      "name": "Budget::new",
-      "kind": "method",
-      "signature": "pub fn new(max_msgs_per_min: u32, max_bytes_per_min: u64) -> Self",
-      "docs": "Mirror the app policy, ideally with headroom (e.g. 90% of the real ceiling) so racing engines on the same app don't clip each other."
-    },
-    {
-      "module": "crowdy_game_kit_core::egress",
-      "name": "Budget::try_charge",
-      "kind": "method",
-      "signature": "pub fn try_charge(&mut self, now_ms: u64, bytes: usize) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_ABILITY",
-      "kind": "const",
-      "signature": "pub const EVENT_ABILITY: u16 = 94;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_CONTACT_DAMAGE",
-      "kind": "const",
-      "signature": "pub const EVENT_CONTACT_DAMAGE: u16 = 77;",
-      "docs": "Platform-reserved server-event types (mirrored by the SDK kit/wire parsers). 77 = contact damage (kit-play referee), 90 = weather (kit-sim), 91 = turn changed (kit-play turns), 92 = score/summary (kit-play score), 93 = match proposal (matchmaking → matches handoff), 94 = ability cast/impact (kit-play abilities), 95 = movement violation (warden), 96 = control-point state (territory), 97 = race timing (kit-play timing), 98 = zone change (kit-sim zones)."
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_CONTROL_POINT",
-      "kind": "const",
-      "signature": "pub const EVENT_CONTROL_POINT: u16 = 96;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_MOVEMENT_VIOLATION",
-      "kind": "const",
-      "signature": "pub const EVENT_MOVEMENT_VIOLATION: u16 = 95;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_PROPOSAL",
-      "kind": "const",
-      "signature": "pub const EVENT_PROPOSAL: u16 = 93;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_RACE_TIMING",
-      "kind": "const",
-      "signature": "pub const EVENT_RACE_TIMING: u16 = 97;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_SCORE",
-      "kind": "const",
-      "signature": "pub const EVENT_SCORE: u16 = 92;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_TURN",
-      "kind": "const",
-      "signature": "pub const EVENT_TURN: u16 = 91;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_WEATHER",
-      "kind": "const",
-      "signature": "pub const EVENT_WEATHER: u16 = 90;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "EVENT_ZONE_CHANGE",
-      "kind": "const",
-      "signature": "pub const EVENT_ZONE_CHANGE: u16 = 98;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "decode_event",
-      "kind": "function",
-      "signature": "pub fn decode_event(payload: &[u8]) -> Option<(u16, &[u8])>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "emit_compute_event",
-      "kind": "function",
-      "signature": "pub fn emit_compute_event(name: &str, payload: Value) -> Result<Value, HostError>",
-      "docs": "Emit a compute event for other modules' `compute_event` triggers."
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "emit_server_event",
-      "kind": "function",
-      "signature": "pub fn emit_server_event( chunk: (i64, i64, i64), uuid_hex: &str, event_type: u16, state: &Value, distance: u8, ) -> Result<Value, HostError>",
-      "docs": "Emit a server event (JSON state) at a chunk, attributed to `uuid_hex` (64 hex chars — see `wire::ActorUuid::ascii_hex`)."
-    },
-    {
-      "module": "crowdy_game_kit_core::events",
-      "name": "encode_event",
-      "kind": "function",
-      "signature": "pub fn encode_event(event_type: u16, state: &[u8]) -> Vec<u8>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "InvokeCtx",
-      "kind": "struct",
-      "signature": "pub struct InvokeCtx { pub export: String, pub params: Value, pub caller_user_id: String, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "InvokeCtx::caller_user_id",
-      "kind": "field",
-      "signature": "pub caller_user_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "InvokeCtx::export",
-      "kind": "field",
-      "signature": "pub export: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "InvokeCtx::params",
-      "kind": "field",
-      "signature": "pub params: Value",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "Router",
-      "kind": "struct",
-      "signature": "pub struct Router { handlers: Vec<(String, Handler)>, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "Router::dispatch",
-      "kind": "method",
-      "signature": "pub fn dispatch(&self, input: &[u8]) -> Vec<u8>",
-      "docs": "Dispatch raw `handle_invoke` input bytes; always returns JSON bytes."
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "Router::new",
-      "kind": "method",
-      "signature": "pub fn new() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "Router::on",
-      "kind": "method",
-      "signature": "pub fn on(mut self, export: &str, handler: impl Fn(&InvokeCtx) -> Value + 'static) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "fail",
-      "kind": "function",
-      "signature": "pub fn fail(reason: &str) -> Value",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::invoke",
-      "name": "ok",
-      "kind": "function",
-      "signature": "pub fn ok(data: Value) -> Value",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Catalog",
-      "kind": "struct",
-      "signature": "pub struct Catalog<T> { type_name: String, ttl_ms: u64, loaded_at: u64, parse: fn(&Container) -> Option<T>, pub items: Vec<T>, }",
-      "docs": "TTL-refreshed catalog of definition containers parsed into `T` (MobDef, AbilityDef, WaveDef, ...). Refresh failures keep the previous snapshot."
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Catalog::ensure",
-      "kind": "method",
-      "signature": "pub fn ensure(&mut self, now_ms: u64) -> bool",
-      "docs": "Refresh when stale; returns true when items are available."
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Catalog::items",
-      "kind": "field",
-      "signature": "pub items: Vec<T>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Catalog::new",
-      "kind": "method",
-      "signature": "pub fn new(type_name: &str, ttl_ms: u64, parse: fn(&Container) -> Option<T>) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Container",
-      "kind": "struct",
-      "signature": "pub struct Container { pub id: String, pub type_name: String, pub display_name: String, pub owner_user_id: Option<String>, pub properties: Value, }",
-      "docs": "A container with its property map (the `container_get_batch` shape)."
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Container::display_name",
-      "kind": "field",
-      "signature": "pub display_name: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Container::id",
-      "kind": "field",
-      "signature": "pub id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Container::owner_user_id",
-      "kind": "field",
-      "signature": "pub owner_user_id: Option<String>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Container::properties",
-      "kind": "field",
-      "signature": "pub properties: Value",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "Container::type_name",
-      "kind": "field",
-      "signature": "pub type_name: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "load_with_props",
-      "kind": "function",
-      "signature": "pub fn load_with_props(type_name: &str) -> Result<Vec<Container>, HostError>",
-      "docs": "List all containers of a type WITH their properties: one `containers_list` plus `container_get_batch` calls of ≤32 ids (2 db-ops for ≤32 containers — the pattern that replaced BWF's ~20-op adopt cycle)."
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "load_with_props_in",
-      "kind": "function",
-      "signature": "pub fn load_with_props_in( type_name: &str, session_id: Option<&str>, ) -> Result<Vec<Container>, HostError>",
-      "docs": "Session-scoped variant of [`load_with_props`] (session games: matches, battles, instances)."
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "prop_bool",
-      "kind": "function",
-      "signature": "pub fn prop_bool(props: &Value, key: &str) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "prop_f32",
-      "kind": "function",
-      "signature": "pub fn prop_f32(props: &Value, key: &str) -> f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "prop_i64",
-      "kind": "function",
-      "signature": "pub fn prop_i64(props: &Value, key: &str) -> i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::model",
-      "name": "prop_str",
-      "kind": "function",
-      "signature": "pub fn prop_str(props: &Value, key: &str) -> String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerActor",
-      "kind": "struct",
-      "signature": "pub struct PlayerActor { pub uuid: String, pub user_id: String, pub x: f32, pub y: f32, pub z: f32, /// True when the position came from a decoded pose (vs chunk centre). pub precise: bool, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerActor::precise",
-      "kind": "field",
-      "signature": "pub precise: bool",
-      "docs": "True when the position came from a decoded pose (vs chunk centre)."
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerActor::user_id",
-      "kind": "field",
-      "signature": "pub user_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerActor::uuid",
-      "kind": "field",
-      "signature": "pub uuid: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerActor::x",
-      "kind": "field",
-      "signature": "pub x: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerActor::y",
-      "kind": "field",
-      "signature": "pub y: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerActor::z",
-      "kind": "field",
-      "signature": "pub z: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker",
-      "kind": "struct",
-      "signature": "pub struct PlayerTracker { pub center: (i64, i64, i64), pub radius_xz: u8, pub radius_y: u8, pub chunk_size: i64, pub players: Vec<PlayerActor>, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::by_user",
-      "kind": "method",
-      "signature": "pub fn by_user(&self, user_id: &str) -> Option<&PlayerActor>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::center",
-      "kind": "field",
-      "signature": "pub center: (i64, i64, i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::chunk_size",
-      "kind": "field",
-      "signature": "pub chunk_size: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::nearest",
-      "kind": "method",
-      "signature": "pub fn nearest(&self, x: f32, z: f32) -> Option<&PlayerActor>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::new",
-      "kind": "method",
-      "signature": "pub fn new(center: (i64, i64, i64), radius_xz: u8, radius_y: u8) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::players",
-      "kind": "field",
-      "signature": "pub players: Vec<PlayerActor>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::radius_xz",
-      "kind": "field",
-      "signature": "pub radius_xz: u8",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::radius_y",
-      "kind": "field",
-      "signature": "pub radius_y: u8",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::presence",
-      "name": "PlayerTracker::refresh",
-      "kind": "method",
-      "signature": "pub fn refresh(&mut self) -> &[PlayerActor]",
-      "docs": "Refresh the snapshot (one db-op). Host errors keep the last snapshot. A user with several actor rows (alts, stale test actors, ghosts) contributes only their FRESHEST row (by `updatedAt`, ISO-sortable)."
-    },
-    {
-      "module": "crowdy_game_kit_core::rng",
-      "name": "Rng",
-      "kind": "struct",
-      "signature": "pub struct Rng { state: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::rng",
-      "name": "Rng::f32",
-      "kind": "method",
-      "signature": "pub fn f32(&mut self) -> f32",
-      "docs": "Uniform in [0, 1)."
-    },
-    {
-      "module": "crowdy_game_kit_core::rng",
-      "name": "Rng::from_host",
-      "kind": "method",
-      "signature": "pub fn from_host() -> Self",
-      "docs": "Seed from the host (deterministic per module instance)."
-    },
-    {
-      "module": "crowdy_game_kit_core::rng",
-      "name": "Rng::next_u64",
-      "kind": "method",
-      "signature": "pub fn next_u64(&mut self) -> u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::rng",
-      "name": "Rng::pick",
-      "kind": "method",
-      "signature": "pub fn pick<'a, T>(&mut self, items: &'a [T]) -> Option<&'a T>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::rng",
-      "name": "Rng::range_i64",
-      "kind": "method",
-      "signature": "pub fn range_i64(&mut self, lo: i64, hi: i64) -> i64",
-      "docs": "Uniform integer in [lo, hi] (inclusive)."
-    },
-    {
-      "module": "crowdy_game_kit_core::rng",
-      "name": "Rng::seeded",
-      "kind": "method",
-      "signature": "pub fn seeded(seed: u64) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "DEFAULT_CHUNK_SIZE",
-      "kind": "const",
-      "signature": "pub const DEFAULT_CHUNK_SIZE: i64 = 16;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "block_world",
-      "kind": "function",
-      "signature": "pub fn block_world(chunk: (i64, i64, i64), local: (i64, i64, i64), chunk_size: i64) -> (i64, i64, i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "chunk_box",
-      "kind": "function",
-      "signature": "pub fn chunk_box( center: (i64, i64, i64), radius_xz: i64, radius_y: i64, ) -> impl Iterator<Item = (i64, i64, i64)>",
-      "docs": "Iterate a chunk box around a center (inclusive radii), y-band clamped."
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "chunk_center",
-      "kind": "function",
-      "signature": "pub fn chunk_center(chunk: (i64, i64, i64), chunk_size: i64) -> (f32, f32, f32)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "chunk_of_block",
-      "kind": "function",
-      "signature": "pub fn chunk_of_block(x: i64, y: i64, z: i64, chunk_size: i64) -> (i64, i64, i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "dist3",
-      "kind": "function",
-      "signature": "pub fn dist3(a: (f32, f32, f32), b: (f32, f32, f32)) -> f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "dist_xz",
-      "kind": "function",
-      "signature": "pub fn dist_xz(ax: f32, az: f32, bx: f32, bz: f32) -> f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "world_to_chunk",
-      "kind": "function",
-      "signature": "pub fn world_to_chunk(x: f32, y: f32, z: f32, chunk_size: i64) -> (i64, i64, i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::space",
-      "name": "world_to_local",
-      "kind": "function",
-      "signature": "pub fn world_to_local(x: i64, y: i64, z: i64, chunk_size: i64) -> (u8, u8, u8)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Partitioned",
-      "kind": "struct",
-      "signature": "pub struct Partitioned<T> { pub parts: HashMap<String, T>, }",
-      "docs": "Many logical states under one blob, keyed by string (instance ids, run ids). One module serves many instances (game-kit-program 02 B6)."
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Partitioned::approx_bytes",
-      "kind": "method",
-      "signature": "pub fn approx_bytes(&self) -> usize",
-      "docs": "Serialized size in bytes — engines guard against the platform's 256 KB module-state cap before admitting new partitions."
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Partitioned::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Partitioned::evict",
-      "kind": "method",
-      "signature": "pub fn evict(&mut self, mut expired: impl FnMut(&str, &T) -> bool) -> Vec<String>",
-      "docs": "Evict partitions selected by `expired` (completed runs, idle tables); returns the evicted keys. Engines call this every tick — durable results must already live on model containers (the D5 contract)."
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Partitioned::get_or_default",
-      "kind": "method",
-      "signature": "pub fn get_or_default(&mut self, key: &str) -> &mut T",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Partitioned::has_room",
-      "kind": "method",
-      "signature": "pub fn has_room(&self, budget_bytes: usize) -> bool",
-      "docs": "Whether admitting another partition is safe under `budget_bytes` (leaves headroom for the new partition to grow to the size of the current largest one)."
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Partitioned::parts",
-      "kind": "field",
-      "signature": "pub parts: HashMap<String, T>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Partitioned::remove",
-      "kind": "method",
-      "signature": "pub fn remove(&mut self, key: &str) -> Option<T>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Persisted",
-      "kind": "struct",
-      "signature": "pub struct Persisted<T> { pub value: T, version: u8, dirty: bool, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Persisted::load",
-      "kind": "method",
-      "signature": "pub fn load(version: u8) -> Self",
-      "docs": "Load the blob (or defaults). `version` guards schema evolution: a blob with a different version byte is discarded in favor of defaults."
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Persisted::mark_dirty",
-      "kind": "method",
-      "signature": "pub fn mark_dirty(&mut self)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Persisted::save",
-      "kind": "method",
-      "signature": "pub fn save(&mut self) -> bool",
-      "docs": "Persist now (unconditionally)."
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Persisted::save_if_dirty",
-      "kind": "method",
-      "signature": "pub fn save_if_dirty(&mut self) -> bool",
-      "docs": "Persist only when marked dirty (call at the end of every tick)."
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "Persisted::value",
-      "kind": "field",
-      "signature": "pub value: T",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::state",
-      "name": "STATE_CAP_BYTES",
-      "kind": "const",
-      "signature": "pub const STATE_CAP_BYTES: usize = 256 * 1024;",
-      "docs": "The platform module-state cap (see the compute docs): engines size partition budgets against this."
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "ActorUuid",
-      "kind": "struct",
-      "signature": "pub struct ActorUuid(String);",
-      "docs": "A 32-char ASCII actor id (the platform wire form)."
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "ActorUuid::as_str",
-      "kind": "method",
-      "signature": "pub fn as_str(&self) -> &str",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "ActorUuid::ascii_hex",
-      "kind": "method",
-      "signature": "pub fn ascii_hex(&self) -> String",
-      "docs": "emit_spatial wants the hex of the 32 ASCII octets (64 hex chars)."
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "ActorUuid::normalize",
-      "kind": "method",
-      "signature": "pub fn normalize(candidate: &str, fallback: &str) -> Self",
-      "docs": "Accept a well-formed uuid, or derive one from fallback material (hex-filtered, zero-padded) — mirrors the client normalizeUuid."
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "FLAG_GROUNDED",
-      "kind": "const",
-      "signature": "pub const FLAG_GROUNDED: u8 = 0b0001;",
-      "docs": "Flag-bit registry. Bits 0-3 are platform-reserved; games may use 4-7."
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "FLAG_MOB",
-      "kind": "const",
-      "signature": "pub const FLAG_MOB: u8 = 0b0010;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "FLAG_NPC",
-      "kind": "const",
-      "signature": "pub const FLAG_NPC: u8 = 0b0100;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "FLAG_RESERVED3",
-      "kind": "const",
-      "signature": "pub const FLAG_RESERVED3: u8 = 0b1000;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "POSE_BYTES",
-      "kind": "const",
-      "signature": "pub const POSE_BYTES: usize = 48;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose",
-      "kind": "struct",
-      "signature": "pub struct Pose { pub x: f32, pub y: f32, pub z: f32, pub yaw: f32, pub pitch: f32, pub vel_x: f32, pub vel_y: f32, pub vel_z: f32, pub flags: u8, pub held: u8, pub updated_at_ms: f64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::at",
-      "kind": "method",
-      "signature": "pub fn at(x: f32, y: f32, z: f32) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::decode",
-      "kind": "method",
-      "signature": "pub fn decode(bytes: &[u8]) -> Option<Self>",
-      "docs": "Decode the leading 48 bytes; tolerates longer payloads (suffix data)."
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::encode",
-      "kind": "method",
-      "signature": "pub fn encode(&self) -> [u8; POSE_BYTES]",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::flags",
-      "kind": "field",
-      "signature": "pub flags: u8",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::held",
-      "kind": "field",
-      "signature": "pub held: u8",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::pitch",
-      "kind": "field",
-      "signature": "pub pitch: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::suffix",
-      "kind": "method",
-      "signature": "pub fn suffix(bytes: &[u8]) -> Option<String>",
-      "docs": "The UTF-8 suffix after the pose (mob/npc container ids), if any."
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::updated_at_ms",
-      "kind": "field",
-      "signature": "pub updated_at_ms: f64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::vel_x",
-      "kind": "field",
-      "signature": "pub vel_x: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::vel_y",
-      "kind": "field",
-      "signature": "pub vel_y: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::vel_z",
-      "kind": "field",
-      "signature": "pub vel_z: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::x",
-      "kind": "field",
-      "signature": "pub x: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::y",
-      "kind": "field",
-      "signature": "pub y: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::yaw",
-      "kind": "field",
-      "signature": "pub yaw: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "Pose::z",
-      "kind": "field",
-      "signature": "pub z: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_core::wire",
-      "name": "emit_actor",
-      "kind": "function",
-      "signature": "pub fn emit_actor( uuid: &ActorUuid, pose: &Pose, suffix: Option<&str>, distance: u8, chunk_size: i64, ) -> Result<Value, HostError>",
-      "docs": "Emit an actor-pose update (optionally with a suffix) at the pose's chunk."
-    },
-    {
-      "module": "crowdy_game_kit_econ",
-      "name": "boards",
-      "kind": "module",
-      "signature": "pub mod boards;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ",
-      "name": "core",
-      "kind": "reexport",
-      "signature": "pub use crowdy_game_kit_core as core;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ",
-      "name": "loot",
-      "kind": "module",
-      "signature": "pub mod loot;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ",
-      "name": "market",
-      "kind": "module",
-      "signature": "pub mod market;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ",
-      "name": "production",
-      "kind": "module",
-      "signature": "pub mod production;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "Board",
-      "kind": "struct",
-      "signature": "pub struct Board { pub scores: HashMap<String, i64>, }",
-      "docs": "A score book for one board. Submit through trusted paths only."
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "Board::page",
-      "kind": "method",
-      "signature": "pub fn page(&self, page: usize, per_page: usize) -> Vec<RankedEntry>",
-      "docs": "One page of the ranking (0-based `page` of `per_page` rows)."
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "Board::rank_of",
-      "kind": "method",
-      "signature": "pub fn rank_of(&self, subject_id: &str) -> Option<RankedEntry>",
-      "docs": "One subject's ranked row (None when unranked)."
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "Board::ranking",
-      "kind": "method",
-      "signature": "pub fn ranking(&self) -> Vec<RankedEntry>",
-      "docs": "The full ranking, best first (ties share rank; stable by id)."
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "Board::scores",
-      "kind": "field",
-      "signature": "pub scores: HashMap<String, i64>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "Board::submit",
-      "kind": "method",
-      "signature": "pub fn submit(&mut self, subject_id: &str, score: i64, improve_only: bool) -> i64",
-      "docs": "Record a score (higher wins; `improve_only` keeps personal bests)."
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "RankedEntry",
-      "kind": "struct",
-      "signature": "pub struct RankedEntry { pub subject_id: String, pub score: i64, /// 1-based; ties share a rank (competition ranking: 1, 1, 3). pub rank: u32, /// Percentile of entries at-or-below this score, in [0, 100]. pub percentile: f32, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "RankedEntry::percentile",
-      "kind": "field",
-      "signature": "pub percentile: f32",
-      "docs": "Percentile of entries at-or-below this score, in [0, 100]."
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "RankedEntry::rank",
-      "kind": "field",
-      "signature": "pub rank: u32",
-      "docs": "1-based; ties share a rank (competition ranking: 1, 1, 3)."
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "RankedEntry::score",
-      "kind": "field",
-      "signature": "pub score: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "RankedEntry::subject_id",
-      "kind": "field",
-      "signature": "pub subject_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "SeasonSnapshot",
-      "kind": "struct",
-      "signature": "pub struct SeasonSnapshot { pub season: String, pub taken_at_ms: u64, pub entries: Vec<RankedEntry>, }",
-      "docs": "A frozen end-of-season ranking."
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "SeasonSnapshot::entries",
-      "kind": "field",
-      "signature": "pub entries: Vec<RankedEntry>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "SeasonSnapshot::season",
-      "kind": "field",
-      "signature": "pub season: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "SeasonSnapshot::taken_at_ms",
-      "kind": "field",
-      "signature": "pub taken_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::boards",
-      "name": "roll_season",
-      "kind": "function",
-      "signature": "pub fn roll_season(board: &mut Board, season: &str, now_ms: u64) -> SeasonSnapshot",
-      "docs": "Freeze the board into a snapshot and reset live scores."
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootBook",
-      "kind": "struct",
-      "signature": "pub struct LootBook { pub rolls: u64, pub pity_counters: HashMap<String, u32>, /// (roll number, item id) — last N rolls for dispute audits. pub audit: Vec<(u64, String)>, }",
-      "docs": "Per-subject roll memory: pity counters + a rolling audit log."
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootBook::audit",
-      "kind": "field",
-      "signature": "pub audit: Vec<(u64, String)>",
-      "docs": "(roll number, item id) — last N rolls for dispute audits."
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootBook::pity_counters",
-      "kind": "field",
-      "signature": "pub pity_counters: HashMap<String, u32>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootBook::rolls",
-      "kind": "field",
-      "signature": "pub rolls: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootEntry",
-      "kind": "struct",
-      "signature": "pub struct LootEntry { pub item_id: String, pub weight: u32, /// Entries sharing a pity group tick that group's counter. pub pity_group: Option<String>, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootEntry::item_id",
-      "kind": "field",
-      "signature": "pub item_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootEntry::pity_group",
-      "kind": "field",
-      "signature": "pub pity_group: Option<String>",
-      "docs": "Entries sharing a pity group tick that group's counter."
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootEntry::weight",
-      "kind": "field",
-      "signature": "pub weight: u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootRoll",
-      "kind": "struct",
-      "signature": "pub struct LootRoll { pub item_id: String, pub pity_triggered: bool, pub roll_no: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootRoll::item_id",
-      "kind": "field",
-      "signature": "pub item_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootRoll::pity_triggered",
-      "kind": "field",
-      "signature": "pub pity_triggered: bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootRoll::roll_no",
-      "kind": "field",
-      "signature": "pub roll_no: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootTable",
-      "kind": "struct",
-      "signature": "pub struct LootTable { pub entries: Vec<LootEntry>, /// pity group -> guaranteed within this many rolls. pub pity_within: HashMap<String, u32>, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootTable::entries",
-      "kind": "field",
-      "signature": "pub entries: Vec<LootEntry>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "LootTable::pity_within",
-      "kind": "field",
-      "signature": "pub pity_within: HashMap<String, u32>",
-      "docs": "pity group -> guaranteed within this many rolls."
-    },
-    {
-      "module": "crowdy_game_kit_econ::loot",
-      "name": "roll",
-      "kind": "function",
-      "signature": "pub fn roll(table: &LootTable, book: &mut LootBook, rng: &mut Rng) -> Option<LootRoll>",
-      "docs": "Roll once. Pity: when a group's counter reaches its `pity_within` threshold, the next roll is forced from that group (rarest-first by weight) and the counter resets. Rolling the group naturally also resets."
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Fill",
-      "kind": "struct",
-      "signature": "pub struct Fill { pub buyer_id: String, pub seller_id: String, pub buy_order_id: u64, pub sell_order_id: u64, pub price: i64, pub quantity: i64, }",
-      "docs": "One trade produced by matching: `quantity` units at `price`, buyer pays `price * quantity` to the seller. The engine settles both legs."
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Fill::buy_order_id",
-      "kind": "field",
-      "signature": "pub buy_order_id: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Fill::buyer_id",
-      "kind": "field",
-      "signature": "pub buyer_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Fill::price",
-      "kind": "field",
-      "signature": "pub price: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Fill::quantity",
-      "kind": "field",
-      "signature": "pub quantity: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Fill::sell_order_id",
-      "kind": "field",
-      "signature": "pub sell_order_id: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Fill::seller_id",
-      "kind": "field",
-      "signature": "pub seller_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Order",
-      "kind": "struct",
-      "signature": "pub struct Order { pub order_id: u64, pub user_id: String, pub side: Side, /// Limit price per unit. pub price: i64, pub quantity: i64, pub placed_at_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Order::order_id",
-      "kind": "field",
-      "signature": "pub order_id: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Order::placed_at_ms",
-      "kind": "field",
-      "signature": "pub placed_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Order::price",
-      "kind": "field",
-      "signature": "pub price: i64",
-      "docs": "Limit price per unit."
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Order::quantity",
-      "kind": "field",
-      "signature": "pub quantity: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Order::side",
-      "kind": "field",
-      "signature": "pub side: Side",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Order::user_id",
-      "kind": "field",
-      "signature": "pub user_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "OrderBook",
-      "kind": "struct",
-      "signature": "pub struct OrderBook { pub bids: Vec<Order>, pub asks: Vec<Order>, next_order_id: u64, }",
-      "docs": "The book for ONE item/commodity. Bids sorted best (highest) first, asks best (lowest) first; ties by placement time (price-time priority)."
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "OrderBook::asks",
-      "kind": "field",
-      "signature": "pub asks: Vec<Order>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "OrderBook::best_ask",
-      "kind": "method",
-      "signature": "pub fn best_ask(&self) -> Option<&Order>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "OrderBook::best_bid",
-      "kind": "method",
-      "signature": "pub fn best_bid(&self) -> Option<&Order>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "OrderBook::bids",
-      "kind": "field",
-      "signature": "pub bids: Vec<Order>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "OrderBook::cancel",
-      "kind": "method",
-      "signature": "pub fn cancel(&mut self, order_id: u64, user_id: &str) -> Option<Order>",
-      "docs": "Cancel a resting order (owner only). Returns it for escrow refund."
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "OrderBook::depth",
-      "kind": "method",
-      "signature": "pub fn depth(&self, side: Side, levels: usize) -> Vec<(i64, i64)>",
-      "docs": "Depth summary: (price, total quantity) per level, best first."
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "OrderBook::place",
-      "kind": "method",
-      "signature": "pub fn place( &mut self, user_id: &str, side: Side, price: i64, quantity: i64, now_ms: u64, ) -> Result<(u64, Vec<Fill>), &'static str>",
-      "docs": "Place a limit order, matching immediately against the far side. Returns (order id, fills). Any unfilled remainder rests on the book. Maker price wins (the resting order's limit is the trade price)."
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Side",
-      "kind": "enum",
-      "signature": "pub enum Side { Buy, Sell, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Side::Buy",
-      "kind": "variant",
-      "signature": "Buy",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::market",
-      "name": "Side::Sell",
-      "kind": "variant",
-      "signature": "Sell",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "Producer",
-      "kind": "struct",
-      "signature": "pub struct Producer { pub node_id: String, /// (resource, amount per cycle) consumed. pub inputs: Vec<(String, i64)>, /// (resource, amount per cycle) produced. pub outputs: Vec<(String, i64)>, pub rate_per_min: f64, /// Fractional cycles carried between advances. pub cycle_progress: f64, }",
-      "docs": "One production node: consumes inputs, produces outputs, at `rate_per_min` cycles per minute, bounded by input stock and output capacity."
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "Producer::cycle_progress",
-      "kind": "field",
-      "signature": "pub cycle_progress: f64",
-      "docs": "Fractional cycles carried between advances."
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "Producer::inputs",
-      "kind": "field",
-      "signature": "pub inputs: Vec<(String, i64)>",
-      "docs": "(resource, amount per cycle) consumed."
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "Producer::node_id",
-      "kind": "field",
-      "signature": "pub node_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "Producer::outputs",
-      "kind": "field",
-      "signature": "pub outputs: Vec<(String, i64)>",
-      "docs": "(resource, amount per cycle) produced."
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "Producer::rate_per_min",
-      "kind": "field",
-      "signature": "pub rate_per_min: f64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "ProductionChain",
-      "kind": "struct",
-      "signature": "pub struct ProductionChain { pub producers: Vec<Producer>, pub stock: HashMap<String, i64>, /// Per-resource storage caps (absent = unlimited). pub capacity: HashMap<String, i64>, pub last_advanced_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "ProductionChain::advance",
-      "kind": "method",
-      "signature": "pub fn advance(&mut self, now_ms: u64) -> HashMap<String, i64>",
-      "docs": "Advance the whole chain to `now_ms` (offline catch-up in one call). Producers run in declaration order — upstream nodes first lets a night of idle time flow through multi-stage chains."
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "ProductionChain::capacity",
-      "kind": "field",
-      "signature": "pub capacity: HashMap<String, i64>",
-      "docs": "Per-resource storage caps (absent = unlimited)."
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "ProductionChain::last_advanced_ms",
-      "kind": "field",
-      "signature": "pub last_advanced_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "ProductionChain::producers",
-      "kind": "field",
-      "signature": "pub producers: Vec<Producer>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_econ::production",
-      "name": "ProductionChain::stock",
-      "kind": "field",
-      "signature": "pub stock: HashMap<String, i64>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play",
-      "name": "abilities",
-      "kind": "module",
-      "signature": "pub mod abilities;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play",
-      "name": "cards",
-      "kind": "module",
-      "signature": "pub mod cards;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play",
-      "name": "core",
-      "kind": "reexport",
-      "signature": "pub use crowdy_game_kit_core as core;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play",
-      "name": "referee",
-      "kind": "module",
-      "signature": "pub mod referee;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play",
-      "name": "score",
-      "kind": "module",
-      "signature": "pub mod score;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play",
-      "name": "timing",
-      "kind": "module",
-      "signature": "pub mod timing;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play",
-      "name": "turns",
-      "kind": "module",
-      "signature": "pub mod turns;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilityKind",
-      "kind": "enum",
-      "signature": "pub enum AbilityKind { /// Immediate hit on a target in range (hitscan). Instant { damage: i64 }, /// A stepped projectile along a direction; first actor within /// `hit_radius` takes the damage. Projectile { speed: f32, damage: i64, max_range: f32, hit_radius: f32 }, /// A delayed explosion at a target point; damage within `radius`, /// optionally scaled down linearly with distance. Aoe { radius: f32, damage: i64, delay_ms: u64, falloff: bool }, }",
-      "docs": "What a cast does once validated."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilityKind::Aoe",
-      "kind": "variant",
-      "signature": "Aoe { radius: f32, damage: i64, delay_ms: u64, falloff: bool }",
-      "docs": "A delayed explosion at a target point; damage within `radius`, optionally scaled down linearly with distance."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilityKind::Instant",
-      "kind": "variant",
-      "signature": "Instant { damage: i64 }",
-      "docs": "Immediate hit on a target in range (hitscan)."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilityKind::Projectile",
-      "kind": "variant",
-      "signature": "Projectile { speed: f32, damage: i64, max_range: f32, hit_radius: f32 }",
-      "docs": "A stepped projectile along a direction; first actor within `hit_radius` takes the damage."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilitySpec",
-      "kind": "struct",
-      "signature": "pub struct AbilitySpec { pub ability_id: String, pub cooldown_ms: u64, pub resource_cost: i64, /// Max cast distance (target point / initial direction anchor). pub range: f32, pub kind: AbilityKind, }",
-      "docs": "One ability's rules (usually parsed from an `AbilityDef` container)."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilitySpec::ability_id",
-      "kind": "field",
-      "signature": "pub ability_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilitySpec::cooldown_ms",
-      "kind": "field",
-      "signature": "pub cooldown_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilitySpec::kind",
-      "kind": "field",
-      "signature": "pub kind: AbilityKind",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilitySpec::range",
-      "kind": "field",
-      "signature": "pub range: f32",
-      "docs": "Max cast distance (target point / initial direction anchor)."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "AbilitySpec::resource_cost",
-      "kind": "field",
-      "signature": "pub resource_cost: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "CasterBook",
-      "kind": "struct",
-      "signature": "pub struct CasterBook { /// ability id -> earliest next cast (ms). pub ready_at: HashMap<String, u64>, pub resource: i64, pub resource_max: i64, /// Resource points regenerated per second. pub regen_per_sec: i64, pub last_regen_ms: u64, }",
-      "docs": "Per-caster server-held book: cooldown stamps + a regenerating resource pool. One book per user, serde in module state."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "CasterBook::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "CasterBook::last_regen_ms",
-      "kind": "field",
-      "signature": "pub last_regen_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "CasterBook::ready_at",
-      "kind": "field",
-      "signature": "pub ready_at: HashMap<String, u64>",
-      "docs": "ability id -> earliest next cast (ms)."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "CasterBook::regen",
-      "kind": "method",
-      "signature": "pub fn regen(&mut self, now_ms: u64)",
-      "docs": "Apply resource regeneration up to `now_ms`."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "CasterBook::regen_per_sec",
-      "kind": "field",
-      "signature": "pub regen_per_sec: i64",
-      "docs": "Resource points regenerated per second."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "CasterBook::resource",
-      "kind": "field",
-      "signature": "pub resource: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "CasterBook::resource_max",
-      "kind": "field",
-      "signature": "pub resource_max: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe",
-      "kind": "struct",
-      "signature": "pub struct PendingAoe { pub ability_id: String, pub caster_id: String, pub x: f32, pub z: f32, pub radius: f32, pub damage: i64, pub falloff: bool, pub detonate_at_ms: u64, }",
-      "docs": "A delayed area effect awaiting detonation."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::ability_id",
-      "kind": "field",
-      "signature": "pub ability_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::caster_id",
-      "kind": "field",
-      "signature": "pub caster_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::damage",
-      "kind": "field",
-      "signature": "pub damage: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::detonate_at_ms",
-      "kind": "field",
-      "signature": "pub detonate_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::falloff",
-      "kind": "field",
-      "signature": "pub falloff: bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::from_cast",
-      "kind": "method",
-      "signature": "pub fn from_cast( spec: &AbilitySpec, caster_id: &str, cast: &ValidCast, now_ms: u64, ) -> Option<Self>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::radius",
-      "kind": "field",
-      "signature": "pub radius: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::ready",
-      "kind": "method",
-      "signature": "pub fn ready(&self, now_ms: u64) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::resolve",
-      "kind": "method",
-      "signature": "pub fn resolve(&self, victims: &[(String, (f32, f32))]) -> Vec<(String, i64)>",
-      "docs": "Damage per victim inside the radius (linear falloff to 25% at the edge when enabled). Victims = (id, position); the caster is exempt."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::x",
-      "kind": "field",
-      "signature": "pub x: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "PendingAoe::z",
-      "kind": "field",
-      "signature": "pub z: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile",
-      "kind": "struct",
-      "signature": "pub struct Projectile { pub ability_id: String, pub caster_id: String, pub x: f32, pub z: f32, pub dir: (f32, f32), pub speed: f32, pub damage: i64, pub hit_radius: f32, pub traveled: f32, pub max_range: f32, pub launched_at_ms: u64, }",
-      "docs": "A live projectile stepped by the engine each tick."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::ability_id",
-      "kind": "field",
-      "signature": "pub ability_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::caster_id",
-      "kind": "field",
-      "signature": "pub caster_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::damage",
-      "kind": "field",
-      "signature": "pub damage: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::dir",
-      "kind": "field",
-      "signature": "pub dir: (f32, f32)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::hit_radius",
-      "kind": "field",
-      "signature": "pub hit_radius: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::launch",
-      "kind": "method",
-      "signature": "pub fn launch( spec: &AbilitySpec, caster_id: &str, from: (f32, f32), cast: &ValidCast, now_ms: u64, ) -> Option<Self>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::launched_at_ms",
-      "kind": "field",
-      "signature": "pub launched_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::max_range",
-      "kind": "field",
-      "signature": "pub max_range: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::speed",
-      "kind": "field",
-      "signature": "pub speed: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::step",
-      "kind": "method",
-      "signature": "pub fn step( &mut self, dt_ms: u64, hit_test: &mut impl FnMut(f32, f32, f32) -> Option<String>, blocked: &mut impl FnMut(f32, f32) -> bool, ) -> ProjectileStep",
-      "docs": "Advance `dt_ms`, sub-stepping so tick-rate simulation cannot tunnel through targets (tolerance window = hit_radius per sub-step). `hit_test(x, z, radius)` returns a hit target (never the caster) or None; `blocked(x, z)` marks walls."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::traveled",
-      "kind": "field",
-      "signature": "pub traveled: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::x",
-      "kind": "field",
-      "signature": "pub x: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "Projectile::z",
-      "kind": "field",
-      "signature": "pub z: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "ProjectileStep",
-      "kind": "enum",
-      "signature": "pub enum ProjectileStep { /// Still flying (new position recorded on the projectile). Flying, /// Hit `target_id` at the recorded position; despawn. Hit { target_id: String }, /// Ran out of range or was blocked; despawn. Expired, }",
-      "docs": "The outcome of one projectile step."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "ProjectileStep::Expired",
-      "kind": "variant",
-      "signature": "Expired",
-      "docs": "Ran out of range or was blocked; despawn."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "ProjectileStep::Flying",
-      "kind": "variant",
-      "signature": "Flying",
-      "docs": "Still flying (new position recorded on the projectile)."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "ProjectileStep::Hit",
-      "kind": "variant",
-      "signature": "Hit { target_id: String }",
-      "docs": "Hit `target_id` at the recorded position; despawn."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "ValidCast",
-      "kind": "struct",
-      "signature": "pub struct ValidCast { pub ability_id: String, /// Normalized aim direction (projectiles). pub dir: (f32, f32), /// Clamped target point (instant/AoE). pub target: (f32, f32), }",
-      "docs": "A validated cast, ready for the engine to act on."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "ValidCast::ability_id",
-      "kind": "field",
-      "signature": "pub ability_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "ValidCast::dir",
-      "kind": "field",
-      "signature": "pub dir: (f32, f32)",
-      "docs": "Normalized aim direction (projectiles)."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "ValidCast::target",
-      "kind": "field",
-      "signature": "pub target: (f32, f32)",
-      "docs": "Clamped target point (instant/AoE)."
-    },
-    {
-      "module": "crowdy_game_kit_play::abilities",
-      "name": "validate_cast",
-      "kind": "function",
-      "signature": "pub fn validate_cast( spec: &AbilitySpec, book: &mut CasterBook, caster_pos: (f32, f32), target: (f32, f32), now_ms: u64, ) -> Result<ValidCast, &'static str>",
-      "docs": "Validate a cast against the book: cooldown, resource, range. On success the cooldown is armed and the resource deducted (the cast is committed)."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardId",
-      "kind": "type",
-      "signature": "pub type CardId = String;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable",
-      "kind": "struct",
-      "signature": "pub struct CardTable { pub draw: Pile, pub discard: Pile, pub hands: HashMap<String, Vec<CardId>>, /// Named public zones (battlefield, trick, melds, ...), in play order. pub zones: HashMap<String, Vec<(String, CardId)>>, pub seed: u64, }",
-      "docs": "The full table: draw pile, discard, per-actor hidden hands, and named public zones. Everything serde — one `CardTable` per match partition."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::clear_zone",
-      "kind": "method",
-      "signature": "pub fn clear_zone(&mut self, zone: &str) -> Vec<(String, CardId)>",
-      "docs": "Move every card in a zone to the discard (trick taken, turn over)."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::deal",
-      "kind": "method",
-      "signature": "pub fn deal(&mut self, actors: &[String], count: usize)",
-      "docs": "Deal `count` cards to each actor (round-robin, deterministic order)."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::discard",
-      "kind": "field",
-      "signature": "pub discard: Pile",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::draw",
-      "kind": "field",
-      "signature": "pub draw: Pile",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::draw_to_hand",
-      "kind": "method",
-      "signature": "pub fn draw_to_hand(&mut self, actor_id: &str) -> Option<CardId>",
-      "docs": "Draw one card into an actor's hidden hand. Recycles the discard (reshuffled with the table seed + draw count) when the deck empties."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::hand",
-      "kind": "method",
-      "signature": "pub fn hand(&self, actor_id: &str) -> &[CardId]",
-      "docs": "The caller's own hand (the ONLY read path for hidden cards)."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::hand_sizes",
-      "kind": "method",
-      "signature": "pub fn hand_sizes(&self) -> HashMap<String, usize>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::hands",
-      "kind": "field",
-      "signature": "pub hands: HashMap<String, Vec<CardId>>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::new",
-      "kind": "method",
-      "signature": "pub fn new(catalog: impl IntoIterator<Item = CardId>, seed: u64) -> Self",
-      "docs": "Build a table from a card catalog and shuffle with the given seed."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::play",
-      "kind": "method",
-      "signature": "pub fn play(&mut self, actor_id: &str, card: &str, zone: &str) -> Result<(), &'static str>",
-      "docs": "Play (reveal) a card from a hand into a public zone. Fails when the caller does not hold the card — the legality floor every game gets."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::public_json",
-      "kind": "method",
-      "signature": "pub fn public_json(&self) -> Value",
-      "docs": "The public view (zones + counts, NEVER hidden cards) for model sync and spectator events."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::seed",
-      "kind": "field",
-      "signature": "pub seed: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "CardTable::zones",
-      "kind": "field",
-      "signature": "pub zones: HashMap<String, Vec<(String, CardId)>>",
-      "docs": "Named public zones (battlefield, trick, melds, ...), in play order."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "Pile",
-      "kind": "struct",
-      "signature": "pub struct Pile { /// Top of the pile is the END of the vec (pop to draw). pub cards: Vec<CardId>, }",
-      "docs": "A pile with hidden order (draw deck / discard)."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "Pile::cards",
-      "kind": "field",
-      "signature": "pub cards: Vec<CardId>",
-      "docs": "Top of the pile is the END of the vec (pop to draw)."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "Pile::draw",
-      "kind": "method",
-      "signature": "pub fn draw(&mut self) -> Option<CardId>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "Pile::is_empty",
-      "kind": "method",
-      "signature": "pub fn is_empty(&self) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "Pile::len",
-      "kind": "method",
-      "signature": "pub fn len(&self) -> usize",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "Pile::put",
-      "kind": "method",
-      "signature": "pub fn put(&mut self, card: CardId)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "Pile::shuffle",
-      "kind": "method",
-      "signature": "pub fn shuffle(&mut self, rng: &mut Rng)",
-      "docs": "Seeded Fisher-Yates shuffle."
-    },
-    {
-      "module": "crowdy_game_kit_play::cards",
-      "name": "standard_52",
-      "kind": "function",
-      "signature": "pub fn standard_52() -> Vec<CardId>",
-      "docs": "Build a standard 52-card catalog (\"AS\", \"2S\", ..., \"KC\") — handy for examples and tests; real games usually feed `DeckDef` container catalogs."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactBook",
-      "kind": "struct",
-      "signature": "pub struct ContactBook { pub contact_at_ms: HashMap<String, u64>, }",
-      "docs": "Per-victim contact-damage memory (persist in module state)."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactBook::contact_at_ms",
-      "kind": "field",
-      "signature": "pub contact_at_ms: HashMap<String, u64>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactBook::try_contact",
-      "kind": "method",
-      "signature": "pub fn try_contact( &mut self, victim_uuid: &str, victim_pos: (f32, f32, f32), attacker_pos: (f32, f32, f32), rules: &ContactRules, now_ms: u64, chunk_size: i64, ) -> Option<ContactHit>",
-      "docs": "Decide whether `attacker_pos` (a hostile mob) contacts the victim at `victim` this tick. Consumes the victim's cooldown when it does."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactHit",
-      "kind": "struct",
-      "signature": "pub struct ContactHit { pub victim_uuid: String, pub victim_chunk: (i64, i64, i64), }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactHit::victim_chunk",
-      "kind": "field",
-      "signature": "pub victim_chunk: (i64, i64, i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactHit::victim_uuid",
-      "kind": "field",
-      "signature": "pub victim_uuid: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactRules",
-      "kind": "struct",
-      "signature": "pub struct ContactRules { pub range: f32, /// Per-victim cooldown between contact hits. pub cooldown_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactRules::cooldown_ms",
-      "kind": "field",
-      "signature": "pub cooldown_ms: u64",
-      "docs": "Per-victim cooldown between contact hits."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactRules::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ContactRules::range",
-      "kind": "field",
-      "signature": "pub range: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "DamageOutcome",
-      "kind": "struct",
-      "signature": "pub struct DamageOutcome { pub health: i64, pub killed: bool, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "DamageOutcome::health",
-      "kind": "field",
-      "signature": "pub health: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "DamageOutcome::killed",
-      "kind": "field",
-      "signature": "pub killed: bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "EVENT_CONTACT_DAMAGE",
-      "kind": "const",
-      "signature": "pub const EVENT_CONTACT_DAMAGE: u16 = 77;",
-      "docs": "The platform convention for contact-damage server events."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "Health",
-      "kind": "struct",
-      "signature": "pub struct Health { pub current: i64, pub max: i64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "Health::alive",
-      "kind": "method",
-      "signature": "pub fn alive(&self) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "Health::apply",
-      "kind": "method",
-      "signature": "pub fn apply(&mut self, amount: i64) -> DamageOutcome",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "Health::current",
-      "kind": "field",
-      "signature": "pub current: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "Health::heal",
-      "kind": "method",
-      "signature": "pub fn heal(&mut self, amount: i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "Health::max",
-      "kind": "field",
-      "signature": "pub max: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "Health::new",
-      "kind": "method",
-      "signature": "pub fn new(max: i64) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitBook",
-      "kind": "struct",
-      "signature": "pub struct HitBook { pub last_hit_ms: HashMap<String, u64>, }",
-      "docs": "Per-attacker hit-rate memory (persist in module state)."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitBook::last_hit_ms",
-      "kind": "field",
-      "signature": "pub last_hit_ms: HashMap<String, u64>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitRules",
-      "kind": "struct",
-      "signature": "pub struct HitRules { /// Max distance between the attacker's actor and the target. pub range: f32, /// Per-attacker minimum interval between accepted hits. pub cooldown_ms: u64, /// Damage clamp. pub min_amount: i64, pub max_amount: i64, /// Accept chunk-level proximity when the attacker has no pose heartbeat /// yet (the tracker's `precise: false` rows). BWF's lag-tolerant default. pub allow_imprecise: bool, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitRules::allow_imprecise",
-      "kind": "field",
-      "signature": "pub allow_imprecise: bool",
-      "docs": "Accept chunk-level proximity when the attacker has no pose heartbeat yet (the tracker's `precise: false` rows). BWF's lag-tolerant default."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitRules::cooldown_ms",
-      "kind": "field",
-      "signature": "pub cooldown_ms: u64",
-      "docs": "Per-attacker minimum interval between accepted hits."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitRules::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitRules::max_amount",
-      "kind": "field",
-      "signature": "pub max_amount: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitRules::min_amount",
-      "kind": "field",
-      "signature": "pub min_amount: i64",
-      "docs": "Damage clamp."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "HitRules::range",
-      "kind": "field",
-      "signature": "pub range: f32",
-      "docs": "Max distance between the attacker's actor and the target."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "KillRecord",
-      "kind": "struct",
-      "signature": "pub struct KillRecord { pub killer_user_id: String, pub at_ms: u64, pub respawn_at_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "KillRecord::at_ms",
-      "kind": "field",
-      "signature": "pub at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "KillRecord::killer_user_id",
-      "kind": "field",
-      "signature": "pub killer_user_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "KillRecord::respawn_at_ms",
-      "kind": "field",
-      "signature": "pub respawn_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "RespawnBook",
-      "kind": "struct",
-      "signature": "pub struct RespawnBook { pub kills: HashMap<String, KillRecord>, }",
-      "docs": "Kill credit + respawn timers, keyed by the victim's id (slot container, player uuid, ...). Persist in module state."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "RespawnBook::due",
-      "kind": "method",
-      "signature": "pub fn due(&mut self, now_ms: u64) -> Vec<String>",
-      "docs": "Ids whose respawn timer elapsed (removed from the book)."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "RespawnBook::is_down",
-      "kind": "method",
-      "signature": "pub fn is_down(&self, victim_id: &str) -> bool",
-      "docs": "A victim currently down (dead, waiting on respawn)?"
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "RespawnBook::kills",
-      "kind": "field",
-      "signature": "pub kills: HashMap<String, KillRecord>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "RespawnBook::record_kill",
-      "kind": "method",
-      "signature": "pub fn record_kill(&mut self, victim_id: &str, killer_user_id: &str, now_ms: u64, respawn_ms: u64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ValidHit",
-      "kind": "struct",
-      "signature": "pub struct ValidHit { pub amount: i64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "ValidHit::amount",
-      "kind": "field",
-      "signature": "pub amount: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "contact_event_body",
-      "kind": "function",
-      "signature": "pub fn contact_event_body(victim_uuid: &str, damage: i64, mob_id: &str, mob_name: &str) -> Value",
-      "docs": "The type-77 event body clients apply to their own stats (BWF shape)."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "hit_response",
-      "kind": "function",
-      "signature": "pub fn hit_response(outcome: &DamageOutcome) -> Value",
-      "docs": "The invoke response for an accepted hit (the `{success, health, killed}` envelope BWF clients already speak)."
-    },
-    {
-      "module": "crowdy_game_kit_play::referee",
-      "name": "validate_hit",
-      "kind": "function",
-      "signature": "pub fn validate_hit( caller_user_id: &str, amount: i64, target_pos: (f32, f32, f32), target_alive: bool, tracker: &PlayerTracker, rules: &HitRules, book: &mut HitBook, now_ms: u64, ) -> Result<ValidHit, &'static str>",
-      "docs": "Validate an attack from `caller_user_id` against a target at `target_pos`. The tracker must be freshly refreshed (it is the presence referee)."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "MatchSummary",
-      "kind": "struct",
-      "signature": "pub struct MatchSummary { pub winner_id: Option<String>, pub standings: Vec<Standing>, pub rounds_played: u32, pub decided_by: String, }",
-      "docs": "The published result of a decided match."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "MatchSummary::decided_by",
-      "kind": "field",
-      "signature": "pub decided_by: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "MatchSummary::rounds_played",
-      "kind": "field",
-      "signature": "pub rounds_played: u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "MatchSummary::standings",
-      "kind": "field",
-      "signature": "pub standings: Vec<Standing>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "MatchSummary::winner_id",
-      "kind": "field",
-      "signature": "pub winner_id: Option<String>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook",
-      "kind": "struct",
-      "signature": "pub struct ScoreBook { pub scores: HashMap<String, i64>, /// Actors still in the running (forfeits/eliminations remove). pub active: Vec<String>, pub decided: Option<MatchSummary>, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::active",
-      "kind": "field",
-      "signature": "pub active: Vec<String>",
-      "docs": "Actors still in the running (forfeits/eliminations remove)."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::award",
-      "kind": "method",
-      "signature": "pub fn award(&mut self, actor_id: &str, points: i64) -> i64",
-      "docs": "Add points (engines call this from validated moves only)."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::decided",
-      "kind": "field",
-      "signature": "pub decided: Option<MatchSummary>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::eliminate",
-      "kind": "method",
-      "signature": "pub fn eliminate(&mut self, actor_id: &str)",
-      "docs": "Remove an actor from contention (death/forfeit/disconnect)."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::evaluate",
-      "kind": "method",
-      "signature": "pub fn evaluate( &mut self, condition: &WinCondition, rounds_played: u32, now_ms: u64, ) -> Option<&MatchSummary>",
-      "docs": "Evaluate the condition; the first decision sticks (idempotent after)."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::new",
-      "kind": "method",
-      "signature": "pub fn new(actors: impl IntoIterator<Item = String>) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::score",
-      "kind": "method",
-      "signature": "pub fn score(&self, actor_id: &str) -> i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::scores",
-      "kind": "field",
-      "signature": "pub scores: HashMap<String, i64>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "ScoreBook::standings",
-      "kind": "method",
-      "signature": "pub fn standings(&self) -> Vec<Standing>",
-      "docs": "Standings ordered by score desc (stable; rank is 1-based, ties share the earlier rank's position order but distinct ranks — simple v1)."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "Standing",
-      "kind": "struct",
-      "signature": "pub struct Standing { pub actor_id: String, pub score: i64, pub rank: u32, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "Standing::actor_id",
-      "kind": "field",
-      "signature": "pub actor_id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "Standing::rank",
-      "kind": "field",
-      "signature": "pub rank: u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "Standing::score",
-      "kind": "field",
-      "signature": "pub score: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "WinCondition",
-      "kind": "enum",
-      "signature": "pub enum WinCondition { /// First to reach `target` points. ScoreReached { target: i64 }, /// Highest score when round `final_round` completes. BestOfRounds { final_round: u32 }, /// Last active participant standing (driven by forfeits/eliminations). LastStanding, /// Survive until the timer: highest score at `ends_at_ms`. TimeLimit { ends_at_ms: u64 }, }",
-      "docs": "When is the match decided?"
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "WinCondition::BestOfRounds",
-      "kind": "variant",
-      "signature": "BestOfRounds { final_round: u32 }",
-      "docs": "Highest score when round `final_round` completes."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "WinCondition::LastStanding",
-      "kind": "variant",
-      "signature": "LastStanding",
-      "docs": "Last active participant standing (driven by forfeits/eliminations)."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "WinCondition::ScoreReached",
-      "kind": "variant",
-      "signature": "ScoreReached { target: i64 }",
-      "docs": "First to reach `target` points."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "WinCondition::TimeLimit",
-      "kind": "variant",
-      "signature": "TimeLimit { ends_at_ms: u64 }",
-      "docs": "Survive until the timer: highest score at `ends_at_ms`."
-    },
-    {
-      "module": "crowdy_game_kit_play::score",
-      "name": "summary_json",
-      "kind": "function",
-      "signature": "pub fn summary_json(summary: &MatchSummary) -> Value",
-      "docs": "The summary as the JSON shape clients/events consume."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "Course",
-      "kind": "struct",
-      "signature": "pub struct Course { pub gates: Vec<Gate>, pub laps: u32, }",
-      "docs": "A course: ordered gates; a lap = passing every gate in order (gate 0 is the start/finish line)."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "Course::gates",
-      "kind": "field",
-      "signature": "pub gates: Vec<Gate>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "Course::laps",
-      "kind": "field",
-      "signature": "pub laps: u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "GHOST_MAX_FRAMES",
-      "kind": "const",
-      "signature": "pub const GHOST_MAX_FRAMES: usize = 600;",
-      "docs": "Ghost tracks are capped so a long run cannot blow the state budget."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "Gate",
-      "kind": "struct",
-      "signature": "pub struct Gate { pub x: f32, pub z: f32, pub radius: f32, }",
-      "docs": "One ordered gate on a course."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "Gate::radius",
-      "kind": "field",
-      "signature": "pub radius: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "Gate::x",
-      "kind": "field",
-      "signature": "pub x: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "Gate::z",
-      "kind": "field",
-      "signature": "pub z: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "GhostTrack",
-      "kind": "struct",
-      "signature": "pub struct GhostTrack { pub frames: Vec<(u32, f32, f32, f32, f32)>, pub started_at_ms: u64, }",
-      "docs": "A compact recorded pose track: (offset ms, x, y, z, yaw). Sampled at the recorder's cadence, replayed with linear interpolation."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "GhostTrack::duration_ms",
-      "kind": "method",
-      "signature": "pub fn duration_ms(&self) -> u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "GhostTrack::frame_at",
-      "kind": "method",
-      "signature": "pub fn frame_at(&self, offset_ms: u32) -> Option<(f32, f32, f32, f32)>",
-      "docs": "Interpolated pose at `offset_ms` into the replay (clamped to ends)."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "GhostTrack::frames",
-      "kind": "field",
-      "signature": "pub frames: Vec<(u32, f32, f32, f32, f32)>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "GhostTrack::record",
-      "kind": "method",
-      "signature": "pub fn record(&mut self, now_ms: u64, x: f32, y: f32, z: f32, yaw: f32)",
-      "docs": "Record one frame (call per sample while the run is live)."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "GhostTrack::started_at_ms",
-      "kind": "field",
-      "signature": "pub started_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer",
-      "kind": "struct",
-      "signature": "pub struct RunTimer { pub next_gate: usize, pub lap: u32, pub started_at_ms: u64, pub lap_started_at_ms: u64, pub splits_ms: Vec<u64>, pub best_lap_ms: u64, pub finished: bool, pub total_ms: u64, }",
-      "docs": "One racer's live run state."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::best_lap_ms",
-      "kind": "field",
-      "signature": "pub best_lap_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::feed",
-      "kind": "method",
-      "signature": "pub fn feed(&mut self, course: &Course, pos: (f32, f32), now_ms: u64) -> Vec<TimingEvent>",
-      "docs": "Feed one pose sample; returns the timing events it produced. The run starts when the racer first touches gate 0."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::finished",
-      "kind": "field",
-      "signature": "pub finished: bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::lap",
-      "kind": "field",
-      "signature": "pub lap: u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::lap_started_at_ms",
-      "kind": "field",
-      "signature": "pub lap_started_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::next_gate",
-      "kind": "field",
-      "signature": "pub next_gate: usize",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::splits_ms",
-      "kind": "field",
-      "signature": "pub splits_ms: Vec<u64>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::started_at_ms",
-      "kind": "field",
-      "signature": "pub started_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "RunTimer::total_ms",
-      "kind": "field",
-      "signature": "pub total_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "TimingEvent",
-      "kind": "enum",
-      "signature": "pub enum TimingEvent { Started { at_ms: u64 }, Checkpoint { gate: usize, split_ms: u64 }, LapCompleted { lap: u32, lap_ms: u64, best: bool }, Finished { total_ms: u64, best_lap_ms: u64 }, }",
-      "docs": "Events produced by feeding poses through a run timer."
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "TimingEvent::Checkpoint",
-      "kind": "variant",
-      "signature": "Checkpoint { gate: usize, split_ms: u64 }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "TimingEvent::Finished",
-      "kind": "variant",
-      "signature": "Finished { total_ms: u64, best_lap_ms: u64 }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "TimingEvent::LapCompleted",
-      "kind": "variant",
-      "signature": "LapCompleted { lap: u32, lap_ms: u64, best: bool }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::timing",
-      "name": "TimingEvent::Started",
-      "kind": "variant",
-      "signature": "Started { at_ms: u64 }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound",
-      "kind": "struct",
-      "signature": "pub struct RevealRound { pub expected: Vec<String>, pub submissions: Vec<(String, serde_json::Value)>, pub deadline_ms: u64, }",
-      "docs": "Collects one hidden submission per actor, then resolves when everyone (or the deadline) is in. Submissions stay module-side until reveal."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound::complete",
-      "kind": "method",
-      "signature": "pub fn complete(&self) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound::deadline_ms",
-      "kind": "field",
-      "signature": "pub deadline_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound::expected",
-      "kind": "field",
-      "signature": "pub expected: Vec<String>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound::new",
-      "kind": "method",
-      "signature": "pub fn new(expected: Vec<String>, now_ms: u64, window_ms: u64) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound::ready",
-      "kind": "method",
-      "signature": "pub fn ready(&self, now_ms: u64) -> bool",
-      "docs": "Ready to reveal: everyone submitted, or the window closed."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound::reveal",
-      "kind": "method",
-      "signature": "pub fn reveal(self) -> Vec<(String, serde_json::Value)>",
-      "docs": "Consume and return all submissions (the reveal)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound::submissions",
-      "kind": "field",
-      "signature": "pub submissions: Vec<(String, serde_json::Value)>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "RevealRound::submit",
-      "kind": "method",
-      "signature": "pub fn submit(&mut self, actor_id: &str, payload: serde_json::Value) -> Result<(), &'static str>",
-      "docs": "Record a submission. Duplicates and strangers are rejected."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TimeoutPolicy",
-      "kind": "enum",
-      "signature": "pub enum TimeoutPolicy { /// The actor's turn is skipped (turn passes on). Skip, /// The actor forfeits and is removed from the order. Forfeit, /// Nothing happens automatically (a human host decides). Wait, }",
-      "docs": "What happens when a turn timer expires."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TimeoutPolicy::Forfeit",
-      "kind": "variant",
-      "signature": "Forfeit",
-      "docs": "The actor forfeits and is removed from the order."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TimeoutPolicy::Skip",
-      "kind": "variant",
-      "signature": "Skip",
-      "docs": "The actor's turn is skipped (turn passes on)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TimeoutPolicy::Wait",
-      "kind": "variant",
-      "signature": "Wait",
-      "docs": "Nothing happens automatically (a human host decides)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TimeoutPolicy::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnActor",
-      "kind": "struct",
-      "signature": "pub struct TurnActor { /// Stable id (user id, unit container id, ...). pub id: String, /// Higher acts first; ties keep insertion order (stable sort). pub initiative: i64, /// Forfeited/dead actors stay recorded but are skipped. pub active: bool, }",
-      "docs": "One participant in the order."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnActor::active",
-      "kind": "field",
-      "signature": "pub active: bool",
-      "docs": "Forfeited/dead actors stay recorded but are skipped."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnActor::id",
-      "kind": "field",
-      "signature": "pub id: String",
-      "docs": "Stable id (user id, unit container id, ...)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnActor::initiative",
-      "kind": "field",
-      "signature": "pub initiative: i64",
-      "docs": "Higher acts first; ties keep insertion order (stable sort)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnEvent",
-      "kind": "enum",
-      "signature": "pub enum TurnEvent { TurnStarted { actor_id: String, round: u32, turn_in_round: u32 }, RoundStarted { round: u32 }, ActorSkipped { actor_id: String }, ActorForfeited { actor_id: String }, /// One (or zero) active actors remain. OrderExhausted, }",
-      "docs": "An event the engine should announce (turn changed, round advanced, ...)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnEvent::ActorForfeited",
-      "kind": "variant",
-      "signature": "ActorForfeited { actor_id: String }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnEvent::ActorSkipped",
-      "kind": "variant",
-      "signature": "ActorSkipped { actor_id: String }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnEvent::OrderExhausted",
-      "kind": "variant",
-      "signature": "OrderExhausted",
-      "docs": "One (or zero) active actors remain."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnEvent::RoundStarted",
-      "kind": "variant",
-      "signature": "RoundStarted { round: u32 }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnEvent::TurnStarted",
-      "kind": "variant",
-      "signature": "TurnStarted { actor_id: String, round: u32, turn_in_round: u32 }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder",
-      "kind": "struct",
-      "signature": "pub struct TurnOrder { pub actors: Vec<TurnActor>, /// Index into `actors` of the current turn holder. pub current: usize, pub round: u32, pub turn_in_round: u32, /// Current turn deadline (0 = no timer). pub deadline_ms: u64, pub turn_duration_ms: u64, pub timeout_policy: TimeoutPolicy, started: bool, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::active_count",
-      "kind": "method",
-      "signature": "pub fn active_count(&self) -> usize",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::actors",
-      "kind": "field",
-      "signature": "pub actors: Vec<TurnActor>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::advance",
-      "kind": "method",
-      "signature": "pub fn advance(&mut self, now_ms: u64) -> Vec<TurnEvent>",
-      "docs": "Advance to the next active actor (call when the current turn ends)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::current",
-      "kind": "field",
-      "signature": "pub current: usize",
-      "docs": "Index into `actors` of the current turn holder."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::current_actor",
-      "kind": "method",
-      "signature": "pub fn current_actor(&self) -> Option<&TurnActor>",
-      "docs": "The current turn holder (None before start / after exhaustion)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::deadline_ms",
-      "kind": "field",
-      "signature": "pub deadline_ms: u64",
-      "docs": "Current turn deadline (0 = no timer)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::forfeit",
-      "kind": "method",
-      "signature": "pub fn forfeit(&mut self, actor_id: &str, now_ms: u64) -> Vec<TurnEvent>",
-      "docs": "Remove an actor from the running order (death, rage-quit). Advances the turn when it was theirs."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::new",
-      "kind": "method",
-      "signature": "pub fn new( actors: impl IntoIterator<Item = (String, i64)>, turn_duration_ms: u64, timeout_policy: TimeoutPolicy, ) -> Self",
-      "docs": "Build an order from (id, initiative) pairs; sorts by initiative descending (stable — ties keep the given order)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::remaining_ms",
-      "kind": "method",
-      "signature": "pub fn remaining_ms(&self, now_ms: u64) -> Option<u64>",
-      "docs": "Milliseconds left on the current turn (None = no timer / not started)."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::round",
-      "kind": "field",
-      "signature": "pub round: u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::start",
-      "kind": "method",
-      "signature": "pub fn start(&mut self, now_ms: u64) -> Vec<TurnEvent>",
-      "docs": "Begin round 1, turn 1. Returns the announce events."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::tick",
-      "kind": "method",
-      "signature": "pub fn tick(&mut self, now_ms: u64) -> Vec<TurnEvent>",
-      "docs": "Apply the timeout policy if the current turn's deadline passed."
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::timeout_policy",
-      "kind": "field",
-      "signature": "pub timeout_policy: TimeoutPolicy",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::turn_duration_ms",
-      "kind": "field",
-      "signature": "pub turn_duration_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_play::turns",
-      "name": "TurnOrder::turn_in_round",
-      "kind": "field",
-      "signature": "pub turn_in_round: u32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim",
-      "name": "core",
-      "kind": "reexport",
-      "signature": "pub use crowdy_game_kit_core as core;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim",
-      "name": "daycycle",
-      "kind": "module",
-      "signature": "pub mod daycycle;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim",
-      "name": "grow",
-      "kind": "module",
-      "signature": "pub mod grow;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim",
-      "name": "nodes",
-      "kind": "module",
-      "signature": "pub mod nodes;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim",
-      "name": "terrain",
-      "kind": "module",
-      "signature": "pub mod terrain;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim",
-      "name": "waves",
-      "kind": "module",
-      "signature": "pub mod waves;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim",
-      "name": "weather",
-      "kind": "module",
-      "signature": "pub mod weather;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim",
-      "name": "zones",
-      "kind": "module",
-      "signature": "pub mod zones;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DEFAULT_DAY_LENGTH_MS",
-      "kind": "const",
-      "signature": "pub const DEFAULT_DAY_LENGTH_MS: u64 = 1_200_000;",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DayCycle",
-      "kind": "struct",
-      "signature": "pub struct DayCycle { pub day_length_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DayCycle::day_index",
-      "kind": "method",
-      "signature": "pub fn day_index(&self, now_ms: u64) -> u64",
-      "docs": "Day number since epoch (season math, daily resets)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DayCycle::day_length_ms",
-      "kind": "field",
-      "signature": "pub day_length_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DayCycle::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DayCycle::is_night",
-      "kind": "method",
-      "signature": "pub fn is_night(&self, now_ms: u64) -> bool",
-      "docs": "The BWF convention: night when sin(phase*TAU) dips below -0.05."
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DayCycle::new",
-      "kind": "method",
-      "signature": "pub fn new(day_length_ms: u64) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DayCycle::phase",
-      "kind": "method",
-      "signature": "pub fn phase(&self, now_ms: u64) -> f32",
-      "docs": "Phase in [0, 1): 0 = day start, 0.5 = day/night boundary region."
-    },
-    {
-      "module": "crowdy_game_kit_sim::daycycle",
-      "name": "DayCycle::sun",
-      "kind": "method",
-      "signature": "pub fn sun(&self, now_ms: u64) -> f32",
-      "docs": "Sun height in [-1, 1] (drive lighting / spawn weights)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "GrowthRule",
-      "kind": "struct",
-      "signature": "pub struct GrowthRule { pub from_block: i64, pub grow_seconds: f64, pub structure: Vec<Placement>, /// Whether the planter uuid is stamped onto hard placements' state. pub keep_planter: bool, }",
-      "docs": "A growth rule: voxels of `from_block` older than `grow_seconds` become `structure` (relative to the plant position)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "GrowthRule::from_block",
-      "kind": "field",
-      "signature": "pub from_block: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "GrowthRule::grow_seconds",
-      "kind": "field",
-      "signature": "pub grow_seconds: f64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "GrowthRule::keep_planter",
-      "kind": "field",
-      "signature": "pub keep_planter: bool",
-      "docs": "Whether the planter uuid is stamped onto hard placements' state."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "GrowthRule::structure",
-      "kind": "field",
-      "signature": "pub structure: Vec<Placement>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "Placement",
-      "kind": "struct",
-      "signature": "pub struct Placement { pub dx: i64, pub dy: i64, pub dz: i64, pub block: i32, /// Soft placements (canopy leaves) skip positions with a player edit; /// hard ones (trunk) always write. pub soft: bool, }",
-      "docs": "One relative voxel write of a grown structure."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "Placement::block",
-      "kind": "field",
-      "signature": "pub block: i32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "Placement::dx",
-      "kind": "field",
-      "signature": "pub dx: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "Placement::dy",
-      "kind": "field",
-      "signature": "pub dy: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "Placement::dz",
-      "kind": "field",
-      "signature": "pub dz: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "Placement::soft",
-      "kind": "field",
-      "signature": "pub soft: bool",
-      "docs": "Soft placements (canopy leaves) skip positions with a player edit; hard ones (trunk) always write."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "RipePlant",
-      "kind": "struct",
-      "signature": "pub struct RipePlant { pub chunk: (i64, i64, i64), pub local: (i64, i64, i64), pub planter_uuid: Option<String>, pub rule_index: usize, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "RipePlant::chunk",
-      "kind": "field",
-      "signature": "pub chunk: (i64, i64, i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "RipePlant::local",
-      "kind": "field",
-      "signature": "pub local: (i64, i64, i64)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "RipePlant::planter_uuid",
-      "kind": "field",
-      "signature": "pub planter_uuid: Option<String>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "RipePlant::rule_index",
-      "kind": "field",
-      "signature": "pub rule_index: usize",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "ScanBand",
-      "kind": "struct",
-      "signature": "pub struct ScanBand { pub radius_xz: i64, pub y_min: i64, pub y_max: i64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "ScanBand::radius_xz",
-      "kind": "field",
-      "signature": "pub radius_xz: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "ScanBand::ring",
-      "kind": "method",
-      "signature": "pub fn ring(&self) -> Vec<(i64, i64, i64)>",
-      "docs": "The band's chunks in the stable cursor order."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "ScanBand::y_max",
-      "kind": "field",
-      "signature": "pub y_max: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "ScanBand::y_min",
-      "kind": "field",
-      "signature": "pub y_min: i64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "ScanCursor",
-      "kind": "struct",
-      "signature": "pub struct ScanCursor { pub cursor: u64, }",
-      "docs": "Round-robin cursor over a fixed chunk band (x/z square, y band) — persists in module state so scanning survives re-lease."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "ScanCursor::cursor",
-      "kind": "field",
-      "signature": "pub cursor: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "build",
-      "kind": "function",
-      "signature": "pub fn build(plant: &RipePlant, rule: &GrowthRule, chunk_size: i64)",
-      "docs": "Build the rule's structure at the plant. Soft placements skip positions with a recorded non-air voxel edit (player builds are never overwritten; procedural base terrain is invisible to modules and tolerated)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "scan",
-      "kind": "function",
-      "signature": "pub fn scan( band: &ScanBand, cursor: &mut ScanCursor, rules: &[GrowthRule], now_seconds: f64, chunks_per_tick: usize, ) -> Option<RipePlant>",
-      "docs": "Scan up to `chunks_per_tick` chunks for the first ripe plant matching any rule. Advances the cursor; one db-op per scanned chunk."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "stage",
-      "kind": "function",
-      "signature": "pub fn stage(planted_seconds: f64, now_seconds: f64, grow_seconds: f64, stages: u32) -> u32",
-      "docs": "Pure growth-stage math for client-side rendering parity: which stage of `stages` a plant with `planted_seconds` is in at `now_seconds`, given the full cycle takes `grow_seconds`."
-    },
-    {
-      "module": "crowdy_game_kit_sim::grow",
-      "name": "tree_structure",
-      "kind": "function",
-      "signature": "pub fn tree_structure(wood: i32, leaves: i32) -> Vec<Placement>",
-      "docs": "The classic BWF tree: 4-block trunk (wood 4) + manhattan canopy (leaves 5) — byte-identical to the bwf-world-tick original."
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "HarvestOutcome",
-      "kind": "struct",
-      "signature": "pub struct HarvestOutcome { pub harvested: bool, pub depleted: bool, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "HarvestOutcome::depleted",
-      "kind": "field",
-      "signature": "pub depleted: bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "HarvestOutcome::harvested",
-      "kind": "field",
-      "signature": "pub harvested: bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "Node",
-      "kind": "struct",
-      "signature": "pub struct Node { pub phase: NodePhase, /// Remaining harvests before depletion (0 = infinite until depleted /// explicitly). pub charges: u32, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "Node::charges",
-      "kind": "field",
-      "signature": "pub charges: u32",
-      "docs": "Remaining harvests before depletion (0 = infinite until depleted explicitly)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "Node::phase",
-      "kind": "field",
-      "signature": "pub phase: NodePhase",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePhase",
-      "kind": "enum",
-      "signature": "pub enum NodePhase { Ready, /// Depleted; respawns at the embedded time. Respawning { at_ms: u64 }, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePhase::Ready",
-      "kind": "variant",
-      "signature": "Ready",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePhase::Respawning",
-      "kind": "variant",
-      "signature": "Respawning { at_ms: u64 }",
-      "docs": "Depleted; respawns at the embedded time."
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePhase::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePool",
-      "kind": "struct",
-      "signature": "pub struct NodePool { pub nodes: HashMap<String, Node>, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePool::ensure",
-      "kind": "method",
-      "signature": "pub fn ensure(&mut self, id: &str, charges: u32) -> &mut Node",
-      "docs": "Register a node (idempotent; keeps existing state)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePool::harvest",
-      "kind": "method",
-      "signature": "pub fn harvest(&mut self, id: &str, now_ms: u64, respawn_ms: u64) -> HarvestOutcome",
-      "docs": "Attempt a harvest. Depletes when charges run out."
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePool::is_ready",
-      "kind": "method",
-      "signature": "pub fn is_ready(&self, id: &str) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePool::nodes",
-      "kind": "field",
-      "signature": "pub nodes: HashMap<String, Node>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::nodes",
-      "name": "NodePool::tick",
-      "kind": "method",
-      "signature": "pub fn tick(&mut self, now_ms: u64, recharge: u32) -> Vec<String>",
-      "docs": "Tick respawns: returns ids that just came back (re-arm charges)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::terrain",
-      "name": "TerrainCache",
-      "kind": "struct",
-      "signature": "pub struct TerrainCache { chunk_size: i64, ttl_ms: u64, max_fetches_per_tick: u32, fetches_this_tick: u32, chunks: HashMap<(i64, i64, i64), CachedChunk>, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::terrain",
-      "name": "TerrainCache::begin_tick",
-      "kind": "method",
-      "signature": "pub fn begin_tick(&mut self, now: u64)",
-      "docs": "Call once at the top of each tick: resets the fetch budget and evicts expired entries (so edits players make show up within `ttl_ms`)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::terrain",
-      "name": "TerrainCache::block_at",
-      "kind": "method",
-      "signature": "pub fn block_at(&mut self, x: i64, y: i64, z: i64, now: u64) -> Option<u8>",
-      "docs": "The block byte at a world position; `None` = unknown (unloaded chunk, fetch budget exhausted, or host error)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::terrain",
-      "name": "TerrainCache::ground_y",
-      "kind": "method",
-      "signature": "pub fn ground_y(&mut self, x: f32, z: f32, scan_top: i64, now: u64) -> Option<f32>",
-      "docs": "The walk height for column (x, z): one block above the first solid block scanning down from `scan_top`. `None` = terrain unknown — callers should keep the agent's current height (fail-soft)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::terrain",
-      "name": "TerrainCache::new",
-      "kind": "method",
-      "signature": "pub fn new(chunk_size: i64, ttl_ms: u64, max_fetches_per_tick: u32) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveDef",
-      "kind": "struct",
-      "signature": "pub struct WaveDef { /// Entries: (unit id, count). pub units: Vec<(String, u32)>, /// Delay after the previous wave clears (or starts, for timed mode). pub delay_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveDef::delay_ms",
-      "kind": "field",
-      "signature": "pub delay_ms: u64",
-      "docs": "Delay after the previous wave clears (or starts, for timed mode)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveDef::units",
-      "kind": "field",
-      "signature": "pub units: Vec<(String, u32)>",
-      "docs": "Entries: (unit id, count)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveEvent",
-      "kind": "enum",
-      "signature": "pub enum WaveEvent { /// Spawn this wave's units now. Start(usize), Finished, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveEvent::Finished",
-      "kind": "variant",
-      "signature": "Finished",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveEvent::Start",
-      "kind": "variant",
-      "signature": "Start(usize)",
-      "docs": "Spawn this wave's units now."
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WavePhase",
-      "kind": "enum",
-      "signature": "pub enum WavePhase { /// Before wave `next` starts; starts at the embedded time. Countdown { next: usize, starts_at_ms: u64 }, /// Wave `index` is live. Active { index: usize }, /// All waves done. Complete, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WavePhase::Active",
-      "kind": "variant",
-      "signature": "Active { index: usize }",
-      "docs": "Wave `index` is live."
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WavePhase::Complete",
-      "kind": "variant",
-      "signature": "Complete",
-      "docs": "All waves done."
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WavePhase::Countdown",
-      "kind": "variant",
-      "signature": "Countdown { next: usize, starts_at_ms: u64 }",
-      "docs": "Before wave `next` starts; starts at the embedded time."
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveSchedule",
-      "kind": "struct",
-      "signature": "pub struct WaveSchedule { pub phase: WavePhase, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveSchedule::default",
-      "kind": "method",
-      "signature": "fn default() -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveSchedule::phase",
-      "kind": "field",
-      "signature": "pub phase: WavePhase",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveSchedule::start",
-      "kind": "method",
-      "signature": "pub fn start(waves: &[WaveDef], now_ms: u64) -> Self",
-      "docs": "Arm the schedule from wave 0 with the first delay."
-    },
-    {
-      "module": "crowdy_game_kit_sim::waves",
-      "name": "WaveSchedule::step",
-      "kind": "method",
-      "signature": "pub fn step(&mut self, waves: &[WaveDef], now_ms: u64, active_cleared: bool) -> Option<WaveEvent>",
-      "docs": "Advance. `active_cleared` = the live wave's units are all dead."
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "EVENT_WEATHER",
-      "kind": "const",
-      "signature": "pub const EVENT_WEATHER: u16 = 90;",
-      "docs": "The platform-reserved server-event type for weather/season transitions."
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "Transition",
-      "kind": "struct",
-      "signature": "pub struct Transition { pub from: String, pub to: String, pub until_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "Transition::from",
-      "kind": "field",
-      "signature": "pub from: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "Transition::to",
-      "kind": "field",
-      "signature": "pub to: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "Transition::until_ms",
-      "kind": "field",
-      "signature": "pub until_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherKind",
-      "kind": "struct",
-      "signature": "pub struct WeatherKind { pub id: String, /// Relative pick weight (0 disables). pub weight: u32, pub min_ms: u64, pub max_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherKind::id",
-      "kind": "field",
-      "signature": "pub id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherKind::max_ms",
-      "kind": "field",
-      "signature": "pub max_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherKind::min_ms",
-      "kind": "field",
-      "signature": "pub min_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherKind::weight",
-      "kind": "field",
-      "signature": "pub weight: u32",
-      "docs": "Relative pick weight (0 disables)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherState",
-      "kind": "struct",
-      "signature": "pub struct WeatherState { pub current: String, pub since_ms: u64, pub until_ms: u64, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherState::current",
-      "kind": "field",
-      "signature": "pub current: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherState::since_ms",
-      "kind": "field",
-      "signature": "pub since_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "WeatherState::until_ms",
-      "kind": "field",
-      "signature": "pub until_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "default_kinds",
-      "kind": "function",
-      "signature": "pub fn default_kinds() -> Vec<WeatherKind>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "emit_transition",
-      "kind": "function",
-      "signature": "pub fn emit_transition( chunk: (i64, i64, i64), uuid_hex: &str, state: &WeatherState, now_ms: u64, distance: u8, ) -> Result<Value, HostError>",
-      "docs": "Broadcast a transition as a type-90 server event at `chunk`."
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "front_json",
-      "kind": "function",
-      "signature": "pub fn front_json(state: &WeatherState, now_ms: u64) -> Value",
-      "docs": "The client-facing JSON for a front (both the event body and `forecast`)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::weather",
-      "name": "step",
-      "kind": "function",
-      "signature": "pub fn step( state: &mut WeatherState, kinds: &[WeatherKind], now_ms: u64, rng: &mut Rng, ) -> Option<Transition>",
-      "docs": "Advance the front. Returns the transition when the front changed (emit it to clients), `None` while the current front holds."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkPhase",
-      "kind": "struct",
-      "signature": "pub struct ShrinkPhase { /// The radius this phase shrinks TO. pub radius: f32, /// How long the zone HOLDS before shrinking (the warning window). pub hold_ms: u64, /// How long the shrink itself takes (radius interpolates linearly). pub shrink_ms: u64, }",
-      "docs": "One phase of a shrinking-zone schedule."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkPhase::hold_ms",
-      "kind": "field",
-      "signature": "pub hold_ms: u64",
-      "docs": "How long the zone HOLDS before shrinking (the warning window)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkPhase::radius",
-      "kind": "field",
-      "signature": "pub radius: f32",
-      "docs": "The radius this phase shrinks TO."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkPhase::shrink_ms",
-      "kind": "field",
-      "signature": "pub shrink_ms: u64",
-      "docs": "How long the shrink itself takes (radius interpolates linearly)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone",
-      "kind": "struct",
-      "signature": "pub struct ShrinkingZone { pub center: (f32, f32), pub initial_radius: f32, pub phases: Vec<ShrinkPhase>, pub started_at_ms: u64, /// Last phase-progress marker events were emitted for (phase, stage). announced: Vec<(usize, u8)>, }",
-      "docs": "A battle-royale circle: fixed center, radius stepping down a schedule. Pure clock math — feed it `now_ms`, read `radius()` and drain events."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::center",
-      "kind": "field",
-      "signature": "pub center: (f32, f32)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::contains",
-      "kind": "method",
-      "signature": "pub fn contains(&self, pos: (f32, f32), now_ms: u64) -> bool",
-      "docs": "Is a position inside the live circle?"
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::done",
-      "kind": "method",
-      "signature": "pub fn done(&self, now_ms: u64) -> bool",
-      "docs": "Every phase fully settled?"
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::initial_radius",
-      "kind": "field",
-      "signature": "pub initial_radius: f32",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::phases",
-      "kind": "field",
-      "signature": "pub phases: Vec<ShrinkPhase>",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::poll",
-      "kind": "method",
-      "signature": "pub fn poll(&mut self, now_ms: u64) -> Vec<ZoneEvent>",
-      "docs": "Advance the announcer: returns the events newly due at `now_ms` (warning at hold start, shrinking at shrink start, settled at end, final once after the last phase)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::radius",
-      "kind": "method",
-      "signature": "pub fn radius(&self, now_ms: u64) -> f32",
-      "docs": "The circle's radius at `now_ms` (linear interpolation during shrinks)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::start",
-      "kind": "method",
-      "signature": "pub fn start(center: (f32, f32), initial_radius: f32, phases: Vec<ShrinkPhase>, now_ms: u64) -> Self",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ShrinkingZone::started_at_ms",
-      "kind": "field",
-      "signature": "pub started_at_ms: u64",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "Zone",
-      "kind": "struct",
-      "signature": "pub struct Zone { pub id: String, pub rule: String, pub min: (f32, f32, f32), pub max: (f32, f32, f32), }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "Zone::contains",
-      "kind": "method",
-      "signature": "pub fn contains(&self, pos: (f32, f32, f32)) -> bool",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "Zone::id",
-      "kind": "field",
-      "signature": "pub id: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "Zone::max",
-      "kind": "field",
-      "signature": "pub max: (f32, f32, f32)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "Zone::min",
-      "kind": "field",
-      "signature": "pub min: (f32, f32, f32)",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "Zone::rule",
-      "kind": "field",
-      "signature": "pub rule: String",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneEvent",
-      "kind": "enum",
-      "signature": "pub enum ZoneEvent { /// A hold began: the zone will start shrinking to `to_radius` at `at_ms`. Warning { phase: usize, to_radius: f32, shrink_starts_at_ms: u64 }, /// The shrink began. Shrinking { phase: usize, to_radius: f32 }, /// The phase's target radius was reached. Settled { phase: usize, radius: f32 }, /// Every phase is done (the final circle). Final { radius: f32 }, }",
-      "docs": "Announcements a shrinking zone produces as time advances."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneEvent::Final",
-      "kind": "variant",
-      "signature": "Final { radius: f32 }",
-      "docs": "Every phase is done (the final circle)."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneEvent::Settled",
-      "kind": "variant",
-      "signature": "Settled { phase: usize, radius: f32 }",
-      "docs": "The phase's target radius was reached."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneEvent::Shrinking",
-      "kind": "variant",
-      "signature": "Shrinking { phase: usize, to_radius: f32 }",
-      "docs": "The shrink began."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneEvent::Warning",
-      "kind": "variant",
-      "signature": "Warning { phase: usize, to_radius: f32, shrink_starts_at_ms: u64 }",
-      "docs": "A hold began: the zone will start shrinking to `to_radius` at `at_ms`."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneSet",
-      "kind": "struct",
-      "signature": "pub struct ZoneSet { pub zones: Vec<Zone>, }",
-      "docs": ""
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneSet::at",
-      "kind": "method",
-      "signature": "pub fn at(&self, pos: (f32, f32, f32)) -> Vec<&Zone>",
-      "docs": "All zones containing the position."
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneSet::has_rule",
-      "kind": "method",
-      "signature": "pub fn has_rule(&self, pos: (f32, f32, f32), rule: &str) -> bool",
-      "docs": "Does any zone with this rule cover the position?"
-    },
-    {
-      "module": "crowdy_game_kit_sim::zones",
-      "name": "ZoneSet::zones",
-      "kind": "field",
-      "signature": "pub zones: Vec<Zone>",
-      "docs": ""
+      "docs": "Replaces the state blob. Returns 0."
     }
   ]
 };

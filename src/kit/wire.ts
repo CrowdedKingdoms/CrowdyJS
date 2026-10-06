@@ -1,9 +1,9 @@
 /**
- * Engine wire registry — the client mirror of the server's
- * `crowdy-game-kit-core::wire` (the single source of truth for the actor
- * pose layout and flag-bit registry used by compute-module game engines).
- * Parity with the Rust crate is checked by the kit unit suite: any change
- * here must land in kit-core first.
+ * Engine wire registry — the client mirror of `crowdy-game-kit-core::wire`
+ * (the actor pose layout and flag-bit registry the game engines emit, and
+ * hubs that keep a game's client parsers still send). Parity with the Rust
+ * crate is checked by the kit wire unit suite: any change here must land in
+ * kit-core first.
  *
  * 48-byte little-endian pose: pos f32 x3 (0..11), yaw/pitch f32 (12..19),
  * velocity f32 x3 (20..31), flags u8 (32), held u8 (33), 34-35 reserved,
@@ -366,6 +366,30 @@ export function parseRaceTimingEvent(bytes: Uint8Array): RaceTimingEvent | null 
     kind: String(parsed.body.kind ?? ''),
     courseId: String(parsed.body.courseId ?? ''),
     userId: String(parsed.body.userId ?? ''),
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-98 zone-change event (a shrinking or moving play zone). */
+export interface ZoneChangeEvent {
+  kind: string;
+  phase: number | null;
+  radiusNow: number;
+  centerX: number;
+  centerZ: number;
+  body: Record<string, unknown>;
+}
+
+/** Parse a zone-change event; null when the payload is another type. */
+export function parseZoneChangeEvent(bytes: Uint8Array): ZoneChangeEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_ZONE_CHANGE) return null;
+  return {
+    kind: String(parsed.body.kind ?? ''),
+    phase: parsed.body.phase != null ? Number(parsed.body.phase) : null,
+    radiusNow: Number(parsed.body.radiusNow ?? 0),
+    centerX: Number(parsed.body.centerX ?? 0),
+    centerZ: Number(parsed.body.centerZ ?? 0),
     body: parsed.body,
   };
 }

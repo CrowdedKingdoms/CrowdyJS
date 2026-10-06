@@ -33,6 +33,10 @@ test('PlayerCodeBroker keeps a host allowlist and grid clamp', async () => {
   const broker = new PlayerCodeBroker({
     workerUrl: 'player-worker.js',
     workerFactory: () => worker,
+    artifactHash: 'b'.repeat(64),
+    hashArtifact: async () => 'b'.repeat(64),
+    fuelPerDispatch: 1000n,
+    consentedHostCalls: ['chunk_get'],
     grid: {
       low: { x: 0n, y: 0n, z: 0n },
       high: { x: 2n, y: 2n, z: 2n },

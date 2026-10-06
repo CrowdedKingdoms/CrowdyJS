@@ -18,8 +18,8 @@ import type { GameAppsAPI } from './gameApps.js';
  * instances also reachable at the top level (e.g. `client.billing`), grouped
  * here for discoverability.
  *
- * Operator-only platform operations live separately under `client.operator`
- * (requires `is_operator`).
+ * Platform-operator operations are not in the SDK; it wraps only what a studio
+ * or a player may call.
  *
  * @example
  * ```ts

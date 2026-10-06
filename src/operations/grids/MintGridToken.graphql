@@ -1,0 +1,19 @@
+mutation MintGridToken($input: MintGridTokenInput!) {
+  mintGridToken(input: $input) {
+    token
+    gameTokenId
+    appId
+    gridId
+    lowChunk {
+      x
+      y
+      z
+    }
+    highChunk {
+      x
+      y
+      z
+    }
+    expiresAt
+  }
+}

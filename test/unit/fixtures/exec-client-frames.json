@@ -1,0 +1,133 @@
+{
+  "about": "ck-exec client protocol frames (crates/ckx-proto/src/client.rs), one WebSocket binary message each, as hex. crates/ckx-proto/tests/client_golden.rs checks them against the encoder and decoder; client SDKs (CrowdyJS, CrowdyCPP) test their codecs against a copy of this file.",
+  "client": [
+    {
+      "name": "call",
+      "frame": {
+        "kind": "call",
+        "rid": 1,
+        "nodeType": "combat",
+        "key": "",
+        "method": "hit",
+        "payloadHex": "82a56d61746368a26d31a6776561706f6e01"
+      },
+      "hex": "010100000006636f6d62617400000368697482a56d61746368a26d31a6776561706f6e01"
+    },
+    {
+      "name": "call with a key and no payload",
+      "frame": {
+        "kind": "call",
+        "rid": 4294967295,
+        "nodeType": "arena",
+        "key": "m1",
+        "method": "state",
+        "payloadHex": ""
+      },
+      "hex": "01ffffffff056172656e6102006d31057374617465"
+    },
+    {
+      "name": "call with a multi-byte key",
+      "frame": {
+        "kind": "call",
+        "rid": 300,
+        "nodeType": "mobs",
+        "key": "zone-éè☃",
+        "method": "state",
+        "payloadHex": "c0"
+      },
+      "hex": "012c010000046d6f62730c007a6f6e652dc3a9c3a8e29883057374617465c0"
+    },
+    {
+      "name": "subscribe",
+      "frame": {
+        "kind": "subscribe",
+        "rid": 2,
+        "nodeType": "arena",
+        "key": "m1",
+        "topic": "hp"
+      },
+      "hex": "0202000000056172656e6102006d31026870"
+    },
+    {
+      "name": "unsubscribe",
+      "frame": {
+        "kind": "unsubscribe",
+        "rid": 3,
+        "nodeType": "arena",
+        "key": "m1",
+        "topic": "hp"
+      },
+      "hex": "0303000000056172656e6102006d31026870"
+    },
+    {
+      "name": "ping",
+      "frame": {
+        "kind": "ping",
+        "nonce": 305419896
+      },
+      "hex": "0478563412"
+    }
+  ],
+  "server": [
+    {
+      "name": "reply ok",
+      "frame": {
+        "kind": "reply",
+        "rid": 1,
+        "status": 0,
+        "payloadHex": "83a268708ce8d4a5a46869747301a262791f"
+      },
+      "hex": "81010000000083a268708ce8d4a5a46869747301a262791f"
+    },
+    {
+      "name": "reply app error",
+      "frame": {
+        "kind": "reply",
+        "rid": 9,
+        "status": 1,
+        "payloadHex": "756e6b6e6f776e206d6574686f64"
+      },
+      "hex": "810900000001756e6b6e6f776e206d6574686f64"
+    },
+    {
+      "name": "reply denied, empty payload",
+      "frame": {
+        "kind": "reply",
+        "rid": 10,
+        "status": 6,
+        "payloadHex": ""
+      },
+      "hex": "810a00000006"
+    },
+    {
+      "name": "push",
+      "frame": {
+        "kind": "push",
+        "nodeType": "arena",
+        "key": "m1",
+        "topic": "hp",
+        "payloadHex": "81a26870cd03e8"
+      },
+      "hex": "82056172656e6102006d3102687081a26870cd03e8"
+    },
+    {
+      "name": "push from the root hub",
+      "frame": {
+        "kind": "push",
+        "nodeType": "lobby",
+        "key": "",
+        "topic": "players",
+        "payloadHex": "02"
+      },
+      "hex": "82056c6f626279000007706c617965727302"
+    },
+    {
+      "name": "pong",
+      "frame": {
+        "kind": "pong",
+        "nonce": 305419896
+      },
+      "hex": "8478563412"
+    }
+  ]
+}

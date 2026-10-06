@@ -38,6 +38,8 @@ import {
   type DshBridgeRequestMap,
   type DshBuildResult,
   type DshDiagnostic,
+  type DshGridContext,
+  type DshGridProgramStatus,
   type DshPageEventMap,
   type DshProjectSummary,
   type DshRuntimeStatus,
@@ -65,6 +67,29 @@ export interface CrowdyStudioDshHost {
   playerHost?: Pick<PlayerHostAdapterV1, 'observe'>;
   /** Recent `crowdy::log` lines from the CLIENT module and browser runtime errors. */
   clientLogs?(): readonly string[];
+  /**
+   * Grid capability (bridge v4, DN-10). With it the agent can read the grid
+   * the open project is bound to and run a JS grid program from a project
+   * file inside it; without it the grid requests fail with a clear message.
+   */
+  grid?: CrowdyStudioDshGridHost;
+}
+
+/** What a game offers the agent for the grid the open project is bound to. */
+export interface CrowdyStudioDshGridHost {
+  context(gridId: string): Promise<DshGridContext | null>;
+  /**
+   * Run (or with `stop`, stop) the program at `path` inside the grid. The page
+   * hands over the file's current content; how it sandboxes it is the game's
+   * (the construct package uses a network-less iframe and `hostGridProgram`).
+   */
+  runProgram(input: {
+    gridId: string;
+    path: string;
+    source: string;
+    stop?: boolean;
+  }): Promise<DshGridProgramStatus>;
+  programs(): DshGridProgramStatus[];
 }
 
 export interface StudioDshBridgeOptions {
@@ -80,12 +105,13 @@ export interface StudioDshBridgeOptions {
   /** Longest screenshot side, in pixels. */
   maxCaptureSide?: number;
   /**
-   * Ask the player, on the page, whether the agent may deploy live. Resolves
-   * `true` to proceed. Without it `studio.deployLive` is refused: the approval
-   * inside the harness UI is not visible to the page and cannot stand in for
-   * this one.
+   * Ask the player, on the page, whether the agent may deploy the project to the grid: a live
+   * deploy, or a draft test (`mode`), which deploys the project's mod to the grid just the same,
+   * so players there who trust the player run it too. Resolves `true` to proceed. Without it
+   * `studio.deployLive` and `studio.draftTest` are refused: the approval inside the harness UI
+   * is not visible to the page and cannot stand in for this one.
    */
-  confirmLiveDeploy?(summary: { projectName: string }): Promise<boolean>;
+  confirmLiveDeploy?(summary: { projectName: string; mode: 'draft' | 'live' }): Promise<boolean>;
   /** Called when the worker changed a project file, after the controller reloaded. */
   onFileChanged?(change: { target: 'SERVER' | 'CLIENT'; path: string }): void;
   onWarning?(message: string): void;
@@ -375,23 +401,33 @@ export class StudioDshBridge {
       case 'studio.screenshot':
         return this.screenshot((params as { label?: string } | undefined)?.label) as never;
       case 'studio.draftTest':
-        return this.build('draft') as never;
       case 'studio.deployLive': {
+        const mode = method === 'studio.draftTest' ? 'draft' : 'live';
         const confirm = this.options.confirmLiveDeploy;
-        if (!confirm) throw new Error('Live deploys from the agent are not enabled on this page; use the Deploy button in Crowdy Studio.');
-        // Serialized: two concurrent requests would share one prompt and the
+        if (!confirm) {
+          throw new Error(
+            mode === 'draft'
+              ? 'Draft tests from the agent are not enabled on this page (a draft test deploys the project to the grid); use Test draft in Crowdy Studio.'
+              : 'Live deploys from the agent are not enabled on this page; use the Deploy button in Crowdy Studio.',
+          );
+        }
+        // Serialized, through the deploy: two concurrent requests would share one prompt and the
         // player could answer a question other than the one on screen.
-        if (this.liveDeployPending) throw new Error('A live deploy is already waiting for the player to answer. Wait for that answer before asking again.');
+        if (this.liveDeployPending) throw new Error('A deploy is already waiting for the player to answer or running. Wait for it before asking again.');
         this.liveDeployPending = true;
-        let approved: boolean;
         try {
           const projectName = controller.getState().project?.metadata.name ?? 'this project';
-          approved = await confirm({ projectName });
+          if (!(await confirm({ projectName, mode }))) {
+            throw new Error(
+              mode === 'draft'
+                ? 'The player declined the draft test. Ask them before testing again.'
+                : 'The player declined the live deploy. Keep working with draft tests.',
+            );
+          }
+          return (await this.build(mode)) as never;
         } finally {
           this.liveDeployPending = false;
         }
-        if (!approved) throw new Error('The player declined the live deploy. Keep working with draft tests.');
-        return this.build('live') as never;
       }
       case 'studio.runtimeStatus':
         return { runtime: this.runtimeStatus(controller.getState()) } as never;
@@ -435,9 +471,38 @@ export class StudioDshBridge {
         this.emit('page.context', { observation });
         return { observation, capturedAt: new Date().toISOString() } as never;
       }
+      case 'grid.context': {
+        const grid = this.gridHost();
+        const project = controller.getState().project;
+        if (!project) throw new Error('No project is open in Crowdy Studio.');
+        return { grid: await grid.context(project.gridId) } as never;
+      }
+      case 'grid.programRun': {
+        const grid = this.gridHost();
+        const project = controller.getState().project;
+        if (!project) throw new Error('No project is open in Crowdy Studio.');
+        const { path, stop } = params as { path: string; stop?: boolean };
+        const file = project.files.find((f) => f.path === path);
+        if (!file && !stop) throw new Error(`No file ${path} in the open project.`);
+        const program = await grid.runProgram({
+          gridId: project.gridId,
+          path,
+          source: file?.content ?? '',
+          stop: stop === true,
+        });
+        return { program } as never;
+      }
+      case 'grid.programStatus':
+        return { programs: this.gridHost().programs() } as never;
       default:
         throw new Error(`Unsupported bridge method ${String(method)}`);
     }
+  }
+
+  private gridHost(): CrowdyStudioDshGridHost {
+    const grid = this.options.host?.grid;
+    if (!grid) throw new Error('This game does not run grid programs from the agent.');
+    return grid;
   }
 
   private async build(mode: 'draft' | 'live'): Promise<DshBuildResult> {
@@ -548,10 +613,9 @@ function clampLimit(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.min(400, Math.floor(value)));
 }
 
-function formatRunLine(run: CrowdyStudioState['logs'][number]): string {
-  const status = run.success ? 'ok' : 'FAILED';
-  const error = run.errorMessage ? ` — ${run.errorMessage}` : '';
-  return `${run.startedAt} ${run.moduleName} ${run.triggerSource} ${status} ${Math.round(run.durationUs / 1000)}ms fuel=${run.fuelUsed}${error}`;
+function formatRunLine(line: CrowdyStudioState['logs'][number]): string {
+  const where = line.source === 'preview' ? ' (preview)' : '';
+  return `${line.at} ${line.moduleName}${where} ${line.level}: ${line.text}`;
 }
 
 function toDshDiagnostic(diagnostic: CrowdyStudioDiagnostic): DshDiagnostic {

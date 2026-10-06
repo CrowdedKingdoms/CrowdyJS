@@ -55,7 +55,6 @@ import { PaymentsAPI } from './domains/payments.js';
 import { QuotasAPI } from './domains/quotas.js';
 import { UsageAPI } from './domains/usage.js';
 import { SharedEnvironmentAPI } from './domains/sharedEnvironment.js';
-import { ControlPlaneAPI } from './domains/controlPlane.js';
 import { AdminAPI } from './domains/admin.js';
 import { ChunksAPI } from './domains/chunks.js';
 import { AvatarsAPI } from './domains/avatars.js';
@@ -67,16 +66,15 @@ import { TeleportAPI } from './domains/teleport.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
 import { ChannelsAPI } from './domains/channels.js';
+import { GridsAPI } from './domains/grids.js';
+import { GridScope, type GridBox } from './grid-scope.js';
 import { TeamsAPI } from './domains/teams.js';
 import { UdpAPI } from './domains/udp.js';
-import { GameModelAPI } from './domains/gameModel.js';
-import { ComputeAPI } from './domains/compute.js';
-import { PlayerComputeAPI } from './domains/playerCompute.js';
+import { ExecAPI } from './domains/exec.js';
 import { CrowdyStudioAPI } from './domains/crowdyStudio.js';
 import { CrowdyStudioGitHubTransport } from './crowdy-studio/github/transport.js';
 import { PlayerWalletAPI } from './domains/playerWallet.js';
 import { MarketplaceAPI } from './domains/marketplace.js';
-import { PlayerModelAPI } from './domains/playerModel.js';
 import { DiscoveryDomain } from './domains/discovery.js';
 
 export interface CrowdyClientConfig {
@@ -126,8 +124,18 @@ export interface CrowdyClientConfig {
    * framing page, or your own instance to control timeouts.
    */
   embeddedHost?: EmbeddedHost | false;
+  /**
+   * The `fetch` GraphQL requests go through; defaults to the global. See
+   * `createGridProgramClient` for the one case that needs another.
+   */
+  fetch?: typeof fetch;
   /** Realtime (WebSocket) tuning for reconnect backoff and `...AndWait` timeouts. */
   realtime?: {
+    /**
+     * WebSocket constructor for the realtime subscription; defaults to the
+     * platform's. See `createGridProgramClient`.
+     */
+    webSocketImpl?: unknown;
     /** Max reconnect attempts before giving up (default tuned for browsers). */
     retryAttempts?: number;
     /** Initial reconnect backoff in milliseconds. */
@@ -265,8 +273,6 @@ export class CrowdyClient {
   readonly usage: UsageAPI;
   /** Shared-environment publishing, runtime gating, auto-billing (studio admin). */
   readonly sharedEnvironment: SharedEnvironmentAPI;
-  /** Operator (control-plane) surface — requires `is_operator`. */
-  readonly operator: ControlPlaneAPI;
   /**
    * Studio-admin facade grouping the privileged management-surface sub-clients
    * (`organizations`, `appAccess`, `billing`, `payments`, `quotas`,
@@ -289,27 +295,26 @@ export class CrowdyClient {
   readonly serverStatus: ServerStatusAPI;
   /** Channels: location-independent pub/sub messaging groups. */
   readonly channels: ChannelsAPI;
+  /** Grid tokens and grid channels (DN-10); see also {@link CrowdyClient.grid}. */
+  readonly grids: GridsAPI;
   /** Teams: app-scoped player groups with roles and delegated management. */
   readonly teams: TeamsAPI;
   /** UDP proxy: spatial sends + the shared realtime notification subscription. */
   readonly udp: UdpAPI;
-  /** Abstract game model: containers, properties, functions, sessions. */
-  readonly gameModel: GameModelAPI;
-  /** Compute Modules: server-side Rust/WASM logic (manage, invoke, observe). */
-  readonly compute: ComputeAPI;
-  /** Player-authored Rust/WASM bound to player-owned grids. */
-  readonly playerCompute: PlayerComputeAPI;
+  /**
+   * ck-exec: an app's server code as hubs and spokes (connect, call, subscribe, build,
+   * deploy, operate) and players' mods on the grids they own.
+   */
+  readonly exec: ExecAPI;
   /** Crowdy Studio cloud projects, libraries, and common source files. */
   readonly crowdyStudio: CrowdyStudioAPI;
   /** GitHub repository loop for Crowdy Studio projects (same session; the API resolves the repo from the bind). */
   readonly crowdyStudioGitHub: CrowdyStudioGitHubTransport;
 
-  /** P4a marketplace (free mode): store, installs, consent, claim flows. */
+  /** Grid claim flows and the app's player-code administration. */
   readonly marketplace: MarketplaceAPI;
   /** Player wallet, spend caps, hourly usage charges, and player policy (P2). */
   readonly playerWallet: PlayerWalletAPI;
-  /** Player-owned flexible model data and grid-confined automations. */
-  readonly playerModel: PlayerModelAPI;
   /** Durable avatars + per-app avatar state (owner-aware reads). */
   readonly avatars: AvatarsAPI;
   /** Game-host election + actor liveness heartbeat. */
@@ -342,16 +347,15 @@ export class CrowdyClient {
     // invented around it, because the alternative is worse than having no
     // default: `createCrowdyClient({ httpUrl: 'https://my-host' })` would get
     // HTTP on their host and the WEBSOCKET on the tier default, splitting one
-    // session across two origins while looking connected. `gameModel` refuses
-    // a missing wsUrl loudly today and must go on doing so — a refusal
-    // replaced by a silent wrong answer is a bad trade even when the wrong
-    // answer is a live host.
+    // session across two origins while looking connected. A refusal replaced by
+    // a silent wrong answer is a bad trade even when the wrong answer is a live
+    // host.
     //
     // Resolved ONCE here so every sub-client below agrees. Applied per-transport
-    // it reached some transports and not others: `gameModel` was handed
-    // `undefined` while the two transports had an answer, and a default that
-    // reaches some members of a set and not others is a third configuration
-    // nothing was designed for.
+    // it reached some transports and not others (the game-model subscription
+    // client, removed in 18.0.0, was once handed `undefined` while the two
+    // transports had an answer), and a default that reaches some members of a
+    // set and not others is a third configuration nothing was designed for.
     const configuredAnOrigin = Boolean(
       config.httpUrl?.trim() ||
         config.wsUrl?.trim() ||
@@ -371,6 +375,7 @@ export class CrowdyClient {
         timeout: config.timeout,
         logger: config.logger,
         lbCookieStore,
+        ...(config.fetch ? { fetch: config.fetch } : {}),
       },
       this.session,
     );
@@ -478,7 +483,6 @@ export class CrowdyClient {
     this.quotas = new QuotasAPI(this.graphql);
     this.usage = new UsageAPI(this.graphql);
     this.sharedEnvironment = new SharedEnvironmentAPI(this.graphql);
-    this.operator = new ControlPlaneAPI(this.graphql);
 
     this.chunks = new ChunksAPI(this.graphql);
     this.voxels = new VoxelsAPI(this.graphql);
@@ -487,6 +491,7 @@ export class CrowdyClient {
     this.state = new StateAPI(this.graphql);
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);
+    this.grids = new GridsAPI(this.graphql);
     this.teams = new TeamsAPI(this.graphql);
     this.udp = new UdpAPI(
       this.graphql,
@@ -494,17 +499,11 @@ export class CrowdyClient {
       this.metrics,
       () => this.gameplayTokenRefresh,
     );
-    this.gameModel = new GameModelAPI(this.graphql, {
-      wsUrl: config.wsEndpoint ?? toGraphqlEndpoint(wsUrl, 'graphql'),
-      getToken: () => this.session.getToken(),
-    });
-    this.compute = new ComputeAPI(this.graphql);
-    this.playerCompute = new PlayerComputeAPI(this.graphql);
+    this.exec = new ExecAPI(this.graphql);
     this.crowdyStudio = new CrowdyStudioAPI(this.graphql);
     this.crowdyStudioGitHub = new CrowdyStudioGitHubTransport(this.graphql);
     this.playerWallet = new PlayerWalletAPI(this.graphql);
     this.marketplace = new MarketplaceAPI(this.graphql);
-    this.playerModel = new PlayerModelAPI(this.graphql);
     this.avatars = new AvatarsAPI(this.graphql);
     this.host = new HostAPI(this.graphql);
     this.gameApps = new GameAppsAPI(this.graphql);
@@ -616,24 +615,29 @@ export class CrowdyClient {
   }
 
   /**
-   * App-scoped **Game Kit** facade over `client.gameModel`: high-level
-   * building blocks that map traditional game concepts onto Game Models +
-   * Automations — `kit.inventory` (bags/item stacks), `kit.objects` (lockable
-   * doors/chests with custom permissions), `kit.npcs` (server-driven NPCs),
-   * and the studio-side `kit.deploy(blueprints)` that loads the matching
-   * rules/state into the app (requires `manage_apps`). See
-   * {@link GameKitClient} and the "CrowdyJS → Game Kit" docs guide.
+   * One grid, bound once: its channels and origin-checked replication, with the
+   * app and grid filled in (DN-10: grid scope is app scope intersected with grid
+   * confinement). Pass the box if you know it; otherwise `mintToken()` learns it.
    *
-   * @param appId - The app to scope model calls to (BigInt as a decimal string).
-   * @param options - Optional per-helper config when your blueprints use
-   *   non-default type names/prefixes.
+   * @param appId - The app (BigInt as a decimal string).
+   * @param gridId - The grid (BigInt as a decimal string).
+   */
+  grid(appId: string, gridId: string, box?: GridBox): GridScope {
+    return new GridScope(this, appId, gridId, box);
+  }
+
+  /**
+   * App-scoped **Game Kit**: parties, guilds and chat rooms over teams and channels
+   * (`kit.social`). See {@link GameKitClient}.
+   *
+   * @param appId - The app (BigInt as a decimal string).
+   * @param options - Optional name prefixes and the chat sender's actor uuid.
    */
   kit(appId: string, options?: GameKitOptions): GameKitClient {
-    return new GameKitClient(appId, this.gameModel, this.gameApps, options, {
+    return new GameKitClient(appId, this.gameApps, options, {
       channels: this.channels,
       teams: this.teams,
       udp: this.udp,
-      compute: this.compute,
     });
   }
 

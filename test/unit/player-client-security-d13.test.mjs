@@ -138,6 +138,22 @@ class NodeWorkerAdapter {
   }
 }
 
+/**
+ * What a served CLIENT half runs with: the digest (stood in for, unless a test checks the
+ * hash), its fuel budget, and consent to every call the SDK makes, so the broker's other
+ * checks are what each test meets.
+ */
+async function served() {
+  const { EXEC_CLIENT_HOST_CALLS } = await loadSdk();
+  return {
+    artifactHash: SERVED_HASH,
+    hashArtifact: async () => SERVED_HASH,
+    fuelPerDispatch: 1_000_000n,
+    consentedHostCalls: Object.values(EXEC_CLIENT_HOST_CALLS).flatMap((set) => [...set]),
+  };
+}
+const SERVED_HASH = 'c'.repeat(64);
+
 async function makeFakeBroker(overrides = {}) {
   const { PlayerCodeBroker } = await loadSdk();
   const worker = new FakeWorker();
@@ -146,6 +162,7 @@ async function makeFakeBroker(overrides = {}) {
     workerUrl: 'd13-glue-worker.js',
     workerFactory: () => worker,
     grid: GRID,
+    ...(await served()),
     onHostCall: async (call) => {
       calls.push(call);
       return { accepted: true };
@@ -163,6 +180,7 @@ async function makeRealBroker(overrides = {}) {
     workerUrl: glueWorkerPath,
     workerFactory: () => worker,
     grid: GRID,
+    ...(await served()),
     onHostCall: async (call) => {
       calls.push(call);
       return { accepted: true };
@@ -184,6 +202,7 @@ async function makeRestartingRealBroker(overrides = {}) {
       return worker;
     },
     grid: GRID,
+    ...(await served()),
     onHostCall: async (call) => {
       calls.push(call);
       return { accepted: true };
@@ -272,14 +291,14 @@ test('C2/C3: bounded property fuzz rejects malformed host_call fields without re
         case 8:
           envelope = {
             ...base,
-            fn: 'model_invoke',
-            args: { payload: 'x'.repeat(256 * 1024 + 1) },
+            fn: 'user_state_set',
+            args: { stateBase64: 'x'.repeat(256 * 1024 + 1) },
           };
           break;
         case 9: {
           const circular = {};
           circular.self = circular;
-          envelope = { ...base, fn: 'model_invoke', args: circular };
+          envelope = { ...base, fn: 'user_state_set', args: circular };
           break;
         }
         case 10:
@@ -323,7 +342,6 @@ test('C2/C3: bounded property fuzz rejects malformed host_call fields without re
 
 test('C4: every host-call family is independently rate-capped under deterministic floods', async () => {
   const families = [
-    ['model', 100, 'container_get', {}],
     ['state', 100, 'user_state_get', {}],
     ['world_read', 400, 'chunk_get', { x: 1, y: 1, z: 1 }],
     ['world_write', 200, 'voxel_set', { chunkX: 1, chunkY: 1, chunkZ: 1 }],
@@ -362,7 +380,7 @@ test('C4: every host-call family is independently rate-capped under deterministi
     const before = worker.results().length;
     const other =
       family === 'world_read'
-        ? { fn: 'container_get', args: {} }
+        ? { fn: 'user_state_get', args: {} }
         : { fn: 'chunk_get', args: { x: 1, y: 1, z: 1 } };
     worker.receive({ type: 'hostcall', id: 10_000, ...other });
     await flush();
@@ -589,14 +607,14 @@ test('C6: a one-byte tamper of an executable artifact is rejected before worker 
   const tampered = original.slice();
   tampered[tampered.length - 1] ^= 0x01;
 
-  const rejected = await makeFakeBroker({ artifactHash: expectedHash });
+  const rejected = await makeFakeBroker({ artifactHash: expectedHash, hashArtifact: undefined });
   await assert.rejects(
     () => rejected.broker.start(artifactBuffer(tampered)),
     /not fetched from the platform/,
   );
   assert.equal(rejected.worker.sent.length, 0);
 
-  const accepted = await makeFakeBroker({ artifactHash: expectedHash });
+  const accepted = await makeFakeBroker({ artifactHash: expectedHash, hashArtifact: undefined });
   await accepted.broker.start(artifactBuffer(original));
   assert.equal(accepted.worker.sent[0].type, 'init');
   accepted.broker.stop();
@@ -779,6 +797,7 @@ test('C4: the startup watchdog replaces workers that never initialize', async ()
       return worker;
     },
     grid: GRID,
+    ...(await served()),
     startupWatchdogMs: 10,
     onHostCall: async () => ({}),
     onCircuitOpen: resolveOpened,

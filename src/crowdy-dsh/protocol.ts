@@ -32,7 +32,14 @@
  * Studio itself. `page.project` / `page.saved` re-announce the commit whenever
  * it moves so the worker's next write carries the current one.
  */
-export const CROWDY_DSH_PROTOCOL_VERSION = 3 as const;
+/**
+ * v4 (CrowdyJS 17.7 / crowdy-dsh 0.4, DN-10): the grid requests. The agent can
+ * ask which grid the open project is bound to (`grid.context`) and run a JS
+ * grid program from a project file inside it (`grid.programRun`,
+ * `grid.programStatus`). The page answers them only when its host offers a
+ * `grid` capability; otherwise they fail with a clear message.
+ */
+export const CROWDY_DSH_PROTOCOL_VERSION = 4 as const;
 
 export type DshBridgeSide = 'page' | 'worker';
 
@@ -94,6 +101,28 @@ export interface DshProjectSummary {
   github?: string;
 }
 
+/** The grid the open project is bound to, as the page sees it (v4). */
+export interface DshGridContext {
+  appId: string;
+  gridId: string;
+  low: { x: string; y: string; z: string };
+  high: { x: string; y: string; z: string };
+  /** Whether the signed-in player currently owns the grid. */
+  owned: boolean;
+  channels: Array<{ groupId: string; name: string }>;
+  sessions: Array<{ sessionId: string; name: string | null; status: string }>;
+}
+
+/** One JS grid program the page is running (v4). */
+export interface DshGridProgramStatus {
+  path: string;
+  running: boolean;
+  startedAt?: string;
+  lastError?: string;
+  /** Recent `console` lines from the program's sandbox. */
+  log: string[];
+}
+
 export interface DshBridgeRequestMap {
   'studio.screenshot': { params: { label?: string }; result: DshScreenshotResult };
   'studio.draftTest': { params: Record<string, never>; result: DshBuildResult };
@@ -108,6 +137,12 @@ export interface DshBridgeRequestMap {
   'studio.projectOpen': { params: { projectId: string }; result: { project: DshProjectSummary } };
   'studio.projectCreate': { params: { name: string; template?: string }; result: { project: DshProjectSummary } };
   'game.observe': { params: Record<string, never>; result: { observation: unknown; capturedAt: string } };
+  'grid.context': { params: Record<string, never>; result: { grid: DshGridContext | null } };
+  'grid.programRun': {
+    params: { path: string; stop?: boolean };
+    result: { program: DshGridProgramStatus };
+  };
+  'grid.programStatus': { params: Record<string, never>; result: { programs: DshGridProgramStatus[] } };
 }
 
 export type DshBridgeMethod = keyof DshBridgeRequestMap;
