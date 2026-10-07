@@ -120,6 +120,17 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.3.0: a game answers the page-held host calls
+
+No API change. `createGridHostCalls` takes a `local.page(fn, args)` hook for the calls only the
+page can answer: the player's input (`input_axes`, `input_look`, `input_key`), the player's own
+body (`pose_get`, `pose_set`, `pose_release`, `teleport_request`), mod-owned actors
+(`actor_spawn`, `actor_pose`, `actor_despawn`), the scene (`scene_catalog`, `scene_instances`),
+presentation (`avatar_appearance`, `avatar_state_set`, `voice_set`, `video_set`) and the player's
+own sends (`send_client_event`, `events_poll`, `send_text`, `send_actor_message`,
+`send_channel_message`). Without the hook each is refused as not offered, as before. `clock` is
+answered locally. The host catalog lists all of them as client calls the server refuses.
+
 ## 18.2.0: `ChunkStore` keeps the voxel edits it hydrated
 
 No API change. Every voxel write but a chunk write-back lands only in the chunk's edit log: a

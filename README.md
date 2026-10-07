@@ -517,8 +517,10 @@ a CLIENT half's host calls through CrowdyJS confined to the grid. The ones only
 the game can answer need its knowledge: `local.actorsInChunk` for
 `actors_list*`, `local.avatarChunk` (where an avatar's live actor is) for
 `avatar_state_get`, `local.gridPermissionKeys` with the visiting player's
-`userId` for `grid_permission_check`, and `local.drainPointerClicks` for
-`pointer_clicks`; without its hook such a call is refused as not offered. The
+`userId` for `grid_permission_check`, `local.drainPointerClicks` for
+`pointer_clicks`, and `local.page(fn, args)` for the calls the page holds (the
+player's input, body and sends, mod-owned actors, the scene and presentation;
+18.3.0); without its hook such a call is refused as not offered. The
 Game Model, sessions and grid state calls went with the legacy engines in
 18.0.0: the broker refuses them.
 
