@@ -102,6 +102,18 @@ sign-in mutations are refused from a non-first-party browser origin with
 customer's domain that collects it is indistinguishable, to the platform and to
 the player, from a phishing page.
 
+**Every player stores the terms and an age attestation before playing** (ck-api
+v2.35.0, 2026-10-07). Until they do, `portal.mintAppToken`,
+`portal.createAuthorizationCode` and `portal.refresh` answer
+`LEGAL_ACCEPTANCE_REQUIRED` (`isLegalAcceptanceRequiredError`). On the first row
+Studio's `/authorize` asks for both, so a browser game only has to send the player
+back through `portal.signIn` when a refresh is refused that way. On the other rows,
+show your own two checkboxes linking each document, then call
+`client.auth.recordPlayerConsents({ acceptLegal: true, attestAgeOfMajority: true })`
+before minting; `client.auth.playerLegalAcceptance()` says whether that is still
+needed. `auth.register` takes the same two fields, and a browser page must send both.
+See [MIGRATION.md](MIGRATION.md#1840-the-terms-and-age-gate).
+
 **A game published to Crowdy Games takes the first row too, with one twist the SDK
 handles for you** (17.2.0). Such a game is reached at `https://<games host>/<slug>/`,
 which is a first-party *shell* page, and runs inside that page's iframe on its own

@@ -120,6 +120,32 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.4.0: the terms and age gate
+
+**What it needs.** ck-api `v2.35.0` (cks-game-api #437, 2026-10-07). Against an older API the
+two new calls fail as GraphQL validation errors; nothing else changes.
+
+Since `v2.35.0` no gameplay token is issued until the player has agreed to the current required
+legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis,
+Overworld Privacy Policy) and attested that they are at least 18, or the age of majority where
+they live if that is higher. `portal.mintAppToken`, `portal.createAuthorizationCode` and
+`portal.refresh` answer `LEGAL_ACCEPTANCE_REQUIRED`; `isLegalAcceptanceRequiredError` reads it.
+
+- **A browser game on its own domain** changes nothing for sign-in: Studio's `/authorize` asks
+  for both. A refresh refused this way cannot succeed on retry, so send the player back through
+  `portal.signIn`. That also happens when a required document gets a new version.
+- **A first-party page or a client outside a browser** shows its own two checkboxes, linking
+  each document, then calls `client.auth.recordPlayerConsents({ acceptLegal: true,
+  attestAgeOfMajority: true })` before minting. `client.auth.playerLegalAcceptance()` says
+  whether that is still needed. Call it only for a player who ticked both boxes: it records
+  their agreement.
+- `client.auth.register` takes `acceptLegal` and `attestAgeOfMajority`. A browser request must
+  send both `true` or it is refused before any account exists. A request with no browser origin
+  may omit them and record them later.
+
+The schema is cks-game-api `dev`'s after #437 (`npm run schema:sync:paths`, then
+`npm run codegen`).
+
 ## 18.3.0: a game answers the page-held host calls
 
 No API change. `createGridHostCalls` takes a `local.page(fn, args)` hook for the calls only the
