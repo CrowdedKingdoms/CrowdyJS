@@ -91,7 +91,7 @@ model-backed helpers (`client.kit(appId)` keeps `social`; `kit/wire.ts` and
 Crowdy Studio's `'player-compute'` engine for both targets (`mods` is required; `serverEngine`,
 `playerCompute`, the Runs panel, `state.usage` and the pairing control are gone). Each
 replacement is ck-exec's: hubs and spokes, mods, and a mod's CLIENT half (MIGRATION.md has the
-map; the docs' [from the legacy engines](https://docs.dev.crowdedkingdoms.com/exec/from-the-legacy-engines)
+map; the docs' [from the legacy engines](https://docs.crowdedkingdoms.com/exec/from-the-legacy-engines)
 page the reasoning). **The player runtime runs CLIENT
 halves only:** `PlayerCodeBroker` needs `artifactHash`, `fuelPerDispatch` and
 `consentedHostCalls`, the allowlist is `EXEC_CLIENT_HOST_CALLS` (`ALLOWED_HOST_CALLS` is gone),

@@ -12,22 +12,18 @@ gameplay, minted per app through `client.portal`.
 
 Start here:
 
-- [SDK guide](https://docs.dev.crowdedkingdoms.com/crowdyjs/readme) — the canonical
+- [SDK guide](https://docs.crowdedkingdoms.com/crowdyjs/readme) — the canonical
   walkthrough of everything in this README.
-- [Build a game](https://docs.dev.crowdedkingdoms.com/build-a-game/intro) — a
+- [Build a game](https://docs.crowdedkingdoms.com/build-a-game/intro) — a
   hands-on tutorial from sign-in to a playable voxel game.
-- [Platform overview](https://docs.dev.crowdedkingdoms.com/overview/client-workflow)
+- [Platform overview](https://docs.crowdedkingdoms.com/overview/client-workflow)
   — how a client session flows through the platform.
 
 ## Install
 
 ```bash
-npm install @crowdedkingdoms/crowdyjs@dev
+npm install @crowdedkingdoms/crowdyjs
 ```
-
-This README is the `dev` branch's: it documents the release on the `dev` dist-tag
-(`npm view @crowdedkingdoms/crowdyjs dist-tags`), and its links go to the dev docs site. A
-plain `npm install` resolves `latest`, the production release, which has no `client.exec`.
 
 CrowdyJS targets browsers by default and uses native `fetch`, `WebSocket`,
 `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must
@@ -175,8 +171,8 @@ Notes:
 - Use `client.auth.setToken(token)` to seed a token externally (e.g. when
   restoring auth from a non-default storage).
 
-Deeper reading: [Portals & app-scoped tokens](https://docs.dev.crowdedkingdoms.com/management-api/portals-and-app-tokens)
-and [Sign in](https://docs.dev.crowdedkingdoms.com/management-api/authentication).
+Deeper reading: [Portals & app-scoped tokens](https://docs.crowdedkingdoms.com/management-api/portals-and-app-tokens)
+and [Sign in](https://docs.crowdedkingdoms.com/management-api/authentication).
 
 ### Token refresh during gameplay
 
@@ -299,7 +295,7 @@ query AppForRouting($appId: BigInt!) {
 `CrowdyClient` with `httpUrl: gameApiUrl` (and the matching `wsUrl`) holding
 that app's app-scoped token, then drive gameplay through that client. Apps
 with no `gameApiUrl` keep working against the default `httpUrl` you
-configured. See [Loading an app's Game API](https://docs.dev.crowdedkingdoms.com/crowdyjs/shared-environment-routing).
+configured. See [Loading an app's Game API](https://docs.crowdedkingdoms.com/crowdyjs/shared-environment-routing).
 
 ## Realtime notifications
 
@@ -608,7 +604,7 @@ reach your bundle. Reads are synchronous snapshots and writes happen on
 WebSocket events (not `requestAnimationFrame`), so render loops read freely
 and a backgrounded tab keeps ingesting updates; pass `workerTicker()` to also
 keep timer-driven sends at full rate while hidden. See the
-[World Stores guide](https://docs.dev.crowdedkingdoms.com/crowdyjs/stores).
+[World Stores guide](https://docs.crowdedkingdoms.com/crowdyjs/stores).
 
 ## Game Kit
 
@@ -691,7 +687,7 @@ exec.onReconnect((host) => console.log('moved to', host));
 
 Integers above 2^53 decode as `number` and lose precision unless you pass
 `{ decode: { useBigInt64: true } }`. The wire format is in the
-[ck-exec docs](https://docs.dev.crowdedkingdoms.com/exec/intro).
+[ck-exec docs](https://docs.crowdedkingdoms.com/exec/intro).
 
 ### A mod's CLIENT half
 
@@ -762,7 +758,7 @@ counts what was dropped); `invoke` sends at most 256 KiB each way and is refused
 module is not running. `NOT_FOUND` holds a CLIENT half back 15 s and `RATE_LIMITED` 60 s. The
 grid's owner is asked about their own CLIENT halves like anyone; answer yes in `confirm` when
 `prompt.authorId` is the player. See
-[CLIENT halves](https://docs.dev.crowdedkingdoms.com/exec/client-halves).
+[CLIENT halves](https://docs.crowdedkingdoms.com/exec/client-halves).
 
 ## Hosting a game on Crowdy Games
 
@@ -881,8 +877,8 @@ CLIENT project needs ck-api `v2.25.1` or later. A CLIENT crate still on the lega
 `mountCrowdyStudio` and the controller take `mods: client.exec`. Crowdy Studio runs nothing
 on legacy player compute since 18.0.0.
 
-See [CLIENT halves](https://docs.dev.crowdedkingdoms.com/exec/client-halves), [mods](https://docs.dev.crowdedkingdoms.com/exec/mods)
-and [Embed Crowdy Studio in your game](https://docs.dev.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).
+See [CLIENT halves](https://docs.crowdedkingdoms.com/exec/client-halves), [mods](https://docs.crowdedkingdoms.com/exec/mods)
+and [Embed Crowdy Studio in your game](https://docs.crowdedkingdoms.com/crowdyjs/crowdy-studio-embed).
 
 ### The Studio agent (DeepSeek Harness in the browser)
 
@@ -1060,7 +1056,7 @@ no other repositories and no network access required:
 - `src/generated/graphql.ts` — generated TypeScript operation types.
 
 Schema refresh is explicit, from the published
-[SDL](https://docs.dev.crowdedkingdoms.com/schema/game-api.graphql):
+[SDL](https://docs.crowdedkingdoms.com/schema/game-api.graphql):
 
 ```bash
 npm run schema:sync:prod
