@@ -132,7 +132,8 @@ export class SaveStateStore<T> {
     if (autosave !== false && autosave > 0) {
       ctx.onDispose(
         ctx.ticker.every(autosave, () => {
-          if (this.dirtyFlag && !this.saving) void this.save();
+          // A failed autosave stays dirty, so the next one retries it.
+          if (this.dirtyFlag && !this.saving) this.save().catch(() => {});
         }),
       );
     }

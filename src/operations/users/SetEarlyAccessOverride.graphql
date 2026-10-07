@@ -1,6 +1,0 @@
-mutation SetEarlyAccessOverride($userId: BigInt!, $value: Boolean!) {
-  setEarlyAccessOverride(userId: $userId, value: $value) {
-    userId
-    grantEarlyAccessOverride
-  }
-}

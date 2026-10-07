@@ -318,7 +318,7 @@ export function attachActorInbox<T = string>(
 /** A decoded client/server event delivered by the {@link EventRouter}. */
 export interface TypedEvent<T> {
   eventType: number;
-  /** Whether another client or the server (model notification) emitted it. */
+  /** Whether another client or the server (a hub's emit) emitted it. */
   origin: 'client' | 'server';
   /** The emitting actor/source uuid. */
   uuid: string;

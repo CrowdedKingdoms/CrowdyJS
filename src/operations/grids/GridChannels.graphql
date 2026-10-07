@@ -1,0 +1,15 @@
+query GridChannels($appId: BigInt!, $gridId: BigInt!) {
+  gridChannels(appId: $appId, gridId: $gridId) {
+    groupId
+    appId
+    groupType
+    name
+    description
+    ownerUserId
+    membershipPolicy
+    status
+    defaultRoleId
+    gridId
+    createdAt
+  }
+}

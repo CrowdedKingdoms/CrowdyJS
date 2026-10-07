@@ -1,13 +1,13 @@
 /**
- * Browser Web Worker entry for browser-target player WASM (player compute
- * P3/P5). This is the ONLY platform code that shares an execution context
- * with an untrusted player module. It is intentionally thin: the auditable
- * runtime + ABI marshalling live in [glue-runtime.ts] and the synchronous
- * host-call transport in [glue-sab.ts]; this file only wires them to the
- * worker message loop.
+ * Browser Web Worker entry for a ck-exec mod's CLIENT half. This is the ONLY
+ * platform code that shares an execution context with an untrusted player
+ * module. It is intentionally thin: the auditable runtime + ABI marshalling
+ * live in [glue-runtime.ts] and the synchronous host-call transport in
+ * [glue-sab.ts]; this file only wires them to the worker message loop.
  *
- *  - it instantiates the gas-injected player artifact with an import table
- *    that exposes ONLY `ck.*` + inert wasi stubs (nothing else importable),
+ *  - it instantiates the fuel-metered player artifact with an import table
+ *    that exposes ONLY `ck.*` and `wasi_snapshot_preview1.random_get`
+ *    (nothing else importable),
  *  - it never has the DOM, `window`, auth tokens, `fetch`, or third-party
  *    `importScripts`,
  *  - `ck.host_call` blocks the worker on a SharedArrayBuffer while the
@@ -46,6 +46,9 @@ export {
   type GlueDispatchResult,
 };
 
+/** Log lines the worker posts per rolling second; the broker forwards fewer. */
+const GLUE_LOG_LINES_PER_SECOND = 50;
+
 declare const self: {
   addEventListener?: (type: string, listener: (e: MessageEvent) => void) => void;
   postMessage?: (message: unknown, transfer?: Transferable[]) => void;
@@ -67,8 +70,24 @@ export function startGlueWorker(port: {
   let dispatchId = 0;
   let hostCallTimeoutMs = GLUE_HOST_CALL_TIMEOUT_MS;
   let ticking = false;
+  let logTimes: number[] = [];
+  let droppedLogs = 0;
 
   const post = (message: unknown) => port.postMessage(message);
+
+  // The broker bounds what reaches the page; this bounds what a flooding module costs it in
+  // messages. Dropped lines are counted on the next line posted.
+  const postLog = (level: number, message: string) => {
+    const now = Date.now();
+    logTimes = logTimes.filter((t) => now - t < 1000);
+    if (logTimes.length >= GLUE_LOG_LINES_PER_SECOND) {
+      droppedLogs += 1;
+      return;
+    }
+    logTimes.push(now);
+    post({ type: 'log', level, message, dropped: droppedLogs });
+    droppedLogs = 0;
+  };
 
   // Synchronous gateway: post the request (so the page can see it), then
   // block on the SAB until the broker writes the reply.
@@ -93,7 +112,7 @@ export function startGlueWorker(port: {
     return waitAndReadGlueReply(sab, id, hostCallTimeoutMs);
   };
 
-  const beginDispatch = (kind: 'init' | 'tick' | 'invoke'): number => {
+  const beginDispatch = (kind: 'init' | 'tick' | 'invoke' | 'event'): number => {
     dispatchId = (dispatchId % 0x7ffffffe) + 1;
     post({ type: 'dispatch-start', id: dispatchId, kind });
     return dispatchId;
@@ -101,7 +120,7 @@ export function startGlueWorker(port: {
 
   const report = (
     id: number,
-    kind: 'init' | 'tick' | 'invoke',
+    kind: 'init' | 'tick' | 'invoke' | 'event',
     result: GlueDispatchResult,
   ) => {
     if (result.ok) post({ type: 'dispatch-ok', id, kind });
@@ -128,7 +147,7 @@ export function startGlueWorker(port: {
     const fuelPerDispatch = parseFuelBudget(init.fuelPerDispatch);
     runtime = new GlueRuntime({
       hostCallSync,
-      onLog: (level, message) => post({ type: 'log', level, message }),
+      onLog: postLog,
       fuelPerDispatch,
     });
     try {
@@ -196,6 +215,13 @@ export function startGlueWorker(port: {
           });
         }
       });
+    } else if (msg.type === 'event' && runtime) {
+      const payload =
+        msg.payload instanceof Uint8Array ? msg.payload : new Uint8Array(0);
+      const id = beginDispatch('event');
+      void runDispatch(() => runtime!.event(payload)).then((result) =>
+        report(id, 'event', result),
+      );
     } else if (msg.type === 'stop') {
       ticking = false;
     }

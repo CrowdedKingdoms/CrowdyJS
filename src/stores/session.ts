@@ -19,7 +19,6 @@
 
 import type { AvatarsAPI } from '../domains/avatars.js';
 import type { ChunksAPI } from '../domains/chunks.js';
-import type { GameModelAPI } from '../domains/gameModel.js';
 import type { HostAPI } from '../domains/host.js';
 import type { StateAPI } from '../domains/state.js';
 import type { UdpAPI } from '../domains/udp.js';
@@ -37,7 +36,6 @@ export interface WorldStoresClient {
   state: StateAPI;
   avatars: AvatarsAPI;
   host: HostAPI;
-  gameModel: GameModelAPI;
 }
 
 /** The kinds of outbound sends the session can attribute errors to. */

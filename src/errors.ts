@@ -224,6 +224,7 @@ export type CrowdyFaultCode =
   | 'BUDGET_EXCEEDED'
   | 'RATE_LIMITED'
   | 'QUOTA_EXHAUSTED'
+  | 'CIRCUIT_OPEN'
   | 'TEMPORARILY_DISABLED'
   | 'INVALID_REQUEST'
   | 'NOT_ALLOWED'
@@ -241,6 +242,12 @@ export interface CrowdyPlayerFault {
   blame: CrowdyFaultBlame;
   /** Whether repeating the identical call could succeed with nothing else changing. */
   retryable: boolean;
+  /**
+   * Why an open circuit opened, when the server knows. `watchdog_timeout`
+   * means the failures were watchdog kills; wait out `retryAfterMs` and send
+   * the hit again. Absent for every other code.
+   */
+  cause?: string;
 }
 
 /**
@@ -261,7 +268,7 @@ export interface CrowdyPlayerFault {
  * @example
  * ```ts
  * try {
- *   await client.compute.invoke({ appId, moduleName: 'combat', exportName: 'hit' });
+ *   await client.graphql.request(SomeDocument, variables);
  * } catch (err) {
  *   const fault = playerFaultOf(err);
  *   if (!fault) throw err;
@@ -275,13 +282,12 @@ export class CrowdyUserCodeFaultError extends CrowdyGraphQLError {
   /** The platform's attribution: `{ code, blame, retryable }`. */
   get fault(): CrowdyPlayerFault {
     const extensions = this.extensions ?? {};
-    return {
-      code: (extensions.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
-      blame: (extensions.blame as CrowdyFaultBlame) ?? 'PLATFORM',
-      // Absent means "we did not say", and the safe reading of that is the one that does
-      // not send a client into a loop.
-      retryable: extensions.retryable === true,
-    };
+    return faultFields(
+      (extensions.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
+      (extensions.blame as CrowdyFaultBlame) ?? 'PLATFORM',
+      extensions.retryable === true,
+      extensions.cause,
+    );
   }
 
   /** Whose problem this is. Shorthand for `fault.blame`. */
@@ -300,23 +306,32 @@ function faultFromExtensions(
   extensions: Record<string, unknown> | undefined,
 ): CrowdyPlayerFault | null {
   if (!extensions || typeof extensions.blame !== 'string') return null;
-  return {
-    code: (extensions.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
-    blame: extensions.blame as CrowdyFaultBlame,
-    retryable: extensions.retryable === true,
-  };
+  return faultFields(
+    (extensions.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
+    extensions.blame as CrowdyFaultBlame,
+    extensions.retryable === true,
+    extensions.cause,
+  );
+}
+
+function faultFields(
+  code: CrowdyFaultCode,
+  blame: CrowdyFaultBlame,
+  retryable: boolean,
+  cause: unknown,
+): CrowdyPlayerFault {
+  const fault: CrowdyPlayerFault = { code, blame, retryable };
+  if (typeof cause === 'string' && cause.length > 0) fault.cause = cause;
+  return fault;
 }
 
 /**
  * Read the platform's attribution from EITHER carrier, so a game branches once.
  *
- * There are two, and the split is the server's rather than a wart of this SDK.
- * `computeInvoke` and `playerComputeInvoke` FAIL — they throw, and the fault arrives in
- * the GraphQL error's extensions. `gameModelInvoke` RETURNS — a denial or an evaluation
- * failure is a gameplay verdict that still carries an event id and any writes that did
- * apply, so it comes back as `success: false` with a `fault` field. Forcing either into
- * the other's shape would lose something real, so this function accepts both and gives
- * you one thing to switch on.
+ * There are two. A refused or failed call THROWS, and the fault arrives in the GraphQL
+ * error's extensions. A result may instead RETURN one: a verdict that still carries
+ * whatever did apply comes back as `success: false` with a `fault` field. This function
+ * accepts both and gives you one thing to switch on.
  *
  * Returns `null` when there is no fault: a successful result, or an error that is not an
  * attributed one (a network drop, a timeout, an ordinary validation error elsewhere in
@@ -325,8 +340,7 @@ function faultFromExtensions(
  *
  * @example
  * ```ts
- * const result = await client.gameModel.invoke({ appId, functionName, selfContainerId });
- * const fault = playerFaultOf(result);
+ * const fault = playerFaultOf(errorOrResult);
  * if (fault?.retryable) scheduleRetry();
  * ```
  */
@@ -340,15 +354,21 @@ export function playerFaultOf(value: unknown): CrowdyPlayerFault | null {
   // The in-band carrier: an invoke result that reports its own failure.
   const result = value as {
     success?: unknown;
-    fault?: { code?: unknown; blame?: unknown; retryable?: unknown } | null;
+    fault?: {
+      code?: unknown;
+      blame?: unknown;
+      retryable?: unknown;
+      cause?: unknown;
+    } | null;
   };
   const fault = result.fault;
   if (fault && typeof fault.blame === 'string') {
-    return {
-      code: (fault.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
-      blame: fault.blame as CrowdyFaultBlame,
-      retryable: fault.retryable === true,
-    };
+    return faultFields(
+      (fault.code as CrowdyFaultCode) ?? 'PLATFORM_ERROR',
+      fault.blame as CrowdyFaultBlame,
+      fault.retryable === true,
+      fault.cause,
+    );
   }
 
   // A raw GraphQL error payload, e.g. one entry pulled out of `graphqlErrors`.

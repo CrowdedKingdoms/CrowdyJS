@@ -58,29 +58,6 @@ fragment PlayerUsageChargeFields on PlayerUsageCharge {
   createdAt
 }
 
-fragment PlayerWasmPolicyFields on PlayerWasmPolicy {
-  policyId
-  appId
-  scope
-  scopeRef
-  enabled
-  maxModulesPerGrid
-  maxModulesTotal
-  maxTickHz
-  fuelPerTick
-  fuelPerInvoke
-  maxMemoryMb
-  maxRunMs
-  maxDbOpsPerTick
-  maxEgressMsgsPerMin
-  maxEgressBytesPerMin
-  unitsPerHour
-  unitsPerDay
-  maxCompilesPerHour
-  maxContainerCreatesDay
-  clientFuelPerDispatch
-}
-
 query PlayerWalletBalance {
   playerWalletBalance {
     ...PlayerWalletFields
@@ -159,26 +136,6 @@ query PlayerRuntimeStates {
     reason
     updatedAt
   }
-}
-
-query PlayerWasmPolicies($appId: BigInt!) {
-  playerWasmPolicies(appId: $appId) {
-    ...PlayerWasmPolicyFields
-  }
-}
-
-mutation SetPlayerWasmPolicy($input: SetPlayerWasmPolicyInput!) {
-  setPlayerWasmPolicy(input: $input) {
-    ...PlayerWasmPolicyFields
-  }
-}
-
-mutation DeletePlayerWasmPolicy(
-  $appId: BigInt!
-  $scope: String!
-  $scopeRef: BigInt
-) {
-  deletePlayerWasmPolicy(appId: $appId, scope: $scope, scopeRef: $scopeRef)
 }
 
 query PlayerRateMarkup($appId: BigInt!) {

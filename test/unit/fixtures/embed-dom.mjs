@@ -156,44 +156,21 @@ export function sampleProvider(project = sampleProject()) {
   };
 }
 
-export function sampleCompute() {
+/** Enough of `client.exec` for a Studio that opens and polls; no project is built here. */
+export function sampleExec() {
   return {
-    async deploy() {
-      return { versionId: 'v1' };
+    async modStarter() {
+      throw new Error('no project is created here');
     },
-    async versions() {
+    async modBuild() {},
+    async modBuildStatus() {},
+    async modDeploy() {},
+    async modSetEnabled() {},
+    async modLogs() {
       return [];
     },
-    async setEnabled() {},
-    async setRequires() {},
-    async artifactBytes() {
-      return {
-        bytes: new ArrayBuffer(1),
-        artifactHash: 'a',
-        fuelPerDispatch: 1n,
-        versionId: 'v1',
-      };
-    },
-    async usage() {
-      return {
-        hourUnitsUsed: '0',
-        dayUnitsUsed: '0',
-        unitsPerHour: null,
-        unitsPerDay: null,
-        compilesThisHour: 0,
-        maxCompilesPerHour: 1,
-        gateStatus: 'active',
-        gateReason: null,
-      };
-    },
-    async runs() {
-      return [];
-    },
-    async logs() {
-      return [];
-    },
-    async invoke() {
-      return {};
+    async connect() {
+      throw new Error('nothing is invoked here');
     },
   };
 }
