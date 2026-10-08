@@ -4792,9 +4792,11 @@ export type Mutation = {
   mintGridToken: GridTokenResponse;
   /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
+  /** Store acceptance of the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy) and the age-of-majority attestation. Both arguments must be true; a false value stores nothing and is refused with LEGAL_ACCEPTANCE_REQUIRED. Idempotent for a version already stored. Requires a session token. Gameplay tokens stay refused until this has succeeded for the current document set. */
+  recordPlayerConsents: Scalars['Boolean']['output'];
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
   refreshAppToken: AppTokenResponse;
-  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
+  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   register: AuthResponse;
   /** OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired. */
   reinstateOrganization: OrgRetirementType;
@@ -4874,7 +4876,7 @@ export type Mutation = {
   setAppVisibility: App;
   /** Enables or disables off-session auto-billing for an org and updates its thresholds. When enabled and the wallet falls to lowWaterThresholdCents, the saved payment method is charged rechargeAmountCents (requires setupSharedPaymentMethod first). Pass limitCents=null for no per-period cap. Requires the 'manage_billing' org permission. */
   setAutoBilling: OrgAutoBilling;
-  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed. */
+  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed. */
   setBillingRate: SetRateCardResult;
   /** Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately. */
   setChannelMemberRoles: GroupMember;
@@ -5589,6 +5591,12 @@ export type MutationPublishAppToSharedArgs = {
   planId?: InputMaybe<Scalars['BigInt']['input']>;
   provider?: InputMaybe<PaymentProvider>;
   successUrl?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationRecordPlayerConsentsArgs = {
+  acceptLegal: Scalars['Boolean']['input'];
+  attestAgeOfMajority: Scalars['Boolean']['input'];
 };
 
 
@@ -6884,6 +6892,8 @@ export type PublicRateCardEntryType = {
   freeUnits: Maybe<Scalars['BigInt']['output']>;
   /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". This is the key your usage is aggregated under, so it is what to match a bill line against. */
   metric: Scalars['String']['output'];
+  /** The graduated price, band by band, or null when the dimension has one flat price. Egress (aggregate_data_volume) is priced this way per app per calendar month: each GB is charged at the band the app's month-to-date total has reached, and priceCents is the first band's price. */
+  priceBands: Maybe<Array<RateCardBandType>>;
   /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted. 0 means metered but not charged. */
   priceCents: Scalars['Float']['output'];
   /** Which card this row is on. */
@@ -7243,6 +7253,8 @@ export type Query = {
   platformConfig: PlatformConfig;
   /** The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds). */
   playerAutoBilling: PlayerAutoBilling;
+  /** Whether the signed-in account has stored the current required legal documents and the age-of-majority attestation. False means createPortalAuthorizationCode and mintAppToken will refuse with LEGAL_ACCEPTANCE_REQUIRED until recordPlayerConsents. Requires a session token. */
+  playerLegalAcceptance: Scalars['Boolean']['output'];
   /** Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission. */
   playerPulse: PlayerPulse;
   /** The app's player rate-card markup in basis points on the platform base price (06 §4): the studio's usage-revenue stream, shown to players as a separate spend-history component. 0 = no markup (the BWF posture). Requires 'view_billing'. */
@@ -8139,6 +8151,22 @@ export type QueryWalletTransactionsConnectionArgs = {
   orgId: Scalars['BigInt']['input'];
 };
 
+export type RateCardBandInput = {
+  /** Cents per the row's unitQuantity raw units inside this band: >= 0, at most six decimals, and never more than the band below it. */
+  priceCents: Scalars['Float']['input'];
+  /** Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. Every band but the last needs one, strictly above the band before; the last band must leave it null. */
+  upToUnits?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** One band of a graduated price. Each unit of the period's running total is priced at the band its position falls in, so the price of the next unit never rises as the total grows. Bands are edges on the whole total and count from zero: the free allowance fills the first band first. */
+export type RateCardBandType = {
+  __typename?: 'RateCardBandType';
+  /** Cents charged per the row's unitQuantity raw units for the units inside this band. Fractional values are permitted. */
+  priceCents: Scalars['Float']['output'];
+  /** Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. A band covers units from the previous band's edge up to this one. Null on the last band, which has no upper edge. */
+  upToUnits: Maybe<Scalars['BigInt']['output']>;
+};
+
 /** One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged. */
 export type RateCardEntryType = {
   __typename?: 'RateCardEntryType';
@@ -8156,6 +8184,8 @@ export type RateCardEntryType = {
   freeUnits: Maybe<Scalars['BigInt']['output']>;
   /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates. */
   metric: Scalars['String']['output'];
+  /** The graduated price, band by band, or null when the dimension has one flat price. When present the bands price the period total and priceCents is the first band's price. aggregate_data_volume (egress) is the dimension priced this way. */
+  priceBands: Maybe<Array<RateCardBandType>>;
   /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged. */
   priceCents: Scalars['Float']['output'];
   /** Which card this row is on. */
@@ -8169,10 +8199,10 @@ export type RateCardEntryType = {
 /** One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards. */
 export type RateChangeType = {
   __typename?: 'RateChangeType';
-  /** One of "priceCents", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth". */
+  /** One of "priceCents", "priceBands", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth". */
   field: Scalars['String']['output'];
   metric: Scalars['String']['output'];
-  /** The value before this call, as a decimal string. "none" when there was no allowance row. */
+  /** The value before this call, as a decimal string; for priceBands the schedule as JSON. "none" when there was no allowance row, or no bands. */
   previous: Scalars['String']['output'];
   scope: RateScope;
   /** The value after this call, as a decimal string. */
@@ -8199,6 +8229,10 @@ export type RealtimeConnectionEvent = {
 };
 
 export type RegisterUserInput = {
+  /** True when the player has agreed to the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy). A browser signup that omits this, or sends false, is refused with LEGAL_ACCEPTANCE_REQUIRED. Calls with no Origin header may omit it; gameplay tokens stay refused until the documents are stored. */
+  acceptLegal?: InputMaybe<Scalars['Boolean']['input']>;
+  /** True when the player attests they are at least 18, or the age of majority where they live if that is higher. Same requirement as acceptLegal: required on a browser signup, optional when the request has no Origin. */
+  attestAgeOfMajority?: InputMaybe<Scalars['Boolean']['input']>;
   /** Email for the new account; the confirmation email is sent here. */
   email: Scalars['String']['input'];
   /** Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag. */
@@ -8814,6 +8848,8 @@ export type SetQuotaInput = {
 export type SetRateCardInput = {
   /** Required when a unit change also changes the money. Restating 19c per GiB as 1.769513c per 100 MB is the same price and needs nothing; changing 20c per 100 MB to 20c per GiB-month is a 7841x cut and must be stated deliberately. The mutation refuses rather than guessing which one you meant. */
   acknowledgeRepricing?: InputMaybe<Scalars['Boolean']['input']>;
+  /** true removes the dimension's bands so it is priced flat at priceCents (the former first band's price unless priceCents is also given). Not combinable with priceBands. */
+  clearPriceBands?: InputMaybe<Scalars['Boolean']['input']>;
   /** New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged. */
   freePerHour?: InputMaybe<Scalars['BigInt']['input']>;
   /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. */
@@ -8824,6 +8860,8 @@ export type SetRateCardInput = {
   freeUnits?: InputMaybe<Scalars['BigInt']['input']>;
   /** The metered dimension to reprice. Refused unless the platform actually meters it: a rate for an unmetered metric bills nobody while appearing configured. */
   metric: Scalars['String']['input'];
+  /** A whole graduated schedule, replacing the one the dimension holds: 1 to 10 bands, ascending edges, the last band open, no band dearer than the one below. Band 1's price becomes priceCents (supply priceCents only if it is the same). Accepted for SHARED aggregate_data_volume only. Like every price, it applies from a dimension's next period where a period has already been charged. */
+  priceBands?: InputMaybe<Array<RateCardBandInput>>;
   /** New price in cents per unitQuantity raw units. Must be >= 0; 0 means meter but do not charge. Omit to leave the price unchanged. Fractional values are accepted (the column is NUMERIC(20,6)). */
   priceCents?: InputMaybe<Scalars['Float']['input']>;
   /** Why this price is changing. Required: a rate change with no stated reason is not auditable after the fact. Recorded in the operator log with the before and after values. */

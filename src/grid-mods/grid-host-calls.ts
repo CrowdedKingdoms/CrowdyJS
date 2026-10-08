@@ -36,6 +36,12 @@ export interface GridHostLocal {
     state?: string;
   }): Promise<boolean>;
   drainPointerClicks?(): unknown;
+  /**
+   * Answers a host call the page holds and the server does not: input, the
+   * player's body, scene, presentation, and the player's own sends. Absent,
+   * those calls are refused. A game that routes them itself does not use this.
+   */
+  page?(fn: string, args: Record<string, unknown>): unknown | Promise<unknown>;
 }
 
 export interface GridHostCallsOptions {
@@ -275,6 +281,33 @@ export function createGridHostCalls(
       case 'pointer_clicks':
         if (!local?.drainPointerClicks) throw new GridHostCallRefused(fn);
         return local.drainPointerClicks();
+      case 'clock':
+        return { ms: Date.now() };
+      // The page holds these. `local.page` is how a game answers them through
+      // this helper; without it they are refused, the same as a missing hook.
+      case 'actor_despawn':
+      case 'actor_pose':
+      case 'actor_spawn':
+      case 'avatar_appearance':
+      case 'avatar_state_set':
+      case 'events_poll':
+      case 'input_axes':
+      case 'input_key':
+      case 'input_look':
+      case 'pose_get':
+      case 'pose_release':
+      case 'pose_set':
+      case 'scene_catalog':
+      case 'scene_instances':
+      case 'send_actor_message':
+      case 'send_channel_message':
+      case 'send_client_event':
+      case 'send_text':
+      case 'teleport_request':
+      case 'video_set':
+      case 'voice_set':
+        if (!local?.page) throw new GridHostCallRefused(fn);
+        return local.page(fn, args);
       default:
         throw new GridHostCallRefused(fn);
     }

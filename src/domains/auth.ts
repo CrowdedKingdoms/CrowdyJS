@@ -254,8 +254,28 @@ const RegisterDocument = parse(
   `mutation Register($registerUserInput: RegisterUserInput!) { register(registerUserInput: $registerUserInput) { ${AUTH_RESPONSE_FIELDS} } }`,
 ) as TypedDocumentNode<
   { register: AuthResponse },
-  { registerUserInput: { email: string; password: string; gamertag?: string } }
+  {
+    registerUserInput: {
+      email: string;
+      password: string;
+      gamertag?: string;
+      acceptLegal?: boolean;
+      attestAgeOfMajority?: boolean;
+    };
+  }
 >;
+
+// THE CLICKWRAP (ck-api v2.35.0). A gameplay token is refused until both are stored.
+const RecordPlayerConsentsDocument = parse(
+  `mutation RecordPlayerConsents($acceptLegal: Boolean!, $attestAgeOfMajority: Boolean!) { recordPlayerConsents(acceptLegal: $acceptLegal, attestAgeOfMajority: $attestAgeOfMajority) }`,
+) as TypedDocumentNode<
+  { recordPlayerConsents: boolean },
+  { acceptLegal: boolean; attestAgeOfMajority: boolean }
+>;
+
+const PlayerLegalAcceptanceDocument = parse(
+  `query PlayerLegalAcceptance { playerLegalAcceptance }`,
+) as TypedDocumentNode<{ playerLegalAcceptance: boolean }, Record<string, never>>;
 
 // PASSWORD MANAGEMENT. Four mutations, and they are four rather than one or two
 // on purpose: each is defined by what the CALLER has already proven, and
@@ -423,17 +443,60 @@ export class AuthAPI {
    * a password-less magic-link/social account gets the password attached
    * pending email confirmation. Use {@link isAlreadyRegisteredError} to detect
    * either and fall back to {@link login} or {@link requestLoginLink}.
+   *
+   * **The clickwrap (ck-api v2.35.0).** A request from a browser page must send
+   * `acceptLegal` and `attestAgeOfMajority` both `true` — the player ticked both
+   * boxes — or it is refused with `LEGAL_ACCEPTANCE_REQUIRED` before any account
+   * exists; the account then starts accepted. A client with no browser origin may
+   * omit them and call {@link recordPlayerConsents} before its first gameplay
+   * token.
    */
   async register(input: {
     email: string;
     password: string;
     gamertag?: string;
+    /** The player agreed to the current required legal documents. */
+    acceptLegal?: boolean;
+    /** The player is at least 18, or the age of majority where they live if higher. */
+    attestAgeOfMajority?: boolean;
   }): Promise<AuthResponse> {
     const data = await this.graphql.request(RegisterDocument, {
       registerUserInput: input,
     });
     if (data.register?.token) this.session.setToken(data.register.token);
     return data.register;
+  }
+
+  /**
+   * Store the signed-in player's agreement to the current required legal
+   * documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing
+   * Basis, Overworld Privacy Policy) and their attestation that they are at least
+   * 18, or the age of majority where they live if that is higher. Requires the
+   * identity session token; both must be `true`, and repeating it is harmless.
+   *
+   * Since ck-api v2.35.0 a gameplay token (`portal.mintAppToken`,
+   * `portal.createAuthorizationCode`, `portal.refresh`) is refused with
+   * `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError}) until
+   * this is stored. It records the PLAYER's agreement: call it only after they
+   * have ticked both boxes in your own UI, linking each document. A browser game
+   * never needs it, because Studio's hosted `/authorize` asks for both.
+   */
+  async recordPlayerConsents(input: {
+    acceptLegal: boolean;
+    attestAgeOfMajority: boolean;
+  }): Promise<boolean> {
+    const data = await this.graphql.request(RecordPlayerConsentsDocument, input);
+    return data.recordPlayerConsents;
+  }
+
+  /**
+   * Whether the signed-in player has the current required documents and the age
+   * attestation stored, i.e. whether a gameplay token would be issued. Requires
+   * the identity session token. ck-api v2.35.0.
+   */
+  async playerLegalAcceptance(): Promise<boolean> {
+    const data = await this.graphql.request(PlayerLegalAcceptanceDocument, {});
+    return data.playerLegalAcceptance;
   }
 
   /**

@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.2.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.4.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,21 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.4.0: the terms and age gate (2026-10-07).** ck-api `v2.35.0` (cks-game-api #437) refuses a
+gameplay token with `LEGAL_ACCEPTANCE_REQUIRED` until the player's consents are stored.
+`client.auth.recordPlayerConsents` and `playerLegalAcceptance` wrap the two new player fields,
+`auth.register` takes `acceptLegal` / `attestAgeOfMajority`, and `isLegalAcceptanceRequiredError`
+reads the refusal. `recordPlayerConsents` records a person's agreement, so it is for a client that
+showed its own checkboxes; our own scripts call the GraphQL directly. The schema is cks-game-api
+`dev`'s after #437. CrowdyCPP mirrors it.
+
+**18.3.0: a game answers the page-held host calls (#178, 2026-10-07).** `createGridHostCalls`
+routes 21 client-only calls (input, the player's own body and sends, mod-owned actors, the
+scene, presentation) to a `local.page(fn, args)` hook, and refuses each as not offered when the
+game has none; `clock` is answered locally. Default-deny is unchanged: every other name still
+falls to `GridHostCallRefused`, and no account, auth or out-of-grid call was added. The
+grid-box limits are the page's to enforce (the-construct's `modChunkRuntime.ts` checks them).
 
 **18.2.0: `ChunkStore` keeps the voxel edits it hydrated (OI-2026-10-02-006, 2026-10-03).**
 Since ck-api `dev/v2.33.0` (cks-game-api #445) every voxel edit recorded for a chunk (a hub's or
