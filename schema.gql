@@ -6241,6 +6241,10 @@ type Query {
     tierId: BigInt
   ): [GmTierFeature!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "appId")
   """
+  Whether the signed-in account has stored the current required legal documents and the age-of-majority attestation. False means createPortalAuthorizationCode and mintAppToken will refuse with LEGAL_ACCEPTANCE_REQUIRED until recordPlayerConsents. Requires a session token.
+  """
+  playerLegalAcceptance: Boolean!
+  """
   The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart.
   """
   availableLoginProviders: [String!]!
@@ -7972,6 +7976,17 @@ type Mutation {
     input: GrantTierFeatureInput!
   ): Boolean! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
+  Store acceptance of the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy) and the age-of-majority attestation. Both arguments must be true; a false value stores nothing and is refused with LEGAL_ACCEPTANCE_REQUIRED. Idempotent for a version already stored. Requires a session token. Gameplay tokens stay refused until this has succeeded for the current document set.
+  """
+  recordPlayerConsents(
+    """True when the player agrees to the current required legal documents."""
+    acceptLegal: Boolean!
+    """
+    True when the player attests they are at least 18, or the age of majority where they live if that is higher.
+    """
+    attestAgeOfMajority: Boolean!
+  ): Boolean!
+  """
   Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
   requestLoginLink(input: RequestLoginLinkInput!): RequestLoginLinkResult!
@@ -7997,7 +8012,7 @@ type Mutation {
     loginUserInput: LoginUserInput!
   ): AuthResponse!
   """
-  Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
+  Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
   register(
     """
@@ -9812,6 +9827,14 @@ input RegisterUserInput {
   Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag.
   """
   gamertag: String
+  """
+  True when the player has agreed to the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy). A browser signup that omits this, or sends false, is refused with LEGAL_ACCEPTANCE_REQUIRED. Calls with no Origin header may omit it; gameplay tokens stay refused until the documents are stored.
+  """
+  acceptLegal: Boolean
+  """
+  True when the player attests they are at least 18, or the age of majority where they live if that is higher. Same requirement as acceptLegal: required on a browser signup, optional when the request has no Origin.
+  """
+  attestAgeOfMajority: Boolean
 }
 
 input ResetPasswordInput {

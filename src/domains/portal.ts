@@ -329,6 +329,35 @@ export function isHostedSignInRequiredError(error: unknown): boolean {
   );
 }
 
+/**
+ * `LEGAL_ACCEPTANCE_REQUIRED`: the player has not stored the current required
+ * legal documents and the age-of-majority attestation, so no gameplay token is
+ * issued ({@link PortalAPI.mintAppToken}, {@link PortalAPI.createAuthorizationCode},
+ * {@link PortalAPI.refresh}), and a browser `auth.register` without both boxes is
+ * refused. A browser game sends the player back through {@link PortalAPI.signIn},
+ * where Studio's `/authorize` asks; a native client shows its own clickwrap and
+ * calls `auth.recordPlayerConsents`. ck-api v2.35.0.
+ */
+export function isLegalAcceptanceRequiredError(error: unknown): boolean {
+  const e = error as {
+    code?: unknown;
+    extensions?: { code?: unknown };
+    graphQLErrors?: Array<{ extensions?: { code?: unknown } }>;
+    graphqlErrors?: Array<{ extensions?: { code?: unknown } }>;
+    message?: unknown;
+  } | null;
+  const codes = [
+    e?.code,
+    e?.extensions?.code,
+    ...(e?.graphQLErrors ?? []).map((g) => g.extensions?.code),
+    ...(e?.graphqlErrors ?? []).map((g) => g.extensions?.code),
+  ];
+  if (codes.includes('LEGAL_ACCEPTANCE_REQUIRED')) return true;
+  return /LEGAL_ACCEPTANCE_REQUIRED/.test(
+    typeof e?.message === 'string' ? e.message : '',
+  );
+}
+
 export class PortalAPI {
   constructor(
     private readonly api: GraphQLClient,
@@ -351,7 +380,9 @@ export class PortalAPI {
    * Native/direct mint: exchange the caller's identity session token for an
    * app-scoped gameplay token. Returns the token; it is NOT stored on this
    * client (build a per-game client with it). Free/open apps auto-grant access;
-   * paid apps require an existing entitlement.
+   * paid apps require an existing entitlement. Refused with
+   * `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError}) until the
+   * player's consents are stored (`auth.recordPlayerConsents`, ck-api v2.35.0).
    */
   async mintAppToken(appId: string): Promise<AppTokenResponse> {
     const data = await this.api.request(MintAppTokenDocument, {
@@ -363,7 +394,8 @@ export class PortalAPI {
   /**
    * Overworld/identity side: mint a one-time authorization code for a target
    * app, bound to the destination game's PKCE challenge + redirect URI.
-   * Requires the identity session token.
+   * Requires the identity session token. Refused with `LEGAL_ACCEPTANCE_REQUIRED`
+   * until the player's consents are stored (ck-api v2.35.0).
    */
   async createAuthorizationCode(params: {
     appId: string;
@@ -398,6 +430,11 @@ export class PortalAPI {
    * Same-app refresh: rotate the current app token for a fresh one (extended
    * TTL) and store it. Call before expiry to keep playing without bouncing
    * through the Overworld. Requires the current app token on this session.
+   *
+   * Refused with `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError})
+   * when the player's stored consents are missing or a required document has a
+   * new version (ck-api v2.35.0). Retrying cannot succeed: send a browser player
+   * back through {@link signIn}, where `/authorize` asks for them.
    */
   async refresh(currentServer?: CurrentServer): Promise<AppTokenResponse> {
     // NATIVE CLIENTS NAME THEIR SERVER. A Buddy drops datagrams for a token it was

@@ -4792,9 +4792,11 @@ export type Mutation = {
   mintGridToken: GridTokenResponse;
   /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
+  /** Store acceptance of the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy) and the age-of-majority attestation. Both arguments must be true; a false value stores nothing and is refused with LEGAL_ACCEPTANCE_REQUIRED. Idempotent for a version already stored. Requires a session token. Gameplay tokens stay refused until this has succeeded for the current document set. */
+  recordPlayerConsents: Scalars['Boolean']['output'];
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
   refreshAppToken: AppTokenResponse;
-  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
+  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   register: AuthResponse;
   /** OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired. */
   reinstateOrganization: OrgRetirementType;
@@ -5589,6 +5591,12 @@ export type MutationPublishAppToSharedArgs = {
   planId?: InputMaybe<Scalars['BigInt']['input']>;
   provider?: InputMaybe<PaymentProvider>;
   successUrl?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationRecordPlayerConsentsArgs = {
+  acceptLegal: Scalars['Boolean']['input'];
+  attestAgeOfMajority: Scalars['Boolean']['input'];
 };
 
 
@@ -7243,6 +7251,8 @@ export type Query = {
   platformConfig: PlatformConfig;
   /** The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds). */
   playerAutoBilling: PlayerAutoBilling;
+  /** Whether the signed-in account has stored the current required legal documents and the age-of-majority attestation. False means createPortalAuthorizationCode and mintAppToken will refuse with LEGAL_ACCEPTANCE_REQUIRED until recordPlayerConsents. Requires a session token. */
+  playerLegalAcceptance: Scalars['Boolean']['output'];
   /** Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission. */
   playerPulse: PlayerPulse;
   /** The app's player rate-card markup in basis points on the platform base price (06 §4): the studio's usage-revenue stream, shown to players as a separate spend-history component. 0 = no markup (the BWF posture). Requires 'view_billing'. */
@@ -8199,6 +8209,10 @@ export type RealtimeConnectionEvent = {
 };
 
 export type RegisterUserInput = {
+  /** True when the player has agreed to the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy). A browser signup that omits this, or sends false, is refused with LEGAL_ACCEPTANCE_REQUIRED. Calls with no Origin header may omit it; gameplay tokens stay refused until the documents are stored. */
+  acceptLegal?: InputMaybe<Scalars['Boolean']['input']>;
+  /** True when the player attests they are at least 18, or the age of majority where they live if that is higher. Same requirement as acceptLegal: required on a browser signup, optional when the request has no Origin. */
+  attestAgeOfMajority?: InputMaybe<Scalars['Boolean']['input']>;
   /** Email for the new account; the confirmation email is sent here. */
   email: Scalars['String']['input'];
   /** Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag. */
