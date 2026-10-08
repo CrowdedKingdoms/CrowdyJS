@@ -317,6 +317,208 @@ export const GENERATED_HOST_CATALOG: HostCatalog = {
       ],
       "app": "Refused on the server",
       "grid": "Refused on the server"
+    },
+    {
+      "name": "input_axes",
+      "group": "input",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The player's own movement axes (WASD / stick), drained by the page"
+    },
+    {
+      "name": "input_look",
+      "group": "input",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The player's own pointer-look delta since the last poll"
+    },
+    {
+      "name": "input_key",
+      "group": "input",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "Whether one named key is held by the player"
+    },
+    {
+      "name": "clock",
+      "group": "meta",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The page's wall clock in milliseconds, answered locally"
+    },
+    {
+      "name": "pose_get",
+      "group": "world_read",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The player's own body pose (held by the mod, or the walker)"
+    },
+    {
+      "name": "pose_set",
+      "group": "world_write",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The player's own body, positions inside the grid box only"
+    },
+    {
+      "name": "pose_release",
+      "group": "world_write",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "Hand the player's own body back to the walker"
+    },
+    {
+      "name": "teleport_request",
+      "group": "world_write",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The player's own body, destinations inside the grid box only"
+    },
+    {
+      "name": "actor_spawn",
+      "group": "world_write",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "A mod-owned actor placed inside the grid box, replicated from the player's session"
+    },
+    {
+      "name": "actor_pose",
+      "group": "world_write",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "A mod-owned actor of this session, positions inside the grid box only"
+    },
+    {
+      "name": "actor_despawn",
+      "group": "world_write",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "A mod-owned actor of this session"
+    },
+    {
+      "name": "scene_catalog",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The mod's construct.scene.v1 templates, kept in the page"
+    },
+    {
+      "name": "scene_instances",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "Template instances inside the grid box, drawn locally"
+    },
+    {
+      "name": "avatar_appearance",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The player's own avatar tint"
+    },
+    {
+      "name": "avatar_state_set",
+      "group": "state",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "The player's own avatar state blob"
+    },
+    {
+      "name": "voice_set",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "Start or stop the player's own microphone; the page still asks the browser"
+    },
+    {
+      "name": "video_set",
+      "group": "present",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "Start or stop the player's own camera; the page still asks the browser"
+    },
+    {
+      "name": "send_client_event",
+      "group": "egress",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "A ClientEvent on the UDP fan-out from the player's own chunk, inside the grid box",
+      "egress": true
+    },
+    {
+      "name": "events_poll",
+      "group": "egress",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "ClientEvents received by the player's session since the last poll"
+    },
+    {
+      "name": "send_text",
+      "group": "egress",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "A spatial text packet from the player's own chunk, as the player",
+      "egress": true
+    },
+    {
+      "name": "send_actor_message",
+      "group": "egress",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "A single-actor message from the player's session to one actor inside the grid box",
+      "egress": true
+    },
+    {
+      "name": "send_channel_message",
+      "group": "egress",
+      "targets": [
+        "client"
+      ],
+      "app": "Refused on the server",
+      "grid": "A channel message as the player, on channels the player may send on",
+      "egress": true
     }
   ]
 };
