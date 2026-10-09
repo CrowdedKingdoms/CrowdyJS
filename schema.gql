@@ -7295,13 +7295,24 @@ type Query {
     includeRevoked: Boolean = false
   ): [TierAccessRule!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """OPERATOR: one account's access to this tier and its stored grant."""
-  userTierAccess(userId: BigInt!): UserTierAccess! @requiresPermission(scope: "operator", permission: "is_operator")
+  userTierAccess(
+    """The account to read."""
+    userId: BigInt!
+  ): UserTierAccess! @requiresPermission(scope: "operator", permission: "is_operator")
   """OPERATOR: the provisioning tokens of this tier (never their secrets)."""
-  tierAccessProvisioningTokens(includeRevoked: Boolean = false): [TierAccessProvisioningToken!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  tierAccessProvisioningTokens(
+    """Also list revoked tokens."""
+    includeRevoked: Boolean = false
+  ): [TierAccessProvisioningToken!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   OPERATOR: who on this tier would be refused -- counts, a page of refused accounts with what they hold, and organizations with no admitted member. Reads every account; for review, not for polling. Refused on prod.
   """
-  tierAccessInventory(limit: Int = 200, offset: Int = 0): TierAccessInventory! @requiresPermission(scope: "operator", permission: "is_operator")
+  tierAccessInventory(
+    """Refused accounts per page (1 to 500)."""
+    limit: Int = 200
+    """Refused accounts to skip, newest first."""
+    offset: Int = 0
+  ): TierAccessInventory! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. Read-only reporting. Requires the 'view_usage' org permission.
   """
@@ -9119,12 +9130,17 @@ type Mutation {
   """
   OPERATOR: remove an entry from the list. Accounts it was admitting are refused at their next request, and their sessions and app tokens are ended. Refused on prod.
   """
-  revokeTierAccessRule(ruleId: BigInt!): TierAccessRule! @requiresPermission(scope: "operator", permission: "is_operator")
+  revokeTierAccessRule(
+    """The rule to revoke (tierAccessRules.ruleId)."""
+    ruleId: BigInt!
+  ): TierAccessRule! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   OPERATOR: grant one account access to this tier regardless of its email (a service account, an unverifiable address), optionally until a date, or clear the grant. Clearing ends its sessions if nothing else admits it. Refused on prod.
   """
   setUserTierAccess(
+    """The account to grant or clear."""
     userId: BigInt!
+    """true grants access; false clears an operator grant."""
     granted: Boolean!
     """When the grant ends. Omit for none."""
     expiresAt: DateTime
@@ -9132,11 +9148,21 @@ type Mutation {
   """
   OPERATOR: grant every existing account a prefix*@domain pattern matches that has no grant -- for bot rosters created before the gate. The domain must be a reserved test domain or a company domain. Dry run by default. Refused on prod.
   """
-  grantTierAccessByPattern(emailPattern: String!, dryRun: Boolean = true): GrantTierAccessByPatternResult! @requiresPermission(scope: "operator", permission: "is_operator")
+  grantTierAccessByPattern(
+    """
+    prefix*@domain: the domain must be a reserved test domain or a company domain, the prefix at least three characters.
+    """
+    emailPattern: String!
+    """Count the matches without granting (the default)."""
+    dryRun: Boolean = true
+  ): GrantTierAccessByPatternResult! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   OPERATOR: end the sessions and app tokens of these accounts (at most 1000), skipping any this tier admits. Returns how many had sessions ended. Refused on prod.
   """
-  endTierAccessSessions(userIds: [BigInt!]!): Int! @requiresPermission(scope: "operator", permission: "is_operator")
+  endTierAccessSessions(
+    """Accounts whose sessions and app tokens end; at most 1000."""
+    userIds: [BigInt!]!
+  ): Int! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   OPERATOR: mint a provisioning token for a test harness. The secret is returned once. Refused on prod.
   """
@@ -9144,11 +9170,21 @@ type Mutation {
   """
   OPERATOR: revoke a provisioning token. With revokeAccounts, also clear the grant of every account it created and end their sessions. Refused on prod.
   """
-  revokeTierAccessProvisioningToken(tokenId: BigInt!, revokeAccounts: Boolean = false): TierAccessProvisioningToken! @requiresPermission(scope: "operator", permission: "is_operator")
+  revokeTierAccessProvisioningToken(
+    """The token to revoke (tierAccessProvisioningTokens.tokenId)."""
+    tokenId: BigInt!
+    """
+    Also clear the grants of the accounts it created and end their sessions.
+    """
+    revokeAccounts: Boolean = false
+  ): TierAccessProvisioningToken! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   SUPER ADMIN: set this tier to OBSERVE (log what would be refused) or ENFORCE. Refused on prod, where the gate is always off.
   """
-  setTierAccessMode(mode: TierAccessStoredMode!): TierAccessSettings! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  setTierAccessMode(
+    """OBSERVE logs refusals; ENFORCE refuses."""
+    mode: TierAccessStoredMode!
+  ): TierAccessSettings! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Application liveness heartbeat for the authenticated user's existing actor rows in an app. Refreshes actors.updated_at so the user stays host-eligible, then returns the freshly-elected host so a client can fold its poll and heartbeat into one round-trip. This is not proof of a live Buddy session and does not refresh the separate Buddy presence lease used by security-sensitive artifact/compute occupancy gates.
   """
