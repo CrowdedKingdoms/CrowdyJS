@@ -11,30 +11,49 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
  *   npm run schema:sync:prod
  *   npm run schema:sync:local
  *   npm run schema:sync:paths -- --schema <file-or-url>
- * Then run `npm run codegen` and commit both schema.gql and
+ * Then run `npm run codegen` and commit schema.gql, src/generated/graphql-schema.ts and
  * src/generated/graphql.ts.
+ *
+ * Two outputs since graphql-codegen 7 (18.4.1): `typescript-operations` now emits the
+ * input types and enums an operation uses, so beside the `typescript` plugin in one file
+ * they were declared twice. The schema types go to graphql-schema.ts, the operations
+ * import them from there, and graphql.ts re-exports them so its importers are unchanged.
  */
+const shared = {
+  useTypeImports: true,
+  scalars: {
+    BigInt: 'string',
+    DateTime: 'string',
+  },
+  avoidOptionals: {
+    field: true,
+    inputValue: false,
+    object: false,
+    defaultValue: false,
+  },
+  skipTypename: false,
+  nonOptionalTypename: false,
+};
+
 const config: CodegenConfig = {
   overwrite: true,
   schema: './schema.gql',
   documents: 'src/operations/**/*.graphql',
   generates: {
+    'src/generated/graphql-schema.ts': {
+      plugins: ['typescript'],
+      config: shared,
+    },
     'src/generated/graphql.ts': {
-      plugins: ['typescript', 'typescript-operations', 'typed-document-node'],
+      plugins: [
+        { add: { content: "export * from './graphql-schema.js';" } },
+        'typescript-operations',
+        'typed-document-node',
+      ],
       config: {
-        useTypeImports: true,
-        scalars: {
-          BigInt: 'string',
-          DateTime: 'string',
-        },
-        avoidOptionals: {
-          field: true,
-          inputValue: false,
-          object: false,
-          defaultValue: false,
-        },
-        skipTypename: false,
-        nonOptionalTypename: false,
+        ...shared,
+        importSchemaTypesFrom: 'src/generated/graphql-schema',
+        importExtension: '.js',
         documentMode: 'documentNode',
         dedupeFragments: true,
       },
