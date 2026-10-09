@@ -1,0 +1,9672 @@
+export type Maybe<T> = T | null;
+export type InputMaybe<T> = Maybe<T>;
+/** All built-in and custom scalars, mapped to their actual values */
+export type Scalars = {
+  ID: { input: string; output: string; }
+  String: { input: string; output: string; }
+  Boolean: { input: boolean; output: boolean; }
+  Int: { input: number; output: number; }
+  Float: { input: number; output: number; }
+  /** Arbitrary-precision signed integer (used for 64-bit ids and chunk coordinates such as appId, userId and chunk x/y/z). ALWAYS transmitted as a base-10 decimal STRING in BOTH directions — send it quoted (e.g. "1024", "-5") and read it back as a string; never use a raw JSON number, because large values overflow IEEE-754 doubles. The server rejects any value that is not a valid integer string. */
+  BigInt: { input: string; output: string; }
+  /** ISO-8601 DateTime or relative duration (e.g. 1d, 7d, 1h) interpreted as a lookback window ending at now. */
+  DateTime: { input: string; output: string; }
+};
+
+export type Actor = {
+  __typename?: 'Actor';
+  /** App (game) this actor belongs to. BigInt serialized as a decimal string. */
+  appId: Scalars['BigInt']['output'];
+  /** Avatar this actor is using, or null. BigInt serialized as a decimal string. */
+  avatarId: Maybe<Scalars['BigInt']['output']>;
+  /** Chunk-grid coordinates (x, y, z as int64 BigInt decimal strings) locating the actor in the world. */
+  chunk: ChunkCoordinates;
+  /** Server timestamp (ISO-8601) when the actor row was created. Used as the primary ordering key for host election (oldest fresh actor wins). */
+  createdAt: Scalars['DateTime']['output'];
+  /** Owner-only private state blob, base64-encoded binary. Stripped (returned null) for non-owners and in public/batch reads such as `batchLookupActors`. */
+  privateState: Maybe<Scalars['String']['output']>;
+  /** Public state blob, base64-encoded binary; visible to all viewers. */
+  publicState: Maybe<Scalars['String']['output']>;
+  /** Liveness timestamp (ISO-8601), refreshed by the `actorHeartbeat` mutation. Host election treats actors with a recent `updatedAt` as fresh; stale rows age out of eligibility. */
+  updatedAt: Scalars['DateTime']['output'];
+  /** Owner user id. BigInt serialized as a decimal string. Ownership gates writes and access to `privateState`. */
+  userId: Scalars['BigInt']['output'];
+  /** Actor id and primary key: a 32-character ASCII identifier (exactly 32 ASCII characters / 32 raw octets on the UDP wire). This is NOT a hyphenated RFC-4122 UUID. This is the value accepted by all actor `uuid` arguments. */
+  uuid: Scalars['ID']['output'];
+};
+
+/** An edge in a Actor connection. */
+export type ActorEdge = {
+  __typename?: 'ActorEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: Actor;
+};
+
+export type ActorFilterInput = {
+  /** Restrict to actors in this app. BigInt sent as a decimal string. */
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Restrict to actors using this avatar. BigInt sent as a decimal string. */
+  avatarId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Restrict to actors in this chunk (x, y, z as int64 BigInt decimal strings). */
+  chunk?: InputMaybe<ChunkCoordinatesInput>;
+  /** Restrict to a single actor by its 32-character ASCII actor id (the UDP-wire id, not a hyphenated UUID). */
+  uuid?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** The game server has stopped considering an actor present (Buddy v0.25.0). Emitted ONCE, over the actor's last chunk with the replication rings its own updates used, at the moment its presence record is removed -- roughly five seconds after its last update. Not emitted when the actor merely moved to another server. Treat a later ActorUpdateNotification for the same uuid as a rejoin. Received via the udpNotifications subscription. */
+export type ActorLeftNotification = {
+  __typename?: 'ActorLeftNotification';
+  /** The ID of the app the actor was in. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the actor's last chunk. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the actor's last chunk. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the actor's last chunk. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Chunk replication distance (0-8) the notification was fanned out over. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** Why the server stopped considering the actor present: 0 = STALE (it stopped updating). 1 is reserved for an immediate server-side release; treat any other value as STALE. */
+  leftReason: Scalars['Int']['output'];
+  /** Correlation byte from the datagram tail (always 0 today). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The unique identifier of the actor that left. */
+  uuid: Scalars['String']['output'];
+};
+
+/** The signed-in identity behind a bearer token. */
+export type ActorType = {
+  __typename?: 'ActorType';
+  /** Contributor uuid — the votes/content actor. */
+  contributorUuid: Scalars['String']['output'];
+  email: Maybe<Scalars['String']['output']>;
+  /** Legacy bigint public user id (Buddy / CK wire), as a string. */
+  userId: Scalars['String']['output'];
+  /** User identity: the users.galaxy_row_uuid value. The column keeps its historical name; the datastore is PostgreSQL/Citus. */
+  userUuid: Scalars['String']['output'];
+  username: Maybe<Scalars['String']['output']>;
+};
+
+/** Notification received when an actor (player or NPC) state is updated by another client or the server. Received via the udpNotifications subscription. */
+export type ActorUpdateNotification = {
+  __typename?: 'ActorUpdateNotification';
+  /** The ID of the app where the actor is located. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk where the actor is located. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk where the actor is located. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk where the actor is located. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The actor state data, base64-encoded. Decode this to get the full ActorState containing position, rotation, velocity, animation flags, etc. */
+  state: Scalars['String']['output'];
+  /** The unique identifier of the actor that was updated. */
+  uuid: Scalars['String']['output'];
+};
+
+/** Input for sending an actor update request to the UDP game server. This updates the state of an actor (player character or NPC) in a specific chunk. */
+export type ActorUpdateRequestInput = {
+  /** The ID of the app where the actor is located. */
+  appId: Scalars['BigInt']['input'];
+  /** The chunk coordinates where the actor is located. A chunk is a 16x16x16 voxel cube. */
+  chunk: ChunkCoordinatesInput;
+  /** Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 1 (exponential) for actor updates. */
+  decayRate?: InputMaybe<Scalars['Int']['input']>;
+  /** Chunk replication distance (0-8). Defaults to 8 for actor updates. Clamped to 0-8. */
+  distance?: InputMaybe<Scalars['Int']['input']>;
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on the matching response and on any GenericErrorResponse for this send, both delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** The actor state data, base64-encoded. May be an empty string for registration-only updates (no state payload). */
+  state: Scalars['String']['input'];
+  /** A unique identifier for the actor. Must be exactly 32 bytes when encoded as UTF-8. This is typically a client-generated UUID. */
+  uuid: Scalars['String']['input'];
+};
+
+/** LEGACY — never emitted. The game server retired the dedicated actor-update response opcode (129); an applied update now arrives as your own ActorUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version. */
+export type ActorUpdateResponse = {
+  __typename?: 'ActorUpdateResponse';
+  /** The ID of the app where the actor update was processed. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk where the actor is located. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk where the actor is located. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk where the actor is located. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sequenceNumber echoed back from the originating sendActorUpdate request (a uint8, 0-255, wrapping at modulo 256). Use it to correlate this response with that send. Correlation only — not an idempotency key. */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The unique identifier of the actor that was updated. */
+  uuid: Scalars['String']['output'];
+};
+
+/** Relay-style cursor-paginated connection over the caller’s actors (Actor). Page with `first`/`after`; cursors are opaque. */
+export type ActorsConnection = {
+  __typename?: 'ActorsConnection';
+  /** Edges on this page. */
+  edges: Array<ActorEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+export type AdmitAppCodeInput = {
+  /** Numeric app id whose allow list receives this entry. */
+  appId: Scalars['BigInt']['input'];
+  /** Admit one code listing, author user, or authoring org. */
+  subjectKind: CodeAdmissionSubjectKind;
+  /** Stable id of the subject (listing UUID, numeric user id, or numeric org id). */
+  subjectRef: Scalars['String']['input'];
+  /** Optional P1 version range: exact "3", inclusive "2-5", ">=4", or "<=9". Omit to admit all versions. */
+  versionRange?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Short-lived single-use human decision bound to one tool call and canonical argument hash. */
+export type AgentApproval = {
+  __typename?: 'AgentApproval';
+  /** Stable approval UUID. */
+  approvalId: Scalars['String']['output'];
+  /** True when this response granted/consumed the approval. */
+  approved: Scalars['Boolean']['output'];
+  /** Canonical sha256 argument/context binding shown to the human. */
+  argumentHash: Scalars['String']['output'];
+  /** Attached client epoch authorized to decide. */
+  clientEpoch: Scalars['BigInt']['output'];
+  /** Hard decision/consumption expiry. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** True when this response denied the approval. */
+  rejected: Scalars['Boolean']['output'];
+  /** Safe bounded domain summary shown before approval. */
+  safeSummary: Scalars['String']['output'];
+  /** Current single-use lifecycle. */
+  status: CrowdyStudioAgentApprovalStatus;
+  /** Tool call UUID this decision binds. */
+  toolCallId: Scalars['String']['output'];
+};
+
+/** Typed exact-argument human approval event. */
+export type AgentApprovalEvent = AgentEventBase & {
+  __typename?: 'AgentApprovalEvent';
+  /** Stable approval UUID. */
+  approvalId: Scalars['String']['output'];
+  /** Canonical displayed argument hash. */
+  argumentHash: Scalars['String']['output'];
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Hard approval expiry. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Bounded server-authored reasons for requiring approval. */
+  reasons: Array<Scalars['String']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Safe domain summary retained without raw arguments. */
+  safeSummary: Scalars['String']['output'];
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Required approval lifecycle status. */
+  status: CrowdyStudioAgentApprovalStatus;
+  /** Bound tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Complete platform-funded budget across turn, session, and player-day dimensions. */
+export type AgentBudget = {
+  __typename?: 'AgentBudget';
+  /** All normative provider/tool/compile/wall-clock dimensions. */
+  dimensions: Array<AgentBudgetDimension>;
+  /** Payer seam; 'PLATFORM' throughout the development pilot. */
+  payer: Scalars['String']['output'];
+  /** True throughout the development pilot. */
+  platformFunded: Scalars['Boolean']['output'];
+  /** UTC player-day reset, or null when no reset applies. */
+  resetAt: Maybe<Scalars['DateTime']['output']>;
+};
+
+/** One effective budget dimension at TURN, SESSION, or PLAYER_DAY scope. */
+export type AgentBudgetDimension = {
+  __typename?: 'AgentBudgetDimension';
+  /** Durably consumed amount. */
+  consumed: Scalars['BigInt']['output'];
+  /** Effective hard limit. */
+  limit: Scalars['BigInt']['output'];
+  /** REQUESTS, INPUT_TOKENS, OUTPUT_TOKENS, REASONING_TOKENS, PROVIDER_COST, TOOL_ROUNDS, WALL_CLOCK_MS, TOOL_CALLS, or COMPILES. */
+  name: Scalars['String']['output'];
+  /** Non-negative remaining amount. */
+  remaining: Scalars['BigInt']['output'];
+  /** Worst-case active reservation. */
+  reserved: Scalars['BigInt']['output'];
+  /** TURN, SESSION, or PLAYER_DAY limit scope. */
+  scope: Scalars['String']['output'];
+  /** Dimension unit, for example tokens, requests, microusd, or ms. */
+  unit: Scalars['String']['output'];
+};
+
+/** Typed provider budget reservation or reconciliation event; no wallet debit occurs in the platform-funded pilot. */
+export type AgentBudgetEvent = AgentEventBase & {
+  __typename?: 'AgentBudgetEvent';
+  /** Complete effective budget snapshot after this change. */
+  budget: AgentBudget;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Typed immutable private project checkpoint event. */
+export type AgentCheckpointEvent = AgentEventBase & {
+  __typename?: 'AgentCheckpointEvent';
+  /** Private checkpoint UUID. */
+  checkpointId: Scalars['String']['output'];
+  /** sha256 digest of the canonical private snapshot. */
+  contentHash: Scalars['String']['output'];
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Bounded target/path/hash/byte summaries; never source. */
+  files: Array<AgentCheckpointFile>;
+  /** Project revision captured as the immutable pre-image. */
+  projectRevision: Scalars['BigInt']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** AGENT_WRITE, RESTORE_PREIMAGE, or MANUAL. */
+  reason: Scalars['String']['output'];
+  /** Restore timestamp for CHECKPOINT_RESTORED, or null. */
+  restoredAt: Maybe<Scalars['DateTime']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** One source-free file summary in an immutable checkpoint. */
+export type AgentCheckpointFile = {
+  __typename?: 'AgentCheckpointFile';
+  /** Exact UTF-8 byte length. */
+  byteLength: Scalars['Int']['output'];
+  /** Exact file content digest. */
+  contentHash: Scalars['String']['output'];
+  /** Bounded project-relative path. */
+  path: Scalars['String']['output'];
+  /** SERVER or CLIENT target. */
+  target: Scalars['String']['output'];
+};
+
+/** Stable safe error envelope carried inside tool/run events. Branch on code, never message. */
+export type AgentError = {
+  __typename?: 'AgentError';
+  /** Stable additive error code. */
+  code: Scalars['String']['output'];
+  /** Optional invalid input field path. */
+  field: Maybe<Scalars['String']['output']>;
+  /** Safe bounded human-readable detail. */
+  message: Scalars['String']['output'];
+  /** Optional safe human remediation, never a command to execute. */
+  remediation: Maybe<Scalars['String']['output']>;
+  /** Optional missing agent scope. */
+  requiredScope: Maybe<Scalars['String']['output']>;
+  /** Whether policy permits a deliberate retry. */
+  retryable: Scalars['Boolean']['output'];
+};
+
+/** Common identity/order fields on every typed durable agent event variant. */
+export type AgentEventBase = {
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** One ordered event connection edge. */
+export type AgentEventEdge = {
+  __typename?: 'AgentEventEdge';
+  /** Opaque cursor equal to the event decimal sequence. */
+  cursor: Scalars['String']['output'];
+  /** Typed durable event node. */
+  node: CrowdyStudioAgentEvent;
+};
+
+/** Short-lived context-bound capability. The model cannot create, widen, or renew it. */
+export type AgentLease = {
+  __typename?: 'AgentLease';
+  /** Bound attached browser epoch. */
+  clientEpoch: Scalars['BigInt']['output'];
+  /** Authoritative context version bound to the lease. */
+  contextVersion: Scalars['String']['output'];
+  /** Controlled entity for PLAY, or null. */
+  controlledEntityId: Maybe<Scalars['String']['output']>;
+  /** Expected project revision for WORKSPACE, or null. */
+  expectedProjectRevision: Maybe<Scalars['BigInt']['output']>;
+  /** Hard expiry; the model cannot renew it. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** Lease grant timestamp. */
+  grantedAt: Scalars['DateTime']['output'];
+  /** Human-visible lease holder alias. */
+  holder: Scalars['String']['output'];
+  /** Host capability revision for PLAY, or null. */
+  hostCapabilityRevision: Maybe<Scalars['String']['output']>;
+  /** WORKSPACE or PLAY. */
+  kind: CrowdyStudioAgentLeaseType;
+  /** Stable lease UUID. */
+  leaseId: Scalars['String']['output'];
+  /** Stable revoke/expiry reason, or null while active. */
+  revokedReason: Maybe<Scalars['String']['output']>;
+  /** Explicit maximum scopes carried by this lease. */
+  scopes: Array<Scalars['String']['output']>;
+  /** Required lease lifecycle status. */
+  status: CrowdyStudioAgentLeaseStatus;
+};
+
+/** Typed workspace/Play lease lifecycle event. */
+export type AgentLeaseEvent = AgentEventBase & {
+  __typename?: 'AgentLeaseEvent';
+  /** Bound attached client epoch. */
+  clientEpoch: Scalars['BigInt']['output'];
+  /** Authoritative context version bound to this lease. */
+  contextVersion: Scalars['String']['output'];
+  /** Controlled entity identifier for PLAY, or null. */
+  controlledEntityId: Maybe<Scalars['String']['output']>;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Expected project revision for WORKSPACE, or null. */
+  expectedProjectRevision: Maybe<Scalars['BigInt']['output']>;
+  /** Hard lease expiry. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** Lease grant timestamp. */
+  grantedAt: Scalars['DateTime']['output'];
+  /** Human-visible lease holder alias. */
+  holder: Scalars['String']['output'];
+  /** Host capability revision for PLAY, or null. */
+  hostCapabilityRevision: Maybe<Scalars['String']['output']>;
+  /** WORKSPACE or PLAY. */
+  kind: CrowdyStudioAgentLeaseType;
+  /** Stable lease UUID. */
+  leaseId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Stable revoke/expiry reason, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Explicit scopes carried when granted; empty otherwise. */
+  scopes: Array<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Required lease lifecycle status. */
+  status: CrowdyStudioAgentLeaseStatus;
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Typed session/client/mode/context lifecycle event. */
+export type AgentLifecycleEvent = AgentEventBase & {
+  __typename?: 'AgentLifecycleEvent';
+  /** Attached client epoch when this event carries one. */
+  clientEpoch: Maybe<Scalars['BigInt']['output']>;
+  /** New context version when carried by this event. */
+  contextVersion: Maybe<Scalars['String']['output']>;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Selected mode when this event carries one. */
+  mode: Maybe<CrowdyStudioAgentMode>;
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Stable lifecycle/preemption reason, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Replay cursor returned by attach, or null. */
+  replayAfterSeq: Maybe<Scalars['BigInt']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Typed bounded user or assistant text event. */
+export type AgentMessageEvent = AgentEventBase & {
+  __typename?: 'AgentMessageEvent';
+  /** Redacted bounded text. ASSISTANT_MESSAGE is canonical; chunks are transient presentation hints. */
+  content: Scalars['String']['output'];
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Stable message UUID used for replay deduplication. */
+  messageId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** USER or ASSISTANT message role. */
+  role: Scalars['String']['output'];
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Standard opaque-cursor pagination metadata. */
+export type AgentPageInfo = {
+  __typename?: 'AgentPageInfo';
+  /** Opaque cursor for the final returned edge, or null. */
+  endCursor: Maybe<Scalars['String']['output']>;
+  /** Whether another page exists after endCursor. */
+  hasNextPage: Scalars['Boolean']['output'];
+};
+
+/** One Crowdy Studio agent model price, in micro-USD per million tokens. Only an ACTIVE row with a model_id ever prices a run. */
+export type AgentRateCardEntryType = {
+  __typename?: 'AgentRateCardEntryType';
+  /** Micro-USD per million cached prompt tokens. */
+  cachedInputMicroUsdPerMillion: Scalars['BigInt']['output'];
+  /** Stable code for this card row, unique across the table. */
+  code: Scalars['String']['output'];
+  /** ISO currency code. USD today. */
+  currency: Scalars['String']['output'];
+  /** Micro-USD per million uncached prompt tokens. */
+  inputMicroUsdPerMillion: Scalars['BigInt']['output'];
+  /** Provider model this prices, matched against the resolved model at ingest. Null is only legal on a non-ACTIVE row. */
+  modelId: Maybe<Scalars['String']['output']>;
+  /** Micro-USD per million completion tokens. */
+  outputMicroUsdPerMillion: Scalars['BigInt']['output'];
+  /** Micro-USD per million reasoning tokens. */
+  reasoningMicroUsdPerMillion: Scalars['BigInt']['output'];
+  /** DRAFT, ACTIVE or RETIRED. Only ACTIVE, inside its effective window, prices a run; an uncarded model is left unbilled rather than charged at cost. */
+  status: Scalars['String']['output'];
+};
+
+/** Summary of one durable session run. */
+export type AgentRun = {
+  __typename?: 'AgentRun';
+  /** True when the durable run status is CANCELLED. */
+  cancelled: Scalars['Boolean']['output'];
+  /** Run acceptance timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable terminal error code, or null while non-terminal/successful. */
+  errorCode: Maybe<Scalars['String']['output']>;
+  /** Terminal timestamp, or null while active. */
+  finishedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Provider rounds already attempted in this run. */
+  providerRounds: Scalars['Int']['output'];
+  /** SDK-compatible terminal/preemption reason, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Stable run UUID. */
+  runId: Scalars['String']['output'];
+  /** Worker start timestamp, or null while queued. */
+  startedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Current serialized state. */
+  status: CrowdyStudioAgentRunStatus;
+  /** Stable preemption/cancellation reason, or null. */
+  terminalReason: Maybe<Scalars['String']['output']>;
+  /** Descriptor-pinned tool calls already recorded. */
+  toolCalls: Scalars['Int']['output'];
+};
+
+/** Typed run lifecycle event. */
+export type AgentRunEvent = AgentEventBase & {
+  __typename?: 'AgentRunEvent';
+  /** Stable terminal error code, or null. */
+  code: Maybe<Scalars['String']['output']>;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Safe typed error envelope when present. */
+  error: Maybe<AgentError>;
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Stable terminal/preemption reason, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Required durable run status carried by this event. */
+  status: CrowdyStudioAgentRunStatus;
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Owner/app-scoped durable agent conversation with pinned mode, model, policy, registry, and client epoch. */
+export type AgentSession = {
+  __typename?: 'AgentSession';
+  /** Current unexpired leases; bounded to WORKSPACE and PLAY. */
+  activeLeases: Array<AgentLease>;
+  /** Current non-terminal run, or null. */
+  activeRun: Maybe<AgentRun>;
+  /** App tenant from the app-scoped bearer token. */
+  appId: Scalars['BigInt']['output'];
+  /** Opaque management app-policy version pinned at creation. */
+  appPolicyVersion: Scalars['String']['output'];
+  /** SDK-compatible attached client epoch, or null before attach. */
+  clientEpoch: Maybe<Scalars['BigInt']['output']>;
+  /** Close timestamp, or null while open. */
+  closedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Current authoritative context version. */
+  contextVersion: Scalars['String']['output'];
+  /** Session contract version; always 'crowdy.studio-agent/1'. */
+  contractVersion: Scalars['String']['output'];
+  /** Session creation timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Monotonic attached client epoch. A newer attach fences all older tabs. */
+  currentClientEpoch: Scalars['BigInt']['output'];
+  /** SDK-compatible current non-terminal run, or null. */
+  currentRun: Maybe<AgentRun>;
+  /** Selected grid id, or null; it does not grant authority. */
+  gridId: Maybe<Scalars['BigInt']['output']>;
+  /** Highest committed durable event sequence. */
+  lastEventSeq: Scalars['BigInt']['output'];
+  /** Human-selected current mode. */
+  mode: CrowdyStudioAgentMode;
+  /** Selected allowlisted model, matching the SDK session model. */
+  model: Maybe<Scalars['String']['output']>;
+  /** Newest unexpired pending approval, or null. */
+  pendingApproval: Maybe<AgentApproval>;
+  /** Selected private project UUID, or null. Returned only to its exact owner/app. */
+  projectId: Maybe<Scalars['String']['output']>;
+  /** Whether the human accepted first-use disclosure of selected private project source. Messages and metadata do not imply this consent. */
+  providerDataConsent: Scalars['Boolean']['output'];
+  /** Opaque platform provider-policy version pinned at creation. */
+  providerPolicyVersion: Scalars['String']['output'];
+  /** Digest of the mode/policy-filtered immutable tool registry. */
+  registryDigest: Scalars['String']['output'];
+  /** Requested model in the effective platform/app allowlist. */
+  requestedModel: Scalars['String']['output'];
+  /** Resolved routed model after a provider response, or null. */
+  resolvedModel: Maybe<Scalars['String']['output']>;
+  /** Stable session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Current durable session lifecycle. */
+  status: CrowdyStudioAgentSessionStatus;
+  /** Latest durable session update. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** One session connection edge. */
+export type AgentSessionEdge = {
+  __typename?: 'AgentSessionEdge';
+  /** Opaque cursor for this session edge. */
+  cursor: Scalars['String']['output'];
+  /** Owner/app-scoped session node. */
+  node: AgentSession;
+};
+
+/** One effective immutable tool descriptor. Schemas are JSON Schema 2020-12 objects serialized as canonical JSON. */
+export type AgentToolDescriptor = {
+  __typename?: 'AgentToolDescriptor';
+  /** Maximum approval lifetime in seconds. */
+  approvalMaxTtlSeconds: Scalars['Int']['output'];
+  /** NONE, REQUIRED, or CONDITIONAL approval policy. */
+  approvalPolicy: Scalars['String']['output'];
+  /** Server-authored approval reasons. */
+  approvalReasons: Array<Scalars['String']['output']>;
+  /** Whether exact human approval is always required. */
+  approvalRequired: Scalars['Boolean']['output'];
+  /** sha256 digest of the immutable descriptor contract. */
+  descriptorDigest: Scalars['String']['output'];
+  /** Complete RFC8785-canonical crowdy.agent-tool/1 descriptor JSON. */
+  descriptorJson: Scalars['String']['output'];
+  /** SERVER or BROWSER. */
+  executor: CrowdyStudioAgentToolExecutor;
+  /** PURE, KEYED, TOOL_CALL_ONCE, or NON_RETRYABLE. */
+  idempotencyClass: Scalars['String']['output'];
+  /** NONE, TOOL_CALL, or USER_TOOL_ARGUMENTS key scope. */
+  idempotencyKeyScope: Scalars['String']['output'];
+  /** Canonical JSON array of input redaction rules. */
+  inputRedactionJson: Scalars['String']['output'];
+  /** Canonical bounded input JSON Schema. */
+  inputSchemaJson: Scalars['String']['output'];
+  /** Maximum persisted redacted tool bytes. */
+  maxPersistedBytes: Scalars['Int']['output'];
+  /** Human modes in which this descriptor may be proposed. */
+  modes: Array<CrowdyStudioAgentMode>;
+  /** Logical dotted tool name. */
+  name: Scalars['String']['output'];
+  /** Canonical JSON array of output redaction rules. */
+  outputRedactionJson: Scalars['String']['output'];
+  /** Canonical bounded output JSON Schema. */
+  outputSchemaJson: Scalars['String']['output'];
+  /** Server-classified risk. */
+  risk: CrowdyStudioAgentToolRisk;
+  /** Canonical server-classified effect labels. */
+  riskEffects: Array<Scalars['String']['output']>;
+  /** Whether the classified effect is reversible. */
+  riskReversible: Scalars['Boolean']['output'];
+  /** Descriptor schema version; always 'crowdy.agent-tool/1'. */
+  schemaVersion: Scalars['String']['output'];
+  /** Canonical JSON array of complete scope requirement objects, including argument-path conditions. */
+  scopeRequirementsJson: Scalars['String']['output'];
+  /** Required agent scopes; ordinary platform checks still apply. */
+  scopes: Array<Scalars['String']['output']>;
+  /** Safe model/user-facing summary. */
+  summary: Scalars['String']['output'];
+  /** Hard tool execution timeout in milliseconds. */
+  timeoutMs: Scalars['Int']['output'];
+  /** Semantic descriptor version. */
+  version: Scalars['String']['output'];
+  /** Provider-safe exact wire name including major version. */
+  wireName: Scalars['String']['output'];
+};
+
+/** Typed tool event. JSON fields are descriptor-versioned and validated against the descriptor returned by crowdyStudioAgentToolDescriptors; they are never arbitrary executor input. */
+export type AgentToolEvent = AgentEventBase & {
+  __typename?: 'AgentToolEvent';
+  /** Opaque approval capability, or null. */
+  approvalGrant: Maybe<Scalars['String']['output']>;
+  /** Canonical argument hash, or null. */
+  argumentHash: Maybe<Scalars['String']['output']>;
+  /** Descriptor-schema-validated, redaction-safe canonical JSON arguments for browser dispatch; null otherwise. */
+  argumentsJson: Maybe<Scalars['String']['output']>;
+  /** Fenced browser epoch for a dispatch, or null. */
+  clientEpoch: Maybe<Scalars['BigInt']['output']>;
+  /** Authoritative dispatch context version, or null. */
+  contextVersion: Maybe<Scalars['String']['output']>;
+  /** Commit timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Dispatch deadline, or null for non-dispatch events. */
+  deadline: Maybe<Scalars['DateTime']['output']>;
+  /** Pinned descriptor digest, or null before dispatch. */
+  descriptorDigest: Maybe<Scalars['String']['output']>;
+  /** Safe typed terminal tool error, or null. */
+  error: Maybe<AgentError>;
+  /** Stable event UUID for deduplication. */
+  eventId: Scalars['String']['output'];
+  /** SERVER or BROWSER executor, or null. */
+  executor: Maybe<CrowdyStudioAgentToolExecutor>;
+  /** Executor idempotency key, or null. */
+  idempotencyKey: Maybe<Scalars['String']['output']>;
+  /** Complete browser invocation on TOOL_DISPATCHED; null for other events. */
+  invocation: Maybe<AgentToolInvocation>;
+  /** Bound lease UUID, or null. */
+  leaseId: Maybe<Scalars['String']['output']>;
+  /** Event envelope version; always 'crowdy.agent-event/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Complete typed terminal result when available. */
+  result: Maybe<AgentToolResultEnvelope>;
+  /** Descriptor-schema-validated, redaction-safe canonical JSON result summary; source and prompt bodies are omitted. */
+  resultJson: Maybe<Scalars['String']['output']>;
+  /** Related run UUID, or null for session-only facts. */
+  runId: Maybe<Scalars['String']['output']>;
+  /** Safe bounded human summary, or null. */
+  safeSummary: Maybe<Scalars['String']['output']>;
+  /** Strictly increasing session sequence as a decimal BigInt. */
+  seq: Scalars['BigInt']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Required durable tool status for this event. */
+  status: CrowdyStudioAgentToolCallStatus;
+  /** Stable tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+  /** Logical versioned tool name. */
+  toolName: Scalars['String']['output'];
+  /** Pinned semantic tool version. */
+  toolVersion: Scalars['String']['output'];
+  /** Stable version 1 event discriminator. */
+  type: CrowdyStudioAgentEventType;
+  /** Versioned event payload contract. */
+  version: Scalars['String']['output'];
+};
+
+/** Complete crowdy.tool-call/1 browser invocation envelope. Arguments are canonical descriptor-validated JSON. */
+export type AgentToolInvocation = {
+  __typename?: 'AgentToolInvocation';
+  /** Opaque consumed approval capability when required. */
+  approvalGrant: Maybe<Scalars['String']['output']>;
+  /** Canonical argument/context hash. */
+  argumentHash: Scalars['String']['output'];
+  /** Canonical JSON object matching the descriptor input schema. */
+  argumentsJson: Scalars['String']['output'];
+  /** Required matching browser epoch. */
+  clientEpoch: Maybe<Scalars['BigInt']['output']>;
+  /** Authoritative context version. */
+  contextVersion: Scalars['String']['output'];
+  /** Hard browser execution deadline. */
+  deadline: Scalars['DateTime']['output'];
+  /** Pinned canonical descriptor digest. */
+  descriptorDigest: Scalars['String']['output'];
+  /** Server-issued executor idempotency key when required. */
+  idempotencyKey: Maybe<Scalars['String']['output']>;
+  /** Required lease UUID when the tool scopes demand one. */
+  leaseId: Maybe<Scalars['String']['output']>;
+  /** Logical tool name. */
+  name: Scalars['String']['output'];
+  /** Invocation version; always 'crowdy.tool-call/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Owning run UUID. */
+  runId: Scalars['String']['output'];
+  /** Owning session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Execute-once tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+  /** Pinned semantic tool version. */
+  version: Scalars['String']['output'];
+};
+
+/** Complete crowdy.tool-result/1 terminal browser result with exact timing and safe typed error. */
+export type AgentToolResultEnvelope = {
+  __typename?: 'AgentToolResultEnvelope';
+  /** Safe typed error for non-success, or null. */
+  error: Maybe<AgentError>;
+  /** Browser execution finish timestamp. */
+  finishedAt: Scalars['DateTime']['output'];
+  /** Context version observed by the browser executor. */
+  observedContextVersion: Scalars['String']['output'];
+  /** Canonical descriptor-validated output JSON, or null. */
+  outputJson: Maybe<Scalars['String']['output']>;
+  /** Result version; always 'crowdy.tool-result/1'. */
+  protocolVersion: Scalars['String']['output'];
+  /** Browser execution start timestamp. */
+  startedAt: Scalars['DateTime']['output'];
+  /** Terminal result status. */
+  status: CrowdyStudioAgentToolResultStatus;
+  /** Matching tool call UUID. */
+  toolCallId: Scalars['String']['output'];
+};
+
+/** The interval a free allowance resets on and a dimension is rounded over. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving; the development quota is MONTH. */
+export enum AllowancePeriod {
+  Day = 'DAY',
+  Hour = 'HOUR',
+  Month = 'MONTH'
+}
+
+/** A publishable application (game/experience) owned by an organization. Its discoverability is controlled by visibility and its lifecycle by status. */
+export type App = {
+  __typename?: 'App';
+  /** Unique numeric identifier of the app (primary key). */
+  appId: Scalars['BigInt']['output'];
+  /** OAuth client type: "public" (browser/PKCE, no secret) or "confidential" (server-side, holds a secret). Defaults to "public". */
+  clientType: Scalars['String']['output'];
+  /** Player-code censorship mode: "implicit_allow" (default/off) or "allow_list" (strict admission of every running artifact, including self-authored code). */
+  codeAdmissionMode: Scalars['String']['output'];
+  /** Timestamp when the app was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Numeric user id of the account that created the app. */
+  createdBy: Scalars['BigInt']['output'];
+  /** Where the app runs: "none" (draft / not deployed), "shared" (the shared game-api), or "dedicated" (a provisioned per-tenant environment). */
+  deploymentTarget: Scalars['String']['output'];
+  /** Short plain-text description shown in listings; also matched by the marketplace free-text filter. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Resolved game-api base URL for SDK/runtime calls: the per-tenant URL for dedicated apps, or the shared platform URL for shared apps. Null for legacy or not-yet-deployed apps. */
+  gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** Player user ids allowed to approve grid claim requests in "approval" mode. When empty, approval falls back to org staff holding manage_compute. */
+  gridClaimApproverUserIds: Array<Scalars['String']['output']>;
+  /** How a player claim confers grid ownership (D4): "self_claim" (the claim right alone; default), "approval" (designated approvers accept claim requests), "invite" (standing invites only), or "marketplace_only" (only a marketplace grid purchase; the purchase edge ships in P4b). */
+  gridClaimPolicy: Scalars['String']['output'];
+  /** True for first-party/trusted apps: portal entry skips the consent screen. The Overworld (app 1) is trusted. Studio admins cannot set this; it is platform-controlled. */
+  isTrusted: Scalars['Boolean']['output'];
+  /** Browser destination (origin/URL) a player is redirected to when they portal into this app from the Overworld. Used to route the player and to validate portal redirect URIs. */
+  launchUrl: Maybe<Scalars['String']['output']>;
+  /** Opaque JSON-encoded string of marketplace media (cover image URL, screenshots, long description, etc.). Stored internally as JSONB; clients must JSON.parse on read and JSON.stringify on write. Null/"{}" when unset. */
+  metadata: Maybe<Scalars['String']['output']>;
+  /** Human-readable display name of the app. */
+  name: Scalars['String']['output'];
+  /** The organization that owns this app. Null if the owning org cannot be found. */
+  org: Maybe<Organization>;
+  /** Numeric id of the organization that owns this app. */
+  orgId: Scalars['BigInt']['output'];
+  /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. */
+  redirectUris: Array<Scalars['String']['output']>;
+  /**
+   * Reserved realtime (UDP) capacity in bytes/s for shared apps. Superseded by reservedUdpBytesPerSec.
+   * @deprecated Renamed 2026-09-01 when reservations split by traffic type. Use reservedUdpBytesPerSec; this returns the same value for one release.
+   */
+  reservedEgressBytesPerSec: Scalars['BigInt']['output'];
+  /** Reserved API request rate in GraphQL operations/sec. Guarantees a minimum the platform provisions for you; it is not a limit on how many requests you may make. Billed monthly whether or not used, IN ADDITION TO metered usage -- a reservation buys capacity, not volume. Independent of reservedUdpBytesPerSec: reserving one does not reserve the other. 0 = none. */
+  reservedGraphqlOpsPerSec: Scalars['BigInt']['output'];
+  /** Reserved realtime (UDP) capacity in bytes/s. Guarantees a minimum the platform provisions for you; it is not a limit on what you may send. Billed monthly whether or not used, IN ADDITION TO metered usage -- a reservation buys capacity, not volume, so reserving 5 MB/s does not make the first 5 MB/s free. Independent of reservedGraphqlOpsPerSec. 0 = none. */
+  reservedUdpBytesPerSec: Scalars['BigInt']['output'];
+  /** When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", or "subscription_lapsed". Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds". */
+  runtimeDenialReason: Maybe<Scalars['String']['output']>;
+  /** Shared-environment runtime gate, mirrored to the game DB and enforced by game-api + Buddy: "active", "grace", "denied", or "suspended". */
+  runtimeStatus: Scalars['String']['output'];
+  /** URL-safe slug, unique within the org; combined with the org slug to form the marketplace path. May be null for legacy rows. */
+  slug: Maybe<Scalars['String']['output']>;
+  /** True when this app's runtime data lives in a dedicated per-tenant game-api database (rather than the shared game-api). Used together with gameApiUrl to route gameplay calls. */
+  splitMode: Scalars['Boolean']['output'];
+  /** Base64-encoded binary blob of the app's persisted runtime/world state; opaque to clients and potentially large. Null when no state has been saved. */
+  state: Maybe<Scalars['String']['output']>;
+  /** Lifecycle state (DRAFT/LIVE/ARCHIVED). See AppStatus. */
+  status: AppStatus;
+  /** Timestamp when the app was last updated. */
+  updatedAt: Scalars['DateTime']['output'];
+  /** Marketplace discoverability (PUBLIC/UNLISTED/PRIVATE). See AppVisibility. */
+  visibility: AppVisibility;
+  /** Whether players may write the app's wilderness: chunks that no grid but the app's world grid covers. True (the default) leaves those writes to the ordinary voxel permission; false refuses every voxel and chunk write there (updateVoxel, sendVoxelUpdate, updateChunk, ck-exec's world.set_voxels, and a client's voxel updates sent straight to the realtime servers), whoever makes it. Set with updateApp (manage_apps). */
+  wildernessWritesOpen: Scalars['Boolean']['output'];
+};
+
+/** A free or purchasable access tier for an app, bundling a price and the set of runtime permission keys that granted users receive. */
+export type AppAccessTier = {
+  __typename?: 'AppAccessTier';
+  /** Numeric id of the app this tier belongs to. */
+  appId: Scalars['BigInt']['output'];
+  /** Billing cadence for recurring tiers (e.g. "month", "year"); null for one-time or free tiers. */
+  billingPeriod: Maybe<Scalars['String']['output']>;
+  /** Timestamp when the tier was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** ISO 4217 currency code for priceCents (e.g. "usd"); defaults to "usd". */
+  currency: Maybe<Scalars['String']['output']>;
+  /** Optional marketing description of what the tier includes. */
+  description: Maybe<Scalars['String']['output']>;
+  /** True if this is the app default tier (used for open-by-default / self-service grants). At most one default per app is expected. */
+  isDefault: Scalars['Boolean']['output'];
+  /** True if the tier has no purchase cost. */
+  isFree: Scalars['Boolean']['output'];
+  /** Display name of the tier (e.g. "Free", "Pro"). */
+  name: Scalars['String']['output'];
+  /** Runtime permission keys granted to users on this tier (a subset of runtimePermissions), e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat" (webcam; not granted by default). */
+  permissionKeys: Array<Scalars['String']['output']>;
+  /** Price in the smallest currency unit (cents) for paid tiers; null for free tiers. */
+  priceCents: Maybe<Scalars['BigInt']['output']>;
+  /** Tier lifecycle: "active" or "archived" (soft-deleted via archiveAccessTier). Defaults to "active". */
+  status: Scalars['String']['output'];
+  /** Unique numeric id of the tier (primary key). */
+  tierId: Scalars['BigInt']['output'];
+  /** Sort order for displaying tiers (ascending); lower values appear first. */
+  tierOrder: Scalars['Float']['output'];
+  /** Timestamp when the tier was last updated. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** A user's standing consent for an app to receive app-scoped tokens via the Overworld portal (the “connected apps” list). */
+export type AppAuthorizationGrant = {
+  __typename?: 'AppAuthorizationGrant';
+  appId: Scalars['ID']['output'];
+  appName: Maybe<Scalars['String']['output']>;
+  grantId: Scalars['ID']['output'];
+  grantedAt: Scalars['DateTime']['output'];
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The scopes the user approved for this app. */
+  scopes: Array<Scalars['String']['output']>;
+  /** 'active' | 'revoked'. */
+  status: Scalars['String']['output'];
+  userId: Scalars['ID']['output'];
+};
+
+export type AppAvatarState = {
+  __typename?: 'AppAvatarState';
+  /** App (game) id this state is scoped to. BigInt serialized as a decimal string. */
+  appId: Scalars['BigInt']['output'];
+  /** Avatar id this state belongs to. BigInt serialized as a decimal string. */
+  avatarId: Scalars['BigInt']['output'];
+  /** Row creation timestamp (ISO-8601). */
+  createdAt: Scalars['DateTime']['output'];
+  /** Per-app avatar state blob, base64-encoded binary; null when cleared. Owner-exclusive write, public read. */
+  state: Maybe<Scalars['String']['output']>;
+  /** Last-update timestamp (ISO-8601). */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+export type AppBudget = {
+  __typename?: 'AppBudget';
+  /** Unique app-budget id (BigInt as a decimal string). */
+  appBudgetId: Scalars['BigInt']['output'];
+  /** App this budget applies to (BigInt as a decimal string). */
+  appId: Scalars['BigInt']['output'];
+  /** When the budget was first created (ISO-8601 UTC timestamp). */
+  createdAt: Scalars['DateTime']['output'];
+  /** Spend so far in the current monthly period, in minor currency units (cents) as a BigInt decimal string. Resets when `periodStart` rolls over to a new month. */
+  currentMonthUsageCents: Scalars['BigInt']['output'];
+  /** Monthly spend cap in minor currency units (cents) as a BigInt decimal string; null means no cap is configured (unlimited). */
+  monthlyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Organization that owns the app (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Start of the current monthly budget period (ISO-8601 UTC timestamp), truncated to the first day of the month. */
+  periodStart: Scalars['DateTime']['output'];
+  /** When the budget was last updated (ISO-8601 UTC timestamp). */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** An active or revoked app code-admission entry. Admission controls execution only; it never grants source access. */
+export type AppCodeAdmission = {
+  __typename?: 'AppCodeAdmission';
+  /** UUID of this admission record. */
+  admissionId: Scalars['String']['output'];
+  /** When the entry was admitted. */
+  admittedAt: Scalars['DateTime']['output'];
+  /** Numeric user id of the org member who admitted the subject. */
+  admittedBy: Scalars['BigInt']['output'];
+  /** Numeric app id whose code-admission policy owns this entry. */
+  appId: Scalars['BigInt']['output'];
+  /** When the entry was revoked; null while active. */
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Whether this entry admits code, an author, or an org. */
+  subjectKind: CodeAdmissionSubjectKind;
+  /** Stable id of the admitted subject (listing UUID, user id, or org id). */
+  subjectRef: Scalars['String']['output'];
+  /** Optional P1 version range: exact "3", inclusive "2-5", ">=4", or "<=9". Null admits all versions; invalid expressions fail closed at runtime. */
+  versionRange: Maybe<Scalars['String']['output']>;
+};
+
+/** An app's compute allowance in units per minute. Absent when no allowance has been set for the app, in which case its ck-exec code is never paused for its budget. */
+export type AppComputeBudgetInfo = {
+  __typename?: 'AppComputeBudgetInfo';
+  /** The app the allowance belongs to. */
+  appId: Scalars['BigInt']['output'];
+  /** When false the allowance is recorded and nothing is paused (the default). When true, ck-exec pauses the app's code while its last settled minute is over the allowance, and resumes it once a minute is back inside. */
+  enforce: Scalars['Boolean']['output'];
+  /** Why this number was chosen. Recorded because an allowance with no stated basis is a number the next operator cannot safely change. */
+  note: Maybe<Scalars['String']['output']>;
+  /** Compute units this app may consume per minute. */
+  unitsPerMinute: Scalars['BigInt']['output'];
+  /** When the allowance was last written. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Where an app runs: none (draft), shared (the shared game-api), or dedicated (a provisioned environment). */
+export enum AppDeploymentTarget {
+  /** Runs on a dedicated, org-provisioned environment. */
+  Dedicated = 'DEDICATED',
+  /** Draft / unpublished: the app is not deployed to any runtime. */
+  None = 'NONE',
+  /** Runs on the multi-tenant shared game-api (publishAppToShared). */
+  Shared = 'SHARED'
+}
+
+/** Where one app lives, and therefore which origin a client should talk to before it does anything else. Public: this is the same information the published DNS names already expose. */
+export type AppDiscovery = {
+  __typename?: 'AppDiscovery';
+  /** The app this entry describes, echoed back so a batched result can be matched to its request. */
+  appId: Scalars['BigInt']['output'];
+  /** Datacenter code the app is placed in (for example `or`, `va`), or null if the app has no placement yet. */
+  datacenterCode: Maybe<Scalars['String']['output']>;
+  /** HTTPS GraphQL origin for this app's OWN datacenter. Move here BEFORE authenticating: logging in through the shared origin writes the session on whichever datacenter DNS happened to pick, and the app token then has to be minted across a WAN. Null when the app has no placement, in which case keep using the shared origin. */
+  gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** The wss:// form of gameApiUrl, for the subscription socket and the binary relay. */
+  gameApiWsUrl: Maybe<Scalars['String']['output']>;
+};
+
+/** An edge in a App connection. */
+export type AppEdge = {
+  __typename?: 'AppEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: App;
+};
+
+/** Org member eligible for app access grants. Scoped to the app org; requires manage_access_tiers. */
+export type AppGrantMemberCandidate = {
+  __typename?: 'AppGrantMemberCandidate';
+  /** Email of the candidate, if known. */
+  email: Maybe<Scalars['String']['output']>;
+  /** Gamertag / display handle of the candidate, if set. */
+  gamertag: Maybe<Scalars['String']['output']>;
+  /** Numeric id of the candidate user (use with grantAppAccess). */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** Per-app, per-type policy controlling who may create groups of a type and the default membership policy of new groups. */
+export type AppGroupPolicy = {
+  __typename?: 'AppGroupPolicy';
+  /** The app (tenant) the policy applies to. */
+  appId: Scalars['BigInt']['output'];
+  /** admin | member | anyone */
+  creationPolicy: Scalars['String']['output'];
+  /** open | request | invite | admin */
+  defaultMembershipPolicy: Scalars['String']['output'];
+  /** The group type the policy governs: 'team' | 'channel' | 'grid'. */
+  groupType: Scalars['String']['output'];
+  /** Optional cap on groups of this type a user may belong to (null = unlimited). */
+  maxGroupsPerUser: Maybe<Scalars['Int']['output']>;
+  /** Optional cap on members per group (null = unlimited). */
+  maxMembers: Maybe<Scalars['Int']['output']>;
+};
+
+/** Optional filters for the public marketplace apps listing. */
+export type AppMarketplaceFilterInput = {
+  /** Restrict results to a single organization by its slug (storefront view). Omit to search across all orgs. */
+  orgSlug?: InputMaybe<Scalars['String']['input']>;
+  /** Free-text search applied to app name and description (case-insensitive substring match). Omit for no text filter. */
+  query?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Per-player usage row for studio diagnostics (top spenders / quota utilization): one (player, app) aggregate over a window. */
+export type AppPlayerUsageRow = {
+  __typename?: 'AppPlayerUsageRow';
+  /** Legacy: the removed engines' player automation units. Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
+  automationUnits: Scalars['BigInt']['output'];
+  /**
+   * DEPRECATED. chargedMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from chargedMicrousd (truncated). Read chargedMicrousd.
+   */
+  chargedCents: Scalars['BigInt']['output'];
+  /** Micro-USD charged to the player for this app in the window (exact). */
+  chargedMicrousd: Scalars['BigInt']['output'];
+  /** Legacy: compile submissions of the removed player-compute engine (mod builds are not counted). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
+  compileCount: Scalars['Int']['output'];
+  /** Player compute units used. */
+  computeUnits: Scalars['BigInt']['output'];
+  /** The player (grid owner). */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** The shared-environment runtime gate + current billing-window usage for an app. */
+export type AppRuntimeState = {
+  __typename?: 'AppRuntimeState';
+  /** App id (BigInt). */
+  appId: Scalars['BigInt']['output'];
+  /** Spend so far in the current day window, in cents. */
+  currentDayUsageCents: Scalars['BigInt']['output'];
+  /** Spend so far in the current hour window, in cents. */
+  currentHourUsageCents: Scalars['BigInt']['output'];
+  /** Per-app daily spend cap in cents (set via setAppSpendCaps). Null = no cap. */
+  dailyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Where the app runs (none / shared / dedicated). */
+  deploymentTarget: AppDeploymentTarget;
+  /** Per-app hourly spend cap in cents (set via setAppSpendCaps). Null = no cap. */
+  hourlyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** insufficient_funds | spend_cap | subscription_lapsed when not active. Historical rows may carry free_allowance, which the gate no longer produces. */
+  runtimeDenialReason: Maybe<Scalars['String']['output']>;
+  /** Current runtime gate decision (active / grace / denied / suspended). */
+  runtimeStatus: AppRuntimeStatus;
+  /** Owning org wallet balance, in cents. */
+  walletBalanceCents: Scalars['BigInt']['output'];
+};
+
+/** The per-app runtime gate game-api + Buddy enforce. See runtimeDenialReason when not active. */
+export enum AppRuntimeStatus {
+  /** Allowed to run; clients may connect. */
+  Active = 'ACTIVE',
+  /** Blocked from running now (e.g. insufficient funds, spend cap hit, or free allowance exhausted); recoverable once the cause clears. */
+  Denied = 'DENIED',
+  /** Still running on a temporary allowance (e.g. low funds) but at risk of being denied soon. */
+  Grace = 'GRACE',
+  /** Hard-stopped (e.g. lapsed subscription); requires action to restore. */
+  Suspended = 'SUSPENDED'
+}
+
+/** @deprecated Legacy paid shared-environment subscription for an app slot. Null when the app has none. */
+export type AppSharedSubscription = {
+  __typename?: 'AppSharedSubscription';
+  /** App id (BigInt). */
+  appId: Scalars['BigInt']['output'];
+  /** End of the current paid period (when access lapses if not renewed). */
+  currentPeriodEnd: Maybe<Scalars['DateTime']['output']>;
+  /** Owning organization id (BigInt). */
+  orgId: Scalars['BigInt']['output'];
+  /** Subscribed plan id (BigInt). Null when not on a paid plan. */
+  planId: Maybe<Scalars['BigInt']['output']>;
+  /** Payment provider backing the subscription, e.g. 'stripe'. */
+  provider: Maybe<Scalars['String']['output']>;
+  /** Subscription status, e.g. 'active', 'past_due', or 'canceled'. */
+  status: Scalars['String']['output'];
+};
+
+/** Lifecycle state of an app. Independent of AppVisibility; the public marketplace requires status=LIVE. */
+export enum AppStatus {
+  /** Soft-deleted via archiveApp: retained but read-only and excluded from the marketplace. Reversible by setting status back to DRAFT or LIVE. */
+  Archived = 'ARCHIVED',
+  /** Work-in-progress: invisible to non-members and never listed in the marketplace. Selectable manually via updateApp; new apps default to LIVE. */
+  Draft = 'DRAFT',
+  /** Published and purchasable/playable; eligible for the public marketplace when visibility=PUBLIC. */
+  Live = 'LIVE'
+}
+
+/** A short-lived, app-scoped gameplay token (Overworld portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session. */
+export type AppTokenResponse = {
+  __typename?: 'AppTokenResponse';
+  /** The app this token is confined to, as a String. */
+  appId: Scalars['String']['output'];
+  /** Set only by `refreshAppToken` when the caller passed `currentServer`: the Buddy the NEW token was just authorized on, which is the node the client is already connected to. When present, keep the existing UDP session and start signing datagrams with the new token; there is no need to call serverWithLeastClients. Null when the caller passed nothing, or when that node can no longer serve this app (gone, draining, Full, or not local to the app) -- then call serverWithLeastClients for a fresh placement, exactly as before. */
+  authorizedServer: Maybe<ServerStatus>;
+  /** Stable entry origin, resolving to every datacenter, that always reaches SOME healthy instance. Use it to re-discover endpoints when `gameApiUrl` stops answering: a token-holding client cannot re-mint, because that needs the identity session it does not have. Never a per-datacenter or per-instance address. */
+  discoveryUrl: Maybe<Scalars['String']['output']>;
+  /** ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this, or re-portal through the Overworld for a different app. */
+  expiresAt: Scalars['String']['output'];
+  /** Base HTTPS URL of the Game API that serves this app — its OWN datacenter's endpoint when a placement exists, because that is where the app's shards are. Null if the app has no dedicated/shared game-api route yet. Use this for gameplay; use `discoveryUrl` to recover if it stops answering. */
+  gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** WebSocket URL of the Game API that serves this app (wss://), for realtime subscriptions. */
+  gameApiWsUrl: Maybe<Scalars['String']['output']>;
+  /** Identifier of the underlying game_token row, as a String. */
+  gameTokenId: Scalars['String']['output'];
+  /** Browser launch URL for this app (where the player's browser plays it), if configured. */
+  launchUrl: Maybe<Scalars['String']['output']>;
+  /** Opaque app-scoped gameplay token. Send to the target app's Game API as `Authorization: Bearer <token>` (and in the realtime `connectionParams`). Do NOT send it to the Management API for anything other than `me`/`refreshAppToken`. */
+  token: Scalars['String']['output'];
+};
+
+/** End-of-month egress projection for one shared app from linear extrapolation of calendar-month usage so far. */
+export type AppUsageProjection = {
+  __typename?: 'AppUsageProjection';
+  /** App id (as a string). */
+  appId: Scalars['String']['output'];
+  /** Egress bytes recorded so far this calendar month (from app_monthly_egress). Egress only -- bytes the service delivered to clients, measured as wire bytes at the network interface. Ingress is metered separately and does not count toward this figure or the allowance it is compared against. */
+  currentEgressBytes: Scalars['String']['output'];
+  /** Ingress bytes recorded so far this calendar month (from app_monthly_egress.ingress_bytes): bytes clients sent the service over UDP replication and GraphQL, measured on the same basis as egress. Billed once, as aggregate_data_ingress above its own monthly allowance; never counted toward the egress figure or allowance. */
+  currentIngressBytes: Scalars['String']['output'];
+  /** Fractional UTC days elapsed since the calendar month started. */
+  daysElapsed: Scalars['Float']['output'];
+  /** Per-app free monthly egress allowance in bytes (5 decimal GB). */
+  freeAllowanceBytes: Scalars['String']['output'];
+  /** True when projected egress exceeds the free allowance, or null when insufficient data. */
+  onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
+  /** Projected end-of-month egress bytes (linear extrapolation), or null when insufficient data. */
+  projectedBytes: Maybe<Scalars['String']['output']>;
+  /** Projected usage as a percentage of the free allowance, or null when insufficient data. */
+  projectedPctOfFree: Maybe<Scalars['Float']['output']>;
+  /** True when at least 3 days have elapsed in the month (projection is meaningful). */
+  sufficientData: Scalars['Boolean']['output'];
+};
+
+/** Aggregate byte totals plus the top GraphQL operations for one app over the window. WHICH OF THESE YOU PAY FOR: the *SendBytes fields are the billable direction, and *RecvBytes are metered but do NOT count toward Aggregate Data Volume, the monthly free-tier and overage measure. All byte figures are wire bytes measured at the network interface, including transport and network headers, and after any compression the service applies -- they will not match a client-side byte counter. */
+export type AppUsageSummary = {
+  __typename?: 'AppUsageSummary';
+  /** App id (as a string). */
+  appId: Scalars['String']['output'];
+  /** Legacy: billed compute units of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
+  automationComputeUnits: Scalars['String']['output'];
+  /** Legacy: function invocations of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
+  automationInvocations: Scalars['String']['output'];
+  /** Legacy: runs of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration. */
+  automationRuns: Scalars['String']['output'];
+  /** Total GraphQL bytes received (string counter). */
+  graphqlRecvBytes: Scalars['String']['output'];
+  /** Total GraphQL bytes sent (string counter). */
+  graphqlSendBytes: Scalars['String']['output'];
+  /** Total replication bytes received (string counter). */
+  replicationRecvBytes: Scalars['String']['output'];
+  /** Total replication bytes sent (string counter). */
+  replicationSendBytes: Scalars['String']['output'];
+  /** Top GraphQL operations by bytes (capped by operationLimit). */
+  topGraphqlOperations: Array<GraphqlOperationUsageRow>;
+};
+
+/** A user's entitlement to a specific app: whether (and via which tier) they may access it. At most one row per (app, user). */
+export type AppUserAccess = {
+  __typename?: 'AppUserAccess';
+  /** Numeric id of the app this access applies to. */
+  appId: Scalars['BigInt']['output'];
+  /** Unique numeric id of this access record (primary key). */
+  appUserAccessId: Scalars['BigInt']['output'];
+  /** Timestamp when the access record was first created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional expiry timestamp; access is treated as inactive once it has passed. Null means the grant does not expire. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** Who granted this access: the granting admin's numeric user id (as a string), or "system" for automatic/free-tier grants. */
+  grantedBy: Scalars['String']['output'];
+  /** Entitlement lifecycle: "active" (currently entitled) or "revoked" (access removed). Only active, non-expired rows grant runtime access. Defaults to "active". */
+  status: Scalars['String']['output'];
+  /** External billing subscription id (e.g. Stripe/PayPal) backing a paid grant; null for free or manual grants. */
+  subscriptionId: Maybe<Scalars['String']['output']>;
+  /** The access tier granted by this record. Null if no tier is associated (tierId is null) or the tier could not be loaded. */
+  tier: Maybe<AppAccessTier>;
+  /** Numeric id of the access tier granting this access; null if access was granted without a specific tier. */
+  tierId: Maybe<Scalars['BigInt']['output']>;
+  /** Timestamp when the access record was last updated (e.g. re-granted or revoked). */
+  updatedAt: Scalars['DateTime']['output'];
+  /** The user this access record belongs to. Null if the user could not be loaded. */
+  user: Maybe<User>;
+  /** Numeric id of the user this access belongs to. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A Relay cursor connection over AppUserAccess records. Page with first/after; pass pageInfo.endCursor back as after for the next page. */
+export type AppUserAccessConnection = {
+  __typename?: 'AppUserAccessConnection';
+  /** Edges on this page. */
+  edges: Array<AppUserAccessEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** An edge in a AppUserAccess connection. */
+export type AppUserAccessEdge = {
+  __typename?: 'AppUserAccessEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: AppUserAccess;
+};
+
+/** Controls where an app can be discovered. Independent of AppStatus (the marketplace additionally requires status=LIVE). */
+export enum AppVisibility {
+  /** Hidden from the marketplace; visible only to org members and users with an access grant. */
+  Private = 'PRIVATE',
+  /** Listed in the public marketplace (when status=LIVE) and resolvable by slug. */
+  Public = 'PUBLIC',
+  /** Hidden from marketplace listings but accessible to anyone who knows the direct org/app slug link. */
+  Unlisted = 'UNLISTED'
+}
+
+/** A Relay cursor connection over App records. Page with first/after; pass pageInfo.endCursor back as after for the next page. */
+export type AppsConnection = {
+  __typename?: 'AppsConnection';
+  /** Edges on this page. */
+  edges: Array<AppEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** A paginated page of apps returned by the marketplace listing. */
+export type AppsPage = {
+  __typename?: 'AppsPage';
+  /** The apps on this page, ordered newest-first. */
+  items: Array<App>;
+  /** Pagination metadata: totalCount (total matches ignoring limit/offset) plus the applied limit and offset. */
+  pageInfo: PageInfo;
+};
+
+export type AssignGridOwnershipInput = {
+  /** App that contains the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** Required for RENTED tenure; omitted for permanent ownership. */
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Grid to assign. */
+  gridId: Scalars['BigInt']['input'];
+  /** User id receiving title. P1 only permits user owners. */
+  ownerUserId: Scalars['BigInt']['input'];
+  /** OWNED (default) or RENTED. */
+  tenure?: InputMaybe<GridTenure>;
+};
+
+/** Grant runtime permission keys to a group (optionally one role) on a grid (writes the grid_group_grants input table). */
+export type AssignGroupToGridInput = {
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional expiry; after this time the grant stops contributing to the effective ACL. Null/omitted means it never expires. */
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  /** The grid to grant on. */
+  gridId: Scalars['BigInt']['input'];
+  /** The group whose members receive the grant. Must belong to the same app. */
+  groupId: Scalars['BigInt']['input'];
+  /** Optional: scope the grant to members holding this group role. Omit to grant to all members of the group. */
+  groupRoleId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Runtime permission key strings to grant to the group/role. Each must be a known key in runtime_permissions, unique, and at most 64 chars. */
+  permissionKeys: Array<Scalars['String']['input']>;
+};
+
+/** Whether the account has a password set. Does not reveal whether the email is registered. */
+export type AuthMethodResult = {
+  __typename?: 'AuthMethodResult';
+  /** True when the account exists and has a password hash; false otherwise (including unknown emails). */
+  hasPassword: Scalars['Boolean']['output'];
+};
+
+/** Result of a successful login or registration: a session token plus the authenticated user. */
+export type AuthResponse = {
+  __typename?: 'AuthResponse';
+  /** Identifier of the underlying session (game_token) row, as a String. */
+  gameTokenId: Scalars['String']['output'];
+  /** Opaque session token. Send it on subsequent requests as the `Authorization: Bearer <token>` header. */
+  token: Scalars['String']['output'];
+  /** The authenticated user. */
+  user: User;
+};
+
+/** Approve (consent to) an app receiving app-scoped tokens via the Overworld portal. */
+export type AuthorizeAppInput = {
+  /** App to authorize. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional explicit scopes to grant (defaults to the app baseline). */
+  scopes?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+export type Avatar = {
+  __typename?: 'Avatar';
+  /** Avatar id and primary key (auto-increment). Serialized as a GraphQL ID (a numeric string). */
+  avatarId: Scalars['ID']['output'];
+  /** Server timestamp (ISO-8601) when the avatar was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Human-readable avatar name. */
+  name: Scalars['String']['output'];
+  /** Owner-only private state blob, base64-encoded binary. Stripped (returned null) for non-owners (e.g. via `userAvatars`/`avatar` when the caller is not the owner). */
+  privateState: Maybe<Scalars['String']['output']>;
+  /** Public state blob, base64-encoded binary; visible to all viewers. */
+  publicState: Maybe<Scalars['String']['output']>;
+  /** Owner user id. BigInt serialized as a decimal string. NOTE: the AvatarDTO returned by `myAvatars` exposes this same value typed as a GraphQL ID instead of BigInt. */
+  userId: Scalars['BigInt']['output'];
+};
+
+export type AvatarDto = {
+  __typename?: 'AvatarDTO';
+  /** Avatar id, serialized as a GraphQL ID (a numeric string). */
+  avatarId: Scalars['ID']['output'];
+  /** Server timestamp (ISO-8601) when the avatar was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Human-readable avatar name. */
+  name: Scalars['String']['output'];
+  /** Owner-only private state blob, base64-encoded binary. Returned by `myAvatars` (caller is the owner); stripped to null for non-owners on other queries. */
+  privateState: Maybe<Scalars['String']['output']>;
+  /** Public state blob, base64-encoded binary; visible to all viewers. */
+  publicState: Maybe<Scalars['String']['output']>;
+  /** Owner user id, serialized as a GraphQL ID (a numeric string). Same underlying value as Avatar.userId, which is typed as BigInt. */
+  userId: Scalars['ID']['output'];
+};
+
+export type BatchActorLookupInput = {
+  /** Actor ids to look up. Each is exactly 32 ASCII characters (the UDP-wire actor id), NOT a hyphenated RFC-4122 UUID. Must be non-empty; unknown ids are silently omitted from the result. */
+  uuids: Array<Scalars['String']['input']>;
+};
+
+/** Declare a publish: every file of the built bundle. */
+export type BeginGamePublishInput = {
+  files: Array<PublishFileInput>;
+  /** The hosting slug (claimGameHosting first). */
+  slug: Scalars['String']['input'];
+};
+
+/** The result of beginGamePublish: a publish id and one upload per manifest file. Upload them all, then call completeGamePublish(publishId). */
+export type BeginGamePublishResult = {
+  __typename?: 'BeginGamePublishResult';
+  /** When the upload URLs stop working. */
+  expiresAt: Scalars['DateTime']['output'];
+  publishId: Scalars['BigInt']['output'];
+  slug: Scalars['String']['output'];
+  uploads: Array<HostedGameUpload>;
+};
+
+/** One settlement unit of the lossless ledger: a (payer, meter, period) for a continuous meter, or one request for a request-priced meter. Amounts in micro-USD; nothing is rounded. */
+export type BillingCharge = {
+  __typename?: 'BillingCharge';
+  appId: Scalars['BigInt']['output'];
+  billedMicrousd: Scalars['BigInt']['output'];
+  chargeId: Scalars['String']['output'];
+  heldMicrousd: Scalars['BigInt']['output'];
+  meter: Scalars['String']['output'];
+  payerId: Scalars['BigInt']['output'];
+  payerKind: Scalars['String']['output'];
+  periodStart: Maybe<Scalars['DateTime']['output']>;
+  pricedTotalMicrousd: Scalars['BigInt']['output'];
+  quantityFree: Scalars['BigInt']['output'];
+  quantityTotal: Scalars['BigInt']['output'];
+  settlementRef: Scalars['String']['output'];
+  state: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+  writtenOffMicrousd: Scalars['BigInt']['output'];
+};
+
+export type BillingCreditResult = {
+  __typename?: 'BillingCreditResult';
+  creditedMicrousd: Scalars['BigInt']['output'];
+};
+
+/** An organization whose wallet is not debited and whose apps are not denied for funds. Usage is still metered; waived amounts are in org_billing_waivers. */
+export type BillingExemptOrgType = {
+  __typename?: 'BillingExemptOrgType';
+  /** Organization name. */
+  name: Scalars['String']['output'];
+  /** Organization id (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Why the exemption exists. Required when setting it true. */
+  reason: Scalars['String']['output'];
+  /** When the exemption was last set true. */
+  setAt: Scalars['DateTime']['output'];
+  /** Operator user_id who last set the exemption true. */
+  setBy: Maybe<Scalars['BigInt']['output']>;
+  /** Organization slug. */
+  slug: Scalars['String']['output'];
+};
+
+/** One run of the ledger invariant checks. */
+export type BillingInvariantRun = {
+  __typename?: 'BillingInvariantRun';
+  /** JSON text. */
+  detail: Maybe<Scalars['String']['output']>;
+  ok: Scalars['Boolean']['output'];
+  ranAt: Scalars['DateTime']['output'];
+  residueMicrousd: Scalars['BigInt']['output'];
+  runId: Scalars['String']['output'];
+  /** JSON text. */
+  sums: Scalars['String']['output'];
+};
+
+/** Ledger versus provider for one UTC day. */
+export type BillingReconciliation = {
+  __typename?: 'BillingReconciliation';
+  day: Scalars['String']['output'];
+  deltaMicrousd: Maybe<Scalars['BigInt']['output']>;
+  /** JSON text. */
+  detail: Maybe<Scalars['String']['output']>;
+  expectedMicrousd: Scalars['BigInt']['output'];
+  provider: Scalars['String']['output'];
+  providerReportedMicrousd: Maybe<Scalars['BigInt']['output']>;
+  status: Scalars['String']['output'];
+};
+
+/** A billable amount that could not be billed, with the reason. */
+export type BillingWriteOff = {
+  __typename?: 'BillingWriteOff';
+  amountMicrousd: Scalars['BigInt']['output'];
+  appId: Maybe<Scalars['BigInt']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  /** JSON text. */
+  evidence: Maybe<Scalars['String']['output']>;
+  meter: Scalars['String']['output'];
+  payerId: Scalars['BigInt']['output'];
+  payerKind: Scalars['String']['output'];
+  quantity: Scalars['BigInt']['output'];
+  reason: Scalars['String']['output'];
+  writeOffId: Scalars['String']['output'];
+};
+
+export type BindCrowdyStudioGitHubInput = {
+  appId: Scalars['BigInt']['input'];
+  branch?: InputMaybe<Scalars['String']['input']>;
+  /** Which side is the truth for the first commit. */
+  initial: CrowdyStudioGitHubBindInitial;
+  owner: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+  repo: Scalars['String']['input'];
+};
+
+/** Live (most recent heartbeat) Buddy UDP throughput rates. */
+export type BuddyLiveRates = {
+  __typename?: 'BuddyLiveRates';
+  /** Megabits per second received from clients. */
+  clientRecvMbitPerSec: Scalars['Float']['output'];
+  /** Messages per second received from clients. */
+  clientRecvMsgsPerSec: Scalars['Float']['output'];
+  /** Megabits per second sent to clients. */
+  clientSendMbitPerSec: Scalars['Float']['output'];
+  /** Messages per second sent to clients. */
+  clientSendMsgsPerSec: Scalars['Float']['output'];
+  /** Currently connected client count. */
+  clients: Scalars['Float']['output'];
+  /** Buddy/runtime server id reporting these rates. */
+  serverId: Scalars['String']['output'];
+  /** Timestamp of the heartbeat these rates came from. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Input for publishing a message to a channel. Delivered to every active member of the channel (regardless of location), not chunk-routed. The sender must have the channel send_messages permission. */
+export type ChannelMessageInput = {
+  /** The channel id (groups.group_id) to publish to. */
+  channelId: Scalars['BigInt']['input'];
+  /** The message payload, base64-encoded. Opaque to the server; decode per your application protocol. Max 1024 bytes. */
+  payload: Scalars['String']['input'];
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** The sender's actor UUID (your own actor's UUID). Must be exactly 32 bytes when encoded as UTF-8. */
+  uuid: Scalars['String']['input'];
+};
+
+/** Notification received when a message is published to a channel you are a member of. Delivered over the udpNotifications subscription to every active channel member. */
+export type ChannelMessageNotification = {
+  __typename?: 'ChannelMessageNotification';
+  /** The channel id (groups.group_id) the message was sent to. */
+  channelId: Scalars['BigInt']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The message payload, base64-encoded. Opaque to the server; decode per your application protocol. */
+  payload: Scalars['String']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The sending actor's UUID. */
+  uuid: Scalars['String']['output'];
+};
+
+/** Check whether an account has password sign-in enabled (email-first adaptive login). */
+export type CheckAuthMethodInput = {
+  /** Email address to check. */
+  email: Scalars['String']['input'];
+};
+
+export type Checkout = {
+  __typename?: 'Checkout';
+  /** Charge amount in minor currency units (cents) of `currency`, as a BigInt decimal string; null when the purpose carries no amount. */
+  amountCents: Maybe<Scalars['BigInt']['output']>;
+  /** Target app for the purpose (BigInt as a decimal string); null when not applicable. */
+  appId: Maybe<Scalars['BigInt']['output']>;
+  /** Unique checkout id (BigInt as a decimal string). */
+  checkoutId: Scalars['BigInt']['output'];
+  /** When the checkout reached COMPLETED (ISO-8601 UTC timestamp); null until then. */
+  completedAt: Maybe<Scalars['DateTime']['output']>;
+  /** When the checkout was created (ISO-8601 UTC timestamp). */
+  createdAt: Scalars['DateTime']['output'];
+  /** ISO-4217 currency code for `amountCents`, lowercase (e.g. "usd"); null when no amount applies. */
+  currency: Maybe<Scalars['String']['output']>;
+  /** Failure reason when `status` is FAILED; null otherwise. */
+  error: Maybe<Scalars['String']['output']>;
+  /** When the provider session expires if still unpaid (ISO-8601 UTC timestamp); null if there is no expiry. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** Identifier of the session/order in the provider (e.g. Stripe Checkout Session id, PayPal Order id). */
+  externalId: Scalars['String']['output'];
+  /** Provider-hosted URL to redirect the user to in order to complete payment. */
+  externalUrl: Scalars['String']['output'];
+  /** Target organization for the purpose (BigInt as a decimal string); null when not applicable. */
+  orgId: Maybe<Scalars['BigInt']['output']>;
+  /** Payment processor handling this checkout. */
+  provider: PaymentProvider;
+  /** Why the checkout was created; determines the side effect applied on completion. */
+  purpose: CheckoutPurpose;
+  /** Current lifecycle state, updated by webhook reconciliation (not by the redirect). */
+  status: CheckoutStatus;
+  /** Access tier being purchased (BigInt as a decimal string); set for APP_ACCESS_PURCHASE, otherwise null. */
+  tierId: Maybe<Scalars['BigInt']['output']>;
+  /** User who initiated the checkout (BigInt as a decimal string). */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** An edge in a Checkout connection. */
+export type CheckoutEdge = {
+  __typename?: 'CheckoutEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: Checkout;
+};
+
+export type CheckoutFilterInput = {
+  /** Only return checkouts targeting this app (BigInt as a decimal string). */
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Only return checkouts targeting this organization (BigInt as a decimal string). */
+  orgId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Only return checkouts using this payment provider. */
+  provider?: InputMaybe<PaymentProvider>;
+  /** Only return checkouts created for this purpose. */
+  purpose?: InputMaybe<CheckoutPurpose>;
+  /** Only return checkouts in this lifecycle status. */
+  status?: InputMaybe<CheckoutStatus>;
+  /** Only return checkouts created by this user (BigInt as a decimal string). */
+  userId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** Why the checkout exists. Drives which side effect runs on webhook completion: ORG_WALLET_TOPUP credits an org_wallet; PLAYER_WALLET_TOPUP credits the caller's player_wallet; APP_ACCESS_PURCHASE upserts app_user_access; DONATION inserts donations; PROPERTY_TOKENS credits property_tokens; SHARED_APP_SUBSCRIPTION activates a paid shared-environment app slot. */
+export enum CheckoutPurpose {
+  /** Purchase a user's access to an app at a given tier. Requires appId and tierId. Upserts app_user_access on completion. */
+  AppAccessPurchase = 'APP_ACCESS_PURCHASE',
+  /**
+   * Deprecated. Historically a one-off donation to an app. No longer purchasable and rejected at runtime by createCheckout.
+   * @deprecated No longer purchasable; use ORG_WALLET_TOPUP or APP_ACCESS_PURCHASE. Retained for historical checkouts.
+   */
+  Donation = 'DONATION',
+  /** Add funds to an organization wallet. Requires orgId and amountCents, and the caller must hold the org "manage_billing" permission. Credits the org wallet on completion. */
+  OrgWalletTopup = 'ORG_WALLET_TOPUP',
+  /** Add funds to the caller's own player wallet, which pays for their mods past the monthly trial (see PlayerWallet). Requires amountCents only — any authenticated user may fund their own wallet; no org permission is involved. Credits the player wallet idempotently on completion. */
+  PlayerWalletTopup = 'PLAYER_WALLET_TOPUP',
+  /**
+   * Deprecated. Historically a purchase of in-world property tokens. No longer purchasable and rejected at runtime by createCheckout.
+   * @deprecated No longer purchasable; use ORG_WALLET_TOPUP or APP_ACCESS_PURCHASE. Retained for historical checkouts.
+   */
+  PropertyTokens = 'PROPERTY_TOKENS',
+  /**
+   * @deprecated Legacy recurring subscription for a paid shared app slot. No longer purchasable via createCheckout; retained for historical checkouts and webhook reconciliation.
+   * @deprecated Shared apps use org wallet hourly usage billing. Publish via publishAppToShared and top up with ORG_WALLET_TOPUP.
+   */
+  SharedAppSubscription = 'SHARED_APP_SUBSCRIPTION'
+}
+
+/** Lifecycle state of a Checkout. Updated by webhook reconciliation, not by the redirect URL. */
+export enum CheckoutStatus {
+  /** The user abandoned or canceled the checkout before completion. Terminal state. */
+  Canceled = 'CANCELED',
+  /** Payment succeeded and the purpose side effect was applied (e.g. wallet credited). Terminal success state. */
+  Completed = 'COMPLETED',
+  /** The provider session expired before payment completed (see `expiresAt`). Terminal state. */
+  Expired = 'EXPIRED',
+  /** Payment attempt failed or was declined; see the checkout `error` field for details. Terminal failure state. */
+  Failed = 'FAILED',
+  /** Created and awaiting payment. Initial state right after createCheckout; the user has not finished paying yet. */
+  Pending = 'PENDING'
+}
+
+/** A Relay cursor connection over Checkout records. Page with first/after; pass pageInfo.endCursor back as after for the next page. */
+export type CheckoutsConnection = {
+  __typename?: 'CheckoutsConnection';
+  /** Edges on this page. */
+  edges: Array<CheckoutEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** A page of checkouts with offset/limit pagination metadata. */
+export type CheckoutsPage = {
+  __typename?: 'CheckoutsPage';
+  /** The checkouts on this page, ordered newest first. */
+  items: Array<Checkout>;
+  /** Offset/limit pagination metadata (totalCount, limit, offset) for this result set. */
+  pageInfo: PageInfo;
+};
+
+/** A persisted 16x16x16-voxel chunk (4096 voxels) of an app's voxel world. Holds the packed voxel-type grid (`voxels`), sparse per-voxel state overrides (`voxelStates`), an optional opaque chunk-level state blob (`chunkState`), and level-of-detail meshes (`lods`). Returned by getChunk/getChunksByDistance and written by updateChunk/updateChunkState/updateChunkLods. */
+export type Chunk = {
+  __typename?: 'Chunk';
+  /** Id of the app that owns this chunk (decimal string). */
+  appId: Scalars['ID']['output'];
+  /** Timestamp the chunk's binary (d2.bin) was last synced to the CDN/S3, or null if it has never been uploaded. */
+  cdnUploadedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Server-assigned unique chunk id (decimal string). */
+  chunkId: Scalars['ID']['output'];
+  /** BASE64-encoded opaque binary blob holding chunk-LEVEL state (distinct from per-voxel state). Decode from base64; null when unset. Written only via updateChunkState and preserved by updateChunk/updateChunkLods. */
+  chunkState: Maybe<Scalars['String']['output']>;
+  /** This chunk's address in the app's world grid. */
+  coordinates: ChunkCoordinates;
+  /** Timestamp when this chunk row was first created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Level-of-detail (LOD) entries for this chunk (coarser sampled representations), or null if none. Each entry is keyed by integer level (0 = finest) and carries a base64-encoded binary blob. */
+  lods: Maybe<Array<LodData>>;
+  /** User id (decimal string) of the last writer of this chunk, or null if unknown. */
+  owner: Maybe<Scalars['ID']['output']>;
+  /** Timestamp of the most recent write to this chunk. */
+  updatedAt: Scalars['DateTime']['output'];
+  /** Sparse list of per-voxel overrides: the states stored with the chunk (e.g. rotation, atlas, flags) and every voxel edit recorded for it since (the voxel_updates log), each with its voxel type, which takes precedence over the type byte in `voxels`. Empty when the chunk has neither. */
+  voxelStates: Array<VoxelState>;
+  /** BASE64-encoded binary blob of the dense voxel-type grid. When present, the DECODED buffer is exactly 4096 bytes: one unsigned byte (voxel type 0-255) per voxel, indexed as x + y*16 + z*256 with x,y,z in 0-15. Null when the chunk has no voxel grid yet. Decode from base64 before reading. */
+  voxels: Maybe<Scalars['String']['output']>;
+};
+
+/** Authoritative result of an ordinary player claiming one chunk as a new grid under SELF_CLAIM. Grid creation, title assignment, and direct ACL grants are committed atomically. */
+export type ChunkClaimResult = {
+  __typename?: 'ChunkClaimResult';
+  /** Full effective runtime permission-key set materialized for the caller on the new grid after grid limits are applied. */
+  effectivePermissionKeys: Array<Scalars['String']['output']>;
+  /** Id of the one-chunk grid created for this claim. */
+  gridId: Scalars['BigInt']['output'];
+  /** High corner of the claimed grid. It equals lowChunk because a player claim covers exactly one chunk. */
+  highChunk: ChunkCoordinates;
+  /** Low corner of the claimed grid. It equals highChunk because a player claim covers exactly one chunk. */
+  lowChunk: ChunkCoordinates;
+  /** True when the effective ACL contains both write and run permission for at least one player-code target (server or client). */
+  moddable: Scalars['Boolean']['output'];
+  /** New current user ownership record created atomically with the grid. */
+  ownership: GridOwnership;
+  /** App claim policy applied by the server. This mutation succeeds only for SELF_CLAIM. */
+  policy: GridClaimPolicy;
+};
+
+/** Integer (x, y, z) address of a 16x16x16-voxel chunk within an app's world grid. Each unit step moves one whole chunk (16 voxels) along that axis. Components are signed 64-bit integers serialized as decimal strings (see the BigInt scalar). */
+export type ChunkCoordinates = {
+  __typename?: 'ChunkCoordinates';
+  /** Chunk index along X as a decimal string; +1 = one chunk (16 voxels) further along X. */
+  x: Scalars['BigInt']['output'];
+  /** Chunk index along Y as a decimal string; +1 = one chunk (16 voxels) further along Y. */
+  y: Scalars['BigInt']['output'];
+  /** Chunk index along Z as a decimal string; +1 = one chunk (16 voxels) further along Z. */
+  z: Scalars['BigInt']['output'];
+};
+
+/** Input form of a chunk address (see ChunkCoordinates). Each component is a signed 64-bit integer passed as a decimal string (see the BigInt scalar); all three are required. */
+export type ChunkCoordinatesInput = {
+  /** Chunk index along X as a decimal string (required). */
+  x: Scalars['BigInt']['input'];
+  /** Chunk index along Y as a decimal string (required). */
+  y: Scalars['BigInt']['input'];
+  /** Chunk index along Z as a decimal string (required). */
+  z: Scalars['BigInt']['input'];
+};
+
+/** Result of getChunkLods: identifying info for a chunk plus the LOD levels that were requested. */
+export type ChunkLodsResponse = {
+  __typename?: 'ChunkLodsResponse';
+  /** Owning app id (decimal string). */
+  appId: Scalars['ID']['output'];
+  /** Chunk id (decimal string). */
+  chunkId: Scalars['ID']['output'];
+  /** Address of the chunk. */
+  coordinates: ChunkCoordinates;
+  /** The requested LOD levels for the chunk. */
+  lods: Array<LodData>;
+  /** Timestamp when the chunk was last updated. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Payload for updateChunk: upserts a chunk's dense voxel grid and/or per-voxel states and logs each provided state as an individual voxel update. Does NOT modify chunkState or LODs. */
+export type ChunkUpdateInput = {
+  /** Id of the app that owns the chunk (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Address of the chunk to create or update. */
+  coordinates: ChunkCoordinatesInput;
+  /** Optional per-voxel state overrides to write, at most 4096 (one per voxel); each entry is also recorded as an individual voxel update. Omit to leave existing states unchanged. */
+  voxelStates?: InputMaybe<Array<VoxelStateInput>>;
+  /** Optional BASE64-encoded dense voxel grid. The DECODED buffer must be exactly 4096 bytes: one voxel-type byte (0-255) per voxel, indexed x + y*16 + z*256 (x,y,z in 0-15). Omit to leave the existing grid unchanged. */
+  voxels?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Result of getVoxelList: the queried chunk address together with its recorded voxel edits. */
+export type ChunkVoxelResponse = {
+  __typename?: 'ChunkVoxelResponse';
+  /** Address of the chunk the voxel edits belong to. */
+  coordinates: ChunkCoordinates;
+  /** Recorded voxel edits for the chunk, newest first. */
+  voxels: Array<Voxel>;
+};
+
+/** Recorded voxel edits for a single chunk within a distance query, newest first. */
+export type ChunkVoxelUpdatesResponse = {
+  __typename?: 'ChunkVoxelUpdatesResponse';
+  /** Address of the chunk these voxel edits belong to. */
+  coordinates: ChunkCoordinates;
+  /** Voxel edits for this chunk, newest first. */
+  voxels: Array<Voxel>;
+};
+
+/** Paginated result of getChunksByDistance: the chunks found within the search cube plus an echo of the pagination applied. */
+export type ChunksByDistanceResponse = {
+  __typename?: 'ChunksByDistanceResponse';
+  /** Chunks found within the search cube. */
+  chunks: Array<Chunk>;
+  /** Echo of the `limit` applied to this page, or null if none was supplied. */
+  limit: Maybe<Scalars['Int']['output']>;
+  /** Echo of the `skip` applied to this page, or null if none was supplied. */
+  skip: Maybe<Scalars['Int']['output']>;
+};
+
+/** Claim (or re-assert) the hosting slug for an app. */
+export type ClaimGameHostingInput = {
+  /** The app to host. Requires manage_apps on it. */
+  appId: Scalars['BigInt']['input'];
+  /** The slug to claim. Defaults to the app slug when that is a valid DNS label. Once claimed, an app keeps its slug; pass a different one to MOVE (the old path stops serving). */
+  slug?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Notification received when another client sends an audio packet (voice chat). Received via the udpNotifications subscription. */
+export type ClientAudioNotification = {
+  __typename?: 'ClientAudioNotification';
+  /** The ID of the app where the audio is coming from. */
+  appId: Scalars['BigInt']['output'];
+  /** The compressed audio data, base64-encoded. */
+  audioData: Scalars['String']['output'];
+  /** The X coordinate of the chunk where the audio source is located. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk where the audio source is located. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk where the audio source is located. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The unique identifier of the audio source (typically the player UUID sending the audio). */
+  uuid: Scalars['String']['output'];
+};
+
+/** Input for sending a client audio packet (voice chat) to the UDP game server. The audio data is compressed and will be broadcast to nearby players. */
+export type ClientAudioPacketInput = {
+  /** The ID of the app where the audio is being sent from. */
+  appId: Scalars['BigInt']['input'];
+  /** The compressed audio data, base64-encoded. */
+  audioData: Scalars['String']['input'];
+  /** The chunk coordinates where the audio source is located. */
+  chunk: ChunkCoordinatesInput;
+  /** Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for audio packets. */
+  decayRate?: InputMaybe<Scalars['Int']['input']>;
+  /** Chunk replication distance (0-8). Defaults to 1 for audio packets. Clamped to 0-8. */
+  distance?: InputMaybe<Scalars['Int']['input']>;
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** A unique identifier for the audio source (typically the player UUID). Must be exactly 32 bytes when encoded as UTF-8. */
+  uuid: Scalars['String']['input'];
+};
+
+/** Notification received when another client sends a custom event. Received via the udpNotifications subscription. */
+export type ClientEventNotification = {
+  __typename?: 'ClientEventNotification';
+  /** The ID of the app where the event is occurring. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk where the event is located. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk where the event is located. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk where the event is located. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The event type ID (uint16). This determines how the event should be processed. */
+  eventType: Scalars['Int']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The event state data, base64-encoded. The format is defined by the event type. */
+  state: Scalars['String']['output'];
+  /** The unique identifier of the object controlling this event. */
+  uuid: Scalars['String']['output'];
+};
+
+/** Input for sending a client event notification to the UDP game server. Events are custom game events that can be used for various gameplay mechanics. The event type and state format are defined by the client/mod. */
+export type ClientEventNotificationInput = {
+  /** The ID of the app where the event is occurring. */
+  appId: Scalars['BigInt']['input'];
+  /** The chunk coordinates where the event is located. */
+  chunk: ChunkCoordinatesInput;
+  /** Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for events. */
+  decayRate?: InputMaybe<Scalars['Int']['input']>;
+  /** Chunk replication distance (0-8). Defaults to 8 for events. Clamped to 0-8. */
+  distance?: InputMaybe<Scalars['Int']['input']>;
+  /** The event type ID (uint16, 0-65535). This is a client-defined enum that determines how the event should be processed. */
+  eventType: Scalars['Int']['input'];
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** The event state data, base64-encoded. The format is defined by the event type and is currently only processed by clients. */
+  state: Scalars['String']['input'];
+  /** A unique identifier for the object controlling this event. Must be exactly 32 bytes when encoded as UTF-8. */
+  uuid: Scalars['String']['input'];
+};
+
+/** Notification received when another client sends a text message (chat). Received via the udpNotifications subscription. */
+export type ClientTextNotification = {
+  __typename?: 'ClientTextNotification';
+  /** The ID of the app where the text message is coming from. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk where the text source is located. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk where the text source is located. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk where the text source is located. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The text message content, UTF-8 encoded. Display this to the user. */
+  text: Scalars['String']['output'];
+  /** The unique identifier of the text source (typically the player UUID sending the message). */
+  uuid: Scalars['String']['output'];
+};
+
+/** Input for sending a text message (chat) to the UDP game server. The text will be broadcast to nearby players in the same chunk. */
+export type ClientTextPacketInput = {
+  /** The ID of the app where the text message is being sent from. */
+  appId: Scalars['BigInt']['input'];
+  /** The chunk coordinates where the text message source is located. */
+  chunk: ChunkCoordinatesInput;
+  /** Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for text packets. */
+  decayRate?: InputMaybe<Scalars['Int']['input']>;
+  /** Chunk replication distance (0-8). Defaults to 8 for text packets. Clamped to 0-8. */
+  distance?: InputMaybe<Scalars['Int']['input']>;
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** The text message content, encoded as UTF-8. This will be displayed to nearby players. */
+  text: Scalars['String']['input'];
+  /** A unique identifier for the text source (typically the player UUID). Must be exactly 32 bytes when encoded as UTF-8. */
+  uuid: Scalars['String']['input'];
+};
+
+/** Notification received when another client sends a webcam video fragment. Received via the udpNotifications subscription. videoData is ONE fragment: a 6-byte header (version, codec, frameId uint16 BE, fragIndex, fragCount) followed by that slice of the encoded frame; reassemble fragments with the same uuid and frameId, and drop an incomplete frame when a newer frameId arrives or after ~500 ms. */
+export type ClientVideoNotification = {
+  __typename?: 'ClientVideoNotification';
+  /** The ID of the app where the video is coming from. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk where the video source is located. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk where the video source is located. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk where the video source is located. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The unique identifier of the video source (typically the player UUID sending the video). */
+  uuid: Scalars['String']['output'];
+  /** One video fragment, base64-encoded: 6-byte fragment header then the frame slice. */
+  videoData: Scalars['String']['output'];
+};
+
+/** Input for sending one webcam video FRAGMENT to the UDP game server, fanned out to nearby players as a ClientVideoNotification. A datagram carries at most ~1117 bytes of videoData, so an encoded frame is split by the SDK into fragments that each start with the 6-byte video fragment header (version, codec, frameId, fragIndex, fragCount) and are reassembled by the receiver; this mutation sends ONE such fragment. Sustained video belongs on the binary realtime relay; this path works but is a mutation per fragment. */
+export type ClientVideoPacketInput = {
+  /** The ID of the app where the video is being sent from. */
+  appId: Scalars['BigInt']['input'];
+  /** The chunk coordinates where the video source is located. */
+  chunk: ChunkCoordinatesInput;
+  /** Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for video packets. */
+  decayRate?: InputMaybe<Scalars['Int']['input']>;
+  /** Chunk replication distance (0-8). Defaults to 1 for video packets. Every receiver in range pays the egress bytes; keep this small. */
+  distance?: InputMaybe<Scalars['Int']['input']>;
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** A unique identifier for the video source (typically the player UUID). Must be exactly 32 bytes when encoded as UTF-8. */
+  uuid: Scalars['String']['input'];
+  /** One video fragment, base64-encoded: the 6-byte fragment header followed by that slice of the encoded frame. Opaque to the server. */
+  videoData: Scalars['String']['input'];
+};
+
+/** Controls player-code censorship for an app. IMPLICIT_ALLOW admits lawful code by default; ALLOW_LIST requires every code target, including self-authored code, to match an active code/author/org admission. */
+export enum CodeAdmissionMode {
+  AllowList = 'ALLOW_LIST',
+  ImplicitAllow = 'IMPLICIT_ALLOW'
+}
+
+/** The identity admitted by an app code allow-list entry: one code listing, one author user, or one authoring organization. */
+export enum CodeAdmissionSubjectKind {
+  Author = 'AUTHOR',
+  Code = 'CODE',
+  Org = 'ORG'
+}
+
+/** The result of completeGamePublish. */
+export type CompleteGamePublishResult = {
+  __typename?: 'CompleteGamePublishResult';
+  game: HostedGame;
+  /** The CloudFront invalidation id, when one was created. */
+  invalidationId: Maybe<Scalars['String']['output']>;
+  publish: HostedGamePublish;
+};
+
+/** Complete a magic-link sign-in with the emailed token. */
+export type CompleteLoginLinkInput = {
+  /** The one-time token from the magic-link URL. */
+  token: Scalars['String']['input'];
+};
+
+/** Relay-style pagination metadata for a connection. */
+export type ConnectionPageInfo = {
+  __typename?: 'ConnectionPageInfo';
+  /** Opaque cursor of the last edge in this page; pass as `after`. */
+  endCursor: Maybe<Scalars['String']['output']>;
+  /** True if more edges exist after `endCursor`. */
+  hasNextPage: Scalars['Boolean']['output'];
+  /** True if edges exist before `startCursor`. */
+  hasPreviousPage: Scalars['Boolean']['output'];
+  /** Opaque cursor of the first edge in this page. */
+  startCursor: Maybe<Scalars['String']['output']>;
+};
+
+/** Input for creating a new app access tier. */
+export type CreateAccessTierInput = {
+  /** Numeric id of the app the tier belongs to. The caller must hold manage_access_tiers on this app. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional marketing description of the tier. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Optional; whether this is the app's default tier. Defaults to false. */
+  isDefault?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional; whether the tier is free. Defaults to false. */
+  isFree?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Tier display name (max 128 chars). */
+  name: Scalars['String']['input'];
+  /** Optional runtime permission keys to grant on this tier (must be valid runtimePermissions). Defaults to ["access"] when omitted. */
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Optional sort order (ascending). Defaults to 0. */
+  tierOrder?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type CreateActorInput = {
+  /** App (game) the actor belongs to. Required. BigInt sent as a decimal string. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional avatar to attach; if provided it must be owned by the caller. BigInt sent as a decimal string. */
+  avatarId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Initial chunk-grid coordinates (x, y, z as int64 BigInt decimal strings). Required. */
+  chunk: ChunkCoordinatesInput;
+  /** Optional owner-only private state blob, base64-encoded binary. */
+  privateState?: InputMaybe<Scalars['String']['input']>;
+  /** Optional public state blob, base64-encoded binary. */
+  publicState?: InputMaybe<Scalars['String']['input']>;
+  /** Actor id: exactly 32 ASCII characters (the UDP-wire actor id), NOT a hyphenated RFC-4122 UUID. Required and must be unique. */
+  uuid: Scalars['String']['input'];
+};
+
+/** Input payload for creating a new app. */
+export type CreateAppInput = {
+  /** Datacenter the app will live in, e.g. 'or' or 'va'. Query placeableDatacenters for the accepted codes and whether each can currently hold an app. REQUIRED and permanent: an app is distributed on app_id, so all of its data lives on one node in one datacenter and that is fixed when the id is minted. Creation FAILS if the datacenter is unknown to this deployment or holds no capacity, rather than creating an app that cannot be routed. There is no default — the instance answering this call may be in a different datacenter from the one you want. Moving an app afterwards is an operator action. */
+  datacenter: Scalars['String']['input'];
+  /** Optional short plain-text description for listings. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Optional JSON-encoded marketplace metadata string (see App.metadata). Defaults to an empty object when omitted. */
+  metadata?: InputMaybe<Scalars['String']['input']>;
+  /** Display name of the app (1-256 characters). */
+  name: Scalars['String']['input'];
+  /** Numeric id of the organization that will own the app. The caller must hold the manage_apps permission on this org. */
+  orgId: Scalars['BigInt']['input'];
+  /** URL-safe slug (1-128 chars, lowercase letters, numbers and dashes only). Must be unique within the org. */
+  slug: Scalars['String']['input'];
+  /** Optional initial lifecycle status. Defaults to LIVE when omitted. */
+  status?: InputMaybe<AppStatus>;
+  /** Optional initial visibility. Defaults to PUBLIC when omitted. */
+  visibility?: InputMaybe<AppVisibility>;
+};
+
+export type CreateAvatarInput = {
+  /** Optional avatar name; defaults to "Default Avatar" when omitted. */
+  name?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Create a channel in an app. */
+export type CreateChannelInput = {
+  /** The app (tenant) the channel belongs to. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional free-text description of the channel. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel). */
+  membersCanSend?: InputMaybe<Scalars['Boolean']['input']>;
+  /** open | request | invite | admin. Defaults to the app policy. */
+  membershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** Display name for the channel (max 128 chars; unique per app+type). */
+  name: Scalars['String']['input'];
+};
+
+export type CreateCheckoutInput = {
+  /** Charge amount in minor currency units (cents) of `currency`, as a BigInt decimal string. Required for ORG_WALLET_TOPUP. */
+  amountCents?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Target app (BigInt as a decimal string). Required for APP_ACCESS_PURCHASE and SHARED_APP_SUBSCRIPTION. */
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Absolute URL the provider redirects to if the user cancels. Optional; a server default is used if omitted. */
+  cancelUrl?: InputMaybe<Scalars['String']['input']>;
+  /** ISO-4217 currency code, lowercase (e.g. "usd"). Defaults to "usd". */
+  currency?: InputMaybe<Scalars['String']['input']>;
+  /** Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first checkout instead of opening a second provider session; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Target organization (BigInt as a decimal string). Required for ORG_WALLET_TOPUP; ignored for other purposes. */
+  orgId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Shared-environment plan id (a shared_env_plans.plan_id, BigInt as a decimal string). Required for SHARED_APP_SUBSCRIPTION. */
+  planId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Payment processor to use for this checkout (STRIPE or PAYPAL). */
+  provider: PaymentProvider;
+  /** What the checkout is for; determines which other fields are required and the side effect applied on completion. DONATION and PROPERTY_TOKENS are rejected. */
+  purpose: CheckoutPurpose;
+  /** Absolute URL the provider redirects to after a successful payment. Optional; a server default is used if omitted. */
+  successUrl?: InputMaybe<Scalars['String']['input']>;
+  /** Access tier to purchase (BigInt as a decimal string). Required for APP_ACCESS_PURCHASE. */
+  tierId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** Create a private player-owned project, optionally with bounded initial files for either target. */
+export type CreateCrowdyStudioProjectInput = {
+  /** Supported guest ABI pin; defaults to ABI 0. */
+  abiVersion?: InputMaybe<Scalars['Int']['input']>;
+  /** App tenant. Requires an app-scoped token for this exact app; the project is owned by the authenticated user. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional stable crate-style CLIENT module name. It must differ from the server name. */
+  clientModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** Optional private project description. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Optional grid affinity in the same app. Affinity does not grant deployment permission and survives ownership transfer. */
+  gridId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional retry key. Same user, operation, key, and input replay the first result for 24 hours; changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Optional initial source files. At most 16 total and at most 8/256 KiB independently per target. */
+  initialFiles?: InputMaybe<Array<CrowdyStudioProjectFileInput>>;
+  /** Player-facing project name. */
+  name: Scalars['String']['input'];
+  /** Optional editor pairing preference; defaults to PAIRED. */
+  pairingPreference?: InputMaybe<CrowdyStudioPairingPreference>;
+  /** Supported crowdy-compute-sdk pin; defaults to the current 0.1.8 authoring pin. */
+  sdkVersion?: InputMaybe<Scalars['String']['input']>;
+  /** Optional stable crate-style SERVER module name. Deployment rechecks current authority. */
+  serverModuleName?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Create a grid channel (DN-10): a channel that belongs to one grid, so that grid's player modules may emit_channel into it. Only the grid's current owner may create one. */
+export type CreateGridChannelInput = {
+  /** The app (tenant) the channel belongs to. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional free-text description of the channel. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** The grid the channel belongs to. The caller must own it. */
+  gridId: Scalars['BigInt']['input'];
+  /** When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel). */
+  membersCanSend?: InputMaybe<Scalars['Boolean']['input']>;
+  /** open | request | invite | admin. Defaults to the app policy. */
+  membershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** Display name for the channel (max 128 chars; unique per app+type). */
+  name: Scalars['String']['input'];
+};
+
+/** Defines a new grid by its app and two opposite corner chunks. The corners are normalized server-side into a low/high chunk box, so corner order is irrelevant and a single chunk (corner1 == corner2) is allowed. */
+export type CreateGridInput = {
+  /** The app (tenant) the grid belongs to. */
+  appId: Scalars['BigInt']['input'];
+  /** One corner of the grid box, in chunk coordinates. */
+  corner1: ChunkCoordinatesInput;
+  /** The opposite corner of the grid box, in chunk coordinates. May equal corner1 for a single-chunk grid. */
+  corner2: ChunkCoordinatesInput;
+};
+
+/** Result of createGrid. This is a hybrid result rather than a thrown error: inspect `error` first. When `error` is NO_ERROR the call succeeded and `grid` is populated; otherwise `grid` is null and `error` explains why. */
+export type CreateGridResponse = {
+  __typename?: 'CreateGridResponse';
+  /** A UDP-style error code (the same ErrorType enum the realtime/UDP servers use). NO_ERROR (0) means success; non-zero values describe the failure, e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS, or UNKNOWN_ERROR. */
+  error: UdpErrorCode;
+  /** The created grid on success; null when `error` is non-zero. */
+  grid: Maybe<Grid>;
+};
+
+/** Create a custom role within a group (team or channel), granting group permission keys. */
+export type CreateGroupRoleInput = {
+  /** The group (team/channel) the role belongs to. */
+  groupId: Scalars['BigInt']['input'];
+  /** Group permission key strings this role grants (e.g. manage_members, manage_roles, manage_group, send_messages). Must be valid keys for the group type; each max 64 chars, unique. Defaults to none. */
+  permissions?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Sort/precedence rank (higher = more senior). Defaults to 0. */
+  rank?: InputMaybe<Scalars['Int']['input']>;
+  /** Role display name (max 128 chars; unique within the group). */
+  roleName: Scalars['String']['input'];
+};
+
+export type CreateOrgRoleInput = {
+  /** Optional human-readable description. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Organization to create the role in (BigInt as string). */
+  orgId: Scalars['BigInt']['input'];
+  /** Permission keys (from orgPermissions) to grant. Unknown keys are silently dropped. */
+  permissions: Array<Scalars['String']['input']>;
+  /** Role name (max 128 characters). */
+  roleName: Scalars['String']['input'];
+};
+
+export type CreateOrgTokenInput = {
+  /** Optional expiry timestamp; omit for a non-expiring token. */
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Optional human-readable label (max 256 characters). */
+  label?: InputMaybe<Scalars['String']['input']>;
+  /** Organization to mint the token for (BigInt as string). */
+  orgId: Scalars['BigInt']['input'];
+};
+
+export type CreateOrganizationInput = {
+  /** Organization display name (1-256 characters). */
+  name: Scalars['String']['input'];
+  /** Unique URL slug; lowercase letters, numbers, and dashes only (1-128 characters). */
+  slug: Scalars['String']['input'];
+};
+
+/** Input for createPortalAuthorizationCode: the Overworld (identity origin, holding the session token) mints a one-time code the destination game exchanges for an app token. Browser handoff path; pair with a PKCE verifier held by the destination game origin. */
+export type CreatePortalAuthorizationCodeInput = {
+  /** Numeric id of the target app the player is portaling into. */
+  appId: Scalars['BigInt']['input'];
+  /** PKCE code challenge (recommended). Base64url(SHA-256(verifier)) when method is S256. The destination game generates the verifier+challenge so the verifier never leaves its origin. */
+  codeChallenge: Scalars['String']['input'];
+  /** PKCE method: "S256" (default, recommended) or "plain". */
+  codeChallengeMethod?: InputMaybe<Scalars['String']['input']>;
+  /** Where to redirect the player after issuing the code. Must match the target app's configured launch_url origin when set. */
+  redirectUri: Scalars['String']['input'];
+};
+
+/** Create a team in an app. */
+export type CreateTeamInput = {
+  /** The app (tenant) the team belongs to. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional free-text description of the team. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** open | request | invite | admin. Defaults to the app policy. */
+  membershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** Display name for the team (max 128 chars; unique per app+type). */
+  name: Scalars['String']['input'];
+};
+
+export type CreateUserAppStateInput = {
+  /** App (game) id to scope the state to. Required. BigInt sent as a decimal string. */
+  appId: Scalars['BigInt']['input'];
+  /** Per-app user state as base64-encoded binary, at most 1,048,576 base64 characters (~768 KiB binary); larger payloads draw a structured validation error. Omit or send null to clear it. */
+  state?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Single-use human decision lifecycle for one canonical argument hash. */
+export enum CrowdyStudioAgentApprovalStatus {
+  /** Used exactly once for dispatch/execution. */
+  Consumed = 'CONSUMED',
+  /** Human denied the exact call. */
+  Denied = 'DENIED',
+  /** TTL elapsed before use. */
+  Expired = 'EXPIRED',
+  /** Granted but not yet atomically consumed. */
+  Granted = 'GRANTED',
+  /** Awaiting the matching attached human. */
+  Pending = 'PENDING',
+  /** Invalidated by context or policy change. */
+  Revoked = 'REVOKED'
+}
+
+/** One allowed Agentic Studio mode that cannot perform the work the mode exists for, because the tool or risk-class allowlist excludes every tool that would do it. This is a capability shortfall, not a permission failure: the policy really is enabled and the mode really is allowed, so no disable reason code describes it. */
+export type CrowdyStudioAgentCapabilityGap = {
+  __typename?: 'CrowdyStudioAgentCapabilityGap';
+  /** Stable code. NO_TOOLS: the tool allowlist is empty, so the agent can only talk. NO_WRITE_RISK: tools are allowed but every risk class that would let this mode change something is not, so BUILD can read and cannot build, and PLAY can observe and cannot act. */
+  code: Scalars['String']['output'];
+  /** Safe operator-facing explanation naming the missing risk classes. Never includes provider bodies or secrets. */
+  detail: Scalars['String']['output'];
+  /** The allowed mode that has nothing useful to call. */
+  mode: CrowdyStudioAgentMode;
+};
+
+/** The answering ck-api instance's Agentic Studio capability: the models it carries with their pinned prices, the implemented tool registry with risk classes, and the full mode and risk-class value sets a policy may draw from. This is deployed configuration, not stored policy — a platform policy naming anything absent here is accepted and then runs nothing. */
+export type CrowdyStudioAgentCatalog = {
+  __typename?: 'CrowdyStudioAgentCatalog';
+  /** The answering instance's datacenter (CK_DATACENTER), or null. */
+  datacenterCode: Maybe<Scalars['String']['output']>;
+  /** Default model id, or null when the agent is disabled here. */
+  defaultModelId: Maybe<Scalars['String']['output']>;
+  /** Whether CROWDY_STUDIO_AGENT_ENABLED is set on this instance. False means every list below is empty and no policy can make the agent run here. */
+  instanceEnabled: Scalars['Boolean']['output'];
+  /** Which process answered (CKS_RUNTIME_SERVER_ID or hostname), because this is a per-instance answer. */
+  instanceId: Maybe<Scalars['String']['output']>;
+  /** Models this instance carries, sorted by id. Empty when the agent is disabled here. */
+  models: Array<CrowdyStudioAgentCatalogModel>;
+  /** Every mode value a policy allowlist may contain. */
+  modes: Array<CrowdyStudioAgentMode>;
+  /** Platform policy contract version the instance enforces. */
+  platformPolicyVersion: Scalars['String']['output'];
+  /** Provider the instance would route to: 'openrouter', or 'fake' outside production. */
+  provider: Scalars['String']['output'];
+  /** Digest over the whole compiled-in tool registry. Two instances reporting different digests are running different tool sets. */
+  registryDigest: Scalars['String']['output'];
+  /** Every risk-class value a policy allowlist may contain. */
+  riskClasses: Array<CrowdyStudioAgentRiskClass>;
+  /** Implemented tools, sorted by logical name. Present whether or not the agent is enabled, because the registry is compiled in. */
+  tools: Array<CrowdyStudioAgentCatalogTool>;
+};
+
+/** One model the answering ck-api instance carries, with the pinned price it will meter against. */
+export type CrowdyStudioAgentCatalogModel = {
+  __typename?: 'CrowdyStudioAgentCatalogModel';
+  /** Pinned input price in micro-USD per million tokens. */
+  inputMicrosPerMillion: Scalars['Int']['output'];
+  /** Whether this is the instance's default model (CROWDY_STUDIO_AGENT_DEFAULT_MODEL). */
+  isDefault: Scalars['Boolean']['output'];
+  /** Exact provider model id, as a policy would name it. */
+  modelId: Scalars['String']['output'];
+  /** Pinned output price in micro-USD per million tokens. */
+  outputMicrosPerMillion: Scalars['Int']['output'];
+  /** Whether the instance would accept a run on this model: it is in the instance allowlist and has a positive pinned price in both directions. A zero price is only reachable with the non-production fake provider, which cannot reserve cost. */
+  selectable: Scalars['Boolean']['output'];
+};
+
+/** One implemented crowdy.agent-tools/1 tool, named exactly as a policy allowlist must name it. */
+export type CrowdyStudioAgentCatalogTool = {
+  __typename?: 'CrowdyStudioAgentCatalogTool';
+  /** Whether every call needs exact human approval regardless of policy. */
+  approvalRequired: Scalars['Boolean']['output'];
+  /** Trusted boundary that runs it: SERVER or BROWSER. */
+  executor: CrowdyStudioAgentToolExecutor;
+  /** Modes the tool is available in. */
+  modes: Array<CrowdyStudioAgentMode>;
+  /** Logical dotted tool name. This is the string an allowedToolNames entry must equal. */
+  name: Scalars['String']['output'];
+  /** Server-classified risk. Allowing the class is necessary but not sufficient: an approval-gated tool still requires exact human approval. */
+  riskClass: CrowdyStudioAgentRiskClass;
+  /** What the tool does, from its canonical descriptor. */
+  summary: Scalars['String']['output'];
+};
+
+/** Typed union of ordered, replayable version 1 session facts. Delivery is at-least-once; seq and eventId support deduplication. */
+export type CrowdyStudioAgentEvent = AgentApprovalEvent | AgentBudgetEvent | AgentCheckpointEvent | AgentLeaseEvent | AgentLifecycleEvent | AgentMessageEvent | AgentRunEvent | AgentToolEvent;
+
+/** Version 1 durable ordered event vocabulary. */
+export enum CrowdyStudioAgentEventType {
+  /** Approval was atomically consumed once. */
+  ApprovalConsumed = 'APPROVAL_CONSUMED',
+  /** Human denied the pending exact approval. */
+  ApprovalDenied = 'APPROVAL_DENIED',
+  /** Approval TTL elapsed. */
+  ApprovalExpired = 'APPROVAL_EXPIRED',
+  /** Human granted the pending exact approval. */
+  ApprovalGranted = 'APPROVAL_GRANTED',
+  /** Exact argument-hash human approval was requested. */
+  ApprovalRequested = 'APPROVAL_REQUESTED',
+  /** Bounded coalesced assistant text; final message is canonical. */
+  AssistantChunk = 'ASSISTANT_CHUNK',
+  /** Canonical final assistant response. */
+  AssistantMessage = 'ASSISTANT_MESSAGE',
+  /** Provider reservation/accounting state changed. */
+  BudgetUpdated = 'BUDGET_UPDATED',
+  /** Immutable private pre-image checkpoint was created. */
+  CheckpointCreated = 'CHECKPOINT_CREATED',
+  /** Checkpoint restored as a new project revision. */
+  CheckpointRestored = 'CHECKPOINT_RESTORED',
+  /** A new monotonic client epoch attached and fenced older tabs. */
+  ClientAttached = 'CLIENT_ATTACHED',
+  /** The interactive browser detached. */
+  ClientDetached = 'CLIENT_DETACHED',
+  /** Authoritative context changed and old authority was fenced. */
+  ContextChanged = 'CONTEXT_CHANGED',
+  /** Lease reached its expiry. */
+  LeaseExpired = 'LEASE_EXPIRED',
+  /** Workspace or Play lease was granted. */
+  LeaseGranted = 'LEASE_GRANTED',
+  /** Lease was immediately revoked. */
+  LeaseRevoked = 'LEASE_REVOKED',
+  /** Human selected ASK, BUILD, or PLAY. */
+  ModeSelected = 'MODE_SELECTED',
+  /** Human cancellation became durable. */
+  RunCancelled = 'RUN_CANCELLED',
+  /** Run reached a typed terminal failure. */
+  RunFailed = 'RUN_FAILED',
+  /** Active run entered a recoverable pause. */
+  RunPaused = 'RUN_PAUSED',
+  /** Safety preemption became durable. */
+  RunPreempted = 'RUN_PREEMPTED',
+  /** A leased worker started the serialized run. */
+  RunStarted = 'RUN_STARTED',
+  /** Run completed successfully. */
+  RunSucceeded = 'RUN_SUCCEEDED',
+  /** Session closed and retention cleanup began. */
+  SessionClosed = 'SESSION_CLOSED',
+  /** Session and pinned policy/registry context were created. */
+  SessionCreated = 'SESSION_CREATED',
+  /** Human paused the session and revoked capabilities. */
+  SessionPaused = 'SESSION_PAUSED',
+  /** Human explicitly resumed after context revalidation. */
+  SessionResumed = 'SESSION_RESUMED',
+  /** Human denied the exact proposal. */
+  ToolDenied = 'TOOL_DENIED',
+  /** Typed browser call was durably dispatched once. */
+  ToolDispatched = 'TOOL_DISPATCHED',
+  /** Typed executor reported a safe terminal failure. */
+  ToolFailed = 'TOOL_FAILED',
+  /** Effect may have occurred; no blind retry is allowed. */
+  ToolOutcomeUnknown = 'TOOL_OUTCOME_UNKNOWN',
+  /** Provider proposal passed exact name and input validation. */
+  ToolProposed = 'TOOL_PROPOSED',
+  /** Typed executor output passed validation. */
+  ToolSucceeded = 'TOOL_SUCCEEDED',
+  /** Recorded tool deadline elapsed. */
+  ToolTimedOut = 'TOOL_TIMED_OUT',
+  /** Redacted bounded human message accepted for one run. */
+  UserMessage = 'USER_MESSAGE'
+}
+
+/** Funding for Agentic Studio model usage. PLATFORM_FUNDED (the pilot default) means the platform absorbs provider cost; METERED means each model request is priced at the agent rate card and charged to the payer: the PLAYER's own wallet by default, or the app's ORG wallet when an org billing admin elected that. Set at the platform layer (billingMode, walletDebitEnabled) and the app layer (payerKind). */
+export type CrowdyStudioAgentFundingPolicy = {
+  __typename?: 'CrowdyStudioAgentFundingPolicy';
+  /** 'PLATFORM_FUNDED' or 'METERED'. */
+  billingMode: Scalars['String']['output'];
+  /** Who pays under METERED: 'PLAYER' (default) or 'ORG'. 'PLATFORM' while platform-funded. */
+  payerKind: Scalars['String']['output'];
+  /** Rate-card UUID pinned by policy; null means the ACTIVE per-model card at request time. */
+  rateCardId: Maybe<Scalars['String']['output']>;
+  /** Whether metered usage debits the payer wallet. False while platform-funded. */
+  walletDebitEnabled: Scalars['Boolean']['output'];
+};
+
+/** Funding patch. On the platform layer: billingMode ('PLATFORM_FUNDED' | 'METERED') and walletDebitEnabled. On an app layer: payerKind ('PLAYER' | 'ORG'); choosing ORG spends the org wallet and requires manage_billing on the org. Omitted fields stay unchanged. */
+export type CrowdyStudioAgentFundingPolicyInput = {
+  /** Platform layer only: 'PLATFORM_FUNDED' or 'METERED'. */
+  billingMode?: InputMaybe<Scalars['String']['input']>;
+  /** App layer: 'PLAYER' (default) or 'ORG'. */
+  payerKind?: InputMaybe<Scalars['String']['input']>;
+  /** Platform layer only: whether metered usage debits wallets. */
+  walletDebitEnabled?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** Lifecycle of a short-lived workspace or Play capability. */
+export enum CrowdyStudioAgentLeaseStatus {
+  /** Usable until its exact expiry/context changes. */
+  Active = 'ACTIVE',
+  /** Expired and cannot be renewed by the model. */
+  Expired = 'EXPIRED',
+  /** Explicitly or automatically revoked. */
+  Revoked = 'REVOKED'
+}
+
+/** Capability family represented by a lease. */
+export enum CrowdyStudioAgentLeaseType {
+  /** Visible human-granted browser control lease, capped at ten minutes. */
+  Play = 'PLAY',
+  /** Thirty-second server-acquired lease bound to project revision and target write scopes. */
+  Workspace = 'WORKSPACE'
+}
+
+/** Human-selected authority mode. The model cannot change modes or elevate itself. */
+export enum CrowdyStudioAgentMode {
+  /** Read bounded project, diagnostics, policy, and host context; no project or game writes. */
+  Ask = 'ASK',
+  /** Permit routine checkpointed project edits and draft tests under target write/run permissions and a workspace lease; live deployment is available only through an exact human approval. */
+  Build = 'BUILD',
+  /** Permit bounded browser-host observation and gameplay tools only through a visible, human-granted, scoped lease; human input and policy/context changes preempt control immediately. */
+  Play = 'PLAY'
+}
+
+/** Per-player UTC-day cumulative limits plus player/app concurrency ceilings. */
+export type CrowdyStudioAgentPlayerDayLimits = {
+  __typename?: 'CrowdyStudioAgentPlayerDayLimits';
+  /** Maximum draft compile submissions per player per UTC day. */
+  compiles: Scalars['Int']['output'];
+  /** Maximum concurrent agent runs across the app. */
+  concurrentRunsPerApp: Scalars['Int']['output'];
+  /** Maximum concurrent sessions for one player. */
+  concurrentSessions: Scalars['Int']['output'];
+  /** Maximum input tokens per player per UTC day. */
+  inputTokens: Scalars['BigInt']['output'];
+  /** Maximum output tokens per player per UTC day. */
+  outputTokens: Scalars['BigInt']['output'];
+  /** Maximum provider cost per player per UTC day, in micro-USD. */
+  providerCostMicrousd: Scalars['BigInt']['output'];
+  /** Maximum provider requests per player per UTC day. */
+  providerRequests: Scalars['Int']['output'];
+  /** Maximum reasoning tokens per player per UTC day. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Maximum tool calls per player per UTC day. */
+  toolCalls: Scalars['Int']['output'];
+  /** Maximum total provider tokens per player per UTC day. */
+  totalTokens: Scalars['BigInt']['output'];
+};
+
+/** Patch for per-player/day and app concurrency limits. Omitted values stay unchanged; supplied values are clamped down to platform ceilings. */
+export type CrowdyStudioAgentPlayerDayLimitsInput = {
+  /** Maximum draft compile submissions per player per UTC day. */
+  compiles?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum concurrent Agentic Studio runs across the app. */
+  concurrentRunsPerApp?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum concurrent Agentic Studio sessions for one player. */
+  concurrentSessions?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum input tokens per player per UTC day. */
+  inputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum output tokens per player per UTC day. */
+  outputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider cost per player per UTC day, in micro-USD. */
+  providerCostMicrousd?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider requests per player per UTC day. */
+  providerRequests?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum reasoning tokens per player per UTC day. */
+  reasoningTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum tool calls per player per UTC day. */
+  toolCalls?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum total provider tokens per player per UTC day. */
+  totalTokens?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** Management's Agentic Crowdy Studio policy publication. EFFECTIVE values are the fail-closed platform/app intersection; an app can never widen platform models, tools, modes, risks, budgets, retention, or privacy. Game API runtime enforcement still requires a fresh validated replica. */
+export type CrowdyStudioAgentPolicy = {
+  __typename?: 'CrowdyStudioAgentPolicy';
+  /** Exact model ids allowed by this layer/intersection. Empty denies all models. */
+  allowedModelIds: Array<Scalars['String']['output']>;
+  /** Human-selectable modes allowed by this layer/intersection. */
+  allowedModes: Array<CrowdyStudioAgentMode>;
+  /** Allowed tool risk classes. Required approval classes remain approval-gated even when listed. Empty follows the same rule as allowedToolNames: deny-all on PLATFORM, inherit-the-platform on APP. An EFFECTIVE policy can never be enabled with an empty list, because crowdy.studio-agent-policy/1 requires a non-empty risk intersection; that case reports AGENT_SCOPE_DENIED. */
+  allowedRiskClasses: Array<CrowdyStudioAgentRiskClass>;
+  /** Exact crowdy.agent-tools/1 logical tool names allowed by this layer/intersection. Empty means opposite things at the two layers: on PLATFORM it denies every tool, because the platform layer is the ceiling; on APP it expresses no narrowing, so EFFECTIVE inherits the platform list unchanged. An app therefore cannot reach a tool the platform has not published, and an operator who later adds one widens every app that names none. */
+  allowedToolNames: Array<Scalars['String']['output']>;
+  /** App id for APP/EFFECTIVE policy; null for platform policy. */
+  appId: Maybe<Scalars['BigInt']['output']>;
+  /** App revision used by an EFFECTIVE projection; zero means missing app policy. */
+  appRevision: Scalars['BigInt']['output'];
+  /** Allowed modes that cannot do what the mode is for, derived from this layer's own tool and risk allowlists. Read this on the EFFECTIVE projection: an empty list is the only thing that entitles a caller to report an unblocked chain, because "enabled with a null disableReasonCode" is true of a dock whose BUILD mode has no tool it may call. On PLATFORM and APP it describes that layer in isolation and is not a claim about the intersection. */
+  capabilityGaps: Array<CrowdyStudioAgentCapabilityGap>;
+  /** Policy row creation time or projection time. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Safe operator/app reason text; never includes provider bodies or secrets. */
+  disableReason: Maybe<Scalars['String']['output']>;
+  /** Stable disable/kill reason code (for example AGENT_OPERATOR_KILLED); null when enabled. */
+  disableReasonCode: Maybe<Scalars['String']['output']>;
+  /** Composite Management revision, formatted p<platform revision>:a<app revision>. Game API pins it only after a successful fresh replica pull. */
+  effectiveRevision: Scalars['String']['output'];
+  /** Whether this Management policy layer/publication is enabled. EFFECTIVE is true only when all required layers are enabled and no kill applies; it does not attest that Game API has synchronized. */
+  enabled: Scalars['Boolean']['output'];
+  /** Platform-funded pilot/future billing seam. */
+  funding: CrowdyStudioAgentFundingPolicy;
+  /** Layer kill state. EFFECTIVE is true when platform, operator-app, or app kill is active. */
+  killSwitch: Scalars['Boolean']['output'];
+  /** PLATFORM, APP, or EFFECTIVE projection. */
+  kind: CrowdyStudioAgentPolicyKind;
+  /** Operator-only per-app kill state. App policy mutations cannot clear or alter it. */
+  operatorKillSwitch: Scalars['Boolean']['output'];
+  /** Platform revision used by an EFFECTIVE projection. */
+  platformRevision: Scalars['BigInt']['output'];
+  /** Per-player UTC-day and concurrency hard limits. */
+  playerDayLimits: CrowdyStudioAgentPlayerDayLimits;
+  /** Locked provider privacy and private-source controls. */
+  privacy: CrowdyStudioAgentPrivacyPolicy;
+  /** Redacted-data retention limits. */
+  retention: CrowdyStudioAgentRetentionPolicy;
+  /** Revision of this stored layer; zero means no app row exists yet. */
+  revision: Scalars['BigInt']['output'];
+  /** Per-session hard limits. */
+  sessionLimits: CrowdyStudioAgentSessionLimits;
+  /** Per-turn hard limits. */
+  turnLimits: CrowdyStudioAgentTurnLimits;
+  /** Last policy change time or projection time. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Whether a policy object is the platform row, app row, or intersection. */
+export enum CrowdyStudioAgentPolicyKind {
+  /** App-owned policy after write-time platform clamping. */
+  App = 'APP',
+  /** Fail-closed intersection of platform, operator-kill, and app policy. */
+  Effective = 'EFFECTIVE',
+  /** Operator-owned platform policy and hard ceilings. */
+  Platform = 'PLATFORM'
+}
+
+/** Provider privacy posture. ZDR and collection denial are locked true; provider request/response bodies are never persisted. */
+export type CrowdyStudioAgentPrivacyPolicy = {
+  __typename?: 'CrowdyStudioAgentPrivacyPolicy';
+  /** Whether selected private project source may be sent after the separate human disclosure/consent gate. */
+  allowPrivateSource: Scalars['Boolean']['output'];
+  /** Whether routed-provider data collection must be denied. Always true in v1. */
+  denyDataCollection: Scalars['Boolean']['output'];
+  /** Whether provider HTTP request/response bodies can be persisted. Always false in v1. */
+  persistProviderBodies: Scalars['Boolean']['output'];
+  /** Whether first-use human disclosure/consent is required for private source. Always true in v1. */
+  requirePrivateSourceConsent: Scalars['Boolean']['output'];
+  /** Whether Zero Data Retention is required. Always true in v1. */
+  requireZdr: Scalars['Boolean']['output'];
+};
+
+/** App/platform privacy patch. It can disable private-source sharing; ZDR, collection denial, first-use consent, and provider-body non-persistence are locked. */
+export type CrowdyStudioAgentPrivacyPolicyInput = {
+  /** Allow selected private source only after the separate human disclosure/consent gate. */
+  allowPrivateSource?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** Retention ceilings for redacted Agentic Studio data. Provider wire bodies, headers, private reasoning, and individual token deltas always have zero retention and are absent. */
+export type CrowdyStudioAgentRetentionPolicy = {
+  __typename?: 'CrowdyStudioAgentRetentionPolicy';
+  /** Coalesced assistant chunk retention in hours (0-24). */
+  assistantChunkHours: Scalars['Int']['output'];
+  /** Detailed game observation/browser tool-result retention in hours (0-24). */
+  detailedContextHours: Scalars['Int']['output'];
+  /** Final messages, redacted events, and checkpoint retention after close in days (0-30). */
+  sessionDataDays: Scalars['Int']['output'];
+  /** Provider generation/token/cost and kill metadata retention in days (1-90). */
+  usageDays: Scalars['Int']['output'];
+};
+
+/** Retention patch. Values may only shorten the platform policy and the hard pilot maxima. */
+export type CrowdyStudioAgentRetentionPolicyInput = {
+  /** Coalesced assistant chunk retention in hours (0-24). */
+  assistantChunkHours?: InputMaybe<Scalars['Int']['input']>;
+  /** Detailed observation/browser result retention in hours (0-24). */
+  detailedContextHours?: InputMaybe<Scalars['Int']['input']>;
+  /** Final message/redacted event retention after close in days (0-30). */
+  sessionDataDays?: InputMaybe<Scalars['Int']['input']>;
+  /** Generation/token/cost/kill metadata retention in days (1-90). */
+  usageDays?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Tool risk classes from crowdy.agent-tools/1. App policy may only remove platform-allowed classes; locked approval requirements still apply. */
+export enum CrowdyStudioAgentRiskClass {
+  /** Destructive action; exact human approval required. */
+  Destructive = 'DESTRUCTIVE',
+  /** Money or commerce action; exact human approval required. */
+  Economic = 'ECONOMIC',
+  /** Irreversible action; exact human approval required. */
+  Irreversible = 'IRREVERSIBLE',
+  /** Owner/app-scoped reads with redaction. */
+  ReadOnly = 'READ_ONLY',
+  /** Reversible Build writes with revision checks and checkpoints. */
+  RoutineWrite = 'ROUTINE_WRITE',
+  /** Trust, consent, or capability change; exact human approval required. */
+  TrustConsent = 'TRUST_CONSENT',
+  /** Routine Play actions requiring a visible human-granted lease. */
+  WorldControl = 'WORLD_CONTROL'
+}
+
+/** Serialized durable state of one accepted human message and its provider/tool loop. */
+export enum CrowdyStudioAgentRunStatus {
+  /** Terminal human cancellation. */
+  Cancelled = 'CANCELLED',
+  /** Terminal typed failure; inspect errorCode. */
+  Failed = 'FAILED',
+  /** Recoverable human pause; resume revalidates context. */
+  Paused = 'PAUSED',
+  /** Terminal safety preemption caused by context/control loss. */
+  Preempted = 'PREEMPTED',
+  /** Durably accepted and awaiting a worker claim. */
+  Queued = 'QUEUED',
+  /** Owned by one leased orchestrator worker. */
+  Running = 'RUNNING',
+  /** Finished with a canonical assistant message. */
+  Succeeded = 'SUCCEEDED',
+  /** Waiting for a short-lived exact human decision. */
+  WaitingForApproval = 'WAITING_FOR_APPROVAL',
+  /** Waiting for one matching browser tool result. */
+  WaitingForTool = 'WAITING_FOR_TOOL'
+}
+
+/** Per-session cumulative provider/tool/compile limits and the serialized-run concurrency ceiling. */
+export type CrowdyStudioAgentSessionLimits = {
+  __typename?: 'CrowdyStudioAgentSessionLimits';
+  /** Maximum draft compile submissions in one session. */
+  compiles: Scalars['Int']['output'];
+  /** Maximum concurrent non-terminal runs in a session. The v1 contract requires one. */
+  concurrentRuns: Scalars['Int']['output'];
+  /** Maximum input tokens in one session. */
+  inputTokens: Scalars['BigInt']['output'];
+  /** Maximum output tokens in one session. */
+  outputTokens: Scalars['BigInt']['output'];
+  /** Maximum provider cost in one session, in micro-USD. */
+  providerCostMicrousd: Scalars['BigInt']['output'];
+  /** Maximum provider requests in one session. */
+  providerRequests: Scalars['Int']['output'];
+  /** Maximum reasoning tokens in one session. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Maximum tool calls in one session. */
+  toolCalls: Scalars['Int']['output'];
+  /** Maximum total provider tokens in one session. */
+  totalTokens: Scalars['BigInt']['output'];
+};
+
+/** Patch for per-session limits. Omitted values stay unchanged; supplied values are clamped down to platform ceilings. */
+export type CrowdyStudioAgentSessionLimitsInput = {
+  /** Maximum draft compile submissions in one session. */
+  compiles?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum concurrent non-terminal runs in one session. */
+  concurrentRuns?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum input tokens in one session; positive decimal string. */
+  inputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum output tokens in one session; positive decimal string. */
+  outputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider cost in one session, in positive micro-USD. */
+  providerCostMicrousd?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider requests in one session. */
+  providerRequests?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum reasoning tokens in one session; positive decimal string. */
+  reasoningTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum tool calls in one session. */
+  toolCalls?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum total provider tokens in one session. */
+  totalTokens?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** Durable lifecycle state of an owner/app agent session. */
+export enum CrowdyStudioAgentSessionStatus {
+  /** Accepts human control mutations and one run. */
+  Active = 'ACTIVE',
+  /** Permanently closed, all capabilities revoked, and retention cleanup scheduled. */
+  Closed = 'CLOSED',
+  /** Stopped by the human or reconnect flow; explicit context-revalidating resume is required. */
+  Paused = 'PAUSED',
+  /** Disabled by authoritative policy or platform control and cannot resume. */
+  Revoked = 'REVOKED'
+}
+
+/** Durable state of one descriptor-pinned serialized tool proposal. */
+export enum CrowdyStudioAgentToolCallStatus {
+  /** Cancelled before a known successful effect. */
+  Cancelled = 'CANCELLED',
+  /** Human denied the exact proposal. */
+  Denied = 'DENIED',
+  /** Durably sent to the matching attached browser epoch. */
+  Dispatched = 'DISPATCHED',
+  /** Typed executor failure. */
+  Failed = 'FAILED',
+  /** An effect may have occurred; it is never retried blindly and requires human inspection. */
+  OutcomeUnknown = 'OUTCOME_UNKNOWN',
+  /** Validated and recorded, not yet dispatched. */
+  Proposed = 'PROPOSED',
+  /** Executor began the typed operation. */
+  Running = 'RUNNING',
+  /** Fenced by an epoch or context change. */
+  Stale = 'STALE',
+  /** Typed output validated successfully. */
+  Succeeded = 'SUCCEEDED',
+  /** The recorded tool deadline elapsed. */
+  TimedOut = 'TIMED_OUT',
+  /** Blocked on the exact argument-hash approval. */
+  WaitingForApproval = 'WAITING_FOR_APPROVAL'
+}
+
+/** Trusted boundary that executes a typed tool. */
+export enum CrowdyStudioAgentToolExecutor {
+  /** The attached CrowdyJS host executes once after epoch/context/lease validation. */
+  Browser = 'BROWSER',
+  /** Game API invokes an owner-scoped domain service; never shell or arbitrary GraphQL. */
+  Server = 'SERVER'
+}
+
+/** Terminal result reported once by a browser executor. */
+export enum CrowdyStudioAgentToolResultStatus {
+  /** Known cancelled before successful effect. */
+  Cancelled = 'CANCELLED',
+  /** Effect is known failed with a typed safe error. */
+  Failed = 'FAILED',
+  /** Effect may have happened; server fails the run without retrying. */
+  OutcomeUnknown = 'OUTCOME_UNKNOWN',
+  /** Effect and typed output are known successful. */
+  Succeeded = 'SUCCEEDED',
+  /** Browser deadline elapsed. */
+  TimedOut = 'TIMED_OUT'
+}
+
+/** Server-classified effect risk; app policy may only tighten it. */
+export enum CrowdyStudioAgentToolRisk {
+  /** Possible data/path loss; exact human approval required. */
+  Destructive = 'DESTRUCTIVE',
+  /** Moves or commits value; exact human approval required. */
+  Economic = 'ECONOMIC',
+  /** Cannot be safely undone; exact human approval required. */
+  Irreversible = 'IRREVERSIBLE',
+  /** No canonical state mutation. */
+  ReadOnly = 'READ_ONLY',
+  /** Reversible expected-revision write with checkpointing. */
+  RoutineWrite = 'ROUTINE_WRITE',
+  /** Changes trust or consent; exact human approval required. */
+  TrustConsent = 'TRUST_CONSENT',
+  /** Routine game control requiring an explicit Play scope. */
+  WorldControl = 'WORLD_CONTROL'
+}
+
+/** Per-turn provider/tool/compile limits. Token and cost values are exact decimal BigInt strings; cost is in micro-US-dollars. */
+export type CrowdyStudioAgentTurnLimits = {
+  __typename?: 'CrowdyStudioAgentTurnLimits';
+  /** Maximum draft compile submissions in one turn. */
+  compiles: Scalars['Int']['output'];
+  /** Maximum concurrent provider requests in one turn. The v1 orchestrator still serializes calls. */
+  concurrentProviderRequests: Scalars['Int']['output'];
+  /** Maximum input tokens in one turn. */
+  inputTokens: Scalars['BigInt']['output'];
+  /** Maximum output tokens in one turn. */
+  outputTokens: Scalars['BigInt']['output'];
+  /** Maximum reserved/reconciled provider cost per turn, in micro-USD. */
+  providerCostMicrousd: Scalars['BigInt']['output'];
+  /** Maximum provider requests in one accepted turn. */
+  providerRequests: Scalars['Int']['output'];
+  /** Maximum reasoning tokens in one turn. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Maximum tool calls in one turn. */
+  toolCalls: Scalars['Int']['output'];
+  /** Maximum serialized provider/tool rounds in one turn. */
+  toolRounds: Scalars['Int']['output'];
+  /** Maximum total provider tokens in one turn. */
+  totalTokens: Scalars['BigInt']['output'];
+  /** Maximum turn wall-clock duration in milliseconds. */
+  wallClockMs: Scalars['Int']['output'];
+};
+
+/** Patch for per-turn limits. Omitted values stay unchanged; supplied values must be positive and are clamped down to platform ceilings. */
+export type CrowdyStudioAgentTurnLimitsInput = {
+  /** Maximum draft compile submissions in one turn. */
+  compiles?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum concurrent provider requests in one turn. */
+  concurrentProviderRequests?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum input tokens in one turn; positive decimal string. */
+  inputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum output tokens in one turn; positive decimal string. */
+  outputTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider cost in one turn, in positive micro-USD. */
+  providerCostMicrousd?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum provider requests in one turn; positive integer. */
+  providerRequests?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum reasoning tokens in one turn; positive decimal string. */
+  reasoningTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum tool calls in one turn; positive integer. */
+  toolCalls?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum serialized provider/tool rounds in one turn. */
+  toolRounds?: InputMaybe<Scalars['Int']['input']>;
+  /** Maximum total provider tokens in one turn; positive decimal string. */
+  totalTokens?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Maximum wall-clock duration of one turn in milliseconds. */
+  wallClockMs?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Sanitized app usage read model: newest exact records plus an aggregate for the requested window. */
+export type CrowdyStudioAgentUsagePage = {
+  __typename?: 'CrowdyStudioAgentUsagePage';
+  /** Newest usage records, bounded by the requested limit. */
+  records: Array<CrowdyStudioAgentUsageRecord>;
+  /** Inclusive start of the usage window. */
+  since: Scalars['DateTime']['output'];
+  /** Aggregate over the full requested time window, not only returned records. */
+  summary: CrowdyStudioAgentUsageSummary;
+  /** Exclusive end of the usage window. */
+  until: Scalars['DateTime']['output'];
+};
+
+/** One sanitized, platform-funded provider usage record. It contains exact OpenRouter token/cost dimensions but no key, prompt, headers, request/response body, private reasoning, or wallet debit. */
+export type CrowdyStudioAgentUsageRecord = {
+  __typename?: 'CrowdyStudioAgentUsageRecord';
+  /** RECONCILED or RESERVATION_CONSUMED when terminal usage was unavailable. */
+  accountingStatus: Scalars['String']['output'];
+  /** App whose agent run consumed usage. */
+  appId: Scalars['BigInt']['output'];
+  /** Pinned app policy revision. */
+  appPolicyRevision: Scalars['BigInt']['output'];
+  /** Funding mode; 'PLATFORM_FUNDED' in the pilot. */
+  billingMode: Scalars['String']['output'];
+  /** OpenRouter cached token count. */
+  cachedTokens: Scalars['BigInt']['output'];
+  /** Draft compile submissions in the run. */
+  compileCount: Scalars['BigInt']['output'];
+  /** OpenRouter completion token count. */
+  completionTokens: Scalars['BigInt']['output'];
+  /** True: provider data collection was denied. */
+  dataCollectionDenied: Scalars['Boolean']['output'];
+  /** When Management API accepted the usage record. */
+  ingestedAt: Scalars['DateTime']['output'];
+  /** Provider-native cached token count. */
+  nativeCachedTokens: Scalars['BigInt']['output'];
+  /** Provider-native completion token count. */
+  nativeCompletionTokens: Scalars['BigInt']['output'];
+  /** Provider-native prompt token count. */
+  nativePromptTokens: Scalars['BigInt']['output'];
+  /** Provider-native reasoning token count. */
+  nativeReasoningTokens: Scalars['BigInt']['output'];
+  /** When the provider usage occurred. */
+  occurredAt: Scalars['DateTime']['output'];
+  /** Payer kind; 'PLATFORM' in the pilot. */
+  payerKind: Scalars['String']['output'];
+  /** Pinned platform policy revision. */
+  platformPolicyRevision: Scalars['BigInt']['output'];
+  /** OpenRouter prompt token count. */
+  promptTokens: Scalars['BigInt']['output'];
+  /** Provider name; 'openrouter' for the v1 pilot. */
+  provider: Scalars['String']['output'];
+  /** Exact provider-reported OpenRouter cost in decimal USD (up to 18 fractional digits). */
+  providerCostUsd: Scalars['String']['output'];
+  /** Opaque OpenRouter generation id; null when terminal provider accounting was unavailable. */
+  providerGenerationId: Maybe<Scalars['String']['output']>;
+  /** OpenRouter reasoning token count. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Provider request count. */
+  requestCount: Scalars['BigInt']['output'];
+  /** Worst-case cost reserved before provider contact, in micro-USD. */
+  reservedCostMicrousd: Scalars['BigInt']['output'];
+  /** Resolved allowlisted model id. */
+  resolvedModelId: Scalars['String']['output'];
+  /** Game-local Agentic Studio run UUID. */
+  runId: Scalars['String']['output'];
+  /** Game-local Agentic Studio session UUID. */
+  sessionId: Scalars['String']['output'];
+  /** Validated tool calls in the run. */
+  toolCalls: Scalars['BigInt']['output'];
+  /** Serialized provider/tool rounds in the run. */
+  toolRounds: Scalars['BigInt']['output'];
+  /** Exact upstream inference cost in decimal USD when reported. */
+  upstreamInferenceCostUsd: Maybe<Scalars['String']['output']>;
+  /** Game API-issued immutable usage UUID. */
+  usageId: Scalars['String']['output'];
+  /** Player whose isolated budget consumed usage. */
+  userId: Scalars['BigInt']['output'];
+  /** Accepted run wall-clock duration in milliseconds, from durable run start to finish. */
+  wallClockMs: Scalars['BigInt']['output'];
+  /** True: OpenRouter ZDR was enforced. */
+  zdrEnforced: Scalars['Boolean']['output'];
+};
+
+/** Exact aggregate over the returned app/window usage records. Decimal USD remains a string to preserve precision. */
+export type CrowdyStudioAgentUsageSummary = {
+  __typename?: 'CrowdyStudioAgentUsageSummary';
+  /** Cached tokens. */
+  cachedTokens: Scalars['BigInt']['output'];
+  /** Draft compiles. */
+  compileCount: Scalars['BigInt']['output'];
+  /** Completion tokens. */
+  completionTokens: Scalars['BigInt']['output'];
+  /** Prompt tokens. */
+  promptTokens: Scalars['BigInt']['output'];
+  /** Exact summed provider cost in decimal USD. */
+  providerCostUsd: Scalars['String']['output'];
+  /** Reasoning tokens. */
+  reasoningTokens: Scalars['BigInt']['output'];
+  /** Provider requests. */
+  requestCount: Scalars['BigInt']['output'];
+  /** Tool calls. */
+  toolCalls: Scalars['BigInt']['output'];
+  /** Tool rounds. */
+  toolRounds: Scalars['BigInt']['output'];
+  /** Summed accepted-run wall-clock milliseconds. */
+  wallClockMs: Scalars['BigInt']['output'];
+};
+
+/** A Crowdy Studio-curated app-scoped common file at its current immutable published version. Unlike personal source, this content is intentionally readable by app-scoped players. */
+export type CrowdyStudioCommonFile = {
+  __typename?: 'CrowdyStudioCommonFile';
+  /** App tenant whose players may read this published entry. */
+  appId: Scalars['BigInt']['output'];
+  /** Stable common catalog entry UUID. */
+  commonFileId: Scalars['String']['output'];
+  /** Published UTF-8 source text for this immutable version. */
+  content: Scalars['String']['output'];
+  /** Lowercase SHA-256 digest of the exact UTF-8 content bytes. */
+  contentSha256: Scalars['String']['output'];
+  /** Catalog entry creation timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional Crowdy Studio-authored catalog description. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Safe recommended project destination path. */
+  path: Scalars['String']['output'];
+  /** Timestamp when the current immutable version was published. */
+  publishedAt: Scalars['DateTime']['output'];
+  /** Crowdy Studio user that published the current immutable version. */
+  publishedByUserId: Scalars['BigInt']['output'];
+  /** Stable lowercase URL-safe catalog slug. */
+  slug: Scalars['String']['output'];
+  /** Catalog lifecycle state; ordinary player queries expose only PUBLISHED. */
+  status: CrowdyStudioCommonStatus;
+  /** Normalized Crowdy Studio-curated discovery tags. */
+  tags: Array<Scalars['String']['output']>;
+  /** Compatible project target for this catalog entry. */
+  target: CrowdyStudioTarget;
+  /** Crowdy Studio-authored catalog title. */
+  title: Scalars['String']['output'];
+  /** Timestamp of the latest catalog publication. */
+  updatedAt: Scalars['DateTime']['output'];
+  /** Current immutable content-version UUID. */
+  versionId: Scalars['String']['output'];
+  /** Monotonic immutable version number within the catalog entry. */
+  versionNo: Scalars['BigInt']['output'];
+};
+
+/** Crowdy Studio catalog visibility. Player catalog queries return only published entries. */
+export enum CrowdyStudioCommonStatus {
+  /** Retained for provenance but hidden from new player catalog reads and imports. */
+  Archived = 'ARCHIVED',
+  /** Crowdy Studio work in progress; hidden from player common-file queries. */
+  Draft = 'DRAFT',
+  /** Available to app-scoped players for reading and copy-by-value import. */
+  Published = 'PUBLISHED'
+}
+
+/** How a project file entered the project. Imported content is copied by value; provenance is informational and does not create a live link. */
+export enum CrowdyStudioFileProvenance {
+  /** The owner authored or directly saved this project file. */
+  Authored = 'AUTHORED',
+  /** The file was copied from a specific immutable version of the app’s Crowdy Studio-curated common catalog. */
+  Common = 'COMMON',
+  /** The file was copied from a specific revision of the owner’s private personal library. */
+  Library = 'LIBRARY'
+}
+
+export type CrowdyStudioGitHubAtCommitInput = {
+  appId: Scalars['BigInt']['input'];
+  /** Full 40-hex commit to read at. Omitted reads the project githubSha (the mirror commit), never the branch head. */
+  commitSha?: InputMaybe<Scalars['String']['input']>;
+  projectId: Scalars['String']['input'];
+};
+
+/** What the first commit of a bind does. The repository and the Studio project cannot both be the truth on day one, so the owner says which one is. */
+export enum CrowdyStudioGitHubBindInitial {
+  /** The Studio project files are committed to the branch (with a crowdy.json when the repository has none). Refused with GITHUB_REPO_HAS_FILES when the repository already carries rust under the layout roots. */
+  PushProject = 'PUSH_PROJECT',
+  /** The repository is adopted as it is; the Studio project files are replaced by the rust under the layout roots at branch HEAD. Refused with GITHUB_REPO_EMPTY when there is nothing to take. */
+  TakeRepository = 'TAKE_REPOSITORY'
+}
+
+export type CrowdyStudioGitHubConnectStart = {
+  __typename?: 'CrowdyStudioGitHubConnectStart';
+  /** Install URL for this tier's App, carrying a signed state. */
+  connectUrl: Scalars['String']['output'];
+};
+
+export type CrowdyStudioGitHubDeleteFileInput = {
+  appId: Scalars['BigInt']['input'];
+  /** The project githubSha the writer read; stale is refused with GITHUB_STALE_SHA. */
+  expectedCommitSha: Scalars['String']['input'];
+  message: Scalars['String']['input'];
+  path: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+  /** Blob SHA of the file being deleted. Optional; resolved from the tree at expectedCommitSha. */
+  sha?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type CrowdyStudioGitHubFile = {
+  __typename?: 'CrowdyStudioGitHubFile';
+  /** Commit the file was read at, or the commit a write created. After a write this is the new project githubSha. */
+  commitSha: Maybe<Scalars['String']['output']>;
+  /** UTF-8 content. */
+  content: Scalars['String']['output'];
+  path: Scalars['String']['output'];
+  /** Blob SHA; send it back on update. */
+  sha: Scalars['String']['output'];
+};
+
+export type CrowdyStudioGitHubFileInput = {
+  appId: Scalars['BigInt']['input'];
+  /** Full 40-hex commit to read at. Omitted reads the project githubSha (the mirror commit), never the branch head. */
+  commitSha?: InputMaybe<Scalars['String']['input']>;
+  path: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+};
+
+/** Where the SERVER and CLIENT crates live in the bound repository, resolved from crowdy.json (or inferred) at one commit. The only layout grammar: clients must not parse crowdy.json themselves. */
+export type CrowdyStudioGitHubLayout = {
+  __typename?: 'CrowdyStudioGitHubLayout';
+  /** Prefix visitors may fetch assets from (no trailing slash). */
+  assets: Scalars['String']['output'];
+  /** Directory of the CLIENT Cargo.toml, or null when server-only. */
+  client: Maybe<Scalars['String']['output']>;
+  /** Commit the layout was resolved at. */
+  commitSha: Scalars['String']['output'];
+  /** A crowdy.json exists at the repository root. False means the layout was inferred from the tree. */
+  fromFile: Scalars['Boolean']['output'];
+  /** Directory of the SERVER Cargo.toml; `.` is the repository root. */
+  server: Scalars['String']['output'];
+};
+
+export type CrowdyStudioGitHubProjectInput = {
+  appId: Scalars['BigInt']['input'];
+  projectId: Scalars['String']['input'];
+};
+
+export type CrowdyStudioGitHubPutFileInput = {
+  appId: Scalars['BigInt']['input'];
+  content: Scalars['String']['input'];
+  /** The project githubSha the writer read. The write is refused with GITHUB_STALE_SHA when the project has moved on, so two editors cannot silently interleave. */
+  expectedCommitSha: Scalars['String']['input'];
+  message: Scalars['String']['input'];
+  path: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+  /** Blob SHA of the file being replaced. Optional: the server resolves it from the tree at expectedCommitSha, which is the lock that matters. When sent it must agree with that tree. */
+  sha?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type CrowdyStudioGitHubRepo = {
+  __typename?: 'CrowdyStudioGitHubRepo';
+  defaultBranch: Maybe<Scalars['String']['output']>;
+  fullName: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  owner: Scalars['String']['output'];
+  private: Scalars['Boolean']['output'];
+};
+
+/** GitHub connection for the caller and, when a project is named, the repository bound to it. GitHub is a Studio filesystem capability, not a login provider. */
+export type CrowdyStudioGitHubStatus = {
+  __typename?: 'CrowdyStudioGitHubStatus';
+  /** GitHub login the App is installed on. */
+  accountLogin: Maybe<Scalars['String']['output']>;
+  /** `User` or `Organization`. */
+  accountType: Maybe<Scalars['String']['output']>;
+  branch: Maybe<Scalars['String']['output']>;
+  /** This tier has a GitHub App registered. */
+  configured: Scalars['Boolean']['output'];
+  /** The caller has installed the App on a GitHub account. */
+  connected: Scalars['Boolean']['output'];
+  /** Commit the project mirror is at. Every bound write presents it as expectedCommitSha; a stale value is refused with GITHUB_STALE_SHA. Null when the project is not bound. */
+  githubSha: Maybe<Scalars['String']['output']>;
+  /** Where to send the modder to install or manage the App. */
+  installUrl: Maybe<Scalars['String']['output']>;
+  /** Bound repository owner, when a project was named. */
+  owner: Maybe<Scalars['String']['output']>;
+  repo: Maybe<Scalars['String']['output']>;
+  /** Which repositories the installation covers: "all", or "selected" (a repository created on GitHub afterwards must be added to the installation at installUrl before it can be bound). Null when not connected. */
+  repositorySelection: Maybe<Scalars['String']['output']>;
+};
+
+/** Recursive listing of the bound repository at one commit. The commit is the one the paths were read at, so a follow-up file read can pin it. */
+export type CrowdyStudioGitHubTree = {
+  __typename?: 'CrowdyStudioGitHubTree';
+  /** Commit the tree was read at. */
+  commitSha: Scalars['String']['output'];
+  entries: Array<CrowdyStudioGitHubTreeEntry>;
+};
+
+export type CrowdyStudioGitHubTreeEntry = {
+  __typename?: 'CrowdyStudioGitHubTreeEntry';
+  /** Repo-relative path. */
+  path: Scalars['String']['output'];
+  sha: Maybe<Scalars['String']['output']>;
+  size: Maybe<Scalars['Int']['output']>;
+  /** `blob` or `tree`. */
+  type: Scalars['String']['output'];
+};
+
+/** The source catalog used for a copy-by-value project file import. */
+export enum CrowdyStudioImportSource {
+  /** Import from an immutable published common-file version in the requested app. */
+  Common = 'COMMON',
+  /** Import from a private personal-library file owned by the authenticated caller. */
+  Library = 'LIBRARY'
+}
+
+/** A reusable private text file in the authenticated player’s app-scoped personal library. */
+export type CrowdyStudioLibraryFile = {
+  __typename?: 'CrowdyStudioLibraryFile';
+  /** App tenant that isolates this private library entry. */
+  appId: Scalars['BigInt']['output'];
+  /** Whether this entry is archived and unavailable for new imports. */
+  archived: Scalars['Boolean']['output'];
+  /** Archive timestamp, or null while active. */
+  archivedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Private UTF-8 source text, visible only to the app-scoped owner. */
+  content: Scalars['String']['output'];
+  /** Library entry creation timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Stable personal-library file UUID. */
+  libraryFileId: Scalars['String']['output'];
+  /** User that exclusively owns this library entry. */
+  ownerUserId: Scalars['BigInt']['output'];
+  /** Safe suggested destination path; imports may choose another safe path. */
+  pathHint: Scalars['String']['output'];
+  /** Monotonic optimistic-concurrency revision. */
+  revision: Scalars['BigInt']['output'];
+  /** Normalized search tags, each lowercase and hyphen-safe. */
+  tags: Array<Scalars['String']['output']>;
+  /** Compatible project target for this reusable file. */
+  target: CrowdyStudioTarget;
+  /** Player-facing library title. */
+  title: Scalars['String']['output'];
+  /** Timestamp of the latest successful library mutation. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** The player's model spend in this app today plus their most recent requests. */
+export type CrowdyStudioModelUsage = {
+  __typename?: 'CrowdyStudioModelUsage';
+  appId: Scalars['BigInt']['output'];
+  /** Today's spend ceiling in micro-USD from the effective policy. */
+  dayLimitMicrousd: Scalars['BigInt']['output'];
+  payerKind: Scalars['String']['output'];
+  recent: Array<CrowdyStudioModelUsageEntry>;
+  todayChargeMicrousd: Scalars['BigInt']['output'];
+  todayRequests: Scalars['BigInt']['output'];
+};
+
+/** One request through the metered model endpoint, counts and charge only. */
+export type CrowdyStudioModelUsageEntry = {
+  __typename?: 'CrowdyStudioModelUsageEntry';
+  /** Rate-carded charge in micro-USD (1,000,000 = $1). */
+  chargeMicrousd: Scalars['BigInt']['output'];
+  client: Scalars['String']['output'];
+  completionTokens: Scalars['BigInt']['output'];
+  occurredAt: Scalars['DateTime']['output'];
+  payerKind: Scalars['String']['output'];
+  promptTokens: Scalars['BigInt']['output'];
+  reasoningTokens: Scalars['BigInt']['output'];
+  requestedModel: Scalars['String']['output'];
+  resolvedModel: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  usageId: Scalars['String']['output'];
+};
+
+/** Editor preference describing how the project presents its server and client targets; it never grants deployment or runtime authority. */
+export enum CrowdyStudioPairingPreference {
+  /** Present only the client-target authoring workflow. */
+  ClientOnly = 'CLIENT_ONLY',
+  /** Present server and client sources independently without an implied requirement edge. */
+  Independent = 'INDEPENDENT',
+  /** Present server and client sources as two coordinated halves of one Crowdy Studio project. */
+  Paired = 'PAIRED',
+  /** Present only the server-target authoring workflow. */
+  ServerOnly = 'SERVER_ONLY'
+}
+
+/** A private, revisioned Crowdy Studio project owned by one user in one app. Optional grid affinity and module names are authoring hints only; deployment still rechecks current grid ownership and target-specific permissions. */
+export type CrowdyStudioProject = {
+  __typename?: 'CrowdyStudioProject';
+  /** Pinned guest ABI version used when constructing deploy input. */
+  abiVersion: Scalars['Int']['output'];
+  /** App tenant that isolates this project and all of its source. */
+  appId: Scalars['BigInt']['output'];
+  /** Whether the project is archived. Archived projects remain private and retained but are read-only until unarchived. */
+  archived: Scalars['Boolean']['output'];
+  /** Archive timestamp, or null while the project is active. */
+  archivedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Stable crate-style CLIENT module name used when the owner chooses to deploy, or null when unassigned. */
+  clientModuleName: Maybe<Scalars['String']['output']>;
+  /** Project creation timestamp. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional private project description. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Total file count across both targets; each target is independently capped at eight. */
+  fileCount: Scalars['Int']['output'];
+  /** Private project files ordered by target and path. Bounded to eight files per target. For a GITHUB project this is the mirror of the repository at githubSha, read the same way. */
+  files: Array<CrowdyStudioProjectFile>;
+  /** Bound branch. */
+  githubBranch: Maybe<Scalars['String']['output']>;
+  /** Bound repository owner, or null for a STUDIO project. */
+  githubOwner: Maybe<Scalars['String']['output']>;
+  /** Bound repository name. */
+  githubRepo: Maybe<Scalars['String']['output']>;
+  /** Commit the mirror is at. Present it as expectedCommitSha on every bound write; a stale value is refused with GITHUB_STALE_SHA. */
+  githubSha: Maybe<Scalars['String']['output']>;
+  /** Optional grid affinity. It survives a grid transfer and does not itself grant deploy authority. */
+  gridId: Maybe<Scalars['BigInt']['output']>;
+  /** Player-facing project name. */
+  name: Scalars['String']['output'];
+  /** User that exclusively owns and may read or modify this project source. */
+  ownerUserId: Scalars['BigInt']['output'];
+  /** Editor presentation preference for the two source targets. */
+  pairingPreference: CrowdyStudioPairingPreference;
+  /** Stable project UUID. */
+  projectId: Scalars['String']['output'];
+  /** Monotonic project revision required by optimistic metadata, file, import, and archive mutations. */
+  revision: Scalars['BigInt']['output'];
+  /** Pinned crowdy-compute-sdk version used when constructing deploy input. */
+  sdkVersion: Scalars['String']['output'];
+  /** Stable crate-style SERVER module name used when the owner chooses to deploy, or null when unassigned. */
+  serverModuleName: Maybe<Scalars['String']['output']>;
+  /** STUDIO until the owner binds a repository; GITHUB while one is bound. Decides which mutations may write files. */
+  source: CrowdyStudioProjectSource;
+  /** Total UTF-8 source bytes across both targets, bounded by target and aggregate owner quotas. */
+  totalBytes: Scalars['BigInt']['output'];
+  /** Timestamp of the latest successful project mutation. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** One private text file in a player-owned project. It is returned only when both app id and authenticated owner match the project. */
+export type CrowdyStudioProjectFile = {
+  __typename?: 'CrowdyStudioProjectFile';
+  /** Private UTF-8 source text. Grid ownership and Crowdy Studio permissions never override project ownership. */
+  content: Scalars['String']['output'];
+  /** Timestamp when this target/path entry was first created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Safe compute-source relative path: Cargo.toml or a Rust file below src/. */
+  path: Scalars['String']['output'];
+  /** Copy provenance. Imported bytes remain unchanged if the source catalog entry later changes. */
+  provenance: CrowdyStudioFileProvenance;
+  /** Immutable common-file version UUID copied into this file, or null when common provenance does not apply. */
+  provenanceCommonVersionId: Maybe<Scalars['String']['output']>;
+  /** Private library file UUID used for the copy, or null for authored/common content. */
+  provenanceLibraryFileId: Maybe<Scalars['String']['output']>;
+  /** Library revision copied into this file, or null when library provenance does not apply. */
+  provenanceLibraryRevision: Maybe<Scalars['BigInt']['output']>;
+  /** Monotonic revision of this target/path entry, incremented on every successful upsert. */
+  revision: Scalars['BigInt']['output'];
+  /** Server or client target whose independent 8-file/256-KiB deploy cap includes this file. */
+  target: CrowdyStudioTarget;
+  /** Timestamp of the latest successful content/provenance save. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** A target/path key removed atomically by crowdyStudioProjectSaveFiles. */
+export type CrowdyStudioProjectFileDeleteInput = {
+  /** Safe relative path of the file to remove. */
+  path: Scalars['String']['input'];
+  /** Project target containing the file to remove. */
+  target: CrowdyStudioTarget;
+};
+
+/** One direct-authored initial or batch-upsert project file. Paths and UTF-8 bytes are validated against player-compute safety limits. */
+export type CrowdyStudioProjectFileInput = {
+  /** UTF-8 source text, capped at 64 KiB. */
+  content: Scalars['String']['input'];
+  /** Safe relative path: Cargo.toml or a .rs file below src/, with no traversal segments. */
+  path: Scalars['String']['input'];
+  /** Project target receiving this file. */
+  target: CrowdyStudioTarget;
+};
+
+/** Where a project’s files are authored. Every project starts as STUDIO; its owner may bind a GitHub repository later (crowdyStudioGitHubBind) and unbind it again. GitHub is never required. */
+export enum CrowdyStudioProjectSource {
+  /** The bound repository is the working tree. `files` is a server-maintained mirror of the rust under the layout roots at githubSha; writes go through crowdyStudioGitHubPutFile / DeleteFile with expectedCommitSha, and the Studio file mutations refuse with GITHUB_BOUND_USE_CONTENTS. */
+  Github = 'GITHUB',
+  /** Files live in Crowdy Studio and are written with the crowdyStudioProject* file mutations under the project revision. */
+  Studio = 'STUDIO'
+}
+
+/** Whether this player has accepted that their Crowdy Studio project source may be sent to a model provider (under the platform ZDR / no-collection routing) for this app. */
+export type CrowdyStudioProviderConsent = {
+  __typename?: 'CrowdyStudioProviderConsent';
+  appId: Scalars['BigInt']['output'];
+  /** True once recorded and not revoked. */
+  consented: Scalars['Boolean']['output'];
+  consentedAt: Maybe<Scalars['DateTime']['output']>;
+};
+
+/** The independently capped source target inside a player-owned Crowdy Studio project. */
+export enum CrowdyStudioTarget {
+  /** Browser-worker Rust that can run only after the caller separately passes current grid ownership and write_client_code deployment checks. */
+  Client = 'CLIENT',
+  /** Server-target Rust that can run only after the caller separately passes current grid ownership and write_server_code deployment checks. */
+  Server = 'SERVER'
+}
+
+/** The Buddy a native client is CURRENTLY connected to, named by the `ip4` and `clientPort` that `serverWithLeastClients` handed it. Pass it to `refreshAppToken` so the refreshed token is authorized on that same node and the client keeps its session there instead of being re-placed. */
+export type CurrentServerInput = {
+  /** The `clientPort` of the ServerStatus the client is connected to. */
+  clientPort: Scalars['Int']['input'];
+  /** The `ip4` of the ServerStatus the client is connected to (as returned by serverWithLeastClients). */
+  ip4: Scalars['String']['input'];
+};
+
+/** Whether a datacenter currently has a ck-api instance able to serve clients. Three-valued on purpose: "nothing is serving there" and "the liveness signal could not be read" look identical through a boolean and call for opposite reactions. */
+export enum DatacenterServingStatus {
+  /** The signal was readable and reported no instance able to take a client there. An app placed here would be created and stored correctly, and its players would be told the app is temporarily offline until an instance returns. */
+  NotServing = 'NOT_SERVING',
+  /** At least one instance in that datacenter has heartbeated within the freshness window and is not draining. */
+  Serving = 'SERVING',
+  /** The liveness signal itself could not be read or trusted. Must NOT be presented as an outage: a fleet-wide heartbeat failure once made every datacenter look dead while all of them were fine, and healthy players were told their app was offline. */
+  Unknown = 'UNKNOWN'
+}
+
+/** Define an app feature key. */
+export type DefineAppFeatureInput = {
+  /** The app (tenant) defining the feature. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional description of the feature. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** The feature key, as ck-exec code reads it among a player's features. */
+  featureKey: Scalars['String']['input'];
+};
+
+/** Identifies a studio-created grid to delete. The default open-by-default world grid and grids that still contain nested child grids cannot be removed. */
+export type DeleteGridInput = {
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** The grid to delete. */
+  gridId: Scalars['BigInt']['input'];
+};
+
+/** Result of deleteGrid. This is a hybrid result rather than a thrown error: inspect `error` first. When `error` is NO_ERROR the call succeeded and `gridId` is populated; otherwise `gridId` is null and `error` explains why. */
+export type DeleteGridResponse = {
+  __typename?: 'DeleteGridResponse';
+  /** A UDP-style error code (the same ErrorType enum the realtime/UDP servers use). NO_ERROR (0) means success; non-zero values describe the failure, e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN, or UNKNOWN_ERROR. */
+  error: UdpErrorCode;
+  /** The deleted grid id on success; null when `error` is non-zero. */
+  gridId: Maybe<Scalars['BigInt']['output']>;
+};
+
+/** Everything this API knows about whether an address can be emailed, and why. */
+export type EmailDeliverability = {
+  __typename?: 'EmailDeliverability';
+  email: Scalars['String']['output'];
+  /** Most recent events first. */
+  events: Array<EmailEventRecord>;
+  /** Whether a send to this address would be attempted right now. False for a permanent bounce, a complaint, or a transient bounce inside its 24-hour cool-off. */
+  sendable: Scalars['Boolean']['output'];
+  /** Null means SES has never reported anything about this address, which is treated as sendable. */
+  status: Maybe<EmailStatusRecord>;
+  /** Whether this address is refused before SES is consulted at all, because its domain is in EMAIL_SUPPRESS_DOMAINS. */
+  suppressedDomain: Scalars['Boolean']['output'];
+};
+
+/** How this API instance is configured to send mail. Read it before concluding that a missing email is a bug: an instance with sendingEnabled=false composes every message and hands none of them to SES. */
+export type EmailDeliveryConfig = {
+  __typename?: 'EmailDeliveryConfig';
+  /** SES_CONFIGURATION_SET. Null or empty means sends carry no configuration set, so SES publishes NO delivery or bounce events for them and this tier learns nothing about its own mail. */
+  configurationSet: Maybe<Scalars['String']['output']>;
+  /** The From address (EMAIL_FROM). */
+  fromAddress: Scalars['String']['output'];
+  /** AWS_REGION used for SES. */
+  region: Scalars['String']['output'];
+  /** SEND_EMAILS. False means nothing reaches SES from this instance. */
+  sendingEnabled: Scalars['Boolean']['output'];
+  /** Domain suffixes refused before SES is consulted (EMAIL_SUPPRESS_DOMAINS). */
+  suppressedDomains: Array<Scalars['String']['output']>;
+};
+
+/** One recorded SES event for an address: the `send` this API wrote when it handed the message to SES, or a `delivery` / `bounce` / `complaint` / `delivery_delay` that arrived back on the SNS webhook. */
+export type EmailEventRecord = {
+  __typename?: 'EmailEventRecord';
+  /** When the row was written (ISO 8601). */
+  createdAt: Scalars['String']['output'];
+  /** Recipient address the event concerns. */
+  email: Scalars['String']['output'];
+  /** Event detail where SES supplies one: `Permanent/General` for a bounce, the complaint feedback type for a complaint. */
+  eventSubtype: Maybe<Scalars['String']['output']>;
+  /** send | delivery | bounce | complaint | delivery_delay. Lower-case, as stored. */
+  eventType: Scalars['String']['output'];
+  /** SES message id. Present on the `send` row this API writes and on the feedback events SES publishes for it, which is what lets one send be matched to its own delivery rather than a previous run's. */
+  messageId: Maybe<Scalars['String']['output']>;
+};
+
+/** An address's stored deliverability record. Absent (null) until SES reports something about the address. */
+export type EmailStatusRecord = {
+  __typename?: 'EmailStatusRecord';
+  bounceSubType: Maybe<Scalars['String']['output']>;
+  /** Permanent | Transient | Undetermined, from SES. */
+  bounceType: Maybe<Scalars['String']['output']>;
+  complaintType: Maybe<Scalars['String']['output']>;
+  deliveryAttempts: Maybe<Scalars['Int']['output']>;
+  email: Scalars['String']['output'];
+  /** True once SES has reported a permanent bounce or a complaint. This is what stops the address being sent to again. */
+  isPermanentFailure: Maybe<Scalars['Boolean']['output']>;
+  lastEventAt: Maybe<Scalars['String']['output']>;
+  lastEventType: Maybe<Scalars['String']['output']>;
+  messageId: Maybe<Scalars['String']['output']>;
+  /** valid | bounced | complained. */
+  status: Scalars['String']['output'];
+};
+
+/** Input for exchangePortalCode: the destination game (public client) trades a one-time portal code for an app-scoped gameplay token. Public (the code + PKCE verifier authorize the call). */
+export type ExchangePortalCodeInput = {
+  /** The one-time authorization code received on the redirect. */
+  code: Scalars['String']['input'];
+  /** PKCE code verifier matching the challenge supplied when the code was created. Required when the code was created with a challenge. */
+  codeVerifier?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Whether an app’s ck-exec code may run: its active version and its switches. */
+export type ExecAppStatus = {
+  __typename?: 'ExecAppStatus';
+  /** The active version; null before the first deploy. */
+  activeVersion: Maybe<Scalars['Int']['output']>;
+  /** Paused while the app is over its compute budget; it resumes by itself once a minute is back under it. */
+  budgetPaused: Scalars['Boolean']['output'];
+  /** The whole app is switched off (`execSetEnabled` without a node type). */
+  disabled: Scalars['Boolean']['output'];
+  /** Node types switched off one by one. */
+  disabledTypes: Array<Scalars['String']['output']>;
+};
+
+/** One compiled module for a ck-exec deploy. */
+export type ExecArtifactInput = {
+  /** SHA-256 of the WASM, 64 hex characters; the manager checks it. */
+  digest: Scalars['String']['input'];
+  /** The WASM module (wasm32-unknown-unknown, built with ckx-sdk), base64. */
+  wasmBase64: Scalars['String']['input'];
+};
+
+/** A ck-exec build: queued, building, succeeded or failed, with the compiler’s log and, once it succeeds, one module per crate. */
+export type ExecBuild = {
+  __typename?: 'ExecBuild';
+  /** The modules built so far, one per crate. */
+  artifacts: Array<ExecBuildArtifact>;
+  /** The build’s id: for `execBuildStatus` and `execDeploy`, or for a player’s builds `execModBuildStatus` with `execModDeploy` (server) or `execModClientDeploy` (CLIENT half). */
+  buildId: Scalars['String']['output'];
+  /** When the build was requested. */
+  createdAt: Scalars['DateTime']['output'];
+  /** When it finished. */
+  finishedAt: Maybe<Scalars['DateTime']['output']>;
+  /** What it builds: `exec` for ck-exec modules, `client` for the CLIENT half of a mod (`execModClientBuild`). */
+  kind: Scalars['String']['output'];
+  /** The compiler’s output once the build finishes, at most 64 KB (the end is kept). */
+  log: Maybe<Scalars['String']['output']>;
+  /** When it started compiling. */
+  startedAt: Maybe<Scalars['DateTime']['output']>;
+  /** `queued`, `building`, `succeeded` or `failed`. */
+  status: Scalars['String']['output'];
+};
+
+/** One module a ck-exec build produced. */
+export type ExecBuildArtifact = {
+  __typename?: 'ExecBuildArtifact';
+  /** SHA-256 of the canonical capability summary, hex: what visitors consent to. Null for a ck-exec module. */
+  capabilityHash: Maybe<Scalars['String']['output']>;
+  /** A CLIENT half’s capability summary as JSON, derived from the module: its imports, the client host calls it can reach, their groups, its presentation hooks and exports. Null for a ck-exec module. */
+  capabilitySummaryJson: Maybe<Scalars['String']['output']>;
+  /** The crate it was built from. */
+  crate: Scalars['String']['output'];
+  /** SHA-256 of the WASM, hex: the `digest` a manifest names a ck-exec module by, and a CLIENT half’s digest once attached (`execModClientDeploy`). */
+  digest: Scalars['String']['output'];
+  /** The module’s size in bytes. */
+  sizeBytes: Scalars['Int']['output'];
+  /** How often, in milliseconds, browsers tick a CLIENT half: `[package.metadata.crowdy] tick_interval_ms`, 16-1000, 1000 by default. Null for a ck-exec module. */
+  tickIntervalMs: Maybe<Scalars['Int']['output']>;
+};
+
+/** One crate of a ck-exec build: a `ckx-sdk` library with `[lib] crate-type = ["cdylib"]`, built into one module. */
+export type ExecBuildCrateInput = {
+  /** Its files, at most 64. `Cargo.toml` may have only [package], [lib] and [dependencies] from `ckx-sdk`, `serde` and `serde_json`; a CLIENT half (`execModClientBuild`) depends on `crowdy-client-sdk` instead of `ckx-sdk` and may add [package.metadata.crowdy] with `tick_interval_ms`. */
+  files: Array<ExecBuildFileInput>;
+  /** The crate’s name: lowercase letters, digits, `-` or `_`, at most 64 characters. The build reports each module under it. */
+  name: Scalars['String']['input'];
+};
+
+/** One source file of a ck-exec crate. */
+export type ExecBuildFileInput = {
+  /** The file’s contents, UTF-8. */
+  content: Scalars['String']['input'];
+  /** The path within the crate: `Cargo.toml`, `README.md`, or a `.rs` file under `src/`. */
+  path: Scalars['String']['input'];
+};
+
+/** Sources to build into ck-exec modules. */
+export type ExecBuildInput = {
+  /** The app to build for. */
+  appId: Scalars['BigInt']['input'];
+  /** The crates, at most 16, 2 MB of source in all; each becomes one module. */
+  crates: Array<ExecBuildCrateInput>;
+};
+
+/** Where and how a game client connects to ck-exec, the hub-and-spoke execution service. Open a WebSocket to `{gatewayUrl}/v1/connect?token={token}` before `expiresAt`. */
+export type ExecConnection = {
+  __typename?: 'ExecConnection';
+  /** When the token stops being accepted; the open socket is not closed then. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** The execution host’s gateway, e.g. wss://ckx-or-1.exec.dev.crowdedkingdoms.com. */
+  gatewayUrl: Scalars['String']['output'];
+  /** The execution host id the token is bound to. */
+  host: Scalars['String']['output'];
+  /** Short-lived Ed25519 connect token for this player, this app and this host only. */
+  token: Scalars['String']['output'];
+};
+
+/** A new version of an app’s ck-exec topology. */
+export type ExecDeployInput = {
+  /** The app to deploy. */
+  appId: Scalars['BigInt']['input'];
+  /** Modules the manifest names that this app has not uploaded before (at most 64). A request body is limited to 10 MB, so about 7 MB of modules per call. */
+  artifacts?: InputMaybe<Array<ExecArtifactInput>>;
+  /** A succeeded `execBuild` of this app whose modules to include, so a manifest can name them by digest without uploading them. */
+  buildId?: InputMaybe<Scalars['String']['input']>;
+  /** The manifest as JSON: `{ "root": "<hub type>", "types": { "<name>": { "kind": "hub"|"spoke", "parent", "digest", "client", "calls", "scopes", ... } } }`; with `buildId`, a type may give `"crate": "<name>"` instead of `digest`. Every field and its platform bounds: https://docs.dev.crowdedkingdoms.com/exec/intro#the-manifest. */
+  manifestJson: Scalars['String']['input'];
+};
+
+/** The result of a ck-exec deploy. */
+export type ExecDeployResult = {
+  __typename?: 'ExecDeployResult';
+  /** The version now active for the app. */
+  version: Scalars['Int']['output'];
+};
+
+/** Calls to one endpoint (a node type's method) of an app's ck-exec code over a window, by outcome. A client's or an instance's call is counted once, by the host it entered on, with the status its caller got; a platform event (`$timer`, `$topic`, `$presence`, `$session`, `$world`) is counted by the host that ran it. Counts are whole numbers. */
+export type ExecEndpointStat = {
+  __typename?: 'ExecEndpointStat';
+  /** Calls the handler answered with an error (`AppError`). */
+  appErrors: Scalars['Float']['output'];
+  /** Calls refused as busy: a full mailbox, the root hub’s call rate, or the caller’s call limit (120 calls per 10 seconds per player and app on a host, refused `Busy` with a message starting "rate limited"). */
+  busy: Scalars['Float']['output'];
+  /** Calls in the window. */
+  calls: Scalars['Float']['output'];
+  /** Calls not answered before their deadline (`DeadlineExceeded`). */
+  deadlineExceeded: Scalars['Float']['output'];
+  /** Calls refused as not allowed (`Denied`). */
+  denied: Scalars['Float']['output'];
+  /** The first minute of the window with calls. */
+  firstMinute: Scalars['DateTime']['output'];
+  /** The last minute of the window with calls. Each host reports a minute once it ends. */
+  lastMinute: Scalars['DateTime']['output'];
+  /** The timed calls’ average latency in milliseconds. For a client’s or an instance’s call it runs from reaching the host the call entered on to its answer leaving that host: queueing, the handler, and any hop to the host that runs the target. For a platform event it is the time in the handler. Null when no call was timed. */
+  latencyMsAvg: Maybe<Scalars['Float']['output']>;
+  /** The longest of those latencies in milliseconds; null when no call was timed. */
+  latencyMsMax: Maybe<Scalars['Float']['output']>;
+  /** The method called; a `$` method is a platform event, and `(other)` as for `nodeType`. */
+  method: Scalars['String']['output'];
+  /** The node type called; `(other)` for calls to endpoints past the 256 one host counts per app a minute. */
+  nodeType: Scalars['String']['output'];
+  /** Calls that failed otherwise: not found, unavailable, trapped, moved, internal or a bad request. */
+  otherErrors: Scalars['Float']['output'];
+  /** Calls a handler answered (`Ok` or `AppError`); the latencies are over these. */
+  timedCalls: Scalars['Float']['output'];
+};
+
+/** A CLIENT half a grid serves: of a mod on it that is switched on, not stopped by the kill ladder and admitted, running as the grid’s owner. Carries the caller’s consent and trust in its author. */
+export type ExecGridClientMod = {
+  __typename?: 'ExecGridClientMod';
+  /** The hash `execTrustAuthor` takes: SHA-256 of the canonical union. A new capability changes it. */
+  authorCapabilityHash: Scalars['String']['output'];
+  /** The union, as JSON, of the capability summaries of every CLIENT half this author has on the grid: the summary a one-per-author trust prompt shows. */
+  authorCapabilitySummaryJson: Scalars['String']['output'];
+  /** Its author: the mod’s owner, who owns the grid. Pass it to `execTrustAuthor`. */
+  authorId: Scalars['BigInt']['output'];
+  /** The caller consented to it at its current capability hash. */
+  callerConsented: Scalars['Boolean']['output'];
+  /** The caller trusts this author on this grid, at this hash or a union at least as wide. */
+  callerTrustsAuthor: Scalars['Boolean']['output'];
+  /** The hash `execConsentClientMod` takes: SHA-256 of the canonical capability summary. */
+  capabilityHash: Scalars['String']['output'];
+  /** Its capability summary as JSON. */
+  capabilitySummaryJson: Scalars['String']['output'];
+  /** The CLIENT half’s version. */
+  clientVersion: Scalars['Int']['output'];
+  /** SHA-256 of the module, hex: cache the bytes by it, and stop a worker whose digest is no longer listed. */
+  digest: Scalars['String']['output'];
+  /** The grid. */
+  gridId: Scalars['BigInt']['output'];
+  /** The marketplace listing the mod was installed from. */
+  listingId: Maybe<Scalars['BigInt']['output']>;
+  /** The mod, for `execConsentClientMod` and `execModClientArtifact`. */
+  modId: Scalars['String']['output'];
+  /** The mod’s name: its name on the page’s grid event bus. */
+  name: Scalars['String']['output'];
+  /** How often, in milliseconds, to tick it (16-1000). */
+  tickIntervalMs: Scalars['Int']['output'];
+  /** When it was last attached. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** An instance the execution manager has placed for an app. */
+export type ExecInstance = {
+  __typename?: 'ExecInstance';
+  /** Rises each time it is placed; snapshots from an older epoch are refused. */
+  epoch: Scalars['Int']['output'];
+  /** Why the manager will not place it right now (a crash loop, a failed start), when it will not. */
+  heldBack: Maybe<Scalars['String']['output']>;
+  /** The execution host it runs on; null while idle. */
+  host: Maybe<Scalars['String']['output']>;
+  /** The instance id. */
+  instanceId: Scalars['String']['output'];
+  /** The instance key; empty for the root hub. */
+  key: Scalars['String']['output'];
+  /** `hub` or `spoke`. */
+  kind: Scalars['String']['output'];
+  nodeType: Scalars['String']['output'];
+  /** `idle`, `starting`, `running` or `stopping`. */
+  phase: Scalars['String']['output'];
+  /** Milliseconds since it entered this phase. */
+  sinceMs: Scalars['Float']['output'];
+};
+
+/** One guest log line from an app’s ck-exec instances (`ctx.log`), kept for 24 hours. */
+export type ExecLogLine = {
+  __typename?: 'ExecLogLine';
+  /** When the instance logged it. */
+  at: Scalars['DateTime']['output'];
+  /** The flow of the call the instance was handling, as 32 lowercase hex digits. A client’s call and everything it causes (the calls it makes to other hubs, on any host, and the lines they log) share one flow; pass it as `flow` to `execLogs` to follow the chain. Null for a line written outside a call (start, snapshot, stop). */
+  flow: Maybe<Scalars['String']['output']>;
+  /** The execution host it ran on. */
+  host: Scalars['String']['output'];
+  /** The line’s id, time-ordered: pass the oldest one you have as `before` to page back. */
+  id: Scalars['String']['output'];
+  /** The instance key. */
+  key: Scalars['String']['output'];
+  /** 0 error, 1 warn, 2 info, 3 debug. */
+  level: Scalars['Int']['output'];
+  /** The node type that logged it; empty for a platform note (lines dropped over a rate). */
+  nodeType: Scalars['String']['output'];
+  /** The line, at most 1 KiB. */
+  text: Scalars['String']['output'];
+};
+
+/** A mod: a player’s code on a grid they own, run by ck-exec as the hub `mod:<name>` keyed by the grid id, in its owner’s own sandbox. */
+export type ExecMod = {
+  __typename?: 'ExecMod';
+  /** Why an enabled mod will not run: a switch of the app’s kill ladder, or the app’s own switch. */
+  blocked: Maybe<Scalars['String']['output']>;
+  /** SHA-256 of its module, hex. */
+  digest: Scalars['String']['output'];
+  /** Its owner switched it on. It runs only while this holds and `blocked` is null. */
+  enabled: Scalars['Boolean']['output'];
+  gridId: Scalars['BigInt']['output'];
+  /** The marketplace listing it was installed from. */
+  listingId: Maybe<Scalars['BigInt']['output']>;
+  modId: Scalars['String']['output'];
+  /** 1-48 lowercase letters, digits, `-` or `_`. */
+  name: Scalars['String']['output'];
+  /** The player it runs as: the grid’s owner when it was deployed, or when the grid last changed hands. */
+  ownerId: Scalars['BigInt']['output'];
+  /** Whether an instance of it runs now. */
+  running: Scalars['Boolean']['output'];
+  updatedAt: Scalars['DateTime']['output'];
+  version: Scalars['Int']['output'];
+};
+
+/** The CLIENT half of a mod: browser WASM built from a crowdy-client-sdk crate and attached to the mod, which the mod’s grid serves to visitors who consent to it. */
+export type ExecModClient = {
+  __typename?: 'ExecModClient';
+  /** SHA-256 of the canonical capability summary, hex: what a visitor consents to. */
+  capabilityHash: Scalars['String']['output'];
+  /** Its capability summary as JSON, derived from the module: imports, the client host calls it can reach, their groups, presentation hooks and exports. */
+  capabilitySummaryJson: Scalars['String']['output'];
+  /** Rises by one with every attach to the mod. */
+  clientVersion: Scalars['Int']['output'];
+  /** SHA-256 of the module, hex: what `execModClientArtifact` serves. */
+  digest: Scalars['String']['output'];
+  /** The mod’s grid. */
+  gridId: Scalars['BigInt']['output'];
+  /** The mod it is attached to. */
+  modId: Scalars['String']['output'];
+  /** The mod’s name. */
+  name: Scalars['String']['output'];
+  /** The player it was attached as: the mod’s owner. */
+  ownerId: Scalars['BigInt']['output'];
+  /** The module’s size in bytes. */
+  sizeBytes: Scalars['Int']['output'];
+  /** How often, in milliseconds, browsers tick it (16-1000, from its Cargo.toml). */
+  tickIntervalMs: Scalars['Int']['output'];
+  /** When it was last attached. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** A CLIENT half’s module and what the browser broker needs to run it: the fuel-metered wasm32-unknown-unknown module, its digest to check the bytes against, and the per-dispatch fuel budget to load into its `ck_fuel` global. */
+export type ExecModClientArtifact = {
+  __typename?: 'ExecModClientArtifact';
+  /** The client ABI version it was built for (0). */
+  abiVersion: Scalars['Int']['output'];
+  /** SHA-256 of the canonical capability summary. */
+  capabilityHash: Scalars['String']['output'];
+  /** Its capability summary as JSON. */
+  capabilitySummaryJson: Scalars['String']['output'];
+  /** The CLIENT half’s version. */
+  clientVersion: Scalars['Int']['output'];
+  /** SHA-256 of the module, hex. The broker recomputes it and refuses bytes that differ. */
+  digest: Scalars['String']['output'];
+  /** Fuel for each dispatch (init, tick, invoke, event): the broker sets `ck_fuel` to it before every call, and the module traps when it runs out. */
+  fuelPerDispatch: Scalars['BigInt']['output'];
+  /** The mod’s grid. */
+  gridId: Scalars['BigInt']['output'];
+  /** The mod. */
+  modId: Scalars['String']['output'];
+  /** The mod’s name: its name on the page’s grid event bus. */
+  name: Scalars['String']['output'];
+  /** Its size in bytes, at most 512 KiB. */
+  sizeBytes: Scalars['Int']['output'];
+  /** How often, in milliseconds, to tick it (16-1000). */
+  tickIntervalMs: Scalars['Int']['output'];
+  /** The module, base64. */
+  wasmBase64: Scalars['String']['output'];
+};
+
+/** A mod version its owner published, which any grid owner in the app may install as a mod of their own (no payments). */
+export type ExecModListing = {
+  __typename?: 'ExecModListing';
+  /** SHA-256 of that capability summary, hex. */
+  clientCapabilityHash: Maybe<Scalars['String']['output']>;
+  /** That CLIENT half’s capability summary as JSON, for an installer to review first. */
+  clientCapabilitySummaryJson: Maybe<Scalars['String']['output']>;
+  /** SHA-256 of the CLIENT half the mod had when it was published, hex; null without one. An install attaches it to the installer’s mod, and visitors consent to it afresh. */
+  clientDigest: Maybe<Scalars['String']['output']>;
+  /** How often, in milliseconds, browsers tick that CLIENT half. */
+  clientTickIntervalMs: Maybe<Scalars['Int']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  delistedAt: Maybe<Scalars['DateTime']['output']>;
+  description: Maybe<Scalars['String']['output']>;
+  /** SHA-256 of its module, hex. */
+  digest: Scalars['String']['output'];
+  installs: Scalars['Int']['output'];
+  listingId: Scalars['BigInt']['output'];
+  publisherId: Scalars['BigInt']['output'];
+  sourceModId: Scalars['String']['output'];
+  sourceVersion: Scalars['Int']['output'];
+  title: Scalars['String']['output'];
+};
+
+/** A rung of the mods kill ladder: one mod (target: its mod id), a player’s mods (their user id), a grid’s mods (its grid id), the installs of a marketplace listing (its listing id), or every mod in the app (no target). */
+export enum ExecModScope {
+  All = 'ALL',
+  Grid = 'GRID',
+  Listing = 'LISTING',
+  Mod = 'MOD',
+  Player = 'PLAYER'
+}
+
+/** A rung of the mods kill ladder that is off. */
+export type ExecModSwitch = {
+  __typename?: 'ExecModSwitch';
+  createdAt: Scalars['DateTime']['output'];
+  /** Who switched it off, e.g. `user:<id>`. */
+  createdBy: Maybe<Scalars['String']['output']>;
+  reason: Maybe<Scalars['String']['output']>;
+  scope: ExecModScope;
+  /** The id it names; empty for `ALL`. */
+  target: Scalars['String']['output'];
+};
+
+/** A starter crate: a ckx-sdk hub to build with `execBuild` as it is, or to change first. */
+export type ExecStarter = {
+  __typename?: 'ExecStarter';
+  /** The crate’s name, which the pack’s manifest names it by. */
+  crate: Scalars['String']['output'];
+  /** What it does. */
+  description: Scalars['String']['output'];
+  /** Its Cargo.toml and sources. */
+  files: Array<ExecStarterFile>;
+  /** The node type the pack’s manifest deploys it as. */
+  nodeType: Scalars['String']['output'];
+};
+
+/** One source file of a starter crate. */
+export type ExecStarterFile = {
+  __typename?: 'ExecStarterFile';
+  /** The file’s contents. */
+  content: Scalars['String']['output'];
+  /** The path within the crate, as `execBuild` takes it. */
+  path: Scalars['String']['output'];
+};
+
+/** The starter packs: four crates and a manifest that deploys them as one app. */
+export type ExecStarterPack = {
+  __typename?: 'ExecStarterPack';
+  /** The manifest for `execDeploy` with the build’s id: the root `world` hub, and `matchmaker`, `session` and `npcs` under it, each naming its crate. */
+  manifestJson: Scalars['String']['output'];
+  /** The mod starter: a player’s code on a grid they own, built with `execModBuild` and deployed with `execModDeploy` rather than in the manifest. Null on a toolchain without it. */
+  mod: Maybe<ExecStarter>;
+  /** The crates. */
+  starters: Array<ExecStarter>;
+};
+
+/** A deployed version of an app’s ck-exec topology. */
+export type ExecVersion = {
+  __typename?: 'ExecVersion';
+  /** Whether it is the active version. */
+  active: Scalars['Boolean']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  /** Who deployed it, e.g. `user:<id>`. */
+  createdBy: Maybe<Scalars['String']['output']>;
+  /** The deployed manifest as JSON: the root and each node type with its kind, parent, client access, calls, node API scopes and limits. A type’s spawn seed is replaced by its size in bytes (`seed_bytes`). Null if the version’s row is gone. */
+  manifestJson: Maybe<Scalars['String']['output']>;
+  /** Node types in its manifest. */
+  types: Scalars['Int']['output'];
+  version: Scalars['Int']['output'];
+};
+
+/** An org's free shared app slot quota usage. */
+export type FreeAppQuota = {
+  __typename?: 'FreeAppQuota';
+  /** Shared apps with free-slot / reserved / paid credit status. */
+  apps: Array<FreeAppQuotaApp>;
+  /** Organization id (BigInt). */
+  orgId: Scalars['BigInt']['output'];
+  /** Apps on a paid subscription (do not consume free slots). */
+  paidApps: Scalars['Int']['output'];
+  /** Total free shared app slots granted to the org. */
+  quota: Scalars['Int']['output'];
+  /** Free slots still available (quota − usedFree). */
+  remainingFree: Scalars['Int']['output'];
+  /** Apps with reserved throughput (premium; do not consume free slots). */
+  reservedApps: Scalars['Int']['output'];
+  /** Free slots currently in use. */
+  usedFree: Scalars['Int']['output'];
+};
+
+/** A shared app row in the org free-slot portfolio (free / reserved / paid credit). */
+export type FreeAppQuotaApp = {
+  __typename?: 'FreeAppQuotaApp';
+  /** App id (BigInt). */
+  appId: Scalars['BigInt']['output'];
+  /** True when the app consumes a free org slot (shared, not archived, no active subscription, no reserved realtime capacity). Only a REALTIME (UDP) reservation releases a slot; a GraphQL operations reservation does not. */
+  consumesFreeSlot: Scalars['Boolean']['output'];
+  /** How this app is credited: 'free_slot', 'reserved', or 'paid_subscription'. */
+  creditKind: Scalars['String']['output'];
+  /** True when the app has an active legacy shared subscription. */
+  hasActiveSubscription: Scalars['Boolean']['output'];
+  /** App display name. */
+  name: Scalars['String']['output'];
+  /** Reserved REALTIME (UDP) capacity in bytes/sec (0 when none). This is the dimension that decides free-slot consumption; a GraphQL operations reservation is separate and is not reported here. Same value as App.reservedUdpBytesPerSec. */
+  reservedEgressBytesPerSec: Scalars['BigInt']['output'];
+  /** URL slug for the app. */
+  slug: Scalars['String']['output'];
+};
+
+export type FreePlayWindowInfo = {
+  __typename?: 'FreePlayWindowInfo';
+  /** Human-readable description of the free-play schedule. */
+  description: Scalars['String']['output'];
+  /** True if a free-play window is active right now. */
+  isCurrentlyActive: Scalars['Boolean']['output'];
+  /** ISO-8601 start time of the next free-play window, or null if none. */
+  nextWindowStart: Maybe<Scalars['String']['output']>;
+};
+
+/** Startup contract for browser game clients. Fetch this after login to initialize protocol/version checks and UDP proxy state in one round trip. */
+export type GameClientBootstrap = {
+  __typename?: 'GameClientBootstrap';
+  /** The app (game) this bootstrap was requested for, echoed back. A BigInt as a decimal string. Reuse this exact appId to scope the udpNotifications subscription and on every spatial send for this play session. */
+  appId: Scalars['BigInt']['output'];
+  /** Whether this server exposes the binary realtime relay (crowdy-relay-v1): a raw WebSocket endpoint at binaryRelayPath that relays complete client-signed Buddy wire datagrams as BINARY frames in both directions, replacing the GraphQL send*\/udpNotifications hot path. When false, use the GraphQL realtime surface. */
+  binaryRelayEnabled: Scalars['Boolean']['output'];
+  /** HTTP path of the binary realtime relay WebSocket endpoint on this origin (e.g. "/realtime"). Connect with `?appId=<appId>` and offer the binaryRelayProtocol subprotocol; authenticate with an app-scoped bearer token via the Authorization header, a `bearer.<base64url(token)>` subprotocol entry, or `?token=`. Wire format: cks docs, client-wire-formats. */
+  binaryRelayPath: Scalars['String']['output'];
+  /** Required WebSocket subprotocol for the binary realtime relay. The client must offer it during the upgrade; the server selects it. Currently "crowdy-relay-v1". */
+  binaryRelayProtocol: Scalars['String']['output'];
+  /** Stable entry point that always resolves to SOME healthy API instance — the environment’s shared load balancer. Use this to RE-DISCOVER an endpoint when the instance you are connected to stops answering: call gameClientBootstrap (or mintAppToken) against it and use the gameApiUrl it returns. This is the recovery path for direct connect, where gameApiUrl is a single instance that can die; discoveryUrl is chosen so that it cannot die with it. Null only if the server has no public URL configured. */
+  discoveryUrl: Maybe<Scalars['String']['output']>;
+  /** HTTPS origin the client should use for GraphQL right now: the app's OWN datacenter, because that is where its shards live and a query answered elsewhere crosses a WAN silently. Under direct connect it is one specific instance in that datacenter, which is NOT interchangeable with other instances for an open realtime session. Not to be confused with discoveryUrl, which is the shared origin resolving to every datacenter — fall back to that if requests here start failing. */
+  gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** The wss:// form of gameApiUrl, for the graphql-transport-ws subscription socket and the binary relay. Same origin, same caveat: under direct connect it is one instance. */
+  gameApiWsUrl: Maybe<Scalars['String']['output']>;
+  /** Maximum allowed value for the `decayRate` (named attenuation algorithm id) field on spatial sends. Currently 5; the server clamps send `decayRate` to 0..this. decayRate selects how the message attenuates with distance (0 = none). */
+  maxDecayRate: Scalars['Int']['output'];
+  /** Maximum allowed value for the `distance` (chunk fan-out radius) field on spatial sends. Currently 8; the server clamps send `distance` to 0..this. distance is the number of chunks outward the message is replicated. */
+  maxReplicationDistance: Scalars['Int']['output'];
+  /** The authenticated user resolved from the bearer game token on the request. Use this for the local player identity instead of a separate `me` call. */
+  me: User;
+  /** GraphQL WebSocket subprotocol expected by udpNotifications. */
+  realtimeProtocol: Scalars['String']['output'];
+  /** The modulus the per-message sequenceNumber wraps at (256), i.e. sequenceNumber is a uint8 in 0-255. sequenceNumber exists ONLY to correlate asynchronous responses/errors (delivered on udpNotifications) with the send that produced them — it is NOT an idempotency key, and the server does not dedupe replays. */
+  sequenceNumberModulo: Scalars['Int']['output'];
+  /** GraphQL subscription field that carries UDP proxy notifications. */
+  subscriptionName: Scalars['String']['output'];
+  /** UDP proxy session status for this game token at bootstrap time. connected is false until you open a session (via connectUdpProxy, any send* mutation, or subscribing to udpNotifications); fetching the bootstrap does not open one. */
+  udpProxyConnectionStatus: UdpProxyConnectionStatus;
+  /** Current server version and the minimum client version the server accepts. Compare your build against minimumClientVersion before connecting; prompt the player to update if it is too old. */
+  versionInfo: ServerVersionInfo;
+};
+
+/** The elected host user of a game (app). Election is deterministic across all game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy, the realtime runtime; liveness (updated_at) is owned by game-api's actorHeartbeat mutation. */
+export type GameHost = {
+  __typename?: 'GameHost';
+  /** How many actors the host user currently owns in this app (always >= 1 when this object is returned). */
+  actorCount: Scalars['Int']['output'];
+  /** Timestamp of the host's earliest still-connected actor (`MIN(actors.created_at)` for the host's group). Used as the primary election ordering key. */
+  earliestActorJoinedAt: Scalars['DateTime']['output'];
+  /** The user_id of the elected host. Stable while this user has at least one fresh row in `actors` for the app; the next-oldest user takes over automatically once the current host stops heartbeating (its rows age past HOST_ACTOR_FRESHNESS_SECONDS) or Buddy idle-evicts its last row. */
+  hostUserId: Scalars['BigInt']['output'];
+};
+
+/** Asynchronous error from the UDP game server for a previously sent datagram (e.g. a send* mutation). Delivered as a member of the udpNotifications union, NOT as a GraphQL error on the mutation (which only reports whether the datagram was accepted for sending). Match it to the originating send via sequenceNumber and read errorCode for the reason. Note: not every failure produces one — some auth failures are dropped silently (see UdpErrorCode). */
+export type GenericErrorResponse = {
+  __typename?: 'GenericErrorResponse';
+  /** Error code indicating the reason for the failure. */
+  errorCode: UdpErrorCode;
+  /** Echoes the sequenceNumber of the request that failed (a uint8, 0-255, wrapping at modulo 256) so you can correlate this error with the send* mutation that produced it. Correlation only — it is not an idempotency key. */
+  sequenceNumber: Scalars['Int']['output'];
+};
+
+/** Arguments for getChunk: selects a single chunk by app id and chunk coordinates, with optional LOD filtering. */
+export type GetChunkInput = {
+  /** Id of the app that owns the chunk (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Address of the chunk to fetch. */
+  coordinates: ChunkCoordinatesInput;
+  /** When true, return all available LODs and ignore `requestedLodLevels`. */
+  includeAllLods?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional list of LOD levels (each >= 0) to include in the returned chunk's `lods`. Ignored when `includeAllLods` is true. Omit to apply no LOD filtering. */
+  requestedLodLevels?: InputMaybe<Array<Scalars['Int']['input']>>;
+};
+
+/** Arguments for getChunkLods: selects the LOD meshes for one chunk and returns only the requested levels. */
+export type GetChunkLodsInput = {
+  /** Id of the app that owns the chunk (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Address of the chunk whose LODs to fetch. */
+  coordinates: ChunkCoordinatesInput;
+  /** LOD levels to return (each >= 0; 0 is the finest). Only matching levels are included in the response. */
+  lodLevels: Array<Scalars['Int']['input']>;
+};
+
+/** Arguments for getChunksByDistance: selects chunks within a cubic (Chebyshev-distance) radius around a center chunk, with pagination. */
+export type GetChunksByDistanceInput = {
+  /** Id of the app whose chunks to search (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Center chunk of the search cube. */
+  centerCoordinate: ChunkCoordinatesInput;
+  /** Maximum number of chunks to return. Defaults to 1000 when omitted. Must be >= 0. */
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  /** Cube 'radius' in chunks measured as Chebyshev distance: matches chunks whose x, y and z each differ from the center by at most this many chunks (a (2*maxDistance+1)^3 cube). Integer, 1-8 inclusive. */
+  maxDistance: Scalars['Int']['input'];
+  /** Number of chunks to skip for pagination. Defaults to 0 when omitted. Must be >= 0. */
+  skip?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Arguments for getVoxelList: selects all recorded voxel edits for one chunk by app id and chunk coordinates. */
+export type GetVoxelListInput = {
+  /** Id of the app that owns the chunk (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Address of the chunk whose voxel edits to list. */
+  coordinates: ChunkCoordinatesInput;
+};
+
+/** An app feature key that access tiers can grant. ck-exec code reads the keys a player's tier grants with `ctx.players().features(player)`. */
+export type GmAppFeature = {
+  __typename?: 'GmAppFeature';
+  /** The app (tenant) that defines the feature. */
+  appId: Scalars['BigInt']['output'];
+  /** Optional description of the feature. */
+  description: Maybe<Scalars['String']['output']>;
+  /** The feature key, as ck-exec code reads it among a player's features. */
+  featureKey: Scalars['String']['output'];
+};
+
+/** A grant of a feature key to an access tier. */
+export type GmTierFeature = {
+  __typename?: 'GmTierFeature';
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['output'];
+  /** The feature key granted to the tier. */
+  featureKey: Scalars['String']['output'];
+  /** The access tier the feature is granted to. */
+  tierId: Scalars['BigInt']['output'];
+};
+
+/** Input for granting a user access to an app, optionally on a specific tier. */
+export type GrantAppAccessInput = {
+  /** Numeric id of the app to grant access to. The caller must hold manage_access_tiers on this app. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional audit override for who granted access; defaults to the calling user id. Service grants use "system". */
+  grantedBy?: InputMaybe<Scalars['String']['input']>;
+  /** Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Optional tier to grant. When omitted, an existing grant keeps its current tier (no tier change). */
+  tierId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Numeric id of the user who should receive access. */
+  userId: Scalars['BigInt']['input'];
+};
+
+/** Grant runtime permission keys directly to one user on one grid (writes the grid_user_direct_grants input table). */
+export type GrantGridPermissionsInput = {
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional expiry; after this time the grant stops contributing to the effective ACL. Null/omitted means it never expires. */
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  /** The grid to grant on. */
+  gridId: Scalars['BigInt']['input'];
+  /** Runtime permission key strings to grant (e.g. update_voxel_data). Each must be a known key in runtime_permissions, unique, and at most 64 chars. */
+  permissionKeys: Array<Scalars['String']['input']>;
+  /** The user receiving the grant. Must already have active app access for this app. */
+  userId: Scalars['BigInt']['input'];
+};
+
+/** Grant or revoke a feature key for an access tier. */
+export type GrantTierFeatureInput = {
+  /** The app (tenant). */
+  appId: Scalars['BigInt']['input'];
+  /** The feature key to grant to (or revoke from) the tier. */
+  featureKey: Scalars['String']['input'];
+  /** The access tier id. */
+  tierId: Scalars['BigInt']['input'];
+};
+
+/** A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy. */
+export type GraphQlServer = {
+  __typename?: 'GraphQLServer';
+  /** TCP port the GraphQL/HTTP API listens on (default 4000). */
+  apiPort: Scalars['Int']['output'];
+  /** Current CPU utilization percentage (0-100) of the host, if reported. */
+  cpuUsagePct: Maybe<Scalars['Float']['output']>;
+  /** When this server was first registered in the fleet. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Unique id of this GraphQL server registration. */
+  graphqlServerId: Scalars['ID']['output'];
+  /** Internal/private IPv4 address of this server. Use publicIp4 for external reachability. */
+  ip4: Maybe<Scalars['String']['output']>;
+  /** Internal/private IPv6 address of this server. Use publicIp6 for external reachability. */
+  ip6: Maybe<Scalars['String']['output']>;
+  /** Logical kind of GraphQL service. Every current server is 'game-api', which serves both the management and game surfaces; 'management-api' appears only on rows predating their unification. */
+  kind: Maybe<Scalars['String']['output']>;
+  /** 1-minute load average of the host, if reported. */
+  loadAverage1m: Maybe<Scalars['Float']['output']>;
+  /** Current memory utilization percentage (0-100) of the host, if reported. */
+  memoryUsagePct: Maybe<Scalars['Float']['output']>;
+  /** Cloud provider instance id of the underlying host, if known. */
+  providerInstanceId: Maybe<Scalars['String']['output']>;
+  /** Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.crowdedkingdoms.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you. */
+  publicHostname: Maybe<Scalars['String']['output']>;
+  /** Public IPv4 address clients use to reach this server, if assigned. */
+  publicIp4: Maybe<Scalars['String']['output']>;
+  /** Public IPv6 address clients use to reach this server, if assigned. */
+  publicIp6: Maybe<Scalars['String']['output']>;
+  /** UUID of the Buddy realtime runtime instance this API server is paired with, if any. */
+  runtimeServerId: Maybe<Scalars['String']['output']>;
+  /** Current lifecycle state (see ServerState). activeGraphQLServers returns only ReadyForClients. */
+  status: ServerState;
+  /** When this server row was last updated (heartbeat). Use to judge freshness. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Usage totals for a single GraphQL operation over the window. */
+export type GraphqlOperationUsageRow = {
+  __typename?: 'GraphqlOperationUsageRow';
+  /** GraphQL operation name (or '(anonymous)'). */
+  operationName: Scalars['String']['output'];
+  /** Total bytes received for this operation (string counter). */
+  recvBytes: Scalars['String']['output'];
+  /** Total bytes sent for this operation (string counter). */
+  sendBytes: Scalars['String']['output'];
+  /** Total invocation count (string counter). */
+  totalOps: Scalars['String']['output'];
+};
+
+/** A grid: a 3D box of chunks within an app that runtime/world (voxel) permissions are scoped to. Its bounds lie inside one of the app's grid assignments and never overlap another grid. */
+export type Grid = {
+  __typename?: 'Grid';
+  /** The app (tenant) that owns the grid. */
+  app_id: Scalars['BigInt']['output'];
+  /** When the grid was created. */
+  created_at: Scalars['DateTime']['output'];
+  /** Unique grid id. */
+  grid_id: Scalars['BigInt']['output'];
+  /** High (maximum x/y/z) corner chunk of the box. */
+  high_chunk: ChunkCoordinates;
+  /** Low (minimum x/y/z) corner chunk of the box. */
+  low_chunk: ChunkCoordinates;
+};
+
+/** How a player claim confers grid ownership in this app (D4): SELF_CLAIM (the claim alone assigns ownership), APPROVAL (claims create requests designated approvers accept), INVITE (only against a standing invite), or MARKETPLACE_ONLY (direct claims refused). setAppGridClaimPolicy refuses MARKETPLACE_ONLY while paid grid commerce is off the public API. */
+export enum GridClaimPolicy {
+  Approval = 'APPROVAL',
+  Invite = 'INVITE',
+  MarketplaceOnly = 'MARKETPLACE_ONLY',
+  SelfClaim = 'SELF_CLAIM'
+}
+
+/** A pending or decided grid claim request (claim policy 'approval'). Approval assigns grid_ownership to the requester. */
+export type GridClaimRequest = {
+  __typename?: 'GridClaimRequest';
+  /** App of the grid. */
+  appId: Scalars['BigInt']['output'];
+  /** When the request was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** The grid being claimed. */
+  gridId: Scalars['BigInt']['output'];
+  /** UUID of the request. */
+  requestId: Scalars['String']['output'];
+  /** The requesting player. */
+  requesterUserId: Scalars['BigInt']['output'];
+  /** Request status: 'pending', 'approved', 'denied', or 'cancelled'. */
+  status: Scalars['String']['output'];
+};
+
+/** Result of claimGridOwnership: either ownership was assigned now (SELF_CLAIM / INVITE) or a claim request was created (APPROVAL). MARKETPLACE_ONLY apps refuse direct claims. */
+export type GridClaimResult = {
+  __typename?: 'GridClaimResult';
+  /** UUID of the created claim request in APPROVAL mode; null otherwise. */
+  claimRequestId: Maybe<Scalars['String']['output']>;
+  /** True when the caller now owns the grid. */
+  ownershipAssigned: Scalars['Boolean']['output'];
+  /** The app policy that was applied. */
+  policy: GridClaimPolicy;
+};
+
+/** A single group/role -> permission-key grant on a grid (one row of the grid_group_grants input table). */
+export type GridGroupGrant = {
+  __typename?: 'GridGroupGrant';
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['output'];
+  /** When the grant expires; null means it never expires. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** The grid this grant applies to. */
+  gridId: Scalars['BigInt']['output'];
+  /** The group this grant is for. */
+  groupId: Scalars['BigInt']['output'];
+  /** Null means the grant applies to all members of the group. */
+  groupRoleId: Maybe<Scalars['BigInt']['output']>;
+  /** The runtime permission key string granted to the group/role. */
+  permissionKey: Scalars['String']['output'];
+};
+
+/** The permission keys a grid grants every player with active access to the app (the grid_open_permissions input table). */
+export type GridOpenPermissions = {
+  __typename?: 'GridOpenPermissions';
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['output'];
+  /** The grid. */
+  gridId: Scalars['BigInt']['output'];
+  /** The keys every player with active access holds on this grid (its limits still cap them). Empty means the grid is not open. */
+  permissionKeys: Array<Scalars['String']['output']>;
+};
+
+/** Kind of principal holding grid title. P1 can assign USER owners; GROUP and ORG are schema-reserved for future shared ownership. */
+export enum GridOwnerKind {
+  Group = 'GROUP',
+  Org = 'ORG',
+  User = 'USER'
+}
+
+/** The current first-class ownership record for a grid. Server player code always resolves its execution identity from this record. */
+export type GridOwnership = {
+  __typename?: 'GridOwnership';
+  /** When this ownership began. */
+  acquiredAt: Scalars['DateTime']['output'];
+  /** Audit origin of this ownership (for example studio_grant, self_claim, self_claim_chunk, transfer, or marketplace). self_claim_chunk identifies a grid created by claimGridChunk and eligible for owner release. */
+  acquiredVia: Scalars['String']['output'];
+  /** App that contains the grid. */
+  appId: Scalars['BigInt']['output'];
+  /** Rental expiry; null for permanent ownership. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** Owned grid id. */
+  gridId: Scalars['BigInt']['output'];
+  /** UUID of the ownership history row. */
+  gridOwnershipId: Scalars['String']['output'];
+  /** Kind of current owner. P1 supports USER. */
+  ownerKind: GridOwnerKind;
+  /** Numeric user/group/org id selected by ownerKind. */
+  ownerRef: Scalars['BigInt']['output'];
+  /** Permanent ownership or an expiring rental. */
+  tenure: GridTenure;
+};
+
+/** The permission-key whitelist configured for a grid (the grid_permission_limits input table). */
+export type GridPermissionLimits = {
+  __typename?: 'GridPermissionLimits';
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['output'];
+  /** The grid the limits apply to. */
+  gridId: Scalars['BigInt']['output'];
+  /** The permission keys this grid is limited to. Empty means no limit (every active grid permission is allowed). */
+  permissionKeys: Array<Scalars['String']['output']>;
+};
+
+/** Whether the current title is permanent ownership or an expiring rental. */
+export enum GridTenure {
+  Owned = 'OWNED',
+  Rented = 'RENTED'
+}
+
+/** A grid-scoped token: an app token narrowed to one grid. Hand it to code that should act inside the grid and nowhere else (a JS grid program, a mod host adapter, an agent). */
+export type GridTokenResponse = {
+  __typename?: 'GridTokenResponse';
+  /** The app it is confined to. */
+  appId: Scalars['BigInt']['output'];
+  /** When the token stops working. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** The underlying game_token id, as a BigInt. */
+  gameTokenId: Scalars['BigInt']['output'];
+  /** The grid it is confined to. */
+  gridId: Scalars['BigInt']['output'];
+  /** High corner of the grid box, copied at mint. */
+  highChunk: ChunkCoordinates;
+  /** Low corner of the grid box, copied at mint. */
+  lowChunk: ChunkCoordinates;
+  /** Bearer token. It admits only the root fields the grid-token policy lists, each confined to the grid, and it is refused by the binary realtime relay (realtime runs over GraphQL). */
+  token: Scalars['String']['output'];
+};
+
+/** A user's effective (materialized) runtime permissions on one grid: the flattened union of direct + group grants, with expired grants excluded, that Buddy enforces. */
+export type GridUserPermissions = {
+  __typename?: 'GridUserPermissions';
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['output'];
+  /** The grid these permissions apply to. */
+  gridId: Scalars['BigInt']['output'];
+  /** The effective runtime permission key strings the user currently holds on this grid. */
+  permissionKeys: Array<Scalars['String']['output']>;
+  /** The user these permissions belong to. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A generic group. `groupType` discriminates teams ('team'), channels ('channel'), and grid-access groups ('grid'). */
+export type Group = {
+  __typename?: 'Group';
+  /** The app (tenant) the group belongs to. */
+  appId: Scalars['BigInt']['output'];
+  /** When the group was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional role auto-assigned to every new member (e.g. a channel "member" role granting send_messages). Null means new members get no role by default. */
+  defaultRoleId: Maybe<Scalars['BigInt']['output']>;
+  /** Optional free-text description. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Channels only: the grid this channel belongs to (a grid channel, DN-10). Player modules on that grid may emit_channel into it; null for an ordinary channel. */
+  gridId: Maybe<Scalars['BigInt']['output']>;
+  /** Unique group id. */
+  groupId: Scalars['BigInt']['output'];
+  /** Discriminator: 'team' | 'channel' | 'grid'. */
+  groupType: Scalars['String']['output'];
+  /** How users may join: open (join immediately) | request (pending approval) | invite | admin. */
+  membershipPolicy: Scalars['String']['output'];
+  /** Display name (unique per app + group type). */
+  name: Scalars['String']['output'];
+  /** The user who created/owns the group (holds the system 'leader' role). */
+  ownerUserId: Maybe<Scalars['BigInt']['output']>;
+  /** Lifecycle status, e.g. 'active'. */
+  status: Scalars['String']['output'];
+};
+
+/** A user's membership in a group, including the roles assigned to them. */
+export type GroupMember = {
+  __typename?: 'GroupMember';
+  /** When the membership row was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** The group this membership is in. */
+  groupId: Scalars['BigInt']['output'];
+  /** Unique membership id. */
+  groupMemberId: Scalars['BigInt']['output'];
+  /** Roles assigned to this member. */
+  roles: Array<GroupRole>;
+  /** Membership status: 'active' | 'pending' (awaiting approval) | 'banned'. */
+  status: Scalars['String']['output'];
+  /** The member user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** The caller's view of a group they belong to: the group, their roles, and their effective group permission keys. */
+export type GroupMembership = {
+  __typename?: 'GroupMembership';
+  /** The group the caller belongs to. */
+  group: Group;
+  /** When the caller joined the group. */
+  joinedAt: Scalars['DateTime']['output'];
+  /** The caller's effective group permission key strings (union across their roles). */
+  permissions: Array<Scalars['String']['output']>;
+  /** The caller's roles in this group. */
+  roles: Array<GroupRole>;
+};
+
+/** A role within a group (team/channel). Carries the group-management permission keys it grants (e.g. manage_members), NOT world/runtime grid permissions. */
+export type GroupRole = {
+  __typename?: 'GroupRole';
+  /** When the role was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** The group this role belongs to. */
+  groupId: Scalars['BigInt']['output'];
+  /** Unique role id. */
+  groupRoleId: Scalars['BigInt']['output'];
+  /** True for built-in roles (e.g. 'leader') that cannot be renamed, re-ranked, or deleted. */
+  isSystem: Scalars['Boolean']['output'];
+  /** Group permission key strings this role grants (e.g. manage_members, manage_roles, manage_group, send_messages). */
+  permissions: Array<Scalars['String']['output']>;
+  /** Sort/precedence rank; higher is more senior. */
+  rank: Scalars['Int']['output'];
+  /** Role display name (unique within the group). */
+  roleName: Scalars['String']['output'];
+};
+
+/** A third-party game hosted on Crowdy Games (2026-09-13). Reached at launchUrl -- https://<games host>/<slug>/, a first-party shell page -- while its bundle executes on contentOrigin, https://<slug>.<content host>, an origin of its own. One row per app; the slug is global on the tier. */
+export type HostedGame = {
+  __typename?: 'HostedGame';
+  /** The app this slug serves. */
+  appId: Scalars['BigInt']['output'];
+  /** https://<slug>.<content host> -- the origin the game bundle runs on. The shell frames this; it is also registered as the app redirect URI so the API answers its CORS. Empty for a TAKEN_DOWN game: its objects were removed from the edge and the origin is not advertised. */
+  contentOrigin: Scalars['String']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  /** The publish currently serving, if any. */
+  currentPublishId: Maybe<Scalars['BigInt']['output']>;
+  /** https://<games host>/<slug>/ -- the public URL players use; the first-party shell; the redirect URI hosted sign-in returns to. */
+  launchUrl: Scalars['String']['output'];
+  /** Listed in the Overworld lobby and the management UI Games page. Operator-controlled (setHostedGameListing); publishing is self-serve, being listed is not. */
+  listed: Scalars['Boolean']['output'];
+  /** The app display name. */
+  name: Scalars['String']['output'];
+  /** The owning organization. */
+  orgId: Scalars['BigInt']['output'];
+  /** The owning organization name, for the shell chrome. */
+  orgName: Maybe<Scalars['String']['output']>;
+  /** The owning organization slug. */
+  orgSlug: Maybe<Scalars['String']['output']>;
+  /** When the current publish went live. */
+  publishedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The hosting slug: the path on the games host and the host label on the content domain. A DNS label (lower-case letters, digits, hyphens; 1-63 chars). */
+  slug: Scalars['String']['output'];
+  status: HostedGameStatus;
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** One publish of a hosted game: the manifest the developer declared and what became of it. */
+export type HostedGamePublish = {
+  __typename?: 'HostedGamePublish';
+  appId: Scalars['BigInt']['output'];
+  completedAt: Maybe<Scalars['DateTime']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  failureReason: Maybe<Scalars['String']['output']>;
+  fileCount: Scalars['Int']['output'];
+  publishId: Scalars['BigInt']['output'];
+  slug: Scalars['String']['output'];
+  state: HostedGamePublishState;
+  totalBytes: Scalars['BigInt']['output'];
+  /** Who published. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** Lifecycle of one publish. STAGING: upload URLs issued, objects arriving. LIVE: promoted and serving. SUPERSEDED: a later publish went live. FAILED: completion refused. ABANDONED: the developer gave up (abandonGamePublish). */
+export enum HostedGamePublishState {
+  Abandoned = 'ABANDONED',
+  Failed = 'FAILED',
+  Live = 'LIVE',
+  Staging = 'STAGING',
+  Superseded = 'SUPERSEDED'
+}
+
+/** Whether a hosted game is served. LIVE: served at its launchUrl. DISABLED: switched off by its developer (setHostedGameEnabled). TAKEN_DOWN: removed by an operator; the developer cannot publish or re-enable until an operator restores it. */
+export enum HostedGameStatus {
+  Disabled = 'DISABLED',
+  Live = 'LIVE',
+  TakenDown = 'TAKEN_DOWN'
+}
+
+/** How to upload one file of a publish: PUT the file bytes to url with exactly these headers. */
+export type HostedGameUpload = {
+  __typename?: 'HostedGameUpload';
+  /** Headers the PUT must carry exactly (content type, SHA-256 checksum, staging tag, cache-control). S3 refuses a body whose digest differs. */
+  headers: Array<HostedGameUploadHeader>;
+  /** Always PUT. */
+  method: Scalars['String']['output'];
+  /** The manifest path this URL is for. */
+  path: Scalars['String']['output'];
+  /** Presigned S3 URL; valid until BeginGamePublishResult.expiresAt. */
+  url: Scalars['String']['output'];
+};
+
+export type HostedGameUploadHeader = {
+  __typename?: 'HostedGameUploadHeader';
+  name: Scalars['String']['output'];
+  value: Scalars['String']['output'];
+};
+
+/** Copy a private library revision or immutable published common version into a project by value. */
+export type ImportCrowdyStudioProjectFileInput = {
+  /** App tenant shared by the project and import source. */
+  appId: Scalars['BigInt']['input'];
+  /** Immutable common version UUID; required only for COMMON imports. */
+  commonVersionId?: InputMaybe<Scalars['String']['input']>;
+  /** Optional safe destination path. Omit to use the source entry’s path or path hint. */
+  destinationPath?: InputMaybe<Scalars['String']['input']>;
+  /** Current project revision; the copy and revision increment are atomic. */
+  expectedProjectRevision: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Caller-owned library file UUID; required only for LIBRARY imports. */
+  libraryFileId?: InputMaybe<Scalars['String']['input']>;
+  /** Destination project UUID. */
+  projectId: Scalars['String']['input'];
+  /** Private LIBRARY or app-curated COMMON source. */
+  source: CrowdyStudioImportSource;
+};
+
+export type InviteOrgMemberInput = {
+  /** Organization to add the user to (BigInt as string). */
+  orgId: Scalars['BigInt']['input'];
+  /** user_id of the user to add (BigInt as string). */
+  userId: Scalars['BigInt']['input'];
+};
+
+/** Link an additional federated identity to the signed-in account. */
+export type LinkIdentityInput = {
+  code: Scalars['String']['input'];
+  provider: Scalars['String']['input'];
+  state: Scalars['String']['input'];
+};
+
+/** Arguments for listVoxelUpdatesByDistance: selects recorded voxel edits across chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance. */
+export type ListVoxelUpdatesByDistanceInput = {
+  /** Id of the app whose voxel edits to search (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Center chunk of the search cube. */
+  centerCoordinate: ChunkCoordinatesInput;
+  /** Maximum number of CHUNKS (not voxels) to include. Defaults to 1000 when omitted. Must be >= 0. */
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  /** Cube radius in chunks measured as Chebyshev distance: matches chunks whose x, y and z each differ from the center by at most this many chunks. Integer, 1-8 inclusive. */
+  maxDistance: Scalars['Int']['input'];
+  /** Optional inclusive lower time bound; only edits with createdAt >= this timestamp are returned. */
+  since?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Number of chunks to skip for pagination. Defaults to 0 when omitted. Must be >= 0. */
+  skip?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Arguments for listVoxels: selects recorded voxel edits for one chunk, optionally only those at/after a timestamp. */
+export type ListVoxelsInput = {
+  /** Id of the app that owns the chunk (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Address of the chunk whose voxel edits to list. */
+  coordinates: ChunkCoordinatesInput;
+  /** Optional inclusive lower time bound. When set, only voxel edits with createdAt >= this timestamp are returned. */
+  since?: InputMaybe<Scalars['DateTime']['input']>;
+};
+
+/** A single level-of-detail (LOD) representation of a chunk. */
+export type LodData = {
+  __typename?: 'LodData';
+  /** BASE64-encoded binary LOD data (decode from base64). */
+  data: Scalars['String']['output'];
+  /** LOD level (0 is the finest; higher numbers are coarser). */
+  level: Scalars['Int']['output'];
+};
+
+/** A single LOD level and its encoded data for a chunk. */
+export type LodDataInput = {
+  /** BASE64-encoded binary LOD data for this level. */
+  data: Scalars['String']['input'];
+  /** LOD level (>= 0; 0 is the finest / highest detail). */
+  level: Scalars['Int']['input'];
+};
+
+export type LoginUserInput = {
+  /** Account email address. */
+  email: Scalars['String']['input'];
+  /** Account password (min 8 characters). */
+  password: Scalars['String']['input'];
+};
+
+/** Input for mintAppToken: directly mint an app-scoped gameplay token for the calling user (native/direct path, no browser redirect). */
+export type MintAppTokenInput = {
+  /** Numeric id of the app to mint a confined gameplay token for. Free/open apps are auto-granted access; paid apps require an existing entitlement (else FORBIDDEN). */
+  appId: Scalars['BigInt']['input'];
+};
+
+/** Narrow the app token you hold to one grid (DN-10 grid-scoped token). */
+export type MintGridTokenInput = {
+  /** The app; must be the calling app token’s app. */
+  appId: Scalars['BigInt']['input'];
+  /** The grid to confine the token to. The caller must own it or hold its run_client_code permission. */
+  gridId: Scalars['BigInt']['input'];
+  /** Lifetime in seconds (60-3600, default 900). Never outlives the app token it was minted from. */
+  ttlSeconds?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type Mutation = {
+  __typename?: 'Mutation';
+  /** Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token. */
+  abandonGamePublish: HostedGamePublish;
+  /** Application liveness heartbeat for the authenticated user's existing actor rows in an app. Refreshes actors.updated_at so the user stays host-eligible, then returns the freshly-elected host so a client can fold its poll and heartbeat into one round-trip. This is not proof of a live Buddy session and does not refresh the separate Buddy presence lease used by security-sensitive artifact/compute occupancy gates. */
+  actorHeartbeat: Maybe<GameHost>;
+  /** Add a user to a channel, or approve their pending join request (upsert to active). Requires the 'manage_members' channel permission (app admins bypass). Auto-assigns the default role if configured and notifies Buddy with the member's effective send permission. */
+  addChannelMember: GroupMember;
+  /** Add a user to a team, or approve their pending join request (upsert to active). Requires the 'manage_members' team permission (app admins bypass). Auto-assigns the team's default role if configured. */
+  addTeamMember: GroupMember;
+  /** Admit one player-code listing, author, or authoring org to an app's strict allow list. Requires 'manage_compute'. Idempotency is explicit: an identical active entry returns a conflict instead of silently creating duplicates. SIDE EFFECTS: audit row + replica sync. */
+  admitAppCode: AppCodeAdmission;
+  /** Soft-delete an access tier by setting its status to 'archived' (the row is retained, NOT hard-deleted) and notifies the game API. Requires the 'manage_access_tiers' permission on the app that owns the tier; super admins bypass. Existing user grants on this tier are NOT automatically revoked. Throws if the tier is not found. */
+  archiveAccessTier: AppAccessTier;
+  /** Soft-delete an app by setting status=ARCHIVED. The row is retained (NOT hard-deleted) and is excluded from the public marketplace. REVERSIBLE: call updateApp to set status back to DRAFT or LIVE. Requires the 'manage_apps' permission on the app; super admins bypass. Throws if the app id does not exist. */
+  archiveApp: App;
+  /** Assign first-class title for an unowned grid to one user. P1 studio/bootstrap path; marketplace acquisition supersedes it later. Requires app-admin ('manage_apps'). Assigns title only: permissions must be granted explicitly. */
+  assignGridOwnership: GridOwnership;
+  /** Grant runtime permission keys to a group (optionally scoped to a single group role) on a grid by writing the `grid_group_grants` input table, then recompute the materialized effective ACL so every affected member gains the keys. Requires app-admin ('manage_apps'). Returns the grid's current group grants for the group. Use `grantGridPermissions` for per-user grants instead. */
+  assignGroupToGrid: Array<GridGroupGrant>;
+  /** Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the Overworld consent screen before createPortalAuthorizationCode. Idempotent. Requires a SESSION token. */
+  authorizeApp: AppAuthorizationGrant;
+  /** Declare a publish: the full manifest of the built bundle (path, size, SHA-256 per file; index.html at the root). Validates it as a whole (HOSTED_MANIFEST_INVALID names every problem), records a STAGING publish, and returns one presigned PUT per file. Upload every file with exactly the returned headers, then call completeGamePublish. Rate-limited per app. Requires manage_apps and a SESSION token. */
+  beginGamePublish: BeginGamePublishResult;
+  /** Begin vaulting a card on the caller's player wallet (P4b): returns a Stripe SetupIntent client secret + publishable key for the browser to confirm. On success the card is saved for wallet auto-recharge and rent auto-renew. Closes the P2 gap where players had no card-setup path. */
+  beginPlayerCardSetup: PlayerCardSetup;
+  /** DESTRUCTIVE. Cancels an app's paid shared-environment subscription. The app loses its paid shared slot (typically at currentPeriodEnd) and may be denied runtime once the period lapses unless a free slot covers it. Returns the updated subscription. Requires the 'manage_billing' permission on the app's org. */
+  cancelSharedSubscription: AppSharedSubscription;
+  /** Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout. */
+  capturePaypalCheckout: Checkout;
+  /** Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success. Refuses with extensions.code INVALID_CURRENT_PASSWORD (403) when the current password is wrong, and PASSWORD_NOT_SET (409) when the account has no password to change — use setInitialPassword for that, which needs only the session. NEITHER of those means the session is invalid, and neither is UNAUTHENTICATED: both were until v1.60.0, so a client that signs the user out on UNAUTHENTICATED was signing them out over a typo. Every OTHER session for the account is revoked (with the app tokens minted from it); the session that made this call stays valid, so the client does not need to sign in again. */
+  changePassword: Scalars['Boolean']['output'];
+  /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
+  claimFreeAppAccess: AppUserAccess;
+  /** Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN. */
+  claimGameHosting: HostedGame;
+  /** Claim one wilderness chunk (a chunk no grid but the app's world grid covers) as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. A chunk inside another grid (a plot, a zone or another claim) is refused FORBIDDEN (GRID_NOT_CLAIMABLE): the claim would be the most specific grid there and take the chunk from whoever that grid grants. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus the player-code keys and use_video_chat where the caller's tier already carries them, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain. */
+  claimGridChunk: ChunkClaimResult;
+  /** Claim grid ownership under the app's claim policy (D4, server-authorized — no client manage_apps involved). SELF_CLAIM assigns ownership immediately; APPROVAL creates a pending request for designated approvers; INVITE requires a standing invite (consumed on use); MARKETPLACE_ONLY refuses. The grid must exist and have no current owner; game rules gate who may attempt a claim. */
+  claimGridOwnership: GridClaimResult;
+  /** Remove an app's compute allowance, so its ck-exec code is no longer paused for its budget. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
+  clearAppComputeBudget: Scalars['Boolean']['output'];
+  /** Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token. */
+  completeGamePublish: CompleteGamePublishResult;
+  /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
+  completeLoginLink: AuthResponse;
+  /** Confirms a user email address using the token from the confirmation email (also enables password sign-in for the account). Returns true on success, false if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
+  confirmEmail: Scalars['Boolean']['output'];
+  /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
+  connectUdpProxy: UdpProxyConnectionStatus;
+  /** Operator only. Credit the payer of an over-billed charge (an I3 finding: an allowance or rate was raised after the charge landed) the difference, and close the charge row. Idempotent per charge state. SIDE EFFECT: a wallet credit and a CREDIT event. */
+  cpBillingCreditOverbill: BillingCreditResult;
+  /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment and a sanitized audit event. NOTHING IS PUSHED TO GAME API: preemption takes effect when its runtime next pulls this app's crowdy.studio-agent-policy/1 replica, which is within about a minute for an app already holding one and not at all for an app that does not until a permitted caller asks. Releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  cpSetCrowdyStudioAgentAppKill: CrowdyStudioAgentPolicy;
+  /** Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, the revision increments, and a sanitized append-only audit event is written. NOTHING IS FANNED OUT TO APPS: Game API pulls crowdy.studio-agent-policy/1 per app, so a platform change reaches an app that already holds a replica within about a minute (refreshAfter is two thirds of a 60s validity) and reaches an app with no replica only when a permitted caller next asks about it. Game API must fail closed if the envelope is missing, malformed, or stale. Narrowing the platform lists narrows every app immediately on its next read, including apps that expressed no narrowing of their own. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  cpSetCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
+  /** Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user. */
+  createAccessTier: AppAccessTier;
+  /** Creates an actor (a player’s presence/instance in an app world) owned by the authenticated user and returns the persisted row (including the server-set `createdAt`). Requires a valid game token. If `input.avatarId` is set it must reference an avatar the caller owns (throws Unauthorized otherwise). `input.uuid` must be the 32-character ASCII actor id used on the UDP wire (NOT a hyphenated RFC-4122 UUID). */
+  createActor: Actor;
+  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=DRAFT unless overridden in the input. */
+  createApp: App;
+  /** Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar". */
+  createAvatar: Avatar;
+  /** Create a channel. Whether the caller may create one is governed by the per-app channel policy (app_group_policies: admin | member | anyone). The caller becomes the owner with a system 'leader' role. When membersCanSend is true (default) a default 'member' role granting send_messages is created and auto-assigned to joiners (open chat channel); when false only roles you grant may post (announce/read-only channel). */
+  createChannel: Group;
+  /** Create a custom (non-system) channel role granting the given channel permission keys (e.g. send_messages for posting rights). Requires the 'manage_roles' channel permission (app admins bypass). */
+  createChannelRole: GroupRole;
+  /** Creates a Checkout row, opens a hosted payment session with the selected provider, and returns the row with `externalUrl` set — redirect the user there to pay. Status starts PENDING and is reconciled to COMPLETED/FAILED later via provider webhooks (this call does not itself capture funds). The side effect applied on completion depends on `purpose` (e.g. ORG_WALLET_TOPUP credits the org wallet, APP_ACCESS_PURCHASE grants app access). Requires an authenticated user; ORG_WALLET_TOPUP additionally requires the 'manage_billing' org permission. Purposes DONATION and PROPERTY_TOKENS are rejected. Pass `input.idempotencyKey` to make retries safe (a replay returns the first checkout instead of opening a second provider session). */
+  createCheckout: Checkout;
+  /** Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit within one of the app's grid assignments (its buildable regions); it MAY be nested inside a broader containing grid such as the open-by-default world grid, but must not partially overlap a peer grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS). */
+  createGrid: CreateGridResponse;
+  /** Create a grid channel (DN-10): an ordinary channel bound to one grid, owned by the caller, so the grid's player modules may emit_channel into it (their messages carry the sender uuid 'grid:<gridId>'). Only the grid's current owner may create one, whatever the app's channel creation policy says, and a grid holds at most 8 active channels. Membership works like any channel: membershipPolicy defaults to 'open' so visitors can join it, and members get send_messages unless membersCanSend is false. */
+  createGridChannel: Group;
+  /** Creates a custom role in an organization with a name, optional description, and permission keys. Requires the 'manage_members' permission on the org (super admins bypass). */
+  createOrgRole: OrgRole;
+  /** Mints a new org API token and returns the plaintext token exactly once - save it, since subsequent queries only show metadata. Requires the 'manage_tokens' permission on the target org (super admins bypass). */
+  createOrgToken: OrgTokenWithSecret;
+  /** Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token. */
+  createOrganization: Organization;
+  /** Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Requires a SESSION token. */
+  createPortalAuthorizationCode: PortalAuthorizationCode;
+  /** Create a team. Whether the caller may create one is governed by the per-app team policy (app_group_policies: admin | member | anyone). The caller becomes the owner and is granted a system 'leader' role holding every team permission. New teams default to the app's default membership policy unless overridden. */
+  createTeam: Group;
+  /** Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs). */
+  createTeamRole: GroupRole;
+  /** OPERATOR ONLY. Credits an organization wallet without a payment provider, for seeding a test environment or making an operator adjustment, and records it in the wallet ledger as an "admin_credit" transaction. Use this instead of writing to org_wallets by hand: it creates the wallet if absent, repairs a missing wallet id, and moves the balance and the ledger row together in one transaction. Pass a referenceId to make retries idempotent. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so a credit that clears an insufficient_funds denial lifts it immediately instead of leaving the app refusing clients. */
+  creditOrgWallet: WalletTransaction;
+  /** Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
+  crowdyStudioCommonPublish: CrowdyStudioCommonFile;
+  /** Bind a Crowdy Studio project you own to a repository granted to your installation, and make the two agree in one commit: PUSH_PROJECT commits the project files to the branch (refused with GITHUB_REPO_HAS_FILES when the branch already has rust under the layout roots); TAKE_REPOSITORY replaces the project files with the rust on the branch (refused with GITHUB_REPO_EMPTY when there is none). From then on the repository is the working tree and the project files are a mirror of it at githubSha. Identity session only. */
+  crowdyStudioGitHubBind: CrowdyStudioGitHubStatus;
+  /** Install URL for this tier's Crowdy Studio GitHub App with a signed state. Identity session only. No GitHub token ever reaches the browser. */
+  crowdyStudioGitHubConnectUrl: CrowdyStudioGitHubConnectStart;
+  /** Delete one file from the bound repository as a commit on the bound branch, under the same blob-sha and expectedCommitSha guards as crowdyStudioGitHubPutFile. A project file leaves the mirror with it. crowdy.json cannot be deleted this way. */
+  crowdyStudioGitHubDeleteFile: CrowdyStudioGitHubStatus;
+  /** Create or update one UTF-8 file in the bound repository as a commit on the bound branch. Send the blob sha on update and the project githubSha as expectedCommitSha; either being stale is refused with GITHUB_STALE_SHA and nothing moves. When the path is a project file under the layout roots the project mirror advances with it; the returned commitSha is the new githubSha. */
+  crowdyStudioGitHubPutFile: CrowdyStudioGitHubFile;
+  /** Bring the project mirror forward to the branch head. This is how a push made outside Crowdy Studio reaches the editor and the agent; githubSha becomes the head commit. A no-op when already at head. */
+  crowdyStudioGitHubRefresh: CrowdyStudioGitHubStatus;
+  /** Remove the repository bind from a project you own. The project keeps its files (the mirror at githubSha) and is a plain Crowdy Studio project again; nothing on GitHub changes. Identity session only. */
+  crowdyStudioGitHubUnbind: CrowdyStudioGitHubStatus;
+  /** Create or optimistically update one private personal-library source file. Requires an app-scoped token; ownership is always the authenticated player and cannot be delegated. Safe source paths, 64-KiB content, revision, and configurable bounded aggregate library storage are enforced atomically. */
+  crowdyStudioLibrarySave: CrowdyStudioLibraryFile;
+  /** Archive or restore one caller-owned personal-library file under optimistic revision control. Requires an app-scoped token and exact app/user ownership; archived entries remain retained but cannot be imported until restored. */
+  crowdyStudioLibrarySetArchived: CrowdyStudioLibraryFile;
+  /** Create a private revisioned Crowdy Studio project for the authenticated player, optionally with initial server/client text files. Requires only an app-scoped token for the input app; optional grid affinity is validated but grants no deployment authority. Source paths, per-target deploy caps, and aggregate owner/app storage are enforced atomically. */
+  crowdyStudioProjectCreate: CrowdyStudioProject;
+  /** Copy one active caller-owned library revision or one immutable published app-common version into a private project by value. Requires an app-scoped token and exact project ownership. The source is re-authorized, content/provenance are snapshotted, project caps and aggregate storage are checked, and the project revision advances atomically. */
+  crowdyStudioProjectImportFile: CrowdyStudioProject;
+  /** Atomically save selected private project metadata and a batch of file upserts/deletes under one expected project revision. Requires an app-scoped token and exact project ownership. No partial metadata or file changes survive validation, target-cap, aggregate-storage, module-binding, or revision failures. */
+  crowdyStudioProjectSave: CrowdyStudioProject;
+  /** Apply a batch of project-file upserts and deletes in one transaction under one expected project revision. Requires an app-scoped token and exact project ownership. No partial writes survive path, manifest, independent 8-file/64-KiB-file/256-KiB-target caps, aggregate storage, or revision failures. */
+  crowdyStudioProjectSaveFiles: CrowdyStudioProject;
+  /** Optimistically save selected private project metadata and increment its monotonic revision. Requires an app-scoped token and exact project ownership. A stale expectedRevision is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409) — that exact string, not CONFLICT, which is what an earlier wording of this sentence implied and what one SDK consequently matched on; grid affinity remains an authoring hint and never bypasses player-compute deployment checks. */
+  crowdyStudioProjectSaveMetadata: CrowdyStudioProject;
+  /** Archive or restore a private project without deleting any source or provenance, using optimistic revision control. Requires an app-scoped token and exact owner match. Archived projects remain readable by their owner but are read-only until restored. */
+  crowdyStudioProjectSetArchived: CrowdyStudioProject;
+  /** Record (or revoke) the caller's consent for their project source in this app to be sent to a model provider through the platform's metered endpoint under ZDR / no-collection routing. Idempotent. Requires 'use_studio_agent'. SIDE EFFECT: enables (or disables) POST /v1/model/chat/completions for this player and app. */
+  crowdyStudioSetProviderConsent: CrowdyStudioProviderConsent;
+  /** Approve or deny a pending grid claim request (claim policy APPROVAL). Callable by the app's designated approver users or studio staff holding manage_compute. Approval assigns grid_ownership to the requester. */
+  decideGridClaim: GridClaimRequest;
+  /** DESTRUCTIVE: permanently deletes the actor identified by `uuid` and returns a copy of the now-deleted row. OWNER-EXCLUSIVE: only the owner may delete (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id. */
+  deleteActor: Actor;
+  /** DESTRUCTIVE: permanently deletes the avatar and returns a copy of the now-deleted row. OWNER-EXCLUSIVE: only the owner may delete (throws Unauthorized otherwise). Requires a valid game token. */
+  deleteAvatar: Avatar;
+  /** Delete a channel. Requires the 'manage_group' channel permission (app admins bypass). DESTRUCTIVE: cascades to members and roles and notifies Buddy servers to tear down message routing for the channel. Returns true on success. */
+  deleteChannel: Scalars['Boolean']['output'];
+  /** Delete a non-system channel role. Requires the 'manage_roles' channel permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members. Returns true if a role was deleted. */
+  deleteChannelRole: Scalars['Boolean']['output'];
+  /** Delete a studio-created peer grid so its chunk box no longer blocks overlapping grid creation. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `gridId` is populated and `error` is NO_ERROR; on failure `gridId` is null and `error` is a UDP-style error code (e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN). The open-by-default world grid and any grid that still contains nested child grids cannot be deleted. */
+  deleteGrid: DeleteGridResponse;
+  /** DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token. */
+  deleteMyAccount: Scalars['Boolean']['output'];
+  /** Deletes an organization role. Requires the 'manage_members' permission on the role's org (super admins bypass). DESTRUCTIVE: removes the role and unassigns it from all members. Returns false if the role does not exist. */
+  deleteOrgRole: Scalars['Boolean']['output'];
+  /** Permanently deletes a quota enforcement rule by id. Returns true if a rule was removed, or false if no quota with that id exists. Destructive and not reversible: once removed, the metric falls back to the next-most-specific rule or the free-tier default. Requires the 'manage_quotas' permission on the same scope (app or org) the quota belongs to, or super admin for global quotas. */
+  deleteQuota: Scalars['Boolean']['output'];
+  /** Delete a team. Requires the 'manage_group' team permission (app admins bypass). DESTRUCTIVE: cascades to members, roles, and any grid grants the team conferred, and recomputes the effective grid ACL for affected grids. Returns true on success. */
+  deleteTeam: Scalars['Boolean']['output'];
+  /** Delete a non-system team role. Requires the 'manage_roles' team permission (app admins bypass). The system 'leader' role cannot be deleted. DESTRUCTIVE: removes the role from members and recomputes any grid ACLs the role granted on. Returns true if a role was deleted. */
+  deleteTeamRole: Scalars['Boolean']['output'];
+  /** DESTRUCTIVE: deletes the authenticated user’s per-app state row for `appId` and returns the deleted row. Requires a valid game token; acts only on the caller’s own state. Throws NotFound when no row exists. */
+  deleteUserAppState: UserAppState;
+  /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
+  disconnectUdpProxy: Scalars['Boolean']['output'];
+  /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
+  exchangePortalCode: AppTokenResponse;
+  /** Make an earlier ck-exec version active again, a rollback. Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission. */
+  execActivateVersion: ExecAppStatus;
+  /** Build ck-exec modules from Rust source: each crate is compiled with the platform's pinned toolchain and `ckx-sdk`, for wasm32-unknown-unknown, and checked against the guest ABI. Returns at once with the build queued; poll `execBuildStatus`, then pass its id to `execDeploy`. Requires the org 'manage_compute' permission. */
+  execBuild: ExecBuild;
+  /** Connect a player to ck-exec: the execution manager picks a host (the one running `nodeType`/`key` when given, placing it if needed) and this returns its gateway and a 60-second connect token bound to this player, this app and that host. Requires the app-scoped token of the app named. */
+  execConnect: ExecConnection;
+  /** Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints. The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token. */
+  execConnectAsDeveloper: ExecConnection;
+  /** Consent to run a mod's CLIENT half in your browser at its current capability hash. A CLIENT half whose capabilities change carries a new hash, and the consent stops holding until you consent again. Answers CONFLICT when the hash is not the current one. Requires access to the app. */
+  execConsentClientMod: Scalars['Boolean']['output'];
+  /** Deploy a new version of an app's ck-exec topology: the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active; running instances pick it up when they next start. Requires the org 'manage_compute' permission. */
+  execDeploy: ExecDeployResult;
+  /** Build a mod from one ckx-sdk crate, as `execBuild` builds a developer's crates. Returns at once with the build queued; poll `execModBuildStatus`, then pass its id to `execModDeploy`. One build at a time per player. Requires the 'write_server_code' permission in the app. */
+  execModBuild: ExecBuild;
+  /** Build the CLIENT half of a mod from one crowdy-client-sdk crate: compiled for wasm32-unknown-unknown in the build sandbox, fuel-metered and optimized there, checked against the client ABI and at most 512 KiB, with its capability summary derived from the module. Returns at once with the build queued (`kind` `client`); poll `execModBuildStatus`, then attach it with `execModClientDeploy`. One build, server or CLIENT, at a time per player. Requires the 'write_client_code' permission in the app. */
+  execModClientBuild: ExecBuild;
+  /** Detach the CLIENT half of a mod on your grid, with every visitor's consent to it; the mod itself keeps running. Requires being the grid's current owner and 'write_client_code' on both the app tier and the grid. */
+  execModClientDelete: Scalars['Boolean']['output'];
+  /** Attach a CLIENT build of yours to your mod on a grid you own, replacing the CLIENT half it had; its version rises by one. A visitor's consent carries over only while the capability hash is unchanged. Requires being the grid's current owner, 'write_client_code' on both the app tier and the grid, the mod running as you, and the app's code admission admitting the new CLIENT version (an admission naming the mod, its listing or you). */
+  execModClientDeploy: ExecModClient;
+  /** Stop and remove a mod on your grid, with its state and versions. Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid. */
+  execModDelete: Scalars['Boolean']['output'];
+  /** Deploy a mod build of yours to a grid you own: a new mod starts switched off; a running one restarts on the new version. Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid. */
+  execModDeploy: ExecMod;
+  /** Install a listing onto a grid you own as your own mod, switched off (no payments). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid. */
+  execModInstall: ExecMod;
+  /** Publish a mod of yours, at its current version, for other grid owners in the app to install (no payments). Requires being the grid's current owner and 'write_server_code' on both the app tier and the grid. */
+  execModPublish: ExecModListing;
+  /** Switch a mod on your grid on or off. On, it runs as you once the app's code admission admits it. Requires being the grid's current owner and 'run_server_code' on both the app tier and the grid. */
+  execModSetEnabled: ExecMod;
+  /** The mods kill ladder: switch off one mod, a player's mods, a grid's mods, a listing's installs or every mod in the app, or back on. Off stops what runs at once and refuses calls. Returns the switches that are off. Requires the org 'manage_compute' permission. */
+  execModSetSwitch: Array<ExecModSwitch>;
+  /** Delist a listing you published: nobody installs it any more; installed copies keep running. */
+  execModUnpublish: Scalars['Boolean']['output'];
+  /** Stop trusting an author on a grid, and take back your consent to each of their CLIENT halves there, so none is served to you until you consent or trust again; true when anything was taken back. Works from anywhere, not only inside the grid. Needs only the app-scoped token of the app, not access to it. */
+  execRevokeAuthorTrust: Scalars['Boolean']['output'];
+  /** Take back your consent to a mod's CLIENT half, whatever hash you consented to; true when you had consented. While you trust the mod's author on its grid, their CLIENT halves there are still served to you: take that back with `execRevokeAuthorTrust`. Needs only the app-scoped token of the app, not access to it. */
+  execRevokeClientModConsent: Scalars['Boolean']['output'];
+  /** The kill switch for an app's ck-exec code, or one node type of it. Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. Requires the org 'manage_compute' permission. */
+  execSetEnabled: ExecAppStatus;
+  /** Trust one author's CLIENT halves on a grid you stand in, at the hash of their union (`authorCapabilityHash`): it covers the author's CLIENT halves there while their union is no wider, and consents to each current one at its own hash. Answers CONFLICT when the hash is not the current one. Requires access to the app. */
+  execTrustAuthor: Scalars['Boolean']['output'];
+  /** ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). */
+  forceLogoutUser: Scalars['Boolean']['output'];
+  /** Operator only (is_operator). Deletes the stored deliverability rows for one address (email_status and email_events) and returns how many rows went. Exists so a verification run is not reading the previous run's events, and so an address suppressed by a bounce that has since been fixed can be given another chance. Returns 0 when there was nothing stored. */
+  forgetEmailDeliverability: Scalars['Int']['output'];
+  /** Define an app feature key that access tiers can be granted. ck-exec code reads the keys a player's tier grants with `ctx.players().features(player)` (scope `players.read`) and gates on them itself. The `gameModel` prefix is a legacy name. Idempotent on (app, featureKey). Requires app-admin ('manage_apps'). */
+  gameModelDefineFeature: GmAppFeature;
+  /** Grant a feature key to an access tier, so it is among the features ck-exec code reads with `ctx.players().features(player)` for every player with active access on that tier. The `gameModel` prefix is a legacy name. Requires app-admin ('manage_apps'). */
+  gameModelGrantTierFeature: GmTierFeature;
+  /** Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed. */
+  gameModelRevokeTierFeature: Scalars['Boolean']['output'];
+  /** Grant (or re-activate) a user's access to an app, optionally on a specific tier. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. ENTITLEMENT CHANGE: upserts an active app_user_access row and notifies the game API, so the target user immediately gains that tier's runtime permissions in Buddy. Idempotent per (app,user): re-granting updates the tier and sets status back to active. */
+  grantAppAccess: AppUserAccess;
+  /** Grant one or more runtime permission keys directly to a single user on a grid (writes the `grid_user_direct_grants` input table), then recompute that user's materialized effective ACL on the grid. The target user must already have active app access (otherwise this fails). Requires app-admin ('manage_apps'). Returns the user's full effective permission-key set on the grid. To grant by group/role instead of per-user, use `assignGroupToGrid`. */
+  grantGridPermissions: GridUserPermissions;
+  /** Org dashboard shortcut: the authenticated caller grants themselves access to an app using its default active tier. Requires that the caller is an active member of the app's owning org OR holds the 'manage_access_tiers' permission on the app. ENTITLEMENT CHANGE: upserts an active grant and notifies the game API. Errors if the app has no active tier, or the caller is neither a member nor a manager. */
+  grantMyAppAccess: AppUserAccess;
+  /** Adds a user to an organization as a member. Requires the 'manage_members' permission on the target org (super admins bypass). */
+  inviteOrgMember: OrgMember;
+  /** Issue a standing grid claim invite (claim policy INVITE). Callable by designated approvers or studio staff holding manage_compute; the invitee then calls claimGridOwnership to take ownership. */
+  issueGridClaimInvite: Scalars['Boolean']['output'];
+  /** Join a channel as the caller (subscribe to it). Honors the channel membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. On becoming active, Buddy is notified with the caller's effective send permission so routing starts. */
+  joinChannel: GroupMember;
+  /** Join a team as the caller. Honors the team membership policy: open -> active immediately, request -> pending (a manager must approve), invite/admin -> rejected. Banned users are rejected. No special permission required. */
+  joinTeam: GroupMember;
+  /** Leave a channel (unsubscribe the caller). Notifies Buddy to stop routing messages to the caller. Returns true if a membership was removed. */
+  leaveChannel: Scalars['Boolean']['output'];
+  /** Leave a team (removes the caller's own membership). Returns true if a membership was removed. */
+  leaveTeam: Scalars['Boolean']['output'];
+  /** Link an additional federated identity (from a socialLoginStart callback) to the signed-in account. Requires a session token; throws if the identity is already linked to another account. */
+  linkIdentity: UserIdentity;
+  /** Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed. First-party origins only: a browser page on any other origin is refused with HOSTED_SIGN_IN_REQUIRED (403) and must use the hosted sign-in redirect (CrowdyJS portal.signIn) instead; requests with no Origin header (native clients, scripts) are unaffected. Rate-limited per address and per client. */
+  login: AuthResponse;
+  /** Ends the current session by deleting the game_token that authenticated this request; other devices stay logged in. An identity session logout also cascades to (revokes) every app token it minted. Returns false if no token was resolved. */
+  logout: Scalars['Boolean']['output'];
+  /** Ends every active session for the authenticated user: deletes every session token and every app-scoped gameplay token derived from one, so the user is signed out of the platform and of every game they had entered. Takes effect immediately — a deleted token stops authenticating on its next request rather than at its next refresh. Requires a valid session token. */
+  logoutAllDevices: Scalars['Boolean']['output'];
+  /** Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). Side effect: may create an app_user_access row on the app's free default tier. */
+  mintAppToken: AppTokenResponse;
+  /** Mint a grid-scoped token from the app token you hold (DN-10). The result can call only a short, fixed list of gameplay fields, and each is confined to the grid: world reads and replication sends must address a chunk inside it (a send's origin; its reach follows distance), and channels must be the grid's own. refreshAppToken and logout are refused, so the token cannot widen or tear down its parent. Requires an app token (not a session token, not another grid token), and the caller must own the grid or hold run_client_code on it. */
+  mintGridToken: GridTokenResponse;
+  /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
+  publishAppToShared: PublishAppResult;
+  /** Store acceptance of the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy) and the age-of-majority attestation. Both arguments must be true; a false value stores nothing and is refused with LEGAL_ACCEPTANCE_REQUIRED. Idempotent for a version already stored. Requires a session token. Gameplay tokens stay refused until this has succeeded for the current document set. */
+  recordPlayerConsents: Scalars['Boolean']['output'];
+  /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
+  refreshAppToken: AppTokenResponse;
+  /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
+  register: AuthResponse;
+  /** OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired. */
+  reinstateOrganization: OrgRetirementType;
+  /** Release a one-chunk grid previously created through claimGridChunk. Requires an ordinary app-scoped player token and the caller must still be its current user owner. Refuses foreign grids, studio/marketplace grids, and grids assigned through legacy claimGridOwnership. Atomically removes pending claim requests and invites, self-claim ownership, direct/effective ACL rows, and the grid so its chunk can be claimed again. */
+  releaseClaimedGrid: ReleaseClaimedGridResult;
+  /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
+  removeChannelMember: Scalars['Boolean']['output'];
+  /** Removes a user from an organization. Requires the 'manage_members' permission on the org (super admins bypass). DESTRUCTIVE: revokes the user's membership and role assignments in that org. Returns false if the user was not a member. */
+  removeOrgMember: Scalars['Boolean']['output'];
+  /** Removes a saved (vaulted) off-session payment method from the org; returns true on success. If it was the method backing auto-billing, recharges will fail until another is set up. Requires the 'manage_billing' org permission. */
+  removeSharedPaymentMethod: Scalars['Boolean']['output'];
+  /** Remove a member from a team. Requires the 'manage_members' team permission, except that any member may remove themselves. DESTRUCTIVE: drops the membership and its roles. Returns true if a membership was removed. */
+  removeTeamMember: Scalars['Boolean']['output'];
+  /** Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
+  requestLoginLink: RequestLoginLinkResult;
+  /** Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
+  requestPasswordReset: Scalars['Boolean']['output'];
+  /** Request to join a request-only channel (creates a pending membership a manager can approve via addChannelMember). Behaves identically to joinChannel; named for request-policy UIs. */
+  requestToJoinChannel: GroupMember;
+  /** Request to join a request-only team (creates a pending membership a manager can approve via addTeamMember). Behaves identically to joinTeam; named for request-policy UIs. */
+  requestToJoinTeam: GroupMember;
+  /** Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
+  resendConfirmationEmail: Scalars['Boolean']['output'];
+  /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). EVERY existing session for the account is revoked (and every app token minted from one): a reset is what an owner does after losing control of the account, so whoever held a session loses it. The user signs in again with the new password. */
+  resetPassword: Scalars['Boolean']['output'];
+  /** OPERATOR ONLY. Retires an organization: sets organizations.status to 'retired', stamps deleted_at, archives its apps, and writes a tombstone to org_retirements. RETIREMENT IS A STATE, NOT A DELETION — no wallet_transactions, org_billing_waivers, app_shared_usage_charges or other ledger row is altered or removed, so an auditor can still reconstruct exactly what this organization spent, with the same joins as before, indefinitely. There is no purge and no retention window, by decision rather than by omission: org ledger rows are retained forever (operator decision, 2026-08-21), so retirement is only ever a state. A retired organization's remaining wallet balance is FROZEN indefinitely by the same decision — held, not refunded and not forfeited — and the amount is recorded on the tombstone. AFTER RETIREMENT the org's API tokens stop authenticating, its members lose every org permission (super admins excepted, so this is reversible), and it is excluded from the caller's organization list — but it is still readable by id and slug, because a retired org that answers like a missing one is worse than one that says what it is. Refuses unless expectedSlug matches the org named by orgId, and refuses an organization holding money unless acknowledgeFrozenBalance is passed. Reverse it with reinstateOrganization. */
+  retireOrganization: OrgRetirementType;
+  /** Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. */
+  revokeAppAccess: AppUserAccess;
+  /** Withdraw consent for an app and immediately invalidate every app-scoped token the authenticated user holds for it, whichever session minted them — the tokens stop authenticating on their next request, not at their next refresh. Atomic: if the tokens cannot be invalidated, consent is left in place and this returns an error, so a successful response is the only state in which access has actually been withdrawn. Does NOT sign the user out: their identity session and their tokens for other apps are untouched. Returns false when there was nothing to revoke (no active grant and no live tokens), which makes a repeat call safe. Requires a SESSION token. */
+  revokeAppAuthorization: Scalars['Boolean']['output'];
+  /** Revoke an active player-code admission. Requires 'manage_compute'. SIDE EFFECTS: audit row + replica sync; game-api drains affected server modules and blocks client artifact fetches on the next admission refresh. */
+  revokeAppCodeAdmission: AppCodeAdmission;
+  /** Revoke a user's direct grants on a grid (deletes from the `grid_user_direct_grants` input table) and recompute their materialized effective ACL. Omit `permissionKeys` to remove ALL of the user's direct grants on the grid; pass a subset to remove only those keys. Does not affect permissions the user receives via group grants. Requires app-admin ('manage_apps'). DESTRUCTIVE for the targeted grants. Returns the user's remaining effective permission keys on the grid. */
+  revokeGridPermissions: GridUserPermissions;
+  /** Revoke group/role grants on a grid (deletes from the `grid_group_grants` input table) and recompute the materialized effective ACL. Omit `permissionKeys` to revoke ALL of the group/role's grants on the grid; pass a subset to revoke only those keys. Requires app-admin ('manage_apps'). DESTRUCTIVE: removes the granted permissions from every affected member. Returns the group's remaining grants on the grid. */
+  revokeGroupFromGrid: Array<GridGroupGrant>;
+  /** Permanently deactivates an org token so it can no longer authenticate. Requires the 'manage_tokens' permission on the token's org (super admins bypass). DESTRUCTIVE and irreversible; the secret cannot be reactivated. Returns false if the token does not exist. */
+  revokeOrgToken: Scalars['Boolean']['output'];
+  /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
+  rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
+  /** OPERATOR ONLY. Runs the shared-usage billing tick once. It still bills only the last CLOSED clock hour — it will not charge an open hour. Use this to prove a closed-hour debit without waiting for the ~60s cron. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier. */
+  runSharedUsageBillingTick: Scalars['Boolean']['output'];
+  /** Send an actor (player/NPC) state update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — it does NOT confirm the world applied the update. There is NO separate per-request success response: the game server fans the update out to every client in the target chunk INCLUDING the sender, so you observe your own applied update as an ActorUpdateNotification carrying the same sequenceNumber (ActorUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Subscribe to udpNotifications before sending so the self-notification/error is not missed. */
+  sendActorUpdate: Scalars['Boolean']['output'];
+  /** Send a spatial voice/audio packet, fanned out to nearby actors as a ClientAudioNotification. Requires a bearer game token; voice may additionally be gated by a runtime/grid permission for the region — if the caller lacks it the game server responds asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT that it was delivered; the sender receives no echo, only errors (GenericErrorResponse, correlated by sequenceNumber) on udpNotifications. sequenceNumber is correlation only, not an idempotency key. */
+  sendAudioPacket: Scalars['Boolean']['output'];
+  /** Publish a message to a channel, delivered to every active member of the channel (not chunk-routed) as a ChannelMessageNotification on udpNotifications. Requires a bearer game token and the channel send_messages permission; lacking the permission the server drops the message. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  sendChannelMessage: Scalars['Boolean']['output'];
+  /** Send a custom, app-defined client event (identified by eventType, a uint16) for spatial replication to nearby chunks; nearby actors receive it as a ClientEventNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT that the world processed it. Failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  sendClientEvent: Scalars['Boolean']['output'];
+  /** Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (NOT broadcast to nearby actors). The sender must know the destination actor’s current chunk. Requires a bearer game token; opens a UDP proxy session automatically if none exists. The target receives a SingleActorMessageNotification on udpNotifications; the sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  sendSingleActorMessage: Scalars['Boolean']['output'];
+  /** Operator only (is_operator). Sends a plain test message to one address and returns the SES message id. SIDE EFFECTS: a real outbound email billed to the shared SES identity, and a `send` row in email_events. Prefer the AWS mailbox simulator (success@ / bounce@ / complaint@simulator.amazonses.com), which exercises the whole path without touching a real inbox or a real reputation. `sent: true` with `simulated: true` means SEND_EMAILS is off and nothing left the building -- read both fields. */
+  sendTestEmail: SendTestEmailResult;
+  /** Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  sendTextPacket: Scalars['Boolean']['output'];
+  /** Send ONE webcam video fragment, fanned out to nearby actors as a ClientVideoNotification (Buddy v0.25.0). Requires a bearer game token and the use_video_chat runtime permission at app AND grid level -- without it the game server responds asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). A datagram carries at most ~1117 bytes of videoData, so an encoded frame is split by the SDK into fragments (6-byte header: version, codec, frameId, fragIndex, fragCount; at most 16 per frame) and reassembled by receivers; this is a mutation PER FRAGMENT and sustained video belongs on the binary realtime relay. Every receiver in range pays the egress bytes: keep distance small and frames few. Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING -- NOT that it was delivered; the sender receives no echo, only errors (GenericErrorResponse, correlated by sequenceNumber) on udpNotifications. */
+  sendVideoPacket: Scalars['Boolean']['output'];
+  /** Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Throws FORBIDDEN synchronously, before anything is sent, without the voxel edit permission updateVoxel checks for the chunk (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk), and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false). */
+  sendVoxelUpdate: Scalars['Boolean']['output'];
+  /** Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission. */
+  setAppBudget: AppBudget;
+  /** Register/update an app's portal client settings (redirect_uris, client_type, launch_url). Requires manage_apps on the app and a SESSION token. */
+  setAppClientSettings: PortalConsentState;
+  /** Set an app's player-code censorship mode. Requires 'manage_compute'. SIDE EFFECTS: writes an immutable audit row and replica-syncs the mode to game-api. Switching to ALLOW_LIST is strict: unadmitted code (including self-authored code) drains at the runtime activation gate; deploy/compile remain allowed. */
+  setAppCodeAdmissionMode: CodeAdmissionMode;
+  /** Set an app's compute allowance in units per minute. One unit is one millisecond of measured execution time; ck-exec work is converted from busy time and fuel. An over-ceiling value is REFUSED naming the ceiling (6000000 units per minute) rather than accepted and clamped, so the value reported back is always the value in force. Set enforce to true to pause the app's ck-exec code while its last settled minute is over the allowance; leave it false to record the allowance without pausing anything. Requires app-admin ('manage_apps'). */
+  setAppComputeBudget: AppComputeBudgetInfo;
+  /** Set how a player claim confers grid ownership in this app (D4): SELF_CLAIM, APPROVAL (optionally with a designated approver list), or INVITE. MARKETPLACE_ONLY is refused with FEATURE_DISABLED while paid grid commerce is off the public API. Requires 'manage_apps'. Changing policy never revokes existing grid_ownership rows. */
+  setAppGridClaimPolicy: GridClaimPolicy;
+  /** Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Note that the ~1 MB/s free-tier shaping is lifted by funding a wallet, not by reserving. Requires 'manage_billing' on the app's org. */
+  setAppReservedThroughput: SetAppReservedThroughputResult;
+  /** Sets per-app hourly/daily spend caps (in cents) and returns the re-evaluated runtime state. Pass null for a limit to clear that cap. Exceeding a cap denies the app's runtime (runtimeDenialReason = spend_cap). Requires the 'manage_billing' permission on the app's org. */
+  setAppSpendCaps: AppRuntimeState;
+  /** Super admin only (also requires the management API to be enabled for this deployment). Overrides an app visibility platform-wide, e.g. to take down (PRIVATE/UNLISTED) or relist (PUBLIC) an app. Throws ForbiddenException for non-super-admins or when management APIs are disabled. Throws if the app id does not exist. */
+  setAppVisibility: App;
+  /** Enables or disables off-session auto-billing for an org and updates its thresholds. When enabled and the wallet falls to lowWaterThresholdCents, the saved payment method is charged rechargeAmountCents (requires setupSharedPaymentMethod first). Pass limitCents=null for no per-period cap. Requires the 'manage_billing' org permission. */
+  setAutoBilling: OrgAutoBilling;
+  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed. */
+  setBillingRate: SetRateCardResult;
+  /** Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately. */
+  setChannelMemberRoles: GroupMember;
+  /** Set who may create channels in an app and the default membership policy for new channels. Requires app-admin ('manage_apps'). Affects future channel creation only, not existing channels. */
+  setChannelPolicy: AppGroupPolicy;
+  /** Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. A model/tool/mode/risk list naming anything outside the platform allowlist is REFUSED with AGENT_POLICY_INVALID quoting the platform's current list, rather than silently reduced; a list you do send is stored exactly as sent and can only narrow, and omitting it entirely means 'no narrowing', which inherits the platform's list live on every read. Numeric and retention values are still clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision and appends a sanitized audit event. NOTHING IS PUSHED TO GAME API: its runtime pulls crowdy.studio-agent-policy/1, obtaining a replica the first time a permitted caller asks about an app that has none, and re-pulling an existing replica once it passes refreshAfter (two thirds of its 60s validity). A change therefore reaches enforcement within about a minute for an app already in use, and not at all until someone asks for one that is not. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  setCrowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
+  /** Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). */
+  setEarlyAccessOverride: User;
+  /** Open a grid to every player: replace the permission keys it grants each player with active access to the app (writes the `grid_open_permissions` input table), then recompute the grid's materialized effective ACL for all of them. The most specific grid covering a chunk decides a voxel write there, so a zone inside the world grid that everyone may build in must grant `update_voxel_data` itself. The grid's limits still cap these keys; players who get access later receive them when they connect. Pass an empty array to close the grid. Refuses the app's world grid (already open), the four player-code keys, and a 33rd open grid in one app. Requires app-admin ('manage_apps'). */
+  setGridOpenPermissions: GridOpenPermissions;
+  /** Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid. */
+  setGridPermissionLimits: GridPermissionLimits;
+  /** Developer switch: DISABLED (the shell says "disabled by its developer") or back to LIVE. A TAKEN_DOWN game is refused (HOSTED_GAME_TAKEN_DOWN). Requires manage_apps and a SESSION token. */
+  setHostedGameEnabled: HostedGame;
+  /** OPERATOR: list or unlist a hosted game in the lobby and the management UI. */
+  setHostedGameListing: HostedGame;
+  /** Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Refuses with extensions.code PASSWORD_ALREADY_SET (409) when a password is already set — use changePassword, which verifies the current one, or the reset flow if it is forgotten. (Before v1.60.0 that refusal reached clients as INTERNAL_SERVER_ERROR while this description said CONFLICT, so a client could only recognise it by the message text.) A security notification is emailed to the account address. Existing sessions are not revoked. */
+  setInitialPassword: Scalars['Boolean']['output'];
+  /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
+  setOperator: User;
+  /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
+  setOrgBillingExempt: BillingExemptOrgType;
+  /** Super admin only. Freeze ('frozen') or unfreeze ('active') an organization platform-wide. A FROZEN organization grants its members NO org permission (super admins excepted, so it is reversible): they cannot spend its wallet, create or manage apps, or change members, and every such refusal names the freeze; its API tokens stop authenticating; the org itself still resolves by id and slug so Studio can show the state. Takes exactly 'active' or 'frozen'; 'retired' is refused in either direction — retirement is retireOrganization, which writes a tombstone. */
+  setOrgStatus: Organization;
+  /** Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method. */
+  setPlayerAutoBilling: PlayerAutoBilling;
+  /** Change a listing's catalog status. DELISTED/ACTIVE are owner actions (existing installs keep their pinned versions; delisting only stops new acquisitions). KILLED requires 'manage_compute' on the app (studio/operator). SIDE EFFECTS: audit row + replica sync. */
+  setPlayerCodeListingStatus: PlayerCodeListing;
+  /** Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income accrues per charge to the org's income line and is paid out via the P4b payout ledger. Requires 'manage_billing'. */
+  setPlayerRateMarkup: Scalars['Int']['output'];
+  /** Set (or clear, by passing both limits null) one of the caller's self-set spend caps: a global or per-app daily/monthly ceiling in cents. Hitting a cap pauses that player's mods with PLAYER_SPEND_CAP until the window rolls — play is untouched. Changes replica-sync to the game runtime. */
+  setPlayerSpendCap: Array<PlayerSpendCap>;
+  /** Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage. */
+  setQuota: ServiceQuota;
+  /** ADMIN PRIVILEGE CHANGE: grants or revokes platform super-admin on the target user, changing their privileges across the whole platform. Requires a super-admin bearer game token (and the management API enabled). */
+  setSuperAdmin: User;
+  /** Replace a member's roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' team permission (app admins bypass). */
+  setTeamMemberRoles: GroupMember;
+  /** Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams. */
+  setTeamPolicy: AppGroupPolicy;
+  /** Begins vaulting a card for off-session auto-billing. Returns a Stripe SetupIntent client secret the browser confirms; no charge is made here. Requires the 'manage_billing' org permission. */
+  setupSharedPaymentMethod: PaymentMethodSetup;
+  /** Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
+  socialLoginComplete: AuthResponse;
+  /** Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
+  socialLoginStart: SocialLoginStart;
+  /** OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false. */
+  takeDownHostedGame: HostedGame;
+  /** Checks whether the authenticated user is allowed to teleport an actor to a destination within an app and returns the authorization result. This is an authorization check only — it does NOT itself move the actor; the UDP runtime performs the actual movement. Requires a valid bearer game token plus the app-level "teleport" runtime permission. Returns success=false with errorCode INVALID_APP_ID (non-positive appId), UNAUTHORIZED (reserved sentinel destination -6,-6,-6 or missing permission), or success=true / NO_ERROR when allowed. */
+  teleportRequest: TeleportResponse;
+  /** Transfer grid title to another user. The current user owner or an app admin may transfer. DESTRUCTIVE/SECURITY-SENSITIVE: atomically disables every player module on the grid pending new-owner consent, wipes module state, removes the old owner direct grid grants, and closes the old title row. The new owner receives no implicit permissions. */
+  transferGridOwnership: GridOwnership;
+  /** Transfer a listing between personal and org ownership (DN-9). The caller must be the current owner (user-owned) or hold manage_compute in the owning org; transfers to an org require manage_compute in the receiving org. SIDE EFFECTS: append-only ownership audit row + replica sync to game-api. Ownership moves listing control and source-access rights; from P4b it also moves proceeds. */
+  transferPlayerCodeListing: PlayerCodeListing;
+  /** Unlink a federated identity from the signed-in account by identityId. Refuses to remove your last remaining sign-in method. Requires a session token. */
+  unlinkIdentity: Scalars['Boolean']['output'];
+  /** Update an existing access tier (name, ordering, pricing, permissions, etc.); only fields present in the input are changed. Requires the 'manage_access_tiers' permission on the app that owns the tier (resolved from tierId); super admins bypass. SIDE EFFECTS: re-syncs the tier's permissions to the game API. Throws if the tier is not found or the caller lacks permission. */
+  updateAccessTier: AppAccessTier;
+  /** Partially updates an actor (appId, avatarId, chunk, publicState, privateState); fields omitted from `input` are left unchanged. OWNER-EXCLUSIVE: only the actor’s owner may update (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id. */
+  updateActor: Actor;
+  /** Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary. */
+  updateActorState: Actor;
+  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen); only fields present in the input are changed. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
+  updateApp: App;
+  /** Updates an avatar’s mutable fields (currently `name`) and returns it. OWNER-EXCLUSIVE: only the avatar’s owner may call this (throws Unauthorized otherwise). Requires a valid game token. To change state blobs use `updateAvatarState`. */
+  updateAvatar: Avatar;
+  /** Creates or replaces one avatar’s per-app state (upsert keyed by appId+avatarId; bumps updatedAt). OWNER-EXCLUSIVE: only the avatar’s owner may write (throws Unauthorized otherwise); every authenticated user can read it via `avatarAppState`/`avatarAppStates`. Requires a valid game token. `input.state` is base64-encoded binary (null clears it). */
+  updateAvatarAppState: AppAvatarState;
+  /** Replaces an avatar’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the owner may write (throws Unauthorized otherwise). Requires a valid game token. Both blobs are base64-encoded binary. */
+  updateAvatarState: Avatar;
+  /** Update a channel's name, description, and/or membership policy. Requires the 'manage_group' channel permission (app admins bypass). */
+  updateChannel: Group;
+  /** Update a channel role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' channel permission (app admins bypass). Note: changing send_messages here does not re-push Buddy until affected members' roles are re-applied via setChannelMemberRoles. */
+  updateChannelRole: GroupRole;
+  /** Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. Leaves chunkState and LODs untouched. Requires an app token for the app and either the 'manage_apps' permission on the app (resolved via its org; super admins bypass) or the voxel edit permission for this chunk that updateVoxel checks (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk). Throws FORBIDDEN otherwise, and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false). */
+  updateChunk: Chunk;
+  /** Replaces the level-of-detail (LOD) set for a chunk, preserving voxels, per-voxel states, chunk state and owner; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass). */
+  updateChunkLods: Maybe<Chunk>;
+  /** Upserts ONLY the opaque base64 chunk-level state blob for a chunk, preserving its voxels, per-voxel states and LODs; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass). */
+  updateChunkState: Maybe<Chunk>;
+  /** Sets the authenticated user’s gamertag and disambiguation and appends a gamertag-history row. Requires a valid game token; only ever updates the caller. Fails if the gamertag+disambiguation pair is already taken. */
+  updateGamertag: User;
+  /** Replaces the full set of roles assigned to an org member. Requires the 'manage_members' permission on the org (super admins bypass). Pass the complete desired role list; roles not included are removed. */
+  updateOrgMemberRoles: OrgMember;
+  /** Updates a role's name, description, and/or permission set. Requires the 'manage_members' permission on the role's org (super admins bypass). If input.permissions is provided it replaces the entire set (empty array clears all); omit to leave permissions unchanged. Throws FORBIDDEN when input.permissions is given for a SYSTEM role (such as the org's built-in 'admin'): system roles have a fixed permission set, so create a custom role and assign that instead. Name and description remain editable on a system role. */
+  updateOrgRole: OrgRole;
+  /** Updates an org token's metadata (label, expiry, active flag). Requires the 'manage_tokens' permission on the token's org (super admins bypass). Does not rotate the secret value. */
+  updateOrgToken: OrgToken;
+  /** Update a team's name, description, and/or membership policy. Requires the 'manage_group' team permission (app admins bypass). */
+  updateTeam: Group;
+  /** Update a team role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' team permission (app admins bypass). */
+  updateTeamRole: GroupRole;
+  /** Creates or replaces the authenticated user’s per-app state for `input.appId` (upsert keyed by appId+userId). Requires a valid game token; always writes the caller’s own state. `input.state` is base64-encoded binary. */
+  updateUserAppState: UserAppState;
+  /** Replaces the authenticated user’s top-level `state` blob (base64-encoded binary; omit/null clears it). Requires a valid game token; only ever writes the caller. */
+  updateUserState: User;
+  /** Sets the target user’s account `user_type` (e.g. "direct", "deleted"). Requires a super-admin bearer game token (and the management API enabled). */
+  updateUserType: User;
+  /** Records (upserts) a single voxel edit in the voxel_updates log for one chunk and returns the resulting Voxel. WRITES world state; getChunk returns the edit in the chunk's voxelStates (the packed grid itself is written only by updateChunk). Requires a valid bearer token AND voxel-edit permission for the target region: the user must have active app access, the `update_voxel_data` tier permission, and `update_voxel_data` on the most specific grid covering the chunk (the smallest by volume; of equal ones the lowest grid id), so a claim, a plot or a safe zone decides its chunks and the app's world grid decides only the wilderness. A chunk no grid covers is refused, and so is a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false). */
+  updateVoxel: Voxel;
+};
+
+
+export type MutationAbandonGamePublishArgs = {
+  publishId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+};
+
+
+export type MutationActorHeartbeatArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationAddChannelMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationAddTeamMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationAdmitAppCodeArgs = {
+  input: AdmitAppCodeInput;
+};
+
+
+export type MutationArchiveAccessTierArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  tierId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationArchiveAppArgs = {
+  appId: Scalars['BigInt']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationAssignGridOwnershipArgs = {
+  input: AssignGridOwnershipInput;
+};
+
+
+export type MutationAssignGroupToGridArgs = {
+  input: AssignGroupToGridInput;
+};
+
+
+export type MutationAuthorizeAppArgs = {
+  input: AuthorizeAppInput;
+};
+
+
+export type MutationBeginGamePublishArgs = {
+  input: BeginGamePublishInput;
+};
+
+
+export type MutationCancelSharedSubscriptionArgs = {
+  appId: Scalars['BigInt']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationCapturePaypalCheckoutArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  orderId: Scalars['String']['input'];
+};
+
+
+export type MutationChangePasswordArgs = {
+  currentPassword: Scalars['String']['input'];
+  newPassword: Scalars['String']['input'];
+};
+
+
+export type MutationClaimFreeAppAccessArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationClaimGameHostingArgs = {
+  input: ClaimGameHostingInput;
+};
+
+
+export type MutationClaimGridChunkArgs = {
+  appId: Scalars['BigInt']['input'];
+  chunk: ChunkCoordinatesInput;
+};
+
+
+export type MutationClaimGridOwnershipArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationClearAppComputeBudgetArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationCompleteGamePublishArgs = {
+  publishId: Scalars['BigInt']['input'];
+  slug: Scalars['String']['input'];
+};
+
+
+export type MutationCompleteLoginLinkArgs = {
+  input: CompleteLoginLinkInput;
+};
+
+
+export type MutationConfirmEmailArgs = {
+  token: Scalars['String']['input'];
+};
+
+
+export type MutationCpBillingCreditOverbillArgs = {
+  appId: Scalars['BigInt']['input'];
+  chargeId: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
+};
+
+
+export type MutationCpSetCrowdyStudioAgentAppKillArgs = {
+  input: SetCrowdyStudioAgentOperatorAppKillInput;
+};
+
+
+export type MutationCpSetCrowdyStudioAgentPlatformPolicyArgs = {
+  input: SetCrowdyStudioAgentPlatformPolicyInput;
+};
+
+
+export type MutationCreateAccessTierArgs = {
+  input: CreateAccessTierInput;
+};
+
+
+export type MutationCreateActorArgs = {
+  input: CreateActorInput;
+};
+
+
+export type MutationCreateAppArgs = {
+  input: CreateAppInput;
+};
+
+
+export type MutationCreateAvatarArgs = {
+  input: CreateAvatarInput;
+};
+
+
+export type MutationCreateChannelArgs = {
+  input: CreateChannelInput;
+};
+
+
+export type MutationCreateChannelRoleArgs = {
+  input: CreateGroupRoleInput;
+};
+
+
+export type MutationCreateCheckoutArgs = {
+  input: CreateCheckoutInput;
+};
+
+
+export type MutationCreateGridArgs = {
+  input: CreateGridInput;
+};
+
+
+export type MutationCreateGridChannelArgs = {
+  input: CreateGridChannelInput;
+};
+
+
+export type MutationCreateOrgRoleArgs = {
+  input: CreateOrgRoleInput;
+};
+
+
+export type MutationCreateOrgTokenArgs = {
+  input: CreateOrgTokenInput;
+};
+
+
+export type MutationCreateOrganizationArgs = {
+  input: CreateOrganizationInput;
+};
+
+
+export type MutationCreatePortalAuthorizationCodeArgs = {
+  input: CreatePortalAuthorizationCodeInput;
+};
+
+
+export type MutationCreateTeamArgs = {
+  input: CreateTeamInput;
+};
+
+
+export type MutationCreateTeamRoleArgs = {
+  input: CreateGroupRoleInput;
+};
+
+
+export type MutationCreditOrgWalletArgs = {
+  amountCents: Scalars['BigInt']['input'];
+  orgId: Scalars['BigInt']['input'];
+  reason: Scalars['String']['input'];
+  referenceId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationCrowdyStudioCommonPublishArgs = {
+  input: PublishCrowdyStudioCommonFileInput;
+};
+
+
+export type MutationCrowdyStudioGitHubBindArgs = {
+  input: BindCrowdyStudioGitHubInput;
+};
+
+
+export type MutationCrowdyStudioGitHubDeleteFileArgs = {
+  input: CrowdyStudioGitHubDeleteFileInput;
+};
+
+
+export type MutationCrowdyStudioGitHubPutFileArgs = {
+  input: CrowdyStudioGitHubPutFileInput;
+};
+
+
+export type MutationCrowdyStudioGitHubRefreshArgs = {
+  input: CrowdyStudioGitHubProjectInput;
+};
+
+
+export type MutationCrowdyStudioGitHubUnbindArgs = {
+  input: CrowdyStudioGitHubProjectInput;
+};
+
+
+export type MutationCrowdyStudioLibrarySaveArgs = {
+  input: SaveCrowdyStudioLibraryFileInput;
+};
+
+
+export type MutationCrowdyStudioLibrarySetArchivedArgs = {
+  input: SetCrowdyStudioLibraryFileArchivedInput;
+};
+
+
+export type MutationCrowdyStudioProjectCreateArgs = {
+  input: CreateCrowdyStudioProjectInput;
+};
+
+
+export type MutationCrowdyStudioProjectImportFileArgs = {
+  input: ImportCrowdyStudioProjectFileInput;
+};
+
+
+export type MutationCrowdyStudioProjectSaveArgs = {
+  input: SaveCrowdyStudioProjectInput;
+};
+
+
+export type MutationCrowdyStudioProjectSaveFilesArgs = {
+  input: SaveCrowdyStudioProjectFilesInput;
+};
+
+
+export type MutationCrowdyStudioProjectSaveMetadataArgs = {
+  input: SaveCrowdyStudioProjectMetadataInput;
+};
+
+
+export type MutationCrowdyStudioProjectSetArchivedArgs = {
+  input: SetCrowdyStudioProjectArchivedInput;
+};
+
+
+export type MutationCrowdyStudioSetProviderConsentArgs = {
+  input: SetCrowdyStudioProviderConsentInput;
+};
+
+
+export type MutationDecideGridClaimArgs = {
+  appId: Scalars['BigInt']['input'];
+  approve: Scalars['Boolean']['input'];
+  requestId: Scalars['String']['input'];
+};
+
+
+export type MutationDeleteActorArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  uuid: Scalars['String']['input'];
+};
+
+
+export type MutationDeleteAvatarArgs = {
+  id: Scalars['BigInt']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationDeleteChannelArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationDeleteChannelRoleArgs = {
+  groupRoleId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationDeleteGridArgs = {
+  input: DeleteGridInput;
+};
+
+
+export type MutationDeleteOrgRoleArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  orgRoleId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationDeleteQuotaArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  quotaId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationDeleteTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationDeleteTeamRoleArgs = {
+  groupRoleId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationDeleteUserAppStateArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationExchangePortalCodeArgs = {
+  input: ExchangePortalCodeInput;
+};
+
+
+export type MutationExecActivateVersionArgs = {
+  appId: Scalars['BigInt']['input'];
+  version: Scalars['Int']['input'];
+};
+
+
+export type MutationExecBuildArgs = {
+  input: ExecBuildInput;
+};
+
+
+export type MutationExecConnectArgs = {
+  appId: Scalars['BigInt']['input'];
+  key?: InputMaybe<Scalars['String']['input']>;
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationExecConnectAsDeveloperArgs = {
+  appId: Scalars['BigInt']['input'];
+  key?: InputMaybe<Scalars['String']['input']>;
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationExecConsentClientModArgs = {
+  appId: Scalars['BigInt']['input'];
+  capabilityHash: Scalars['String']['input'];
+  modId: Scalars['String']['input'];
+};
+
+
+export type MutationExecDeployArgs = {
+  input: ExecDeployInput;
+};
+
+
+export type MutationExecModBuildArgs = {
+  appId: Scalars['BigInt']['input'];
+  crate: ExecBuildCrateInput;
+};
+
+
+export type MutationExecModClientBuildArgs = {
+  appId: Scalars['BigInt']['input'];
+  crate: ExecBuildCrateInput;
+};
+
+
+export type MutationExecModClientDeleteArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationExecModClientDeployArgs = {
+  appId: Scalars['BigInt']['input'];
+  buildId: Scalars['String']['input'];
+  gridId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationExecModDeleteArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationExecModDeployArgs = {
+  appId: Scalars['BigInt']['input'];
+  buildId: Scalars['String']['input'];
+  gridId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationExecModInstallArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  listingId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationExecModPublishArgs = {
+  appId: Scalars['BigInt']['input'];
+  description?: InputMaybe<Scalars['String']['input']>;
+  gridId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+  title: Scalars['String']['input'];
+};
+
+
+export type MutationExecModSetEnabledArgs = {
+  appId: Scalars['BigInt']['input'];
+  enabled: Scalars['Boolean']['input'];
+  gridId: Scalars['BigInt']['input'];
+  name: Scalars['String']['input'];
+};
+
+
+export type MutationExecModSetSwitchArgs = {
+  appId: Scalars['BigInt']['input'];
+  off: Scalars['Boolean']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+  scope: ExecModScope;
+  target?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationExecModUnpublishArgs = {
+  appId: Scalars['BigInt']['input'];
+  listingId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationExecRevokeAuthorTrustArgs = {
+  appId: Scalars['BigInt']['input'];
+  authorId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationExecRevokeClientModConsentArgs = {
+  appId: Scalars['BigInt']['input'];
+  modId: Scalars['String']['input'];
+};
+
+
+export type MutationExecSetEnabledArgs = {
+  appId: Scalars['BigInt']['input'];
+  enabled: Scalars['Boolean']['input'];
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationExecTrustAuthorArgs = {
+  appId: Scalars['BigInt']['input'];
+  authorId: Scalars['BigInt']['input'];
+  capabilityHash: Scalars['String']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationForceLogoutUserArgs = {
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationForgetEmailDeliverabilityArgs = {
+  email: Scalars['String']['input'];
+};
+
+
+export type MutationGameModelDefineFeatureArgs = {
+  input: DefineAppFeatureInput;
+};
+
+
+export type MutationGameModelGrantTierFeatureArgs = {
+  input: GrantTierFeatureInput;
+};
+
+
+export type MutationGameModelRevokeTierFeatureArgs = {
+  input: GrantTierFeatureInput;
+};
+
+
+export type MutationGrantAppAccessArgs = {
+  input: GrantAppAccessInput;
+};
+
+
+export type MutationGrantGridPermissionsArgs = {
+  input: GrantGridPermissionsInput;
+};
+
+
+export type MutationGrantMyAppAccessArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationInviteOrgMemberArgs = {
+  input: InviteOrgMemberInput;
+};
+
+
+export type MutationIssueGridClaimInviteArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  inviteeUserId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationJoinChannelArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationJoinTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationLeaveChannelArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationLeaveTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationLinkIdentityArgs = {
+  input: LinkIdentityInput;
+};
+
+
+export type MutationLoginArgs = {
+  loginUserInput: LoginUserInput;
+};
+
+
+export type MutationMintAppTokenArgs = {
+  input: MintAppTokenInput;
+};
+
+
+export type MutationMintGridTokenArgs = {
+  input: MintGridTokenInput;
+};
+
+
+export type MutationPublishAppToSharedArgs = {
+  appId: Scalars['BigInt']['input'];
+  cancelUrl?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  planId?: InputMaybe<Scalars['BigInt']['input']>;
+  provider?: InputMaybe<PaymentProvider>;
+  successUrl?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationRecordPlayerConsentsArgs = {
+  acceptLegal: Scalars['Boolean']['input'];
+  attestAgeOfMajority: Scalars['Boolean']['input'];
+};
+
+
+export type MutationRefreshAppTokenArgs = {
+  currentServer?: InputMaybe<CurrentServerInput>;
+};
+
+
+export type MutationRegisterArgs = {
+  registerUserInput: RegisterUserInput;
+};
+
+
+export type MutationReinstateOrganizationArgs = {
+  input: ReinstateOrganizationInput;
+};
+
+
+export type MutationReleaseClaimedGridArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRemoveChannelMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRemoveOrgMemberArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRemoveSharedPaymentMethodArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  paymentMethodId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRemoveTeamMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRequestLoginLinkArgs = {
+  input: RequestLoginLinkInput;
+};
+
+
+export type MutationRequestPasswordResetArgs = {
+  email: Scalars['String']['input'];
+};
+
+
+export type MutationRequestToJoinChannelArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRequestToJoinTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationResendConfirmationEmailArgs = {
+  email: Scalars['String']['input'];
+};
+
+
+export type MutationResetPasswordArgs = {
+  resetPasswordInput: ResetPasswordInput;
+};
+
+
+export type MutationRetireOrganizationArgs = {
+  input: RetireOrganizationInput;
+};
+
+
+export type MutationRevokeAppAccessArgs = {
+  appId: Scalars['BigInt']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeAppAuthorizationArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeAppCodeAdmissionArgs = {
+  admissionId: Scalars['String']['input'];
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeGridPermissionsArgs = {
+  input: RevokeGridPermissionsInput;
+};
+
+
+export type MutationRevokeGroupFromGridArgs = {
+  input: RevokeGroupFromGridInput;
+};
+
+
+export type MutationRevokeOrgTokenArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  orgTokenId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRollbackVoxelUpdatesArgs = {
+  input: RollbackVoxelUpdatesInput;
+};
+
+
+export type MutationSendActorUpdateArgs = {
+  input: ActorUpdateRequestInput;
+};
+
+
+export type MutationSendAudioPacketArgs = {
+  input: ClientAudioPacketInput;
+};
+
+
+export type MutationSendChannelMessageArgs = {
+  input: ChannelMessageInput;
+};
+
+
+export type MutationSendClientEventArgs = {
+  input: ClientEventNotificationInput;
+};
+
+
+export type MutationSendSingleActorMessageArgs = {
+  input: SingleActorMessageInput;
+};
+
+
+export type MutationSendTestEmailArgs = {
+  subject?: InputMaybe<Scalars['String']['input']>;
+  to: Scalars['String']['input'];
+};
+
+
+export type MutationSendTextPacketArgs = {
+  input: ClientTextPacketInput;
+};
+
+
+export type MutationSendVideoPacketArgs = {
+  input: ClientVideoPacketInput;
+};
+
+
+export type MutationSendVoxelUpdateArgs = {
+  input: VoxelUpdateRequestInput;
+};
+
+
+export type MutationSetAppBudgetArgs = {
+  appId: Scalars['BigInt']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  monthlyLimitCents: Scalars['BigInt']['input'];
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationSetAppClientSettingsArgs = {
+  input: SetAppClientSettingsInput;
+};
+
+
+export type MutationSetAppCodeAdmissionModeArgs = {
+  appId: Scalars['BigInt']['input'];
+  mode: CodeAdmissionMode;
+};
+
+
+export type MutationSetAppComputeBudgetArgs = {
+  appId: Scalars['BigInt']['input'];
+  enforce?: InputMaybe<Scalars['Boolean']['input']>;
+  note?: InputMaybe<Scalars['String']['input']>;
+  unitsPerMinute: Scalars['Int']['input'];
+};
+
+
+export type MutationSetAppGridClaimPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+  approverUserIds?: InputMaybe<Array<Scalars['BigInt']['input']>>;
+  policy: GridClaimPolicy;
+};
+
+
+export type MutationSetAppReservedThroughputArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  input: SetAppReservedThroughputInput;
+};
+
+
+export type MutationSetAppSpendCapsArgs = {
+  appId: Scalars['BigInt']['input'];
+  dailyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  hourlyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type MutationSetAppVisibilityArgs = {
+  appId: Scalars['BigInt']['input'];
+  visibility: AppVisibility;
+};
+
+
+export type MutationSetAutoBillingArgs = {
+  enabled: Scalars['Boolean']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  limitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  lowWaterThresholdCents?: InputMaybe<Scalars['BigInt']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  rechargeAmountCents?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type MutationSetBillingRateArgs = {
+  input: SetRateCardInput;
+};
+
+
+export type MutationSetChannelMemberRolesArgs = {
+  input: SetMemberRolesInput;
+};
+
+
+export type MutationSetChannelPolicyArgs = {
+  input: SetChannelPolicyInput;
+};
+
+
+export type MutationSetCrowdyStudioAgentPolicyArgs = {
+  input: SetCrowdyStudioAgentAppPolicyInput;
+};
+
+
+export type MutationSetEarlyAccessOverrideArgs = {
+  userId: Scalars['BigInt']['input'];
+  value: Scalars['Boolean']['input'];
+};
+
+
+export type MutationSetGridOpenPermissionsArgs = {
+  input: SetGridOpenPermissionsInput;
+};
+
+
+export type MutationSetGridPermissionLimitsArgs = {
+  input: SetGridPermissionLimitsInput;
+};
+
+
+export type MutationSetHostedGameEnabledArgs = {
+  input: SetHostedGameEnabledInput;
+};
+
+
+export type MutationSetHostedGameListingArgs = {
+  input: SetHostedGameListingInput;
+};
+
+
+export type MutationSetInitialPasswordArgs = {
+  newPassword: Scalars['String']['input'];
+};
+
+
+export type MutationSetOperatorArgs = {
+  userId: Scalars['BigInt']['input'];
+  value: Scalars['Boolean']['input'];
+};
+
+
+export type MutationSetOrgBillingExemptArgs = {
+  exempt: Scalars['Boolean']['input'];
+  orgId: Scalars['BigInt']['input'];
+  reason: Scalars['String']['input'];
+};
+
+
+export type MutationSetOrgStatusArgs = {
+  orgId: Scalars['BigInt']['input'];
+  status: Scalars['String']['input'];
+};
+
+
+export type MutationSetPlayerAutoBillingArgs = {
+  enabled: Scalars['Boolean']['input'];
+  limitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  lowWaterThresholdCents?: InputMaybe<Scalars['BigInt']['input']>;
+  rechargeAmountCents?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type MutationSetPlayerCodeListingStatusArgs = {
+  appId: Scalars['BigInt']['input'];
+  listingId: Scalars['String']['input'];
+  status: PlayerCodeListingStatus;
+};
+
+
+export type MutationSetPlayerRateMarkupArgs = {
+  appId: Scalars['BigInt']['input'];
+  markupBps: Scalars['Int']['input'];
+};
+
+
+export type MutationSetPlayerSpendCapArgs = {
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  dailyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  monthlyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
+  scope: Scalars['String']['input'];
+};
+
+
+export type MutationSetQuotaArgs = {
+  input: SetQuotaInput;
+};
+
+
+export type MutationSetSuperAdminArgs = {
+  userId: Scalars['BigInt']['input'];
+  value: Scalars['Boolean']['input'];
+};
+
+
+export type MutationSetTeamMemberRolesArgs = {
+  input: SetMemberRolesInput;
+};
+
+
+export type MutationSetTeamPolicyArgs = {
+  input: SetTeamPolicyInput;
+};
+
+
+export type MutationSetupSharedPaymentMethodArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationSocialLoginCompleteArgs = {
+  input: SocialLoginCompleteInput;
+};
+
+
+export type MutationSocialLoginStartArgs = {
+  input: SocialLoginStartInput;
+};
+
+
+export type MutationTakeDownHostedGameArgs = {
+  slug: Scalars['String']['input'];
+  takenDown?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type MutationTeleportRequestArgs = {
+  input: TeleportRequestInput;
+};
+
+
+export type MutationTransferGridOwnershipArgs = {
+  input: TransferGridOwnershipInput;
+};
+
+
+export type MutationTransferPlayerCodeListingArgs = {
+  input: TransferPlayerCodeListingInput;
+};
+
+
+export type MutationUnlinkIdentityArgs = {
+  identityId: Scalars['String']['input'];
+};
+
+
+export type MutationUpdateAccessTierArgs = {
+  input: UpdateAccessTierInput;
+  tierId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationUpdateActorArgs = {
+  input: UpdateActorInput;
+  uuid: Scalars['String']['input'];
+};
+
+
+export type MutationUpdateActorStateArgs = {
+  input: UpdateActorStateInput;
+  uuid: Scalars['String']['input'];
+};
+
+
+export type MutationUpdateAppArgs = {
+  appId: Scalars['BigInt']['input'];
+  input: UpdateAppInput;
+};
+
+
+export type MutationUpdateAvatarArgs = {
+  id: Scalars['BigInt']['input'];
+  input: UpdateAvatarInput;
+};
+
+
+export type MutationUpdateAvatarAppStateArgs = {
+  input: UpdateAvatarAppStateInput;
+};
+
+
+export type MutationUpdateAvatarStateArgs = {
+  id: Scalars['BigInt']['input'];
+  input: UpdateAvatarStateInput;
+};
+
+
+export type MutationUpdateChannelArgs = {
+  input: UpdateChannelInput;
+};
+
+
+export type MutationUpdateChannelRoleArgs = {
+  input: UpdateGroupRoleInput;
+};
+
+
+export type MutationUpdateChunkArgs = {
+  input: ChunkUpdateInput;
+};
+
+
+export type MutationUpdateChunkLodsArgs = {
+  input: UpdateChunkLodsInput;
+};
+
+
+export type MutationUpdateChunkStateArgs = {
+  input: UpdateChunkStateInput;
+};
+
+
+export type MutationUpdateGamertagArgs = {
+  input: UpdateGamertagInput;
+};
+
+
+export type MutationUpdateOrgMemberRolesArgs = {
+  orgId: Scalars['BigInt']['input'];
+  roleIds: Array<Scalars['BigInt']['input']>;
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationUpdateOrgRoleArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  input: UpdateOrgRoleInput;
+  orgRoleId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationUpdateOrgTokenArgs = {
+  input: UpdateOrgTokenInput;
+  orgTokenId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationUpdateTeamArgs = {
+  input: UpdateTeamInput;
+};
+
+
+export type MutationUpdateTeamRoleArgs = {
+  input: UpdateGroupRoleInput;
+};
+
+
+export type MutationUpdateUserAppStateArgs = {
+  input: CreateUserAppStateInput;
+};
+
+
+export type MutationUpdateUserStateArgs = {
+  input: UpdateUserStateInput;
+};
+
+
+export type MutationUpdateUserTypeArgs = {
+  userId: Scalars['BigInt']['input'];
+  value: Scalars['String']['input'];
+};
+
+
+export type MutationUpdateVoxelArgs = {
+  input: UpdateVoxelInput;
+};
+
+/** A grid overlapping a scanned region (returned by nearbyGrids). Bounds only — no permission keys. */
+export type NearbyGrid = {
+  __typename?: 'NearbyGrid';
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['output'];
+  /** The grid id. */
+  gridId: Scalars['BigInt']['output'];
+  /** High (maximum) corner chunk of the grid box. */
+  highChunk: ChunkCoordinates;
+  /** Low (minimum) corner chunk of the grid box. */
+  lowChunk: ChunkCoordinates;
+};
+
+/** A grid overlapping a scanned region, plus a user's effective permission keys on it (returned by nearbyGridPermissions). */
+export type NearbyGridPermissions = {
+  __typename?: 'NearbyGridPermissions';
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['output'];
+  /** The grid id. */
+  gridId: Scalars['BigInt']['output'];
+  /** High (maximum) corner chunk of the grid box. */
+  highChunk: ChunkCoordinates;
+  /** Low (minimum) corner chunk of the grid box. */
+  lowChunk: ChunkCoordinates;
+  /** The user's effective runtime permission key strings on this grid. */
+  permissionKeys: Array<Scalars['String']['output']>;
+  /** The user the permissions were computed for. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** Scan a region for grids and report a user's effective permissions on each. */
+export type NearbyGridPermissionsInput = {
+  /** The app (tenant) to scan within. */
+  appId: Scalars['BigInt']['input'];
+  /** High corner of the region to scan, in chunk coordinates (normalized). */
+  highChunk: ChunkCoordinatesInput;
+  /** Low corner of the region to scan, in chunk coordinates (normalized). */
+  lowChunk: ChunkCoordinatesInput;
+  /** The user whose effective permissions to report per grid. */
+  userId: Scalars['BigInt']['input'];
+};
+
+/** Scan a region for grids. Player-safe: returns bounds only, no permission keys and no impersonation userId. */
+export type NearbyGridsInput = {
+  /** The app (tenant) to scan within. */
+  appId: Scalars['BigInt']['input'];
+  /** High corner of the region to scan, in chunk coordinates (normalized). */
+  highChunk: ChunkCoordinatesInput;
+  /** Low corner of the region to scan, in chunk coordinates (normalized). */
+  lowChunk: ChunkCoordinatesInput;
+};
+
+/** Per-app projection row within an org rollup. */
+export type OrgAppUsageProjectionRow = {
+  __typename?: 'OrgAppUsageProjectionRow';
+  /** App id (as a string). */
+  appId: Scalars['String']['output'];
+  /** App display name. */
+  appName: Scalars['String']['output'];
+  /** Egress bytes so far this calendar month. Egress only; ingress does not count toward the aggregate volume. */
+  currentEgressBytes: Scalars['String']['output'];
+  /** True when this app is on track to exceed its free allowance, or null when insufficient data. */
+  onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
+  /** Projected end-of-month egress bytes, or null when insufficient data. */
+  projectedBytes: Maybe<Scalars['String']['output']>;
+};
+
+/** Org off-session auto-billing configuration. */
+export type OrgAutoBilling = {
+  __typename?: 'OrgAutoBilling';
+  /** Amount already auto-billed in the current period, in cents. */
+  autoBilledThisPeriodCents: Scalars['BigInt']['output'];
+  /** Whether off-session auto-billing is enabled. */
+  enabled: Scalars['Boolean']['output'];
+  /** True when a vaulted payment method exists to charge off-session. */
+  hasPaymentMethod: Scalars['Boolean']['output'];
+  /** Most recent auto-billing failure message, if any. */
+  lastError: Maybe<Scalars['String']['output']>;
+  /** Max auto-billed per period in cents. Null = no limit. */
+  limitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Wallet balance at or below which an auto-recharge is triggered, in cents. */
+  lowWaterThresholdCents: Scalars['BigInt']['output'];
+  /** Organization id (BigInt). */
+  orgId: Scalars['BigInt']['output'];
+  /** Reset window for the per-period auto-billed total, e.g. 'month'. */
+  period: Scalars['String']['output'];
+  /** Amount to top up the wallet by on each auto-recharge, in cents. */
+  rechargeAmountCents: Scalars['BigInt']['output'];
+};
+
+export type OrgMember = {
+  __typename?: 'OrgMember';
+  /** When the membership was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Organization this membership belongs to (BigInt as string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Unique membership id (primary key, BigInt as string). Distinct from userId. */
+  orgMemberId: Scalars['BigInt']['output'];
+  /** Membership status. Only 'active' members count for permission checks; other values (e.g. 'invited' or 'removed') grant no permissions. */
+  status: Scalars['String']['output'];
+  /** When the membership was last updated. */
+  updatedAt: Scalars['DateTime']['output'];
+  /** The member's user_id (BigInt as string). */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** Represents one user's membership in one organization. Bundles the org, the union of permissions across the user's assigned roles, and the role list itself - so the UI can render an org dashboard without a follow-up round trip. */
+export type OrgMembership = {
+  __typename?: 'OrgMembership';
+  /** When the user joined the organization. */
+  joinedAt: Scalars['DateTime']['output'];
+  /** The organization. */
+  org: Organization;
+  /** Effective permission keys the user holds in this org (union across assigned roles; full set for super admins). */
+  permissions: Array<Scalars['String']['output']>;
+  /** Roles assigned to the user in this org. */
+  roles: Array<OrgRole>;
+};
+
+export type OrgPermission = {
+  __typename?: 'OrgPermission';
+  /** Optional grouping category for UI display. */
+  category: Maybe<Scalars['String']['output']>;
+  /** Human-readable explanation of what the permission allows. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Stable permission key used in role grants (e.g. 'manage_members', 'manage_tokens'). */
+  permissionKey: Scalars['ID']['output'];
+};
+
+/** A record of one organization retirement. Retirement is a STATE, not a deletion: every ledger row the organization ever wrote is still present and still references it, so what the org spent stays reconstructable with the same joins as before. This row says who retired it, why, and what it was holding at the time. */
+export type OrgRetirementType = {
+  __typename?: 'OrgRetirementType';
+  /** How many of the org apps were archived by the retirement. Apps already archived are not counted and are not touched. */
+  appsArchived: Scalars['Int']['output'];
+  /** Wallet balance in cents at the moment of retirement. This money is FROZEN indefinitely, not refunded and not forfeited — the operator decided that on 2026-08-21. It is recorded here rather than only in the wallet so that every organization holding frozen money is enumerable from one table if the policy is ever revisited. */
+  balanceCentsAtRetirement: Scalars['BigInt']['output'];
+  /** True when the caller had to pass acknowledgeFrozenBalance because the org held money, which is frozen indefinitely rather than refunded or forfeited. */
+  frozenBalanceAcknowledged: Scalars['Boolean']['output'];
+  /** The retired organization (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['output'];
+  /** The organization name. */
+  orgName: Scalars['String']['output'];
+  /** The organization slug as it stood when it was retired. */
+  orgSlug: Scalars['String']['output'];
+  /** Why the organization was retired. */
+  reason: Scalars['String']['output'];
+  /** When the retirement was reversed, or null while it is in force. */
+  reinstatedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Operator user_id who reinstated the organization. */
+  reinstatedByUserId: Maybe<Scalars['BigInt']['output']>;
+  /** Why the organization was reinstated. */
+  reinstatedReason: Maybe<Scalars['String']['output']>;
+  /** When it was retired. */
+  retiredAt: Scalars['DateTime']['output'];
+  /** Operator user_id who retired it. */
+  retiredByUserId: Scalars['BigInt']['output'];
+  /** Retirement record id (BigInt as a decimal string). */
+  retirementId: Scalars['BigInt']['output'];
+  /** How many org wallet_transactions rows existed at retirement. All of them are still there — this number is the claim that the ledger survived, stated at the moment it would have been easiest to lose. */
+  walletTxnCountAtRetirement: Scalars['BigInt']['output'];
+};
+
+export type OrgRole = {
+  __typename?: 'OrgRole';
+  /** When the role was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional human-readable description of the role. */
+  description: Maybe<Scalars['String']['output']>;
+  /** True for built-in / seeded roles managed by the platform; typically not editable. */
+  isSystem: Scalars['Boolean']['output'];
+  /** Organization this role belongs to (BigInt as string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Unique role id (primary key, BigInt as string). */
+  orgRoleId: Scalars['BigInt']['output'];
+  /** Permission keys granted by this role (resolved from org_role_permissions). */
+  permissions: Array<Scalars['String']['output']>;
+  /** Display name of the role. */
+  roleName: Scalars['String']['output'];
+};
+
+export type OrgToken = {
+  __typename?: 'OrgToken';
+  /** When the token was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** For 'service' tokens, the environment id (UUID) the token is scoped to; null for user-minted tokens. */
+  environmentId: Maybe<Scalars['String']['output']>;
+  /** Optional expiry timestamp; null means the token never expires. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** False once revoked; inactive tokens cannot authenticate. */
+  isActive: Scalars['Boolean']['output'];
+  /** 'user_minted' (human-created) or 'service' (minted by the control plane for per-tenant game-apis). */
+  kind: Scalars['String']['output'];
+  /** Optional human-readable label. */
+  label: Maybe<Scalars['String']['output']>;
+  /** When the token last authenticated a request, if ever. */
+  lastUsedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Organization that owns this token (BigInt as string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Unique token id (primary key, BigInt as string). */
+  orgTokenId: Scalars['BigInt']['output'];
+  /** When the token was revoked, if it has been. */
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  /** When the token was last updated. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Returned exactly once - on org token creation. The plaintext `token` field is never re-emitted. Future listings show metadata only via the `OrgToken` type. */
+export type OrgTokenWithSecret = {
+  __typename?: 'OrgTokenWithSecret';
+  /** When the token was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional expiry timestamp; null means no expiry. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** Whether the token is active. */
+  isActive: Scalars['Boolean']['output'];
+  /** Optional human-readable label. */
+  label: Maybe<Scalars['String']['output']>;
+  /** Organization that owns this token (BigInt as string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Unique token id (BigInt as string). */
+  orgTokenId: Scalars['BigInt']['output'];
+  /** The plaintext token, returned exactly once. Save it now: only its hash is stored and it cannot be shown again. */
+  token: Scalars['String']['output'];
+};
+
+/** Org-level rollup of per-app monthly egress projections for all shared apps. */
+export type OrgUsageProjection = {
+  __typename?: 'OrgUsageProjection';
+  /** Per-app projection breakdown. */
+  apps: Array<OrgAppUsageProjectionRow>;
+  /** Fractional UTC days elapsed since the calendar month started. */
+  daysElapsed: Scalars['Float']['output'];
+  /** True when any shared app is on track to exceed its free allowance. */
+  onTrackToExceedAny: Scalars['Boolean']['output'];
+  /** True when at least 3 days have elapsed in the month (projection is meaningful). */
+  sufficientData: Scalars['Boolean']['output'];
+  /** True when org total projected egress exceeds the combined free tier, so the org should expect a metered bill. Note that a capacity reservation is NOT a remedy for this: reservations buy provisioned capacity and are charged in addition to metered usage, so they do not reduce an egress bill. What this signals is that the org needs a funded wallet or auto-billing. */
+  suggestReservedThroughput: Scalars['Boolean']['output'];
+  /** Total free monthly egress allowance across all shared apps in the org (apps × 5 GB). */
+  totalFreeAllowanceBytes: Scalars['String']['output'];
+  /** Sum of projected end-of-month egress across shared apps, or null when insufficient data. */
+  totalProjectedBytes: Maybe<Scalars['String']['output']>;
+};
+
+/** Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. WHICH OF THESE YOU PAY FOR: the *SendBytes fields are the billable direction, and *RecvBytes are metered but do NOT count toward Aggregate Data Volume, the monthly free-tier and overage measure. All byte figures are wire bytes measured at the network interface, including transport and network headers, and after any compression the service applies -- they will not match a client-side byte counter. */
+export type OrgUsageSummary = {
+  __typename?: 'OrgUsageSummary';
+  /** Total GraphQL bytes received across all org apps (string counter). */
+  graphqlRecvBytes: Scalars['String']['output'];
+  /** Total GraphQL bytes sent across all org apps (string counter). */
+  graphqlSendBytes: Scalars['String']['output'];
+  /** Organization id (as a string). */
+  orgId: Scalars['String']['output'];
+  /** Total replication bytes received across all org apps (string counter). */
+  replicationRecvBytes: Scalars['String']['output'];
+  /** Total replication bytes sent across all org apps (string counter). */
+  replicationSendBytes: Scalars['String']['output'];
+  /** Total GraphQL operations (send + recv) across all org apps (string counter). */
+  totalOps: Scalars['String']['output'];
+};
+
+export type OrgWallet = {
+  __typename?: 'OrgWallet';
+  /**
+   * DEPRECATED. balanceMicrousd / 10,000 truncated toward zero, as a BigInt decimal string.
+   * @deprecated Cents are a display convenience derived from balanceMicrousd (truncated toward zero). Read balanceMicrousd.
+   */
+  balanceCents: Scalars['BigInt']['output'];
+  /** Current wallet balance in MICRO-USD (1 USD = 1,000,000), as a BigInt decimal string. The unit of account since 2026-09-11: every charge is recorded to the micro-USD and nothing is rounded. May be negative when accrued usage settled against an empty wallet. */
+  balanceMicrousd: Scalars['BigInt']['output'];
+  /** When the wallet was created (ISO-8601 UTC timestamp). */
+  createdAt: Scalars['DateTime']['output'];
+  /** ISO-4217 currency code for `balanceCents`, lowercase (e.g. "usd"). Defaults to "usd". */
+  currency: Scalars['String']['output'];
+  /** Micro-USD currently held against in-flight request-priced usage (a model turn reserves its worst case here before it runs and releases the difference when it settles). Spendable balance is balanceMicrousd - holdsMicrousd. */
+  holdsMicrousd: Scalars['BigInt']['output'];
+  /** Organization that owns this wallet (BigInt as a decimal string). There is exactly one wallet per organization. */
+  orgId: Scalars['BigInt']['output'];
+  /** When the wallet was last modified, e.g. on balance change (ISO-8601 UTC timestamp). */
+  updatedAt: Scalars['DateTime']['output'];
+  /** Unique wallet id (BigInt as a decimal string). */
+  walletId: Scalars['BigInt']['output'];
+};
+
+export type Organization = {
+  __typename?: 'Organization';
+  /** When the organization was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Human-readable organization name. */
+  name: Scalars['String']['output'];
+  /** Unique organization id (primary key). BigInt as a string. */
+  orgId: Scalars['BigInt']['output'];
+  /** user_id of the organization owner (BigInt as string). */
+  ownerUserId: Scalars['BigInt']['output'];
+  /** Unique URL-safe slug (lowercase letters, numbers, and dashes). */
+  slug: Scalars['String']['output'];
+  /** Lifecycle status: 'active', 'frozen' (setOrgStatus) or 'retired' (retireOrganization). A retired organization still resolves by id and slug — it is a state, not a deletion, and its whole ledger is intact — but it grants its members no permissions, its API tokens no longer authenticate, and it is omitted from myOrganizations. */
+  status: Scalars['String']['output'];
+  /** When the organization was last updated. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+export type PageInfo = {
+  __typename?: 'PageInfo';
+  limit: Scalars['Int']['output'];
+  offset: Scalars['Int']['output'];
+  totalCount: Scalars['Int']['output'];
+};
+
+/** A single inbound payment-provider webhook event from the reconciliation audit log. */
+export type PaymentEventRecord = {
+  __typename?: 'PaymentEventRecord';
+  /** Checkout this event was matched to (BigInt as a decimal string); null if it could not be matched. */
+  checkoutId: Maybe<Scalars['BigInt']['output']>;
+  /** When the event was received (ISO-8601 UTC timestamp). */
+  createdAt: Scalars['DateTime']['output'];
+  /** Error message if processing this event failed; null on success. */
+  error: Maybe<Scalars['String']['output']>;
+  /** Unique payment-event id (BigInt as a decimal string). */
+  eventId: Scalars['BigInt']['output'];
+  /** Provider event type string (e.g. "checkout.session.completed" for Stripe). */
+  eventType: Scalars['String']['output'];
+  /** Provider-assigned event id, unique per provider; used to make webhook handling idempotent. */
+  externalEventId: Scalars['String']['output'];
+  /** When the event was successfully processed (ISO-8601 UTC timestamp); null if not yet processed. */
+  processedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Provider that delivered this webhook event. */
+  provider: PaymentProvider;
+};
+
+/** An edge in a PaymentEventRecord connection. */
+export type PaymentEventRecordEdge = {
+  __typename?: 'PaymentEventRecordEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: PaymentEventRecord;
+};
+
+/** A Relay cursor connection over PaymentEventRecord rows. Page with first/after; pass pageInfo.endCursor back as after for the next page. */
+export type PaymentEventsConnection = {
+  __typename?: 'PaymentEventsConnection';
+  /** Edges on this page. */
+  edges: Array<PaymentEventRecordEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** A page of payment webhook events with offset/limit pagination metadata. */
+export type PaymentEventsPage = {
+  __typename?: 'PaymentEventsPage';
+  /** The webhook events on this page, ordered newest first. */
+  items: Array<PaymentEventRecord>;
+  /** Offset/limit pagination metadata (totalCount, limit, offset) for this result set. */
+  pageInfo: PageInfo;
+};
+
+/** Stripe SetupIntent handle the browser uses to vault a card for auto-billing. */
+export type PaymentMethodSetup = {
+  __typename?: 'PaymentMethodSetup';
+  /** SetupIntent client secret the browser confirms to vault the card. */
+  clientSecret: Maybe<Scalars['String']['output']>;
+  /** Provider customer id (e.g. Stripe customer) the card is vaulted under. */
+  externalCustomerId: Scalars['String']['output'];
+  /** Provider publishable key for the browser SDK. */
+  publishableKey: Maybe<Scalars['String']['output']>;
+};
+
+/** External payment processor for a checkout. */
+export enum PaymentProvider {
+  /** PayPal. Hosted approval flow; the approved order is captured via capturePaypalCheckout (which completes the checkout), with PayPal webhooks as backup reconciliation. */
+  Paypal = 'PAYPAL',
+  /** Stripe Checkout. Hosted card payment session; completion is confirmed via Stripe webhooks. */
+  Stripe = 'STRIPE'
+}
+
+/** One datacenter an app can be created in. The `code` is exactly what createApp takes as input.datacenter. */
+export type PlaceableDatacenter = {
+  __typename?: 'PlaceableDatacenter';
+  /** How many shards of the app colocation group this datacenter currently holds. This is the placement odds: createApp mints candidate app ids until one hashes into the requested datacenter, so a datacenter holding half the shards is satisfied in about two attempts. Zero means unplaceable. Always 0 on a deployment that distributes nothing, where the number does not exist and `placeable` is true regardless — read `placeable`, not this, to decide whether a choice is offerable. */
+  appShardCount: Scalars['Int']['output'];
+  /** Datacenter code, e.g. 'or' or 'va'. Pass this verbatim as createApp's input.datacenter; it is compared lowercase. */
+  code: Scalars['String']['output'];
+  /** HTTPS GraphQL origin clients of an app in this datacenter should use. Null only where no topology has been pushed, which on a Citus deployment means the datacenter cannot yet be reached and on a single-node one means there is nothing to route. Informational for a picker: createApp does not need it, and appDiscovery is what a client reads per app. */
+  gameApiUrl: Maybe<Scalars['String']['output']>;
+  /** The wss:// form of gameApiUrl. Null under the same conditions. */
+  gameApiWsUrl: Maybe<Scalars['String']['output']>;
+  /** Whether createApp will accept this datacenter right now. False means it holds no shards of the app colocation group, so no app id can hash into it and creation would fail after exhausting its candidates. Do not offer a false entry as a choice — show it as unavailable, because dropping it hides a half-built datacenter from the only person who would notice. */
+  placeable: Scalars['Boolean']['output'];
+  /** Whether any ck-api instance in this datacenter is currently serving clients. NOT part of whether an app can be PLACED here: placement is about where the data lands and survives a datacenter being down, while this is about whether players could connect today. A datacenter that is placeable but NOT_SERVING will hold the app fine and answer its clients with APP_UNAVAILABLE until an instance comes back, so it is worth warning about and wrong to forbid. UNKNOWN means the liveness signal itself could not be read and must not be shown as an outage — a fleet-wide heartbeat failure once made every datacenter look dead while all of them were fine. */
+  serving: DatacenterServingStatus;
+};
+
+/** The datacenter choices this deployment offers for app creation, plus the two facts a caller needs to interpret an empty list. */
+export type PlaceableDatacenters = {
+  __typename?: 'PlaceableDatacenters';
+  /** Every datacenter this deployment knows how to route to, sorted by code, including any that cannot currently hold an app. EMPTY means the control plane has never pushed a datacenter topology here, in which case createApp refuses every datacenter and the remedy is a change order (pg:upsert_datacenter_topology) rather than a different argument. */
+  datacenters: Array<PlaceableDatacenter>;
+  /** Whether this deployment actually places apps by datacenter. True on any Citus tier: the datacenter is verified at creation and an unknown or empty one is refused. False on a single-node deployment (a developer machine, the CI database), where there is exactly one place an app can be, the argument is still required but cannot be verified, and the single entry returned is a formality. A caller should present a choice when this is true and need not when it is false. */
+  placementEnforced: Scalars['Boolean']['output'];
+  /** The datacenter of the instance that answered this call, or null if it was not told its own. Present so a picker can SAY which datacenter it is talking to; deliberately NOT a default. The published origin is a multivalue record over every datacenter's load balancer, so the instance answering is whichever one DNS picked, and defaulting to it would place apps by exactly the accident createApp's required argument exists to remove. */
+  servedBy: Maybe<Scalars['String']['output']>;
+};
+
+/** Public platform discovery. Clients/SDKs read the shared game-api URL here to route apps deployed to the shared environment. */
+export type PlatformConfig = {
+  __typename?: 'PlatformConfig';
+  /** Free shared app slots an org gets before usage is wallet-billed. */
+  freeAppsPerOrg: Scalars['Int']['output'];
+  /** Shared game-api HTTP/GraphQL root for shared-environment apps. */
+  sharedGameApiUrl: Maybe<Scalars['String']['output']>;
+  /** Shared game-api WebSocket root (subscriptions / UDP proxy). */
+  sharedGameApiWsUrl: Maybe<Scalars['String']['output']>;
+};
+
+/** Off-session auto-recharge settings for the player wallet (the org auto-billing twin): when enabled with a vaulted card, the player gate tops the wallet up before denying for insufficient funds. */
+export type PlayerAutoBilling = {
+  __typename?: 'PlayerAutoBilling';
+  /** Amount auto-billed so far this period. */
+  autoBilledThisPeriodCents: Scalars['BigInt']['output'];
+  /** Whether auto-recharge is enabled. */
+  enabled: Scalars['Boolean']['output'];
+  /** Whether an active vaulted card is attached. */
+  hasPaymentMethod: Scalars['Boolean']['output'];
+  /** Last auto-recharge failure, if any. */
+  lastError: Maybe<Scalars['String']['output']>;
+  /** Per-period auto-recharge ceiling in cents; null = no limit. */
+  limitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Balance threshold that triggers a recharge. */
+  lowWaterThresholdCents: Scalars['BigInt']['output'];
+  /** Amount charged per auto-recharge. */
+  rechargeAmountCents: Scalars['BigInt']['output'];
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A pending player card-vault (P4b): the Stripe SetupIntent the browser confirms to save a card off-session, enabling wallet auto-recharge and rent auto-renew. On success a setup_intent.succeeded webhook persists the card. */
+export type PlayerCardSetup = {
+  __typename?: 'PlayerCardSetup';
+  /** Stripe SetupIntent client secret the browser confirms. */
+  clientSecret: Maybe<Scalars['String']['output']>;
+  /** The Stripe customer id the card is attached to. */
+  externalCustomerId: Scalars['String']['output'];
+  /** Stripe publishable key the browser needs to confirm the card. */
+  publishableKey: Maybe<Scalars['String']['output']>;
+};
+
+/** The caller's entitlement to a listing (mode 'free' in P4a). Uninstalling never deletes this row; it is the audit trail P4b attaches payment to. */
+export type PlayerCodeAcquisition = {
+  __typename?: 'PlayerCodeAcquisition';
+  /** When acquired. */
+  acquiredAt: Scalars['DateTime']['output'];
+  /** Numeric user id of the acquirer (management catalog reads). */
+  acquirerUserId: Maybe<Scalars['BigInt']['output']>;
+  /** UUID of the acquisition. */
+  acquisitionId: Scalars['String']['output'];
+  /** App of the listing. */
+  appId: Scalars['BigInt']['output'];
+  /** Expiry for RENT/TIME_LIMITED; null for perpetual (FREE/BUY) or unit-budgeted (COST_LIMITED). Past expiry drains installs until renewed. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the acquired listing. */
+  listingId: Scalars['String']['output'];
+  /** Acquisition mode: FREE, BUY (perpetual), RENT (renewable window), TIME_LIMITED (single window), or COST_LIMITED (compute-unit budget). */
+  mode: PlayerCodeAcquisitionMode;
+  /** When the entitlement was revoked; null while active. */
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Entitlement status: 'active' or 'revoked'. */
+  status: Scalars['String']['output'];
+  /** Compute-unit budget for COST_LIMITED; null otherwise. */
+  unitBudget: Maybe<Scalars['BigInt']['output']>;
+  /** Compute units consumed so far (advances against unitBudget). */
+  unitsConsumed: Scalars['BigInt']['output'];
+};
+
+/** How a listing is acquired. P4a ships FREE only; the paid modes (buy, rent, time-limited, cost-limited) arrive with the P4b money workstream. */
+export enum PlayerCodeAcquisitionMode {
+  Buy = 'BUY',
+  CostLimited = 'COST_LIMITED',
+  Free = 'FREE',
+  Rent = 'RENT',
+  TimeLimited = 'TIME_LIMITED'
+}
+
+/** One row of an app's admission queue: a listing joined with its standing under the app's allow-list (admitted via a matching code, author, or org admission; pending; or revoked). The studio moderation surface for allow_list apps. */
+export type PlayerCodeAdmissionQueueEntry = {
+  __typename?: 'PlayerCodeAdmissionQueueEntry';
+  /** UUID of the admission entry that admits (or last admitted) this listing — matched on the code subject, its author, or its owning org. Null while pending. */
+  admissionId: Maybe<Scalars['String']['output']>;
+  /** The listing's admission standing in this app. */
+  admissionState: PlayerCodeAdmissionState;
+  /** The listing under review. */
+  listing: PlayerCodeListing;
+  /** Which allow-list subject matched: 'code', 'author', or 'org'. Null while pending. */
+  matchedSubjectKind: Maybe<Scalars['String']['output']>;
+};
+
+/** A listing's standing under this app's admission mode: ADMITTED (installable), PENDING (browsable but uninstallable in allow_list apps), or REVOKED (installs drain). */
+export enum PlayerCodeAdmissionState {
+  Admitted = 'ADMITTED',
+  Pending = 'PENDING',
+  Revoked = 'REVOKED'
+}
+
+/** Source-access mode of a listing: CLOSED (artifacts + contracts only) or OPEN_SOURCE (source readable; irreversible per published version). */
+export enum PlayerCodeLicenseMode {
+  Closed = 'CLOSED',
+  OpenSource = 'OPEN_SOURCE'
+}
+
+/** A marketplace code listing as seen in-game (replica of the management catalog). Every listing is FREE in P4a; carrying both server and client artifact sets makes it a bundle. */
+export type PlayerCodeListing = {
+  __typename?: 'PlayerCodeListing';
+  /** Acquisition mode: FREE, or a paid mode (BUY / RENT / TIME_LIMITED / COST_LIMITED; P4b). Free listings carry no price. */
+  acquisitionMode: PlayerCodeAcquisitionMode;
+  /** The listing's admission standing in this app. In implicit_allow apps this is always ADMITTED; in allow_list apps PENDING listings can be acquired but not installed. Null on management catalog reads that carry no app admission context. */
+  admissionState: Maybe<PlayerCodeAdmissionState>;
+  /** App the listing belongs to. */
+  appId: Scalars['BigInt']['output'];
+  /** When the listing was created. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Store description. */
+  description: Scalars['String']['output'];
+  /** UUID of the newest published version; null before first publish. */
+  latestVersionId: Maybe<Scalars['String']['output']>;
+  /** Source-access mode for new versions. */
+  licenseMode: PlayerCodeLicenseMode;
+  /** UUID of the listing. */
+  listingId: Scalars['String']['output'];
+  /** JSON array of media refs. */
+  mediaJson: Scalars['String']['output'];
+  /** Display name. */
+  name: Scalars['String']['output'];
+  /** Whether a player user or an org owns this listing. */
+  ownerKind: PlayerCodeOwnerKind;
+  /** User id or org id of the owner, per ownerKind. */
+  ownerRef: Scalars['BigInt']['output'];
+  /** Price in cents for paid modes; null when FREE. */
+  priceCents: Maybe<Scalars['Int']['output']>;
+  /** Rent billing interval in days (RENT mode). */
+  rentIntervalDays: Maybe<Scalars['Int']['output']>;
+  /** Catalog status (active / delisted / killed). */
+  status: PlayerCodeListingStatus;
+  /** Compute-unit budget per purchase (COST_LIMITED mode). */
+  unitBudget: Maybe<Scalars['BigInt']['output']>;
+  /** When the listing was last updated. */
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Fixed access window in days (TIME_LIMITED mode). */
+  windowDays: Maybe<Scalars['Int']['output']>;
+};
+
+/** Catalog status of a listing: ACTIVE (browsable/acquirable), DELISTED (author withdrew it — existing installs keep their pinned versions), KILLED (studio/operator kill). */
+export enum PlayerCodeListingStatus {
+  Active = 'ACTIVE',
+  Delisted = 'DELISTED',
+  Killed = 'KILLED'
+}
+
+/** Who owns a marketplace code listing: a player user or an org (DN-9: the org then holds source access and listing control). */
+export enum PlayerCodeOwnerKind {
+  Org = 'ORG',
+  User = 'USER'
+}
+
+/** One explicit edge from a server artifact to the client artifact it requires within the same immutable marketplace bundle. */
+export type PlayerCodeRequirement = {
+  __typename?: 'PlayerCodeRequirement';
+  /** Artifact hash of the CLIENT half required by that server. */
+  clientArtifactHash: Scalars['String']['output'];
+  /** Artifact hash of the SERVER half declaring the requirement. */
+  serverArtifactHash: Scalars['String']['output'];
+};
+
+/** An immutable published version of a code listing. Snapshots ARTIFACT HASHES and explicit server-to-client requirements from the author’s compiled module versions — never source (OQ-1). */
+export type PlayerCodeVersion = {
+  __typename?: 'PlayerCodeVersion';
+  /** Numeric app id (denormalized from the listing). */
+  appId: Scalars['BigInt']['output'];
+  /** sha256 of the canonical capability summary. Installs record the hash they consented to; a widened summary on a newer version forces re-consent. */
+  capabilityHash: Scalars['String']['output'];
+  /** JSON capability summary DERIVED from the artifacts by the compile pipeline (imported host families, invoke contracts, presentation hooks, egress budgets). Never self-declared; this is what installers consent to. */
+  capabilitySummaryJson: Scalars['String']['output'];
+  /** Artifact hashes of the client-target modules in this version (empty for server-only listings). */
+  clientArtifactHashes: Array<Scalars['String']['output']>;
+  /** When the version was published. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Author license terms shown at acquisition (platform enforces access, not downstream legal terms). */
+  licenseText: Maybe<Scalars['String']['output']>;
+  /** UUID of the listing this version belongs to. */
+  listingId: Scalars['String']['output'];
+  /** Whether this version’s source is open. Open-sourcing a version is irreversible for that version; later versions may return to closed. */
+  openSource: Scalars['Boolean']['output'];
+  /** Explicit SERVER artifact to required CLIENT artifact edges. Every referenced hash is a member of this immutable bundle. */
+  requirements: Array<PlayerCodeRequirement>;
+  /** Artifact hashes of the server-target modules in this version (empty for client-only listings). */
+  serverArtifactHashes: Array<Scalars['String']['output']>;
+  /** UUID of this published version. */
+  versionId: Scalars['String']['output'];
+  /** Monotonic version number within the listing. */
+  versionNo: Scalars['Int']['output'];
+};
+
+/** Live concurrent players for a studio vs its all-time peak, a percentile comparison against other studios, and the site-wide CKS total. */
+export type PlayerPulse = {
+  __typename?: 'PlayerPulse';
+  /** Current concurrent players site-wide (dedicated environments plus active dev boxes). Aggregate-only; no per-studio breakdown. */
+  globalLivePlayers: Scalars['Int']['output'];
+  /** All-time peak concurrent players recorded for this org. */
+  orgAllTimePeak: Scalars['Int']['output'];
+  /** When the org all-time peak was observed. */
+  orgAllTimePeakAt: Maybe<Scalars['DateTime']['output']>;
+  /** Current concurrent players for this org (dedicated environments plus active dev boxes). */
+  orgLivePlayers: Scalars['Int']['output'];
+  /** Share of studios whose all-time peak is at or below this org (0–1). Null when the comparison pool is empty or this org has no peak. */
+  percentile: Maybe<Scalars['Float']['output']>;
+  /** Number of studios in the percentile comparison pool (studios with all_time_peak > 0). */
+  poolSize: Scalars['Int']['output'];
+};
+
+/** The caller's per-app player runtime gate state (the app runtime_status twin, player-scoped): 'active', 'grace', or 'denied' with a typed reason. Non-active pauses the player's grid compute only — an unfunded wallet stops your mods, not your game. */
+export type PlayerRuntimeState = {
+  __typename?: 'PlayerRuntimeState';
+  /** The app. */
+  appId: Scalars['BigInt']['output'];
+  /** PLAYER_WALLET_EMPTY or PLAYER_SPEND_CAP when not active. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** 'active', 'grace', or 'denied'. */
+  status: Scalars['String']['output'];
+  /** Last gate evaluation that changed state. */
+  updatedAt: Scalars['DateTime']['output'];
+  /** The player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A player's self-set spend cap (06 §2a): a daily/monthly ceiling globally or per app. The effective runtime limit is min(developer policy, self-cap, wallet balance); hitting a cap pauses that player's mods with PLAYER_SPEND_CAP, never their play. */
+export type PlayerSpendCap = {
+  __typename?: 'PlayerSpendCap';
+  /** Spend counted against the daily cap so far today. */
+  currentDayUsageCents: Scalars['BigInt']['output'];
+  /** Spend counted against the monthly cap so far this month. */
+  currentMonthUsageCents: Scalars['BigInt']['output'];
+  /** Daily ceiling in cents; null = no daily cap. */
+  dailyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Calendar-month ceiling in cents; null = no monthly cap. */
+  monthlyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Cap scope: 'global' or 'app'. */
+  scope: Scalars['String']['output'];
+  /** The app id for app scope; null for global. */
+  scopeRef: Maybe<Scalars['BigInt']['output']>;
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** One posted player usage charge: a (player, app, closed clock hour) row. amountCents = platformCents + markupCents — players see what the platform charges and what the studio adds (06 §4). The UNIQUE hour key makes the billing tick idempotent. */
+export type PlayerUsageCharge = {
+  __typename?: 'PlayerUsageCharge';
+  /** Total debited cents. */
+  amountCents: Scalars['BigInt']['output'];
+  /** The app the usage ran in. */
+  appId: Scalars['BigInt']['output'];
+  /** Charge id. */
+  chargeId: Scalars['BigInt']['output'];
+  /** When the charge posted. */
+  createdAt: Scalars['DateTime']['output'];
+  /** ISO currency code. */
+  currency: Scalars['String']['output'];
+  /** Studio markup component (the app's player_rate_markup_bps). */
+  markupCents: Scalars['BigInt']['output'];
+  /** Billed hour end (exclusive). */
+  periodEnd: Scalars['DateTime']['output'];
+  /** Billed hour start (inclusive). */
+  periodStart: Scalars['DateTime']['output'];
+  /** Platform component (base rate card). */
+  platformCents: Scalars['BigInt']['output'];
+  /** JSON per-metric usage/billing snapshot for the hour. */
+  usageSnapshotJson: Scalars['String']['output'];
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** The caller's player wallet: one platform-scoped balance, across every org and app they play in, that pays for the player's mods past their monthly trial (250,000 compute units in each app) and for any Agentic Studio model requests charged to them. Out-of-band from org wallets — player usage never touches an org's money. */
+export type PlayerWallet = {
+  __typename?: 'PlayerWallet';
+  /**
+   * DEPRECATED. balanceMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from balanceMicrousd (truncated toward zero). Read balanceMicrousd.
+   */
+  balanceCents: Scalars['BigInt']['output'];
+  /** Current balance in MICRO-USD (1 USD = 1,000,000). The unit of account since 2026-09-11; nothing is rounded. May go negative when accrued usage settles against an empty wallet. */
+  balanceMicrousd: Scalars['BigInt']['output'];
+  /** Wallet creation time. */
+  createdAt: Scalars['DateTime']['output'];
+  /** ISO currency code (lowercase). */
+  currency: Scalars['String']['output'];
+  /** Micro-USD held against in-flight request-priced usage (a model turn reserves its worst case before it runs). Spendable = balanceMicrousd - holdsMicrousd. */
+  holdsMicrousd: Scalars['BigInt']['output'];
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+  /** Wallet id. */
+  walletId: Scalars['BigInt']['output'];
+};
+
+/** One player-wallet ledger entry: top-ups, hourly usage debits, auto-recharges, refunds, and adjustments. Usage debits carry the app and reference the hour's charge row, whose snapshot splits platform vs studio-markup components. */
+export type PlayerWalletTransaction = {
+  __typename?: 'PlayerWalletTransaction';
+  /**
+   * DEPRECATED. amountMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from amountMicrousd (truncated toward zero). Read amountMicrousd.
+   */
+  amountCents: Scalars['BigInt']['output'];
+  /** Signed amount in micro-USD (debits negative). Exact. */
+  amountMicrousd: Scalars['BigInt']['output'];
+  /** The app a usage debit covers; null for wallet-level entries. */
+  appId: Maybe<Scalars['BigInt']['output']>;
+  /**
+   * DEPRECATED. balanceAfterMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from balanceAfterMicrousd. Read balanceAfterMicrousd.
+   */
+  balanceAfter: Scalars['BigInt']['output'];
+  /** Balance in micro-USD after this entry. */
+  balanceAfterMicrousd: Scalars['BigInt']['output'];
+  /** Entry time. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Human description. */
+  description: Maybe<Scalars['String']['output']>;
+  /** External reference (checkout/PaymentIntent id). */
+  referenceId: Maybe<Scalars['String']['output']>;
+  /** Transaction id. */
+  transactionId: Scalars['BigInt']['output'];
+  /** What produced this entry. The complete set of values this API writes: "topup" (credit from a completed checkout, positive), "auto_recharge" (off-session automatic recharge, positive), "payout_credit" (marketplace seller payout, positive), "refund" (marketplace refund returned to the buyer, positive), "usage_debit" (hourly player-compute metered charge for one closed clock hour, negative), "purchase" (marketplace purchase, negative), "adjustment" (operator or dispute-clawback correction, signed). */
+  transactionType: Scalars['String']['output'];
+  /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+  /** The wallet. */
+  walletId: Scalars['BigInt']['output'];
+};
+
+/** A one-time portal authorization code. Redirect the player to `redirectUri` carrying `code`; the destination game exchanges it (with its PKCE verifier) via exchangePortalCode for an app token. Single-use and short-lived. */
+export type PortalAuthorizationCode = {
+  __typename?: 'PortalAuthorizationCode';
+  /** The one-time authorization code. Deliver it to the destination game origin only (e.g. as a `code` query param on redirectUri). */
+  code: Scalars['String']['output'];
+  /** ISO-8601 UTC expiry of the code (typically ~60s). */
+  expiresAt: Scalars['String']['output'];
+  /** The validated redirect URI the player should be sent to. */
+  redirectUri: Scalars['String']['output'];
+};
+
+/** Whether portaling into an app requires a consent prompt on the Overworld. */
+export type PortalConsentState = {
+  __typename?: 'PortalConsentState';
+  /** True if the user already has an active grant for this app. */
+  alreadyGranted: Scalars['Boolean']['output'];
+  /** App id, as a String. */
+  appId: Scalars['String']['output'];
+  /** App display name. */
+  appName: Maybe<Scalars['String']['output']>;
+  /** True if the Overworld must show a consent screen (untrusted app, not yet granted) before creating a portal code. */
+  consentRequired: Scalars['Boolean']['output'];
+  /** True for first-party/trusted apps (consent is always skipped). */
+  trusted: Scalars['Boolean']['output'];
+};
+
+/** One priced dimension of the public rate card: its rate and its free allowances. A dimension with a price of 0 is metered but not charged. */
+export type PublicRateCardEntryType = {
+  __typename?: 'PublicRateCardEntryType';
+  /** ISO currency code. USD today. */
+  currency: Scalars['String']['output'];
+  /** Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit. */
+  freePerHour: Maybe<Scalars['BigInt']['output']>;
+  /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app). Null when this dimension has no monthly allowance. */
+  freePerMonth: Maybe<Scalars['BigInt']['output']>;
+  /** The period freeUnits resets on. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving. */
+  freePeriod: Maybe<AllowancePeriod>;
+  /** The allowance as the biller reads it: raw metric units free per freePeriod, as a BigInt decimal string. Null when the dimension has no allowance row. */
+  freeUnits: Maybe<Scalars['BigInt']['output']>;
+  /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". This is the key your usage is aggregated under, so it is what to match a bill line against. */
+  metric: Scalars['String']['output'];
+  /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted. 0 means metered but not charged. */
+  priceCents: Scalars['Float']['output'];
+  /** Which card this row is on. */
+  scope: RateScope;
+  /** Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity. */
+  unitLabel: Scalars['String']['output'];
+  /** How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 19 with unitQuantity 1073741824 is 19 cents per GiB. priceCents and unitQuantity are two halves of one price and mean nothing apart. */
+  unitQuantity: Scalars['BigInt']['output'];
+};
+
+/** Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is wallet-billed: each app has a per-dimension hourly allowance and, for client egress, 5 decimal GB per calendar month. An unfunded free app is also shaped to roughly 1 MB/s; funding the org wallet or enabling auto-billing lifts that. */
+export type PublishAppResult = {
+  __typename?: 'PublishAppResult';
+  appId: Scalars['BigInt']['output'];
+  /** @deprecated Always null — subscriptions replaced by wallet billing. */
+  checkout: Maybe<Checkout>;
+  /** True when the app uses a free org app-slot (under the quota). */
+  free: Scalars['Boolean']['output'];
+};
+
+/** Publish a new immutable Crowdy Studio-curated common-file version. Requires the app manage_compute permission. */
+export type PublishCrowdyStudioCommonFileInput = {
+  /** App tenant receiving the common entry; the token and manage_compute permission must cover this app. */
+  appId: Scalars['BigInt']['input'];
+  /** Existing common entry UUID to version; omit to create or version by slug. */
+  commonFileId?: InputMaybe<Scalars['String']['input']>;
+  /** UTF-8 source text for the new immutable version, capped at 64 KiB. */
+  content: Scalars['String']['input'];
+  /** Optional Crowdy Studio-authored catalog description. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Optional 24-hour retry key; strongly recommended to avoid duplicate versions after transport retries. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Safe recommended destination path. */
+  path: Scalars['String']['input'];
+  /** Stable lowercase hyphenated catalog slug. Existing entries cannot change their slug. */
+  slug: Scalars['String']['input'];
+  /** Optional unique lowercase discovery tags; at most 16. */
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Compatible project target for this common file. */
+  target: CrowdyStudioTarget;
+  /** Crowdy Studio-authored catalog title. */
+  title: Scalars['String']['input'];
+};
+
+/** One file of a publish manifest. */
+export type PublishFileInput = {
+  /** Relative path inside dist/, forward slashes. index.html must be present at the root. */
+  path: Scalars['String']['input'];
+  /** Lower-case hex SHA-256 of the bytes. S3 verifies the upload against it and completeGamePublish verifies the stored object. */
+  sha256: Scalars['String']['input'];
+  /** Size in bytes. */
+  size: Scalars['Int']['input'];
+};
+
+export type Query = {
+  __typename?: 'Query';
+  /** List only healthy GraphQL API servers (status = ReadyForClients) for client routing/discovery. No authentication required. */
+  activeGraphQLServers: Array<GraphQlServer>;
+  /** Fetches a single actor by its 32-character ASCII `uuid`. Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound, the same as a missing id). Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null). */
+  actor: Actor;
+  /** Lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Requires a valid game token; only the caller’s own actors are returned (full state included). Under an app token the list is confined to that token’s app (a `filter.appId` naming another app is refused). For other users’ actors use `actor` or `batchLookupActors`. */
+  actors: Array<Actor>;
+  /** Relay-style cursor-paginated version of `actors`: lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); `totalCount` is the full number of matching actors. Requires a valid game token; only the caller’s own actors are returned (full state included). Under an app token the list is confined to that token’s app. */
+  actorsConnection: ActorsConnection;
+  /** OPERATOR ONLY. The Crowdy Studio agent price list: every model card with its four per-million token prices and its lifecycle status. Separate from billingRateCard because agent pricing is per model rather than per metered dimension. Read-only. */
+  agentRateCards: Array<AgentRateCardEntryType>;
+  /** OPERATOR: every hosted game on the tier, whatever its status or listing. */
+  allHostedGames: Array<HostedGame>;
+  /** Convenience for UI: returns true when the authenticated caller is the currently elected host for the given app (same election as gameHost), otherwise false (including when no host is elected). Not authoritative for server-side decisions. Requires a valid bearer game token (same auth as gameHost). */
+  amIGameHost: Scalars['Boolean']['output'];
+  /** Fetch a single app by its numeric id. Requires authentication (any signed-in user); does NOT enforce org/app permissions, so it can read apps the caller does not own, of any visibility/status. Returns null if the id does not exist. Prefer appBySlug for slug-based marketplace lookups. */
+  app: Maybe<App>;
+  /** Public listing of an app's access tiers (the free/paid bundles of runtime permissions), ordered by tierOrder ascending. PUBLIC: no authentication required. Powers the marketplace app detail / pricing page. Includes tiers of all statuses; inspect AppAccessTier.status to skip archived tiers. */
+  appAccessTiers: Array<AppAccessTier>;
+  /** Returns the monthly spend cap and current-month usage for a single app, or null if no budget has been configured for it. Requires the 'view_billing' app permission. */
+  appBudget: Maybe<AppBudget>;
+  /** Lists every app spend-cap budget configured under the organization. Requires the 'view_billing' org permission. */
+  appBudgets: Array<AppBudget>;
+  /** Look up a single app by its org slug + app slug (the marketplace URL path). PUBLIC: no authentication required, and NOT filtered by visibility/status, so it can resolve unlisted or draft apps when the exact slugs are known. Returns null if no matching app exists. */
+  appBySlug: Maybe<App>;
+  /** Read an app's player-code admission mode. Requires 'view_compute_diagnostics'. IMPLICIT_ALLOW (the default) admits lawful player code without curation; ALLOW_LIST requires every running server/client artifact, including self-authored code, to match an active code, author, or org admission. */
+  appCodeAdmissionMode: CodeAdmissionMode;
+  /** The app's admission queue: every non-killed listing joined with its allow-list standing (ADMITTED via a matching code/author/org admission, PENDING, or REVOKED). Requires 'view_compute_diagnostics'. In allow_list apps PENDING listings are browsable but uninstallable; admit them via admitAppCode (subject kind CODE for one listing, AUTHOR or ORG for wholesale admission). */
+  appCodeAdmissionQueue: Array<PlayerCodeAdmissionQueueEntry>;
+  /** List an app's player-code admission entries, newest first. Requires 'view_compute_diagnostics'. By default returns active entries only; includeRevoked adds audit-visible revoked rows. Admission controls execution, never source visibility. */
+  appCodeAdmissions: Array<AppCodeAdmission>;
+  /** An app's stored compute allowance, or null when none has been set — in which case its ck-exec code is never paused for its budget. Requires app-admin ('manage_apps'). */
+  appComputeBudget: Maybe<AppComputeBudgetInfo>;
+  /** Resolve where one or more apps are placed, WITHOUT authenticating. Call this before login and connect to the returned gameApiUrl, so the session and app token are both written in the app's own datacenter instead of across a WAN. Pass every app a launcher might switch to and cache the result; placement changes rarely and only an operator can change it. An app with no placement comes back with nulls, which means 'keep using the shared origin'. */
+  appDiscovery: Array<AppDiscovery>;
+  /** Lists org members eligible for a manual app access grant (active members of the app's owning org). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Use the returned user ids with grantAppAccess. */
+  appGrantMemberCandidates: Array<AppGrantMemberCandidate>;
+  /** Top GraphQL operations for an app ranked by bytes over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission. */
+  appGraphqlOperations: Array<GraphqlOperationUsageRow>;
+  /** List an app's code acquisitions (entitlement rows), newest first. Requires 'view_compute_diagnostics'. All rows are mode FREE in P4a; uninstalls never delete acquisitions (audit). */
+  appPlayerCodeAcquisitions: Array<PlayerCodeAcquisition>;
+  /** List the immutable published versions of a listing, newest first. Requires 'view_compute_diagnostics'. Versions expose artifact hashes and the derived capability summary — never source. */
+  appPlayerCodeListingVersions: Array<PlayerCodeVersion>;
+  /** List an app's marketplace code listings (studio administration view), newest first. Requires 'view_compute_diagnostics'. includeDelisted adds delisted/killed rows for moderation history. */
+  appPlayerCodeListings: Array<PlayerCodeListing>;
+  /**
+   * DEPRECATED (cents, truncated): read appPlayerMarkupAccruedMicrousd. Total player rate-card markup credited to this app's org wallet, in cents. Requires 'view_billing'.
+   * @deprecated Cents truncate; appPlayerMarkupAccruedMicrousd carries the exact amount.
+   */
+  appPlayerMarkupAccrued: Scalars['BigInt']['output'];
+  /** Total player rate-card markup credited to this app's org wallet (`markup_payout` rows, mirrored as CREDIT events on the ledger), in micro-USD, exact. Cents-era accruals from before the ledger are included. Requires 'view_billing'. */
+  appPlayerMarkupAccruedMicrousd: Scalars['BigInt']['output'];
+  /** Per-player usage aggregate for an app over a trailing window (top spenders / quota utilization): the compute units each player's mods used, and what the player was charged for this app. automationUnits and compileCount are legacy and always 0 for usage since the legacy engines were removed. Requires 'view_compute_diagnostics'. */
+  appPlayerUsage: Array<AppPlayerUsageRow>;
+  /** Shared-environment runtime gate decision plus current hour/day billing-window usage for an app. Read this to learn why an app is not running (runtimeDenialReason). Caller must be a member of the app's org. */
+  appRuntimeState: AppRuntimeState;
+  /** An app's paid shared-environment subscription, or null when it has none (e.g. unpublished or on the free quota). Caller must be a member of the app's org. */
+  appSharedSubscription: Maybe<AppSharedSubscription>;
+  /** Linear end-of-month egress projection for one shared app from calendar-month usage so far. Requires at least 3 elapsed days in the month before returning projected values. Requires the 'view_usage' org permission. */
+  appUsageProjection: AppUsageProjection;
+  /** Replication and GraphQL byte totals plus the top GraphQL operations for one app over the time range. Read-only reporting; the app must be linked to an environment in the org. Requires the 'view_usage' org permission. */
+  appUsageSummary: AppUsageSummary;
+  /** Admin view of the user access records for an app (who has been granted/revoked access and on which tier). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Ordered by most recently updated. Paginated via limit/offset. */
+  appUserAccessByApp: Array<AppUserAccess>;
+  /** Admin view of the user access records for an app (who has been granted/revoked access and on which tier). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Ordered by most recently updated. Relay cursor connection; prefer this over the offset-based appUserAccessByApp. */
+  appUserAccessConnection: AppUserAccessConnection;
+  /** Public marketplace listing of apps. PUBLIC: no authentication required. Returns ONLY apps with visibility=PUBLIC AND status=LIVE (drafts, unlisted, private, and archived apps are never returned). Use myApps or appsForOrg for caller-visible or org-scoped apps. Results are ordered newest-first and paginated via pageInfo. */
+  apps: AppsPage;
+  /** Public marketplace listing of apps. PUBLIC: no authentication required. Returns ONLY apps with visibility=PUBLIC AND status=LIVE (drafts, unlisted, private, and archived apps are never returned). Results are ordered newest-first. Relay cursor connection; prefer this over the offset-based apps. */
+  appsConnection: AppsConnection;
+  /** All apps belonging to an organization, identified by the org's slug, regardless of visibility or status (includes drafts and archived). Requires authentication; intended for org dashboards. Ordered newest-first. Returns an empty list for an unknown slug. */
+  appsForOrg: Array<App>;
+  /** The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart. */
+  availableLoginProviders: Array<Scalars['String']['output']>;
+  /** Fetches a single avatar by id. Requires a valid game token. Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null). Throws NotFound if the id does not exist. State blobs are base64-encoded binary. */
+  avatar: Avatar;
+  /** Reads one avatar’s per-app state (keyed by appId+avatarId). PUBLIC READ: any authenticated user may read it. Requires a valid game token. Returns null when no row exists. `state` is base64-encoded binary. */
+  avatarAppState: Maybe<AppAvatarState>;
+  /** Batch-reads per-app state for many avatars under a single app in one call. PUBLIC READ: any authenticated user may read. Requires a valid game token. Avatars with no row for the app are omitted. `state` blobs are base64-encoded binary. */
+  avatarAppStates: Array<AppAvatarState>;
+  /** Bulk-fetches actors by a list of 32-character ASCII uuids in one round-trip. Game-plane: requires an app token; only actors in that token’s app are returned (uuids in other apps are omitted, the same as unknown ids). A session token is answered NotFound. PUBLIC-STATE ONLY: `privateState` is stripped (null) for every result regardless of ownership. Use this to resolve many actors at once; use `actor` for a single owner-scoped fetch. */
+  batchLookupActors: Array<Actor>;
+  /** The lossless ledger's charge rows for one app: every (payer, meter, period) or request that has been priced, with what was billed, held and written off, in micro-USD. Requires 'view_billing' on the org. */
+  billingCharges: Array<BillingCharge>;
+  /** OPERATOR ONLY. Every organization currently marked billing_exempt. An exemption nobody can enumerate is an exemption that outlives its reason. */
+  billingExemptOrgs: Array<BillingExemptOrgType>;
+  /** OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price and hourly free allowance. SHARED is organization usage billed to the org wallet as "shared_usage"; PLAYER is player compute billed to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only. Customers read the same rates through `meteredRateCard`, which is public and omits the operator note. */
+  billingRateCard: Array<RateCardEntryType>;
+  /** Amounts the platform could not bill this org for, with the reason (an exempt org, a provider with no generation record, a process that died with metered usage in memory). Requires 'view_billing' on the org. */
+  billingWriteOffs: Array<BillingWriteOff>;
+  /** Fetch one channel by id. Errors if the id is not a channel. */
+  channel: Group;
+  /** List the members of a channel (the subscriber set, including pending requests), each with their status and roles. */
+  channelMembers: Array<GroupMember>;
+  /** The current channel creation/membership policy for an app (who may create channels and the default membership policy of new channels). Falls back to app defaults when unset. */
+  channelPolicy: AppGroupPolicy;
+  /** List the roles of a channel, including the system 'leader' role and any default 'member' role (which typically grants send_messages). */
+  channelRoles: Array<GroupRole>;
+  /** List all active channels in an app (not just the caller's). */
+  channels: Array<Group>;
+  /** Email-first adaptive login: check whether the account has password sign-in enabled. Public. It answers true only for an account that has a password, so it does reveal that such an account exists; unknown addresses and password-less accounts both answer false. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited per address and per client. */
+  checkAuthMethod: AuthMethodResult;
+  /** Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckouts` instead. */
+  checkouts: CheckoutsPage;
+  /** Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckoutsConnection` instead. Relay cursor connection; prefer this over the offset-based checkouts. */
+  checkoutsConnection: CheckoutsConnection;
+  /** Operator only. The ledger invariant runs, newest first: whether the sums closed and, when they did not, which check failed and by how much. */
+  cpBillingInvariantRuns: Array<BillingInvariantRun>;
+  /** Operator only. Ledger-versus-provider reconciliation, one row per provider per UTC day. */
+  cpBillingReconciliations: Array<BillingReconciliation>;
+  /** Operator only (is_operator or is_super_admin). Every write-off, newest first. */
+  cpBillingWriteOffs: Array<BillingWriteOff>;
+  /** Operator only (is_operator or is_super_admin). What the ANSWERING ck-api instance carries for Agentic Studio: allowlisted models with their pinned micro-USD prices, the implemented crowdy.agent-tools/1 tools with risk classes, and the complete mode and risk-class value sets a policy may draw from. It is deployed configuration read from that one process, not stored policy and not a fleet-wide claim, so it reports which instance and datacenter answered. A platform policy may name a model or tool absent here: the write succeeds, the value is stored and echoed back, and no run can use it. */
+  cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog;
+  /** Operator only (is_operator or is_super_admin). Read the platform Agentic Studio enablement, global emergency kill, model/tool/mode/risk allowlists, budget ceilings, retention/privacy policy, pilot funding seam, timestamps, and revision. No provider credential or request body is stored or returned. */
+  cpCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
+  /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, the resolved model/tool/mode/risk lists (models and modes are the platform/app intersection; a tool or risk list the app left empty is inherited from the platform whole, because empty at a layer that can only narrow means no narrowing), minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
+  crowdyStudioAgentEffectivePolicy: CrowdyStudioAgentPolicy;
+  /** Read the app-owned Agentic Crowdy Studio policy row, or a disabled/killed deny-all projection when no row exists. Requires 'view_compute_diagnostics' on the app. This is configuration only: use crowdyStudioAgentEffectivePolicy to see platform clamp and kill precedence. No provider key, prompt, source, header, request/response body, payer reference, or other secret is exposed. */
+  crowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
+  /** Read the app's sanitized platform-funded Agentic Studio usage over a bounded time window. Requires 'view_compute_diagnostics'. Returns exact OpenRouter prompt/completion/reasoning/cache/native token and decimal-USD cost dimensions, request/tool/compile/wall counts, and pinned policy revisions. It never returns prompts, source, private reasoning, headers, provider bodies, credentials, payer references, or wallet data; pilot usage never debits a player wallet. */
+  crowdyStudioAgentUsage: CrowdyStudioAgentUsagePage;
+  /** List the current immutable versions of published Crowdy Studio-curated common files for one app. Requires an app-scoped token for appId; unlike private player source, this catalog content is intentionally readable by players in that app. Results are bounded and may be filtered by target. */
+  crowdyStudioCommonFiles: Array<CrowdyStudioCommonFile>;
+  /** One UTF-8 file from the bound repository at one commit (default: githubSha), with its blob SHA. */
+  crowdyStudioGitHubFile: CrowdyStudioGitHubFile;
+  /** Where the SERVER and CLIENT crates live in the bound repository, resolved from crowdy.json (or inferred from the tree) at one commit. The only layout grammar: clients must not parse crowdy.json themselves. */
+  crowdyStudioGitHubLayout: CrowdyStudioGitHubLayout;
+  /** Repositories the caller granted to their Crowdy Studio installation. Identity session only. */
+  crowdyStudioGitHubRepos: Array<CrowdyStudioGitHubRepo>;
+  /** GitHub connection for the caller and the repository bound to a Crowdy Studio project, with the commit the project mirror is at (githubSha). GitHub is a Studio filesystem capability, not a login provider, and it is never required: a project starts in Crowdy Studio and may be bound later. */
+  crowdyStudioGitHubStatus: CrowdyStudioGitHubStatus;
+  /** Recursive file list of the repository bound to the project at one commit (default: githubSha, the mirror commit). */
+  crowdyStudioGitHubTree: CrowdyStudioGitHubTree;
+  /** List the authenticated player’s private reusable Crowdy Studio source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or Crowdy Studio operators. The bounded result defaults to 50. */
+  crowdyStudioLibraryFiles: Array<CrowdyStudioLibraryFile>;
+  /** The caller's own model usage in this app: today's request count and rate-carded charge against the policy ceiling, the payer (PLAYER wallet by default, ORG when the app elected it, PLATFORM while platform-funded), and the most recent requests. Counts and charges only; no prompts or provider bodies exist to return. Requires 'use_studio_agent'. */
+  crowdyStudioModelUsage: CrowdyStudioModelUsage;
+  /** Load one private Crowdy Studio project with all bounded source files. Requires an app-scoped token for appId and exact caller ownership; missing, cross-app, and cross-user ids all return the same NOT_FOUND shape. Grid owners and Crowdy Studio operators receive no source override. */
+  crowdyStudioProject: CrowdyStudioProject;
+  /** List the authenticated player’s private Crowdy Studio projects in one app, newest first. Requires an app-scoped token for appId; every row and source-file read is filtered by both app and caller ownership. The bounded result defaults to 25 and never grants grid deployment authority. */
+  crowdyStudioProjects: Array<CrowdyStudioProject>;
+  /** Read whether the caller has consented to their project source reaching a model provider for this app. The metered model endpoint (POST /v1/model/chat/completions) refuses with AGENT_SCOPE_DENIED until it is recorded. Requires 'use_studio_agent'. */
+  crowdyStudioProviderConsent: CrowdyStudioProviderConsent;
+  /** Resolves the single most-specific quota that applies to the given (tierId, appId, orgId, metric) by walking tier -> app -> org -> free-tier defaults and returning the first match; its limitValue/period describe the enforced limit. Returns null if no matching rule and no free-tier default exist for the metric. Requires the 'view_usage' permission on the most-specific scope provided: tierId or appId -> 'view_usage' on the (owning) app; orgId -> 'view_usage' on the org. A metric-only query (no scope ids) resolves the platform free-tier default and only requires an authenticated user. */
+  effectiveQuota: Maybe<ServiceQuota>;
+  /** Operator only (is_operator). Everything this API knows about whether an address can be emailed: its stored status, whether its domain is suppressed, and the recent SES events for it (the `send` written when the message was handed to SES, and the `delivery` / `bounce` / `complaint` that came back on the SNS webhook). */
+  emailDeliverability: EmailDeliverability;
+  /** Operator only (is_operator). How THIS API instance is configured to send mail: whether sending is on, the From address, the SES configuration set, the region and the suppressed domains. Answers 'why did no email arrive' without an SSH session, and reports the instance that served the query rather than the fleet. */
+  emailDeliveryConfig: EmailDeliveryConfig;
+  /** An app's mods, by grid or by owner, or all of them (at most 1000). Requires the org 'view_compute_diagnostics' permission. */
+  execAppMods: Array<ExecMod>;
+  /** Whether an app's ck-exec code may run: its active version, kill switches and budget pause. Requires the org 'view_compute_diagnostics' permission. */
+  execAppStatus: ExecAppStatus;
+  /** A ck-exec build's status, compiler log and modules; null when this app has no such build, or it is a player's (a mod's builds are read with `execModBuildStatus`, by the player alone). Builds are kept for 7 days. Requires the org 'view_compute_diagnostics' permission. */
+  execBuildStatus: Maybe<ExecBuild>;
+  /** Calls to each endpoint of an app's ck-exec code over the last minutes, by outcome, with their latency, most called first. Each execution host reports a minute once it ends; counters are kept 7 days. Requires the org 'view_compute_diagnostics' permission. */
+  execEndpointStats: Array<ExecEndpointStat>;
+  /** The CLIENT halves a grid serves: those of its mods that are switched on, not stopped by the kill ladder, running as the grid's owner and admitted, each with its capability summary and hash and whether you consented to it, and its author's union summary and hash and whether you trust them. Show one prompt per author and call `execTrustAuthor` (or `execConsentClientMod` per CLIENT half), fetch with `execModClientArtifact`, cache by digest, and poll this to stop CLIENT halves that were removed or changed. Requires access to the app. */
+  execGridClientMods: Array<ExecGridClientMod>;
+  /** What the execution manager has placed for an app: every instance, its phase and host. Requires the org 'view_compute_diagnostics' permission. */
+  execInstances: Array<ExecInstance>;
+  /** Guest log lines from an app's ck-exec instances (`ctx.log`), newest first, kept for 24 hours. Requires the org 'view_compute_diagnostics' permission. */
+  execLogs: Array<ExecLogLine>;
+  /** A mod build of yours: its status, compiler log and module. Builds are kept for 7 days. */
+  execModBuildStatus: ExecBuild;
+  /** A served CLIENT half's module, for the browser broker. Served only to a player holding 'run_client_code' in the app, standing in the mod's grid now, who consented to it at its current hash or trusts its author at a union no wider; every refusal answers NOT_FOUND. At most 12 fetches a minute per player and mod on each API instance (RATE_LIMITED); the module never changes for its digest, so cache it. */
+  execModClientArtifact: ExecModClientArtifact;
+  /** The app's mod marketplace: listed mods, most installed first. Requires access to the app. */
+  execModListings: Array<ExecModListing>;
+  /** A mod of yours' guest log lines (`ctx.log`), newest first, kept for 24 hours. */
+  execModLogs: Array<ExecLogLine>;
+  /** The mod starter: a ckx-sdk crate that greets visitors and follows what happens in its grid (`Hub::on_world`), to pass to `execModBuild`. Requires access to the app. */
+  execModStarter: ExecStarter;
+  /** The app's mod switches that are off. Requires the org 'view_compute_diagnostics' permission. */
+  execModSwitches: Array<ExecModSwitch>;
+  /** A grid's mods, which players in the grid call by name as the node type `mod:<name>` with the grid id as key. Requires access to the app. */
+  execMods: Array<ExecMod>;
+  /** Your mods in an app, on every grid. */
+  execMyMods: Array<ExecMod>;
+  /** The starter packs, which replace the compute templates: a world tick (the root hub: clock, weather, resource nodes, liveops events), a matchmaker, game sessions (lobby, host, turns, scores) and an NPC and mob engine, as ckx-sdk crates to pass to `execBuild` and a manifest for `execDeploy`. Requires the org 'manage_compute' permission. */
+  execStarters: ExecStarterPack;
+  /** An app's deployed ck-exec versions, newest first, and which is active. Requires the org 'view_compute_diagnostics' permission. */
+  execVersions: Array<ExecVersion>;
+  /** Reports whether a free-play window is active now, a human-readable schedule description, and the ISO-8601 start of the next window. PUBLIC: no authentication required. Takes no arguments; computed from server config and the current clock. */
+  freePlayWindowInfo: FreePlayWindowInfo;
+  /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
+  gameClientBootstrap: GameClientBootstrap;
+  /** Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
+  gameHost: Maybe<GameHost>;
+  /** List the feature keys defined for an app. Requires app-admin ('manage_apps'). */
+  gameModelFeatures: Array<GmAppFeature>;
+  /** List tier -> feature grants for an app, optionally filtered to one tier. Requires app-admin ('manage_apps'). */
+  gameModelTierFeatures: Array<GmTierFeature>;
+  /** Fetches one chunk (its base64 voxel grid, per-voxel states, chunk state and LODs) by app id and chunk coordinates. `voxelStates` holds the states stored with the chunk and every voxel edit recorded for it (the voxel_updates log: updateVoxel, sendVoxelUpdate and a hub's or mod's world.set_voxels), each with its voxel type; `voxels` is the grid as last written by updateChunk, so apply each entry's voxelType over it. Returns null if the chunk does not exist. Use the input's LOD options to limit which LODs come back. Requires a valid bearer token in the Authorization header; a token scoped to an app may only read that app's chunks. Read-only (no world state is changed). */
+  getChunk: Maybe<Chunk>;
+  /** Fetches only the requested level-of-detail (LOD) meshes for one chunk, identified by app id and coordinates. Returns null if the chunk does not exist. Cheaper than getChunk when you only need LODs. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  getChunkLods: Maybe<ChunkLodsResponse>;
+  /** Returns all chunks for an app within a cubic (Chebyshev-distance) radius of a center chunk, paginated. The cube spans center +/- maxDistance chunks on each axis. Each chunk's `voxelStates`, when selected, include its recorded voxel edits as in getChunk (selecting them costs one more read). Use this for bulk region loads; use getChunk for a single chunk. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  getChunksByDistance: ChunksByDistanceResponse;
+  /** Returns all recorded voxel edits (the voxel_updates log) for a single chunk, newest first, as a ChunkVoxelResponse. Use getChunk instead when you want the packed voxel grid rather than the individual edit log. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  getVoxelList: ChunkVoxelResponse;
+  /** List every registered GraphQL API server regardless of health/state. No authentication required. For service discovery; to route clients, prefer activeGraphQLServers (filters to healthy servers). */
+  graphqlServers: Array<GraphQlServer>;
+  /** The active grid channels of one grid (DN-10), oldest first. Any caller with a token for the app may list them, the same visibility as the app's channel list; joining still follows each channel's membership policy. */
+  gridChannels: Array<Group>;
+  /** The app's grid claim policy (D4): how a player claim confers grid ownership. */
+  gridClaimPolicy: GridClaimPolicy;
+  /** Pending grid claim requests: designated approvers (or studio staff holding manage_compute) see the app's queue; other callers see their own requests. */
+  gridClaimRequests: Array<GridClaimRequest>;
+  /** List the group/role -> permission-key grants configured on a grid for one group (rows of the `grid_group_grants` input table). These are inputs to the effective ACL, not the materialized result — use `gridUserPermissions` for a specific user's effective keys. Requires app-admin ('manage_apps'). */
+  gridGroupGrants: Array<GridGroupGrant>;
+  /** Read the permission keys a grid grants every player with active access to the app (an open build area, a public arena). An empty list means the grid is not open. Requires app-admin ('manage_apps'). */
+  gridOpenPermissions: GridOpenPermissions;
+  /** Read the current first-class ownership record for a grid. Requires authentication. Returns null when the grid has no current/unexpired owner. Player server code always resolves its execution identity from this record. */
+  gridOwnership: Maybe<GridOwnership>;
+  /** Read the permission-key whitelist configured for a grid. An empty list means there is no limit (every active runtime permission may be granted on the grid). Requires app-admin ('manage_apps'). */
+  gridPermissionLimits: GridPermissionLimits;
+  /** Read one user's effective (materialized) runtime permission keys on a grid — the flattened union of direct and group-derived grants that Buddy enforces, with expired grants excluded. Use this to see what a user can actually do. To inspect the underlying inputs instead, use `gridGroupGrants` (group grants) and `gridPermissionLimits` (the whitelist). Requires app-admin ('manage_apps'). */
+  gridUserPermissions: GridUserPermissions;
+  /** A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games. */
+  hostedGame: Maybe<HostedGame>;
+  /** Publish history for a hosted game, newest first. Requires manage_apps on the app and a SESSION token. */
+  hostedGamePublishes: Array<HostedGamePublish>;
+  /** The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
+  hostedGames: Array<HostedGame>;
+  /** Lists recorded voxel edits for all chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance, paginated over chunks. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
+  /** Lists recorded voxel edits for a single chunk (optionally only those at/after `since`), newest first. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  listVoxels: Array<Voxel>;
+  /** Returns the authenticated user resolved from the token (sent as `Authorization: Bearer <token>`), or null if missing/invalid. Readable with either an identity session token or an app-scoped gameplay token. */
+  me: Maybe<User>;
+  /** Lists the roles assigned to a single org member. Requires a valid session token. */
+  memberRoles: Array<OrgRole>;
+  /** PUBLIC: no authentication required. The metered rate card for a scope — every priced dimension with its unit, price, and free allowances. SHARED is organization usage billed to the org wallet; PLAYER is player compute billed to the player wallet. A dimension priced at 0 is metered but not charged. These are the rates in effect right now on this tier, which is what API ToS 4.1 undertakes to make available. Read-only. */
+  meteredRateCard: Array<PublicRateCardEntryType>;
+  /** The authenticated caller's own access record for a given app, or null if they have none. Requires authentication. Use this to check whether the current user is entitled to the app and on which tier; inspect status to distinguish active vs revoked. */
+  myAppAccess: Maybe<AppUserAccess>;
+  /** Apps the authenticated caller can see in their account: those owned by an org they are an active member of, OR those where they hold an active app_user_access grant. Requires authentication. Includes apps of any visibility/status (e.g. drafts the caller can access). Ordered newest-first. */
+  myApps: Array<App>;
+  /** The calling user's active app authorizations ("connected apps"). Requires a SESSION token. */
+  myAuthorizedApps: Array<AppAuthorizationGrant>;
+  /** Lists all avatars owned by the authenticated user, including full `publicState` and `privateState` (the caller is always the owner here). Requires a valid bearer game token; takes no arguments. State blobs are base64-encoded binary. Use `userAvatars` to view another user’s avatars (private state is stripped for non-owners). */
+  myAvatars: Array<AvatarDto>;
+  /** The caller's channels in an app, with their roles and effective channel permissions (e.g. whether they hold send_messages). Use this to discover which channels the current user can read/post in. */
+  myChannels: Array<GroupMembership>;
+  /** Lists the authenticated caller's own checkouts (newest first), across every org and app. Use this for a self-service payment history; use `checkouts` for the cross-tenant super-admin view. Requires an authenticated user. */
+  myCheckouts: CheckoutsPage;
+  /** Lists the authenticated caller's own checkouts (newest first), across every org and app. Use this for a self-service payment history; use `checkoutsConnection` for the cross-tenant super-admin view. Requires an authenticated user. Relay cursor connection; prefer this over the offset-based myCheckouts. */
+  myCheckoutsConnection: CheckoutsConnection;
+  /**
+   * Lifetime donation totals for the authenticated user, summed across every app. Requires a valid game token.
+   * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
+   */
+  myDonationData: UserDonationData;
+  /** The hosted games the caller can manage (manage_apps on the app). Requires a SESSION token. */
+  myHostedGames: Array<HostedGame>;
+  /** The signed-in user's linked sign-in identities. */
+  myIdentities: Array<UserIdentity>;
+  /** Lists the authenticated caller's organization memberships. Each entry bundles the org, the caller's effective permission keys, and assigned roles. Requires a valid session token. */
+  myOrganizations: Array<OrgMembership>;
+  /**
+   * The authenticated user’s property-token balances (available, in use, total). Requires a valid game token.
+   * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
+   */
+  myPropertyTokens: UserPropertyTokenData;
+  /** The caller's teams in an app, with their roles and effective team permissions. Use this to discover which teams the current user belongs to and what they may do in each. */
+  myTeams: Array<GroupMembership>;
+  /** List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps'). */
+  nearbyGridPermissions: Array<NearbyGridPermissions>;
+  /** List every grid overlapping a chunk-coordinate bounding box, returning gridId and bounds only. Player-safe: no permission keys and no impersonation userId. Requires an app-scoped token for the same app. */
+  nearbyGrids: Array<NearbyGrid>;
+  /** An org's off-session auto-billing configuration (enabled flag, recharge amount, low-water threshold, per-period cap, and last error). Requires the 'view_billing' org permission. */
+  orgAutoBilling: OrgAutoBilling;
+  /** An org's free shared-app slot quota and how much of it is used. Apps beyond the quota still publish; metered usage is billed from the org wallet. Caller must be a member of the org. */
+  orgFreeAppQuota: FreeAppQuota;
+  /** Lists the members of an organization. Requires the 'manage_members' permission on the org (super admins bypass). */
+  orgMembers: Array<OrgMember>;
+  /** Lists the org's saved (vaulted) off-session payment methods. Returns metadata only (brand/last4/status), never card numbers. Requires the 'view_billing' org permission. */
+  orgPaymentMethods: Array<SavedPaymentMethod>;
+  /** The full seed list of permission keys. Used by the UI to render role editors. */
+  orgPermissions: Array<OrgPermission>;
+  /** Lists all roles defined in an organization. Requires the 'manage_members' permission on the org (super admins bypass). */
+  orgRoles: Array<OrgRole>;
+  /** Lists an organization's API tokens (metadata only; secret values are never returned here). Requires the 'manage_tokens' permission on the org (super admins bypass). */
+  orgTokens: Array<OrgToken>;
+  /** Org rollup of per-app monthly egress projections for all shared apps, with upgrade prompts when on track to exceed free tier. Requires the 'view_usage' org permission. */
+  orgUsageProjection: OrgUsageProjection;
+  /** Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. Read-only reporting. Requires the 'view_usage' org permission. */
+  orgUsageSummary: OrgUsageSummary;
+  /** Fetches an organization by id (BigInt as string). Requires a valid session token. Returns null if no such organization exists. */
+  organization: Maybe<Organization>;
+  /** Fetches an organization by its unique URL slug. Requires a valid session token. Returns null if not found. Use this when you only have the slug; otherwise prefer organization(id). */
+  organizationBySlug: Maybe<Organization>;
+  /** Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected. */
+  paymentEvents: PaymentEventsPage;
+  /** Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected. Relay cursor connection; prefer this over the offset-based paymentEvents. */
+  paymentEventsConnection: PaymentEventsConnection;
+  /** The datacenters this deployment can create an app in. Call this before createApp and use a returned `code` as input.datacenter: the argument is REQUIRED and permanent, because an app is distributed on its app_id and all of its data lives in one datacenter for the life of the app. Requires authentication. Offer only entries with placeable=true; an empty list means no datacenter topology has been pushed here and app creation will refuse until it has. Cheap and stable — the answer changes only when the fleet does, and it is served from Citus reference tables on whichever instance answers. */
+  placeableDatacenters: PlaceableDatacenters;
+  /** Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required. */
+  platformConfig: PlatformConfig;
+  /** The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds). */
+  playerAutoBilling: PlayerAutoBilling;
+  /** Whether the signed-in account has stored the current required legal documents and the age-of-majority attestation. False means createPortalAuthorizationCode and mintAppToken will refuse with LEGAL_ACCEPTANCE_REQUIRED until recordPlayerConsents. Requires a session token. */
+  playerLegalAcceptance: Scalars['Boolean']['output'];
+  /** Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission. */
+  playerPulse: PlayerPulse;
+  /** The app's player rate-card markup in basis points on the platform base price (06 §4): the studio's usage-revenue stream, shown to players as a separate spend-history component. 0 = no markup (the BWF posture). Requires 'view_billing'. */
+  playerRateMarkup: Scalars['Int']['output'];
+  /** The caller's per-app player runtime gate states. Only apps where the gate has ever acted appear; absence means active. 'denied' with PLAYER_WALLET_EMPTY or PLAYER_SPEND_CAP pauses that player's grid compute only — play is never touched. */
+  playerRuntimeStates: Array<PlayerRuntimeState>;
+  /** The caller's self-set spend caps (global and per-app) with running counters. The effective runtime limit is min(developer policy, self-cap, wallet balance). */
+  playerSpendCaps: Array<PlayerSpendCap>;
+  /** The caller's posted hourly player-usage charges, newest first, optionally filtered by app. Each charge splits platformCents (base rate card) from markupCents (the studio's configured markup) with a per-metric snapshot — players always see what the platform charges and what the studio adds. */
+  playerUsageCharges: Array<PlayerUsageCharge>;
+  /** The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet, across every org and app, pays for the player's mods past their monthly trial and any Agentic Studio model requests charged to them; org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP. */
+  playerWalletBalance: PlayerWallet;
+  /** The caller's player-wallet ledger, newest first: top-ups, hourly usage debits (per app), auto-recharges, refunds, and adjustments. Usage-debit hours are broken down by playerUsageCharges, whose snapshot splits the platform and studio-markup components. */
+  playerWalletTransactions: Array<PlayerWalletTransaction>;
+  /** Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token. */
+  portalConsent: PortalConsentState;
+  /** Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission. */
+  quotasForApp: Array<ServiceQuota>;
+  /** Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission. */
+  quotasForOrg: Array<ServiceQuota>;
+  /** OPERATOR ONLY. Every organization currently retired, newest first. A retirement nobody can enumerate is indistinguishable from an organization that was quietly lost. */
+  retiredOrganizations: Array<OrgRetirementType>;
+  /** Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index. */
+  runtimePermissions: Array<Scalars['String']['output']>;
+  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
+  serverWithLeastClients: ServerStatus;
+  /** @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only. */
+  sharedEnvPlans: Array<SharedEnvPlan>;
+  /** Fetch one team by id. Errors if the id is not a team. */
+  team: Group;
+  /** List the members of a team (including pending requests, each with their status and roles). */
+  teamMembers: Array<GroupMember>;
+  /** The current team creation/membership policy for an app (who may create teams and the default membership policy of new teams). Falls back to app defaults when unset. */
+  teamPolicy: AppGroupPolicy;
+  /** List the roles of a team, including the system 'leader' role and the group-management permission keys each role grants. */
+  teamRoles: Array<GroupRole>;
+  /** List all active teams in an app (not just the caller's). */
+  teams: Array<Group>;
+  /** UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy. */
+  udpProxyConnectionStatus: UdpProxyConnectionStatus;
+  /** Looks up a single user by id. Requires a valid game token. */
+  user: Maybe<User>;
+  /** Reads the authenticated user’s per-app state for `appId` (keyed by appId+userId). Requires a valid game token; only the caller’s own state is returned. Returns null when no row exists. `state` is base64-encoded binary. */
+  userAppState: Maybe<UserAppState>;
+  /** Lists all per-app state rows for the authenticated user, ordered newest-updated first. Requires a valid game token; only the caller’s own states are returned. `state` blobs are base64-encoded binary. */
+  userAppStates: Array<UserAppState>;
+  /** Lists the avatars owned by `userId`. Requires a valid game token. Owner-aware: when the caller is NOT the owner, each avatar’s `privateState` is stripped (returned null); `publicState` is always included. State blobs are base64-encoded binary. */
+  userAvatars: Array<Avatar>;
+  /** Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated. */
+  usersConnection: UsersConnection;
+  /** SUPER-ADMIN ONLY paginated user search; replaces the legacy `users`/`usersByGamertag`/`usersByEmail` queries. `query` is ILIKE-prefix matched against email, gamertag, and disambiguation, plus an exact user_id match. Requires a super-admin bearer game token. */
+  usersPaginated: UsersPage;
+  /** Current server version and the minimum client version the server accepts. No authentication required. Compare your client build against minimumClientVersion before connecting and prompt an update if it is too old. */
+  versionInfo: ServerVersionInfo;
+  /** Returns entries from the immutable voxel edit history (voxel_updates_history) for an app, newest first, optionally filtered by user id and a changed-at time window. Returns up to `limit` entries (DEFAULT 500, max 50000) starting at `offset`. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  voxelUpdateHistory: Array<VoxelUpdateHistoryEvent>;
+  /** Relay-style cursor-paginated version of `voxelUpdateHistory`: returns entries from the immutable voxel edit history (voxel_updates_history) for an app, newest first, optionally filtered by user id and a changed-at time window. Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); the legacy `limit`/`offset` args are ignored on this query. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  voxelUpdateHistoryConnection: VoxelUpdateHistoryConnection;
+  /** Returns the organization's wallet, creating an empty zero-balance wallet on first access if one does not yet exist (so it never returns null). Use it to read the current balance and currency before charging usage or topping up. Requires the 'view_billing' org permission. */
+  walletBalance: OrgWallet;
+  /** Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission. */
+  walletTransactions: Array<WalletTransaction>;
+  /** Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission. Relay cursor connection; prefer this over the offset-based walletTransactions. */
+  walletTransactionsConnection: WalletTransactionsConnection;
+};
+
+
+export type QueryActorArgs = {
+  uuid: Scalars['String']['input'];
+};
+
+
+export type QueryActorsArgs = {
+  filter?: InputMaybe<ActorFilterInput>;
+};
+
+
+export type QueryActorsConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  filter?: InputMaybe<ActorFilterInput>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryAmIGameHostArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppAccessTiersArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppBudgetArgs = {
+  appId: Scalars['BigInt']['input'];
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppBudgetsArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppBySlugArgs = {
+  appSlug: Scalars['String']['input'];
+  orgSlug: Scalars['String']['input'];
+};
+
+
+export type QueryAppCodeAdmissionModeArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppCodeAdmissionQueueArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppCodeAdmissionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  includeRevoked?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryAppComputeBudgetArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppDiscoveryArgs = {
+  appIds: Array<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryAppGrantMemberCandidatesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppGraphqlOperationsArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  since: Scalars['DateTime']['input'];
+};
+
+
+export type QueryAppPlayerCodeAcquisitionsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppPlayerCodeListingVersionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  listingId: Scalars['String']['input'];
+};
+
+
+export type QueryAppPlayerCodeListingsArgs = {
+  appId: Scalars['BigInt']['input'];
+  includeDelisted?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryAppPlayerMarkupAccruedArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppPlayerMarkupAccruedMicrousdArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppPlayerUsageArgs = {
+  appId: Scalars['BigInt']['input'];
+  hours?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryAppRuntimeStateArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppSharedSubscriptionArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppUsageProjectionArgs = {
+  appId: Scalars['BigInt']['input'];
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAppUsageSummaryArgs = {
+  appId: Scalars['BigInt']['input'];
+  operationLimit?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  since: Scalars['DateTime']['input'];
+};
+
+
+export type QueryAppUserAccessByAppArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryAppUserAccessConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  appId: Scalars['BigInt']['input'];
+  first?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryAppsArgs = {
+  filter?: InputMaybe<AppMarketplaceFilterInput>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryAppsConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  filter?: InputMaybe<AppMarketplaceFilterInput>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryAppsForOrgArgs = {
+  orgSlug: Scalars['String']['input'];
+};
+
+
+export type QueryAvatarArgs = {
+  id: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAvatarAppStateArgs = {
+  appId: Scalars['BigInt']['input'];
+  avatarId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAvatarAppStatesArgs = {
+  appId: Scalars['BigInt']['input'];
+  avatarIds: Array<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryBatchLookupActorsArgs = {
+  input: BatchActorLookupInput;
+};
+
+
+export type QueryBillingChargesArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryBillingRateCardArgs = {
+  scope: RateScope;
+};
+
+
+export type QueryBillingWriteOffsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryChannelArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryChannelMembersArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryChannelPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryChannelRolesArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryChannelsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryCheckAuthMethodArgs = {
+  input: CheckAuthMethodInput;
+};
+
+
+export type QueryCheckoutsArgs = {
+  filter?: InputMaybe<CheckoutFilterInput>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCheckoutsConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  filter?: InputMaybe<CheckoutFilterInput>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCpBillingInvariantRunsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCpBillingReconciliationsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCpBillingWriteOffsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCrowdyStudioAgentEffectivePolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryCrowdyStudioAgentUsageArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  since?: InputMaybe<Scalars['DateTime']['input']>;
+  until?: InputMaybe<Scalars['DateTime']['input']>;
+};
+
+
+export type QueryCrowdyStudioCommonFilesArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  target?: InputMaybe<CrowdyStudioTarget>;
+};
+
+
+export type QueryCrowdyStudioGitHubFileArgs = {
+  input: CrowdyStudioGitHubFileInput;
+};
+
+
+export type QueryCrowdyStudioGitHubLayoutArgs = {
+  input: CrowdyStudioGitHubAtCommitInput;
+};
+
+
+export type QueryCrowdyStudioGitHubStatusArgs = {
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  projectId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryCrowdyStudioGitHubTreeArgs = {
+  input: CrowdyStudioGitHubAtCommitInput;
+};
+
+
+export type QueryCrowdyStudioLibraryFilesArgs = {
+  appId: Scalars['BigInt']['input'];
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCrowdyStudioModelUsageArgs = {
+  appId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCrowdyStudioProjectArgs = {
+  appId: Scalars['BigInt']['input'];
+  projectId: Scalars['String']['input'];
+};
+
+
+export type QueryCrowdyStudioProjectsArgs = {
+  appId: Scalars['BigInt']['input'];
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCrowdyStudioProviderConsentArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryEffectiveQuotaArgs = {
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  metric: Scalars['String']['input'];
+  orgId?: InputMaybe<Scalars['BigInt']['input']>;
+  tierId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryEmailDeliverabilityArgs = {
+  email: Scalars['String']['input'];
+  eventLimit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryExecAppModsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId?: InputMaybe<Scalars['BigInt']['input']>;
+  ownerId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryExecAppStatusArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecBuildStatusArgs = {
+  appId: Scalars['BigInt']['input'];
+  buildId: Scalars['String']['input'];
+};
+
+
+export type QueryExecEndpointStatsArgs = {
+  appId: Scalars['BigInt']['input'];
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+  sinceMinutes?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryExecGridClientModsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecInstancesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecLogsArgs = {
+  appId: Scalars['BigInt']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  flow?: InputMaybe<Scalars['String']['input']>;
+  key?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  maxLevel?: InputMaybe<Scalars['Int']['input']>;
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryExecModBuildStatusArgs = {
+  appId: Scalars['BigInt']['input'];
+  buildId: Scalars['String']['input'];
+};
+
+
+export type QueryExecModClientArtifactArgs = {
+  appId: Scalars['BigInt']['input'];
+  modId: Scalars['String']['input'];
+};
+
+
+export type QueryExecModListingsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecModLogsArgs = {
+  appId: Scalars['BigInt']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  gridId: Scalars['BigInt']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  maxLevel?: InputMaybe<Scalars['Int']['input']>;
+  name: Scalars['String']['input'];
+};
+
+
+export type QueryExecModStarterArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecModSwitchesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecModsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecMyModsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecStartersArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryExecVersionsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGameClientBootstrapArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGameHostArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGameModelFeaturesArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGameModelTierFeaturesArgs = {
+  appId: Scalars['BigInt']['input'];
+  tierId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryGetChunkArgs = {
+  input: GetChunkInput;
+};
+
+
+export type QueryGetChunkLodsArgs = {
+  input: GetChunkLodsInput;
+};
+
+
+export type QueryGetChunksByDistanceArgs = {
+  input: GetChunksByDistanceInput;
+};
+
+
+export type QueryGetVoxelListArgs = {
+  input: GetVoxelListInput;
+};
+
+
+export type QueryGridChannelsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridClaimPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridClaimRequestsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridGroupGrantsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridOpenPermissionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridOwnershipArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridPermissionLimitsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryGridUserPermissionsArgs = {
+  appId: Scalars['BigInt']['input'];
+  gridId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryHostedGameArgs = {
+  slug: Scalars['String']['input'];
+};
+
+
+export type QueryHostedGamePublishesArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  slug: Scalars['String']['input'];
+};
+
+
+export type QueryListVoxelUpdatesByDistanceArgs = {
+  input: ListVoxelUpdatesByDistanceInput;
+};
+
+
+export type QueryListVoxelsArgs = {
+  input: ListVoxelsInput;
+};
+
+
+export type QueryMemberRolesArgs = {
+  orgMemberId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryMeteredRateCardArgs = {
+  scope: RateScope;
+};
+
+
+export type QueryMyAppAccessArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryMyChannelsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryMyCheckoutsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryMyCheckoutsConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryMyTeamsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryNearbyGridPermissionsArgs = {
+  input: NearbyGridPermissionsInput;
+};
+
+
+export type QueryNearbyGridsArgs = {
+  input: NearbyGridsInput;
+};
+
+
+export type QueryOrgAutoBillingArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgFreeAppQuotaArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgMembersArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgPaymentMethodsArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgRolesArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgTokensArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgUsageProjectionArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgUsageSummaryArgs = {
+  orgId: Scalars['BigInt']['input'];
+  since?: InputMaybe<Scalars['DateTime']['input']>;
+};
+
+
+export type QueryOrganizationArgs = {
+  id: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrganizationBySlugArgs = {
+  slug: Scalars['String']['input'];
+};
+
+
+export type QueryPaymentEventsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryPaymentEventsConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryPlayerPulseArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPlayerRateMarkupArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPlayerUsageChargesArgs = {
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryPlayerWalletTransactionsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryPortalConsentArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryQuotasForAppArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryQuotasForOrgArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamMembersArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamPolicyArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamRolesArgs = {
+  groupId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryTeamsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryUserArgs = {
+  id: Scalars['BigInt']['input'];
+};
+
+
+export type QueryUserAppStateArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryUserAvatarsArgs = {
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryUsersConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  query?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryUsersPaginatedArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  query?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryVoxelUpdateHistoryArgs = {
+  appId: Scalars['BigInt']['input'];
+  from?: InputMaybe<Scalars['DateTime']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  to?: InputMaybe<Scalars['DateTime']['input']>;
+  userId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryVoxelUpdateHistoryConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  appId: Scalars['BigInt']['input'];
+  first?: InputMaybe<Scalars['Int']['input']>;
+  from?: InputMaybe<Scalars['DateTime']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  to?: InputMaybe<Scalars['DateTime']['input']>;
+  userId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
+export type QueryWalletBalanceArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryWalletTransactionsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryWalletTransactionsConnectionArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+};
+
+/** One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged. */
+export type RateCardEntryType = {
+  __typename?: 'RateCardEntryType';
+  /** ISO currency code. USD today. */
+  currency: Scalars['String']['output'];
+  /** Operator note on the seed row; null when unset. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit. */
+  freePerHour: Maybe<Scalars['BigInt']['output']>;
+  /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app), and player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance. */
+  freePerMonth: Maybe<Scalars['BigInt']['output']>;
+  /** The period freeUnits resets on. Null when the dimension has no allowance row. */
+  freePeriod: Maybe<AllowancePeriod>;
+  /** The allowance as the biller reads it: raw metric units free per freePeriod, as a BigInt decimal string. freePerHour and freePerMonth are views of this same row for the periods they name; a DAY allowance shows only here. Null when the dimension has no allowance row. */
+  freeUnits: Maybe<Scalars['BigInt']['output']>;
+  /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates. */
+  metric: Scalars['String']['output'];
+  /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged. */
+  priceCents: Scalars['Float']['output'];
+  /** Which card this row is on. */
+  scope: RateScope;
+  /** Human unit this price is quoted in, e.g. "GiB" or "M units". Display only; the arithmetic uses unitQuantity. */
+  unitLabel: Scalars['String']['output'];
+  /** How many raw metric units one priceCents charge covers, as a BigInt decimal string. A price of 19 with unitQuantity 1073741824 is 19 cents per GiB. */
+  unitQuantity: Scalars['BigInt']['output'];
+};
+
+/** One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards. */
+export type RateChangeType = {
+  __typename?: 'RateChangeType';
+  /** One of "priceCents", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth". */
+  field: Scalars['String']['output'];
+  metric: Scalars['String']['output'];
+  /** The value before this call, as a decimal string. "none" when there was no allowance row. */
+  previous: Scalars['String']['output'];
+  scope: RateScope;
+  /** The value after this call, as a decimal string. */
+  updated: Scalars['String']['output'];
+};
+
+/** Which rate card. SHARED prices organization metered usage for shared-environment apps (billed hourly to the org wallet as "shared_usage"). PLAYER prices player compute (billed hourly to the player wallet as "usage_debit"). */
+export enum RateScope {
+  Player = 'PLAYER',
+  Shared = 'SHARED'
+}
+
+/** Realtime lifecycle event delivered on the udpNotifications subscription. It is a control frame — it carries no appId, so it is never dropped by the per-app fan-out filter. Branch on `code`; use `retryable` to decide whether retrying can succeed. Most codes report that a session could not be opened or correctly scoped and are TERMINAL: the subscription completes immediately after emitting one, so the client must fix the cause and resubscribe. The exception is SERVER_DRAINING, which arrives mid-stream on a healthy subscription and does NOT end it — see that code below. */
+export type RealtimeConnectionEvent = {
+  __typename?: 'RealtimeConnectionEvent';
+  /** Machine-readable failure reason. Branch on this (not on `message`). Known values: AUTH_REQUIRED — no valid bearer game token was presented on the WS connection_init / request; authenticate via the Management API and resubscribe (not retryable as-is). APP_ID_REQUIRED — the subscription was opened without an appId scope; udpNotifications must be app-scoped (game tokens are app-agnostic and one socket is shared across apps), so pass the app you are playing and resubscribe (not retryable as-is). UDP_PROXY_CONNECTION_FAILED — the proxy could not open or keep a UDP socket to the selected game server (transient/infrastructure); back off and resubscribe (retryable). `message` carries the specific underlying detail for this case. SERVER_DRAINING — this API instance is being taken out of service; the stream KEEPS WORKING, but you should re-run discovery (mintAppToken) and reconnect to the instance it returns before this one stops. Only reaches clients connected directly to an instance; clients behind the load balancer are moved for them. */
+  code: Scalars['String']['output'];
+  /** Human-readable explanation of the failure, suitable for logs and developer-facing surfaces. Do not parse or branch on this text — branch on `code` instead. */
+  message: Scalars['String']['output'];
+  /** Whether resubscribing without changing anything may succeed. true for transient failures (e.g. UDP_PROXY_CONNECTION_FAILED) — back off and retry. false for caller errors that must be fixed first (AUTH_REQUIRED needs a fresh/valid game token; APP_ID_REQUIRED needs an appId-scoped subscription). */
+  retryable: Scalars['Boolean']['output'];
+  /** Lifecycle status: "failed" when the session could not be established or had to be torn down, or "draining" for the one advisory case (SERVER_DRAINING) where the stream stays open. */
+  status: Scalars['String']['output'];
+};
+
+export type RegisterUserInput = {
+  /** True when the player has agreed to the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy). A browser signup that omits this, or sends false, is refused with LEGAL_ACCEPTANCE_REQUIRED. Calls with no Origin header may omit it; gameplay tokens stay refused until the documents are stored. */
+  acceptLegal?: InputMaybe<Scalars['Boolean']['input']>;
+  /** True when the player attests they are at least 18, or the age of majority where they live if that is higher. Same requirement as acceptLegal: required on a browser signup, optional when the request has no Origin. */
+  attestAgeOfMajority?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Email for the new account; the confirmation email is sent here. */
+  email: Scalars['String']['input'];
+  /** Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag. */
+  gamertag?: InputMaybe<Scalars['String']['input']>;
+  /** Password for the new account (min 8 characters). */
+  password: Scalars['String']['input'];
+};
+
+/** Which retired organization to put back, and why. */
+export type ReinstateOrganizationInput = {
+  /** Organization to reinstate (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['input'];
+  /** Why the retirement is being reversed. Required and stored. */
+  reason: Scalars['String']['input'];
+};
+
+/** Result of releasing a grid created by the caller through claimGridChunk. The ownership, direct/effective ACL, and grid have been removed atomically, making its chunk claimable again. */
+export type ReleaseClaimedGridResult = {
+  __typename?: 'ReleaseClaimedGridResult';
+  /** Id of the self-claimed grid that was removed. */
+  gridId: Scalars['BigInt']['output'];
+  /** High corner of the removed one-chunk grid. */
+  highChunk: ChunkCoordinates;
+  /** Low corner of the removed one-chunk grid. */
+  lowChunk: ChunkCoordinates;
+  /** Claim policy under which the removed grid was created. */
+  policy: GridClaimPolicy;
+  /** True after the ownership, ACL rows, and grid were removed in one committed transaction. */
+  released: Scalars['Boolean']['output'];
+};
+
+/** Request an emailed magic-link to sign in (passwordless). */
+export type RequestLoginLinkInput = {
+  /** Email address to send the one-time sign-in link to. */
+  email: Scalars['String']['input'];
+  /** Where to send the user after they click the link (origin must be an allowed app/UI origin). Defaults to the platform sign-in page. */
+  redirectUri?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Result of requesting a magic link. */
+export type RequestLoginLinkResult = {
+  __typename?: 'RequestLoginLinkResult';
+  /** Always true (does not reveal whether the email exists). */
+  sent: Scalars['Boolean']['output'];
+};
+
+export type ResetPasswordInput = {
+  /** New password to set (min 8 characters). */
+  newPassword: Scalars['String']['input'];
+  /** Password-reset token from the emailed reset link. */
+  token: Scalars['String']['input'];
+};
+
+/** Which organization to retire, proof that you mean that one, and why. */
+export type RetireOrganizationInput = {
+  /** Required when the organization holds a non-zero wallet balance. Retirement FREEZES that balance indefinitely: the money is held, deliberately, and is neither refunded nor forfeited. That is settled policy (operator decision, 2026-08-21), not a placeholder for one. The amount is recorded on the tombstone so every organization it applies to stays enumerable if the policy is ever revisited. Refusing by default rather than omitting the case is deliberate — an unreachable dangerous path guarantees the danger and removes the fix. */
+  acknowledgeFrozenBalance?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Required when the organization is a tier's DURABLE PROBE ORGANIZATION — the `<family>-<tier>` org scripts/probe-org.sh reuses on every run. Retiring one frees nothing: the slug stays taken, organizationBySlug keeps returning it, and the next probe run fails on a bare permission denial days later, so the cost lands on somebody else. The refusal names the family and tells you that reinstateOrganization is the way back. */
+  acknowledgeProbeInfrastructure?: InputMaybe<Scalars['Boolean']['input']>;
+  /** The slug the organization must currently have. Refused if it does not match, which is what stops a mistyped or copy-pasted id from retiring a paying customer. There is no bulk form of this mutation for the same reason. */
+  expectedSlug: Scalars['String']['input'];
+  /** Organization to retire (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['input'];
+  /** Why this organization is being retired. Required and stored on the tombstone. */
+  reason: Scalars['String']['input'];
+};
+
+/** Revoke a user's direct grants on a grid (deletes from the grid_user_direct_grants input table). */
+export type RevokeGridPermissionsInput = {
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** The grid to revoke on. */
+  gridId: Scalars['BigInt']['input'];
+  /** Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Optional subset of permission key strings to revoke. Omit to revoke ALL of the user's direct grants on this grid. Each key must be a known runtime permission key, unique, and at most 64 chars. */
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** The user whose direct grants to revoke. */
+  userId: Scalars['BigInt']['input'];
+};
+
+/** Revoke a group's (optionally one role's) grants on a grid (deletes from the grid_group_grants input table). */
+export type RevokeGroupFromGridInput = {
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** The grid to revoke on. */
+  gridId: Scalars['BigInt']['input'];
+  /** The group whose grants to revoke. */
+  groupId: Scalars['BigInt']['input'];
+  /** Optional role to target. Must match the role the grant was created with (omit to target the group-wide grant, i.e. the grant with no role). */
+  groupRoleId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional subset of keys to revoke. Omit to revoke all of the group/role grants on this grid. */
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** Per-voxel outcome of a rollbackVoxelUpdates call. In dry-run mode this describes what WOULD happen; otherwise it reports what was applied. One result is returned per affected voxel. */
+export type RollbackVoxelEventResult = {
+  __typename?: 'RollbackVoxelEventResult';
+  /** Id of the app this result belongs to (decimal string). */
+  appId: Scalars['BigInt']['output'];
+  /** True if the change was actually written; false in dry-run mode or when the voxel was skipped. */
+  applied: Scalars['Boolean']['output'];
+  /** Address of the chunk that contains the affected voxel. */
+  coordinates: ChunkCoordinates;
+  /** Voxel type immediately before the rollback (the current value), or null. */
+  fromVoxelType: Maybe<Scalars['Int']['output']>;
+  /** Local position of the affected voxel within its chunk. */
+  location: VoxelCoordinates;
+  /** The action computed for this voxel by the rollback (the revert operation to perform). */
+  plannedAction: Scalars['String']['output'];
+  /** Human-readable explanation when a voxel is skipped or an action is taken, or null. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** Voxel type the voxel would be / was reverted to, or null. */
+  toVoxelType: Maybe<Scalars['Int']['output']>;
+};
+
+/** Payload for rollbackVoxelUpdates: selects the voxel edits made by one user in one app within a time window to revert. */
+export type RollbackVoxelUpdatesInput = {
+  /** Id of the app whose voxels to roll back (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** When true (the DEFAULT), only computes and returns the planned reversions WITHOUT writing anything; set false to actually apply the rollback (DESTRUCTIVE — mutates world state). */
+  dryRun?: Scalars['Boolean']['input'];
+  /** Inclusive start of the time window of edits to revert. */
+  from: Scalars['DateTime']['input'];
+  /** Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Inclusive end of the time window of edits to revert. */
+  to: Scalars['DateTime']['input'];
+  /** Id of the user (decimal string) whose edits within the window will be reverted. */
+  userId: Scalars['BigInt']['input'];
+};
+
+/** Create or optimistically update one private reusable personal-library file. */
+export type SaveCrowdyStudioLibraryFileInput = {
+  /** App tenant. Requires an app-scoped token; ownership is always the authenticated user. */
+  appId: Scalars['BigInt']['input'];
+  /** Private UTF-8 source text, capped at 64 KiB. */
+  content: Scalars['String']['input'];
+  /** Required current revision when libraryFileId is supplied; omit on create. */
+  expectedRevision?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional 24-hour retry key. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Existing library UUID to update; omit to create a new entry. */
+  libraryFileId?: InputMaybe<Scalars['String']['input']>;
+  /** Safe suggested destination path: Cargo.toml or a .rs file below src/. */
+  pathHint: Scalars['String']['input'];
+  /** Optional unique lowercase discovery tags; at most 16, each at most 32 characters. */
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Compatible project target for this reusable file. */
+  target: CrowdyStudioTarget;
+  /** Player-facing library title. */
+  title: Scalars['String']['input'];
+};
+
+/** Atomically upsert and delete a private project’s text files under one expected project revision. */
+export type SaveCrowdyStudioProjectFilesInput = {
+  /** App tenant that owns the private project. */
+  appId: Scalars['BigInt']['input'];
+  /** Files to remove in the same transaction. A target/path cannot also appear in upserts. */
+  deletes?: InputMaybe<Array<CrowdyStudioProjectFileDeleteInput>>;
+  /** Current project revision used for optimistic concurrency across the entire batch. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key; recommended because a successful batch increments the expected revision. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Project UUID to mutate. */
+  projectId: Scalars['String']['input'];
+  /** Files to insert or replace. The batch commits only if all paths and post-save caps are valid. */
+  upserts?: InputMaybe<Array<CrowdyStudioProjectFileInput>>;
+};
+
+/** Atomically save selected project metadata plus a batch of file upserts/deletes under one expected project revision. Crowdy Studio uses this to persist one coherent full-stack edit. */
+export type SaveCrowdyStudioProjectInput = {
+  /** New supported ABI pin, or omit to preserve. */
+  abiVersion?: InputMaybe<Scalars['Int']['input']>;
+  /** App tenant that owns the private project. */
+  appId: Scalars['BigInt']['input'];
+  /** New CLIENT module name, explicit null to clear, or omit to preserve. */
+  clientModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** Files to delete in the same transaction. A target/path cannot also appear in upserts. */
+  deletes?: InputMaybe<Array<CrowdyStudioProjectFileDeleteInput>>;
+  /** New private description, explicit null to clear, or omit to preserve. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Current project revision. A stale value is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409) — that exact code, not CONFLICT — and applies no metadata or file writes. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** New optional grid affinity, explicit null to clear, or omit to preserve. Affinity never grants deploy authority. */
+  gridId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional 24-hour retry key; recommended because a successful atomic save increments the expected revision. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** New non-empty project name, or omit to preserve. */
+  name?: InputMaybe<Scalars['String']['input']>;
+  /** New editor pairing preference, or omit to preserve. */
+  pairingPreference?: InputMaybe<CrowdyStudioPairingPreference>;
+  /** Project UUID to update. */
+  projectId: Scalars['String']['input'];
+  /** New supported SDK pin, or omit to preserve. */
+  sdkVersion?: InputMaybe<Scalars['String']['input']>;
+  /** New SERVER module name, explicit null to clear, or omit to preserve. */
+  serverModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** Changed or new files to insert/replace. Unmentioned files and their provenance remain unchanged. */
+  upserts?: InputMaybe<Array<CrowdyStudioProjectFileInput>>;
+};
+
+/** Optimistically save selected project metadata. Omitted fields remain unchanged; explicit null clears nullable metadata. */
+export type SaveCrowdyStudioProjectMetadataInput = {
+  /** New supported ABI pin, or omit to preserve. */
+  abiVersion?: InputMaybe<Scalars['Int']['input']>;
+  /** App tenant that owns the private project. */
+  appId: Scalars['BigInt']['input'];
+  /** New CLIENT module name, explicit null to clear, or omit to preserve. */
+  clientModuleName?: InputMaybe<Scalars['String']['input']>;
+  /** New private description, explicit null to clear, or omit to preserve. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Current project revision. A stale value is refused with extensions.code CROWDY_STUDIO_REVISION_CONFLICT (HTTP 409); branch on that exact code, not on CONFLICT. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** New optional grid affinity, explicit null to clear, or omit to preserve. Affinity never grants deploy authority. */
+  gridId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional 24-hour retry key; reuse with changed input returns IDEMPOTENCY_CONFLICT. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** New project name, or omit to preserve. */
+  name?: InputMaybe<Scalars['String']['input']>;
+  /** New editor pairing preference, or omit to preserve. */
+  pairingPreference?: InputMaybe<CrowdyStudioPairingPreference>;
+  /** Project UUID to update. */
+  projectId: Scalars['String']['input'];
+  /** New supported SDK pin, or omit to preserve. */
+  sdkVersion?: InputMaybe<Scalars['String']['input']>;
+  /** New SERVER module name, explicit null to clear, or omit to preserve. */
+  serverModuleName?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** A saved (vaulted) off-session payment method. */
+export type SavedPaymentMethod = {
+  __typename?: 'SavedPaymentMethod';
+  /** Card brand, e.g. 'visa'. Null for non-card methods. */
+  brand: Maybe<Scalars['String']['output']>;
+  /** True when this is the org default method charged off-session. */
+  isDefault: Scalars['Boolean']['output'];
+  /** Last 4 digits of the card, if applicable. */
+  last4: Maybe<Scalars['String']['output']>;
+  /** Payment method id (BigInt). */
+  paymentMethodId: Scalars['BigInt']['output'];
+  /** Payment provider, e.g. 'stripe'. */
+  provider: Scalars['String']['output'];
+  /** Method status, e.g. 'active' or 'expired'. */
+  status: Scalars['String']['output'];
+};
+
+/** Result of an operator test send. */
+export type SendTestEmailResult = {
+  __typename?: 'SendTestEmailResult';
+  /** The SES message id when a message was actually handed to SES. Null when sending is disabled on this instance, which is reported as sent=true by the same rule the product flows use, so READ THIS FIELD to tell a real send from a simulated one. */
+  messageId: Maybe<Scalars['String']['output']>;
+  /** Why a send was refused, when it was. */
+  refusedReason: Maybe<Scalars['String']['output']>;
+  /** Whether the send was attempted AND accepted. False means refused (suppressed domain, or a prior permanent bounce) or that SES rejected it. */
+  sent: Scalars['Boolean']['output'];
+  /** True when SEND_EMAILS is off and the message was logged rather than sent. sent=true with simulated=true means nothing left the building. */
+  simulated: Scalars['Boolean']['output'];
+};
+
+/** Notification received when the server sends a custom event. Received via the udpNotifications subscription. */
+export type ServerEventNotification = {
+  __typename?: 'ServerEventNotification';
+  /** The ID of the app where the event is occurring. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk where the event is located. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk where the event is located. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk where the event is located. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The event type ID (uint16). This determines how the event should be processed. */
+  eventType: Scalars['Int']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The event state data, base64-encoded. The format is defined by the event type. */
+  state: Scalars['String']['output'];
+  /** The unique identifier of the object controlling this event. */
+  uuid: Scalars['String']['output'];
+};
+
+/** Lifecycle/capacity state of a game/GraphQL server in the fleet. Only ReadyForClients servers should receive new client connections; serverWithLeastClients and activeGraphQLServers already filter to healthy, non-overloaded servers. */
+export enum ServerState {
+  /** Hard resource overload. Like NearCapacity (excluded from new-client selection), and the server is also actively shedding clients: it sends each affected client a reconnect command and drops their session after a short grace period so they migrate to another server. */
+  Full = 'Full',
+  /** Soft resource overload (a CPU core or system memory has been high for several seconds). Existing sessions continue, but the server is excluded from serverWithLeastClients so no new clients are routed here until it recovers. */
+  NearCapacity = 'NearCapacity',
+  /** The server is down or unreachable (failed health checks). Do not route any traffic here. */
+  Offline = 'Offline',
+  /** The server is healthy and accepting clients. This is the only state safe to route new connections to. */
+  ReadyForClients = 'ReadyForClients',
+  /** The server is booting and not yet accepting clients. Do not route new connections here; wait for ReadyForClients. */
+  Starting = 'Starting',
+  /** The server is draining and shutting down: existing sessions may continue briefly but no new clients should be routed here. */
+  Stopping = 'Stopping'
+}
+
+/** Live status and load/telemetry for one UDP game server (Buddy) in the fleet. Returned by serverWithLeastClients (which picks a low-load ReadyForClients server). Throughput metrics are per-second samples from the last reporting window and are null until first reported. */
+export type ServerStatus = {
+  __typename?: 'ServerStatus';
+  /** UDP port that native clients send spatial datagrams to (typically 9091). Browser clients do not use this directly — they reach the server through the UDP proxy / udpNotifications. */
+  clientPort: Scalars['Int']['output'];
+  /** Bytes per second received from clients in the last reporting window. Null until reported. */
+  clientRecvBytesPerSec: Maybe<Scalars['Float']['output']>;
+  /** Messages per second received from clients in the last reporting window. Null until reported. */
+  clientRecvMsgsPerSec: Maybe<Scalars['Float']['output']>;
+  /** Bytes per second sent to clients in the last reporting window. Null until reported. */
+  clientSendBytesPerSec: Maybe<Scalars['Float']['output']>;
+  /** Per-second rate of individually-addressed (single-actor) messages sent to clients in the last window, as opposed to spatial fan-out. Null until reported. */
+  clientSendIndividualMsgsPerSec: Maybe<Scalars['Float']['output']>;
+  /** Messages per second sent to clients in the last reporting window. Null until reported. */
+  clientSendMsgsPerSec: Maybe<Scalars['Float']['output']>;
+  /** Number of game clients currently connected to this server. serverWithLeastClients balances on this DIVIDED BY routerThreads, not on the raw count, so that a server with four fan-out workers takes roughly four times the clients of a server with one. */
+  clients: Scalars['Int']['output'];
+  /** CPU cores available to this server. Reported by the server itself; null on a build that predates capacity reporting. Informational — client balancing divides by routerThreads, not by cores. */
+  cpuCount: Maybe<Scalars['Int']['output']>;
+  /** Peak CPU utilization percentage (0-100) observed in the last reporting window. Null until reported. */
+  cpuPeakPct: Maybe<Scalars['Float']['output']>;
+  /** When this server was first registered in the fleet. */
+  createdAt: Scalars['DateTime']['output'];
+  /** True while the infra control plane is taking this server out of service (autoscale scale-in, or an in-place update). Excluded from serverWithLeastClients immediately; the server then reports Stopping and sends every client a reconnect command so they migrate elsewhere. Never set by the server itself. */
+  drainRequested: Scalars['Boolean']['output'];
+  /** IPv4 address native clients send spatial UDP datagrams to (paired with clientPort). Preferred over ip6 for inter-host UDP in current deployments. */
+  ip4: Scalars['String']['output'];
+  /** IPv6 address of the UDP game server. Global IPv6 between hosts can be unroutable in some deployments, so native clients generally use ip4 + clientPort. */
+  ip6: Scalars['String']['output'];
+  /** Bytes per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported. */
+  peerRecvBytesPerSec: Maybe<Scalars['Float']['output']>;
+  /** Messages per second received from peer servers (server-to-server P2P) in the last reporting window. Null until reported. */
+  peerRecvMsgsPerSec: Maybe<Scalars['Float']['output']>;
+  /** Bytes per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported. */
+  peerSendBytesPerSec: Maybe<Scalars['Float']['output']>;
+  /** Messages per second sent to peer servers (server-to-server P2P) in the last reporting window. Null until reported. */
+  peerSendMsgsPerSec: Maybe<Scalars['Float']['output']>;
+  /** Number of peer (server-to-server P2P) connections this server currently holds. */
+  peers: Scalars['Int']['output'];
+  /** Independent fan-out workers (RouterWorkers) on this server, which is how much of it there is for the purpose of placing a client. serverWithLeastClients divides the client count by this value. Null on a build that predates capacity reporting, and treated as 1, which balances every server equally as before. */
+  routerThreads: Maybe<Scalars['Int']['output']>;
+  /** Unique id of this game-server row in the fleet registry (the Buddy instance uuid). */
+  serverId: Scalars['ID']['output'];
+  /** Current lifecycle state of this server (see ServerState). Only ReadyForClients servers accept new clients. */
+  status: ServerState;
+  /** When this status row was last updated (server heartbeat). Use to judge how fresh the metrics/state are. */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Server version plus the minimum client version the server will accept. A client whose build is older than minimumClientVersion should prompt the user to update before connecting. */
+export type ServerVersionInfo = {
+  __typename?: 'ServerVersionInfo';
+  /** Minimum accepted client version */
+  minimumClientVersion: VersionInfo;
+  /** Current server version */
+  serverVersion: VersionInfo;
+};
+
+export type ServiceQuota = {
+  __typename?: 'ServiceQuota';
+  /** What happens when the limit is exceeded. Free-form string; defaults to "throttle" (typical values: "throttle" to rate-limit, "block" to reject). */
+  actionOnExceed: Scalars['String']['output'];
+  /** App this rule is scoped to (BigInt as a decimal string); null if not app-scoped. */
+  appId: Maybe<Scalars['BigInt']['output']>;
+  /** When the rule was created (ISO-8601 UTC timestamp). */
+  createdAt: Scalars['DateTime']['output'];
+  /** Maximum allowed amount of the metric per `period`, as a BigInt decimal string. */
+  limitValue: Scalars['BigInt']['output'];
+  /** The metered resource this rule limits (e.g. "api_requests", "storage_bytes"). Free-form metric key, matched exactly. */
+  metric: Scalars['String']['output'];
+  /** Organization this rule is scoped to (BigInt as a decimal string); null if not org-scoped. */
+  orgId: Maybe<Scalars['BigInt']['output']>;
+  /** Time window the limit applies over. Free-form string; defaults to "per_minute" (typical values: "per_minute", "per_hour", "per_day"). */
+  period: Scalars['String']['output'];
+  /** Unique quota rule id (BigInt as a decimal string). */
+  quotaId: Scalars['BigInt']['output'];
+  /** Access tier this rule is scoped to (BigInt as a decimal string); null if not tier-scoped. */
+  tierId: Maybe<Scalars['BigInt']['output']>;
+  /** When the rule was last updated (ISO-8601 UTC timestamp). */
+  updatedAt: Scalars['DateTime']['output'];
+};
+
+/** Register/update an app's OAuth client settings for the portal handoff (requires manage_apps on the app). */
+export type SetAppClientSettingsInput = {
+  appId: Scalars['BigInt']['input'];
+  /** OAuth client type: 'public' (browser/PKCE) or 'confidential'. */
+  clientType?: InputMaybe<Scalars['String']['input']>;
+  /** Browser launch URL players are sent to when entering the app. */
+  launchUrl?: InputMaybe<Scalars['String']['input']>;
+  /** Allow-listed redirect URIs for the portal authorization code (origin-matched). Replaces the current list. */
+  redirectUris?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** Set or change an app's reserved REALTIME (UDP) capacity on the shared environment. Reservations are sold in two independent dimensions and this mutation sets one of them; read both back from App.reservedUdpBytesPerSec and App.reservedGraphqlOpsPerSec. */
+export type SetAppReservedThroughputInput = {
+  /** App to configure reserved realtime (UDP) capacity for. */
+  appId: Scalars['BigInt']['input'];
+  /** Organization that owns the app. */
+  orgId: Scalars['BigInt']['input'];
+  /** Reserved sustained realtime capacity in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation, which releases the provisioned floor and stops the monthly fee; it does not change how the app is shaped, because the ~1 MB/s free-tier cap is decided by whether the org can be charged rather than by whether it holds a reservation. A reservation buys capacity, not volume: the fee is charged in addition to metered usage and includes no data allowance. */
+  reservedBytesPerSec: Scalars['BigInt']['input'];
+};
+
+/** Result of setAppReservedThroughput: updated app + reservation fee debited (0 when downgrading or unchanged). */
+export type SetAppReservedThroughputResult = {
+  __typename?: 'SetAppReservedThroughputResult';
+  /** App after the reservation change. */
+  app: App;
+  /** Cents debited from the org wallet for this change (prorated upgrade). 0 when clearing or lowering reservation. */
+  chargedCents: Scalars['BigInt']['output'];
+};
+
+/** Set the per-app channel creation/membership policy (app-admin only). */
+export type SetChannelPolicyInput = {
+  /** The app (tenant) whose channel policy to set. */
+  appId: Scalars['BigInt']['input'];
+  /** admin | member | anyone. Who may create channels in this app. */
+  creationPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** open | request | invite | admin. Default membership policy for new channels. */
+  defaultMembershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** Optional cap on how many channels a single user may belong to (null = unlimited). */
+  maxGroupsPerUser?: InputMaybe<Scalars['Int']['input']>;
+  /** Optional cap on members per channel (null = unlimited). */
+  maxMembers?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Patch an app's Agentic Studio policy. Requires manage_compute. Omitted fields stay unchanged; all supplied authority and limits are clamped to platform policy. */
+export type SetCrowdyStudioAgentAppPolicyInput = {
+  /** Replacement exact model allowlist (max 64). On an APP patch every id must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list; values are never silently dropped. On the PLATFORM patch this list IS the ceiling. Empty denies all models at either layer. */
+  allowedModelIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Replacement mode allowlist. On an APP patch every mode must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list. Empty denies every mode at either layer; there is no inherit-on-empty for modes. */
+  allowedModes?: InputMaybe<Array<CrowdyStudioAgentMode>>;
+  /** Replacement risk-class allowlist. On an APP patch every class must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. On the PLATFORM patch this list is the ceiling and empty denies every class. */
+  allowedRiskClasses?: InputMaybe<Array<CrowdyStudioAgentRiskClass>>;
+  /** Replacement exact logical tool-name allowlist (max 256). On an APP patch every name must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. Sending an empty array on an APP patch clears a narrowing and is therefore also "no narrowing", not "deny all". On the PLATFORM patch this list is the ceiling and empty denies every tool. */
+  allowedToolNames?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** App whose policy is changed. */
+  appId: Scalars['BigInt']['input'];
+  /** Enable or disable this policy layer. */
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional optimistic revision. Use 0 when creating; a mismatch fails AGENT_POLICY_REVISION_CONFLICT. */
+  expectedRevision?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional funding patch: metering on the platform layer, payer on the app layer. */
+  funding?: InputMaybe<CrowdyStudioAgentFundingPolicyInput>;
+  /** Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Set or clear this layer kill switch. Kill always wins over enablement. */
+  killSwitch?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional per-player/day and concurrency limit patch. */
+  playerDayLimits?: InputMaybe<CrowdyStudioAgentPlayerDayLimitsInput>;
+  /** Optional private-source sharing patch; first-use consent remains locked on. */
+  privacy?: InputMaybe<CrowdyStudioAgentPrivacyPolicyInput>;
+  /** Optional retention patch. */
+  retention?: InputMaybe<CrowdyStudioAgentRetentionPolicyInput>;
+  /** Optional per-session limit patch. */
+  sessionLimits?: InputMaybe<CrowdyStudioAgentSessionLimitsInput>;
+  /** Optional per-turn limit patch. */
+  turnLimits?: InputMaybe<CrowdyStudioAgentTurnLimitsInput>;
+};
+
+/** Operator-only per-app emergency kill. App managers cannot clear or override this state. */
+export type SetCrowdyStudioAgentOperatorAppKillInput = {
+  /** App to kill or release. */
+  appId: Scalars['BigInt']['input'];
+  /** Optional optimistic app-policy revision. */
+  expectedRevision?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** True to kill immediately; false to release the operator kill. */
+  killed: Scalars['Boolean']['input'];
+  /** Safe reason text (max 256); no secrets or provider bodies. */
+  reason?: InputMaybe<Scalars['String']['input']>;
+  /** Stable reason code (max 64); defaults to AGENT_OPERATOR_KILLED. */
+  reasonCode?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Operator-only platform policy patch. Omitted values stay unchanged; hard v1 privacy and retention maxima still apply. */
+export type SetCrowdyStudioAgentPlatformPolicyInput = {
+  /** Replacement exact model allowlist (max 64). On an APP patch every id must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list; values are never silently dropped. On the PLATFORM patch this list IS the ceiling. Empty denies all models at either layer. */
+  allowedModelIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Replacement mode allowlist. On an APP patch every mode must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list. Empty denies every mode at either layer; there is no inherit-on-empty for modes. */
+  allowedModes?: InputMaybe<Array<CrowdyStudioAgentMode>>;
+  /** Replacement risk-class allowlist. On an APP patch every class must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. On the PLATFORM patch this list is the ceiling and empty denies every class. */
+  allowedRiskClasses?: InputMaybe<Array<CrowdyStudioAgentRiskClass>>;
+  /** Replacement exact logical tool-name allowlist (max 256). On an APP patch every name must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list, and what you do send is stored exactly as sent; OMIT the field to express no narrowing, which inherits the platform list live on every read. Sending an empty array on an APP patch clears a narrowing and is therefore also "no narrowing", not "deny all". On the PLATFORM patch this list is the ceiling and empty denies every tool. */
+  allowedToolNames?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Enable or disable this policy layer. */
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional optimistic platform revision. */
+  expectedRevision?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional funding patch: metering on the platform layer, payer on the app layer. */
+  funding?: InputMaybe<CrowdyStudioAgentFundingPolicyInput>;
+  /** Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT. */
+  idempotencyKey: Scalars['String']['input'];
+  /** Safe operator-facing kill reason (max 256); no secrets or provider bodies. */
+  killReason?: InputMaybe<Scalars['String']['input']>;
+  /** Stable kill reason code (max 64); used only while killSwitch is true. */
+  killReasonCode?: InputMaybe<Scalars['String']['input']>;
+  /** Set or clear this layer kill switch. Kill always wins over enablement. */
+  killSwitch?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Optional per-player/day and concurrency limit patch. */
+  playerDayLimits?: InputMaybe<CrowdyStudioAgentPlayerDayLimitsInput>;
+  /** Optional private-source sharing patch; first-use consent remains locked on. */
+  privacy?: InputMaybe<CrowdyStudioAgentPrivacyPolicyInput>;
+  /** Optional retention patch. */
+  retention?: InputMaybe<CrowdyStudioAgentRetentionPolicyInput>;
+  /** Optional per-session limit patch. */
+  sessionLimits?: InputMaybe<CrowdyStudioAgentSessionLimitsInput>;
+  /** Optional per-turn limit patch. */
+  turnLimits?: InputMaybe<CrowdyStudioAgentTurnLimitsInput>;
+};
+
+/** Optimistically archive or restore one caller-owned personal-library file. */
+export type SetCrowdyStudioLibraryFileArchivedInput = {
+  /** App tenant that owns the private library entry. */
+  appId: Scalars['BigInt']['input'];
+  /** True to archive; false to make the entry active again. */
+  archived: Scalars['Boolean']['input'];
+  /** Current library revision required for optimistic concurrency. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Personal-library file UUID. */
+  libraryFileId: Scalars['String']['input'];
+};
+
+/** Optimistically archive or unarchive one private project without deleting its files or provenance. */
+export type SetCrowdyStudioProjectArchivedInput = {
+  /** App tenant that owns the private project. */
+  appId: Scalars['BigInt']['input'];
+  /** True to archive; false to restore the project. */
+  archived: Scalars['Boolean']['input'];
+  /** Current project revision required for optimistic concurrency. */
+  expectedRevision: Scalars['BigInt']['input'];
+  /** Optional 24-hour retry key. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Project UUID to archive or restore. */
+  projectId: Scalars['String']['input'];
+};
+
+/** Record or revoke the provider-data consent for one app. */
+export type SetCrowdyStudioProviderConsentInput = {
+  /** App the consent applies to; must match an app token scope. */
+  appId: Scalars['BigInt']['input'];
+  /** True to accept, false to revoke. */
+  consented: Scalars['Boolean']['input'];
+};
+
+/** Set the permission keys a grid grants every player with active access to the app (writes the grid_open_permissions input table): an open build area, a public arena. */
+export type SetGridOpenPermissionsInput = {
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** The grid to open (or close). Not the app's world grid, which is open by default. */
+  gridId: Scalars['BigInt']['input'];
+  /** The keys every player with active access holds on this grid, capped by its limits. Empty array closes it (players keep only what they are granted directly or through a group). Each must be an active grid permission key, unique, at most 64 chars, and not one of the four player-code keys. */
+  permissionKeys: Array<Scalars['String']['input']>;
+};
+
+/** Set the per-grid permission-key whitelist (writes the grid_permission_limits input table). */
+export type SetGridPermissionLimitsInput = {
+  /** The app (tenant) that owns the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** The grid whose whitelist to set. */
+  gridId: Scalars['BigInt']['input'];
+  /** The whitelist of permission keys allowed on this grid. Empty array removes all limits (every active grid permission becomes grantable again). Each key must be a known runtime permission key, unique, and at most 64 chars. */
+  permissionKeys: Array<Scalars['String']['input']>;
+};
+
+/** Developer: switch a hosted game off (DISABLED) or back on (LIVE). A TAKEN_DOWN game cannot be re-enabled here. */
+export type SetHostedGameEnabledInput = {
+  enabled: Scalars['Boolean']['input'];
+  slug: Scalars['String']['input'];
+};
+
+/** Operator: list or unlist a hosted game. */
+export type SetHostedGameListingInput = {
+  listed: Scalars['Boolean']['input'];
+  slug: Scalars['String']['input'];
+};
+
+/** Replace a member's roles in a group (the listed roles become their full set). */
+export type SetMemberRolesInput = {
+  /** The group (team/channel) id. */
+  groupId: Scalars['BigInt']['input'];
+  /** The complete set of group role ids the member should have. Roles not listed are removed; unknown ids or ids from other groups are ignored. */
+  roleIds: Array<Scalars['BigInt']['input']>;
+  /** The member (user) whose roles to set. */
+  userId: Scalars['BigInt']['input'];
+};
+
+export type SetQuotaInput = {
+  /** What to do when the limit is exceeded. Optional; defaults to "throttle" (typical values: "throttle" to rate-limit, "block" to reject). */
+  actionOnExceed?: InputMaybe<Scalars['String']['input']>;
+  /** Scope the rule to this app (BigInt as a decimal string). */
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first result instead of re-applying; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  /** Maximum allowed amount of the metric per `period`, as a BigInt decimal string. */
+  limitValue: Scalars['BigInt']['input'];
+  /** The metered resource key to limit (max 64 characters), e.g. "api_requests". */
+  metric: Scalars['String']['input'];
+  /** Scope the rule to this organization (BigInt as a decimal string). Provide one of orgId/appId/tierId to choose the scope; omit all three for a global (super-admin) rule. */
+  orgId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Time window the limit applies over. Optional; defaults to "per_minute" (typical values: "per_minute", "per_hour", "per_day"). Part of the upsert key, so different periods create separate rules. */
+  period?: InputMaybe<Scalars['String']['input']>;
+  /** Scope the rule to this access tier (BigInt as a decimal string). */
+  tierId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+export type SetRateCardInput = {
+  /** Required when a unit change also changes the money. Restating 19c per GiB as 1.769513c per 100 MB is the same price and needs nothing; changing 20c per 100 MB to 20c per GiB-month is a 7841x cut and must be stated deliberately. The mutation refuses rather than guessing which one you meant. */
+  acknowledgeRepricing?: InputMaybe<Scalars['Boolean']['input']>;
+  /** New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged. */
+  freePerHour?: InputMaybe<Scalars['BigInt']['input']>;
+  /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. */
+  freePerMonth?: InputMaybe<Scalars['BigInt']['input']>;
+  /** New period for the free allowance. Leaves the units as they are unless freeUnits is also given. Moving a dimension to MONTH is how the development quota is stated. */
+  freePeriod?: InputMaybe<AllowancePeriod>;
+  /** New free allowance in raw metric units per freePeriod, as a BigInt decimal string. Must be >= 0. Leaves the period as it is unless freePeriod is also given. Not combinable with freePerHour, which is the older spelling of freeUnits with freePeriod HOUR. */
+  freeUnits?: InputMaybe<Scalars['BigInt']['input']>;
+  /** The metered dimension to reprice. Refused unless the platform actually meters it: a rate for an unmetered metric bills nobody while appearing configured. */
+  metric: Scalars['String']['input'];
+  /** New price in cents per unitQuantity raw units. Must be >= 0; 0 means meter but do not charge. Omit to leave the price unchanged. Fractional values are accepted (the column is NUMERIC(20,6)). */
+  priceCents?: InputMaybe<Scalars['Float']['input']>;
+  /** Why this price is changing. Required: a rate change with no stated reason is not auditable after the fact. Recorded in the operator log with the before and after values. */
+  reason: Scalars['String']['input'];
+  /** Which card to edit. */
+  scope: RateScope;
+  /** New human unit this price is quoted in, e.g. "GiB" or "GiB-mo". Must be supplied together with unitQuantity: a label on its own restates the rate card while the arithmetic keeps the old divisor. Omit both to leave the unit unchanged. */
+  unitLabel?: InputMaybe<Scalars['String']['input']>;
+  /** New number of raw metric units one priceCents charge covers, as a BigInt decimal string. Must be > 0 and supplied together with unitLabel. Needed because every rate seed is ON CONFLICT DO NOTHING, so a unit corrected in the declaration never reaches a tier that is already installed. */
+  unitQuantity?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** The result of setting a rate: the new row and what moved. */
+export type SetRateCardResult = {
+  __typename?: 'SetRateCardResult';
+  /** One entry per field that changed. Never empty: a call that would change nothing is refused rather than reported as a successful no-op. */
+  changes: Array<RateChangeType>;
+  /** The dimension as it now stands. */
+  entry: RateCardEntryType;
+};
+
+/** Set the per-app team creation/membership policy (app-admin only). */
+export type SetTeamPolicyInput = {
+  /** The app (tenant) whose team policy to set. */
+  appId: Scalars['BigInt']['input'];
+  /** admin | member | anyone. Who may create teams in this app. */
+  creationPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** open | request | invite | admin. Default membership policy for new teams. */
+  defaultMembershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** Optional cap on how many teams a single user may belong to (null = unlimited). */
+  maxGroupsPerUser?: InputMaybe<Scalars['Int']['input']>;
+  /** Optional cap on members per team (null = unlimited). */
+  maxMembers?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** @deprecated Legacy monthly app-slot subscription plan. New shared publishes use wallet usage billing. */
+export type SharedEnvPlan = {
+  __typename?: 'SharedEnvPlan';
+  /** Billing cadence, e.g. 'month' or 'year'. */
+  billingInterval: Scalars['String']['output'];
+  /** Stable machine-readable plan code. */
+  code: Scalars['String']['output'];
+  /** ISO-4217 currency for priceCents, e.g. 'USD'. */
+  currency: Scalars['String']['output'];
+  description: Maybe<Scalars['String']['output']>;
+  /** Human-readable plan name. */
+  name: Scalars['String']['output'];
+  /** Plan id (BigInt). */
+  planId: Scalars['BigInt']['output'];
+  /** Recurring price per billing interval, in cents. */
+  priceCents: Scalars['BigInt']['output'];
+  /** Plan status, e.g. 'active' (offered) or 'archived'. */
+  status: Scalars['String']['output'];
+};
+
+/** Input for sending an actor-to-actor message: a message delivered only to the single actor identified by targetUuid. It is spatially routed (the sender must know the destination actor’s chunk), but unlike normal spatial messages it is NOT broadcast to other nearby actors and has no distance/decay. */
+export type SingleActorMessageInput = {
+  /** The ID of the app the destination actor belongs to. */
+  appId: Scalars['BigInt']['input'];
+  /** The chunk coordinates of the DESTINATION actor (where the target currently is). The sender must know this. */
+  chunk: ChunkCoordinatesInput;
+  /** The message payload, base64-encoded. Opaque to the server; the sender’s identity (if needed) must be embedded here by the application. */
+  payload: Scalars['String']['input'];
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** The DESTINATION actor’s UUID. The message is delivered only to the client that owns this actor. Must be exactly 32 bytes when encoded as UTF-8. */
+  targetUuid: Scalars['String']['input'];
+};
+
+/** Notification received when another actor sends you a direct actor-to-actor message (SINGLE_ACTOR_MESSAGE). Delivered only to the targeted actor via the udpNotifications subscription. */
+export type SingleActorMessageNotification = {
+  __typename?: 'SingleActorMessageNotification';
+  /** The ID of the app the message was sent within. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the destination chunk. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the destination chunk. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the destination chunk. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The message payload, base64-encoded. Opaque to the server; decode per your application protocol. */
+  payload: Scalars['String']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The destination actor’s UUID (your own actor’s UUID, echoed from the message). */
+  uuid: Scalars['String']['output'];
+};
+
+/** Complete a federated sign-in from the provider callback. */
+export type SocialLoginCompleteInput = {
+  /** The authorization code returned by the provider. */
+  code: Scalars['String']['input'];
+  provider: Scalars['String']['input'];
+  /** The opaque state value from socialLoginStart (CSRF binding). */
+  state: Scalars['String']['input'];
+};
+
+/** A federated sign-in handoff: redirect the user to authorizeUrl. */
+export type SocialLoginStart = {
+  __typename?: 'SocialLoginStart';
+  /** Provider authorize URL to redirect the user to. */
+  authorizeUrl: Scalars['String']['output'];
+  /** Opaque state to round-trip back to socialLoginComplete. */
+  state: Scalars['String']['output'];
+};
+
+/** Begin a federated (social) sign-in. */
+export type SocialLoginStartInput = {
+  /** Provider id, e.g. 'google' (see availableLoginProviders). */
+  provider: Scalars['String']['input'];
+  /** The callback URL the provider returns to (must be a registered auth callback for your app/UI). */
+  redirectUri: Scalars['String']['input'];
+};
+
+export type Subscription = {
+  __typename?: 'Subscription';
+  /** Realtime downlink from the game server: spatial notifications and responses, GenericErrorResponse (errors from your sends, correlated by sequenceNumber), and RealtimeConnectionEvent (lifecycle/setup failures). Requires a bearer game token AND an appId-scoped connection — the appId is read from the graphql-transport-ws connection (game tokens are app-agnostic and one UDP socket is shared across apps, so an app-agnostic subscription is rejected with a RealtimeConnectionEvent code APP_ID_REQUIRED, and a missing/invalid token with AUTH_REQUIRED). On subscribe, opens a UDP proxy session if none exists (binds to the least-loaded game server); open/transport failures are delivered as RealtimeConnectionEvent (code UDP_PROXY_CONNECTION_FAILED) and then the stream ends. Only this app’s spatial fan-out is delivered; appId-less control frames always pass. Subscribe before/while sending so async results are not missed. Unsubscribing stops delivery only — it does NOT close the UDP session; call disconnectUdpProxy (or rely on the server inactivity timeout) to release it. */
+  udpNotifications: Maybe<UdpNotification>;
+};
+
+export type TeleportRequestInput = {
+  /** App (game) to teleport within. Must be greater than 0 (a non-positive value yields errorCode INVALID_APP_ID). BigInt sent as a decimal string. */
+  appId: Scalars['BigInt']['input'];
+  /** Destination chunk-grid coordinates (x, y, z as int64 BigInt decimal strings). The reserved sentinel (-6, -6, -6) is rejected as UNAUTHORIZED. */
+  chunkAddress: ChunkCoordinatesInput;
+  /** Actor being teleported: exactly 32 ASCII characters (the UDP-wire actor id), NOT a hyphenated RFC-4122 UUID. */
+  uuid: Scalars['String']['input'];
+  /** Destination voxel coordinates within the chunk (x, y, z as signed 16-bit ints, -32768..32767). */
+  voxelAddress: VoxelCoordinatesInput;
+};
+
+export type TeleportResponse = {
+  __typename?: 'TeleportResponse';
+  /** ErrorType enum: NO_ERROR on success; INVALID_APP_ID for a non-positive appId; UNAUTHORIZED when the destination is the reserved sentinel (-6,-6,-6) or the user lacks the app "teleport" runtime permission. */
+  errorCode: UdpErrorCode;
+  /** True when the teleport is authorized/accepted; false otherwise (inspect errorCode for the reason). */
+  success: Scalars['Boolean']['output'];
+};
+
+export type TransferGridOwnershipInput = {
+  /** App that contains the grid. */
+  appId: Scalars['BigInt']['input'];
+  /** Required when the new tenure is RENTED. */
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Grid whose title transfers. */
+  gridId: Scalars['BigInt']['input'];
+  /** User id receiving title. */
+  newOwnerUserId: Scalars['BigInt']['input'];
+  /** New owner tenure. */
+  tenure?: InputMaybe<GridTenure>;
+};
+
+export type TransferPlayerCodeListingInput = {
+  /** Numeric app id that owns the listing. */
+  appId: Scalars['BigInt']['input'];
+  /** UUID of the listing to transfer. */
+  listingId: Scalars['String']['input'];
+  /** New owner kind (USER or ORG). */
+  toOwnerKind: PlayerCodeOwnerKind;
+  /** Numeric user id or org id of the new owner, per toOwnerKind. */
+  toOwnerRef: Scalars['BigInt']['input'];
+};
+
+/** Error codes returned by UDP game servers (and surfaced on `GenericErrorResponse.errorCode`) in response to a spatial/realtime message. NO_ERROR (0) indicates success; every other value indicates a failure. The numeric value is the byte sent on the wire; GraphQL exposes the name. Note: a failed message does not always produce an error — some auth failures are dropped silently (see the docs). */
+export enum UdpErrorCode {
+  /** No app matches the supplied appId. */
+  AppNotFound = 'APP_NOT_FOUND',
+  /** The app exists but is not currently loaded/active on this server. */
+  AppNotLoaded = 'APP_NOT_LOADED',
+  /** The password did not match (login validation). */
+  BadPassword = 'BAD_PASSWORD',
+  CannotDeleteDefaultWorldGrid = 'CANNOT_DELETE_DEFAULT_WORLD_GRID',
+  /** No chunk exists at the referenced coordinates. */
+  ChunkNotFound = 'CHUNK_NOT_FOUND',
+  /** Registration failed because the email is already in use. */
+  EmailAlreadyExists = 'EMAIL_ALREADY_EXISTS',
+  /** Email failed format validation. */
+  EmailInvalid = 'EMAIL_INVALID',
+  /** No account matches the supplied email (login validation). */
+  EmailNotFound = 'EMAIL_NOT_FOUND',
+  /** Email failed maximum-length validation. */
+  EmailTooLong = 'EMAIL_TOO_LONG',
+  /** Email failed minimum-length validation. */
+  EmailTooShort = 'EMAIL_TOO_SHORT',
+  /** The requested gamertag is already taken. */
+  GamertagAlreadyExists = 'GAMERTAG_ALREADY_EXISTS',
+  /** The game token is not the expected length. Use the exact token returned by login (do not trim or re-encode it). */
+  GameTokenWrongSize = 'GAME_TOKEN_WRONG_SIZE',
+  /** A grid already exists at these coordinates. */
+  GridAlreadyExists = 'GRID_ALREADY_EXISTS',
+  GridHasNestedChildren = 'GRID_HAS_NESTED_CHILDREN',
+  GridNotFound = 'GRID_NOT_FOUND',
+  /** The target coordinates fall outside any grid assigned to the caller. */
+  GridOutsideAssignment = 'GRID_OUTSIDE_ASSIGNMENT',
+  /** The requested grid overlaps an existing grid. */
+  GridOverlapsExisting = 'GRID_OVERLAPS_EXISTING',
+  /** The appId was missing, zero, or not a valid value. */
+  InvalidAppId = 'INVALID_APP_ID',
+  /** The grid coordinates were invalid. */
+  InvalidGridCoordinates = 'INVALID_GRID_COORDINATES',
+  /** The message was malformed or failed validation. Check the byte layout. */
+  InvalidRequest = 'INVALID_REQUEST',
+  /** The state/payload bytes were invalid for this message type. */
+  InvalidStateData = 'INVALID_STATE_DATA',
+  /** The game token was rejected (expired, malformed, or revoked). Re-authenticate against the Management API to obtain a fresh token. */
+  InvalidToken = 'INVALID_TOKEN',
+  /** The supplied token was not a valid length. */
+  InvalidTokenLength = 'INVALID_TOKEN_LENGTH',
+  /** A supplied name exceeded the maximum length. */
+  NameTooLong = 'NAME_TOO_LONG',
+  /** No error (0). The message was accepted. */
+  NoError = 'NO_ERROR',
+  /** No grid assignment covers the referenced coordinates. */
+  NoMatchingGridAssignment = 'NO_MATCHING_GRID_ASSIGNMENT',
+  /** Password failed maximum-length validation. */
+  PasswordTooLong = 'PASSWORD_TOO_LONG',
+  /** Password failed minimum-length validation. */
+  PasswordTooShort = 'PASSWORD_TOO_SHORT',
+  /** The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session. */
+  TokenExpired = 'TOKEN_EXPIRED',
+  /** The caller lacks the runtime/grid permission required for this action. Grid permissions can load asynchronously, so the first message to a newly entered region may transiently return this — retry shortly. */
+  Unauthorized = 'UNAUTHORIZED',
+  /** Unspecified server error (1). Retry; if it persists, report it. */
+  UnknownError = 'UNKNOWN_ERROR',
+  /** Requires app-admin privileges (the 'manage_apps' permission). */
+  UserNotAppAdmin = 'USER_NOT_APP_ADMIN',
+  /** This client has no authenticated session on the server. Complete the UDP token handshake (or open the UDP proxy) before sending spatial messages. */
+  UserNotAuthenticated = 'USER_NOT_AUTHENTICATED'
+}
+
+/** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version. */
+export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
+
+/** UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md. */
+export type UdpProxyConnectionStatus = {
+  __typename?: 'UdpProxyConnectionStatus';
+  /** Whether the user is currently connected to a UDP game server through the proxy. */
+  connected: Scalars['Boolean']['output'];
+  /** Timestamp of the last message received from the UDP server (only present when connected). Used to detect connection health. */
+  lastMessageTime: Maybe<Scalars['DateTime']['output']>;
+  /** The client port of the UDP game server (only present when connected). This is the port that native clients would connect to directly. */
+  serverClientPort: Maybe<Scalars['Int']['output']>;
+  /** The IPv6 address of the UDP game server (only present when connected). */
+  serverIp6: Maybe<Scalars['String']['output']>;
+};
+
+/** Fields to update on an access tier. All fields are optional; omitted fields are left unchanged. */
+export type UpdateAccessTierInput = {
+  /** New billing cadence (e.g. "month", "year"); null clears it. */
+  billingPeriod?: InputMaybe<Scalars['String']['input']>;
+  /** New ISO 4217 currency code (e.g. "usd"). */
+  currency?: InputMaybe<Scalars['String']['input']>;
+  /** New tier description; null clears it. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** Set whether this is the app's default tier. */
+  isDefault?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Set whether the tier is free. */
+  isFree?: InputMaybe<Scalars['Boolean']['input']>;
+  /** New tier name (max 128 chars). */
+  name?: InputMaybe<Scalars['String']['input']>;
+  /** External PayPal plan id to associate (billing integration). */
+  paypalPlanId?: InputMaybe<Scalars['String']['input']>;
+  /** Replacement set of runtime permission keys for the tier (must be valid runtimePermissions). When provided, replaces the existing set entirely. */
+  permissionKeys?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** New price in cents; null clears the price (makes the tier unpriced). */
+  priceCents?: InputMaybe<Scalars['BigInt']['input']>;
+  /** External Stripe price id to associate (billing integration). */
+  stripePriceId?: InputMaybe<Scalars['String']['input']>;
+  /** New sort order (ascending). */
+  tierOrder?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type UpdateActorInput = {
+  /** New app id, or omit to leave unchanged. BigInt sent as a decimal string. */
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** New avatar id, or omit to leave unchanged. BigInt sent as a decimal string. */
+  avatarId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** New chunk-grid coordinates (x, y, z as int64 BigInt decimal strings), or omit to leave unchanged. */
+  chunk?: InputMaybe<ChunkCoordinatesInput>;
+  /** New owner-only private state blob (base64-encoded binary), or omit to leave unchanged. */
+  privateState?: InputMaybe<Scalars['String']['input']>;
+  /** New public state blob (base64-encoded binary), or omit to leave unchanged. */
+  publicState?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateActorStateInput = {
+  /** New owner-only private state blob (base64-encoded binary), or omit to leave unchanged. */
+  privateState?: InputMaybe<Scalars['String']['input']>;
+  /** New public state blob (base64-encoded binary), or omit to leave unchanged. */
+  publicState?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Input payload for updating an app. All fields are optional; only fields that are provided are changed. */
+export type UpdateAppInput = {
+  /** New short description. Omit to leave unchanged. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** New JSON-encoded marketplace metadata string, replacing the existing value (see App.metadata). Omit to leave unchanged. */
+  metadata?: InputMaybe<Scalars['String']['input']>;
+  /** New display name (1-256 chars). Omit to leave unchanged. */
+  name?: InputMaybe<Scalars['String']['input']>;
+  /** New lifecycle status; set LIVE to publish, or DRAFT/LIVE to restore an archived app. Omit to leave unchanged. */
+  status?: InputMaybe<AppStatus>;
+  /** New visibility (PUBLIC/UNLISTED/PRIVATE). Omit to leave unchanged. */
+  visibility?: InputMaybe<AppVisibility>;
+  /** Open (true) or close (false) the app's wilderness to voxel and chunk writes: chunks that no grid but the app's world grid covers. Closing refuses every write there, whoever makes it; each game API replica, and each realtime server for a client's direct voxel updates, acts on the change within about 15 seconds. Omit to leave unchanged. */
+  wildernessWritesOpen?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+export type UpdateAvatarAppStateInput = {
+  /** App (game) id the state is scoped to. Required. BigInt sent as a decimal string. */
+  appId: Scalars['BigInt']['input'];
+  /** Avatar whose per-app state to write; must be owned by the caller. Required. BigInt sent as a decimal string. */
+  avatarId: Scalars['BigInt']['input'];
+  /** Per-app avatar state as base64-encoded binary. Send null (or omit) to clear it. */
+  state?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateAvatarInput = {
+  /** New avatar name, or omit to leave unchanged. */
+  name?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateAvatarStateInput = {
+  /** New owner-only private state blob (base64-encoded binary), or omit to leave unchanged. */
+  privateState?: InputMaybe<Scalars['String']['input']>;
+  /** New public state blob (base64-encoded binary), or omit to leave unchanged. */
+  publicState?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Update an existing channel. Omitted fields are left unchanged. */
+export type UpdateChannelInput = {
+  /** New description. Omit to leave unchanged. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** The channel (group) id to update. */
+  groupId: Scalars['BigInt']['input'];
+  /** open | request | invite | admin. Omit to leave unchanged. */
+  membershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** New channel name (max 128 chars). Omit to leave unchanged. */
+  name?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Payload for updateChunkLods: replaces the chunk's entire LOD set. Only LODs are written; voxels, voxel states, chunk state and owner are preserved. */
+export type UpdateChunkLodsInput = {
+  /** Id of the app that owns the chunk (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Address of the chunk whose LODs to replace. */
+  coordinates: ChunkCoordinatesInput;
+  /** Full set of LOD levels to store for the chunk; this REPLACES any existing LODs. */
+  lods: Array<LodDataInput>;
+};
+
+/** Payload for updateChunkState: upserts ONLY the chunk-level opaque state blob; the voxel grid, per-voxel states and LODs are preserved. */
+export type UpdateChunkStateInput = {
+  /** Id of the app that owns the chunk (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** BASE64-encoded binary chunk-level state blob to store. Omit/null to store no chunk state. */
+  chunkState?: InputMaybe<Scalars['String']['input']>;
+  /** Address of the chunk whose chunk-level state to set. */
+  coordinates: ChunkCoordinatesInput;
+};
+
+export type UpdateGamertagInput = {
+  /** Discriminator paired with `gamertag` (max 128 characters) to form a unique handle. */
+  disambiguation: Scalars['String']['input'];
+  /** New gamertag (max 64 characters). Must be unique in combination with `disambiguation`. */
+  gamertag: Scalars['String']['input'];
+};
+
+/** Update a custom group role. Omitted fields are left unchanged. */
+export type UpdateGroupRoleInput = {
+  /** The group role id to update. */
+  groupRoleId: Scalars['BigInt']['input'];
+  /** When provided, REPLACES the role's permission key strings. Each must be a valid group permission key for the group type (max 64 chars, unique). Omit to leave permissions unchanged. */
+  permissions?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** New rank (higher = more senior). Ignored for system roles. Omit to leave unchanged. */
+  rank?: InputMaybe<Scalars['Int']['input']>;
+  /** New role name (max 128 chars). Ignored for system roles. Omit to leave unchanged. */
+  roleName?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateOrgRoleInput = {
+  /** New description; omit to leave unchanged. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** If provided, replaces the entire permission set (empty array clears all); omit to leave unchanged. */
+  permissions?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** New role name; omit to leave unchanged. */
+  roleName?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateOrgTokenInput = {
+  /** New expiry timestamp; omit to leave unchanged. */
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Set false to deactivate the token; omit to leave unchanged. Revoked tokens cannot be re-minted. */
+  isActive?: InputMaybe<Scalars['Boolean']['input']>;
+  /** New label; omit to leave unchanged. */
+  label?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Update an existing team. Omitted fields are left unchanged. */
+export type UpdateTeamInput = {
+  /** New description. Omit to leave unchanged. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** The team (group) id to update. */
+  groupId: Scalars['BigInt']['input'];
+  /** open | request | invite | admin. Omit to leave unchanged. */
+  membershipPolicy?: InputMaybe<Scalars['String']['input']>;
+  /** New team name (max 128 chars). Omit to leave unchanged. */
+  name?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateUserStateInput = {
+  /** New user-level state blob, base64-encoded binary, at most 1,048,576 base64 characters (~768 KiB binary); larger payloads draw a structured validation error. Omit or send null to clear it. */
+  state?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Payload for updateVoxel: records (upserts) a single voxel edit in the voxel_updates log for one chunk. */
+export type UpdateVoxelInput = {
+  /** Id of the app that owns the target chunk (decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** Address of the chunk that contains the voxel to edit. */
+  coordinates: ChunkCoordinatesInput;
+  /** Local voxel position within the chunk, 0-15 per axis; anything else is refused. */
+  location: VoxelCoordinatesInput;
+  /** Optional BASE64-encoded binary state blob for the voxel; omit for none. */
+  state?: InputMaybe<Scalars['String']['input']>;
+  /** Voxel type id to write, 0-255; anything else is refused. */
+  voxelType: Scalars['Float']['input'];
+};
+
+/** One minute-bucketed usage sample. Byte/message counters are returned as strings because they can exceed the 32-bit Int range. */
+export type UsageMinuteRow = {
+  __typename?: 'UsageMinuteRow';
+  /** Start of the one-minute bucket. */
+  minute: Scalars['DateTime']['output'];
+  /** Bytes received in the minute (string counter). */
+  recvBytes: Scalars['String']['output'];
+  /** Messages received in the minute (replication only). */
+  recvMsgs: Maybe<Scalars['String']['output']>;
+  /** Bytes sent in the minute (string counter). */
+  sendBytes: Scalars['String']['output'];
+  /** Messages sent in the minute (replication only). */
+  sendMsgs: Maybe<Scalars['String']['output']>;
+};
+
+/** Peak and average send rates over the sampled replication window. */
+export type UsageRatePeaks = {
+  __typename?: 'UsageRatePeaks';
+  /** Average sent megabits per second over the window. */
+  avgSendMbitPerSec: Scalars['Float']['output'];
+  /** Average sent messages per second over the window. */
+  avgSendMsgsPerSec: Scalars['Float']['output'];
+  /** Highest observed sent megabits per second. */
+  peakSendMbitPerSec: Scalars['Float']['output'];
+  /** Highest observed sent messages per second. */
+  peakSendMsgsPerSec: Scalars['Float']['output'];
+  /** Number of minute samples the averages are computed over. */
+  sampleMinutes: Scalars['Float']['output'];
+};
+
+export type User = {
+  __typename?: 'User';
+  /** Account creation timestamp (ISO-8601). */
+  createdAt: Scalars['DateTime']['output'];
+  /** Discriminator paired with `gamertag` to form a unique handle; null if unset. */
+  disambiguation: Maybe<Scalars['String']['output']>;
+  /** Account email; null for anonymized/soft-deleted accounts. */
+  email: Maybe<Scalars['String']['output']>;
+  /** External identity-provider id for federated accounts, or null. */
+  externalId: Maybe<Scalars['String']['output']>;
+  /** Public display name; null if unset or anonymized. Unique in combination with `disambiguation`. */
+  gamertag: Maybe<Scalars['String']['output']>;
+  /** Whether the user qualifies for early access through normal eligibility (the free-play window/rollout). */
+  grantEarlyAccess: Scalars['Boolean']['output'];
+  /** Admin override forcing early access on/off regardless of normal eligibility (set via `setEarlyAccessOverride`). */
+  grantEarlyAccessOverride: Scalars['Boolean']['output'];
+  /** Whether this account has a password set. Studio reads it to say "set a password" only to accounts that have none (magic-link and OAuth sign-ups); it used to say so to everyone. The hash itself never leaves the process. */
+  hasPassword: Scalars['Boolean']['output'];
+  /** Whether the account email has been confirmed. */
+  isConfirmed: Scalars['Boolean']['output'];
+  /** Company-employee flag that grants access to control-plane / operator features. Independent from is_super_admin. */
+  isOperator: Scalars['Boolean']['output'];
+  /** Whether the user holds platform super-admin privileges (toggled via `setSuperAdmin`). */
+  isSuperAdmin: Scalars['Boolean']['output'];
+  /** Organization the user belongs to, or null. BigInt serialized as a decimal string. */
+  orgId: Maybe<Scalars['BigInt']['output']>;
+  /** The user's effective permission keys on the given org (empty if not a member; full set if super admin). Requires a valid bearer game token. */
+  permissionsForOrg: Array<Scalars['String']['output']>;
+  /** User-level state blob, base64-encoded binary (management-owned). Null when cleared. */
+  state: Maybe<Scalars['String']['output']>;
+  /** Unique user id and primary key. BigInt serialized as a decimal string. */
+  userId: Scalars['BigInt']['output'];
+  /** Account type, e.g. "direct" or "deleted". */
+  userType: Scalars['String']['output'];
+};
+
+
+export type UserPermissionsForOrgArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+export type UserAppState = {
+  __typename?: 'UserAppState';
+  /** App (game) id this state is scoped to. BigInt serialized as a decimal string. */
+  appId: Scalars['BigInt']['output'];
+  /** Row creation timestamp (ISO-8601). */
+  createdAt: Scalars['DateTime']['output'];
+  /** Per-app user state blob, base64-encoded binary; null when cleared. */
+  state: Maybe<Scalars['String']['output']>;
+  /** Last-update timestamp (ISO-8601). */
+  updatedAt: Scalars['DateTime']['output'];
+  /** Owner user id. BigInt serialized as a decimal string. */
+  userId: Scalars['BigInt']['output'];
+};
+
+export type UserDonationData = {
+  __typename?: 'UserDonationData';
+  /** ISO currency code for the total, e.g. "usd". */
+  currency: Scalars['String']['output'];
+  /** Lifetime donation total in minor currency units (cents), as a decimal string. */
+  totalAmountCents: Scalars['String']['output'];
+};
+
+/** An edge in a User connection. */
+export type UserEdge = {
+  __typename?: 'UserEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: User;
+};
+
+/** A sign-in identity linked to a user account: a social provider, an emailed magic link, or a password. */
+export type UserIdentity = {
+  __typename?: 'UserIdentity';
+  createdAt: Scalars['DateTime']['output'];
+  email: Maybe<Scalars['String']['output']>;
+  emailVerified: Scalars['Boolean']['output'];
+  identityId: Scalars['ID']['output'];
+  lastLoginAt: Maybe<Scalars['DateTime']['output']>;
+  /** The identity provider: 'google' | 'apple' | 'discord' | 'email' (magic link) | 'password'. 'dev' is a RETIRED value that appears on identities created before the dev sign-in bypass was removed; it cannot be created and cannot be signed in with. */
+  provider: Scalars['String']['output'];
+  /** The provider's stable subject id ('sub'). For 'email'/'dev' this is the lowercased email. */
+  subject: Scalars['String']['output'];
+  userId: Scalars['ID']['output'];
+};
+
+export type UserPropertyTokenData = {
+  __typename?: 'UserPropertyTokenData';
+  /** Property tokens currently available, as a decimal string. */
+  available: Scalars['String']['output'];
+  /** Property tokens currently in use, as a decimal string. */
+  inUse: Scalars['String']['output'];
+  /** Sum of available + inUse, as a decimal string. */
+  total: Scalars['String']['output'];
+};
+
+/** A Relay cursor connection over User records. Page with first/after; pass pageInfo.endCursor back as after for the next page. */
+export type UsersConnection = {
+  __typename?: 'UsersConnection';
+  /** Edges on this page. */
+  edges: Array<UserEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+export type UsersPage = {
+  __typename?: 'UsersPage';
+  /** Users on the current page, ordered by ascending user id. */
+  items: Array<User>;
+  /** Pagination metadata: totalCount, applied limit, and applied offset. */
+  pageInfo: PageInfo;
+};
+
+/** A semantic-style version as four integer components (major.minor.patch.build). Compare components in order (major, then minor, then patch, then build). */
+export type VersionInfo = {
+  __typename?: 'VersionInfo';
+  /** Build number */
+  build: Scalars['Int']['output'];
+  /** Major version number */
+  major: Scalars['Int']['output'];
+  /** Minor version number */
+  minor: Scalars['Int']['output'];
+  /** Patch version number */
+  patch: Scalars['Int']['output'];
+};
+
+/** A recorded edit to a single voxel (one row of the voxel_updates log): the app/chunk/local-position that changed, the new voxel type, an optional state blob, and who/when. Returned by listVoxels, getVoxelList and listVoxelUpdatesByDistance; created by updateVoxel, sendVoxelUpdate, updateChunk (for each voxel state it stores) and world.set_voxels on the node API. getChunk applies these edits to the chunk it returns, as entries of its voxelStates. */
+export type Voxel = {
+  __typename?: 'Voxel';
+  /** Id of the app this edit belongs to (decimal string). */
+  appId: Scalars['BigInt']['output'];
+  /** Address of the chunk that contains the edited voxel. */
+  coordinates: ChunkCoordinates;
+  /** When the edit was recorded; also serves as the last-modified time for the voxel. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Id of the user that made this edit (decimal string). */
+  createdBy: Scalars['BigInt']['output'];
+  /** Local position of the edited voxel within its chunk (0-15 per axis). */
+  location: VoxelCoordinates;
+  /** BASE64-encoded binary state blob for the voxel (decode from base64); null when no state was set. */
+  state: Maybe<Scalars['String']['output']>;
+  /** New voxel type id written by this edit (0-255). */
+  voxelType: Scalars['Int']['output'];
+  /** Unique id of this voxel-update row (decimal string). */
+  voxelUpdateId: Scalars['BigInt']['output'];
+};
+
+/** Integer (x, y, z) position of a single voxel LOCAL to its chunk (not a world position). Stored as signed 16-bit smallints (-32,768..32,767), but a chunk is 16x16x16 = 4096 voxels, so valid in-bounds positions are 0-15 on each axis. */
+export type VoxelCoordinates = {
+  __typename?: 'VoxelCoordinates';
+  /** Local voxel X within the chunk (0-15 for in-bounds voxels). */
+  x: Scalars['Int']['output'];
+  /** Local voxel Y within the chunk (0-15 for in-bounds voxels). */
+  y: Scalars['Int']['output'];
+  /** Local voxel Z within the chunk (0-15 for in-bounds voxels). */
+  z: Scalars['Int']['output'];
+};
+
+/** Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). Each coordinate is 0-15 on a 16x16x16 chunk, and the voxel writes (updateVoxel, sendVoxelUpdate, updateChunk's voxelStates) refuse any other value. Teleport's voxelAddress, which is not a write, takes any signed 16-bit value. */
+export type VoxelCoordinatesInput = {
+  /** Local voxel X within the chunk, 0-15; voxel writes refuse other values. */
+  x: Scalars['Int']['input'];
+  /** Local voxel Y within the chunk, 0-15; voxel writes refuse other values. */
+  y: Scalars['Int']['input'];
+  /** Local voxel Z within the chunk, 0-15; voxel writes refuse other values. */
+  z: Scalars['Int']['input'];
+};
+
+/** A single voxel's override on a chunk, stored with it or recorded as a voxel edit: its local position, its voxel type, and an opaque base64-encoded state blob. */
+export type VoxelState = {
+  __typename?: 'VoxelState';
+  /** BASE64-encoded binary state blob for this voxel (decode from base64); null/empty when the voxel has no extra state. */
+  state: Maybe<Scalars['String']['output']>;
+  /** Local voxel position within the chunk (0-15 per axis). */
+  voxelCoord: VoxelCoordinates;
+  /** Voxel type id at this position (0-255). */
+  voxelType: Scalars['Int']['output'];
+};
+
+/** One per-voxel state entry to write to a chunk. */
+export type VoxelStateInput = {
+  /** BASE64-encoded binary state blob for this voxel, at most 1 KiB decoded; omit/null for no extra state. */
+  state?: InputMaybe<Scalars['String']['input']>;
+  /** Local voxel position within the chunk, 0-15 per axis; anything else is refused. */
+  voxelCoord: VoxelCoordinatesInput;
+  /** Voxel type id to set at this position, 0-255; anything else is refused. */
+  voxelType: Scalars['Int']['input'];
+};
+
+/** Relay-style cursor-paginated connection over voxel edit history entries (VoxelUpdateHistoryEvent). Page with `first`/`after`; cursors are opaque. */
+export type VoxelUpdateHistoryConnection = {
+  __typename?: 'VoxelUpdateHistoryConnection';
+  /** Edges on this page. */
+  edges: Array<VoxelUpdateHistoryEventEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** One entry in the immutable voxel edit history (voxel_updates_history): a recorded change of a single voxel's type, with who and when. Returned by voxelUpdateHistory, newest first. */
+export type VoxelUpdateHistoryEvent = {
+  __typename?: 'VoxelUpdateHistoryEvent';
+  /** Id of the app this change belongs to (decimal string). */
+  appId: Scalars['BigInt']['output'];
+  /** Timestamp when the change occurred. */
+  changedAt: Scalars['DateTime']['output'];
+  /** Id of the user that made the change (decimal string), or null if unknown. */
+  changedBy: Maybe<Scalars['BigInt']['output']>;
+  /** Address of the chunk that contains the changed voxel. */
+  coordinates: ChunkCoordinates;
+  /** Unique id of this history entry (decimal string). */
+  id: Scalars['BigInt']['output'];
+  /** Local position of the changed voxel within its chunk. */
+  location: VoxelCoordinates;
+  /** Voxel type after the change, or null if the voxel was cleared/removed. */
+  newVoxelType: Maybe<Scalars['Int']['output']>;
+  /** Voxel type before the change, or null if the voxel did not previously exist. */
+  oldVoxelType: Maybe<Scalars['Int']['output']>;
+};
+
+/** An edge in a VoxelUpdateHistoryEvent connection. */
+export type VoxelUpdateHistoryEventEdge = {
+  __typename?: 'VoxelUpdateHistoryEventEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: VoxelUpdateHistoryEvent;
+};
+
+/** Notification received when a voxel (block) is updated by another client or the server. Received via the udpNotifications subscription. */
+export type VoxelUpdateNotification = {
+  __typename?: 'VoxelUpdateNotification';
+  /** The ID of the app where the voxel is located. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk containing the voxel. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk containing the voxel. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk containing the voxel. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sender's sequence number for this message (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The unique identifier for this voxel update. */
+  uuid: Scalars['String']['output'];
+  /** The voxel state data, base64-encoded. */
+  voxelState: Scalars['String']['output'];
+  /** The voxel type ID that was set. */
+  voxelType: Scalars['Int']['output'];
+  /** The X coordinate of the voxel within the chunk. */
+  voxelX: Scalars['Int']['output'];
+  /** The Y coordinate of the voxel within the chunk. */
+  voxelY: Scalars['Int']['output'];
+  /** The Z coordinate of the voxel within the chunk. */
+  voxelZ: Scalars['Int']['output'];
+};
+
+/** Input for sending a voxel update request to the UDP game server. This updates a single voxel (block) in a specific chunk. Voxel coordinates are relative to the chunk. */
+export type VoxelUpdateRequestInput = {
+  /** The ID of the app where the voxel is located. */
+  appId: Scalars['BigInt']['input'];
+  /** The chunk coordinates containing the voxel. A chunk is a 16x16x16 voxel cube. */
+  chunk: ChunkCoordinatesInput;
+  /** Decay algorithm for replication: 0 = none, 1 = exponential, 2 = linear 50%, 3 = linear 25%, 4 = linear 10%, 5 = linear 5%. Defaults to 0 (none) for voxel updates. */
+  decayRate?: InputMaybe<Scalars['Int']['input']>;
+  /** Chunk replication distance (0-8). Defaults to 8 for voxel updates. Clamped to 0-8. */
+  distance?: InputMaybe<Scalars['Int']['input']>;
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on the matching response and on any GenericErrorResponse for this send, both delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** A unique identifier for this voxel update. Must be exactly 32 bytes when encoded as UTF-8. */
+  uuid: Scalars['String']['input'];
+  /** The voxel coordinates within the chunk, 0-15 on each axis; anything else is refused. */
+  voxel: VoxelCoordinatesInput;
+  /** Optional voxel state data, base64-encoded. Omit (or send an empty string) when the voxel has no extra state — an empty payload is a type-only update. */
+  voxelState?: InputMaybe<Scalars['String']['input']>;
+  /** The new voxel type ID, 0-255 (anything else is refused). This determines the appearance and properties of the voxel. */
+  voxelType: Scalars['Int']['input'];
+};
+
+/** LEGACY — never emitted. The game server retired the dedicated voxel-update response opcode (132); an applied update now arrives as your own VoxelUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version. */
+export type VoxelUpdateResponse = {
+  __typename?: 'VoxelUpdateResponse';
+  /** The ID of the app where the voxel update was processed. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the chunk containing the voxel. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the chunk containing the voxel. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the chunk containing the voxel. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Decay algorithm (0-5) from the original message. */
+  decayRate: Scalars['Int']['output'];
+  /** Chunk replication distance (0-8) from the original message. */
+  distance: Scalars['Int']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sequenceNumber echoed back from the originating sendVoxelUpdate request (a uint8, 0-255, wrapping at modulo 256). Use it to correlate this response with that send. Correlation only — not an idempotency key. */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The unique identifier for this voxel update. */
+  uuid: Scalars['String']['output'];
+};
+
+/** Result of listVoxelUpdatesByDistance: per-chunk groups of voxel edits ordered by increasing distance from the center, plus an echo of the pagination applied. */
+export type VoxelUpdatesByDistanceResponse = {
+  __typename?: 'VoxelUpdatesByDistanceResponse';
+  /** The center chunk the search was performed around. */
+  centerCoordinate: ChunkCoordinates;
+  /** Per-chunk groups of voxel edits, ordered by increasing Chebyshev distance from centerCoordinate. */
+  chunks: Array<ChunkVoxelUpdatesResponse>;
+  /** Echo of the chunk `limit` applied to this page, or null if none was supplied. */
+  limit: Maybe<Scalars['Int']['output']>;
+  /** Echo of the chunk `skip` applied to this page, or null if none was supplied. */
+  skip: Maybe<Scalars['Int']['output']>;
+};
+
+export type WalletTransaction = {
+  __typename?: 'WalletTransaction';
+  /**
+   * DEPRECATED. amountMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from amountMicrousd (truncated toward zero). Read amountMicrousd.
+   */
+  amountCents: Scalars['BigInt']['output'];
+  /** Signed change applied to the wallet in MICRO-USD, as a BigInt decimal string: positive credits funds, negative debits funds. Exact; nothing is rounded. */
+  amountMicrousd: Scalars['BigInt']['output'];
+  /** App that incurred the charge (BigInt as a decimal string), set on usage-type transactions; null for org-level credits such as top-ups. */
+  appId: Maybe<Scalars['BigInt']['output']>;
+  /**
+   * DEPRECATED. balanceAfterMicrousd / 10,000 truncated toward zero.
+   * @deprecated Derived from balanceAfterMicrousd (truncated toward zero). Read balanceAfterMicrousd.
+   */
+  balanceAfter: Scalars['BigInt']['output'];
+  /** Wallet balance in micro-USD immediately after this transaction was applied, as a BigInt decimal string. */
+  balanceAfterMicrousd: Scalars['BigInt']['output'];
+  /** When the transaction was recorded (ISO-8601 UTC timestamp). */
+  createdAt: Scalars['DateTime']['output'];
+  /** Optional human-readable note describing the transaction; null when not set. */
+  description: Maybe<Scalars['String']['output']>;
+  /** Organization that owns the wallet (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Optional external reference (e.g. payment-provider charge id or checkout id) linking this transaction to its source; null when not set. */
+  referenceId: Maybe<Scalars['String']['output']>;
+  /** Unique transaction id (BigInt as a decimal string). */
+  transactionId: Scalars['BigInt']['output'];
+  /** What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved capacity -- realtime bytes/s or GraphQL operations/s -- charged in addition to metered usage rather than including any of it, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive), "refund" (a payment-provider refund of a top-up, the credited amount leaving the wallet again, negative), "chargeback" (a card dispute on an org top-up, clawed back from the org wallet, negative). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced. */
+  transactionType: Scalars['String']['output'];
+  /** Wallet this transaction belongs to (BigInt as a decimal string). */
+  walletId: Scalars['BigInt']['output'];
+};
+
+/** An edge in a WalletTransaction connection. */
+export type WalletTransactionEdge = {
+  __typename?: 'WalletTransactionEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: WalletTransaction;
+};
+
+/** A Relay cursor connection over WalletTransaction records. Page with first/after; pass pageInfo.endCursor back as after for the next page. */
+export type WalletTransactionsConnection = {
+  __typename?: 'WalletTransactionsConnection';
+  /** Edges on this page. */
+  edges: Array<WalletTransactionEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
