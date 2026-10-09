@@ -42,7 +42,8 @@ export interface InputLogPageOptions<Filter> {
  * Inputs are kept for the input log's published retention (crowdedkingdoms.com/pricing)
  * and then deleted, so an old session can still be listed after its inputs are gone.
  * Without input logging on the deployment, both calls throw
- * {@link CrowdyGraphQLError} `INPUT_LOG_UNAVAILABLE`.
+ * {@link CrowdyGraphQLError} `INPUT_LOG_UNAVAILABLE`; `messages` also throws it, retryable
+ * with the same cursor, when the log cannot be read right now.
  */
 export class InputLogAPI {
   constructor(private gql: GraphQLClient) {}

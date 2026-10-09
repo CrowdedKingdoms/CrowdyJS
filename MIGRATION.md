@@ -140,7 +140,8 @@ A player reads only the sessions and inputs they sent; a holder of `manage_apps`
 every session. Keep paging while `hasNextPage` is true: a messages page can be short, or empty,
 when it stopped at the server's time or scan limit. Inputs are kept for the published retention,
 so an old session can still be listed after its inputs are gone. Both calls throw
-`INPUT_LOG_UNAVAILABLE` on a deployment without input logging.
+`INPUT_LOG_UNAVAILABLE` on a deployment without input logging, and `messages` throws it, retryable
+with the same cursor, when the log cannot be read right now.
 
 `App.replayLoggingEnabled` is selected on every app read and set with `apps.update(appId,
 { replayLoggingEnabled: true })` (`manage_apps`). Turning it on is refused with
