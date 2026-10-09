@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.4.1** (18.0.0 was published only as
+**Current package:** `package.json` is **18.5.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,16 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.5.0: distance-limited channel messages (2026-10-09).** `udp.sendRangedChannelMessage` wraps
+cks-game-api's `sendRangedChannelMessage` and, on the binary relay, serializes Buddy's opcode 32
+(`serializeRangedChannelMessage`): a channel publish that only members with a live actor within
+`maxDistance` chunks of an origin chunk receive (Euclidean between chunk coordinates, boundary
+included, 0 to 2147483647). Members receive the ordinary `channelMessage` notification, so an older
+SDK on the receiving side needs nothing. It needs ck-api with the mutation and Buddy v0.35.0; an older
+Buddy drops opcode 32 silently. The uplink fixture comes from cks-game-api's generator, and the golden
+vector in `binary-wire.test.mjs` is the one Buddy, CrowdyCPP and CrowdyPy pin. The schema is the game
+API's branch with the mutation (it also carries `dev`'s rate-card bands).
 
 **18.4.1: graphql-codegen 7 (2026-10-09).** Dependabot #215's majors (codegen cli 7, typescript 6,
 typescript-operations 6, typed-document-node 7). Codegen writes two files now (see `codegen.ts`), and the

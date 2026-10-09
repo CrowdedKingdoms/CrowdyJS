@@ -157,11 +157,13 @@ function requiredPassword(varName) {
 
 /** Create a brand-new account and return its session. */
 async function registerAccount(email, password) {
+  // ck-api v2.35.0+ refuses a gameplay token (mintAppToken: LEGAL_ACCEPTANCE_REQUIRED) until the
+  // player's consents are stored, so a throwaway test player agrees at registration.
   const data = await gql(
     `mutation Register($i: RegisterUserInput!) {
        register(registerUserInput: $i) { token gameTokenId user { userId email } }
      }`,
-    { i: { email, password } },
+    { i: { email, password, acceptLegal: true, attestAgeOfMajority: true } },
   );
   const r = data.register;
   return {

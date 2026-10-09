@@ -133,7 +133,7 @@ test('client exposes the full management + game sub-client surface', async () =>
     'sendVideoPacket', 'sendVideoFrame',
     'sendTextPacket', 'sendTextPacketAndWait',
     'sendClientEvent', 'sendClientEventAndWait',
-    'sendSingleActorMessage', 'sendChannelMessage',
+    'sendSingleActorMessage', 'sendChannelMessage', 'sendRangedChannelMessage',
   ]);
   assertMethods(client.apps, 'apps', [
     'codeAdmissionMode', 'codeAdmissions', 'setCodeAdmissionMode', 'admitCode',

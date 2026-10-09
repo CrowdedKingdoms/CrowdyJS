@@ -1,0 +1,3 @@
+mutation SendRangedChannelMessage($input: RangedChannelMessageInput!) {
+  sendRangedChannelMessage(input: $input)
+}
