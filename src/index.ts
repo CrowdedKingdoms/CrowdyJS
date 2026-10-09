@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.5.0';
+export const VERSION = '18.6.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -340,6 +340,14 @@ export { ChunksAPI } from './domains/chunks.js';
 export { VoxelsAPI } from './domains/voxels.js';
 export { ActorsAPI } from './domains/actors.js';
 export { TeleportAPI } from './domains/teleport.js';
+export { InputLogAPI } from './domains/inputLog.js';
+export type {
+  InputLogMessagePage,
+  InputLogMessageRecord,
+  InputLogPageOptions,
+  InputLogSessionPage,
+  InputLogSessionRecord,
+} from './domains/inputLog.js';
 export { StateAPI } from './domains/state.js';
 export { ServerStatusAPI } from './domains/serverStatus.js';
 export { ChannelsAPI } from './domains/channels.js';

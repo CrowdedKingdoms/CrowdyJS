@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.5.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.6.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,15 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.6.0: the input log (2026-10-09).** `client.inputLog.sessions` / `messages` wrap cks-game-api's
+`inputLogSessions` / `inputLogMessages`: the client inputs recorded for an app with replay logging on
+(`App.replayLoggingEnabled`, now selected on every app read and set with `apps.update`). Both are game
+plane (app-scoped token, the app's datacenter): a player reads their own, `manage_apps` reads every
+session. A messages page can be short while `hasNextPage` is true, so the docs say to keep paging.
+Turning logging on is refused with `INPUT_LOG_FUNDS_NEEDED` without a spendable wallet or a billing
+exemption. The schema is cks-game-api's input-log branch; release it only after that merges to `dev`
+and re-sync from `dev`'s `schema.gql`.
 
 **18.5.0: distance-limited channel messages (2026-10-09).** `udp.sendRangedChannelMessage` wraps
 cks-game-api's `sendRangedChannelMessage` and, on the binary relay, serializes Buddy's opcode 32

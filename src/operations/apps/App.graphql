@@ -9,6 +9,7 @@ query App($appId: BigInt!) {
     status
     metadata
     wildernessWritesOpen
+    replayLoggingEnabled
     splitMode
     deploymentTarget
     reservedUdpBytesPerSec

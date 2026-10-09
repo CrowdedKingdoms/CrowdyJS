@@ -9,6 +9,7 @@ query AppsForOrg($orgSlug: String!) {
     status
     metadata
     wildernessWritesOpen
+    replayLoggingEnabled
     splitMode
     gameApiUrl
     createdAt

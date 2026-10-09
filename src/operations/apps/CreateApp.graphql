@@ -9,6 +9,7 @@ mutation CreateApp($input: CreateAppInput!) {
     status
     metadata
     wildernessWritesOpen
+    replayLoggingEnabled
     createdAt
   }
 }

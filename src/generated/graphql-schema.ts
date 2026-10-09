@@ -896,6 +896,8 @@ export type App = {
   orgId: Scalars['BigInt']['output'];
   /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. */
   redirectUris: Array<Scalars['String']['output']>;
+  /** Whether replay logging is on: the realtime servers record every client input they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a funded org wallet or a billing-exempt org. */
+  replayLoggingEnabled: Scalars['Boolean']['output'];
   /**
    * Reserved realtime (UDP) capacity in bytes/s for shared apps. Superseded by reservedUdpBytesPerSec.
    * @deprecated Renamed 2026-09-01 when reservations split by traffic type. Use reservedUdpBytesPerSec; this returns the same value for one release.
@@ -1229,10 +1231,14 @@ export type AppUsageProjection = {
   daysElapsed: Scalars['Float']['output'];
   /** Per-app free monthly egress allowance in bytes (5 decimal GB). */
   freeAllowanceBytes: Scalars['String']['output'];
+  /** Stored input logs this calendar month so far, in byte-hours (input_log_storage_byte_hours, which has no free allowance). 0 when replay logging was off all month. */
+  inputLogByteHours: Scalars['String']['output'];
   /** True when projected egress exceeds the free allowance, or null when insufficient data. */
   onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
   /** Projected end-of-month egress bytes (linear extrapolation), or null when insufficient data. */
   projectedBytes: Maybe<Scalars['String']['output']>;
+  /** Projected end-of-month stored input logs in byte-hours (linear extrapolation), or null when insufficient data. */
+  projectedInputLogByteHours: Maybe<Scalars['String']['output']>;
   /** Projected usage as a percentage of the free allowance, or null when insufficient data. */
   projectedPctOfFree: Maybe<Scalars['Float']['output']>;
   /** True when at least 3 days have elapsed in the month (projection is meaningful). */
@@ -1254,6 +1260,10 @@ export type AppUsageSummary = {
   graphqlRecvBytes: Scalars['String']['output'];
   /** Total GraphQL bytes sent (string counter). */
   graphqlSendBytes: Scalars['String']['output'];
+  /** Stored input logs over the window, in byte-hours (string counter): the sum of the hourly samples, which is the quantity input_log_storage_byte_hours bills. Each recorded byte (InputLogMessage.sizeBytes) is held for the input log retention, one byte-hour per hour. 0 when replay logging was off. */
+  inputLogByteHours: Scalars['String']['output'];
+  /** Recorded input-log bytes the app holds now (string counter): the latest hourly sample, the bytes recorded within the trailing retention. 0 when replay logging has never been on. */
+  inputLogRetainedBytes: Scalars['String']['output'];
   /** Total replication bytes received (string counter). */
   replicationRecvBytes: Scalars['String']['output'];
   /** Total replication bytes sent (string counter). */
@@ -4513,6 +4523,130 @@ export type ImportCrowdyStudioProjectFileInput = {
   source: CrowdyStudioImportSource;
 };
 
+/** One recorded client input: the message exactly as the client sent it, without its trailing authentication bytes. */
+export type InputLogMessage = {
+  __typename?: 'InputLogMessage';
+  /** The 32-character actor uuid of a spatial message; null for other types. */
+  actorUuid: Maybe<Scalars['String']['output']>;
+  /** The message bytes, base64: the client message from its type byte up to, not including, its authentication tail. */
+  body: Scalars['String']['output'];
+  /** The channel of a channel message; null for other types. */
+  channelId: Maybe<Scalars['BigInt']['output']>;
+  /** Chunk x of a spatial message's target chunk; null for other types. */
+  chunkX: Maybe<Scalars['BigInt']['output']>;
+  /** Chunk y of a spatial message's target chunk; null for other types. */
+  chunkY: Maybe<Scalars['BigInt']['output']>;
+  /** Chunk z of a spatial message's target chunk; null for other types. */
+  chunkZ: Maybe<Scalars['BigInt']['output']>;
+  /** True when the message arrived inside a client message bundle. */
+  fromBundle: Scalars['Boolean']['output'];
+  /** The game token the message was sent on. */
+  gameTokenId: Scalars['BigInt']['output'];
+  /** The client message type (its first byte). */
+  messageType: Scalars['Int']['output'];
+  /** When the realtime server received the message. */
+  receivedAt: Scalars['DateTime']['output'];
+  /** The receive time in Unix microseconds (receivedAt at full precision). */
+  receivedAtMicros: Scalars['BigInt']['output'];
+  /** The message's sequence byte, as the client sent it. */
+  seq: Scalars['Int']['output'];
+  /** False when the message type is one accepted without a signature. */
+  signed: Scalars['Boolean']['output'];
+  /** Recorded size in bytes, record header included: what stored input logs are billed on. */
+  sizeBytes: Scalars['Int']['output'];
+  /** The user whose client sent the message. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A page of recorded inputs, oldest first. A page can hold fewer than `first` inputs when the read stopped at its time or scan limit; keep paging while hasNextPage is true. */
+export type InputLogMessageConnection = {
+  __typename?: 'InputLogMessageConnection';
+  /** Edges on this page. */
+  edges: Array<InputLogMessageEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** An edge in a InputLogMessage connection. */
+export type InputLogMessageEdge = {
+  __typename?: 'InputLogMessageEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: InputLogMessage;
+};
+
+/** Narrows inputLogMessages. All fields are optional and AND-combined. */
+export type InputLogMessageFilter = {
+  /** Only inputs received at or after this instant. */
+  from?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Only these client message types (each 0-255, at most 64 of them). */
+  messageTypes?: InputMaybe<Array<Scalars['Int']['input']>>;
+  /** Only inputs received at or before this instant. */
+  to?: InputMaybe<Scalars['DateTime']['input']>;
+};
+
+/** One recorded client session of an app with replay logging on: a game token's inputs, from the first one the realtime servers accepted to the last. Kept for the input log's published retention. */
+export type InputLogSession = {
+  __typename?: 'InputLogSession';
+  /** The app the session belongs to. */
+  appId: Scalars['BigInt']['output'];
+  /** Recorded bytes (the sum of every message sizeBytes): the quantity stored input logs are billed on. */
+  byteCount: Scalars['BigInt']['output'];
+  /** The datacenter that recorded the session, when known. */
+  datacenter: Maybe<Scalars['String']['output']>;
+  /** How the session ended, as the client saw it: expired, revoked, reconnect or released. Null while it may still be running. */
+  endReason: Maybe<Scalars['String']['output']>;
+  /** When the session ended, if its end was recorded; null while it may still be running. */
+  endedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The game token the session ran on; pass it to inputLogMessages to read the inputs. */
+  gameTokenId: Scalars['BigInt']['output'];
+  /** When the latest recorded input or marker arrived. */
+  lastSeenAt: Scalars['DateTime']['output'];
+  /** Inputs recorded in the session. */
+  messageCount: Scalars['BigInt']['output'];
+  /** The client message types the session contains, ascending. */
+  messageTypes: Array<Scalars['Int']['output']>;
+  /** When the first recorded input arrived. */
+  startedAt: Scalars['DateTime']['output'];
+  /** The user whose client sent the inputs. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A page of recorded sessions. */
+export type InputLogSessionConnection = {
+  __typename?: 'InputLogSessionConnection';
+  /** Edges on this page. */
+  edges: Array<InputLogSessionEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** An edge in a InputLogSession connection. */
+export type InputLogSessionEdge = {
+  __typename?: 'InputLogSessionEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: InputLogSession;
+};
+
+/** Narrows inputLogSessions. All fields are optional and AND-combined. */
+export type InputLogSessionFilter = {
+  /** Only sessions still active at or after this instant. */
+  from?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Only sessions containing this client message type (0-255). */
+  messageType?: InputMaybe<Scalars['Int']['input']>;
+  /** Only sessions started at or before this instant. */
+  to?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Only this user's sessions. Without manage_apps on the app, only your own user id is accepted (and is the default). */
+  userId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
 export type InviteOrgMemberInput = {
   /** Organization to add the user to (BigInt as string). */
   orgId: Scalars['BigInt']['input'];
@@ -4991,7 +5125,7 @@ export type Mutation = {
   updateActor: Actor;
   /** Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary. */
   updateActorState: Actor;
-  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen); only fields present in the input are changed. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
+  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
   updateApp: App;
   /** Updates an avatar’s mutable fields (currently `name`) and returns it. OWNER-EXCLUSIVE: only the avatar’s owner may call this (throws Unauthorized otherwise). Requires a valid game token. To change state blobs use `updateAvatarState`. */
   updateAvatar: Avatar;
@@ -7291,6 +7425,10 @@ export type Query = {
   hostedGamePublishes: Array<HostedGamePublish>;
   /** The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
   hostedGames: Array<HostedGame>;
+  /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`; a page can hold fewer than `first` inputs when it stopped at its time or scan limit, so keep paging while hasNextPage is true. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment. */
+  inputLogMessages: InputLogMessageConnection;
+  /** Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. With 'manage_apps' on the app you see every session and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment. */
+  inputLogSessions: InputLogSessionConnection;
   /** Lists recorded voxel edits for all chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance, paginated over chunks. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   /** Lists recorded voxel edits for a single chunk (optionally only those at/after `since`), newest first. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
@@ -8027,6 +8165,23 @@ export type QueryHostedGameArgs = {
 export type QueryHostedGamePublishesArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   slug: Scalars['String']['input'];
+};
+
+
+export type QueryInputLogMessagesArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  appId: Scalars['BigInt']['input'];
+  filter?: InputMaybe<InputLogMessageFilter>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  gameTokenId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryInputLogSessionsArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  appId: Scalars['BigInt']['input'];
+  filter?: InputMaybe<InputLogSessionFilter>;
+  first?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -9475,6 +9630,8 @@ export type UpdateAppInput = {
   metadata?: InputMaybe<Scalars['String']['input']>;
   /** New display name (1-256 chars). Omit to leave unchanged. */
   name?: InputMaybe<Scalars['String']['input']>;
+  /** Turn replay logging on (true) or off (false): record every client input the realtime servers accept for this app, kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt; turning it off always succeeds. Recording starts and stops within about 15 seconds. Omit to leave unchanged. */
+  replayLoggingEnabled?: InputMaybe<Scalars['Boolean']['input']>;
   /** New lifecycle status; set LIVE to publish, or DRAFT/LIVE to restore an archived app. Omit to leave unchanged. */
   status?: InputMaybe<AppStatus>;
   /** New visibility (PUBLIC/UNLISTED/PRIVATE). Omit to leave unchanged. */
