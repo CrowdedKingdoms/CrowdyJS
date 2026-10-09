@@ -57,6 +57,22 @@ const PLATFORM_ONLY = [
   'cpCrowdyStudioAgentPlatformPolicy',
   'emailDeliverability',
   'retiredOrganizations',
+  // dev/test staff-only gate (cks-game-api #482): operator list, grants, provisioning
+  // tokens, inventory; the mode is super-admin. tierAccessPolicy and myTierAccess are
+  // ordinary fields and are not on this list.
+  'tierAccessSettings',
+  'tierAccessRules',
+  'addTierAccessRule',
+  'revokeTierAccessRule',
+  'userTierAccess',
+  'setUserTierAccess',
+  'grantTierAccessByPattern',
+  'endTierAccessSessions',
+  'tierAccessProvisioningTokens',
+  'createTierAccessProvisioningToken',
+  'revokeTierAccessProvisioningToken',
+  'tierAccessInventory',
+  'setTierAccessMode',
 ];
 
 /** How the schema's descriptions say a field is for super-admins or operators only. */
