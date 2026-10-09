@@ -2,7 +2,7 @@
 //
 // CrowdyJS is a standalone public package, so `npm run build` must never depend
 // on sibling API checkouts. Normal builds use the committed ./schema.gql and
-// src/generated/graphql.ts. Run this script only when intentionally refreshing
+// src/generated/graphql.ts and graphql-schema.ts. Run this script only when intentionally refreshing
 // the SDK schema:
 //
 //   npm run schema:sync:prod    # fetch the published SDL from docs.crowdedkingdoms.com

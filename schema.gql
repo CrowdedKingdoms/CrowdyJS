@@ -2058,6 +2058,20 @@ type PaymentMethodSetup {
 }
 
 """
+One band of a graduated price. Each unit of the period's running total is priced at the band its position falls in, so the price of the next unit never rises as the total grows. Bands are edges on the whole total and count from zero: the free allowance fills the first band first.
+"""
+type RateCardBandType {
+  """
+  Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. A band covers units from the previous band's edge up to this one. Null on the last band, which has no upper edge.
+  """
+  upToUnits: BigInt
+  """
+  Cents charged per the row's unitQuantity raw units for the units inside this band. Fractional values are permitted.
+  """
+  priceCents: Float!
+}
+
+"""
 One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged.
 """
 type RateCardEntryType {
@@ -2099,6 +2113,10 @@ type RateCardEntryType {
   freePeriod: AllowancePeriod
   """Operator note on the seed row; null when unset."""
   description: String
+  """
+  The graduated price, band by band, or null when the dimension has one flat price. When present the bands price the period total and priceCents is the first band's price. aggregate_data_volume (egress) is the dimension priced this way.
+  """
+  priceBands: [RateCardBandType!]
 }
 
 """
@@ -2184,6 +2202,10 @@ type PublicRateCardEntryType {
   The period freeUnits resets on. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving.
   """
   freePeriod: AllowancePeriod
+  """
+  The graduated price, band by band, or null when the dimension has one flat price. Egress (aggregate_data_volume) is priced this way per app per calendar month: each GB is charged at the band the app's month-to-date total has reached, and priceCents is the first band's price.
+  """
+  priceBands: [RateCardBandType!]
 }
 
 """
@@ -2193,11 +2215,11 @@ type RateChangeType {
   scope: RateScope!
   metric: String!
   """
-  One of "priceCents", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth".
+  One of "priceCents", "priceBands", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth".
   """
   field: String!
   """
-  The value before this call, as a decimal string. "none" when there was no allowance row.
+  The value before this call, as a decimal string; for priceBands the schedule as JSON. "none" when there was no allowance row, or no bands.
   """
   previous: String!
   """The value after this call, as a decimal string."""
@@ -8391,7 +8413,7 @@ type Mutation {
   """
   runSharedUsageBillingTick: Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed.
+  OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed.
   """
   setBillingRate(
     """Which dimension to reprice, the new price and/or allowance, and why."""
@@ -10170,9 +10192,28 @@ input SetRateCardInput {
   """
   freePerMonth: BigInt
   """
+  A whole graduated schedule, replacing the one the dimension holds: 1 to 10 bands, ascending edges, the last band open, no band dearer than the one below. Band 1's price becomes priceCents (supply priceCents only if it is the same). Accepted for SHARED aggregate_data_volume only. Like every price, it applies from a dimension's next period where a period has already been charged.
+  """
+  priceBands: [RateCardBandInput!]
+  """
+  true removes the dimension's bands so it is priced flat at priceCents (the former first band's price unless priceCents is also given). Not combinable with priceBands.
+  """
+  clearPriceBands: Boolean
+  """
   Why this price is changing. Required: a rate change with no stated reason is not auditable after the fact. Recorded in the operator log with the before and after values.
   """
   reason: String!
+}
+
+input RateCardBandInput {
+  """
+  Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. Every band but the last needs one, strictly above the band before; the last band must leave it null.
+  """
+  upToUnits: BigInt
+  """
+  Cents per the row's unitQuantity raw units inside this band: >= 0, at most six decimals, and never more than the band below it.
+  """
+  priceCents: Float!
 }
 
 """
