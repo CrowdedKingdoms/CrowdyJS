@@ -4870,7 +4870,7 @@ export type Mutation = {
   setAppVisibility: App;
   /** Enables or disables off-session auto-billing for an org and updates its thresholds. When enabled and the wallet falls to lowWaterThresholdCents, the saved payment method is charged rechargeAmountCents (requires setupSharedPaymentMethod first). Pass limitCents=null for no per-period cap. Requires the 'manage_billing' org permission. */
   setAutoBilling: OrgAutoBilling;
-  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed. */
+  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed. */
   setBillingRate: SetRateCardResult;
   /** Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately. */
   setChannelMemberRoles: GroupMember;
@@ -6886,6 +6886,8 @@ export type PublicRateCardEntryType = {
   freeUnits: Maybe<Scalars['BigInt']['output']>;
   /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". This is the key your usage is aggregated under, so it is what to match a bill line against. */
   metric: Scalars['String']['output'];
+  /** The graduated price, band by band, or null when the dimension has one flat price. Egress (aggregate_data_volume) is priced this way per app per calendar month: each GB is charged at the band the app's month-to-date total has reached, and priceCents is the first band's price. */
+  priceBands: Maybe<Array<RateCardBandType>>;
   /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted. 0 means metered but not charged. */
   priceCents: Scalars['Float']['output'];
   /** Which card this row is on. */
@@ -8143,6 +8145,22 @@ export type QueryWalletTransactionsConnectionArgs = {
   orgId: Scalars['BigInt']['input'];
 };
 
+export type RateCardBandInput = {
+  /** Cents per the row's unitQuantity raw units inside this band: >= 0, at most six decimals, and never more than the band below it. */
+  priceCents: Scalars['Float']['input'];
+  /** Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. Every band but the last needs one, strictly above the band before; the last band must leave it null. */
+  upToUnits?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+/** One band of a graduated price. Each unit of the period's running total is priced at the band its position falls in, so the price of the next unit never rises as the total grows. Bands are edges on the whole total and count from zero: the free allowance fills the first band first. */
+export type RateCardBandType = {
+  __typename?: 'RateCardBandType';
+  /** Cents charged per the row's unitQuantity raw units for the units inside this band. Fractional values are permitted. */
+  priceCents: Scalars['Float']['output'];
+  /** Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. A band covers units from the previous band's edge up to this one. Null on the last band, which has no upper edge. */
+  upToUnits: Maybe<Scalars['BigInt']['output']>;
+};
+
 /** One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged. */
 export type RateCardEntryType = {
   __typename?: 'RateCardEntryType';
@@ -8160,6 +8178,8 @@ export type RateCardEntryType = {
   freeUnits: Maybe<Scalars['BigInt']['output']>;
   /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates. */
   metric: Scalars['String']['output'];
+  /** The graduated price, band by band, or null when the dimension has one flat price. When present the bands price the period total and priceCents is the first band's price. aggregate_data_volume (egress) is the dimension priced this way. */
+  priceBands: Maybe<Array<RateCardBandType>>;
   /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged. */
   priceCents: Scalars['Float']['output'];
   /** Which card this row is on. */
@@ -8173,10 +8193,10 @@ export type RateCardEntryType = {
 /** One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards. */
 export type RateChangeType = {
   __typename?: 'RateChangeType';
-  /** One of "priceCents", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth". */
+  /** One of "priceCents", "priceBands", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth". */
   field: Scalars['String']['output'];
   metric: Scalars['String']['output'];
-  /** The value before this call, as a decimal string. "none" when there was no allowance row. */
+  /** The value before this call, as a decimal string; for priceBands the schedule as JSON. "none" when there was no allowance row, or no bands. */
   previous: Scalars['String']['output'];
   scope: RateScope;
   /** The value after this call, as a decimal string. */
@@ -8822,6 +8842,8 @@ export type SetQuotaInput = {
 export type SetRateCardInput = {
   /** Required when a unit change also changes the money. Restating 19c per GiB as 1.769513c per 100 MB is the same price and needs nothing; changing 20c per 100 MB to 20c per GiB-month is a 7841x cut and must be stated deliberately. The mutation refuses rather than guessing which one you meant. */
   acknowledgeRepricing?: InputMaybe<Scalars['Boolean']['input']>;
+  /** true removes the dimension's bands so it is priced flat at priceCents (the former first band's price unless priceCents is also given). Not combinable with priceBands. */
+  clearPriceBands?: InputMaybe<Scalars['Boolean']['input']>;
   /** New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged. */
   freePerHour?: InputMaybe<Scalars['BigInt']['input']>;
   /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. */
@@ -8832,6 +8854,8 @@ export type SetRateCardInput = {
   freeUnits?: InputMaybe<Scalars['BigInt']['input']>;
   /** The metered dimension to reprice. Refused unless the platform actually meters it: a rate for an unmetered metric bills nobody while appearing configured. */
   metric: Scalars['String']['input'];
+  /** A whole graduated schedule, replacing the one the dimension holds: 1 to 10 bands, ascending edges, the last band open, no band dearer than the one below. Band 1's price becomes priceCents (supply priceCents only if it is the same). Accepted for SHARED aggregate_data_volume only. Like every price, it applies from a dimension's next period where a period has already been charged. */
+  priceBands?: InputMaybe<Array<RateCardBandInput>>;
   /** New price in cents per unitQuantity raw units. Must be >= 0; 0 means meter but do not charge. Omit to leave the price unchanged. Fractional values are accepted (the column is NUMERIC(20,6)). */
   priceCents?: InputMaybe<Scalars['Float']['input']>;
   /** Why this price is changing. Required: a rate change with no stated reason is not auditable after the fact. Recorded in the operator log with the before and after values. */
