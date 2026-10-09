@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.4.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.4.1** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,11 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.4.1: graphql-codegen 7 (2026-10-09).** Dependabot #215's majors (codegen cli 7, typescript 6,
+typescript-operations 6, typed-document-node 7). Codegen writes two files now (see `codegen.ts`), and the
+generated documents are unchanged. Thirteen operation-result types lose an optional `__typename` the
+operations never select (MIGRATION.md, 18.4.1). The schema types are unchanged.
 
 **18.4.0: the terms and age gate (2026-10-07).** ck-api `v2.35.0` (cks-game-api #437) refuses a
 gameplay token with `LEGAL_ACCEPTANCE_REQUIRED` until the player's consents are stored.
@@ -475,7 +480,7 @@ not a running service and is not a schema source; gameplay data lives in
   client never imports it. See the README.
 - `src/kit/` — `client.kit(appId).social`, the wire codecs (`kit/wire.ts`) and
   `runOptimisticAction`. The model-backed kit went in 18.0.0.
-- `schema.gql` + `src/generated/graphql.ts` — committed artifacts. Refresh from
+- `schema.gql` + `src/generated/graphql.ts` + `src/generated/graphql-schema.ts` — committed artifacts. Refresh from
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
   depend on sibling repos at build time.
 - `test/e2e` — live suites; they skip without `CROWDY_*`. Point
@@ -704,7 +709,7 @@ written with 14.x they invited a copy that cannot resolve, since a caret never
 matches a prerelease. The tag's commit must be contained in the
 branch it names (`scripts/ci/resolve-release-tier.sh`).
 
-Never hand-edit `src/generated/graphql.ts`. `npm install && npm run build`
+Never hand-edit `src/generated/graphql.ts` or `graphql-schema.ts`. `npm install && npm run build`
 must succeed in a clean clone of this repo alone.
 
 ## Security review on the identity surface (2026-09-08)

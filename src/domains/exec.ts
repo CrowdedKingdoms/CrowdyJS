@@ -1114,13 +1114,15 @@ function parseCapabilities(json: string | null | undefined): ExecClientCapabilit
   }
 }
 
-function strip<T extends { __typename?: string }>(v: T): Omit<T, '__typename'> {
-  const { __typename: _, ...rest } = v;
+// Generated result types carry `__typename` only where an operation selects it, so it is
+// optional here; a response that has one still loses it.
+function strip<T extends object>(v: T): Omit<T, '__typename'> {
+  const { __typename: _, ...rest } = v as T & { __typename?: string };
   return rest;
 }
 
 function build(b: ExecBuildFieldsFragment): ExecBuild {
-  const { __typename: _, artifacts, ...rest } = b;
+  const { __typename: _, artifacts, ...rest } = b as ExecBuildFieldsFragment & { __typename?: string };
   return {
     ...rest,
     artifacts: artifacts.map((a) => ({
