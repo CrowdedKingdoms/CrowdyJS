@@ -522,6 +522,7 @@ not a running service and is not a schema source; gameplay data lives in
   | `CROWDY_OWNER_EMAIL` / `_PASSWORD` | `infra-cp/<tier>/org-admin/crowdedkingdomstudios` |
   | `CROWDY_OPERATOR_EMAIL` / `_PASSWORD` | `infra-cp/<tier>/admin/ck-operator` |
   | `CROWDY_TEST_APP_ID` | a real app id — **never leave this unset** |
+  | `CROWDY_PROVISIONING_TOKEN` | dev and test only: the `harness` token, `infra-cp/<tier>/loadtest/provisioning-token-harness` (`.token`). Dev and test are staff-only, so the suite's new `crowdy-e2e-*@test.invalid` players are refused without it; sent on `register` only |
 
   plus the app's Studio-agent policy, which a rebuilt tier leaves fail-closed:
   `infra-control-plane/scripts/ops/enable-studio-agent.sh --tier <tier> --app-id <id>`.
