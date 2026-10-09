@@ -2295,7 +2295,7 @@ export type CreateTeamInput = {
 };
 
 export type CreateTierAccessProvisioningTokenInput = {
-  /** prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, example.com) or a company domain; the prefix is at least three characters. */
+  /** prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, .localhost, .local, example.com) or a company domain; the prefix is at least three characters. */
   emailPatterns: Array<Scalars['String']['input']>;
   /** Days until it expires (1-90). Accounts it created keep their grant. */
   expiresInDays: Scalars['Int']['input'];
@@ -7425,7 +7425,7 @@ export type Query = {
   hostedGamePublishes: Array<HostedGamePublish>;
   /** The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
   hostedGames: Array<HostedGame>;
-  /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`; a page can hold fewer than `first` inputs when it stopped at its time or scan limit, so keep paging while hasNextPage is true. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment. */
+  /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`; a page can hold fewer than `first` inputs when it stopped at its time or scan limit, so keep paging while hasNextPage is true. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, and also, retryable with the same cursor, when the log cannot be read right now. */
   inputLogMessages: InputLogMessageConnection;
   /** Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. With 'manage_apps' on the app you see every session and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment. */
   inputLogSessions: InputLogSessionConnection;
@@ -9394,6 +9394,8 @@ export enum TierAccessMode {
 /** Whether this tier is an internal (staff-only) environment, for the sign-in pages. Public. */
 export type TierAccessPolicy = {
   __typename?: 'TierAccessPolicy';
+  /** True when refusals are enforced; false while a restricted tier only logs them (observe), and off the restricted tiers. Read by the control plane status check. */
+  enforced: Scalars['Boolean']['output'];
   /** A sentence for the sign-in pages to show when restricted. */
   message: Maybe<Scalars['String']['output']>;
   /** Production Studio, where outside developers create accounts. */

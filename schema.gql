@@ -4280,6 +4280,10 @@ type TierAccessPolicy {
   True on dev and test: accounts need a verified company address, an operator listing or a provisioning grant.
   """
   restricted: Boolean!
+  """
+  True when refusals are enforced; false while a restricted tier only logs them (observe), and off the restricted tiers. Read by the control plane status check.
+  """
+  enforced: Boolean!
   """A sentence for the sign-in pages to show when restricted."""
   message: String
   """Production Studio, where outside developers create accounts."""
@@ -6405,7 +6409,7 @@ type Query {
     filter: InputLogSessionFilter
   ): InputLogSessionConnection!
   """
-  The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`; a page can hold fewer than `first` inputs when it stopped at its time or scan limit, so keep paging while hasNextPage is true. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment.
+  The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`; a page can hold fewer than `first` inputs when it stopped at its time or scan limit, so keep paging while hasNextPage is true. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, and also, retryable with the same cursor, when the log cannot be read right now.
   """
   inputLogMessages(
     """The app the session belongs to."""
@@ -11042,7 +11046,7 @@ input CreateTierAccessProvisioningTokenInput {
   """What uses it, e.g. identity-probe or bwf-loadtest."""
   label: String!
   """
-  prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, example.com) or a company domain; the prefix is at least three characters.
+  prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, .localhost, .local, example.com) or a company domain; the prefix is at least three characters.
   """
   emailPatterns: [String!]!
   """The most accounts it may ever create."""
