@@ -1067,7 +1067,8 @@ CrowdyJS is a standalone public package: a clean clone builds with
 no other repositories and no network access required:
 
 - `schema.gql` — the unified API SDL (management and game surfaces).
-- `src/generated/graphql.ts` — generated TypeScript operation types.
+- `src/generated/graphql.ts` — generated TypeScript operation types; it re-exports
+  `src/generated/graphql-schema.ts`, the generated schema types.
 
 Schema refresh is explicit, from the published
 [SDL](https://docs.crowdedkingdoms.com/schema/game-api.graphql):
@@ -1078,8 +1079,8 @@ npm run codegen
 ```
 
 (`npm run schema:sync:paths -- --schema <file-or-url>` accepts an explicit
-source, and `npm run schema:sync:local` reads `../cks-game-api/schema.gql`.) Commit `schema.gql` and `src/generated/graphql.ts`
-together whenever the public GraphQL surface changes; `npm run check:schema`
+source, and `npm run schema:sync:local` reads `../cks-game-api/schema.gql`.) Commit `schema.gql`, `src/generated/graphql.ts` and
+`src/generated/graphql-schema.ts` together whenever the public GraphQL surface changes; `npm run check:schema`
 detects drift in CI/release work.
 
 Two more committed fixtures follow the same boundary — the build validates

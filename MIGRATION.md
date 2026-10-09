@@ -120,6 +120,18 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.4.1: the generated types come from graphql-codegen 7
+
+No call changes, and the GraphQL documents the SDK sends are byte-for-byte the same. Thirteen types
+built from operation results no longer declare an optional `__typename`, because the operations
+never select it and it was always `undefined`: `BeginGamePublishResult`, `CompleteGamePublishResult`,
+`CrowdyStudioPlayerWallet` (`balance()`), `ExecBuildArtifact`, `ExecModClientArtifact`, `ExecVersion`,
+`GridChannel`, `GridToken`, `HostedGame`, `HostedGamePublish`, `HostedGameUpload`,
+`UdpNotificationsSubscription` (its outer object; each notification keeps its `__typename`) and
+`uploadPublishFiles`'s `uploads` parameter. Code that read `.__typename` on one of them now fails to
+compile: delete the read, since it only ever saw `undefined`. The schema types (`Actor`, the inputs,
+the enums) are unchanged.
+
 ## 18.4.0: the terms and age gate
 
 **What it needs.** ck-api `v2.35.0` (cks-game-api #437, 2026-10-07). Against an older API the
