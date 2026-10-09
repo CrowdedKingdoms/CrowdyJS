@@ -4269,6 +4269,208 @@ type CrowdyStudioAgentUsagePage {
 }
 
 """
+Whether this tier is an internal (staff-only) environment, for the sign-in pages. Public.
+"""
+type TierAccessPolicy {
+  """
+  True on dev and test: accounts need a verified company address, an operator listing or a provisioning grant.
+  """
+  restricted: Boolean!
+  """A sentence for the sign-in pages to show when restricted."""
+  message: String
+  """Production Studio, where outside developers create accounts."""
+  publicStudioUrl: String!
+}
+
+"""
+The signed-in account's access to this tier. Callable while access is pending or denied, so a client can say why it cannot continue.
+"""
+type MyTierAccess {
+  """True on dev and test."""
+  restricted: Boolean!
+  """True when refusals are enforced rather than only logged."""
+  enforced: Boolean!
+  status: TierAccessStatus!
+  """
+  Why access is granted: platform_role, operator_grant, provisioning or verified_email.
+  """
+  via: String
+  """When the grant or listing ends, if it does."""
+  expiresAt: DateTime
+  """A sentence explaining the status."""
+  message: String!
+}
+
+"""
+An account on this tier: NOT_RESTRICTED (prod, or no gate), GRANTED, PENDING_VERIFICATION (a listed address that is not confirmed yet), or DENIED.
+"""
+enum TierAccessStatus {
+  NOT_RESTRICTED
+  GRANTED
+  PENDING_VERIFICATION
+  DENIED
+}
+
+"""OPERATOR: the tier-access settings of this tier."""
+type TierAccessSettings {
+  """The tier this instance serves."""
+  tier: String
+  """The effective mode."""
+  mode: TierAccessMode!
+  """
+  The stored mode; null means none was set (a restricted tier then observes).
+  """
+  storedMode: TierAccessStoredMode
+  updatedAt: DateTime
+  updatedBy: BigInt
+  """Domains whose verified addresses are always allowed."""
+  companyDomains: [String!]!
+  publicStudioUrl: String!
+}
+
+"""
+How the dev/test staff-only gate behaves on this tier. OFF on prod and on any tier that is not dev or test; OBSERVE logs what would be refused; ENFORCE refuses.
+"""
+enum TierAccessMode {
+  OFF
+  OBSERVE
+  ENFORCE
+}
+
+"""The mode an operator can set on a restricted tier."""
+enum TierAccessStoredMode {
+  OBSERVE
+  ENFORCE
+}
+
+"""OPERATOR: one entry on a tier access list."""
+type TierAccessRule {
+  ruleId: BigInt!
+  kind: TierAccessRuleKind!
+  """The lowercased address or domain."""
+  value: String!
+  note: String
+  createdBy: BigInt
+  createdAt: DateTime!
+  expiresAt: DateTime
+  revokedAt: DateTime
+  revokedBy: BigInt
+}
+
+"""An exact email address, or every address on one domain."""
+enum TierAccessRuleKind {
+  EMAIL
+  EMAIL_DOMAIN
+}
+
+"""
+OPERATOR: a credential test harnesses send on register to create accounts that may use a restricted tier. The secret is never returned after creation.
+"""
+type TierAccessProvisioningToken {
+  tokenId: BigInt!
+  label: String!
+  """Addresses it may create, as prefix*@domain."""
+  emailPatterns: [String!]!
+  maxAccounts: Int!
+  accountsCreated: Int!
+  createdBy: BigInt
+  createdAt: DateTime!
+  expiresAt: DateTime!
+  revokedAt: DateTime
+  lastUsedAt: DateTime
+}
+
+"""OPERATOR: a new provisioning token. `token` is shown this once."""
+type CreatedTierAccessProvisioningToken {
+  """The secret. Store it now; it cannot be read again."""
+  token: String!
+  provisioningToken: TierAccessProvisioningToken!
+}
+
+"""OPERATOR: one account's access to this tier."""
+type UserTierAccess {
+  userId: BigInt!
+  email: String
+  isConfirmed: Boolean!
+  status: TierAccessStatus!
+  via: String
+  expiresAt: DateTime
+  """The stored grant: operator or provisioning, or null."""
+  grantSource: String
+  """
+  Who granted it: operator:<user id>, token:<token id> or loadtest-mint:<label>.
+  """
+  grantedBy: String
+  grantedAt: DateTime
+  """When the stored grant ends."""
+  grantExpiresAt: DateTime
+}
+
+type TierAccessCount {
+  key: String!
+  count: Int!
+}
+
+"""OPERATOR: an account this tier would refuse, with what it holds."""
+type TierAccessInventoryAccount {
+  userId: BigInt!
+  email: String
+  """Set when the account was created through Crowd Altar."""
+  username: String
+  createdAt: DateTime
+  isConfirmed: Boolean!
+  status: TierAccessStatus!
+  """Created through Crowd Altar (it carries a username)."""
+  createdViaCrowdAltar: Boolean!
+  """Slugs of the organizations it belongs to."""
+  orgs: [String!]!
+  appsCreated: Int!
+  activeSessions: Int!
+  activeAppTokens: Int!
+  """
+  Holds app tokens, organizations or apps -- the accounts whose sessions a cutover should end.
+  """
+  ckActivity: Boolean!
+}
+
+"""OPERATOR: an organization none of whose members may use this tier."""
+type TierAccessInventoryOrg {
+  orgId: BigInt!
+  name: String!
+  slug: String!
+  status: String!
+  members: Int!
+  apps: Int!
+  liveHostedGames: Int!
+}
+
+"""OPERATOR: who on this tier would be refused."""
+type TierAccessInventory {
+  tier: String
+  mode: TierAccessMode!
+  totalAccounts: Int!
+  granted: Int!
+  """Granted accounts by reason."""
+  grantedByVia: [TierAccessCount!]!
+  pending: Int!
+  denied: Int!
+  """Refused (pending + denied) accounts in total."""
+  accountsTotal: Int!
+  """A page of the refused accounts, newest first."""
+  accounts: [TierAccessInventoryAccount!]!
+  orgsWithoutGrantedMember: [TierAccessInventoryOrg!]!
+}
+
+"""OPERATOR: the result of a bulk grant by pattern."""
+type GrantTierAccessByPatternResult {
+  """Accounts the pattern matches that lack a grant."""
+  matched: Int!
+  """Accounts granted (0 on a dry run)."""
+  granted: Int!
+  dryRun: Boolean!
+}
+
+"""
 One minute-bucketed usage sample. Byte/message counters are returned as strings because they can exceed the 32-bit Int range.
 """
 type UsageMinuteRow {
@@ -6900,6 +7102,31 @@ type Query {
   """
   cpCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy! @requiresPermission(scope: "operator", permission: "is_operator")
   """
+  Whether this tier is an internal environment (dev and test are: Crowded Kingdoms staff, approved contractors and test harnesses only), with a sentence for sign-in pages and the production Studio address. Public.
+  """
+  tierAccessPolicy: TierAccessPolicy!
+  """
+  The signed-in account's access to this tier: GRANTED, PENDING_VERIFICATION (confirm the email address), DENIED, or NOT_RESTRICTED on prod. Requires a session token, and stays callable while access is pending or denied.
+  """
+  myTierAccess: MyTierAccess!
+  """OPERATOR: the tier-access mode and settings of this tier."""
+  tierAccessSettings: TierAccessSettings! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: the addresses and domains allowed on this tier besides the company domains.
+  """
+  tierAccessRules(
+    """Also list revoked and expired-then-revoked entries."""
+    includeRevoked: Boolean = false
+  ): [TierAccessRule!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """OPERATOR: one account's access to this tier and its stored grant."""
+  userTierAccess(userId: BigInt!): UserTierAccess! @requiresPermission(scope: "operator", permission: "is_operator")
+  """OPERATOR: the provisioning tokens of this tier (never their secrets)."""
+  tierAccessProvisioningTokens(includeRevoked: Boolean = false): [TierAccessProvisioningToken!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: who on this tier would be refused -- counts, a page of refused accounts with what they hold, and organizations with no admitted member. Reads every account; for review, not for polling. Refused on prod.
+  """
+  tierAccessInventory(limit: Int = 200, offset: Int = 0): TierAccessInventory! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
   Org-level rollup of replication/GraphQL byte totals and GraphQL op counts across all apps in the organization for the time window. Read-only reporting. Requires the 'view_usage' org permission.
   """
   orgUsageSummary(
@@ -8685,6 +8912,43 @@ type Mutation {
     """
     input: SetCrowdyStudioAgentOperatorAppKillInput!
   ): CrowdyStudioAgentPolicy! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: allow an email address (a contractor or partner) or a domain on this tier, optionally until a date. The address must still be verified to count. Refused on prod.
+  """
+  addTierAccessRule(input: AddTierAccessRuleInput!): TierAccessRule! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: remove an entry from the list. Accounts it was admitting are refused at their next request, and their sessions and app tokens are ended. Refused on prod.
+  """
+  revokeTierAccessRule(ruleId: BigInt!): TierAccessRule! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: grant one account access to this tier regardless of its email (a service account, an unverifiable address), optionally until a date, or clear the grant. Clearing ends its sessions if nothing else admits it. Refused on prod.
+  """
+  setUserTierAccess(
+    userId: BigInt!
+    granted: Boolean!
+    """When the grant ends. Omit for none."""
+    expiresAt: DateTime
+  ): UserTierAccess! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: grant every existing account a prefix*@domain pattern matches that has no grant -- for bot rosters created before the gate. The domain must be a reserved test domain or a company domain. Dry run by default. Refused on prod.
+  """
+  grantTierAccessByPattern(emailPattern: String!, dryRun: Boolean = true): GrantTierAccessByPatternResult! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: end the sessions and app tokens of these accounts (at most 1000), skipping any this tier admits. Returns how many had sessions ended. Refused on prod.
+  """
+  endTierAccessSessions(userIds: [BigInt!]!): Int! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: mint a provisioning token for a test harness. The secret is returned once. Refused on prod.
+  """
+  createTierAccessProvisioningToken(input: CreateTierAccessProvisioningTokenInput!): CreatedTierAccessProvisioningToken! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: revoke a provisioning token. With revokeAccounts, also clear the grant of every account it created and end their sessions. Refused on prod.
+  """
+  revokeTierAccessProvisioningToken(tokenId: BigInt!, revokeAccounts: Boolean = false): TierAccessProvisioningToken! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  SUPER ADMIN: set this tier to OBSERVE (log what would be refused) or ENFORCE. Refused on prod, where the gate is always off.
+  """
+  setTierAccessMode(mode: TierAccessStoredMode!): TierAccessSettings! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
   Application liveness heartbeat for the authenticated user's existing actor rows in an app. Refreshes actors.updated_at so the user stays host-eligible, then returns the freshly-elected host so a client can fold its poll and heartbeat into one round-trip. This is not proof of a live Buddy session and does not refresh the separate Buddy presence lease used by security-sensitive artifact/compute occupancy gates.
   """
@@ -10562,6 +10826,29 @@ input SetCrowdyStudioAgentOperatorAppKillInput {
   Required retry key (1-128 characters). Same key/arguments replay; different arguments fail IDEMPOTENCY_CONFLICT.
   """
   idempotencyKey: String!
+}
+
+input AddTierAccessRuleInput {
+  kind: TierAccessRuleKind!
+  """An email address (EMAIL) or a domain (EMAIL_DOMAIN)."""
+  value: String!
+  """Who this is and why, for the next operator."""
+  note: String
+  """When the listing ends (a contractor engagement). Omit for none."""
+  expiresAt: DateTime
+}
+
+input CreateTierAccessProvisioningTokenInput {
+  """What uses it, e.g. identity-probe or bwf-loadtest."""
+  label: String!
+  """
+  prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, example.com) or a company domain; the prefix is at least three characters.
+  """
+  emailPatterns: [String!]!
+  """The most accounts it may ever create."""
+  maxAccounts: Int!
+  """Days until it expires (1-90). Accounts it created keep their grant."""
+  expiresInDays: Int!
 }
 
 """

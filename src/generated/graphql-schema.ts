@@ -168,6 +168,16 @@ export type ActorsConnection = {
   totalCount: Maybe<Scalars['Int']['output']>;
 };
 
+export type AddTierAccessRuleInput = {
+  /** When the listing ends (a contractor engagement). Omit for none. */
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  kind: TierAccessRuleKind;
+  /** Who this is and why, for the next operator. */
+  note?: InputMaybe<Scalars['String']['input']>;
+  /** An email address (EMAIL) or a domain (EMAIL_DOMAIN). */
+  value: Scalars['String']['input'];
+};
+
 export type AdmitAppCodeInput = {
   /** Numeric app id whose allow list receives this entry. */
   appId: Scalars['BigInt']['input'];
@@ -2274,11 +2284,30 @@ export type CreateTeamInput = {
   name: Scalars['String']['input'];
 };
 
+export type CreateTierAccessProvisioningTokenInput = {
+  /** prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, example.com) or a company domain; the prefix is at least three characters. */
+  emailPatterns: Array<Scalars['String']['input']>;
+  /** Days until it expires (1-90). Accounts it created keep their grant. */
+  expiresInDays: Scalars['Int']['input'];
+  /** What uses it, e.g. identity-probe or bwf-loadtest. */
+  label: Scalars['String']['input'];
+  /** The most accounts it may ever create. */
+  maxAccounts: Scalars['Int']['input'];
+};
+
 export type CreateUserAppStateInput = {
   /** App (game) id to scope the state to. Required. BigInt sent as a decimal string. */
   appId: Scalars['BigInt']['input'];
   /** Per-app user state as base64-encoded binary, at most 1,048,576 base64 characters (~768 KiB binary); larger payloads draw a structured validation error. Omit or send null to clear it. */
   state?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** OPERATOR: a new provisioning token. `token` is shown this once. */
+export type CreatedTierAccessProvisioningToken = {
+  __typename?: 'CreatedTierAccessProvisioningToken';
+  provisioningToken: TierAccessProvisioningToken;
+  /** The secret. Store it now; it cannot be read again. */
+  token: Scalars['String']['output'];
 };
 
 /** Single-use human decision lifecycle for one canonical argument hash. */
@@ -4079,6 +4108,16 @@ export type GrantGridPermissionsInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+/** OPERATOR: the result of a bulk grant by pattern. */
+export type GrantTierAccessByPatternResult = {
+  __typename?: 'GrantTierAccessByPatternResult';
+  dryRun: Scalars['Boolean']['output'];
+  /** Accounts granted (0 on a dry run). */
+  granted: Scalars['Int']['output'];
+  /** Accounts the pattern matches that lack a grant. */
+  matched: Scalars['Int']['output'];
+};
+
 /** Grant or revoke a feature key for an access tier. */
 export type GrantTierFeatureInput = {
   /** The app (tenant). */
@@ -4564,6 +4603,8 @@ export type Mutation = {
   addChannelMember: GroupMember;
   /** Add a user to a team, or approve their pending join request (upsert to active). Requires the 'manage_members' team permission (app admins bypass). Auto-assigns the team's default role if configured. */
   addTeamMember: GroupMember;
+  /** OPERATOR: allow an email address (a contractor or partner) or a domain on this tier, optionally until a date. The address must still be verified to count. Refused on prod. */
+  addTierAccessRule: TierAccessRule;
   /** Admit one player-code listing, author, or authoring org to an app's strict allow list. Requires 'manage_compute'. Idempotency is explicit: an identical active entry returns a conflict instead of silently creating duplicates. SIDE EFFECTS: audit row + replica sync. */
   admitAppCode: AppCodeAdmission;
   /** Soft-delete an access tier by setting its status to 'archived' (the row is retained, NOT hard-deleted) and notifies the game API. Requires the 'manage_access_tiers' permission on the app that owns the tier; super admins bypass. Existing user grants on this tier are NOT automatically revoked. Throws if the tier is not found. */
@@ -4640,6 +4681,8 @@ export type Mutation = {
   createTeam: Group;
   /** Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs). */
   createTeamRole: GroupRole;
+  /** OPERATOR: mint a provisioning token for a test harness. The secret is returned once. Refused on prod. */
+  createTierAccessProvisioningToken: CreatedTierAccessProvisioningToken;
   /** OPERATOR ONLY. Credits an organization wallet without a payment provider, for seeding a test environment or making an operator adjustment, and records it in the wallet ledger as an "admin_credit" transaction. Use this instead of writing to org_wallets by hand: it creates the wallet if absent, repairs a missing wallet id, and moves the balance and the ledger row together in one transaction. Pass a referenceId to make retries idempotent. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so a credit that clears an insufficient_funds denial lifts it immediately instead of leaving the app refusing clients. */
   creditOrgWallet: WalletTransaction;
   /** Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
@@ -4700,6 +4743,8 @@ export type Mutation = {
   deleteUserAppState: UserAppState;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
+  /** OPERATOR: end the sessions and app tokens of these accounts (at most 1000), skipping any this tier admits. Returns how many had sessions ended. Refused on prod. */
+  endTierAccessSessions: Scalars['Int']['output'];
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
   exchangePortalCode: AppTokenResponse;
   /** Make an earlier ck-exec version active again, a rollback. Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission. */
@@ -4760,6 +4805,8 @@ export type Mutation = {
   grantGridPermissions: GridUserPermissions;
   /** Org dashboard shortcut: the authenticated caller grants themselves access to an app using its default active tier. Requires that the caller is an active member of the app's owning org OR holds the 'manage_access_tiers' permission on the app. ENTITLEMENT CHANGE: upserts an active grant and notifies the game API. Errors if the app has no active tier, or the caller is neither a member nor a manager. */
   grantMyAppAccess: AppUserAccess;
+  /** OPERATOR: grant every existing account a prefix*@domain pattern matches that has no grant -- for bot rosters created before the gate. The domain must be a reserved test domain or a company domain. Dry run by default. Refused on prod. */
+  grantTierAccessByPattern: GrantTierAccessByPatternResult;
   /** Adds a user to an organization as a member. Requires the 'manage_members' permission on the target org (super admins bypass). */
   inviteOrgMember: OrgMember;
   /** Issue a standing grid claim invite (claim policy INVITE). Callable by designated approvers or studio staff holding manage_compute; the invitee then calls claimGridOwnership to take ownership. */
@@ -4830,6 +4877,10 @@ export type Mutation = {
   revokeGroupFromGrid: Array<GridGroupGrant>;
   /** Permanently deactivates an org token so it can no longer authenticate. Requires the 'manage_tokens' permission on the token's org (super admins bypass). DESTRUCTIVE and irreversible; the secret cannot be reactivated. Returns false if the token does not exist. */
   revokeOrgToken: Scalars['Boolean']['output'];
+  /** OPERATOR: revoke a provisioning token. With revokeAccounts, also clear the grant of every account it created and end their sessions. Refused on prod. */
+  revokeTierAccessProvisioningToken: TierAccessProvisioningToken;
+  /** OPERATOR: remove an entry from the list. Accounts it was admitting are refused at their next request, and their sessions and app tokens are ended. Refused on prod. */
+  revokeTierAccessRule: TierAccessRule;
   /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
   /** OPERATOR ONLY. Runs the shared-usage billing tick once. It still bills only the last CLOSED clock hour — it will not charge an open hour. Use this to prove a closed-hour debit without waiting for the ~60s cron. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier. */
@@ -4914,6 +4965,10 @@ export type Mutation = {
   setTeamMemberRoles: GroupMember;
   /** Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams. */
   setTeamPolicy: AppGroupPolicy;
+  /** SUPER ADMIN: set this tier to OBSERVE (log what would be refused) or ENFORCE. Refused on prod, where the gate is always off. */
+  setTierAccessMode: TierAccessSettings;
+  /** OPERATOR: grant one account access to this tier regardless of its email (a service account, an unverifiable address), optionally until a date, or clear the grant. Clearing ends its sessions if nothing else admits it. Refused on prod. */
+  setUserTierAccess: UserTierAccess;
   /** Begins vaulting a card for off-session auto-billing. Returns a Stripe SetupIntent client secret the browser confirms; no charge is made here. Requires the 'manage_billing' org permission. */
   setupSharedPaymentMethod: PaymentMethodSetup;
   /** Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
@@ -4997,6 +5052,11 @@ export type MutationAddChannelMemberArgs = {
 export type MutationAddTeamMemberArgs = {
   groupId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationAddTierAccessRuleArgs = {
+  input: AddTierAccessRuleInput;
 };
 
 
@@ -5190,6 +5250,11 @@ export type MutationCreateTeamRoleArgs = {
 };
 
 
+export type MutationCreateTierAccessProvisioningTokenArgs = {
+  input: CreateTierAccessProvisioningTokenInput;
+};
+
+
 export type MutationCreditOrgWalletArgs = {
   amountCents: Scalars['BigInt']['input'];
   orgId: Scalars['BigInt']['input'];
@@ -5332,6 +5397,11 @@ export type MutationDeleteTeamRoleArgs = {
 
 export type MutationDeleteUserAppStateArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationEndTierAccessSessionsArgs = {
+  userIds: Array<Scalars['BigInt']['input']>;
 };
 
 
@@ -5527,6 +5597,12 @@ export type MutationGrantMyAppAccessArgs = {
 };
 
 
+export type MutationGrantTierAccessByPatternArgs = {
+  dryRun?: InputMaybe<Scalars['Boolean']['input']>;
+  emailPattern: Scalars['String']['input'];
+};
+
+
 export type MutationInviteOrgMemberArgs = {
   input: InviteOrgMemberInput;
 };
@@ -5709,6 +5785,17 @@ export type MutationRevokeGroupFromGridArgs = {
 export type MutationRevokeOrgTokenArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   orgTokenId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeTierAccessProvisioningTokenArgs = {
+  revokeAccounts?: InputMaybe<Scalars['Boolean']['input']>;
+  tokenId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeTierAccessRuleArgs = {
+  ruleId: Scalars['BigInt']['input'];
 };
 
 
@@ -5951,6 +6038,18 @@ export type MutationSetTeamPolicyArgs = {
 };
 
 
+export type MutationSetTierAccessModeArgs = {
+  mode: TierAccessStoredMode;
+};
+
+
+export type MutationSetUserTierAccessArgs = {
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  granted: Scalars['Boolean']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationSetupSharedPaymentMethodArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   orgId: Scalars['BigInt']['input'];
@@ -6112,6 +6211,22 @@ export type MutationUpdateUserTypeArgs = {
 
 export type MutationUpdateVoxelArgs = {
   input: UpdateVoxelInput;
+};
+
+/** The signed-in account's access to this tier. Callable while access is pending or denied, so a client can say why it cannot continue. */
+export type MyTierAccess = {
+  __typename?: 'MyTierAccess';
+  /** True when refusals are enforced rather than only logged. */
+  enforced: Scalars['Boolean']['output'];
+  /** When the grant or listing ends, if it does. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** A sentence explaining the status. */
+  message: Scalars['String']['output'];
+  /** True on dev and test. */
+  restricted: Scalars['Boolean']['output'];
+  status: TierAccessStatus;
+  /** Why access is granted: platform_role, operator_grant, provisioning or verified_email. */
+  via: Maybe<Scalars['String']['output']>;
 };
 
 /** A grid overlapping a scanned region (returned by nearbyGrids). Bounds only — no permission keys. */
@@ -7218,6 +7333,8 @@ export type Query = {
   myPropertyTokens: UserPropertyTokenData;
   /** The caller's teams in an app, with their roles and effective team permissions. Use this to discover which teams the current user belongs to and what they may do in each. */
   myTeams: Array<GroupMembership>;
+  /** The signed-in account's access to this tier: GRANTED, PENDING_VERIFICATION (confirm the email address), DENIED, or NOT_RESTRICTED on prod. Requires a session token, and stays callable while access is pending or denied. */
+  myTierAccess: MyTierAccess;
   /** List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps'). */
   nearbyGridPermissions: Array<NearbyGridPermissions>;
   /** List every grid overlapping a chunk-coordinate bounding box, returning gridId and bounds only. Player-safe: no permission keys and no impersonation userId. Requires an app-scoped token for the same app. */
@@ -7294,6 +7411,16 @@ export type Query = {
   teamRoles: Array<GroupRole>;
   /** List all active teams in an app (not just the caller's). */
   teams: Array<Group>;
+  /** OPERATOR: who on this tier would be refused -- counts, a page of refused accounts with what they hold, and organizations with no admitted member. Reads every account; for review, not for polling. Refused on prod. */
+  tierAccessInventory: TierAccessInventory;
+  /** Whether this tier is an internal environment (dev and test are: Crowded Kingdoms staff, approved contractors and test harnesses only), with a sentence for sign-in pages and the production Studio address. Public. */
+  tierAccessPolicy: TierAccessPolicy;
+  /** OPERATOR: the provisioning tokens of this tier (never their secrets). */
+  tierAccessProvisioningTokens: Array<TierAccessProvisioningToken>;
+  /** OPERATOR: the addresses and domains allowed on this tier besides the company domains. */
+  tierAccessRules: Array<TierAccessRule>;
+  /** OPERATOR: the tier-access mode and settings of this tier. */
+  tierAccessSettings: TierAccessSettings;
   /** UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy. */
   udpProxyConnectionStatus: UdpProxyConnectionStatus;
   /** Looks up a single user by id. Requires a valid game token. */
@@ -7304,6 +7431,8 @@ export type Query = {
   userAppStates: Array<UserAppState>;
   /** Lists the avatars owned by `userId`. Requires a valid game token. Owner-aware: when the caller is NOT the owner, each avatar’s `privateState` is stripped (returned null); `publicState` is always included. State blobs are base64-encoded binary. */
   userAvatars: Array<Avatar>;
+  /** OPERATOR: one account's access to this tier and its stored grant. */
+  userTierAccess: UserTierAccess;
   /** Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated. */
   usersConnection: UsersConnection;
   /** SUPER-ADMIN ONLY paginated user search; replaces the legacy `users`/`usersByGamertag`/`usersByEmail` queries. `query` is ILIKE-prefix matched against email, gamertag, and disambiguation, plus an exact user_id match. Requires a super-admin bearer game token. */
@@ -8083,6 +8212,22 @@ export type QueryTeamsArgs = {
 };
 
 
+export type QueryTierAccessInventoryArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryTierAccessProvisioningTokensArgs = {
+  includeRevoked?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryTierAccessRulesArgs = {
+  includeRevoked?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
 export type QueryUserArgs = {
   id: Scalars['BigInt']['input'];
 };
@@ -8094,6 +8239,11 @@ export type QueryUserAppStateArgs = {
 
 
 export type QueryUserAvatarsArgs = {
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryUserTierAccessArgs = {
   userId: Scalars['BigInt']['input'];
 };
 
@@ -9022,6 +9172,148 @@ export type TeleportResponse = {
   success: Scalars['Boolean']['output'];
 };
 
+export type TierAccessCount = {
+  __typename?: 'TierAccessCount';
+  count: Scalars['Int']['output'];
+  key: Scalars['String']['output'];
+};
+
+/** OPERATOR: who on this tier would be refused. */
+export type TierAccessInventory = {
+  __typename?: 'TierAccessInventory';
+  /** A page of the refused accounts, newest first. */
+  accounts: Array<TierAccessInventoryAccount>;
+  /** Refused (pending + denied) accounts in total. */
+  accountsTotal: Scalars['Int']['output'];
+  denied: Scalars['Int']['output'];
+  granted: Scalars['Int']['output'];
+  /** Granted accounts by reason. */
+  grantedByVia: Array<TierAccessCount>;
+  mode: TierAccessMode;
+  orgsWithoutGrantedMember: Array<TierAccessInventoryOrg>;
+  pending: Scalars['Int']['output'];
+  tier: Maybe<Scalars['String']['output']>;
+  totalAccounts: Scalars['Int']['output'];
+};
+
+/** OPERATOR: an account this tier would refuse, with what it holds. */
+export type TierAccessInventoryAccount = {
+  __typename?: 'TierAccessInventoryAccount';
+  activeAppTokens: Scalars['Int']['output'];
+  activeSessions: Scalars['Int']['output'];
+  appsCreated: Scalars['Int']['output'];
+  /** Holds app tokens, organizations or apps -- the accounts whose sessions a cutover should end. */
+  ckActivity: Scalars['Boolean']['output'];
+  createdAt: Maybe<Scalars['DateTime']['output']>;
+  /** Created through Crowd Altar (it carries a username). */
+  createdViaCrowdAltar: Scalars['Boolean']['output'];
+  email: Maybe<Scalars['String']['output']>;
+  isConfirmed: Scalars['Boolean']['output'];
+  /** Slugs of the organizations it belongs to. */
+  orgs: Array<Scalars['String']['output']>;
+  status: TierAccessStatus;
+  userId: Scalars['BigInt']['output'];
+  /** Set when the account was created through Crowd Altar. */
+  username: Maybe<Scalars['String']['output']>;
+};
+
+/** OPERATOR: an organization none of whose members may use this tier. */
+export type TierAccessInventoryOrg = {
+  __typename?: 'TierAccessInventoryOrg';
+  apps: Scalars['Int']['output'];
+  liveHostedGames: Scalars['Int']['output'];
+  members: Scalars['Int']['output'];
+  name: Scalars['String']['output'];
+  orgId: Scalars['BigInt']['output'];
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
+/** How the dev/test staff-only gate behaves on this tier. OFF on prod and on any tier that is not dev or test; OBSERVE logs what would be refused; ENFORCE refuses. */
+export enum TierAccessMode {
+  Enforce = 'ENFORCE',
+  Observe = 'OBSERVE',
+  Off = 'OFF'
+}
+
+/** Whether this tier is an internal (staff-only) environment, for the sign-in pages. Public. */
+export type TierAccessPolicy = {
+  __typename?: 'TierAccessPolicy';
+  /** A sentence for the sign-in pages to show when restricted. */
+  message: Maybe<Scalars['String']['output']>;
+  /** Production Studio, where outside developers create accounts. */
+  publicStudioUrl: Scalars['String']['output'];
+  /** True on dev and test: accounts need a verified company address, an operator listing or a provisioning grant. */
+  restricted: Scalars['Boolean']['output'];
+};
+
+/** OPERATOR: a credential test harnesses send on register to create accounts that may use a restricted tier. The secret is never returned after creation. */
+export type TierAccessProvisioningToken = {
+  __typename?: 'TierAccessProvisioningToken';
+  accountsCreated: Scalars['Int']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  createdBy: Maybe<Scalars['BigInt']['output']>;
+  /** Addresses it may create, as prefix*@domain. */
+  emailPatterns: Array<Scalars['String']['output']>;
+  expiresAt: Scalars['DateTime']['output'];
+  label: Scalars['String']['output'];
+  lastUsedAt: Maybe<Scalars['DateTime']['output']>;
+  maxAccounts: Scalars['Int']['output'];
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  tokenId: Scalars['BigInt']['output'];
+};
+
+/** OPERATOR: one entry on a tier access list. */
+export type TierAccessRule = {
+  __typename?: 'TierAccessRule';
+  createdAt: Scalars['DateTime']['output'];
+  createdBy: Maybe<Scalars['BigInt']['output']>;
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  kind: TierAccessRuleKind;
+  note: Maybe<Scalars['String']['output']>;
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  revokedBy: Maybe<Scalars['BigInt']['output']>;
+  ruleId: Scalars['BigInt']['output'];
+  /** The lowercased address or domain. */
+  value: Scalars['String']['output'];
+};
+
+/** An exact email address, or every address on one domain. */
+export enum TierAccessRuleKind {
+  Email = 'EMAIL',
+  EmailDomain = 'EMAIL_DOMAIN'
+}
+
+/** OPERATOR: the tier-access settings of this tier. */
+export type TierAccessSettings = {
+  __typename?: 'TierAccessSettings';
+  /** Domains whose verified addresses are always allowed. */
+  companyDomains: Array<Scalars['String']['output']>;
+  /** The effective mode. */
+  mode: TierAccessMode;
+  publicStudioUrl: Scalars['String']['output'];
+  /** The stored mode; null means none was set (a restricted tier then observes). */
+  storedMode: Maybe<TierAccessStoredMode>;
+  /** The tier this instance serves. */
+  tier: Maybe<Scalars['String']['output']>;
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
+  updatedBy: Maybe<Scalars['BigInt']['output']>;
+};
+
+/** An account on this tier: NOT_RESTRICTED (prod, or no gate), GRANTED, PENDING_VERIFICATION (a listed address that is not confirmed yet), or DENIED. */
+export enum TierAccessStatus {
+  Denied = 'DENIED',
+  Granted = 'GRANTED',
+  NotRestricted = 'NOT_RESTRICTED',
+  PendingVerification = 'PENDING_VERIFICATION'
+}
+
+/** The mode an operator can set on a restricted tier. */
+export enum TierAccessStoredMode {
+  Enforce = 'ENFORCE',
+  Observe = 'OBSERVE'
+}
+
 export type TransferGridOwnershipInput = {
   /** App that contains the grid. */
   appId: Scalars['BigInt']['input'];
@@ -9437,6 +9729,24 @@ export type UserPropertyTokenData = {
   inUse: Scalars['String']['output'];
   /** Sum of available + inUse, as a decimal string. */
   total: Scalars['String']['output'];
+};
+
+/** OPERATOR: one account's access to this tier. */
+export type UserTierAccess = {
+  __typename?: 'UserTierAccess';
+  email: Maybe<Scalars['String']['output']>;
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** When the stored grant ends. */
+  grantExpiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** The stored grant: operator or provisioning, or null. */
+  grantSource: Maybe<Scalars['String']['output']>;
+  grantedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Who granted it: operator:<user id>, token:<token id> or loadtest-mint:<label>. */
+  grantedBy: Maybe<Scalars['String']['output']>;
+  isConfirmed: Scalars['Boolean']['output'];
+  status: TierAccessStatus;
+  userId: Scalars['BigInt']['output'];
+  via: Maybe<Scalars['String']['output']>;
 };
 
 /** A Relay cursor connection over User records. Page with first/after; pass pageInfo.endCursor back as after for the next page. */

@@ -24,6 +24,11 @@
  *   CROWDY_TEST_APP_ID      app to test against (default '1')
  *   CROWDY_OPERATOR_EMAIL   operator/super-admin persona; falls back to the owner
  *   CROWDY_OPERATOR_PASSWORD  when unset -- see provisionOperator below
+ *   CROWDY_PROVISIONING_TOKEN  sent as X-CK-Provisioning-Token when registering a
+ *                           player. dev and test are staff-only: without one, a new
+ *                           crowdy-e2e-*@test.invalid account is refused there
+ *                           (TIER_ACCESS_REQUIRED). Secrets Manager
+ *                           infra-cp/<tier>/loadtest/provisioning-token-sdk-e2e
  *
  * THE DEFAULT APP ID IS A LOCAL-STACK DEFAULT AND IT IS A TRAP AGAINST A TIER.
  * No deployed tier has an app numbered 1 -- ids are Snowflake53, so they are
@@ -83,8 +88,8 @@ function managementEndpoint() {
 
 const rid = () => randomBytes(5).toString('hex');
 
-async function gql(query, variables, token) {
-  const headers = { 'content-type': 'application/json' };
+async function gql(query, variables, token, extraHeaders = {}) {
+  const headers = { 'content-type': 'application/json', ...extraHeaders };
   if (token) headers.authorization = `Bearer ${token}`;
   const res = await fetch(managementEndpoint(), {
     method: 'POST',
@@ -159,11 +164,16 @@ function requiredPassword(varName) {
 async function registerAccount(email, password) {
   // ck-api v2.35.0+ refuses a gameplay token (mintAppToken: LEGAL_ACCEPTANCE_REQUIRED) until the
   // player's consents are stored, so a throwaway test player agrees at registration.
+  // dev and test are staff-only: the provisioning token is what lets the suite create a
+  // throwaway account there. Only register reads it; other tiers ignore it.
+  const provisioning = process.env.CROWDY_PROVISIONING_TOKEN?.trim();
   const data = await gql(
     `mutation Register($i: RegisterUserInput!) {
        register(registerUserInput: $i) { token gameTokenId user { userId email } }
      }`,
     { i: { email, password, acceptLegal: true, attestAgeOfMajority: true } },
+    undefined,
+    provisioning ? { 'x-ck-provisioning-token': provisioning } : {},
   );
   const r = data.register;
   return {
