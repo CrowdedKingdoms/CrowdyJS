@@ -385,11 +385,17 @@ export class AppsAPI {
    * world grid covers): every voxel and chunk write there is refused with `FORBIDDEN`,
    * whoever makes it, within 15 seconds on every game API replica. Apps start open.
    *
+   * `replayLoggingEnabled: true` turns on replay logging: the realtime servers record
+   * every client input they accept for the app, readable with `client.inputLog` and
+   * billed as stored input logs (crowdedkingdoms.com/pricing). Apps start with it off
+   * ("No replication logging"), and recording stops shortly after it is turned off.
+   *
    * @param appId - Numeric app id.
    * @param input - {@link UpdateAppInput} fields to change.
    * @returns The updated {@link App}.
    * @throws {CrowdyGraphQLError} `FORBIDDEN`/`SCOPE_MISSING` without
-   *   `manage_apps`.
+   *   `manage_apps`, or `INPUT_LOG_FUNDS_NEEDED` when turning replay logging on for
+   *   an org whose wallet has no spendable balance (a billing-exempt org needs none).
    */
   async update(
     appId: string,

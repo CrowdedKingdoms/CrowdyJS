@@ -120,6 +120,35 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.6.0: the input log
+
+Additive. An app with replay logging on has its client inputs recorded, and `client.inputLog`
+reads them back on the app-scoped client:
+
+```ts
+const { edges, pageInfo } = await game.inputLog.sessions(appId, { first: 20 });
+let after: string | undefined;
+do {
+  const page = await game.inputLog.messages(appId, edges[0].node.gameTokenId, { first: 200, after });
+  for (const { node } of page.edges) handle(node.messageType, decodeBase64(node.body));
+  after = page.pageInfo.endCursor ?? undefined;
+  if (!page.pageInfo.hasNextPage) break;
+} while (after);
+```
+
+A player reads only the sessions and inputs they sent; a holder of `manage_apps` on the app reads
+every session. Keep paging while `hasNextPage` is true: a messages page can be short, or empty,
+when it stopped at the server's time or scan limit. Inputs are kept for the published retention,
+so an old session can still be listed after its inputs are gone. Both calls throw
+`INPUT_LOG_UNAVAILABLE` on a deployment without input logging, and `messages` throws it, retryable
+with the same cursor, when the log cannot be read right now.
+
+`App.replayLoggingEnabled` is selected on every app read and set with `apps.update(appId,
+{ replayLoggingEnabled: true })` (`manage_apps`). Turning it on is refused with
+`INPUT_LOG_FUNDS_NEEDED` unless the org's wallet has a spendable balance or the org is exempt from
+billing, because stored input logs are billed (crowdedkingdoms.com/pricing). It needs ck-api with
+the input log (`inputLogSessions`, `inputLogMessages`).
+
 ## 18.5.0: channel messages limited by distance
 
 Additive. `client.udp.sendRangedChannelMessage(input)` publishes to a channel like

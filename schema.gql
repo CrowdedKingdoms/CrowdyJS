@@ -1270,6 +1270,10 @@ type App {
   Whether players may write the app's wilderness: chunks that no grid but the app's world grid covers. True (the default) leaves those writes to the ordinary voxel permission; false refuses every voxel and chunk write there (updateVoxel, sendVoxelUpdate, updateChunk, ck-exec's world.set_voxels, and a client's voxel updates sent straight to the realtime servers), whoever makes it. Set with updateApp (manage_apps).
   """
   wildernessWritesOpen: Boolean!
+  """
+  Whether replay logging is on: the realtime servers record every client input they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a funded org wallet or a billing-exempt org.
+  """
+  replayLoggingEnabled: Boolean!
   """Timestamp when the app was created."""
   createdAt: DateTime!
   """Timestamp when the app was last updated."""
@@ -4276,6 +4280,10 @@ type TierAccessPolicy {
   True on dev and test: accounts need a verified company address, an operator listing or a provisioning grant.
   """
   restricted: Boolean!
+  """
+  True when refusals are enforced; false while a restricted tier only logs them (observe), and off the restricted tiers. Read by the control plane status check.
+  """
+  enforced: Boolean!
   """A sentence for the sign-in pages to show when restricted."""
   message: String
   """Production Studio, where outside developers create accounts."""
@@ -4578,6 +4586,14 @@ type AppUsageSummary {
   Legacy: billed compute units of the removed automation engine over the window (string counter). Always 0 for usage since the legacy engines were removed; kept for the API shape until the migration.
   """
   automationComputeUnits: String!
+  """
+  Stored input logs over the window, in byte-hours (string counter): the sum of the hourly samples, which is the quantity input_log_storage_byte_hours bills. Each recorded byte (InputLogMessage.sizeBytes) is held for the input log retention, one byte-hour per hour. 0 when replay logging was off.
+  """
+  inputLogByteHours: String!
+  """
+  Recorded input-log bytes the app holds now (string counter): the latest hourly sample, the bytes recorded within the trailing retention. 0 when replay logging has never been on.
+  """
+  inputLogRetainedBytes: String!
 }
 
 """
@@ -4614,6 +4630,14 @@ type AppUsageProjection {
   True when projected egress exceeds the free allowance, or null when insufficient data.
   """
   onTrackToExceed: Boolean
+  """
+  Stored input logs this calendar month so far, in byte-hours (input_log_storage_byte_hours, which has no free allowance). 0 when replay logging was off all month.
+  """
+  inputLogByteHours: String!
+  """
+  Projected end-of-month stored input logs in byte-hours (linear extrapolation), or null when insufficient data.
+  """
+  projectedInputLogByteHours: String
 }
 
 """Per-app projection row within an org rollup."""
@@ -5061,6 +5085,126 @@ type CrowdyStudioGitHubLayout {
   A crowdy.json exists at the repository root. False means the layout was inferred from the tree.
   """
   fromFile: Boolean!
+}
+
+"""
+One recorded client session of an app with replay logging on: a game token's inputs, from the first one the realtime servers accepted to the last. Kept for the input log's published retention.
+"""
+type InputLogSession {
+  """The app the session belongs to."""
+  appId: BigInt!
+  """
+  The game token the session ran on; pass it to inputLogMessages to read the inputs.
+  """
+  gameTokenId: BigInt!
+  """The user whose client sent the inputs."""
+  userId: BigInt!
+  """The datacenter that recorded the session, when known."""
+  datacenter: String
+  """When the first recorded input arrived."""
+  startedAt: DateTime!
+  """When the latest recorded input or marker arrived."""
+  lastSeenAt: DateTime!
+  """
+  When the session ended, if its end was recorded; null while it may still be running.
+  """
+  endedAt: DateTime
+  """
+  How the session ended, as the client saw it: expired, revoked, reconnect or released. Null while it may still be running.
+  """
+  endReason: String
+  """Inputs recorded in the session."""
+  messageCount: BigInt!
+  """
+  Recorded bytes (the sum of every message sizeBytes): the quantity stored input logs are billed on.
+  """
+  byteCount: BigInt!
+  """The client message types the session contains, ascending."""
+  messageTypes: [Int!]!
+}
+
+"""An edge in a InputLogSession connection."""
+type InputLogSessionEdge {
+  """Opaque cursor for this edge."""
+  cursor: String!
+  """The node at the end of this edge."""
+  node: InputLogSession!
+}
+
+"""A page of recorded sessions."""
+type InputLogSessionConnection {
+  """Edges on this page."""
+  edges: [InputLogSessionEdge!]!
+  """Pagination metadata."""
+  pageInfo: ConnectionPageInfo!
+  """
+  Total matching records across all pages, when known (null for sources that do not compute a total).
+  """
+  totalCount: Int
+}
+
+"""
+One recorded client input: the message exactly as the client sent it, without its trailing authentication bytes.
+"""
+type InputLogMessage {
+  """When the realtime server received the message."""
+  receivedAt: DateTime!
+  """The receive time in Unix microseconds (receivedAt at full precision)."""
+  receivedAtMicros: BigInt!
+  """The user whose client sent the message."""
+  userId: BigInt!
+  """The game token the message was sent on."""
+  gameTokenId: BigInt!
+  """The client message type (its first byte)."""
+  messageType: Int!
+  """The message's sequence byte, as the client sent it."""
+  seq: Int!
+  """True when the message arrived inside a client message bundle."""
+  fromBundle: Boolean!
+  """False when the message type is one accepted without a signature."""
+  signed: Boolean!
+  """
+  Recorded size in bytes, record header included: what stored input logs are billed on.
+  """
+  sizeBytes: Int!
+  """
+  The message bytes, base64: the client message from its type byte up to, not including, its authentication tail.
+  """
+  body: String!
+  """Chunk x of a spatial message's target chunk; null for other types."""
+  chunkX: BigInt
+  """Chunk y of a spatial message's target chunk; null for other types."""
+  chunkY: BigInt
+  """Chunk z of a spatial message's target chunk; null for other types."""
+  chunkZ: BigInt
+  """
+  The 32-character actor uuid of a spatial message; null for other types.
+  """
+  actorUuid: String
+  """The channel of a channel message; null for other types."""
+  channelId: BigInt
+}
+
+"""An edge in a InputLogMessage connection."""
+type InputLogMessageEdge {
+  """Opaque cursor for this edge."""
+  cursor: String!
+  """The node at the end of this edge."""
+  node: InputLogMessage!
+}
+
+"""
+A page of recorded inputs, oldest first. A page can hold fewer than `first` inputs when the read stopped at its time or scan limit; keep paging while hasNextPage is true.
+"""
+type InputLogMessageConnection {
+  """Edges on this page."""
+  edges: [InputLogMessageEdge!]!
+  """Pagination metadata."""
+  pageInfo: ConnectionPageInfo!
+  """
+  Total matching records across all pages, when known (null for sources that do not compute a total).
+  """
+  totalCount: Int
 }
 
 """
@@ -6249,6 +6393,38 @@ ISO-8601 DateTime or relative duration (e.g. 1d, 7d, 1h) interpreted as a lookba
 scalar DateTime
 
 type Query {
+  """
+  Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. With 'manage_apps' on the app you see every session and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment.
+  """
+  inputLogSessions(
+    """The app whose recorded sessions to list."""
+    appId: BigInt!
+    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    first: Int
+    """
+    Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
+    """
+    after: String
+    """Optional filters; omit to list every session you may see."""
+    filter: InputLogSessionFilter
+  ): InputLogSessionConnection!
+  """
+  The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`; a page can hold fewer than `first` inputs when it stopped at its time or scan limit, so keep paging while hasNextPage is true. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, and also, retryable with the same cursor, when the log cannot be read right now.
+  """
+  inputLogMessages(
+    """The app the session belongs to."""
+    appId: BigInt!
+    """The session to read: InputLogSession.gameTokenId."""
+    gameTokenId: BigInt!
+    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    first: Int
+    """
+    Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
+    """
+    after: String
+    """Optional filters; omit to read every input of the session."""
+    filter: InputLogMessageFilter
+  ): InputLogMessageConnection!
   """
   Returns the authenticated user resolved from the token (sent as `Authorization: Bearer <token>`), or null if missing/invalid. Readable with either an identity session token or an app-scoped gameplay token.
   """
@@ -7742,6 +7918,30 @@ type Query {
   ): GameClientBootstrap!
 }
 
+"""Narrows inputLogSessions. All fields are optional and AND-combined."""
+input InputLogSessionFilter {
+  """
+  Only this user's sessions. Without manage_apps on the app, only your own user id is accepted (and is the default).
+  """
+  userId: BigInt
+  """Only sessions still active at or after this instant."""
+  from: DateTime
+  """Only sessions started at or before this instant."""
+  to: DateTime
+  """Only sessions containing this client message type (0-255)."""
+  messageType: Int
+}
+
+"""Narrows inputLogMessages. All fields are optional and AND-combined."""
+input InputLogMessageFilter {
+  """Only inputs received at or after this instant."""
+  from: DateTime
+  """Only inputs received at or before this instant."""
+  to: DateTime
+  """Only these client message types (each 0-255, at most 64 of them)."""
+  messageTypes: [Int!]
+}
+
 input ActorFilterInput {
   """Restrict to actors in this app. BigInt sent as a decimal string."""
   appId: BigInt
@@ -8465,7 +8665,7 @@ type Mutation {
     input: CreateAppInput!
   ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
-  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen); only fields present in the input are changed. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
+  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
   """
   updateApp(
     """Numeric id of the app to update."""
@@ -10286,6 +10486,10 @@ input UpdateAppInput {
   Open (true) or close (false) the app's wilderness to voxel and chunk writes: chunks that no grid but the app's world grid covers. Closing refuses every write there, whoever makes it; each game API replica, and each realtime server for a client's direct voxel updates, acts on the change within about 15 seconds. Omit to leave unchanged.
   """
   wildernessWritesOpen: Boolean
+  """
+  Turn replay logging on (true) or off (false): record every client input the realtime servers accept for this app, kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt; turning it off always succeeds. Recording starts and stops within about 15 seconds. Omit to leave unchanged.
+  """
+  replayLoggingEnabled: Boolean
 }
 
 input AdmitAppCodeInput {
@@ -10842,7 +11046,7 @@ input CreateTierAccessProvisioningTokenInput {
   """What uses it, e.g. identity-probe or bwf-loadtest."""
   label: String!
   """
-  prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, example.com) or a company domain; the prefix is at least three characters.
+  prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, .localhost, .local, example.com) or a company domain; the prefix is at least three characters.
   """
   emailPatterns: [String!]!
   """The most accounts it may ever create."""

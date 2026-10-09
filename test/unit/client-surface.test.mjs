@@ -44,10 +44,11 @@ test('client exposes the full management + game sub-client surface', async () =>
   // Existing client-facing sub-clients still present.
   for (const k of [
     'auth', 'users', 'apps', 'platform', 'chunks', 'voxels', 'actors',
-    'teleport', 'state', 'serverStatus', 'channels', 'teams', 'udp', 'exec',
+    'teleport', 'state', 'serverStatus', 'channels', 'teams', 'udp', 'exec', 'inputLog',
   ]) {
     assert.ok(client[k], `client.${k} should exist`);
   }
+  assertMethods(client.inputLog, 'inputLog', ['sessions', 'messages']);
 
   // The legacy engines' domains went in 18.0.0: ck-exec (`client.exec`) replaced the game
   // model, its automations, Studio compute and player compute (its CLIENT modules too, by a
