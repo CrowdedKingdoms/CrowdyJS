@@ -1,6 +1,6 @@
 {
   "name": "@crowdedkingdoms/crowdyjs",
-  "version": "18.4.0",
+  "version": "18.4.1",
   "description": "Browser-first Crowded Kingdoms SDK with GraphQL, realtime, and local Rust authoring support",
   "type": "module",
   "main": "dist/index.js",
@@ -56,7 +56,7 @@
     "schema:sync:local": "node scripts/sync-schema.mjs --local",
     "schema:sync:paths": "node scripts/sync-schema.mjs",
     "codegen": "graphql-codegen --config codegen.ts",
-    "check:schema": "npm run codegen && git diff --exit-code schema.gql src/generated/graphql.ts",
+    "check:schema": "npm run codegen && git diff --exit-code schema.gql src/generated/graphql.ts src/generated/graphql-schema.ts",
     "codegen:watch": "graphql-codegen --config codegen.ts --watch",
     "authoring-index:generate": "node scripts/generate-browser-authoring-index.mjs --write",
     "authoring-index:drift": "node scripts/sync-browser-authoring-index.mjs",
