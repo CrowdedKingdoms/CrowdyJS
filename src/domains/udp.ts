@@ -26,6 +26,8 @@ import {
   type SendSingleActorMessageMutationVariables,
   SendChannelMessageDocument,
   type SendChannelMessageMutationVariables,
+  SendRangedChannelMessageDocument,
+  type SendRangedChannelMessageMutationVariables,
 } from '../generated/graphql.js';
 import type { RealtimeMetrics } from '../metrics.js';
 import { payloadBytesOf } from '../metrics.js';
@@ -36,6 +38,7 @@ import {
   serializeAudioPacket,
   serializeChannelMessage,
   serializeClientEvent,
+  serializeRangedChannelMessage,
   serializeSingleActorMessage,
   serializeTextPacket,
   serializeVideoPacket,
@@ -797,6 +800,49 @@ export class UdpAPI {
     const data = await this.gql.request(SendChannelMessageDocument, { input });
     this.record('channelMessage', input);
     return data.sendChannelMessage;
+  }
+
+  /**
+   * Publish a message to a channel that only members near an origin chunk
+   * receive (needs ck-api with `sendRangedChannelMessage` and Buddy v0.35.0).
+   * A member receives it, through the same `channelMessage` handler as
+   * {@link sendChannelMessage}, when one of its live actors is in `appId`
+   * within `maxDistance` chunks of `chunk`, measured as the straight-line
+   * distance between chunk coordinates, boundary included. A member with no
+   * live actor does not receive it. Same send right as `sendChannelMessage`;
+   * the sender receives no echo.
+   *
+   * @param input - {@link RangedChannelMessageInput}:
+   *   - `channelId` — the channel id (`groups.group_id`) as a `BigInt` decimal
+   *     string.
+   *   - `uuid` — the sender's own actor id: exactly 32 ASCII characters.
+   *   - `payload` — message body, base64-encoded; opaque to the server, max
+   *     1024 bytes.
+   *   - `appId` — the origin's app; must be this token's app.
+   *   - `chunk` — the origin chunk `{ x, y, z }` (`BigInt` decimal strings),
+   *     usually the sender's own chunk.
+   *   - `maxDistance` — integer chunks, 0 (the origin chunk only) to
+   *     2147483647. Not the 0-8 Chebyshev ring count spatial sends take.
+   *   - `sequenceNumber` — optional uint8 (0-255) correlation id.
+   * @returns `true` when accepted for sending — **not** confirmation of
+   *   delivery. A refusal (no send right: `UNAUTHORIZED`; another app:
+   *   `INVALID_APP_ID`) arrives as a `genericError` notification.
+   * @throws {CrowdyGraphQLError} on auth/validation failures.
+   */
+  async sendRangedChannelMessage(
+    input: SendRangedChannelMessageMutationVariables['input'],
+  ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeRangedChannelMessage(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('rangedChannelMessage', input);
+      return viaRelay;
+    }
+    const data = await this.gql.request(SendRangedChannelMessageDocument, { input });
+    this.record('rangedChannelMessage', input);
+    return data.sendRangedChannelMessage;
   }
 
   /**

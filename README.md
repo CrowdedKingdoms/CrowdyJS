@@ -249,7 +249,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
 | `client.crowdyStudioGitHub` | Optional GitHub repository for a Crowdy Studio project: status, `bind` (push the project in, or take the repository), `unbind`, `refresh`, `layout`, `tree`, `getFile`, commit-guarded `putFile` / `deleteFile`. While bound the repository is the working tree and every Studio save commits; the project's `files` are the server's mirror at `github.sha`. Never required. |
-| `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendVideoPacket` / `sendVideoFrame`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`). |
+| `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendVideoPacket` / `sendVideoFrame`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`, `sendRangedChannelMessage`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token (see [Token refresh](#token-refresh-during-gameplay)). |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`, `actor.sendToActor`). |
@@ -444,7 +444,10 @@ The plain `sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`,
 result immediately. The `AndWait` variants allocate a `sequenceNumber` when
 one is missing and wait for either a matching notification or
 `GenericErrorResponse`. `sendChannelMessage` broadcasts an opaque payload on a
-channel.
+channel. `sendRangedChannelMessage` publishes on a channel too, but only members
+with a live actor within `maxDistance` chunks (straight-line distance between
+chunk coordinates) of `chunk` receive it; they get the same `channelMessage`
+notification.
 
 ### Bundled sends on the binary relay
 

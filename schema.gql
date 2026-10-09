@@ -2058,6 +2058,20 @@ type PaymentMethodSetup {
 }
 
 """
+One band of a graduated price. Each unit of the period's running total is priced at the band its position falls in, so the price of the next unit never rises as the total grows. Bands are edges on the whole total and count from zero: the free allowance fills the first band first.
+"""
+type RateCardBandType {
+  """
+  Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. A band covers units from the previous band's edge up to this one. Null on the last band, which has no upper edge.
+  """
+  upToUnits: BigInt
+  """
+  Cents charged per the row's unitQuantity raw units for the units inside this band. Fractional values are permitted.
+  """
+  priceCents: Float!
+}
+
+"""
 One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged.
 """
 type RateCardEntryType {
@@ -2099,6 +2113,10 @@ type RateCardEntryType {
   freePeriod: AllowancePeriod
   """Operator note on the seed row; null when unset."""
   description: String
+  """
+  The graduated price, band by band, or null when the dimension has one flat price. When present the bands price the period total and priceCents is the first band's price. aggregate_data_volume (egress) is the dimension priced this way.
+  """
+  priceBands: [RateCardBandType!]
 }
 
 """
@@ -2184,6 +2202,10 @@ type PublicRateCardEntryType {
   The period freeUnits resets on. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving.
   """
   freePeriod: AllowancePeriod
+  """
+  The graduated price, band by band, or null when the dimension has one flat price. Egress (aggregate_data_volume) is priced this way per app per calendar month: each GB is charged at the band the app's month-to-date total has reached, and priceCents is the first band's price.
+  """
+  priceBands: [RateCardBandType!]
 }
 
 """
@@ -2193,11 +2215,11 @@ type RateChangeType {
   scope: RateScope!
   metric: String!
   """
-  One of "priceCents", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth".
+  One of "priceCents", "priceBands", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth".
   """
   field: String!
   """
-  The value before this call, as a decimal string. "none" when there was no allowance row.
+  The value before this call, as a decimal string; for priceBands the schedule as JSON. "none" when there was no allowance row, or no bands.
   """
   previous: String!
   """The value after this call, as a decimal string."""
@@ -8391,7 +8413,7 @@ type Mutation {
   """
   runSharedUsageBillingTick: Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed.
+  OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed.
   """
   setBillingRate(
     """Which dimension to reprice, the new price and/or allowance, and why."""
@@ -9519,6 +9541,15 @@ type Mutation {
     """
     input: ChannelMessageInput!
   ): Boolean!
+  """
+  Publish a message to a channel that only reaches members near an origin chunk: a member receives it, as an ordinary ChannelMessageNotification on udpNotifications, when one of its live actors is in the same app within maxDistance chunks of input.chunk (straight-line distance between chunk coordinates, boundary included). A member with no live actor does not receive it. Requires a bearer game token and the channel send_messages permission, as for sendChannelMessage; the origin app must be the token’s app. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications (UNAUTHORIZED without the send right, INVALID_APP_ID for another app), correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
+  """
+  sendRangedChannelMessage(
+    """
+    The channel message to publish: channelId (groups.group_id), the sender’s 32-byte actor uuid, base64 payload (max 1024 bytes), the origin appId and chunk, maxDistance in chunks, and optional sequenceNumber. See RangedChannelMessageInput.
+    """
+    input: RangedChannelMessageInput!
+  ): Boolean!
 }
 
 input UpdateGamertagInput {
@@ -10170,9 +10201,28 @@ input SetRateCardInput {
   """
   freePerMonth: BigInt
   """
+  A whole graduated schedule, replacing the one the dimension holds: 1 to 10 bands, ascending edges, the last band open, no band dearer than the one below. Band 1's price becomes priceCents (supply priceCents only if it is the same). Accepted for SHARED aggregate_data_volume only. Like every price, it applies from a dimension's next period where a period has already been charged.
+  """
+  priceBands: [RateCardBandInput!]
+  """
+  true removes the dimension's bands so it is priced flat at priceCents (the former first band's price unless priceCents is also given). Not combinable with priceBands.
+  """
+  clearPriceBands: Boolean
+  """
   Why this price is changing. Required: a rate change with no stated reason is not auditable after the fact. Recorded in the operator log with the before and after values.
   """
   reason: String!
+}
+
+input RateCardBandInput {
+  """
+  Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. Every band but the last needs one, strictly above the band before; the last band must leave it null.
+  """
+  upToUnits: BigInt
+  """
+  Cents per the row's unitQuantity raw units inside this band: >= 0, at most six decimals, and never more than the band below it.
+  """
+  priceCents: Float!
 }
 
 """
@@ -11628,6 +11678,38 @@ input ChannelMessageInput {
   The message payload, base64-encoded. Opaque to the server; decode per your application protocol. Max 1024 bytes.
   """
   payload: String!
+  """
+  Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription.
+  """
+  sequenceNumber: Int
+}
+
+"""
+Input for publishing a channel message that only reaches members near an origin chunk. A member receives it when one of its live actors is in the same app within maxDistance chunks of the origin, measured as the straight-line (Euclidean) distance between chunk coordinates, boundary included; a member with no live actor does not receive it. Members receive an ordinary ChannelMessageNotification. The sender must have the channel send_messages permission, exactly as for sendChannelMessage.
+"""
+input RangedChannelMessageInput {
+  """The channel id (groups.group_id) to publish to."""
+  channelId: BigInt!
+  """
+  The sender's actor UUID (your own actor's UUID). Must be exactly 32 bytes when encoded as UTF-8.
+  """
+  uuid: String!
+  """
+  The message payload, base64-encoded. Opaque to the server; decode per your application protocol. Max 1024 bytes.
+  """
+  payload: String!
+  """
+  The app the origin chunk is in. Must be the app this token is scoped to (the game server answers INVALID_APP_ID otherwise).
+  """
+  appId: BigInt!
+  """
+  The origin chunk distance is measured from, usually the chunk of the sending actor. A chunk is a 16x16x16 voxel cube.
+  """
+  chunk: ChunkCoordinatesInput!
+  """
+  Largest straight-line distance from the origin chunk, in chunks, at which a member still receives the message: 0 (the origin chunk only) to 2147483647. Not capped at 8 and not the Chebyshev ring count spatial sends use.
+  """
+  maxDistance: Int!
   """
   Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription.
   """

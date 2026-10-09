@@ -90,6 +90,9 @@ export const WireMessageType = {
   GENERIC_ERROR_MESSAGE: 3,
   CHANNEL_MESSAGE_REQUEST: 17,
   CHANNEL_MESSAGE_NOTIFICATION: 18,
+  // Buddy v0.35.0: a channel publish only members near an origin chunk receive
+  // (they get an ordinary CHANNEL_MESSAGE_NOTIFICATION).
+  CHANNEL_MESSAGE_RANGED_REQUEST: 32,
   ACTOR_UPDATE_REQUEST_2: 128,
   ACTOR_UPDATE_RESPONSE_2: 129,
   ACTOR_UPDATE_NOTIFICATION_2: 130,
@@ -520,6 +523,84 @@ export async function serializeChannelMessage(
   off += 8;
   prefix.set(uuidBytes, off);
   off += UUID_SIZE;
+  view.setUint16(off, payload.length, true);
+  off += 2;
+  prefix.set(payload, off);
+  off += payload.length;
+  view.setUint8(off, 1); // containsAuth
+
+  const hmac = await signWithToken(ctx, prefix);
+
+  const out = new Uint8Array(prefixLen + HMAC_SIZE + 8 + 1);
+  out.set(prefix, 0);
+  out.set(hmac, prefixLen);
+  const tail = new DataView(out.buffer);
+  tail.setBigUint64(prefixLen + HMAC_SIZE, ctx.gameTokenId, true);
+  tail.setUint8(prefixLen + HMAC_SIZE + 8, (input.sequenceNumber ?? 0) & 0xff);
+  return out;
+}
+
+/** Largest `maxDistance` a ranged channel message may carry (the GraphQL `Int` ceiling). */
+export const CHANNEL_RANGED_MAX_DISTANCE = 0x7fffffff;
+
+/**
+ * CHANNEL_MESSAGE_RANGED_REQUEST (Buddy v0.35.0):
+ * `[1B type=32][8B channelId][32B uuid][8B appId][8B chunkX][8B chunkY][8B chunkZ]
+ *  [4B maxDistance u32][2B payloadLen][payload][1B containsAuth][32B HMAC]
+ *  [8B gameTokenId][1B seq]` — HMAC over everything before it, as for 17.
+ */
+export async function serializeRangedChannelMessage(
+  ctx: RelaySignContext,
+  input: {
+    channelId: string;
+    uuid: string;
+    payload?: string | null;
+    appId: string;
+    chunk: { x: string; y: string; z: string };
+    maxDistance: number;
+    sequenceNumber?: number | null;
+  },
+): Promise<Uint8Array> {
+  const payload = input.payload ? decodeBase64(input.payload) : new Uint8Array(0);
+  if (payload.length > 1024) {
+    throw new Error(`Channel payload exceeds 1024 bytes: ${payload.length}`);
+  }
+  if (
+    !Number.isInteger(input.maxDistance) ||
+    input.maxDistance < 0 ||
+    input.maxDistance > CHANNEL_RANGED_MAX_DISTANCE
+  ) {
+    throw new Error(
+      `maxDistance must be an integer from 0 to ${CHANNEL_RANGED_MAX_DISTANCE}: ${input.maxDistance}`,
+    );
+  }
+  const uuidBytes = textEncoder.encode(input.uuid);
+  if (uuidBytes.length !== UUID_SIZE) {
+    throw new Error(
+      `Invalid uuid length: must be exactly ${UUID_SIZE} bytes when UTF-8 encoded. Received ${uuidBytes.length} bytes.`,
+    );
+  }
+
+  const prefixLen = 1 + 8 + UUID_SIZE + 32 + 4 + 2 + payload.length + 1;
+  const prefix = new Uint8Array(prefixLen);
+  const view = new DataView(prefix.buffer);
+  let off = 0;
+  view.setUint8(off, WireMessageType.CHANNEL_MESSAGE_RANGED_REQUEST);
+  off += 1;
+  view.setBigUint64(off, BigInt(input.channelId), true);
+  off += 8;
+  prefix.set(uuidBytes, off);
+  off += UUID_SIZE;
+  view.setBigInt64(off, BigInt(input.appId), true);
+  off += 8;
+  view.setBigInt64(off, BigInt(input.chunk.x), true);
+  off += 8;
+  view.setBigInt64(off, BigInt(input.chunk.y), true);
+  off += 8;
+  view.setBigInt64(off, BigInt(input.chunk.z), true);
+  off += 8;
+  view.setUint32(off, input.maxDistance, true);
+  off += 4;
   view.setUint16(off, payload.length, true);
   off += 2;
   prefix.set(payload, off);

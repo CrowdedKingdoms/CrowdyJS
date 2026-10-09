@@ -40,6 +40,7 @@ const SERIALIZERS = {
   clientEvent: wire.serializeClientEvent,
   singleActorMessage: wire.serializeSingleActorMessage,
   channelMessage: wire.serializeChannelMessage,
+  rangedChannelMessage: wire.serializeRangedChannelMessage,
 };
 
 function toHex(bytes) {
@@ -54,6 +55,53 @@ for (const fixture of fixtures.uplink) {
     assert.equal(toHex(bytes), fixture.bytesHex);
   });
 }
+
+// The vector Buddy's integration builder, game-api's spec and CrowdyCPP/CrowdyPy pin too.
+test('serializeRangedChannelMessage matches the cross-implementation golden bytes', async () => {
+  const golden = await wire.createSignContext(555n, 'A'.repeat(64));
+  const bytes = await wire.serializeRangedChannelMessage(golden, {
+    channelId: '100',
+    uuid: 'u'.repeat(32),
+    payload: Buffer.from('hi').toString('base64'),
+    appId: '2',
+    chunk: { x: '-3', y: '4', z: '5' },
+    maxDistance: 12,
+    sequenceNumber: 9,
+  });
+  assert.equal(
+    toHex(bytes),
+    '20640000000000000075757575757575757575757575757575757575757575757575757575757575' +
+      '750200000000000000fdffffffffffffff040000000000000005000000000000000c000000020068' +
+      '69017f1c386fd1ec421f0a72745fae881f8adbcb17bcd8a0bb3e446565651d18533d2b0200000000' +
+      '000009',
+  );
+});
+
+test('serializeRangedChannelMessage refuses what Buddy would refuse or misread', async () => {
+  const base = {
+    channelId: '1',
+    uuid: 'u'.repeat(32),
+    payload: '',
+    appId: '42',
+    chunk: { x: '0', y: '0', z: '0' },
+    maxDistance: 5,
+  };
+  for (const maxDistance of [-1, wire.CHANNEL_RANGED_MAX_DISTANCE + 1, 1.5]) {
+    await assert.rejects(wire.serializeRangedChannelMessage(ctx, { ...base, maxDistance }));
+  }
+  await assert.rejects(
+    wire.serializeRangedChannelMessage(ctx, {
+      ...base,
+      payload: Buffer.alloc(1025).toString('base64'),
+    }),
+  );
+  await assert.rejects(wire.serializeRangedChannelMessage(ctx, { ...base, uuid: 'short' }));
+  const edge = await wire.serializeRangedChannelMessage(ctx, {
+    ...base,
+    maxDistance: wire.CHANNEL_RANGED_MAX_DISTANCE,
+  });
+  assert.equal(Buffer.from(edge).readUInt32LE(73), 0x7fffffff);
+});
 
 for (const fixture of fixtures.downlink) {
   test(`downlink ${fixture.kind}: parseRelayFrame matches server parse`, () => {

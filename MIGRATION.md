@@ -120,6 +120,31 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.5.0: channel messages limited by distance
+
+Additive. `client.udp.sendRangedChannelMessage(input)` publishes to a channel like
+`sendChannelMessage`, but only members near an origin chunk receive it: a member gets it when one of
+its live actors is in `input.appId` within `input.maxDistance` chunks of `input.chunk`, measured as
+the straight-line distance between chunk coordinates, boundary included. `maxDistance` is an integer
+from 0 (the origin chunk only) to 2147483647; it is not the 0-8 Chebyshev ring count spatial sends
+take. A member with no live actor does not receive it.
+
+```ts
+await client.udp.sendRangedChannelMessage({
+  channelId,
+  uuid: self.uuid,
+  payload: encodeBase64(bytes),
+  appId,
+  chunk: { x: '10', y: '0', z: '-4' },
+  maxDistance: 6,
+});
+```
+
+Members receive the ordinary `channelMessage` notification, so receivers need no change and an older
+SDK receives these messages too. The send right is the channel's `send_messages`, as for
+`sendChannelMessage`; a refusal arrives as a `genericError` (`UNAUTHORIZED`, or `INVALID_APP_ID` when
+`appId` is not the token's app). It needs ck-api with `sendRangedChannelMessage` and Buddy v0.35.0.
+
 ## 18.4.1: the generated types come from graphql-codegen 7
 
 No call changes, and the GraphQL documents the SDK sends are byte-for-byte the same. Thirteen types

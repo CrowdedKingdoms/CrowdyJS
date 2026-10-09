@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.4.1';
+export const VERSION = '18.5.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -107,6 +107,8 @@ export {
   serializeVideoPacket,
   serializeChannelMessage,
   serializeClientEvent,
+  serializeRangedChannelMessage,
+  CHANNEL_RANGED_MAX_DISTANCE,
   serializeSingleActorMessage,
   serializeTextPacket,
   serializeVoxelUpdate,
