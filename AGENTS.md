@@ -30,6 +30,11 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.8.0: `ExecBuild.sdkVersion` (the Minecraft mod's updated asks, 2026-10-10).** The
+`ExecBuildFields` fragment selects `sdkVersion`, the SDK version the platform compiled a build
+against; the `ExecBuild` type and the mapper take it from the fragment. Needs ck-api v2.40.2
+(older APIs refuse the selection in every build call).
+
 **18.7.0: voice helpers, channel audio, opcode 140, wide voxels, self-echo, pause and access
 refusals (the Minecraft mod's platform asks, 2026-10-10).** Needs the ck-api release after v2.39.0
 (the token mutations select `runtimeGate`) and Buddy v0.37.0 for channel audio and the voxel echo.

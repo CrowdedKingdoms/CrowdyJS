@@ -5936,9 +5936,13 @@ type ExecBuild {
   """
   kind: String!
   """
-  The compiler’s output once the build finishes, at most 64 KB (the end is kept).
+  The compiler’s output once the build finishes, at most 64 KB (the end is kept). Its first line names the toolchain the build ran with.
   """
   log: String
+  """
+  The SDK version the build compiled against, from the toolchain of the API instance that ran it: `ckx-sdk` for a ck-exec build, `crowdy-client-sdk` for a CLIENT half. A crate’s own version requirement for the SDK is not what decides this. Null until the build starts, and for builds from before it was recorded.
+  """
+  sdkVersion: String
   """When the build was requested."""
   createdAt: DateTime!
   """When it started compiling."""
