@@ -378,6 +378,104 @@ export function playerFaultOf(value: unknown): CrowdyPlayerFault | null {
   return null;
 }
 
+/** `extensions.code` for "an actor with this uuid already exists" (HTTP 409). */
+export const ACTOR_EXISTS_CODE = 'ACTOR_EXISTS';
+/** `extensions.code` for "this player's access to the app was revoked" (HTTP 403). */
+export const ACCESS_REVOKED_CODE = 'ACCESS_REVOKED';
+/** `extensions.code` for "this player is suspended from the app until a time" (HTTP 403). */
+export const ACCESS_SUSPENDED_CODE = 'ACCESS_SUSPENDED';
+/** `extensions.code` for "this player holds no access to the app" (HTTP 403). */
+export const ACCESS_NOT_GRANTED_CODE = 'ACCESS_NOT_GRANTED';
+/** `extensions.code` for "the app is paused" (HTTP 403); see {@link appPausedOf}. */
+export const APP_PAUSED_CODE = 'APP_PAUSED';
+
+/**
+ * Why an app is paused, as `extensions.reason` on `APP_PAUSED` and
+ * `AppRuntimeGate.reason` carry it. Open union: the server may add one.
+ */
+export type AppPauseReason =
+  | 'insufficient_funds'
+  | 'spend_cap'
+  | 'subscription_lapsed'
+  | (string & {});
+
+/** The first error entry carrying `code`, from an error or a raw payload. */
+function errorWithCode(
+  value: unknown,
+  code: string,
+): CrowdyGraphQLErrorPayload | null {
+  if (!value || typeof value !== 'object') return null;
+  const entries: readonly CrowdyGraphQLErrorPayload[] =
+    value instanceof CrowdyGraphQLError
+      ? value.graphqlErrors
+      : [value as CrowdyGraphQLErrorPayload];
+  return entries.find((entry) => entry?.extensions?.code === code) ?? null;
+}
+
+/**
+ * An `ACTOR_EXISTS` refusal (creating an actor whose uuid is taken), or `null`.
+ * `ownedByCaller` is `extensions.ownedByCaller`: `true` means the actor is
+ * already yours (a retried create; read it rather than failing), `false` that
+ * another player holds the uuid, `null` when the server did not say.
+ */
+export function actorExistsOf(value: unknown): { ownedByCaller: boolean | null } | null {
+  const entry = errorWithCode(value, ACTOR_EXISTS_CODE);
+  if (!entry) return null;
+  const owned = entry.extensions?.ownedByCaller;
+  return { ownedByCaller: typeof owned === 'boolean' ? owned : null };
+}
+
+/** A refusal of the player's own access to an app; see {@link accessRefusalOf}. */
+export interface CrowdyAccessRefusal {
+  code: 'ACCESS_REVOKED' | 'ACCESS_SUSPENDED' | 'ACCESS_NOT_GRANTED';
+  /** `extensions.suspendedUntil` (ISO-8601) on `ACCESS_SUSPENDED`; access returns by itself then. */
+  suspendedUntil?: string;
+}
+
+/**
+ * An access refusal (`ACCESS_REVOKED`, `ACCESS_SUSPENDED` or `ACCESS_NOT_GRANTED`,
+ * all HTTP 403) from a thrown error or a raw error payload, or `null`. None of
+ * them is fixed by retrying; tell the player.
+ */
+export function accessRefusalOf(value: unknown): CrowdyAccessRefusal | null {
+  for (const code of [
+    ACCESS_SUSPENDED_CODE,
+    ACCESS_REVOKED_CODE,
+    ACCESS_NOT_GRANTED_CODE,
+  ] as const) {
+    const entry = errorWithCode(value, code);
+    if (!entry) continue;
+    const refusal: CrowdyAccessRefusal = { code };
+    const until = entry.extensions?.suspendedUntil;
+    if (typeof until === 'string' && until.length > 0) refusal.suspendedUntil = until;
+    return refusal;
+  }
+  return null;
+}
+
+/**
+ * An `APP_PAUSED` refusal (HTTP 403: the app's runtime gate is not ACTIVE), or
+ * `null`. `reason` is `extensions.reason`. Show the player that the world is
+ * paused instead of retrying in a loop.
+ */
+export function appPausedOf(value: unknown): { reason: AppPauseReason | null } | null {
+  const entry = errorWithCode(value, APP_PAUSED_CODE);
+  if (!entry) return null;
+  const reason = entry.extensions?.reason;
+  return { reason: typeof reason === 'string' && reason.length > 0 ? reason : null };
+}
+
+/**
+ * Whether an app's runtime gate (`AppTokenResponse.runtimeGate`,
+ * `GameClientBootstrap.runtimeGate`) says the app is paused: any status but
+ * `ACTIVE`. A missing gate (an older server) reads as not paused.
+ */
+export function isAppPaused(
+  gate: { status: string } | null | undefined,
+): boolean {
+  return gate != null && gate.status !== 'ACTIVE';
+}
+
 /**
  * A network-level failure before any HTTP response was received: DNS failure,
  * TLS error, connection refused, or an aborted `fetch`. Generally retryable

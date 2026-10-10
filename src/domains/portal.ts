@@ -44,6 +44,19 @@ import type { GraphQLClient } from '../client.js';
 import type { SessionStore } from '../session.js';
 import { generatePkcePair, generateState } from '../pkce.js';
 import type { EmbeddedHost } from './embedded-host.js';
+import type { AppPauseReason } from '../errors.js';
+
+/**
+ * An app's runtime gate as a player's client may read it. Any `status` but
+ * `ACTIVE` means the app is paused: replication delivers nothing and refuses
+ * sends with `APP_PAUSED`, and hub calls are refused. Tell the player the world
+ * is paused instead of showing an empty one ({@link isAppPaused}).
+ */
+export interface AppRuntimeGate {
+  status: 'ACTIVE' | 'GRACE' | 'DENIED' | 'SUSPENDED' | (string & {});
+  /** `insufficient_funds`, `spend_cap` or `subscription_lapsed`; null while ACTIVE. */
+  reason: AppPauseReason | null;
+}
 
 export interface AppTokenResponse {
   /** Opaque app-scoped gameplay token. Send to the app's Game API as a Bearer. */
@@ -85,6 +98,12 @@ export interface AppTokenResponse {
    * Absent (undefined) against a Game API older than v1.83.7.
    */
   authorizedServer?: { ip4: string; clientPort: number } | null;
+  /**
+   * The app's runtime gate when the token was minted. A paused app still mints,
+   * so check {@link isAppPaused}(`runtimeGate`) before entering the world.
+   * Null against a Game API that predates the field.
+   */
+  runtimeGate?: AppRuntimeGate | null;
 }
 
 /** The replication server a native client is connected to: the `ip4` + `clientPort` that `serverWithLeastClients` handed it. */
@@ -124,7 +143,7 @@ export class BrowserSessionPkceStore implements PkceStore {
 }
 
 const APP_TOKEN_FIELDS =
-  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl';
+  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl runtimeGate { status reason }';
 
 const MintAppTokenDocument = parse(
   `mutation MintAppToken($input: MintAppTokenInput!) { mintAppToken(input: $input) { ${APP_TOKEN_FIELDS} } }`,

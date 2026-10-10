@@ -105,6 +105,7 @@ export {
   serializeActorUpdate,
   serializeAudioPacket,
   serializeVideoPacket,
+  serializeChannelAudio,
   serializeChannelMessage,
   serializeClientEvent,
   serializeRangedChannelMessage,
@@ -112,6 +113,9 @@ export {
   serializeSingleActorMessage,
   serializeTextPacket,
   serializeVoxelUpdate,
+  assertVoxelEdit,
+  VOXEL_STATE_MAX_BYTES,
+  type ChannelSendInput,
   type RelaySignContext,
 } from './binary-wire.js';
 export {
@@ -230,6 +234,15 @@ export type {
 } from './stores/index.js';
 
 export {
+  ACCESS_NOT_GRANTED_CODE,
+  ACCESS_REVOKED_CODE,
+  ACCESS_SUSPENDED_CODE,
+  ACTOR_EXISTS_CODE,
+  APP_PAUSED_CODE,
+  accessRefusalOf,
+  actorExistsOf,
+  appPausedOf,
+  isAppPaused,
   APP_UNAVAILABLE_CODE,
   CrowdyAppUnavailableError,
   CrowdyError,
@@ -244,6 +257,8 @@ export {
   WRONG_DATACENTER_CODE,
 } from './errors.js';
 export type {
+  AppPauseReason,
+  CrowdyAccessRefusal,
   CrowdyFaultBlame,
   CrowdyFaultCode,
   CrowdyPlayerFault,
@@ -279,6 +294,7 @@ export type {
   ClientEventNotification,
   ServerEventNotification,
   GenericSpatialNotification,
+  ChannelAudioNotification,
   GenericErrorResponse,
   ActorUpdateHandler,
   ActorUpdateResponseHandler,
@@ -291,6 +307,7 @@ export type {
   ClientEventHandler,
   ServerEventHandler,
   GenericSpatialHandler,
+  ChannelAudioHandler,
   GenericErrorHandler,
   UnsubscribeFn,
 } from './types.js';
@@ -312,7 +329,7 @@ export {
   type AuthUser,
   type UserIdentity,
 } from './domains/auth.js';
-export { UsersAPI } from './domains/users.js';
+export { PLAYER_PROFILES_MAX, UsersAPI } from './domains/users.js';
 export { AppsAPI, type AppRoute } from './domains/apps.js';
 export {
   PortalAPI,
@@ -321,6 +338,7 @@ export {
   defaultHostedSignInUrl,
   isHostedSignInRequiredError,
   isLegalAcceptanceRequiredError,
+  type AppRuntimeGate,
   type AppTokenResponse,
   type CurrentServer,
   type PortalAuthorizationCode,
@@ -411,6 +429,7 @@ export {
   type ExecManifest,
   type ExecManifestType,
   type ExecAppStatus,
+  type ExecRestartResult,
   type ExecEndpointStat,
   type ExecEndpointStatsOptions,
   ExecModScope,
