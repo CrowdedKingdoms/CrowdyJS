@@ -67,6 +67,14 @@ export function voxelIndex(x: number, y: number, z: number): number {
   return x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE;
 }
 
+/**
+ * The key a chunk's `overlay` holds a voxel under: `"x:y:z"`, its within-chunk coordinates as
+ * the edit carried them (any signed 16-bit value).
+ */
+export function voxelKey(x: number, y: number, z: number): string {
+  return `${x}:${y}:${z}`;
+}
+
 /** Invert {@link voxelIndex} back to within-chunk coordinates. */
 export function voxelCoordFromIndex(index: number): { x: number; y: number; z: number } {
   return {

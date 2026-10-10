@@ -4,11 +4,19 @@
  * optimistic local edits, and the deterministic-worldgen write-back pattern.
  * Replaces the WorldStreamer + WorldState + codec plumbing every voxel game
  * hand-writes (~860 LOC in Blocks with Friends).
+ *
+ * It is a helper for 16×16×16 chunks with one byte per voxel. Voxel positions and
+ * types are the app's signed 16-bit values, which the platform does not check; an
+ * edit the dense grid cannot hold (a type outside 0-255, a position outside 0-15)
+ * goes to the chunk's `overlay` instead, and reads of that voxel return it. An app
+ * with other addressing reads the raw voxel events (`udp.subscribe`'s
+ * `voxelUpdate`, `chunks.get`'s `voxelStates`).
  */
 
 import { generateCrowdyUuid, decodeBase64, encodeBase64 } from '../utils.js';
 import { rawCodec, type StateCodec } from './codec.js';
 import {
+  CHUNK_SIZE,
   CHUNK_VOLUME,
   chunkDistance,
   chunkKey,
@@ -16,6 +24,7 @@ import {
   fromChunkInput,
   toChunkInput,
   voxelIndex,
+  voxelKey,
   type ChunkCoord,
 } from './keys.js';
 import type { WorldSessionContext } from './session.js';
@@ -86,6 +95,29 @@ async function whenNotBusy<T>(call: () => Promise<T>): Promise<T> {
   }
 }
 
+/** A within-chunk position inside the 16³ grid (0-15 on each axis). */
+function inDenseGrid(x: number, y: number, z: number): boolean {
+  return [x, y, z].every((v) => Number.isInteger(v) && v >= 0 && v < CHUNK_SIZE);
+}
+
+/** Whether the dense grid can hold this edit: a position inside it and a type 0-255. */
+function fitsDenseGrid(x: number, y: number, z: number, voxelType: number): boolean {
+  return inDenseGrid(x, y, z) && Number.isInteger(voxelType) && voxelType >= 0 && voxelType <= 255;
+}
+
+/**
+ * A voxel the dense grid cannot hold, kept in its chunk's `overlay`: a type outside 0-255, or a
+ * position outside 0-15 (the app's signed 16-bit values, as the edit carried them).
+ */
+export interface ChunkOverlayVoxel<TVoxelState = string> {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  voxelType: number;
+  /** Its typed state, when it has one. */
+  state?: TVoxelState;
+}
+
 /** Load lifecycle of a cached chunk. */
 export type ChunkLoadState =
   | 'loading' // fetch in flight
@@ -104,10 +136,17 @@ export interface CachedChunk<TVoxelState = string, TChunkState = string> {
   /**
    * Dense voxel-type grid (4096 bytes), null when unknown. Indexed
    * `x + y*16 + z*256` by default; see {@link ChunkStoreConfig.voxelIndex}.
+   * Holds 0 where an in-grid voxel's type is in {@link overlay}.
    */
   voxels: Uint8Array | null;
-  /** Sparse typed per-voxel state by voxel index. */
+  /** Sparse typed per-voxel state by voxel index (voxels in the dense grid). */
   voxelStates: Map<number, TVoxelState>;
+  /**
+   * The voxels the dense grid cannot hold (a type outside 0-255, a position outside 0-15), each
+   * with its state, keyed by `voxelKey(x, y, z)`. {@link ChunkStore.voxelTypeAt} and
+   * {@link ChunkStore.voxelStateAt} read them first.
+   */
+  overlay: Map<string, ChunkOverlayVoxel<TVoxelState>>;
   /** Typed chunk-level state (null when absent/undecoded). */
   chunkState: TChunkState | null;
   loadState: ChunkLoadState;
@@ -202,10 +241,14 @@ export interface ChunkStoreConfig<TVoxelState = string, TChunkState = string> {
 /** A voxel edit for {@link ChunkStore.setVoxel}. */
 export interface SetVoxelInput<TVoxelState> {
   chunk: ChunkCoord;
-  /** Within-chunk voxel coordinates (0-15 each). */
+  /**
+   * Within-chunk voxel coordinates: 0-15 each for the dense grid; any other signed 16-bit value
+   * is kept in the chunk's overlay.
+   */
   x: number;
   y: number;
   z: number;
+  /** The app's voxel type (signed 16-bit); outside 0-255 it is kept in the overlay. */
   voxelType: number;
   /** Typed per-voxel state (encoded with the store's codec). */
   state?: TVoxelState;
@@ -222,7 +265,9 @@ export interface SetVoxelInput<TVoxelState> {
  *   server never stored as `missing`, and hands them to your `onMissing`
  *   worldgen hook.
  * - Realtime `voxelUpdate` notifications merge into the cache automatically
- *   (dense grid write + typed state decode + revision bump + change event).
+ *   (dense grid write + typed state decode + revision bump + change event; an
+ *   edit with a type outside 0-255 or a position outside 0-15 goes to the
+ *   chunk's `overlay` instead).
  * - `setVoxel` applies locally (optimistic) and replicates via the UDP path.
  * - `seed`/`flush` implement deterministic-worldgen write-back through
  *   `chunks.update`, one throttled chunk at a time.
@@ -314,20 +359,32 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     return [...this.chunks.values()];
   }
 
-  /** The dense voxel type at a within-chunk coordinate (0 when unknown). */
+  /**
+   * The voxel type at a within-chunk coordinate: the overlay's when it holds that voxel, else the
+   * dense grid's (0 when unknown, or for a position outside the grid with no overlay entry).
+   */
   voxelTypeAt(coord: ChunkCoord, x: number, y: number, z: number): number {
     const chunk = this.chunks.get(chunkKey(coord));
-    return chunk?.voxels?.[this.voxelIndex(x, y, z)] ?? 0;
+    if (!chunk) return 0;
+    const wide = chunk.overlay.get(voxelKey(x, y, z));
+    if (wide) return wide.voxelType;
+    if (!inDenseGrid(x, y, z)) return 0;
+    return chunk.voxels?.[this.voxelIndex(x, y, z)] ?? 0;
   }
 
-  /** The typed per-voxel state at a within-chunk coordinate, if any. */
+  /** The typed per-voxel state at a within-chunk coordinate (the overlay's first), if any. */
   voxelStateAt(
     coord: ChunkCoord,
     x: number,
     y: number,
     z: number,
   ): TVoxelState | undefined {
-    return this.chunks.get(chunkKey(coord))?.voxelStates.get(this.voxelIndex(x, y, z));
+    const chunk = this.chunks.get(chunkKey(coord));
+    if (!chunk) return undefined;
+    const wide = chunk.overlay.get(voxelKey(x, y, z));
+    if (wide) return wide.state;
+    if (!inDenseGrid(x, y, z)) return undefined;
+    return chunk.voxelStates.get(this.voxelIndex(x, y, z));
   }
 
   /** Subscribe to per-chunk changes (loads, merges, edits). @returns off. */
@@ -474,7 +531,22 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     if (full.voxels != null) chunk.voxels = decodeBase64(full.voxels);
     chunk.chunkState = this.decodeChunkState(full.chunkState ?? null);
     for (const entry of full.voxelStates ?? []) {
-      const index = this.voxelIndex(entry.voxelCoord.x, entry.voxelCoord.y, entry.voxelCoord.z);
+      const { x, y, z } = entry.voxelCoord;
+      if (!fitsDenseGrid(x, y, z, entry.voxelType)) {
+        const key = voxelKey(x, y, z);
+        let state = entry.state ? chunk.overlay.get(key)?.state : undefined;
+        if (entry.state) {
+          try {
+            state = this.voxelStateCodec.decode(entry.state);
+          } catch {
+            // As below: a foreign blob keeps the state already cached.
+          }
+        }
+        this.putOverlay(chunk, x, y, z, entry.voxelType, state);
+        continue;
+      }
+      const index = this.voxelIndex(x, y, z);
+      chunk.overlay.delete(voxelKey(x, y, z));
       // A chunk stored with `voxels: null` still carries its recorded edits.
       if (!chunk.voxels) chunk.voxels = new Uint8Array(CHUNK_VOLUME);
       chunk.voxels[index] = entry.voxelType;
@@ -694,9 +766,6 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     encodedState?: string,
     decodedState?: TVoxelState,
   ): void {
-    if (!chunk.voxels) chunk.voxels = new Uint8Array(CHUNK_VOLUME);
-    const index = this.voxelIndex(x, y, z);
-    chunk.voxels[index] = voxelType;
     let state = decodedState;
     if (state === undefined && encodedState) {
       try {
@@ -705,12 +774,48 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         state = undefined;
       }
     }
+    if (!fitsDenseGrid(x, y, z, voxelType)) {
+      this.putOverlay(chunk, x, y, z, voxelType, state);
+      this.touch(chunk);
+      return;
+    }
+    chunk.overlay.delete(voxelKey(x, y, z));
+    if (!chunk.voxels) chunk.voxels = new Uint8Array(CHUNK_VOLUME);
+    const index = this.voxelIndex(x, y, z);
+    chunk.voxels[index] = voxelType;
     if (state !== undefined) {
       chunk.voxelStates.set(index, state);
     } else {
       chunk.voxelStates.delete(index);
     }
     this.touch(chunk);
+  }
+
+  /**
+   * Keep a voxel the dense grid cannot hold in the overlay. An in-grid position with a wide type
+   * leaves 0 in the grid and no dense state; one outside the grid never touches the grid.
+   */
+  private putOverlay(
+    chunk: CachedChunk<TVoxelState, TChunkState>,
+    x: number,
+    y: number,
+    z: number,
+    voxelType: number,
+    state: TVoxelState | undefined,
+  ): void {
+    if (inDenseGrid(x, y, z)) {
+      if (!chunk.voxels) chunk.voxels = new Uint8Array(CHUNK_VOLUME);
+      const index = this.voxelIndex(x, y, z);
+      chunk.voxels[index] = 0;
+      chunk.voxelStates.delete(index);
+    }
+    chunk.overlay.set(voxelKey(x, y, z), {
+      x,
+      y,
+      z,
+      voxelType,
+      ...(state !== undefined ? { state } : {}),
+    });
   }
 
   private ensureEntry(coord: ChunkCoord): CachedChunk<TVoxelState, TChunkState> {
@@ -722,6 +827,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         coord,
         voxels: null,
         voxelStates: new Map(),
+        overlay: new Map(),
         chunkState: null,
         loadState: 'loading',
         revision: 0,

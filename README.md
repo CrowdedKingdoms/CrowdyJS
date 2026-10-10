@@ -669,6 +669,14 @@ another player's realtime voxel update) reaches a reload only through hydration:
 returns it in `voxelStates`, and the bulk load's `voxels` never hold it. The store hydrates when
 it has a `voxelStateCodec`; without one, set `chunks: { hydrateVoxelStates: true }`.
 
+`chunks` is a helper for 16×16×16 chunks with one byte per voxel. Voxel positions and types are
+the app's signed 16-bit values, which the platform does not check: an edit the dense grid cannot
+hold (a type outside 0-255, a position outside 0-15), whether a realtime update, a hydrated
+`voxelStates` entry or a local `setVoxel`, is kept whole in the chunk's `overlay` (keyed by
+`voxelKey(x, y, z)`) instead of being truncated into `voxels`, and `voxelTypeAt` / `voxelStateAt`
+return it (18.7.0). A game with other addressing reads the raw `voxelUpdate` events and
+`chunks.get`'s `voxelStates`.
+
 A chunk write-back the server refuses (a visitor on someone else's plot, a safe zone, a closed
 wilderness) is dropped, not retried; one that fails for a reason that can clear is tried five
 times. Listen with `session.chunks.onWriteBackFailed(...)` to undo or flag the edit (18.0.4).
