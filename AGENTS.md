@@ -30,6 +30,17 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.8.0: the input log says what it lost, and when to retry (2026-10-10).** Selects
+`InputLogSession.missingRecords`, so it needs the Game API release after v2.40.2 (cks-game-api
+`fix/input-log-review`, `fix/input-log-reads`, `feat/input-log-funds-audit`); the schema is
+synced from those branches merged with `dev`, so release only after they are on `dev` and re-sync
+from `dev`'s `schema.gql`. Docs only otherwise: the end reasons `logging_off` and `shutdown`,
+`INPUT_LOG_TEMPORARILY_UNAVAILABLE` and `INPUT_LOG_RATE_LIMITED` (retryable, same cursor), cursors
+bound to their session, the funds refusal's amounts, the paging loop on `hasNextPage` with a
+back-off (MIGRATION.md; the 18.6.0 example stopped early), and the README's server-compatibility
+table. No new method, so CrowdyCPP and CrowdyPy have no surface to mirror; they port
+`missingRecords` from this release's dev tag.
+
 **18.7.0: voice helpers, channel audio, opcode 140, wide voxels, self-echo, pause and access
 refusals (the Minecraft mod's platform asks, 2026-10-10).** Needs the ck-api release after v2.39.0
 (the token mutations select `runtimeGate`) and Buddy v0.37.0 for channel audio and the voxel echo.

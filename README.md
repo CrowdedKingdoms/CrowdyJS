@@ -29,6 +29,15 @@ This README is the `dev` branch's: it documents the release on the `dev` dist-ta
 (`npm view @crowdedkingdoms/crowdyjs dist-tags`), and its links go to the dev docs site. A
 plain `npm install` resolves `latest`, the production release, which has no `client.exec`.
 
+**Server compatibility.** A release selects fields the Game API it was built against has,
+so it needs that Game API or newer; promote the Game API before the SDK on each tier.
+
+| CrowdyJS | Needs the Game API (ck-api) |
+| --- | --- |
+| 18.8.0 | the release after v2.40.2 (`InputLogSession.missingRecords`) |
+| 18.7.0 | v2.40.0 or later (`runtimeGate`, channel audio) |
+| 18.6.0 | v2.39.0 or later (every app read selects `replayLoggingEnabled`) |
+
 CrowdyJS targets browsers by default and uses native `fetch`, `WebSocket`,
 `crypto`, `btoa`, and `atob`. Node tools can still use the SDK, but must
 provide browser-compatible globals when opening realtime connections (e.g.

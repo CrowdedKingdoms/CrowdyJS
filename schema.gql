@@ -1301,7 +1301,7 @@ type App {
   """
   wildernessWritesOpen: Boolean!
   """
-  Whether replay logging is on: the realtime servers record every client input they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a funded org wallet or a billing-exempt org.
+  Whether replay logging is on: the realtime servers record every client message they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a wallet that covers the projected cost of one retention period, or a billing-exempt org.
   """
   replayLoggingEnabled: Boolean!
   """
@@ -4637,7 +4637,7 @@ type AppUsageSummary {
   """
   automationComputeUnits: String!
   """
-  Stored input logs over the window, in byte-hours (string counter): the sum of the hourly samples, which is the quantity input_log_storage_byte_hours bills. Each recorded byte (InputLogMessage.sizeBytes) is held for the input log retention, one byte-hour per hour. 0 when replay logging was off.
+  Stored input logs over the window, in byte-hours (string counter): the sum of the hourly samples, which is the quantity input_log_storage_byte_hours bills. Each recorded byte (InputLogMessage.sizeBytes) is held for the input log retention, one byte-hour per hour, so recordings keep accruing byte-hours after replay logging is turned off, until they age out. 0 when nothing was held during the window.
   """
   inputLogByteHours: String!
   """
@@ -4681,7 +4681,7 @@ type AppUsageProjection {
   """
   onTrackToExceed: Boolean
   """
-  Stored input logs this calendar month so far, in byte-hours (input_log_storage_byte_hours, which has no free allowance). 0 when replay logging was off all month.
+  Stored input logs this calendar month so far, in byte-hours (input_log_storage_byte_hours, which has no free allowance). Recordings keep accruing after replay logging is turned off, until they age out at the end of the retention; 0 when nothing was held this month.
   """
   inputLogByteHours: String!
   """
@@ -5156,11 +5156,11 @@ type InputLogSession {
   """When the latest recorded input or marker arrived."""
   lastSeenAt: DateTime!
   """
-  When the session ended, if its end was recorded; null while it may still be running.
+  When the session ended; null while it may still be running. A session whose end was not recorded is closed at its last record once it has gone an hour without one. Later records reopen a session (endedAt returns to null).
   """
   endedAt: DateTime
   """
-  How the session ended, as the client saw it: expired, revoked, reconnect or released. Null while it may still be running.
+  How the session ended: expired, revoked, reconnect or released, as the client saw it; logging_off, when the app turned replay logging off while the session was open; shutdown, when the realtime server recording it stopped (a deploy), after which the client reconnects elsewhere; or unrecorded, when its end was not recorded and it was closed an hour after its last record. Null while it may still be running.
   """
   endReason: String
   """Inputs recorded in the session."""
@@ -5171,6 +5171,10 @@ type InputLogSession {
   byteCount: BigInt!
   """The client message types the session contains, ascending."""
   messageTypes: [Int!]!
+  """
+  Records the realtime servers numbered for this session that never reached the log: recording is best-effort, so an overloaded server or a broker outage can leave gaps, and this is how many. 0 when the recording is complete as far as it is known. A lost end of the recording cannot be counted (its session closes as unrecorded instead). Null for a session recorded before the realtime servers numbered their records.
+  """
+  missingRecords: BigInt
 }
 
 """An edge in a InputLogSession connection."""
@@ -5936,9 +5940,13 @@ type ExecBuild {
   """
   kind: String!
   """
-  The compiler’s output once the build finishes, at most 64 KB (the end is kept).
+  The compiler’s output once the build finishes, at most 64 KB (the end is kept). Its first line names the toolchain the build ran with.
   """
   log: String
+  """
+  The SDK version the build compiled against, from the toolchain of the API instance that ran it: `ckx-sdk` for a ck-exec build, `crowdy-client-sdk` for a CLIENT half. A crate’s own version requirement for the SDK is not what decides this. Null until the build starts, and for builds from before it was recorded.
+  """
+  sdkVersion: String
   """When the build was requested."""
   createdAt: DateTime!
   """When it started compiling."""
@@ -6497,7 +6505,9 @@ type Query {
   inputLogSessions(
     """The app whose recorded sessions to list."""
     appId: BigInt!
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -6507,14 +6517,16 @@ type Query {
     filter: InputLogSessionFilter
   ): InputLogSessionConnection!
   """
-  The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`; a page can hold fewer than `first` inputs when it stopped at its time or scan limit, so keep paging while hasNextPage is true. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, and also, retryable with the same cursor, when the log cannot be read right now.
+  The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`, the previous page's endCursor for this same session (a cursor from another session is BAD_USER_INPUT); a page can hold fewer than `first` inputs, or none, when it stopped at its time or scan limit, so keep paging while hasNextPage is true. An operation may select this field only once. Errors: INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment (do not retry); INPUT_LOG_RATE_LIMITED (429) when you already have a read running, and INPUT_LOG_TEMPORARILY_UNAVAILABLE (503) when the log cannot be read just now, both with extensions.retryable: retry shortly with the same cursor.
   """
   inputLogMessages(
     """The app the session belongs to."""
     appId: BigInt!
     """The session to read: InputLogSession.gameTokenId."""
     gameTokenId: BigInt!
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -6579,7 +6591,9 @@ type Query {
   Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated.
   """
   usersConnection(
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -6626,7 +6640,9 @@ type Query {
   Relay-style cursor-paginated version of `actors`: lists actors owned by the authenticated user, optionally narrowed by `filter` (appId, avatarId, uuid, chunk). Page forward with `first` (default 50, max 200) and `after` (an opaque cursor from a previous page’s `pageInfo.endCursor`); `totalCount` is the full number of matching actors. Requires a valid game token; only the caller’s own actors are returned (full state included). Under an app token the list is confined to that token’s app.
   """
   actorsConnection(
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -6720,7 +6736,9 @@ type Query {
   appUserAccessConnection(
     """Numeric id of the app whose access records to list."""
     appId: BigInt!
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -6873,7 +6891,9 @@ type Query {
   Public marketplace listing of apps. PUBLIC: no authentication required. Returns ONLY apps with visibility=PUBLIC AND status=LIVE (drafts, unlisted, private, and archived apps are never returned). Results are ordered newest-first. Relay cursor connection; prefer this over the offset-based apps.
   """
   appsConnection(
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -7018,7 +7038,9 @@ type Query {
     Organization id (BigInt as a decimal string) whose transactions to list.
     """
     orgId: BigInt!
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -7125,7 +7147,9 @@ type Query {
   Lists the authenticated caller's own checkouts (newest first), across every org and app. Use this for a self-service payment history; use `checkoutsConnection` for the cross-tenant super-admin view. Requires an authenticated user. Relay cursor connection; prefer this over the offset-based myCheckouts.
   """
   myCheckoutsConnection(
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -7153,7 +7177,9 @@ type Query {
   Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckoutsConnection` instead. Relay cursor connection; prefer this over the offset-based checkouts.
   """
   checkoutsConnection(
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -7181,7 +7207,9 @@ type Query {
   Audit log of inbound payment-provider webhook events (used for idempotent reconciliation of checkouts), newest first. Restricted to super admins; requests from non-super-admins are rejected. Relay cursor connection; prefer this over the offset-based paymentEvents.
   """
   paymentEventsConnection(
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -7580,7 +7608,9 @@ type Query {
     Number of entries to skip for pagination. Defaults to 0 when omitted; allowed range is 0-1000000.
     """
     offset: Int @deprecated(reason: "Use voxelUpdateHistoryConnection(first:, after:) instead. See /overview/pagination. Removal no earlier than 2027-01-01. (Ignored by voxelUpdateHistoryConnection, which shares these args.)")
-    """Return the first N edges after `after`. Default 50; clamped to 1..200."""
+    """
+    Return the first N edges after `after`. Default 50; clamped to 1..200, so 0 returns one edge.
+    """
     first: Int
     """
     Opaque cursor: return edges after this one. Pass a previous page's `pageInfo.endCursor`. Omit for the first page.
@@ -8825,7 +8855,7 @@ type Mutation {
     input: CreateAppInput!
   ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
-  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
+  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
   """
   updateApp(
     """Numeric id of the app to update."""
@@ -10690,7 +10720,7 @@ input UpdateAppInput {
   """
   wildernessWritesOpen: Boolean
   """
-  Turn replay logging on (true) or off (false): record every client input the realtime servers accept for this app, kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt; turning it off always succeeds. Recording starts and stops within about 15 seconds. Omit to leave unchanged.
+  Turn replay logging on (true) or off (false): record every client message the realtime servers accept for this app (keep-alives included), kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic, or the org is billing-exempt; turning it off always succeeds, and what was already recorded goes on billing until it ages out. Recording starts and stops within about 15 seconds. Omit to leave unchanged.
   """
   replayLoggingEnabled: Boolean
   """
