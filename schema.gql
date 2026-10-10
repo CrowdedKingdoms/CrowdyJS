@@ -252,14 +252,14 @@ type ChunkCoordinates {
 }
 
 """
-Integer (x, y, z) position of a single voxel LOCAL to its chunk (not a world position). Stored as signed 16-bit smallints (-32,768..32,767), but a chunk is 16x16x16 = 4096 voxels, so valid in-bounds positions are 0-15 on each axis.
+Integer (x, y, z) position of a single voxel LOCAL to its chunk (not a world position). App-defined: any signed 16-bit integer on each axis (-32,768..32,767). Apps that use the 16x16x16 dense grid (Chunk.voxels) use 0-15; other addressing lives in voxel states and the edit log.
 """
 type VoxelCoordinates {
-  """Local voxel X within the chunk (0-15 for in-bounds voxels)."""
+  """Local voxel X within the chunk (signed 16-bit, app-defined)."""
   x: Int!
-  """Local voxel Y within the chunk (0-15 for in-bounds voxels)."""
+  """Local voxel Y within the chunk (signed 16-bit, app-defined)."""
   y: Int!
-  """Local voxel Z within the chunk (0-15 for in-bounds voxels)."""
+  """Local voxel Z within the chunk (signed 16-bit, app-defined)."""
   z: Int!
 }
 
@@ -303,7 +303,9 @@ type Actor {
 type User {
   """Unique user id and primary key. BigInt serialized as a decimal string."""
   userId: BigInt!
-  """Account email; null for anonymized/soft-deleted accounts."""
+  """
+  Account email. Private: null unless the caller is this user, a super-admin or an operator (and for anonymized/soft-deleted accounts).
+  """
   email: String
   """
   Public display name; null if unset or anonymized. Unique in combination with `disambiguation`.
@@ -314,50 +316,56 @@ type User {
   """
   disambiguation: String
   """
-  User-level state blob, base64-encoded binary (management-owned). Null when cleared.
+  User-level state blob, base64-encoded binary (management-owned). Private: null unless the caller is this user, a super-admin or an operator; also null when cleared.
   """
   state: String
-  """Whether the account email has been confirmed."""
-  isConfirmed: Boolean!
+  """
+  Whether the account email has been confirmed. Private: null unless the caller is this user, a super-admin or an operator.
+  """
+  isConfirmed: Boolean
   """Account creation timestamp (ISO-8601)."""
   createdAt: DateTime!
   """
-  Whether the user qualifies for early access through normal eligibility (the free-play window/rollout).
+  Whether the user qualifies for early access through normal eligibility (the free-play window/rollout). Private: null unless the caller is this user, a super-admin or an operator.
   """
-  grantEarlyAccess: Boolean!
+  grantEarlyAccess: Boolean
   """
-  Admin override forcing early access on/off regardless of normal eligibility (set via `setEarlyAccessOverride`).
+  Admin override forcing early access on/off regardless of normal eligibility (set via `setEarlyAccessOverride`). Private: null unless the caller is this user, a super-admin or an operator.
   """
-  grantEarlyAccessOverride: Boolean!
+  grantEarlyAccessOverride: Boolean
   """
-  Organization the user belongs to, or null. BigInt serialized as a decimal string.
+  Organization the user belongs to, or null. BigInt serialized as a decimal string. Private: null unless the caller is this user, a super-admin or an operator.
   """
   orgId: BigInt
-  """External identity-provider id for federated accounts, or null."""
+  """
+  External identity-provider id for federated accounts, or null. Private: null unless the caller is this user, a super-admin or an operator.
+  """
   externalId: String
-  """Account type, e.g. "direct" or "deleted"."""
-  userType: String!
   """
-  Whether the user holds platform super-admin privileges (toggled via `setSuperAdmin`).
+  Account type, e.g. "direct" or "deleted". Private: null unless the caller is this user, a super-admin or an operator.
   """
-  isSuperAdmin: Boolean!
+  userType: String
   """
-  Company-employee flag that grants access to control-plane / operator features. Independent from is_super_admin.
+  Whether the user holds platform super-admin privileges (toggled via `setSuperAdmin`). Private: null unless the caller is this user, a super-admin or an operator.
   """
-  isOperator: Boolean!
+  isSuperAdmin: Boolean
   """
-  Whether this account has a password set. Studio reads it to say "set a password" only to accounts that have none (magic-link and OAuth sign-ups); it used to say so to everyone. The hash itself never leaves the process.
+  Company-employee flag that grants access to control-plane / operator features. Independent from is_super_admin. Private: null unless the caller is this user, a super-admin or an operator.
   """
-  hasPassword: Boolean!
+  isOperator: Boolean
   """
-  The user's effective permission keys on the given org (empty if not a member; full set if super admin). Requires a valid bearer game token.
+  Whether this account has a password set. Studio reads it to say "set a password" only to accounts that have none (magic-link and OAuth sign-ups); it used to say so to everyone. The hash itself never leaves the process. Private: null unless the caller is this user, a super-admin or an operator.
+  """
+  hasPassword: Boolean
+  """
+  The user's effective permission keys on the given org (empty if not a member; full set if super admin). Requires a valid bearer game token. Private: null unless the caller is this user, a super-admin or an operator.
   """
   permissionsForOrg(
     """
     Organization id (BigInt sent as a decimal string) to evaluate the user against.
     """
     orgId: BigInt!
-  ): [String!]!
+  ): [String!]
 }
 
 """
@@ -378,6 +386,20 @@ type UserIdentity {
   emailVerified: Boolean!
   createdAt: DateTime!
   lastLoginAt: DateTime
+}
+
+"""
+A player's public profile: what another player's client may show (a nametag, a friends list). Carries nothing private; for your own account read `me`.
+"""
+type PlayerProfile {
+  """The user id. BigInt serialized as a decimal string."""
+  userId: BigInt!
+  """Public display name; null if unset or anonymized."""
+  gamertag: String
+  """
+  Discriminator paired with gamertag to form a unique handle; null if unset.
+  """
+  disambiguation: String
 }
 
 type AppAvatarState {
@@ -605,6 +627,10 @@ type AppUserAccess {
   Optional expiry timestamp; access is treated as inactive once it has passed. Null means the grant does not expire.
   """
   expiresAt: DateTime
+  """
+  A timed suspension: while this time is in the future the player holds no access (a gameplay token is refused with ACCESS_SUSPENDED and realtime sessions end), and access returns by itself once it passes. Null when the player is not suspended. Set with suspendAppAccess, cleared with unsuspendAppAccess.
+  """
+  suspendedUntil: DateTime
   """Timestamp when the access record was first created."""
   createdAt: DateTime!
   """
@@ -721,6 +747,10 @@ enum UdpErrorCode {
   The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session.
   """
   TOKEN_EXPIRED
+  """
+  The app's runtime gate is not ACTIVE (its organization has no funds, it hit its spend cap, or its subscription lapsed), so the server delivers nothing for it. Sent at most once per session every few seconds. Tell the player the world is paused; gameClientBootstrap.runtimeGate carries the reason, and sends work again within seconds of the owner fixing the cause.
+  """
+  APP_PAUSED
 }
 
 """An edge in a AppUserAccess connection."""
@@ -1274,6 +1304,10 @@ type App {
   Whether replay logging is on: the realtime servers record every client input they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a funded org wallet or a billing-exempt org.
   """
   replayLoggingEnabled: Boolean!
+  """
+  Grid permission keys a player's claim grants its owner on the claimed grid (claimGridOwnership), beside the player-code keys the owner's tier carries; for example update_voxel_data makes a claim buildable without a hub granting it. Never a player-code key; the grid's permission limits still cap them. Empty by default. Set with updateApp (manage_apps).
+  """
+  claimOwnerKeys: [String!]!
   """Timestamp when the app was created."""
   createdAt: DateTime!
   """Timestamp when the app was last updated."""
@@ -1386,6 +1420,36 @@ enum CodeAdmissionSubjectKind {
 }
 
 """
+The app's runtime gate as a player's client may read it. When status is not ACTIVE the app's realtime traffic and hubs are paused: replication delivers nothing and refuses sends with APP_PAUSED, and hub calls are refused. Clients should tell the player the world is paused rather than show an empty one. Readable with the player's own app token; carries no billing figures.
+"""
+type AppRuntimeGate {
+  """ACTIVE when the app runs; anything else means paused."""
+  status: AppRuntimeStatus!
+  """
+  Why the app is paused: insufficient_funds, spend_cap or subscription_lapsed. Null while ACTIVE.
+  """
+  reason: String
+}
+
+"""
+The per-app runtime gate game-api + Buddy enforce. See runtimeDenialReason when not active.
+"""
+enum AppRuntimeStatus {
+  """Allowed to run; clients may connect."""
+  ACTIVE
+  """
+  Still running on a temporary allowance (e.g. low funds) but at risk of being denied soon.
+  """
+  GRACE
+  """
+  Blocked from running now (insufficient funds or a spend cap hit); recoverable once the cause clears.
+  """
+  DENIED
+  """Hard-stopped (e.g. lapsed subscription); requires action to restore."""
+  SUSPENDED
+}
+
+"""
 A short-lived, app-scoped gameplay token (Overworld portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session.
 """
 type AppTokenResponse {
@@ -1421,6 +1485,10 @@ type AppTokenResponse {
   Set only by `refreshAppToken` when the caller passed `currentServer`: the Buddy the NEW token was just authorized on, which is the node the client is already connected to. When present, keep the existing UDP session and start signing datagrams with the new token; there is no need to call serverWithLeastClients. Null when the caller passed nothing, or when that node can no longer serve this app (gone, draining, Full, or not local to the app) -- then call serverWithLeastClients for a fresh placement, exactly as before.
   """
   authorizedServer: ServerStatus
+  """
+  The app's runtime gate when the token was minted. A token is issued for a paused app too, so a client can read status and reason and tell the player the world is paused; realtime sends and hub calls are refused until status is ACTIVE again. Null only when the gate could not be read.
+  """
+  runtimeGate: AppRuntimeGate
 }
 
 """
@@ -1922,24 +1990,6 @@ enum AppDeploymentTarget {
   SHARED
   """Runs on a dedicated, org-provisioned environment."""
   DEDICATED
-}
-
-"""
-The per-app runtime gate game-api + Buddy enforce. See runtimeDenialReason when not active.
-"""
-enum AppRuntimeStatus {
-  """Allowed to run; clients may connect."""
-  ACTIVE
-  """
-  Still running on a temporary allowance (e.g. low funds) but at risk of being denied soon.
-  """
-  GRACE
-  """
-  Blocked from running now (e.g. insufficient funds, spend cap hit, or free allowance exhausted); recoverable once the cause clears.
-  """
-  DENIED
-  """Hard-stopped (e.g. lapsed subscription); requires action to restore."""
-  SUSPENDED
 }
 
 """
@@ -5211,9 +5261,9 @@ type InputLogMessageConnection {
 A single voxel's override on a chunk, stored with it or recorded as a voxel edit: its local position, its voxel type, and an opaque base64-encoded state blob.
 """
 type VoxelState {
-  """Local voxel position within the chunk (0-15 per axis)."""
+  """Voxel position within the chunk (signed 16-bit per axis, app-defined)."""
   voxelCoord: VoxelCoordinates!
-  """Voxel type id at this position (0-255)."""
+  """Voxel type id at this position (signed 16-bit, app-defined)."""
   voxelType: Int!
   """
   BASE64-encoded binary state blob for this voxel (decode from base64); null/empty when the voxel has no extra state.
@@ -5230,7 +5280,7 @@ type LodData {
 }
 
 """
-A persisted 16x16x16-voxel chunk (4096 voxels) of an app's voxel world. Holds the packed voxel-type grid (`voxels`), sparse per-voxel state overrides (`voxelStates`), an optional opaque chunk-level state blob (`chunkState`), and level-of-detail meshes (`lods`). Returned by getChunk/getChunksByDistance and written by updateChunk/updateChunkState/updateChunkLods.
+A persisted chunk of an app's voxel world. Holds an optional packed voxel-type grid for 16x16x16 chunks (`voxels`, one byte per voxel), sparse per-voxel state overrides and recorded edits (`voxelStates`; voxel positions and types are app-defined signed 16-bit values, so an app may address its chunks however it likes), an optional opaque chunk-level state blob (`chunkState`), and level-of-detail meshes (`lods`). Returned by getChunk/getChunksByDistance and written by updateChunk/updateChunkState/updateChunkLods.
 """
 type Chunk {
   """Server-assigned unique chunk id (decimal string)."""
@@ -5244,9 +5294,13 @@ type Chunk {
   """
   voxels: String
   """
-  Sparse list of per-voxel overrides: the states stored with the chunk (e.g. rotation, atlas, flags) and every voxel edit recorded for it since (the voxel_updates log), each with its voxel type, which takes precedence over the type byte in `voxels`. Empty when the chunk has neither.
+  Sparse list of per-voxel overrides: the states stored with the chunk (e.g. rotation, atlas, flags) and every voxel edit recorded for it since (the voxel_updates log), each with its voxel type, which takes precedence over the type byte in `voxels`. Positions and types are app-defined signed 16-bit values; an entry outside the 16x16x16 grid or the 0-255 type range lives only here. Empty when the chunk has neither.
   """
   voxelStates: [VoxelState!]!
+  """
+  True when the chunk holds more recorded edits than one read applies (65,536 for getChunk; 262,144 across one getChunksByDistance call), so voxelStates stops short of the newest. Read the whole log with listVoxels, which pages.
+  """
+  voxelStatesTruncated: Boolean!
   """
   User id (decimal string) of the last writer of this chunk, or null if unknown.
   """
@@ -5279,9 +5333,11 @@ type Voxel {
   appId: BigInt!
   """Address of the chunk that contains the edited voxel."""
   coordinates: ChunkCoordinates!
-  """Local position of the edited voxel within its chunk (0-15 per axis)."""
+  """
+  Position of the edited voxel within its chunk (signed 16-bit per axis, app-defined).
+  """
   location: VoxelCoordinates!
-  """New voxel type id written by this edit (0-255)."""
+  """New voxel type id written by this edit (signed 16-bit, app-defined)."""
   voxelType: Int!
   """
   BASE64-encoded binary state blob for the voxel (decode from base64); null when no state was set.
@@ -5523,6 +5579,14 @@ type GameClientBootstrap {
   The wss:// form of gameApiUrl, for the graphql-transport-ws subscription socket and the binary relay. Same origin, same caveat: under direct connect it is one instance.
   """
   gameApiWsUrl: String
+  """
+  The app's runtime gate. Bootstrap answers for a paused app too, so a client can tell the player the world is paused (status not ACTIVE, with the reason) instead of showing an empty one; realtime sends and hub calls are refused until it is ACTIVE again.
+  """
+  runtimeGate: AppRuntimeGate!
+  """
+  Whether the app's wilderness (land no grid but the world grid covers) is open to players' voxel edits (App.wildernessWritesOpen). When false, edits there are refused, so a client can stop a player before sending one.
+  """
+  wildernessWritesOpen: Boolean!
 }
 
 """
@@ -6057,9 +6121,43 @@ type ExecAppStatus {
   """Node types switched off one by one."""
   disabledTypes: [String!]!
   """
-  Paused while the app is over its compute budget; it resumes by itself once a minute is back under it.
+  Paused while the app's runtime gate is not active (no funds, a spend cap, a lapsed subscription) or it is over its compute budget; it resumes by itself once the cause clears.
   """
   budgetPaused: Boolean!
+  """
+  Why the app is paused: insufficient_funds, spend_cap, subscription_lapsed or compute_budget. Null when it is not paused (or the manager predates reasons).
+  """
+  budgetPauseReason: String
+  """
+  The most instances the app may have placed in this datacenter. The free hub tier (an organization that has not funded the app) allows 16; null means the manager's default.
+  """
+  maxInstances: Int
+  """
+  The most memory, in MB, the app's placed instances may reserve in this datacenter (each instance reserves its type's memory). The free hub tier allows 1,024; null means no memory limit beyond the instance count.
+  """
+  maxReservedMb: Int
+  """
+  The instance limit in force: maxInstances, or the manager’s default when that is null. Null from a manager older than ck-exec 0.15.
+  """
+  instanceLimit: Int
+  """
+  Instances of the app placed and not yet stopped in this datacenter now, mods included. Null from a manager older than ck-exec 0.15.
+  """
+  instances: Int
+  """
+  Memory, in MB, those instances reserve now (what maxReservedMb limits). Null from a manager older than ck-exec 0.15.
+  """
+  reservedMb: Int
+}
+
+"""
+The result of execRestartType: how many running instances were persisted and stopped. They start again on the app's active version at their next call.
+"""
+type ExecRestartResult {
+  """The node type that was restarted."""
+  nodeType: String!
+  """Running instances persisted and stopped (0 when none ran)."""
+  stopped: Int!
 }
 
 """
@@ -6429,11 +6527,29 @@ type Query {
   Returns the authenticated user resolved from the token (sent as `Authorization: Bearer <token>`), or null if missing/invalid. Readable with either an identity session token or an app-scoped gameplay token.
   """
   me: User
-  """Looks up a single user by id. Requires a valid game token."""
+  """
+  Looks up a single user by id. Requires a valid game token. Another user's private fields (email, state, isConfirmed, early access, orgId, externalId, userType, isSuperAdmin, isOperator, hasPassword, permissionsForOrg) are null unless the caller is that user, a super-admin or an operator. A game client showing names should use playerProfile / playerProfiles.
+  """
   user(
     """Target user id (BigInt sent as a decimal string)."""
     id: BigInt!
   ): User
+  """
+  A player's public profile (user id, gamertag, disambiguation), for a game client's nametags and lists. Requires a valid game token. Null when there is no such user.
+  """
+  playerProfile(
+    """The user id (BigInt sent as a decimal string)."""
+    userId: BigInt!
+  ): PlayerProfile
+  """
+  Public profiles (user id, gamertag, disambiguation) for up to 100 user ids in one call, in no particular order; ids with no user are omitted. Requires a valid game token. Use it after batchLookupActors to name everyone in view at once.
+  """
+  playerProfiles(
+    """
+    User ids (BigInt decimal strings), at most 100; duplicates are read once.
+    """
+    userIds: [BigInt!]!
+  ): [PlayerProfile!]!
   """
   Lifetime donation totals for the authenticated user, summed across every app. Requires a valid game token.
   """
@@ -8388,7 +8504,7 @@ type Mutation {
     input: GrantAppAccessInput!
   ): AppUserAccess! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "input.appId")
   """
-  Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess.
+  Revoke a user's access to an app by setting their app_user_access status to 'revoked'. Their gameplay tokens for the app are deleted and their realtime sessions ended at once, and a new token is refused with ACCESS_REVOKED. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. For a ban that lifts by itself use suspendAppAccess.
   """
   revokeAppAccess(
     """Numeric id of the app to revoke access on."""
@@ -8400,6 +8516,39 @@ type Mutation {
     """
     idempotencyKey: String
   ): AppUserAccess! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
+  """
+  Suspend a user's access to an app until a time: a timed ban that lifts by itself. Until then their gameplay tokens are refused with ACCESS_SUSPENDED (carrying suspendedUntil), and the tokens they hold for the app are deleted and their realtime sessions ended at once. The time must be in the future and at most 365 days away. The user must have an access record. Requires the 'manage_access_tiers' permission on the app; super admins bypass. REVERSIBLE early via unsuspendAppAccess.
+  """
+  suspendAppAccess(
+    """Numeric id of the app."""
+    appId: BigInt!
+    """Numeric id of the user to suspend."""
+    userId: BigInt!
+    """
+    When the suspension lapses (ISO-8601, in the future). Access returns by itself then.
+    """
+    until: DateTime!
+    """
+    Optional idempotency key. Recommended for retries: replaying with the same key and identical arguments returns the first result instead of re-applying; the same key with different arguments returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
+    """
+    idempotencyKey: String
+  ): AppUserAccess! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
+  """
+  Lift a user's suspension (suspendAppAccess) before it lapses. A no-op for a user who is not suspended. Requires the 'manage_access_tiers' permission on the app; super admins bypass.
+  """
+  unsuspendAppAccess(
+    """Numeric id of the app."""
+    appId: BigInt!
+    """Numeric id of the user whose suspension to lift."""
+    userId: BigInt!
+  ): AppUserAccess! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
+  """
+  Re-apply every player's tier keys that follow onto the app's world grid (today use_video_chat) and rebuild the world grid's permissions. Tier changes (grantAppAccess with a tier, updateAccessTier with permissionKeys) already do this; call it after any change made another way. Requires the 'manage_access_tiers' permission on the app; super admins bypass.
+  """
+  resyncTierGridPermissions(
+    """Numeric id of the app."""
+    appId: BigInt!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_access_tiers", scopeArg: "appId")
   """
   Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived.
   """
@@ -9211,7 +9360,7 @@ type Mutation {
   """
   updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
   """
-  Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass).
+  Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). A reverted voxel’s edit-log row takes the earlier edit’s type, state and author and the ROLLBACK’s time as its createdAt, so a client reading edits `since` its last sync sees the revert. Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass).
   """
   rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
@@ -9426,7 +9575,7 @@ type Mutation {
     input: SetChannelPolicyInput!
   ): AppGroupPolicy!
   """
-  Create a channel. Whether the caller may create one is governed by the per-app channel policy (app_group_policies: admin | member | anyone). The caller becomes the owner with a system 'leader' role. When membersCanSend is true (default) a default 'member' role granting send_messages is created and auto-assigned to joiners (open chat channel); when false only roles you grant may post (announce/read-only channel).
+  Create a channel. Whether the caller may create one is governed by the per-app channel policy (app_group_policies: admin | member | anyone). The caller becomes the owner with a system 'leader' role. When membersCanSend is true (default) a default 'member' role granting send_messages is created and auto-assigned to joiners (open chat channel); when false only roles you grant may post (announce/read-only channel). membersCanSpeak (default false) adds send_voice to that role, so members may send channel audio (party or guild voice); voice also needs the player's use_voice_chat.
   """
   createChannel(
     """
@@ -9651,6 +9800,15 @@ type Mutation {
     """Only this node type; the whole app when omitted."""
     nodeType: String
   ): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
+  """
+  Moves one node type's running instances to the app's active version: each is persisted and stopped, and starts again on the active version at its next call. A deploy (execDeploy, execActivateVersion) changes which version NEW instances run but leaves running ones on theirs until they stop; this is how to move them without switching the type off. Requires the org 'manage_compute' permission.
+  """
+  execRestartType(
+    """The app whose ck-exec code this is about."""
+    appId: BigInt!
+    """The node type whose running instances to restart."""
+    nodeType: String!
+  ): ExecRestartResult! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
   Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints. The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token.
   """
@@ -10042,6 +10200,15 @@ type Mutation {
     input: ChannelMessageInput!
   ): Boolean!
   """
+  Send audio to a channel: delivered to every active member of the channel, wherever they are (party or guild voice), as a ChannelAudioNotification on udpNotifications. The payload is opaque (at most 1024 bytes): your app or an SDK voice helper defines the format and codec. Requires a bearer game token, the channel send_voice permission and the player’s use_voice_chat; without either the server refuses it with UNAUTHORIZED (asynchronously, on udpNotifications). Opens a UDP proxy session automatically if none exists. The sender receives no echo. Every member’s downlink is billed as egress, so keep voice channels small. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING, not delivered; correlate failures by sequenceNumber (correlation only, not an idempotency key).
+  """
+  sendChannelAudio(
+    """
+    The channel audio to send: channelId (groups.group_id), the sender’s 32-byte actor uuid, base64 payload (max 1024 bytes), and optional sequenceNumber. Same shape as sendChannelMessage.
+    """
+    input: ChannelMessageInput!
+  ): Boolean!
+  """
   Publish a message to a channel that only reaches members near an origin chunk: a member receives it, as an ordinary ChannelMessageNotification on udpNotifications, when one of its live actors is in the same app within maxDistance chunks of input.chunk (straight-line distance between chunk coordinates, boundary included). A member with no live actor does not receive it. Requires a bearer game token and the channel send_messages permission, as for sendChannelMessage; the origin app must be the token’s app. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications (UNAUTHORIZED without the send right, INVALID_APP_ID for another app), correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
   sendRangedChannelMessage(
@@ -10194,19 +10361,19 @@ input TeleportRequestInput {
 }
 
 """
-Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). Each coordinate is 0-15 on a 16x16x16 chunk, and the voxel writes (updateVoxel, sendVoxelUpdate, updateChunk's voxelStates) refuse any other value. Teleport's voxelAddress, which is not a write, takes any signed 16-bit value.
+Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). App-defined: each coordinate is any signed 16-bit integer, on every voxel write (updateVoxel, sendVoxelUpdate, updateChunk's voxelStates) and in teleport's voxelAddress; the platform checks no narrower range. Apps that use the 16x16x16 dense grid use 0-15.
 """
 input VoxelCoordinatesInput {
   """
-  Local voxel X within the chunk, 0-15; voxel writes refuse other values.
+  Local voxel X within the chunk. App-defined: any signed 16-bit integer (-32768 to 32767). Apps that use the 16x16x16 dense grid use 0-15.
   """
   x: Int!
   """
-  Local voxel Y within the chunk, 0-15; voxel writes refuse other values.
+  Local voxel Y within the chunk. App-defined: any signed 16-bit integer (-32768 to 32767). Apps that use the 16x16x16 dense grid use 0-15.
   """
   y: Int!
   """
-  Local voxel Z within the chunk, 0-15; voxel writes refuse other values.
+  Local voxel Z within the chunk. App-defined: any signed 16-bit integer (-32768 to 32767). Apps that use the 16x16x16 dense grid use 0-15.
   """
   z: Int!
 }
@@ -10526,6 +10693,10 @@ input UpdateAppInput {
   Turn replay logging on (true) or off (false): record every client input the realtime servers accept for this app, kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt; turning it off always succeeds. Recording starts and stops within about 15 seconds. Omit to leave unchanged.
   """
   replayLoggingEnabled: Boolean
+  """
+  Grid permission keys a player's claim grants its owner on the claimed grid (at most 8; active grid keys; never a player-code key). An empty list grants none. Applies to claims made from now on. Omit to leave unchanged.
+  """
+  claimOwnerKeys: [String!]
 }
 
 input AdmitAppCodeInput {
@@ -11112,11 +11283,11 @@ input ChunkUpdateInput {
 """One per-voxel state entry to write to a chunk."""
 input VoxelStateInput {
   """
-  Local voxel position within the chunk, 0-15 per axis; anything else is refused.
+  Voxel position within the chunk. App-defined: any signed 16-bit integer per axis; a position outside the 16x16x16 dense grid lives only in voxel states.
   """
   voxelCoord: VoxelCoordinatesInput!
   """
-  Voxel type id to set at this position, 0-255; anything else is refused.
+  Voxel type id to set at this position. App-defined: any signed 16-bit integer (-32768 to 32767). The dense grid stores 0-255; a wider type lives in this voxel state.
   """
   voxelType: Int!
   """
@@ -11134,7 +11305,7 @@ input UpdateChunkStateInput {
   """Address of the chunk whose chunk-level state to set."""
   coordinates: ChunkCoordinatesInput!
   """
-  BASE64-encoded binary chunk-level state blob to store. Omit/null to store no chunk state.
+  BASE64-encoded binary chunk-level state blob to store, at most 65,536 bytes decoded. Omit/null to store no chunk state.
   """
   chunkState: String
 }
@@ -11170,10 +11341,12 @@ input UpdateVoxelInput {
   """Address of the chunk that contains the voxel to edit."""
   coordinates: ChunkCoordinatesInput!
   """
-  Local voxel position within the chunk, 0-15 per axis; anything else is refused.
+  Local voxel position within the chunk. App-defined: any signed 16-bit integer per axis (-32768 to 32767); apps on the 16x16x16 dense grid use 0-15.
   """
   location: VoxelCoordinatesInput!
-  """Voxel type id to write, 0-255; anything else is refused."""
+  """
+  Voxel type id to write. App-defined: any signed 16-bit integer (-32768 to 32767).
+  """
   voxelType: Float!
   """
   Optional BASE64-encoded binary state blob for the voxel; omit for none.
@@ -11509,6 +11682,10 @@ input CreateChannelInput {
   When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel).
   """
   membersCanSend: Boolean
+  """
+  When true, new members are also auto-granted send_voice so they can send channel audio (party or guild voice, delivered to every member wherever they are). False (default): only roles you grant send_voice may speak. Voice also needs the player's use_voice_chat tier permission, and every member's downlink is billed as egress, so keep voice channels small.
+  """
+  membersCanSpeak: Boolean
 }
 
 """
@@ -11527,6 +11704,10 @@ input CreateGridChannelInput {
   When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel).
   """
   membersCanSend: Boolean
+  """
+  When true, new members are also auto-granted send_voice so they can send channel audio (party or guild voice, delivered to every member wherever they are). False (default): only roles you grant send_voice may speak. Voice also needs the player's use_voice_chat tier permission, and every member's downlink is billed as egress, so keep voice channels small.
+  """
+  membersCanSpeak: Boolean
   """The grid the channel belongs to. The caller must own it."""
   gridId: BigInt!
 }
@@ -12020,11 +12201,11 @@ input VoxelUpdateRequestInput {
   """
   uuid: String!
   """
-  The voxel coordinates within the chunk, 0-15 on each axis; anything else is refused.
+  The voxel coordinates within the chunk. App-defined: any signed 16-bit integer on each axis (-32768 to 32767); apps on the 16x16x16 dense grid use 0-15.
   """
   voxel: VoxelCoordinatesInput!
   """
-  The new voxel type ID, 0-255 (anything else is refused). This determines the appearance and properties of the voxel.
+  The new voxel type ID. App-defined: any signed 16-bit integer (-32768 to 32767). This determines the appearance and properties of the voxel.
   """
   voxelType: Int!
   """

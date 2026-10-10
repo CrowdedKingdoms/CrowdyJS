@@ -1731,7 +1731,7 @@ export type GameClientBootstrapQueryVariables = Exact<{
 }>;
 
 
-export type GameClientBootstrapQuery = { gameClientBootstrap: { appId: string, gameApiUrl: string | null, gameApiWsUrl: string | null, discoveryUrl: string | null, realtimeProtocol: string, subscriptionName: string, maxReplicationDistance: number, maxDecayRate: number, sequenceNumberModulo: number, udpProxyConnectionStatus: { connected: boolean, serverIp6: string | null, serverClientPort: number | null, lastMessageTime: string | null }, versionInfo: { serverVersion: { major: number, minor: number, patch: number, build: number }, minimumClientVersion: { major: number, minor: number, patch: number, build: number } }, me: { userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, state: string | null, isConfirmed: boolean, createdAt: string, grantEarlyAccess: boolean, grantEarlyAccessOverride: boolean, orgId: string | null, externalId: string | null, userType: string, isSuperAdmin: boolean } } };
+export type GameClientBootstrapQuery = { gameClientBootstrap: { appId: string, gameApiUrl: string | null, gameApiWsUrl: string | null, discoveryUrl: string | null, realtimeProtocol: string, subscriptionName: string, maxReplicationDistance: number, maxDecayRate: number, sequenceNumberModulo: number, udpProxyConnectionStatus: { connected: boolean, serverIp6: string | null, serverClientPort: number | null, lastMessageTime: string | null }, versionInfo: { serverVersion: { major: number, minor: number, patch: number, build: number }, minimumClientVersion: { major: number, minor: number, patch: number, build: number } }, me: { userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, state: string | null, isConfirmed: boolean | null, createdAt: string, grantEarlyAccess: boolean | null, grantEarlyAccessOverride: boolean | null, orgId: string | null, externalId: string | null, userType: string | null, isSuperAdmin: boolean | null } } };
 
 export type GraphqlServersQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -2162,28 +2162,28 @@ export type FreePlayWindowQuery = { freePlayWindowInfo: { isCurrentlyActive: boo
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type MeQuery = { me: { userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, state: string | null, isConfirmed: boolean, createdAt: string, grantEarlyAccess: boolean, grantEarlyAccessOverride: boolean, orgId: string | null, externalId: string | null, userType: string, isSuperAdmin: boolean } | null };
+export type MeQuery = { me: { userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, state: string | null, isConfirmed: boolean | null, createdAt: string, grantEarlyAccess: boolean | null, grantEarlyAccessOverride: boolean | null, orgId: string | null, externalId: string | null, userType: string | null, isSuperAdmin: boolean | null } | null };
 
 export type UpdateGamertagMutationVariables = Exact<{
   input: Types.UpdateGamertagInput;
 }>;
 
 
-export type UpdateGamertagMutation = { updateGamertag: { userId: string, gamertag: string | null, disambiguation: string | null, userType: string } };
+export type UpdateGamertagMutation = { updateGamertag: { userId: string, gamertag: string | null, disambiguation: string | null, userType: string | null } };
 
 export type UpdateUserStateMutationVariables = Exact<{
   input: Types.UpdateUserStateInput;
 }>;
 
 
-export type UpdateUserStateMutation = { updateUserState: { userId: string, state: string | null, userType: string } };
+export type UpdateUserStateMutation = { updateUserState: { userId: string, state: string | null, userType: string | null } };
 
 export type UserQueryVariables = Exact<{
   id: string;
 }>;
 
 
-export type UserQuery = { user: { userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, state: string | null, isConfirmed: boolean, createdAt: string, grantEarlyAccess: boolean, grantEarlyAccessOverride: boolean, orgId: string | null, externalId: string | null, userType: string, isSuperAdmin: boolean } | null };
+export type UserQuery = { user: { userId: string, email: string | null, gamertag: string | null, disambiguation: string | null, state: string | null, isConfirmed: boolean | null, createdAt: string, grantEarlyAccess: boolean | null, grantEarlyAccessOverride: boolean | null, orgId: string | null, externalId: string | null, userType: string | null, isSuperAdmin: boolean | null } | null };
 
 export type ListVoxelUpdatesByDistanceQueryVariables = Exact<{
   input: Types.ListVoxelUpdatesByDistanceInput;
