@@ -11,6 +11,7 @@ query GetChunksByDistance($input: GetChunksByDistanceInput!) {
         z
       }
       voxels
+      voxelStatesTruncated
       owner
       createdAt
       updatedAt

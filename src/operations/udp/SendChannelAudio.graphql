@@ -1,0 +1,3 @@
+mutation SendChannelAudio($input: ChannelMessageInput!) {
+  sendChannelAudio(input: $input)
+}

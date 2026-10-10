@@ -120,6 +120,95 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.7.0: voice helpers, channel audio, opcode 140 on the relay, wide voxels, self-echo, pause and access refusals
+
+Additive, with reads that change for values they used to get wrong (the wide-voxel item) and one
+new floor: **the token mutations (`portal.mintAppToken`, `exchangeCode`, `refresh`) select
+`runtimeGate` and the `udpNotifications` subscription selects `ChannelAudioNotification`, so
+18.7.0 needs the ck-api release after v2.39.0 that carries both** (an older one refuses the
+selections). Channel audio and the voxel echo need Buddy v0.37.0.
+
+- **Voice helpers** (`media/voice-frames.ts`, exported from the package entry): an optional
+  convention for what an audio payload carries. A 10-byte header, little-endian, goes in front of
+  each codec frame: version 1, codec (0 raw, 1 Opus 48 kHz mono, 2 G.711 µ-law 8 kHz), `u16` seq,
+  `u32` timestamp in codec samples (milliseconds for raw), the frame's duration in ms, and flags
+  (bit 0 the first packet after silence, bit 1 the last before it). `encodeVoiceHeader` /
+  `encodeVoicePacket` write it; `decodeVoicePacket` returns `null` for a packet shorter than
+  10 bytes or of another version and never throws. `VoicePacketizer` numbers one sender's frames
+  across the seq and timestamp wraps and sets the flags (`packetize(frame, { last })`, `skip()`
+  for silence). `VoiceJitterBuffer` takes `push(key, packet, nowMs)` per sender key and returns
+  the due frames from `pull(key, nowMs)` / `poll(nowMs)`: in seq order, `targetDelayMs` (60) after
+  a talk spurt's first packet, a gap (`frame: null`) for each one that never came, late packets
+  dropped, at most `maxFrames` (64) a sender, starting over on a talk spurt or `resetAfterMs`
+  (200) of silence. A spurt that starts while the one before still has frames waiting drops
+  them. CrowdyCPP 0.60.0 has the same helpers and replays `test/unit/fixtures/voice-frames.json`.
+  No codec ships: a browser encodes Opus with WebCodecs (the module doc has the settings). A game
+  with a voice format of its own keeps it; positioning a voice stays the game's.
+- **`genericSpatial`.** Opcode 140 (`GENERIC_SPATIAL_1`), an app-defined spatial payload such as
+  CrowdyCPP's `Connection::sendGenericSpatial`, reaches the new `genericSpatial` handler of
+  `udp.subscribe` (and `any`) as a `GenericSpatialNotification`: the spatial header fields and a
+  base64 `payload`. The World Stores bus has a `genericSpatial` key. **Binary relay only**
+  (`realtime: { binaryTransport: true }`): the GraphQL `udpNotifications` union has no member for
+  140, so the proxy drops it and a client on the GraphQL transport never sees one. `UdpNotification`
+  gains the member, so an exhaustive `switch` over `__typename` needs the new case.
+- **`ChunkStore` keeps wide voxel types and other addresses.** Positions and types are the app's
+  signed 16-bit values, which the platform does not check. An edit the 16×16×16 one-byte grid
+  cannot hold (a type outside 0-255, a position outside 0-15) — a realtime update, a hydrated
+  `voxelStates` entry, or a local `setVoxel` — is kept whole in the new `CachedChunk.overlay`
+  (`ChunkOverlayVoxel`: `x`, `y`, `z`, `voxelType`, `state`; keyed by `voxelKey(x, y, z)`), and
+  `voxelTypeAt` / `voxelStateAt` return it. What changes: a type outside 0-255 is no longer stored
+  truncated (300 used to read as 44, -1 as 255); a position outside 0-15 no longer lands on
+  another voxel (`(16, 0, 0)` used to overwrite `(0, 1, 0)`), and reading one returns the overlay's
+  or nothing; and code that walks `chunk.voxels` itself sees 0 where an in-grid voxel's type is in
+  the overlay. The store is a 16×16×16 helper; a game with other addressing reads the raw
+  `voxelUpdate` events and `chunks.get`'s `voxelStates`.
+- **`createGridHostCalls({ voxelBounds })`** sets the positions and types a CLIENT half's
+  `voxel_set` may write, for a world that uses other signed 16-bit values. The default,
+  `DEFAULT_GRID_VOXEL_BOUNDS`, is today's: positions 0-15, types 0-255. Bounds that are not
+  integer ranges within -32768 to 32767 throw `RangeError` when the host calls are created.
+- **Channel audio** (Buddy v0.37.0). `udp.sendChannelAudio({ channelId, uuid, payload,
+  sequenceNumber? })` sends opcode 35 (opcode 17's layout and signing) on the binary relay, else
+  the `sendChannelAudio` mutation; `payload` is base64, at most 1,024 bytes, and the server
+  refuses it with `UNAUTHORIZED` (7) without the channel's `send_voice` and the app's
+  `use_voice_chat`. There is no echo to the sender. Other members' frames arrive as opcode 36,
+  standalone or bundled, as a `ChannelAudioNotification` (`channelId`, `uuid`, `audioData`
+  base64, `sequenceNumber`, `epochMillis`) on the new `channelAudio` handler of `udp.subscribe`
+  (and `any`) and the World Stores bus key `channelAudio`, on the binary relay and on the GraphQL
+  transport alike (the `udpNotifications` subscription selects the union's
+  `ChannelAudioNotification`, so it too needs that ck-api release). `channels.create` /
+  `grids.createChannel` take `membersCanSpeak` (default false: the member role gets
+  `send_voice`); `GridScope.channels` has `sendAudio(channelId, uuid, audioBase64)`;
+  `serializeChannelAudio` is exported. The voice helpers are the payload: see the README.
+- **UDP error 33, `APP_PAUSED`**: the replication server refuses a paused app's sends.
+  `UDP_ERROR_NAMES[33]` and the generated `UdpErrorCode.AppPaused` name it.
+- **Voxel edits are int16 and their state at most 1,024 bytes.** `udp.sendVoxelUpdate` and
+  `ChunkStore.setVoxel` throw `RangeError` (nothing sent) for a position or type outside
+  -32768..32767 or a state over 1,024 bytes (`assertVoxelEdit`, `VOXEL_STATE_MAX_BYTES`); the
+  server answers those with `INVALID_REQUEST` (15). The 0-15 / 0-255 ranges in the docs were
+  never enforced and are gone.
+- **The echo of your own voxel edit.** Buddy v0.37.0 delivers every accepted edit back to its
+  sender as a `VoxelUpdateNotification`. `ChunkStore` records each `setVoxel` (uuid, sequence,
+  voxel) for 10 s and does not apply its echo again, so a local edit fires `onChunkChanged` once;
+  it applies the echo only when another client's edit of the voxel arrived in between (the server
+  ordered yours last) and no newer local edit of it is pending. A game reading `voxelUpdate`
+  itself sees its own edits there now: compare the `uuid` and `sequenceNumber` with the send's.
+- **Pause and access refusals.** `isAppPaused(gate)` reads `AppTokenResponse.runtimeGate` and
+  `GameClientBootstrap.runtimeGate` (`{ status, reason }`; anything but `ACTIVE` is paused; a
+  paused app still mints, so check before entering). `appPausedOf(err)` reads `APP_PAUSED`
+  (`reason`), `accessRefusalOf(err)` `ACCESS_REVOKED` / `ACCESS_SUSPENDED` (`suspendedUntil`) /
+  `ACCESS_NOT_GRANTED`, `actorExistsOf(err)` `ACTOR_EXISTS` (`ownedByCaller`), with their
+  `*_CODE` constants.
+- **New API wraps**: `users.playerProfile(userId)` and `users.playerProfiles(userIds)` (at most
+  `PLAYER_PROFILES_MAX`, 100; `RangeError` above) for public `{ userId, gamertag, disambiguation }`;
+  `users.get` documents that another user's private fields come back null.
+  `appAccess.suspend(appId, userId, until, idempotencyKey?)`, `unsuspend`,
+  `resyncTierGridPermissions` (`manage_access_tiers`); `suspendedUntil` on every access record.
+  `exec.restartType(appId, nodeType)` → `{ nodeType, stopped }` (`manage_compute`);
+  `exec.status` adds `budgetPauseReason`, `maxInstances`, `maxReservedMb`, `instanceLimit`,
+  `instances`, `reservedMb`. `apps.get` / `apps.update` carry `claimOwnerKeys`;
+  `chunks.get` / `getByDistance` carry `voxelStatesTruncated`; `gameClientBootstrap` carries
+  `runtimeGate` and `wildernessWritesOpen`.
+
 ## 18.6.0: the input log
 
 Additive. An app with replay logging on has its client inputs recorded, and `client.inputLog`

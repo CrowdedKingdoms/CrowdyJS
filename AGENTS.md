@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.6.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.7.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,35 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.7.0: voice helpers, channel audio, opcode 140, wide voxels, self-echo, pause and access
+refusals (the Minecraft mod's platform asks, 2026-10-10).** Needs the ck-api release after v2.39.0
+(the token mutations select `runtimeGate`) and Buddy v0.37.0 for channel audio and the voxel echo.
+`media/voice-frames.ts` is an optional voice payload convention: a 10-byte
+header (version 1, codec 0 raw / 1 Opus 48 kHz / 2 µ-law 8 kHz, `u16` seq, `u32` timestamp,
+frameMs, talk-spurt flags), `VoicePacketizer` and `VoiceJitterBuffer` (per sender key; 60 ms
+target delay, gaps, late drops, 64 frames a sender, starts over on a talk spurt or 200 ms of
+silence). `test/unit/fixtures/voice-frames.json` is the case set CrowdyCPP copies byte for byte
+(`tools/parity/fixtures/voice-frames.json`, held to the pin by its parity test) and replays: a
+behaviour change edits the fixture and both replays. No codec ships; browsers use WebCodecs.
+Opcode 140 (`GENERIC_SPATIAL_1`) reaches `genericSpatial` (handler, bus key, metrics kind) on the
+**binary relay only**: the GraphQL union has no member for it and nothing was added to the schema.
+`ChunkStore` keeps an edit the one-byte 16³ grid cannot hold (type outside 0-255, position outside
+0-15) in `CachedChunk.overlay` instead of truncating or aliasing it, and `createGridHostCalls`
+takes `voxelBounds` (default 0-15 / 0-255). Channel audio: `udp.sendChannelAudio` (opcode 35 =
+opcode 17's builder with type 35, `serializeChannelFrame` in `binary-wire.ts`, else the mutation)
+and opcode 36 parsed like 18 into `ChannelAudioNotification` (handler / bus key `channelAudio`).
+`ChannelAudioNotification` is the generated union member (cks-game-api `feat/mc-platform-asks`
+added it to `udpNotifications`); `UdpNotifications.graphql` selects it, so the GraphQL transport
+reaches the same `channelAudio` handler and the subscription needs a game API that has it. UDP
+error 33 is `APP_PAUSED`.
+`assertVoxelEdit` is the one int16 / 1,024-byte state check for `sendVoxelUpdate` and
+`ChunkStore.setVoxel`. `ChunkStore` keeps pending local edits per voxel for 10 s and applies an
+echo of one only when a foreign edit came in between and no newer local edit is pending
+(`test/unit/chunk-store-echo.test.mjs`). `errors.ts` adds `actorExistsOf`, `accessRefusalOf`,
+`appPausedOf`, `isAppPaused`; `portal.ts` selects `runtimeGate` (identity path: security review
+before the PR). CrowdyCPP 0.60.0 mirrors all of it; its wire_test and
+`test/unit/channel-audio.test.mjs` pin the same opcode 35 bytes.
 
 **18.6.0: the input log (2026-10-09).** `client.inputLog.sessions` / `messages` wrap cks-game-api's
 `inputLogSessions` / `inputLogMessages`: the client inputs recorded for an app with replay logging on
@@ -656,7 +685,7 @@ reference consumer of the hosted flow.
 | Parties, guilds, chat rooms | `kit(appId).social` |
 | Client-side simulation authority | `host.heartbeat`; the hub decides from its caller |
 | Tier-gated features | `appAccess.defineFeature` / `grantTierFeature`; a hub reads `players.features` |
-| Voice / chat / guilds | `udp.sendAudioPacket`; `udp.sendTextPacket`; `channels.*`; `teams.*` |
+| Voice / chat / guilds | `udp.sendAudioPacket` (optionally framed with `VoicePacketizer`, played back through `VoiceJitterBuffer`); `udp.sendTextPacket`; `channels.*`; `teams.*` |
 | Land claims | `gameApps.createGrid` / `grantPermissions` |
 | Players' code on their grids | ck-exec mods (`exec.modBuild` / `modDeploy`) and their CLIENT halves (`exec.modClientBuild` / `modClientDeploy`); visitors run a grid's with `ExecClientHalves` (`PlayerCodeBroker`, `createGridHostCalls`) |
 | Direct player-to-player | `udp.sendSingleActorMessage` |

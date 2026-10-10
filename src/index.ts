@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.6.0';
+export const VERSION = '18.7.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -105,6 +105,7 @@ export {
   serializeActorUpdate,
   serializeAudioPacket,
   serializeVideoPacket,
+  serializeChannelAudio,
   serializeChannelMessage,
   serializeClientEvent,
   serializeRangedChannelMessage,
@@ -112,6 +113,9 @@ export {
   serializeSingleActorMessage,
   serializeTextPacket,
   serializeVoxelUpdate,
+  assertVoxelEdit,
+  VOXEL_STATE_MAX_BYTES,
+  type ChannelSendInput,
   type RelaySignContext,
 } from './binary-wire.js';
 export {
@@ -128,6 +132,30 @@ export {
   type VideoFragmentHeader,
   type AssembledVideoFrame,
 } from './media/video-frames.js';
+export {
+  VOICE_HEADER_BYTES,
+  VOICE_HEADER_VERSION,
+  MAX_VOICE_FRAME_BYTES,
+  VOICE_TARGET_DELAY_MS,
+  VOICE_JITTER_MAX_FRAMES,
+  VOICE_RESET_AFTER_MS,
+  VoiceCodec,
+  VoiceFlag,
+  voiceClockRate,
+  voiceSamplesPerFrame,
+  voiceSeqDiff,
+  encodeVoiceHeader,
+  encodeVoicePacket,
+  decodeVoicePacket,
+  VoicePacketizer,
+  VoiceJitterBuffer,
+  type VoiceHeader,
+  type VoicePacket,
+  type VoicePacketizerOptions,
+  type VoiceJitterBufferOptions,
+  type VoicePushResult,
+  type VoicePlayout,
+} from './media/voice-frames.js';
 export {
   RealtimeMetrics,
   payloadBytesOf,
@@ -206,6 +234,15 @@ export type {
 } from './stores/index.js';
 
 export {
+  ACCESS_NOT_GRANTED_CODE,
+  ACCESS_REVOKED_CODE,
+  ACCESS_SUSPENDED_CODE,
+  ACTOR_EXISTS_CODE,
+  APP_PAUSED_CODE,
+  accessRefusalOf,
+  actorExistsOf,
+  appPausedOf,
+  isAppPaused,
   APP_UNAVAILABLE_CODE,
   CrowdyAppUnavailableError,
   CrowdyError,
@@ -220,6 +257,8 @@ export {
   WRONG_DATACENTER_CODE,
 } from './errors.js';
 export type {
+  AppPauseReason,
+  CrowdyAccessRefusal,
   CrowdyFaultBlame,
   CrowdyFaultCode,
   CrowdyPlayerFault,
@@ -254,6 +293,8 @@ export type {
   ClientTextNotification,
   ClientEventNotification,
   ServerEventNotification,
+  GenericSpatialNotification,
+  ChannelAudioNotification,
   GenericErrorResponse,
   ActorUpdateHandler,
   ActorUpdateResponseHandler,
@@ -265,6 +306,8 @@ export type {
   ClientTextHandler,
   ClientEventHandler,
   ServerEventHandler,
+  GenericSpatialHandler,
+  ChannelAudioHandler,
   GenericErrorHandler,
   UnsubscribeFn,
 } from './types.js';
@@ -286,7 +329,7 @@ export {
   type AuthUser,
   type UserIdentity,
 } from './domains/auth.js';
-export { UsersAPI } from './domains/users.js';
+export { PLAYER_PROFILES_MAX, UsersAPI } from './domains/users.js';
 export { AppsAPI, type AppRoute } from './domains/apps.js';
 export {
   PortalAPI,
@@ -295,6 +338,7 @@ export {
   defaultHostedSignInUrl,
   isHostedSignInRequiredError,
   isLegalAcceptanceRequiredError,
+  type AppRuntimeGate,
   type AppTokenResponse,
   type CurrentServer,
   type PortalAuthorizationCode,
@@ -385,6 +429,7 @@ export {
   type ExecManifest,
   type ExecManifestType,
   type ExecAppStatus,
+  type ExecRestartResult,
   type ExecEndpointStat,
   type ExecEndpointStatsOptions,
   ExecModScope,

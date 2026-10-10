@@ -1,0 +1,941 @@
+{
+  "about": "The voice payload convention (header v1, packetizer, jitter buffer). Owned by CrowdyJS (src/media/voice-frames.ts, test/unit/voice-frames.test.mjs); CrowdyCPP copies this file byte for byte to tools/parity/fixtures/voice-frames.json and replays it in tests/voice_frames_test.cpp. Bytes are hex; times are milliseconds on the caller's clock; a pull entry with \"frame\": null is a gap.",
+  "headers": [
+    {
+      "note": "Opus, the first packet of a spurt; every field little-endian",
+      "header": {
+        "codec": 1,
+        "seq": 4660,
+        "timestamp": 2309737967,
+        "frameMs": 20,
+        "flags": 1
+      },
+      "frame": "deadbeef",
+      "packet": "01013412efcdab891401deadbeef"
+    },
+    {
+      "note": "G.711 mu-law at the top of every counter, the last packet before silence, no frame",
+      "header": {
+        "codec": 2,
+        "seq": 65535,
+        "timestamp": 4294967295,
+        "frameMs": 60,
+        "flags": 2
+      },
+      "frame": "",
+      "packet": "0102ffffffffffff3c02"
+    },
+    {
+      "note": "raw, a one-packet spurt (both flags)",
+      "header": {
+        "codec": 0,
+        "seq": 0,
+        "timestamp": 0,
+        "frameMs": 10,
+        "flags": 3
+      },
+      "frame": "00ff",
+      "packet": "01000000000000000a0300ff"
+    }
+  ],
+  "decoded": [
+    {
+      "note": "a codec and flag bits this SDK does not know are carried through",
+      "packet": "0107010002000000148400ff",
+      "header": {
+        "version": 1,
+        "codec": 7,
+        "seq": 1,
+        "timestamp": 2,
+        "frameMs": 20,
+        "flags": 132
+      },
+      "frame": "00ff"
+    },
+    {
+      "note": "a frame duration of 0 is a header readers accept (the jitter buffer refuses it)",
+      "packet": "0101050006000000000011",
+      "header": {
+        "version": 1,
+        "codec": 1,
+        "seq": 5,
+        "timestamp": 6,
+        "frameMs": 0,
+        "flags": 0
+      },
+      "frame": "11"
+    }
+  ],
+  "rejected": [
+    {
+      "note": "empty",
+      "packet": ""
+    },
+    {
+      "note": "nine bytes",
+      "packet": "010100000000000014"
+    },
+    {
+      "note": "version 0",
+      "packet": "00010000000000001401aa"
+    },
+    {
+      "note": "version 2",
+      "packet": "02010000000000001401aa"
+    }
+  ],
+  "packetizer": [
+    {
+      "note": "Opus 20 ms across the seq and timestamp wrap, a spurt that ends, silence, and a one-packet spurt",
+      "options": {
+        "codec": 1,
+        "frameMs": 20,
+        "seq": 65534,
+        "timestamp": 4294966336
+      },
+      "steps": [
+        {
+          "packetize": "01",
+          "packet": "0101feff40fcffff140101"
+        },
+        {
+          "packetize": "02",
+          "packet": "0101ffff00000000140002"
+        },
+        {
+          "packetize": "03",
+          "last": true,
+          "packet": "01010000c0030000140203"
+        },
+        {
+          "skip": 2,
+          "nextSeq": 1,
+          "nextTimestamp": 3840
+        },
+        {
+          "packetize": "04",
+          "packet": "01010100000f0000140104"
+        },
+        {
+          "packetize": "05",
+          "last": true,
+          "packet": "01010200c0120000140205"
+        },
+        {
+          "skip": 0,
+          "nextSeq": 3,
+          "nextTimestamp": 5760
+        },
+        {
+          "packetize": "06",
+          "last": true,
+          "packet": "0101030080160000140306"
+        },
+        {
+          "packetize": "07",
+          "packet": "01010400401a0000140107"
+        }
+      ]
+    },
+    {
+      "note": "G.711 mu-law 60 ms: 480 samples a frame",
+      "options": {
+        "codec": 2,
+        "frameMs": 60
+      },
+      "steps": [
+        {
+          "packetize": "aabb",
+          "packet": "01020000000000003c01aabb"
+        },
+        {
+          "packetize": "ccdd",
+          "packet": "01020100e00100003c00ccdd"
+        },
+        {
+          "skip": 3,
+          "nextSeq": 2,
+          "nextTimestamp": 2400
+        },
+        {
+          "packetize": "eeff",
+          "packet": "01020200600900003c01eeff"
+        }
+      ]
+    },
+    {
+      "note": "raw 10 ms counts milliseconds",
+      "options": {
+        "codec": 0,
+        "frameMs": 10,
+        "seq": 7,
+        "timestamp": 4294967290
+      },
+      "steps": [
+        {
+          "packetize": "10",
+          "packet": "01000700faffffff0a0110"
+        },
+        {
+          "packetize": "11",
+          "packet": "01000800040000000a0011"
+        }
+      ]
+    }
+  ],
+  "jitter": [
+    {
+      "note": "reordering, a duplicate, a loss reported as a gap, a late packet, the seq and timestamp wrap, a spurt that ends, the next spurt with its start reordered, and a sender gone silent without saying so",
+      "options": {
+        "targetDelayMs": 60,
+        "maxFrames": 8,
+        "resetAfterMs": 200
+      },
+      "events": [
+        {
+          "at": 0,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 65533,
+            "timestamp": 4294966336,
+            "frameMs": 20,
+            "flags": 1
+          },
+          "frame": "a1",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 21,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 65535,
+            "timestamp": 960,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "a3",
+          "result": "buffered",
+          "buffered": 2
+        },
+        {
+          "at": 25,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 65534,
+            "timestamp": 0,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "a2",
+          "result": "buffered",
+          "buffered": 3
+        },
+        {
+          "at": 40,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 65535,
+            "timestamp": 960,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "a3",
+          "result": "duplicate",
+          "buffered": 3
+        },
+        {
+          "at": 59,
+          "pull": "a",
+          "expect": [],
+          "senders": 1
+        },
+        {
+          "at": 60,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 65533,
+              "timestamp": 4294966336,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 1,
+              "frame": "a1"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 62,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 1,
+            "timestamp": 2880,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "a5",
+          "result": "buffered",
+          "buffered": 3
+        },
+        {
+          "at": 100,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 65534,
+              "timestamp": 0,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": "a2"
+            },
+            {
+              "seq": 65535,
+              "timestamp": 960,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": "a3"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 125,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 0,
+              "timestamp": 1920,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 130,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 0,
+            "timestamp": 1920,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "a4",
+          "result": "late",
+          "buffered": 1
+        },
+        {
+          "at": 141,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 2,
+            "timestamp": 3840,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "a6",
+          "result": "buffered",
+          "buffered": 2
+        },
+        {
+          "at": 145,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 1,
+              "timestamp": 2880,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": "a5"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 150,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 3,
+            "timestamp": 4800,
+            "frameMs": 20,
+            "flags": 2
+          },
+          "frame": "a7",
+          "result": "buffered",
+          "buffered": 2
+        },
+        {
+          "at": 200,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 2,
+              "timestamp": 3840,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": "a6"
+            },
+            {
+              "seq": 3,
+              "timestamp": 4800,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 2,
+              "frame": "a7"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 210,
+          "pull": "a",
+          "expect": [],
+          "senders": 1
+        },
+        {
+          "at": 215,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 2,
+            "timestamp": 3840,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "a6",
+          "result": "late",
+          "buffered": 0
+        },
+        {
+          "at": 300,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 5,
+            "timestamp": 8640,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "b2",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 305,
+          "push": "a",
+          "header": {
+            "codec": 1,
+            "seq": 4,
+            "timestamp": 7680,
+            "frameMs": 20,
+            "flags": 1
+          },
+          "frame": "b1",
+          "result": "buffered",
+          "buffered": 2
+        },
+        {
+          "at": 339,
+          "pull": "a",
+          "expect": [],
+          "senders": 1
+        },
+        {
+          "at": 340,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 4,
+              "timestamp": 7680,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 1,
+              "frame": "b1"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 360,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 5,
+              "timestamp": 8640,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": "b2"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 420,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 6,
+              "timestamp": 9600,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            },
+            {
+              "seq": 7,
+              "timestamp": 10560,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            },
+            {
+              "seq": 8,
+              "timestamp": 11520,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 505,
+          "pull": "a",
+          "expect": [
+            {
+              "seq": 9,
+              "timestamp": 12480,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            },
+            {
+              "seq": 10,
+              "timestamp": 13440,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            },
+            {
+              "seq": 11,
+              "timestamp": 14400,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            },
+            {
+              "seq": 12,
+              "timestamp": 15360,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            }
+          ],
+          "senders": 0
+        },
+        {
+          "at": 510,
+          "pull": "a",
+          "expect": [],
+          "senders": 0
+        }
+      ],
+      "counters": {
+        "late": 2,
+        "duplicates": 1,
+        "malformed": 0,
+        "discarded": 0,
+        "gaps": 8
+      }
+    },
+    {
+      "note": "malformed packets, the window bound, a packet after its playout time, a codec change, silence, a talk spurt start over a waiting spurt, two senders, and forget",
+      "options": {
+        "targetDelayMs": 40,
+        "maxFrames": 4,
+        "resetAfterMs": 100
+      },
+      "events": [
+        {
+          "at": 0,
+          "push": "b",
+          "packet": "010200000000000014",
+          "result": "malformed",
+          "buffered": 0
+        },
+        {
+          "at": 0,
+          "push": "b",
+          "packet": "02020a00400600001401cc",
+          "result": "malformed",
+          "buffered": 0
+        },
+        {
+          "at": 0,
+          "push": "b",
+          "packet": "01020a00400600000001cc",
+          "result": "malformed",
+          "buffered": 0
+        },
+        {
+          "at": 1,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 10,
+            "timestamp": 1600,
+            "frameMs": 20,
+            "flags": 1
+          },
+          "frame": "c0",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 2,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 12,
+            "timestamp": 1920,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "c2",
+          "result": "buffered",
+          "buffered": 2
+        },
+        {
+          "at": 3,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 13,
+            "timestamp": 2080,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "c3",
+          "result": "buffered",
+          "buffered": 3
+        },
+        {
+          "at": 4,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 11,
+            "timestamp": 1760,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "c1",
+          "result": "buffered",
+          "buffered": 4
+        },
+        {
+          "at": 5,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 14,
+            "timestamp": 2240,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "c4",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 41,
+          "pull": "b",
+          "expect": [],
+          "senders": 1
+        },
+        {
+          "at": 42,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 14,
+            "timestamp": 2240,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "c4",
+          "result": "duplicate",
+          "buffered": 1
+        },
+        {
+          "at": 43,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 16,
+            "timestamp": 2560,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "c6",
+          "result": "buffered",
+          "buffered": 2
+        },
+        {
+          "at": 100,
+          "pull": "b",
+          "expect": [
+            {
+              "seq": 14,
+              "timestamp": 2240,
+              "codec": 2,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": "c4"
+            },
+            {
+              "seq": 15,
+              "timestamp": 2400,
+              "codec": 2,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            },
+            {
+              "seq": 16,
+              "timestamp": 2560,
+              "codec": 2,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": "c6"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 101,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 20,
+            "timestamp": 3200,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "d0",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 130,
+          "push": "b",
+          "header": {
+            "codec": 2,
+            "seq": 17,
+            "timestamp": 2720,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "c7",
+          "result": "late",
+          "buffered": 1
+        },
+        {
+          "at": 140,
+          "pull": "b",
+          "expect": [
+            {
+              "seq": 17,
+              "timestamp": 2720,
+              "codec": 2,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            },
+            {
+              "seq": 18,
+              "timestamp": 2880,
+              "codec": 2,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": null
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 150,
+          "push": "b",
+          "header": {
+            "codec": 1,
+            "seq": 21,
+            "timestamp": 3360,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "d1",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 190,
+          "pull": "b",
+          "expect": [
+            {
+              "seq": 21,
+              "timestamp": 3360,
+              "codec": 1,
+              "frameMs": 20,
+              "flags": 0,
+              "frame": "d1"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 290,
+          "push": "b",
+          "header": {
+            "codec": 1,
+            "seq": 22,
+            "timestamp": 3520,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "d2",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 291,
+          "pull": "b",
+          "expect": [],
+          "senders": 1
+        },
+        {
+          "at": 292,
+          "push": "b",
+          "header": {
+            "codec": 1,
+            "seq": 23,
+            "timestamp": 4480,
+            "frameMs": 20,
+            "flags": 0
+          },
+          "frame": "d3",
+          "result": "buffered",
+          "buffered": 2
+        },
+        {
+          "at": 293,
+          "push": "b",
+          "header": {
+            "codec": 1,
+            "seq": 30,
+            "timestamp": 9000,
+            "frameMs": 20,
+            "flags": 1
+          },
+          "frame": "e0",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 300,
+          "push": "c",
+          "header": {
+            "codec": 0,
+            "seq": 7,
+            "timestamp": 70,
+            "frameMs": 10,
+            "flags": 3
+          },
+          "frame": "ee",
+          "result": "buffered",
+          "buffered": 1
+        },
+        {
+          "at": 301,
+          "forget": "b",
+          "senders": 1
+        },
+        {
+          "at": 339,
+          "pull": "c",
+          "expect": [],
+          "senders": 1
+        },
+        {
+          "at": 340,
+          "pull": "c",
+          "expect": [
+            {
+              "seq": 7,
+              "timestamp": 70,
+              "codec": 0,
+              "frameMs": 10,
+              "flags": 3,
+              "frame": "ee"
+            }
+          ],
+          "senders": 1
+        },
+        {
+          "at": 345,
+          "push": "c",
+          "header": {
+            "codec": 0,
+            "seq": 7,
+            "timestamp": 70,
+            "frameMs": 10,
+            "flags": 3
+          },
+          "frame": "ee",
+          "result": "late",
+          "buffered": 0
+        },
+        {
+          "at": 399,
+          "pull": "c",
+          "expect": [],
+          "senders": 1
+        },
+        {
+          "at": 400,
+          "pull": "c",
+          "expect": [],
+          "senders": 0
+        }
+      ],
+      "counters": {
+        "late": 2,
+        "duplicates": 1,
+        "malformed": 3,
+        "discarded": 8,
+        "gaps": 3
+      }
+    }
+  ]
+}

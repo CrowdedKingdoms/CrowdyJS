@@ -93,6 +93,9 @@ export const WireMessageType = {
   // Buddy v0.35.0: a channel publish only members near an origin chunk receive
   // (they get an ordinary CHANNEL_MESSAGE_NOTIFICATION).
   CHANNEL_MESSAGE_RANGED_REQUEST: 32,
+  // Buddy v0.37.0: channel audio, laid out exactly as 17 / 18 with their own type byte.
+  CHANNEL_AUDIO_REQUEST: 35,
+  CHANNEL_AUDIO_NOTIFICATION: 36,
   ACTOR_UPDATE_REQUEST_2: 128,
   ACTOR_UPDATE_RESPONSE_2: 129,
   ACTOR_UPDATE_NOTIFICATION_2: 130,
@@ -105,6 +108,9 @@ export const WireMessageType = {
   CLIENT_TEXT_NOTIFICATION_2: 137,
   CLIENT_EVENT_NOTIFICATION_2: 138,
   SERVER_EVENT_NOTIFICATION_2: 139,
+  // An app-defined spatial payload (CrowdyCPP `Connection::sendGenericSpatial`, a hub's
+  // emit). Parsed on the binary relay only: the GraphQL union has no member for it.
+  GENERIC_SPATIAL_1: 140,
   SINGLE_ACTOR_MESSAGE: 142,
   // Buddy v0.25.0: webcam video pair (audio's shape, payload = one SDK
   // fragment, see media/video-frames.ts) and the server-only actor-left downlink.
@@ -159,6 +165,7 @@ const UDP_ERROR_NAMES: Record<number, string> = {
   30: 'CANNOT_DELETE_DEFAULT_WORLD_GRID',
   31: 'GRID_HAS_NESTED_CHILDREN',
   32: 'TOKEN_EXPIRED',
+  33: 'APP_PAUSED',
 };
 
 const textEncoder = new TextEncoder();
@@ -359,6 +366,37 @@ export function serializeActorUpdate(
   );
 }
 
+/** Most bytes a voxel edit's state may carry; the server refuses longer with INVALID_REQUEST. */
+export const VOXEL_STATE_MAX_BYTES = 1024;
+
+/**
+ * Check a voxel edit before it is sent: positions and type are app-defined
+ * signed 16-bit integers (no narrower range), and the state is at most
+ * {@link VOXEL_STATE_MAX_BYTES} decoded.
+ * @throws {RangeError} naming the field that does not fit.
+ */
+export function assertVoxelEdit(input: {
+  voxel: { x: number; y: number; z: number };
+  voxelType: number;
+  voxelState?: string | null;
+}): void {
+  const int16 = (name: string, v: number) => {
+    if (!Number.isInteger(v) || v < -32768 || v > 32767) {
+      throw new RangeError(`${name} must be a signed 16-bit integer: ${v}`);
+    }
+  };
+  int16('voxel.x', input.voxel.x);
+  int16('voxel.y', input.voxel.y);
+  int16('voxel.z', input.voxel.z);
+  int16('voxelType', input.voxelType);
+  const stateBytes = input.voxelState ? decodeBase64(input.voxelState).length : 0;
+  if (stateBytes > VOXEL_STATE_MAX_BYTES) {
+    throw new RangeError(
+      `voxelState is ${stateBytes} bytes; at most ${VOXEL_STATE_MAX_BYTES}`,
+    );
+  }
+}
+
 export function serializeVoxelUpdate(
   ctx: RelaySignContext,
   input: SpatialSendBase & {
@@ -493,14 +531,37 @@ export function serializeSingleActorMessage(
  * `[1B type=17][8B channelId][32B uuid][2B payloadLen][payload][1B containsAuth]
  *  [32B HMAC][8B gameTokenId][1B seq]` — HMAC over everything before it.
  */
-export async function serializeChannelMessage(
+export function serializeChannelMessage(
   ctx: RelaySignContext,
-  input: {
-    channelId: string;
-    uuid: string;
-    payload?: string | null;
-    sequenceNumber?: number | null;
-  },
+  input: ChannelSendInput,
+): Promise<Uint8Array> {
+  return serializeChannelFrame(ctx, WireMessageType.CHANNEL_MESSAGE_REQUEST, input);
+}
+
+/**
+ * CHANNEL_AUDIO_REQUEST (Buddy v0.37.0): opcode 17's layout and signing with
+ * type byte 35. The payload is opaque (at most 1,024 bytes), typically one
+ * {@link VoicePacketizer} packet.
+ */
+export function serializeChannelAudio(
+  ctx: RelaySignContext,
+  input: ChannelSendInput,
+): Promise<Uint8Array> {
+  return serializeChannelFrame(ctx, WireMessageType.CHANNEL_AUDIO_REQUEST, input);
+}
+
+/** Input shared by the channel message and channel audio uplinks (`ChannelMessageInput`). */
+export interface ChannelSendInput {
+  channelId: string;
+  uuid: string;
+  payload?: string | null;
+  sequenceNumber?: number | null;
+}
+
+async function serializeChannelFrame(
+  ctx: RelaySignContext,
+  messageType: number,
+  input: ChannelSendInput,
 ): Promise<Uint8Array> {
   const payload = input.payload ? decodeBase64(input.payload) : new Uint8Array(0);
   if (payload.length > 1024) {
@@ -517,7 +578,7 @@ export async function serializeChannelMessage(
   const prefix = new Uint8Array(prefixLen);
   const view = new DataView(prefix.buffer);
   let off = 0;
-  view.setUint8(off, WireMessageType.CHANNEL_MESSAGE_REQUEST);
+  view.setUint8(off, messageType);
   off += 1;
   view.setBigUint64(off, BigInt(input.channelId), true);
   off += 8;
@@ -723,7 +784,10 @@ function parseOne(bytes: Uint8Array): UdpNotification | null {
     } as UdpNotification;
   }
 
-  if (messageType === WireMessageType.CHANNEL_MESSAGE_NOTIFICATION) {
+  if (
+    messageType === WireMessageType.CHANNEL_MESSAGE_NOTIFICATION ||
+    messageType === WireMessageType.CHANNEL_AUDIO_NOTIFICATION
+  ) {
     // [1B type][8B channelId][32B senderUuid][2B payloadLen][payload][8B epochMillis][1B seq]
     if (bytes.length < 1 + 8 + UUID_SIZE + 2) return null;
     let off = 1;
@@ -741,6 +805,16 @@ function parseOne(bytes: Uint8Array): UdpNotification | null {
     const epochMillis = view.getBigUint64(off, true);
     off += 8;
     const sequenceNumber = view.getUint8(off);
+    if (messageType === WireMessageType.CHANNEL_AUDIO_NOTIFICATION) {
+      return {
+        __typename: 'ChannelAudioNotification',
+        channelId: channelId.toString(),
+        uuid,
+        audioData: encodeBase64(payload),
+        sequenceNumber,
+        epochMillis: epochMillis.toString(),
+      } as UdpNotification;
+    }
     return {
       __typename: 'ChannelMessageNotification',
       channelId: channelId.toString(),
@@ -844,6 +918,12 @@ function parseOne(bytes: Uint8Array): UdpNotification | null {
         payload: encodeBase64(p.payload),
       } as UdpNotification;
     }
+    case WireMessageType.GENERIC_SPATIAL_1:
+      return {
+        __typename: 'GenericSpatialNotification',
+        ...spatialCommon(p),
+        payload: encodeBase64(p.payload),
+      } as UdpNotification;
     default:
       return null;
   }

@@ -234,7 +234,7 @@ never told about, so a native refresh without it is a re-placement.
 | Sub-client | What it does |
 |---|---|
 | `client.auth` | Sign-in: `login` / `register` (email + password), magic link, social/OIDC. Passwords: `requestPasswordReset` / `resetPassword`, `changePassword`, and `setInitialPassword` for an account created by magic link or a social provider (added in 15.1.0). Log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). **No dev bypass** — `devLogin` was removed in 15.0.0 and `DEV_AUTH_BYPASS` is gone from every tier. |
-| `client.users` | `me`, `updateGamertag`, profile reads. |
+| `client.users` | `me`, `updateGamertag`, profile reads; `playerProfile` / `playerProfiles` (up to 100) for other players' public `{ userId, gamertag, disambiguation }`. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
 | `client.hosting` | Third-party hosting on Crowdy Games (17.2.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
@@ -245,7 +245,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.teleport` | Teleport requests. |
 | `client.inputLog` | The input log (18.6.0): `sessions(appId)` and `messages(appId, gameTokenId)` read the client inputs recorded for an app with replay logging on (`apps.update(appId, { replayLoggingEnabled: true })`). A player reads their own; `manage_apps` reads every session. Keep paging while `hasNextPage` is true. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
-| `client.exec` | **ck-exec:** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion` and `setEnabled` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec). |
+| `client.exec` | **ck-exec:** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion`, `setEnabled`, `restartType` and `status` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec). |
 | `client.playerWallet` | Player spend: balance, ledger, hourly charges, spend caps, card setup, auto-recharge. A ck-exec mod's compute is billed here, to its owner. |
 | `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
@@ -264,7 +264,7 @@ grouped under `client.admin` and mirrored at the top level):
 |---|---|
 | `client.organizations` | Orgs, members, RBAC roles, org API tokens. |
 | `client.apps` | App registry, discovery + routing (`create`, `routeFor`, `marketplace`), visibility, and player-code admission mode / allow-list administration. |
-| `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`. |
+| `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`; timed bans (`suspend`, `unsuspend`) and `resyncTierGridPermissions`. |
 | `client.billing` | Org wallet + per-app spend budgets. |
 | `client.payments` | Payment checkouts (wallet top-ups, plan purchases). |
 | `client.quotas` | Usage quotas at the org/app scope. |
@@ -346,6 +346,10 @@ const unsubscribe = client.udp.subscribe(
     },
     clientEvent: (event) => { /* ... */ },
     serverEvent: (event) => { /* ... */ },
+    genericSpatial: (event) => {
+      // An app-defined spatial payload (opcode 140): binary relay only, see below.
+      console.log(event.uuid, event.payload); // payload is base64
+    },
     singleActorMessage: (event) => {
       // A direct actor-to-actor message addressed to you.
       console.log(event.uuid, event.payload); // payload is base64
@@ -385,6 +389,13 @@ flag: `UDP_PROXY_CONNECTION_FAILED` is transient (back off and resubscribe),
 while `AUTH_REQUIRED` / `APP_ID_REQUIRED` must be fixed by the caller first.
 Unsubscribing stops delivery only; call `client.udp.disconnect()` to close the
 UDP proxy session.
+
+`genericSpatial` receives opcode 140 (`GENERIC_SPATIAL_1`), an app-defined spatial payload the
+server fans out without reading — what CrowdyCPP's `Connection::sendGenericSpatial` sends. It
+arrives only on the binary relay (`realtime: { binaryTransport: true }`): the GraphQL
+`udpNotifications` union has no member for it, so the GraphQL proxy drops it and a client on that
+transport never sees one. A World Stores session carries it on its bus too:
+`session.context.on('genericSpatial', …)`.
 
 ### Surviving the loss of an instance (direct connect)
 
@@ -450,6 +461,12 @@ with a live actor within `maxDistance` chunks (straight-line distance between
 chunk coordinates) of `chunk` receive it; they get the same `channelMessage`
 notification.
 
+`sendVoxelUpdate` takes the app's signed 16-bit positions and type and a state of
+at most 1,024 bytes (`RangeError` otherwise, nothing sent). Buddy v0.37.0 echoes
+every accepted voxel edit back to its sender as a `voxelUpdate`, so a game reading
+those sees its own edits; World Stores' `ChunkStore` applies that echo once. A
+paused app's sends are refused with UDP error 33, `APP_PAUSED`.
+
 ### Bundled sends on the binary relay
 
 With `realtime: { binaryTransport: true }` the SDK signs each message itself
@@ -475,6 +492,76 @@ await client.udp.sendSingleActorMessage({
   targetUuid: '0123456789abcdef0123456789abcdef',
   payload: 'aGVsbG8=', // base64; embed sender identity here if you need it
 });
+```
+
+### Voice payloads
+
+`sendAudioPacket` carries whatever bytes it is given, and a game with a voice format of its own
+keeps it. The voice helpers are an optional one that both SDKs share (CrowdyCPP's
+`crowdy/media/voice_frames.hpp`, held to the same cases in `test/unit/fixtures/voice-frames.json`):
+a 10-byte header in front of each codec frame, little-endian — the version (1), the codec (0 raw,
+1 Opus 48 kHz mono, 2 G.711 µ-law 8 kHz), a `u16` seq, a `u32` timestamp in codec samples, the
+frame's duration in milliseconds and two talk-spurt flags (bit 0 the first packet after silence,
+bit 1 the last before it). A reader refuses a packet shorter than the header or of another
+version. `VoicePacketizer` numbers one sender's frames; `VoiceJitterBuffer` puts each sender's
+packets back in order, plays them out 60 ms (`targetDelayMs`) after the first packet of a talk
+spurt arrived, reports a frame that never came as a gap, drops one that arrives after its
+playout time, and holds at most 64 frames a sender.
+
+```ts
+import {
+  VoiceCodec, VoiceJitterBuffer, VoicePacketizer, decodeBase64, encodeBase64,
+} from '@crowdedkingdoms/crowdyjs';
+
+const packetizer = new VoicePacketizer({ codec: VoiceCodec.OPUS, frameMs: 20 });
+// Every 20 ms while the player talks (`opusFrame` from a WebCodecs AudioEncoder):
+await client.udp.sendAudioPacket({
+  appId, chunk, uuid: me.uuid,
+  audioData: encodeBase64(packetizer.packetize(opusFrame, { last: talkKeyReleased })),
+});
+// ...and packetizer.skip() for every 20 ms of silence that is not sent.
+
+const voices = new VoiceJitterBuffer();
+client.udp.subscribe({
+  audio: (n) => voices.push(n.uuid, decodeBase64(n.audioData), performance.now()),
+  actorLeft: (n) => voices.forget(n.uuid),
+}, appId);
+// From the audio clock, at least once a frame:
+for (const slot of voices.poll(performance.now())) {
+  if (slot.gap) conceal(slot.key, slot.frameMs); // the frame never came
+  else play(slot.key, slot.codec, slot.frame!);
+}
+```
+
+The SDK ships no codec. A browser encodes and decodes Opus with WebCodecs (`AudioEncoder` /
+`AudioDecoder`, `codec: 'opus'`, 48 kHz, one channel; check `AudioEncoder.isConfigSupported`
+first) and falls back to G.711 µ-law where it has none; `media/voice-frames.ts` has the settings.
+Where a voice sits in the world (panning, distance attenuation) stays the game's.
+
+#### Channel audio (party and guild voice)
+
+`sendAudioPacket` reaches players near a chunk. `sendChannelAudio` (Buddy v0.37.0) reaches every
+active member of a channel wherever they are: opcode 35 on the binary relay, the
+`sendChannelAudio` mutation otherwise, at most 1,024 payload bytes. The sender needs the channel's
+`send_voice` (`channels.create({ ..., membersCanSpeak: true })` gives it to the member role) and the
+app's `use_voice_chat`; without them the server answers `UNAUTHORIZED` on the subscription. There is
+no echo. Members get a `channelAudio` notification; key the jitter buffer by channel and sender so
+one player in two channels is two streams. It arrives on the binary relay and on the GraphQL
+transport alike.
+
+```ts
+const party = new VoicePacketizer({ codec: VoiceCodec.OPUS, frameMs: 20 });
+await client.udp.sendChannelAudio({
+  channelId, uuid: me.uuid,
+  payload: encodeBase64(party.packetize(opusFrame, { last: talkKeyReleased })),
+});
+
+const partyVoices = new VoiceJitterBuffer();
+client.udp.subscribe({
+  channelAudio: (n) =>
+    partyVoices.push(`${n.channelId}:${n.uuid}`, decodeBase64(n.audioData), performance.now()),
+}, appId);
+// ...poll(performance.now()) from the audio clock as above.
 ```
 
 ## World helpers
@@ -545,7 +632,9 @@ holds it to rules of its own (18.0.2): `grid_permission_check` answers only for
 the player's four code-permission keys (`GRID_PERMISSION_CHECK_KEYS`) and
 refuses any other key instead of answering false, because a game knows no other
 key for a grid; `voxel_set` takes a voxel inside its chunk (0-15) and a type
-0-255; and a half's spatial and channel sends go out as an actor uuid the page
+0-255, or the ranges the game sets with `createGridHostCalls({ voxelBounds })` for a world
+whose positions and types are other signed 16-bit values (18.7.0); and a half's spatial and
+channel sends go out as an actor uuid the page
 derives for the grid from the one the half names (`clientHalfActorUuid`), so a
 half can never move the player's avatar or speak as another player. The broker
 refuses a call that names its chunk a second way (`chunk`, `chunk_x`, …): route
@@ -613,6 +702,14 @@ A voxel edit that is not a chunk write-back (a hub's or mod's `world.set_voxels`
 another player's realtime voxel update) reaches a reload only through hydration: `getChunk`
 returns it in `voxelStates`, and the bulk load's `voxels` never hold it. The store hydrates when
 it has a `voxelStateCodec`; without one, set `chunks: { hydrateVoxelStates: true }`.
+
+`chunks` is a helper for 16×16×16 chunks with one byte per voxel. Voxel positions and types are
+the app's signed 16-bit values, which the platform does not check: an edit the dense grid cannot
+hold (a type outside 0-255, a position outside 0-15), whether a realtime update, a hydrated
+`voxelStates` entry or a local `setVoxel`, is kept whole in the chunk's `overlay` (keyed by
+`voxelKey(x, y, z)`) instead of being truncated into `voxels`, and `voxelTypeAt` / `voxelStateAt`
+return it (18.7.0). A game with other addressing reads the raw `voxelUpdate` events and
+`chunks.get`'s `voxelStates`.
 
 A chunk write-back the server refuses (a visitor on someone else's plot, a safe zone, a closed
 wilderness) is dropped, not retried; one that fails for a reason that can clear is tried five
@@ -985,6 +1082,13 @@ GraphQL errors carry a stable `extensions.code` (e.g. `UNAUTHENTICATED`,
 `SCOPE_MISSING`, `FORBIDDEN`, `IDEMPOTENCY_CONFLICT`, `RATE_LIMITED`) plus,
 where applicable, `extensions.remediation` and `extensions.requiredPermission`.
 Branch on `error.extensions?.code` rather than parsing messages.
+
+Readers for the refusals a player should be told about, each `null` for any other error:
+`accessRefusalOf(err)` (`ACCESS_REVOKED`, `ACCESS_SUSPENDED` with `suspendedUntil`,
+`ACCESS_NOT_GRANTED`), `appPausedOf(err)` (`APP_PAUSED`, with `reason`) and `actorExistsOf(err)`
+(`ACTOR_EXISTS`; `ownedByCaller: true` means a retried create of your own actor). A paused app
+still mints tokens: check `isAppPaused(token.runtimeGate)` (or the bootstrap's `runtimeGate`)
+before entering the world.
 
 ## Idempotent retries
 

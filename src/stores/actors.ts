@@ -152,7 +152,9 @@ export interface LocalActorConfig<T> {
   sendOnChange?: boolean;
   /**
    * With `sendOnChange`, still force a keyframe send after this many ms of
-   * dedup silence so presence never starves. Defaults to 3000.
+   * dedup silence so presence never starves. Defaults to 3000. Idle players on
+   * different servers meet at the first full update after joining (replication
+   * v0.37.0); before it, heartbeats ahead of the first update kept them apart.
    */
   keyframeEveryMs?: number;
   /** Default replication radius in chunk units (0-8). */
