@@ -3607,8 +3607,10 @@ export type ExecBuild = {
   finishedAt: Maybe<Scalars['DateTime']['output']>;
   /** What it builds: `exec` for ck-exec modules, `client` for the CLIENT half of a mod (`execModClientBuild`). */
   kind: Scalars['String']['output'];
-  /** The compiler’s output once the build finishes, at most 64 KB (the end is kept). */
+  /** The compiler’s output once the build finishes, at most 64 KB (the end is kept). Its first line names the toolchain the build ran with. */
   log: Maybe<Scalars['String']['output']>;
+  /** The SDK version the build compiled against, from the toolchain of the API instance that ran it: `ckx-sdk` for a ck-exec build, `crowdy-client-sdk` for a CLIENT half. A crate’s own version requirement for the SDK is not what decides this. Null until the build starts, and for builds from before it was recorded. */
+  sdkVersion: Maybe<Scalars['String']['output']>;
   /** When it started compiling. */
   startedAt: Maybe<Scalars['DateTime']['output']>;
   /** `queued`, `building`, `succeeded` or `failed`. */

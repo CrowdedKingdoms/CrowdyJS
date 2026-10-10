@@ -152,6 +152,7 @@ fragment ExecBuildFields on ExecBuild {
   status
   kind
   log
+  sdkVersion
   createdAt
   startedAt
   finishedAt

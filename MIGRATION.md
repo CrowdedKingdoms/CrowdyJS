@@ -120,6 +120,21 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.8.0: builds report the SDK version they compiled against
+
+Additive, with one new floor: **the build documents select `ExecBuild.sdkVersion`, so 18.8.0
+needs ck-api v2.40.2 or later** for `exec.build`, `buildStatus`, `waitForBuild`, `modBuild`,
+`modClientBuild`, `modBuildStatus` and `waitForModBuild` (an older API refuses the selection).
+
+- **`sdkVersion`** on every build: the version of `ckx-sdk` the platform compiled the build
+  against (`crowdy-client-sdk` for a CLIENT half), from the toolchain of the API instance that
+  ran it. The platform points a crate at its own copy of the SDK whatever version the crate
+  names, so this, not your manifest, says what your code was checked against. `null` until the
+  build starts, and for builds from before the platform recorded it. The build log's first line
+  names the same toolchain.
+
+`schema.gql` and the generated types carry cks-game-api `dev`'s SDL at #494.
+
 ## 18.7.0: voice helpers, channel audio, opcode 140 on the relay, wide voxels, self-echo, pause and access refusals
 
 Additive, with reads that change for values they used to get wrong (the wide-voxel item) and one
