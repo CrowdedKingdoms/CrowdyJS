@@ -19,7 +19,7 @@ import {
 } from './binary-relay.js';
 import type { RelaySignContext } from './binary-wire.js';
 import { CROWDY_DEFAULT_WS_ORIGIN } from './default-origin.js';
-import type { GenericSpatialNotification } from './types.js';
+import type { ChannelAudioNotification, GenericSpatialNotification } from './types.js';
 
 /**
  * Lifecycle state of the realtime WebSocket connection, as reported by
@@ -49,12 +49,14 @@ export type RealtimeStatus =
  * union of every spatial echo/fan-out notification plus `GenericErrorResponse`
  * and `RealtimeConnectionEvent`. This is the codegen-derived (canonical)
  * shape, narrowed to the non-null payload, plus
- * {@link GenericSpatialNotification}, which only the binary relay delivers;
- * discriminate the members by their `__typename`.
+ * {@link GenericSpatialNotification}, which only the binary relay delivers, and
+ * {@link ChannelAudioNotification} (opcode 36), which the GraphQL union does not
+ * list yet; discriminate the members by their `__typename`.
  */
 export type UdpNotification =
   | NonNullable<UdpNotificationsSubscription['udpNotifications']>
-  | GenericSpatialNotification;
+  | GenericSpatialNotification
+  | ChannelAudioNotification;
 
 /**
  * The members of {@link UdpNotification} that carry a `sequenceNumber` and can
@@ -159,6 +161,13 @@ export interface UdpNotificationHandlers {
    * is base64 and opaque to the server.
    */
   channelMessage?: (notification: Extract<UdpNotification, { __typename?: 'ChannelMessageNotification' }>) => void;
+  /**
+   * Channel audio (opcode 36) from another member of a channel you belong to;
+   * `audioData` is base64 and opaque to the server (one `VoicePacketizer` packet
+   * with the SDK voice helpers). The sender gets no echo. Arrives on the binary
+   * relay; the GraphQL `udpNotifications` union does not carry it yet.
+   */
+  channelAudio?: (notification: ChannelAudioNotification) => void;
   /**
    * An asynchronous error for a previously sent datagram. Correlate it to the
    * originating send via `sequenceNumber` and read `errorCode`
@@ -1268,6 +1277,9 @@ export class RealtimeClient {
           case 'ChannelMessageNotification':
             handlers.channelMessage?.(notification);
             break;
+          case 'ChannelAudioNotification':
+            handlers.channelAudio?.(notification);
+            break;
           case 'GenericErrorResponse':
             handlers.genericError?.(notification);
             break;
@@ -1353,6 +1365,7 @@ const NOTIFICATION_KINDS: Record<string, string> = {
   GenericSpatialNotification: 'genericSpatial',
   SingleActorMessageNotification: 'singleActorMessage',
   ChannelMessageNotification: 'channelMessage',
+  ChannelAudioNotification: 'channelAudio',
   GenericErrorResponse: 'genericError',
   RealtimeConnectionEvent: 'connectionEvent',
 };

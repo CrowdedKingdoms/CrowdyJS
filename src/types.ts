@@ -767,6 +767,29 @@ export interface GenericSpatialNotification {
 }
 
 /**
+ * Channel audio from another member of a channel you belong to (opcode 36,
+ * Buddy v0.37.0), delivered wherever you are. `audioData` is opaque to the
+ * server; with the SDK voice helpers it is one {@link VoicePacketizer} packet.
+ * The sender receives no echo. Delivered on the binary relay; the GraphQL
+ * `udpNotifications` union does not list it yet, so the SDK only dispatches it
+ * there once the server sends one.
+ */
+export interface ChannelAudioNotification {
+  /** Discriminator for the {@link UdpNotification} union. */
+  __typename: 'ChannelAudioNotification';
+  /** The channel id (`groups.group_id`, {@link BigInt} decimal string). */
+  channelId: BigInt;
+  /** The sending actor's 32-ASCII-character id. */
+  uuid: string;
+  /** The audio payload, base64-encoded (at most 1,024 bytes decoded). */
+  audioData: string;
+  /** The sender's sequence number for this packet (`0`–`255`). */
+  sequenceNumber: number;
+  /** Server-generated timestamp in epoch milliseconds ({@link BigInt} string). */
+  epochMillis: BigInt;
+}
+
+/**
  * Asynchronous error for a previously sent datagram (e.g. a `send*` request).
  * Delivered as a member of the {@link UdpNotification} union on the
  * subscription — **not** as a GraphQL error on the mutation. Match it to the
@@ -806,6 +829,7 @@ export type UdpNotification =
   | ClientEventNotification
   | ServerEventNotification
   | GenericSpatialNotification
+  | ChannelAudioNotification
   | GenericErrorResponse;
 
 // Client Configuration
@@ -854,6 +878,8 @@ export type ClientEventHandler = (notification: ClientEventNotification) => void
 export type ServerEventHandler = (notification: ServerEventNotification) => void;
 /** Callback for a {@link GenericSpatialNotification} (an app-defined spatial message, opcode 140). */
 export type GenericSpatialHandler = (notification: GenericSpatialNotification) => void;
+/** Callback for a {@link ChannelAudioNotification} (channel audio, opcode 36). */
+export type ChannelAudioHandler = (notification: ChannelAudioNotification) => void;
 /** Callback for a {@link GenericErrorResponse} (async error for a prior send). */
 export type GenericErrorHandler = (response: GenericErrorResponse) => void;
 

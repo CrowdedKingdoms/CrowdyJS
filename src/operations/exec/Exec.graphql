@@ -99,6 +99,12 @@ fragment ExecAppStatusFields on ExecAppStatus {
   disabled
   disabledTypes
   budgetPaused
+  budgetPauseReason
+  maxInstances
+  maxReservedMb
+  instanceLimit
+  instances
+  reservedMb
 }
 
 query ExecAppStatus($appId: BigInt!) {
@@ -116,6 +122,13 @@ mutation ExecActivateVersion($appId: BigInt!, $version: Int!) {
 mutation ExecSetEnabled($appId: BigInt!, $enabled: Boolean!, $nodeType: String) {
   execSetEnabled(appId: $appId, enabled: $enabled, nodeType: $nodeType) {
     ...ExecAppStatusFields
+  }
+}
+
+mutation ExecRestartType($appId: BigInt!, $nodeType: String!) {
+  execRestartType(appId: $appId, nodeType: $nodeType) {
+    nodeType
+    stopped
   }
 }
 

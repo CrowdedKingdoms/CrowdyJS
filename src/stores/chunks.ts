@@ -13,6 +13,7 @@
  * `voxelUpdate`, `chunks.get`'s `voxelStates`).
  */
 
+import { assertVoxelEdit } from '../binary-wire.js';
 import { generateCrowdyUuid, decodeBase64, encodeBase64 } from '../utils.js';
 import { rawCodec, type StateCodec } from './codec.js';
 import {
@@ -38,6 +39,23 @@ const HYDRATE_CONCURRENCY = 8;
 const BUSY_ATTEMPTS = 4;
 /** A chunk whose hydration failed this many times in a row is not asked for again. */
 const HYDRATE_GIVE_UP = 3;
+
+/** How long a local voxel edit waits for its echo before it is forgotten (a lost or refused send). */
+const PENDING_EDIT_TTL_MS = 10_000;
+
+/**
+ * A voxel edit this client sent and the server has not echoed yet. `stale` is set when another
+ * client's edit of the same voxel arrived (or the edit was not applied locally), so its echo
+ * must be applied: the server ordered it last.
+ */
+interface PendingVoxelEdit {
+  uuid: string;
+  sequenceNumber: number;
+  voxelType: number;
+  encodedState?: string;
+  sentAt: number;
+  stale: boolean;
+}
 
 /** The platform refused the call before running it: asking again can succeed. */
 function refusedBeforeRunning(error: unknown): boolean {
@@ -268,7 +286,13 @@ export interface SetVoxelInput<TVoxelState> {
  *   (dense grid write + typed state decode + revision bump + change event; an
  *   edit with a type outside 0-255 or a position outside 0-15 goes to the
  *   chunk's `overlay` instead).
- * - `setVoxel` applies locally (optimistic) and replicates via the UDP path.
+ * - `setVoxel` applies locally (optimistic) and replicates via the UDP path. The
+ *   server delivers every accepted edit back to its sender: that echo is matched
+ *   (sender uuid + sequence number + voxel) and not applied again, so a local edit
+ *   fires one change event, and an older echo never rolls back a newer local edit.
+ *   It is applied only when another client's edit of that voxel arrived in
+ *   between (the server ordered yours last) or the edit was sent with
+ *   `optimistic: false`.
  * - `seed`/`flush` implement deterministic-worldgen write-back through
  *   `chunks.update`, one throttled chunk at a time.
  *
@@ -300,6 +324,8 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   private readonly voxelIndex: (x: number, y: number, z: number) => number;
   private revisionValue = 0;
   private sequence = 0;
+  /** This client's edits not yet echoed back, oldest first, per `chunkKey|voxelKey`. */
+  private readonly pendingEdits = new Map<string, PendingVoxelEdit[]>();
 
   constructor(
     private readonly ctx: WorldSessionContext,
@@ -323,6 +349,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         };
         const chunk = this.chunks.get(chunkKey(coord));
         if (!chunk) return; // only merge into chunks we track
+        if (!this.takeEcho(chunk, notification)) return;
         this.applyVoxel(
           chunk,
           notification.voxelX,
@@ -571,8 +598,13 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
    * acceptance.
    */
   async setVoxel(input: SetVoxelInput<TVoxelState>): Promise<boolean> {
+    const encodedState =
+      input.state !== undefined ? this.voxelStateCodec.encode(input.state) : undefined;
+    const voxel = { x: input.x, y: input.y, z: input.z };
+    assertVoxelEdit({ voxel, voxelType: input.voxelType, voxelState: encodedState });
     const chunk = this.ensureEntry(input.chunk);
-    if (input.optimistic ?? true) {
+    const optimistic = input.optimistic ?? true;
+    if (optimistic) {
       this.applyVoxel(
         chunk,
         input.x,
@@ -584,11 +616,20 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
       );
     }
     const sequenceNumber = this.nextSequence();
+    const uuid = this.senderUuid();
+    this.rememberEdit(chunk, voxel, {
+      uuid,
+      sequenceNumber,
+      voxelType: input.voxelType,
+      encodedState,
+      sentAt: this.now(),
+      stale: !optimistic,
+    });
     this.ctx.trackSend({
       kind: 'voxelUpdate',
       sequenceNumber,
       sentAt: this.now(),
-      uuid: this.senderUuid(),
+      uuid,
       detail: { chunk: input.chunk, x: input.x, y: input.y, z: input.z },
     });
     // Omit voxelState when the caller did not supply state. Sending '' is
@@ -598,12 +639,10 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     return this.ctx.client.udp.sendVoxelUpdate({
       appId: this.ctx.appId,
       chunk: toChunkInput(input.chunk),
-      uuid: this.senderUuid(),
-      voxel: { x: input.x, y: input.y, z: input.z },
+      uuid,
+      voxel,
       voxelType: input.voxelType,
-      ...(input.state !== undefined
-        ? { voxelState: this.voxelStateCodec.encode(input.state) }
-        : {}),
+      ...(encodedState !== undefined ? { voxelState: encodedState } : {}),
       sequenceNumber,
       ...(this.config.distance !== undefined ? { distance: this.config.distance } : {}),
       ...(this.config.decayRate !== undefined
@@ -755,6 +794,54 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     } else if (generated) {
       this.seed(coord, generated.voxels, { writeBack: generated.writeBack ?? true });
     }
+  }
+
+  private rememberEdit(
+    chunk: CachedChunk<TVoxelState, TChunkState>,
+    voxel: { x: number; y: number; z: number },
+    edit: PendingVoxelEdit,
+  ): void {
+    const key = `${chunk.key}|${voxelKey(voxel.x, voxel.y, voxel.z)}`;
+    const edits = this.livePendingEdits(key);
+    edits.push(edit);
+    this.pendingEdits.set(key, edits);
+  }
+
+  /** The unexpired pending edits for one voxel, dropping the expired ones. */
+  private livePendingEdits(key: string): PendingVoxelEdit[] {
+    const cutoff = this.now() - PENDING_EDIT_TTL_MS;
+    const edits = (this.pendingEdits.get(key) ?? []).filter((edit) => edit.sentAt >= cutoff);
+    if (edits.length === 0) this.pendingEdits.delete(key);
+    else this.pendingEdits.set(key, edits);
+    return edits;
+  }
+
+  /**
+   * Match a realtime voxel edit against this client's pending edits. Returns whether to apply it.
+   * The server delivers every accepted edit back to its sender: the echo of an edit already
+   * applied optimistically is not applied again (no second change event), and an echo is never
+   * applied over a newer local edit of the same voxel. Another client's edit is applied, and
+   * marks the pending local edits of that voxel stale so their echoes restore them.
+   */
+  private takeEcho(
+    chunk: CachedChunk<TVoxelState, TChunkState>,
+    notification: { uuid: string; sequenceNumber: number; voxelX: number; voxelY: number; voxelZ: number },
+  ): boolean {
+    const key = `${chunk.key}|${voxelKey(notification.voxelX, notification.voxelY, notification.voxelZ)}`;
+    const edits = this.livePendingEdits(key);
+    if (edits.length === 0) return true;
+    const index = edits.findIndex(
+      (edit) =>
+        edit.uuid === notification.uuid && edit.sequenceNumber === notification.sequenceNumber,
+    );
+    if (index < 0) {
+      for (const edit of edits) edit.stale = true;
+      return true;
+    }
+    const [echoed] = edits.splice(index, 1);
+    if (edits.length === 0) this.pendingEdits.delete(key);
+    const newerLocalEdit = edits.length > index;
+    return echoed.stale && !newerLocalEdit;
   }
 
   private applyVoxel(

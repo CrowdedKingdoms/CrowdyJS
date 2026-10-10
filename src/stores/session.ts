@@ -47,7 +47,8 @@ export type SentPacketKind =
   | 'audio'
   | 'video'
   | 'singleActorMessage'
-  | 'channelMessage';
+  | 'channelMessage'
+  | 'channelAudio';
 
 /** A record of one outbound send, kept so errors can be attributed. */
 export interface SentPacketRecord {
@@ -106,6 +107,7 @@ const BUS_KEYS: BusKey[] = [
   'genericSpatial',
   'singleActorMessage',
   'channelMessage',
+  'channelAudio',
   'genericError',
   'connectionEvent',
   'any',
