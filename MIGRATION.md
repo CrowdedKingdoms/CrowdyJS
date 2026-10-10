@@ -124,8 +124,9 @@ super-admin's session). There is no SDK replacement.
 
 Additive, with reads that change for values they used to get wrong (the wide-voxel item) and one
 new floor: **the token mutations (`portal.mintAppToken`, `exchangeCode`, `refresh`) select
-`runtimeGate`, so 18.7.0 needs the ck-api release after v2.39.0** (an older one refuses the
-selection). Channel audio and the voxel echo need Buddy v0.37.0.
+`runtimeGate` and the `udpNotifications` subscription selects `ChannelAudioNotification`, so
+18.7.0 needs the ck-api release after v2.39.0 that carries both** (an older one refuses the
+selections). Channel audio and the voxel echo need Buddy v0.37.0.
 
 - **Voice helpers** (`media/voice-frames.ts`, exported from the package entry): an optional
   convention for what an audio payload carries. A 10-byte header, little-endian, goes in front of
@@ -172,8 +173,9 @@ selection). Channel audio and the voxel echo need Buddy v0.37.0.
   `use_voice_chat`. There is no echo to the sender. Other members' frames arrive as opcode 36,
   standalone or bundled, as a `ChannelAudioNotification` (`channelId`, `uuid`, `audioData`
   base64, `sequenceNumber`, `epochMillis`) on the new `channelAudio` handler of `udp.subscribe`
-  (and `any`) and the World Stores bus key `channelAudio`. **Receiving is binary relay only for
-  now**: the game API's `udpNotifications` union does not carry the type yet. `channels.create` /
+  (and `any`) and the World Stores bus key `channelAudio`, on the binary relay and on the GraphQL
+  transport alike (the `udpNotifications` subscription selects the union's
+  `ChannelAudioNotification`, so it too needs that ck-api release). `channels.create` /
   `grids.createChannel` take `membersCanSpeak` (default false: the member role gets
   `send_voice`); `GridScope.channels` has `sendAudio(channelId, uuid, audioBase64)`;
   `serializeChannelAudio` is exported. The voice helpers are the payload: see the README.

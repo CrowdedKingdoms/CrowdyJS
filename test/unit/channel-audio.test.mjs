@@ -172,6 +172,85 @@ test('RealtimeClient hands a relayed 36 to channelAudio and any, and counts it',
   }
 });
 
+// graphql-transport-ws server side, enough for one subscription.
+class FakeGraphqlSocket {
+  static instances = [];
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+  constructor(url, protocol) {
+    this.url = url;
+    this.protocol = typeof protocol === 'string' ? protocol : protocol?.[0];
+    this.readyState = 0;
+    this.sent = [];
+    FakeGraphqlSocket.instances.push(this);
+    setTimeout(() => {
+      this.readyState = 1;
+      this.onopen?.({});
+    }, 0);
+  }
+  send(data) {
+    const message = JSON.parse(data);
+    this.sent.push(message);
+    if (message.type === 'connection_init') this.reply({ type: 'connection_ack' });
+  }
+  reply(message) {
+    this.onmessage?.({ data: JSON.stringify(message) });
+  }
+  close(code = 1000, reason = '') {
+    this.readyState = 3;
+    this.onclose?.({ code, reason, wasClean: true });
+  }
+}
+
+test('the GraphQL transport selects ChannelAudioNotification and hands it to channelAudio', async () => {
+  FakeGraphqlSocket.instances = [];
+  const metrics = new RealtimeMetrics();
+  const realtime = new RealtimeClient(
+    { wsUrl: 'wss://ck-api.example.test/graphql', webSocketImpl: FakeGraphqlSocket },
+    { getToken: () => 'a'.repeat(64), onChange: () => () => {} },
+    metrics,
+  );
+  const seen = { audio: [], message: 0 };
+  const off = realtime.subscribe(
+    { channelAudio: (n) => seen.audio.push(n), channelMessage: () => (seen.message += 1) },
+    '42',
+  );
+  let subscribe;
+  for (let i = 0; i < 50 && !subscribe; i += 1) {
+    await settle();
+    subscribe = FakeGraphqlSocket.instances.at(-1)?.sent.find((m) => m.type === 'subscribe');
+  }
+  assert.ok(subscribe, 'the udpNotifications subscription was sent');
+  assert.match(
+    subscribe.payload.query,
+    /\.\.\. on ChannelAudioNotification \{\s*channelId\s+uuid\s+audioData\s+sequenceNumber\s+epochMillis\s*\}/,
+  );
+  FakeGraphqlSocket.instances.at(-1).reply({
+    id: subscribe.id,
+    type: 'next',
+    payload: {
+      data: {
+        udpNotifications: {
+          __typename: 'ChannelAudioNotification',
+          channelId: '9',
+          uuid: UUID,
+          audioData: 'AQI=',
+          sequenceNumber: 4,
+          epochMillis: '1700000000000',
+        },
+      },
+    },
+  });
+  assert.equal(seen.audio.length, 1);
+  assert.equal(seen.audio[0].channelId, '9');
+  assert.equal(seen.audio[0].audioData, 'AQI=');
+  assert.equal(seen.message, 0);
+  assert.equal(metrics.snapshot().perKind.channelAudio.received.messages, 1);
+  off();
+});
+
 test('the World Stores bus carries channelAudio', () => {
   let handlers;
   const client = { udp: { subscribe: (h) => ((handlers = h), () => {}) } };

@@ -546,8 +546,8 @@ active member of a channel wherever they are: opcode 35 on the binary relay, the
 `send_voice` (`channels.create({ ..., membersCanSpeak: true })` gives it to the member role) and the
 app's `use_voice_chat`; without them the server answers `UNAUTHORIZED` on the subscription. There is
 no echo. Members get a `channelAudio` notification; key the jitter buffer by channel and sender so
-one player in two channels is two streams. Receiving needs `realtime: { binaryTransport: true }`
-for now: the game API's GraphQL `udpNotifications` does not carry `ChannelAudioNotification` yet.
+one player in two channels is two streams. It arrives on the binary relay and on the GraphQL
+transport alike.
 
 ```ts
 const party = new VoicePacketizer({ codec: VoiceCodec.OPUS, frameMs: 20 });

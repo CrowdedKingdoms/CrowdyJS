@@ -126,7 +126,7 @@ export interface VoxelCoordinatesInput {
  * - `GamertagAlreadyExists` — the requested gamertag is already taken.
  */
 export { UdpErrorCode } from './generated/graphql.js';
-import type { UdpErrorCode } from './generated/graphql.js';
+import type { UdpErrorCode, UdpNotificationsSubscription } from './generated/graphql.js';
 
 // User types
 /**
@@ -768,26 +768,17 @@ export interface GenericSpatialNotification {
 
 /**
  * Channel audio from another member of a channel you belong to (opcode 36,
- * Buddy v0.37.0), delivered wherever you are. `audioData` is opaque to the
- * server; with the SDK voice helpers it is one {@link VoicePacketizer} packet.
- * The sender receives no echo. Delivered on the binary relay; the GraphQL
- * `udpNotifications` union does not list it yet, so the SDK only dispatches it
- * there once the server sends one.
+ * Buddy v0.37.0), delivered wherever you are, on the binary relay and on the
+ * GraphQL `udpNotifications` subscription alike: `channelId`, the sender's
+ * `uuid`, `audioData` (base64, at most 1,024 bytes decoded), `sequenceNumber`
+ * and `epochMillis`. `audioData` is opaque to the server; with the SDK voice
+ * helpers it is one {@link VoicePacketizer} packet. The sender receives no echo.
+ * The generated member of the subscription's union.
  */
-export interface ChannelAudioNotification {
-  /** Discriminator for the {@link UdpNotification} union. */
-  __typename: 'ChannelAudioNotification';
-  /** The channel id (`groups.group_id`, {@link BigInt} decimal string). */
-  channelId: BigInt;
-  /** The sending actor's 32-ASCII-character id. */
-  uuid: string;
-  /** The audio payload, base64-encoded (at most 1,024 bytes decoded). */
-  audioData: string;
-  /** The sender's sequence number for this packet (`0`–`255`). */
-  sequenceNumber: number;
-  /** Server-generated timestamp in epoch milliseconds ({@link BigInt} string). */
-  epochMillis: BigInt;
-}
+export type ChannelAudioNotification = Extract<
+  NonNullable<UdpNotificationsSubscription['udpNotifications']>,
+  { __typename?: 'ChannelAudioNotification' }
+>;
 
 /**
  * Asynchronous error for a previously sent datagram (e.g. a `send*` request).

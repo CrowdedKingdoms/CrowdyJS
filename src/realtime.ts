@@ -49,14 +49,12 @@ export type RealtimeStatus =
  * union of every spatial echo/fan-out notification plus `GenericErrorResponse`
  * and `RealtimeConnectionEvent`. This is the codegen-derived (canonical)
  * shape, narrowed to the non-null payload, plus
- * {@link GenericSpatialNotification}, which only the binary relay delivers, and
- * {@link ChannelAudioNotification} (opcode 36), which the GraphQL union does not
- * list yet; discriminate the members by their `__typename`.
+ * {@link GenericSpatialNotification}, which only the binary relay delivers;
+ * discriminate the members by their `__typename`.
  */
 export type UdpNotification =
   | NonNullable<UdpNotificationsSubscription['udpNotifications']>
-  | GenericSpatialNotification
-  | ChannelAudioNotification;
+  | GenericSpatialNotification;
 
 /**
  * The members of {@link UdpNotification} that carry a `sequenceNumber` and can
@@ -165,7 +163,7 @@ export interface UdpNotificationHandlers {
    * Channel audio (opcode 36) from another member of a channel you belong to;
    * `audioData` is base64 and opaque to the server (one `VoicePacketizer` packet
    * with the SDK voice helpers). The sender gets no echo. Arrives on the binary
-   * relay; the GraphQL `udpNotifications` union does not carry it yet.
+   * relay and on the GraphQL transport alike.
    */
   channelAudio?: (notification: ChannelAudioNotification) => void;
   /**

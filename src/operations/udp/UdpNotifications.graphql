@@ -141,6 +141,13 @@ subscription UdpNotifications {
       sequenceNumber
       epochMillis
     }
+    ... on ChannelAudioNotification {
+      channelId
+      uuid
+      audioData
+      sequenceNumber
+      epochMillis
+    }
     ... on GenericErrorResponse {
       sequenceNumber
       errorCode

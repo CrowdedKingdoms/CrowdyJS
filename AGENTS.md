@@ -47,9 +47,10 @@ Opcode 140 (`GENERIC_SPATIAL_1`) reaches `genericSpatial` (handler, bus key, met
 takes `voxelBounds` (default 0-15 / 0-255). Channel audio: `udp.sendChannelAudio` (opcode 35 =
 opcode 17's builder with type 35, `serializeChannelFrame` in `binary-wire.ts`, else the mutation)
 and opcode 36 parsed like 18 into `ChannelAudioNotification` (handler / bus key `channelAudio`).
-That type is hand-written in `types.ts` because cks-game-api's `udpNotifications` union does not
-list it yet (the class exists); when it does, re-sync, add `... on ChannelAudioNotification` to
-`UdpNotifications.graphql` and switch to the generated type. UDP error 33 is `APP_PAUSED`.
+`ChannelAudioNotification` is the generated union member (cks-game-api `feat/mc-platform-asks`
+added it to `udpNotifications`); `UdpNotifications.graphql` selects it, so the GraphQL transport
+reaches the same `channelAudio` handler and the subscription needs a game API that has it. UDP
+error 33 is `APP_PAUSED`.
 `assertVoxelEdit` is the one int16 / 1,024-byte state check for `sendVoxelUpdate` and
 `ChunkStore.setVoxel`. `ChunkStore` keeps pending local edits per voxel for 10 s and applies an
 echo of one only when a foreign edit came in between and no newer local edit is pending
