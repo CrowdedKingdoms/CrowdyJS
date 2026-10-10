@@ -19,6 +19,7 @@ import {
 } from './binary-relay.js';
 import type { RelaySignContext } from './binary-wire.js';
 import { CROWDY_DEFAULT_WS_ORIGIN } from './default-origin.js';
+import type { GenericSpatialNotification } from './types.js';
 
 /**
  * Lifecycle state of the realtime WebSocket connection, as reported by
@@ -47,12 +48,13 @@ export type RealtimeStatus =
  * Any single message delivered on the `udpNotifications` subscription — the
  * union of every spatial echo/fan-out notification plus `GenericErrorResponse`
  * and `RealtimeConnectionEvent`. This is the codegen-derived (canonical)
- * shape, narrowed to the non-null payload; discriminate the members by their
- * `__typename`.
+ * shape, narrowed to the non-null payload, plus
+ * {@link GenericSpatialNotification}, which only the binary relay delivers;
+ * discriminate the members by their `__typename`.
  */
-export type UdpNotification = NonNullable<
-  UdpNotificationsSubscription['udpNotifications']
->;
+export type UdpNotification =
+  | NonNullable<UdpNotificationsSubscription['udpNotifications']>
+  | GenericSpatialNotification;
 
 /**
  * The members of {@link UdpNotification} that carry a `sequenceNumber` and can
@@ -139,6 +141,13 @@ export interface UdpNotificationHandlers {
    * events), shaped like a client event (`eventType` + base64 `state`).
    */
   serverEvent?: (notification: Extract<UdpNotification, { __typename?: 'ServerEventNotification' }>) => void;
+  /**
+   * An app-defined spatial message (opcode 140, `GENERIC_SPATIAL_1`) from a nearby client or a
+   * hub; `payload` is base64 and opaque to the server. **Binary relay only**
+   * (`realtime: { binaryTransport: true }`): the GraphQL `udpNotifications` union has no member
+   * for it, so on the GraphQL transport this never fires.
+   */
+  genericSpatial?: (notification: GenericSpatialNotification) => void;
   /**
    * A direct actor-to-actor message addressed specifically to you; `payload`
    * is base64. There is no sender echo, so this only ever arrives on the
@@ -1250,6 +1259,9 @@ export class RealtimeClient {
           case 'ServerEventNotification':
             handlers.serverEvent?.(notification);
             break;
+          case 'GenericSpatialNotification':
+            handlers.genericSpatial?.(notification);
+            break;
           case 'SingleActorMessageNotification':
             handlers.singleActorMessage?.(notification);
             break;
@@ -1338,6 +1350,7 @@ const NOTIFICATION_KINDS: Record<string, string> = {
   ClientTextNotification: 'text',
   ClientEventNotification: 'clientEvent',
   ServerEventNotification: 'serverEvent',
+  GenericSpatialNotification: 'genericSpatial',
   SingleActorMessageNotification: 'singleActorMessage',
   ChannelMessageNotification: 'channelMessage',
   GenericErrorResponse: 'genericError',

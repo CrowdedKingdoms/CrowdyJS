@@ -346,6 +346,10 @@ const unsubscribe = client.udp.subscribe(
     },
     clientEvent: (event) => { /* ... */ },
     serverEvent: (event) => { /* ... */ },
+    genericSpatial: (event) => {
+      // An app-defined spatial payload (opcode 140): binary relay only, see below.
+      console.log(event.uuid, event.payload); // payload is base64
+    },
     singleActorMessage: (event) => {
       // A direct actor-to-actor message addressed to you.
       console.log(event.uuid, event.payload); // payload is base64
@@ -385,6 +389,13 @@ flag: `UDP_PROXY_CONNECTION_FAILED` is transient (back off and resubscribe),
 while `AUTH_REQUIRED` / `APP_ID_REQUIRED` must be fixed by the caller first.
 Unsubscribing stops delivery only; call `client.udp.disconnect()` to close the
 UDP proxy session.
+
+`genericSpatial` receives opcode 140 (`GENERIC_SPATIAL_1`), an app-defined spatial payload the
+server fans out without reading — what CrowdyCPP's `Connection::sendGenericSpatial` sends. It
+arrives only on the binary relay (`realtime: { binaryTransport: true }`): the GraphQL
+`udpNotifications` union has no member for it, so the GraphQL proxy drops it and a client on that
+transport never sees one. A World Stores session carries it on its bus too:
+`session.context.on('genericSpatial', …)`.
 
 ### Surviving the loss of an instance (direct connect)
 

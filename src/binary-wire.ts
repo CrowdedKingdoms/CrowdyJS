@@ -105,6 +105,9 @@ export const WireMessageType = {
   CLIENT_TEXT_NOTIFICATION_2: 137,
   CLIENT_EVENT_NOTIFICATION_2: 138,
   SERVER_EVENT_NOTIFICATION_2: 139,
+  // An app-defined spatial payload (CrowdyCPP `Connection::sendGenericSpatial`, a hub's
+  // emit). Parsed on the binary relay only: the GraphQL union has no member for it.
+  GENERIC_SPATIAL_1: 140,
   SINGLE_ACTOR_MESSAGE: 142,
   // Buddy v0.25.0: webcam video pair (audio's shape, payload = one SDK
   // fragment, see media/video-frames.ts) and the server-only actor-left downlink.
@@ -844,6 +847,12 @@ function parseOne(bytes: Uint8Array): UdpNotification | null {
         payload: encodeBase64(p.payload),
       } as UdpNotification;
     }
+    case WireMessageType.GENERIC_SPATIAL_1:
+      return {
+        __typename: 'GenericSpatialNotification',
+        ...spatialCommon(p),
+        payload: encodeBase64(p.payload),
+      } as UdpNotification;
     default:
       return null;
   }

@@ -103,6 +103,7 @@ const BUS_KEYS: BusKey[] = [
   'text',
   'clientEvent',
   'serverEvent',
+  'genericSpatial',
   'singleActorMessage',
   'channelMessage',
   'genericError',

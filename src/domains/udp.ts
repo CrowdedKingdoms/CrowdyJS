@@ -863,8 +863,8 @@ export class UdpAPI {
    * @param handlers - {@link UdpNotificationHandlers}: optional per-typename
    *   callbacks (`actorUpdate`, `voxelUpdate`, `audio`, `text`, `clientEvent`,
    *   `singleActorMessage`, `channelMessage`, `genericError`, `connectionEvent`,
-   *   etc.) plus `any` (every notification) and `error` (a
-   *   {@link CrowdyRealtimeError}).
+   *   etc.; `genericSpatial` fires on the binary relay only) plus `any` (every
+   *   notification) and `error` (a {@link CrowdyRealtimeError}).
    * @param appId - The app to scope delivery to (`BigInt` as a decimal string).
    *   Required.
    * @returns An unsubscribe function that detaches these handlers (and closes

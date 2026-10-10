@@ -278,6 +278,7 @@ export type {
   ClientTextNotification,
   ClientEventNotification,
   ServerEventNotification,
+  GenericSpatialNotification,
   GenericErrorResponse,
   ActorUpdateHandler,
   ActorUpdateResponseHandler,
@@ -289,6 +290,7 @@ export type {
   ClientTextHandler,
   ClientEventHandler,
   ServerEventHandler,
+  GenericSpatialHandler,
   GenericErrorHandler,
   UnsubscribeFn,
 } from './types.js';

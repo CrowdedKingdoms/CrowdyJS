@@ -735,6 +735,38 @@ export interface ServerEventNotification {
 }
 
 /**
+ * An app-defined spatial message (`GENERIC_SPATIAL_1`, opcode 140) from a nearby client or a
+ * hub: the server fans it out like any spatial message and never reads `payload` (CrowdyCPP
+ * sends one with `Connection::sendGenericSpatial`). Delivered on the binary relay only
+ * (`realtime: { binaryTransport: true }`): the GraphQL `udpNotifications` union has no member for
+ * it, so a client on the GraphQL transport does not receive these.
+ */
+export interface GenericSpatialNotification {
+  /** Discriminator for the {@link UdpNotification} union. */
+  __typename: 'GenericSpatialNotification';
+  /** Id of the app the message is in ({@link BigInt} decimal string). */
+  appId: BigInt;
+  /** X coordinate of the message's chunk ({@link BigInt} int64 decimal string). */
+  chunkX: BigInt;
+  /** Y coordinate of the message's chunk ({@link BigInt} int64 decimal string). */
+  chunkY: BigInt;
+  /** Z coordinate of the message's chunk ({@link BigInt} int64 decimal string). */
+  chunkZ: BigInt;
+  /** Chunk replication distance (`0`–`8`) from the original message. */
+  distance: number;
+  /** Decay algorithm (`0`–`5`) from the original message. */
+  decayRate: number;
+  /** The 32-ASCII-character actor id the sender put on the message. */
+  uuid: string;
+  /** The app-defined payload, base64-encoded (decode with {@link decodeBase64}). */
+  payload: string;
+  /** The sender's sequence number for this message (`0`–`255`). */
+  sequenceNumber: number;
+  /** Server-generated timestamp in epoch milliseconds ({@link BigInt} string). */
+  epochMillis: BigInt;
+}
+
+/**
  * Asynchronous error for a previously sent datagram (e.g. a `send*` request).
  * Delivered as a member of the {@link UdpNotification} union on the
  * subscription — **not** as a GraphQL error on the mutation. Match it to the
@@ -773,6 +805,7 @@ export type UdpNotification =
   | ClientTextNotification
   | ClientEventNotification
   | ServerEventNotification
+  | GenericSpatialNotification
   | GenericErrorResponse;
 
 // Client Configuration
@@ -819,6 +852,8 @@ export type ClientTextHandler = (notification: ClientTextNotification) => void;
 export type ClientEventHandler = (notification: ClientEventNotification) => void;
 /** Callback for a {@link ServerEventNotification} (server-originated spatial event). */
 export type ServerEventHandler = (notification: ServerEventNotification) => void;
+/** Callback for a {@link GenericSpatialNotification} (an app-defined spatial message, opcode 140). */
+export type GenericSpatialHandler = (notification: GenericSpatialNotification) => void;
 /** Callback for a {@link GenericErrorResponse} (async error for a prior send). */
 export type GenericErrorHandler = (response: GenericErrorResponse) => void;
 
