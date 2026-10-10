@@ -120,6 +120,50 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.7.0: voice helpers, opcode 140 on the relay, wide voxels in the chunk store
+
+Additive, with two reads that change for values they used to get wrong (the third item). Nothing
+changes on the wire and nothing needs a newer API.
+
+- **Voice helpers** (`media/voice-frames.ts`, exported from the package entry): an optional
+  convention for what an audio payload carries. A 10-byte header, little-endian, goes in front of
+  each codec frame: version 1, codec (0 raw, 1 Opus 48 kHz mono, 2 G.711 µ-law 8 kHz), `u16` seq,
+  `u32` timestamp in codec samples (milliseconds for raw), the frame's duration in ms, and flags
+  (bit 0 the first packet after silence, bit 1 the last before it). `encodeVoiceHeader` /
+  `encodeVoicePacket` write it; `decodeVoicePacket` returns `null` for a packet shorter than
+  10 bytes or of another version and never throws. `VoicePacketizer` numbers one sender's frames
+  across the seq and timestamp wraps and sets the flags (`packetize(frame, { last })`, `skip()`
+  for silence). `VoiceJitterBuffer` takes `push(key, packet, nowMs)` per sender key and returns
+  the due frames from `pull(key, nowMs)` / `poll(nowMs)`: in seq order, `targetDelayMs` (60) after
+  a talk spurt's first packet, a gap (`frame: null`) for each one that never came, late packets
+  dropped, at most `maxFrames` (64) a sender, starting over on a talk spurt or `resetAfterMs`
+  (200) of silence. A spurt that starts while the one before still has frames waiting drops
+  them. CrowdyCPP 0.60.0 has the same helpers and replays `test/unit/fixtures/voice-frames.json`.
+  No codec ships: a browser encodes Opus with WebCodecs (the module doc has the settings). A game
+  with a voice format of its own keeps it; positioning a voice stays the game's.
+- **`genericSpatial`.** Opcode 140 (`GENERIC_SPATIAL_1`), an app-defined spatial payload such as
+  CrowdyCPP's `Connection::sendGenericSpatial`, reaches the new `genericSpatial` handler of
+  `udp.subscribe` (and `any`) as a `GenericSpatialNotification`: the spatial header fields and a
+  base64 `payload`. The World Stores bus has a `genericSpatial` key. **Binary relay only**
+  (`realtime: { binaryTransport: true }`): the GraphQL `udpNotifications` union has no member for
+  140, so the proxy drops it and a client on the GraphQL transport never sees one. `UdpNotification`
+  gains the member, so an exhaustive `switch` over `__typename` needs the new case.
+- **`ChunkStore` keeps wide voxel types and other addresses.** Positions and types are the app's
+  signed 16-bit values, which the platform does not check. An edit the 16×16×16 one-byte grid
+  cannot hold (a type outside 0-255, a position outside 0-15) — a realtime update, a hydrated
+  `voxelStates` entry, or a local `setVoxel` — is kept whole in the new `CachedChunk.overlay`
+  (`ChunkOverlayVoxel`: `x`, `y`, `z`, `voxelType`, `state`; keyed by `voxelKey(x, y, z)`), and
+  `voxelTypeAt` / `voxelStateAt` return it. What changes: a type outside 0-255 is no longer stored
+  truncated (300 used to read as 44, -1 as 255); a position outside 0-15 no longer lands on
+  another voxel (`(16, 0, 0)` used to overwrite `(0, 1, 0)`), and reading one returns the overlay's
+  or nothing; and code that walks `chunk.voxels` itself sees 0 where an in-grid voxel's type is in
+  the overlay. The store is a 16×16×16 helper; a game with other addressing reads the raw
+  `voxelUpdate` events and `chunks.get`'s `voxelStates`.
+- **`createGridHostCalls({ voxelBounds })`** sets the positions and types a CLIENT half's
+  `voxel_set` may write, for a world that uses other signed 16-bit values. The default,
+  `DEFAULT_GRID_VOXEL_BOUNDS`, is today's: positions 0-15, types 0-255. Bounds that are not
+  integer ranges within -32768 to 32767 throw `RangeError` when the host calls are created.
+
 ## 18.6.0: the input log
 
 Additive. An app with replay logging on has its client inputs recorded, and `client.inputLog`
