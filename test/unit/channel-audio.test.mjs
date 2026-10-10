@@ -56,6 +56,14 @@ test('serializeChannelAudio is opcode 17 with type byte 35, signed over its own 
   assert.equal(audio.readBigUInt64LE(prefixLen + 32), 777n);
   assert.equal(audio[prefixLen + 40], 200);
 
+  // The vector CrowdyCPP's wire_test pins for encodeChannelAudio.
+  assert.equal(
+    audio.toString('hex'),
+    '23921000000000000076767676767676767676767676767676767676767676767676767676767676' +
+      '760500010203040501f7c505bbdfc07169f661cb3e3c8d061bbf0065ef4bdc239df40c77112ff8' +
+      '85150903000000000000c8',
+  );
+
   await assert.rejects(
     wire.serializeChannelAudio(ctx, { ...input, payload: Buffer.alloc(1025).toString('base64') }),
     /exceeds 1024/,
