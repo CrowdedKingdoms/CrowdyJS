@@ -120,10 +120,12 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
-## 18.7.0: voice helpers, opcode 140 on the relay, wide voxels in the chunk store
+## 18.7.0: voice helpers, channel audio, opcode 140 on the relay, wide voxels, self-echo, pause and access refusals
 
-Additive, with two reads that change for values they used to get wrong (the third item). Nothing
-changes on the wire and nothing needs a newer API.
+Additive, with reads that change for values they used to get wrong (the wide-voxel item) and one
+new floor: **the token mutations (`portal.mintAppToken`, `exchangeCode`, `refresh`) select
+`runtimeGate`, so 18.7.0 needs the ck-api release after v2.39.0** (an older one refuses the
+selection). Channel audio and the voxel echo need Buddy v0.37.0.
 
 - **Voice helpers** (`media/voice-frames.ts`, exported from the package entry): an optional
   convention for what an audio payload carries. A 10-byte header, little-endian, goes in front of
@@ -163,6 +165,47 @@ changes on the wire and nothing needs a newer API.
   `voxel_set` may write, for a world that uses other signed 16-bit values. The default,
   `DEFAULT_GRID_VOXEL_BOUNDS`, is today's: positions 0-15, types 0-255. Bounds that are not
   integer ranges within -32768 to 32767 throw `RangeError` when the host calls are created.
+- **Channel audio** (Buddy v0.37.0). `udp.sendChannelAudio({ channelId, uuid, payload,
+  sequenceNumber? })` sends opcode 35 (opcode 17's layout and signing) on the binary relay, else
+  the `sendChannelAudio` mutation; `payload` is base64, at most 1,024 bytes, and the server
+  refuses it with `UNAUTHORIZED` (7) without the channel's `send_voice` and the app's
+  `use_voice_chat`. There is no echo to the sender. Other members' frames arrive as opcode 36,
+  standalone or bundled, as a `ChannelAudioNotification` (`channelId`, `uuid`, `audioData`
+  base64, `sequenceNumber`, `epochMillis`) on the new `channelAudio` handler of `udp.subscribe`
+  (and `any`) and the World Stores bus key `channelAudio`. **Receiving is binary relay only for
+  now**: the game API's `udpNotifications` union does not carry the type yet. `channels.create` /
+  `grids.createChannel` take `membersCanSpeak` (default false: the member role gets
+  `send_voice`); `GridScope.channels` has `sendAudio(channelId, uuid, audioBase64)`;
+  `serializeChannelAudio` is exported. The voice helpers are the payload: see the README.
+- **UDP error 33, `APP_PAUSED`**: the replication server refuses a paused app's sends.
+  `UDP_ERROR_NAMES[33]` and the generated `UdpErrorCode.AppPaused` name it.
+- **Voxel edits are int16 and their state at most 1,024 bytes.** `udp.sendVoxelUpdate` and
+  `ChunkStore.setVoxel` throw `RangeError` (nothing sent) for a position or type outside
+  -32768..32767 or a state over 1,024 bytes (`assertVoxelEdit`, `VOXEL_STATE_MAX_BYTES`); the
+  server answers those with `INVALID_REQUEST` (15). The 0-15 / 0-255 ranges in the docs were
+  never enforced and are gone.
+- **The echo of your own voxel edit.** Buddy v0.37.0 delivers every accepted edit back to its
+  sender as a `VoxelUpdateNotification`. `ChunkStore` records each `setVoxel` (uuid, sequence,
+  voxel) for 10 s and does not apply its echo again, so a local edit fires `onChunkChanged` once;
+  it applies the echo only when another client's edit of the voxel arrived in between (the server
+  ordered yours last) and no newer local edit of it is pending. A game reading `voxelUpdate`
+  itself sees its own edits there now: compare the `uuid` and `sequenceNumber` with the send's.
+- **Pause and access refusals.** `isAppPaused(gate)` reads `AppTokenResponse.runtimeGate` and
+  `GameClientBootstrap.runtimeGate` (`{ status, reason }`; anything but `ACTIVE` is paused; a
+  paused app still mints, so check before entering). `appPausedOf(err)` reads `APP_PAUSED`
+  (`reason`), `accessRefusalOf(err)` `ACCESS_REVOKED` / `ACCESS_SUSPENDED` (`suspendedUntil`) /
+  `ACCESS_NOT_GRANTED`, `actorExistsOf(err)` `ACTOR_EXISTS` (`ownedByCaller`), with their
+  `*_CODE` constants.
+- **New API wraps**: `users.playerProfile(userId)` and `users.playerProfiles(userIds)` (at most
+  `PLAYER_PROFILES_MAX`, 100; `RangeError` above) for public `{ userId, gamertag, disambiguation }`;
+  `users.get` documents that another user's private fields come back null.
+  `appAccess.suspend(appId, userId, until, idempotencyKey?)`, `unsuspend`,
+  `resyncTierGridPermissions` (`manage_access_tiers`); `suspendedUntil` on every access record.
+  `exec.restartType(appId, nodeType)` → `{ nodeType, stopped }` (`manage_compute`);
+  `exec.status` adds `budgetPauseReason`, `maxInstances`, `maxReservedMb`, `instanceLimit`,
+  `instances`, `reservedMb`. `apps.get` / `apps.update` carry `claimOwnerKeys`;
+  `chunks.get` / `getByDistance` carry `voxelStatesTruncated`; `gameClientBootstrap` carries
+  `runtimeGate` and `wildernessWritesOpen`.
 
 ## 18.6.0: the input log
 

@@ -234,7 +234,7 @@ never told about, so a native refresh without it is a re-placement.
 | Sub-client | What it does |
 |---|---|
 | `client.auth` | Sign-in: `login` / `register` (email + password), magic link, social/OIDC. Passwords: `requestPasswordReset` / `resetPassword`, `changePassword`, and `setInitialPassword` for an account created by magic link or a social provider (added in 15.1.0). Log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). **No dev bypass** — `devLogin` was removed in 15.0.0 and `DEV_AUTH_BYPASS` is gone from every tier. |
-| `client.users` | `me`, `updateGamertag`, profile reads. |
+| `client.users` | `me`, `updateGamertag`, profile reads; `playerProfile` / `playerProfiles` (up to 100) for other players' public `{ userId, gamertag, disambiguation }`. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
 | `client.hosting` | Third-party hosting on Crowdy Games (17.2.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
@@ -245,7 +245,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.teleport` | Teleport requests. |
 | `client.inputLog` | The input log (18.6.0): `sessions(appId)` and `messages(appId, gameTokenId)` read the client inputs recorded for an app with replay logging on (`apps.update(appId, { replayLoggingEnabled: true })`). A player reads their own; `manage_apps` reads every session. Keep paging while `hasNextPage` is true. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
-| `client.exec` | **ck-exec:** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion` and `setEnabled` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec). |
+| `client.exec` | **ck-exec:** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion`, `setEnabled`, `restartType` and `status` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec). |
 | `client.playerWallet` | Player spend: balance, ledger, hourly charges, spend caps, card setup, auto-recharge. A ck-exec mod's compute is billed here, to its owner. |
 | `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
@@ -264,7 +264,7 @@ grouped under `client.admin` and mirrored at the top level):
 |---|---|
 | `client.organizations` | Orgs, members, RBAC roles, org API tokens. |
 | `client.apps` | App registry, discovery + routing (`create`, `routeFor`, `marketplace`), visibility, and player-code admission mode / allow-list administration. |
-| `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`. |
+| `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`; timed bans (`suspend`, `unsuspend`) and `resyncTierGridPermissions`. |
 | `client.billing` | Org wallet + per-app spend budgets. |
 | `client.payments` | Payment checkouts (wallet top-ups, plan purchases). |
 | `client.quotas` | Usage quotas at the org/app scope. |
@@ -461,6 +461,12 @@ with a live actor within `maxDistance` chunks (straight-line distance between
 chunk coordinates) of `chunk` receive it; they get the same `channelMessage`
 notification.
 
+`sendVoxelUpdate` takes the app's signed 16-bit positions and type and a state of
+at most 1,024 bytes (`RangeError` otherwise, nothing sent). Buddy v0.37.0 echoes
+every accepted voxel edit back to its sender as a `voxelUpdate`, so a game reading
+those sees its own edits; World Stores' `ChunkStore` applies that echo once. A
+paused app's sends are refused with UDP error 33, `APP_PAUSED`.
+
 ### Bundled sends on the binary relay
 
 With `realtime: { binaryTransport: true }` the SDK signs each message itself
@@ -531,6 +537,32 @@ The SDK ships no codec. A browser encodes and decodes Opus with WebCodecs (`Audi
 `AudioDecoder`, `codec: 'opus'`, 48 kHz, one channel; check `AudioEncoder.isConfigSupported`
 first) and falls back to G.711 µ-law where it has none; `media/voice-frames.ts` has the settings.
 Where a voice sits in the world (panning, distance attenuation) stays the game's.
+
+#### Channel audio (party and guild voice)
+
+`sendAudioPacket` reaches players near a chunk. `sendChannelAudio` (Buddy v0.37.0) reaches every
+active member of a channel wherever they are: opcode 35 on the binary relay, the
+`sendChannelAudio` mutation otherwise, at most 1,024 payload bytes. The sender needs the channel's
+`send_voice` (`channels.create({ ..., membersCanSpeak: true })` gives it to the member role) and the
+app's `use_voice_chat`; without them the server answers `UNAUTHORIZED` on the subscription. There is
+no echo. Members get a `channelAudio` notification; key the jitter buffer by channel and sender so
+one player in two channels is two streams. Receiving needs `realtime: { binaryTransport: true }`
+for now: the game API's GraphQL `udpNotifications` does not carry `ChannelAudioNotification` yet.
+
+```ts
+const party = new VoicePacketizer({ codec: VoiceCodec.OPUS, frameMs: 20 });
+await client.udp.sendChannelAudio({
+  channelId, uuid: me.uuid,
+  payload: encodeBase64(party.packetize(opusFrame, { last: talkKeyReleased })),
+});
+
+const partyVoices = new VoiceJitterBuffer();
+client.udp.subscribe({
+  channelAudio: (n) =>
+    partyVoices.push(`${n.channelId}:${n.uuid}`, decodeBase64(n.audioData), performance.now()),
+}, appId);
+// ...poll(performance.now()) from the audio clock as above.
+```
 
 ## World helpers
 
@@ -1050,6 +1082,13 @@ GraphQL errors carry a stable `extensions.code` (e.g. `UNAUTHENTICATED`,
 `SCOPE_MISSING`, `FORBIDDEN`, `IDEMPOTENCY_CONFLICT`, `RATE_LIMITED`) plus,
 where applicable, `extensions.remediation` and `extensions.requiredPermission`.
 Branch on `error.extensions?.code` rather than parsing messages.
+
+Readers for the refusals a player should be told about, each `null` for any other error:
+`accessRefusalOf(err)` (`ACCESS_REVOKED`, `ACCESS_SUSPENDED` with `suspendedUntil`,
+`ACCESS_NOT_GRANTED`), `appPausedOf(err)` (`APP_PAUSED`, with `reason`) and `actorExistsOf(err)`
+(`ACTOR_EXISTS`; `ownedByCaller: true` means a retried create of your own actor). A paused app
+still mints tokens: check `isAppPaused(token.runtimeGate)` (or the bootstrap's `runtimeGate`)
+before entering the world.
 
 ## Idempotent retries
 

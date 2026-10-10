@@ -30,8 +30,10 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
-**18.7.0: voice helpers, opcode 140, wide voxels (the Minecraft mod's platform asks, 2026-10-10).**
-No wire or API change. `media/voice-frames.ts` is an optional voice payload convention: a 10-byte
+**18.7.0: voice helpers, channel audio, opcode 140, wide voxels, self-echo, pause and access
+refusals (the Minecraft mod's platform asks, 2026-10-10).** Needs the ck-api release after v2.39.0
+(the token mutations select `runtimeGate`) and Buddy v0.37.0 for channel audio and the voxel echo.
+`media/voice-frames.ts` is an optional voice payload convention: a 10-byte
 header (version 1, codec 0 raw / 1 Opus 48 kHz / 2 µ-law 8 kHz, `u16` seq, `u32` timestamp,
 frameMs, talk-spurt flags), `VoicePacketizer` and `VoiceJitterBuffer` (per sender key; 60 ms
 target delay, gaps, late drops, 64 frames a sender, starts over on a talk spurt or 200 ms of
@@ -42,7 +44,19 @@ Opcode 140 (`GENERIC_SPATIAL_1`) reaches `genericSpatial` (handler, bus key, met
 **binary relay only**: the GraphQL union has no member for it and nothing was added to the schema.
 `ChunkStore` keeps an edit the one-byte 16³ grid cannot hold (type outside 0-255, position outside
 0-15) in `CachedChunk.overlay` instead of truncating or aliasing it, and `createGridHostCalls`
-takes `voxelBounds` (default 0-15 / 0-255). CrowdyCPP 0.60.0 mirrors all of it.
+takes `voxelBounds` (default 0-15 / 0-255). Channel audio: `udp.sendChannelAudio` (opcode 35 =
+opcode 17's builder with type 35, `serializeChannelFrame` in `binary-wire.ts`, else the mutation)
+and opcode 36 parsed like 18 into `ChannelAudioNotification` (handler / bus key `channelAudio`).
+That type is hand-written in `types.ts` because cks-game-api's `udpNotifications` union does not
+list it yet (the class exists); when it does, re-sync, add `... on ChannelAudioNotification` to
+`UdpNotifications.graphql` and switch to the generated type. UDP error 33 is `APP_PAUSED`.
+`assertVoxelEdit` is the one int16 / 1,024-byte state check for `sendVoxelUpdate` and
+`ChunkStore.setVoxel`. `ChunkStore` keeps pending local edits per voxel for 10 s and applies an
+echo of one only when a foreign edit came in between and no newer local edit is pending
+(`test/unit/chunk-store-echo.test.mjs`). `errors.ts` adds `actorExistsOf`, `accessRefusalOf`,
+`appPausedOf`, `isAppPaused`; `portal.ts` selects `runtimeGate` (identity path: security review
+before the PR). CrowdyCPP 0.60.0 mirrors all of it; its wire_test and
+`test/unit/channel-audio.test.mjs` pin the same opcode 35 bytes.
 
 **18.6.0: the input log (2026-10-09).** `client.inputLog.sessions` / `messages` wrap cks-game-api's
 `inputLogSessions` / `inputLogMessages`: the client inputs recorded for an app with replay logging on
