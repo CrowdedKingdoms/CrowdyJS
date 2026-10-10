@@ -600,7 +600,9 @@ holds it to rules of its own (18.0.2): `grid_permission_check` answers only for
 the player's four code-permission keys (`GRID_PERMISSION_CHECK_KEYS`) and
 refuses any other key instead of answering false, because a game knows no other
 key for a grid; `voxel_set` takes a voxel inside its chunk (0-15) and a type
-0-255; and a half's spatial and channel sends go out as an actor uuid the page
+0-255, or the ranges the game sets with `createGridHostCalls({ voxelBounds })` for a world
+whose positions and types are other signed 16-bit values (18.7.0); and a half's spatial and
+channel sends go out as an actor uuid the page
 derives for the grid from the one the half names (`clientHalfActorUuid`), so a
 half can never move the player's avatar or speak as another player. The broker
 refuses a call that names its chunk a second way (`chunk`, `chunk_x`, …): route

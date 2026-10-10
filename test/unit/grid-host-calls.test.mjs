@@ -174,6 +174,53 @@ test('voxel_set writes only a voxel inside its chunk, of a type 0-255', async ()
   assert.deepEqual(server[0].location, { x: 3, y: 4, z: 5 });
 });
 
+test('voxel_set takes the bounds the game sets, and refuses bounds the wire cannot carry', async () => {
+  const { GridScope, createGridHostCalls, GridHostCallRefused, DEFAULT_GRID_VOXEL_BOUNDS } = await loadSdk();
+  assert.deepEqual(DEFAULT_GRID_VOXEL_BOUNDS, { position: { min: 0, max: 15 }, type: { min: 0, max: 255 } });
+  const scope = new GridScope({ grids: {}, channels: {}, udp: {} }, '42', '500', BOX);
+  const local = [];
+  const make = (voxelBounds) =>
+    createGridHostCalls({
+      scope,
+      client: { chunks: {}, state: {}, voxels: {} },
+      local: { setVoxel: async (input) => (local.push(input), true) },
+      voxelBounds,
+    });
+  const voxel = (over) => ({
+    fn: 'voxel_set',
+    args: { chunkX: 1, chunkY: 0, chunkZ: 2, voxelX: 3, voxelY: 4, voxelZ: 5, voxelType: 7, ...over },
+  });
+
+  const wide = make({ position: { min: -64, max: 79 }, type: { min: -1, max: 4095 } });
+  for (const over of [{ voxelX: 16 }, { voxelY: -1 }, { voxelZ: -64 }, { voxelX: 79 }, { voxelType: 300 }, { voxelType: -1 }]) {
+    assert.deepEqual(await wide(voxel(over)), { ok: true }, JSON.stringify(over));
+  }
+  assert.deepEqual(local.slice(-2).map((v) => v.voxelType), [300, -1]);
+  for (const over of [{ voxelX: 80 }, { voxelY: -65 }, { voxelType: 4096 }, { voxelType: -2 }]) {
+    await assert.rejects(
+      wide(voxel(over)),
+      (e) =>
+        e instanceof GridHostCallRefused &&
+        e.message.includes('inside its chunk (-64 to 79) and a voxel type -1 to 4095'),
+      JSON.stringify(over),
+    );
+  }
+
+  // Bounds for types only keep the default positions.
+  const types = make({ type: { min: 0, max: 1023 } });
+  assert.deepEqual(await types(voxel({ voxelType: 1023 })), { ok: true });
+  await assert.rejects(types(voxel({ voxelX: 16 })), /inside its chunk \(0-15\) and a voxel type 0-1023/);
+
+  for (const voxelBounds of [
+    { position: { min: 5, max: 4 } },
+    { position: { min: 0, max: 1.5 } },
+    { type: { min: -32769, max: 0 } },
+    { type: { min: 0, max: 32768 } },
+  ]) {
+    assert.throws(() => make(voxelBounds), RangeError, JSON.stringify(voxelBounds));
+  }
+});
+
 test('spatial and channel sends go out under a uuid derived for the grid, never one the mod names', async () => {
   const { GridScope, createGridHostCalls, clientHalfActorUuid } = await loadSdk();
   const sent = [];
