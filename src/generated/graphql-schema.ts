@@ -1588,6 +1588,21 @@ export type BuddyLiveRates = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** Channel audio from another member of a channel you belong to (party or guild voice), delivered over the udpNotifications subscription wherever you are. The payload is opaque to the server: your app (or an SDK voice helper) defines its format and codec. */
+export type ChannelAudioNotification = {
+  __typename?: 'ChannelAudioNotification';
+  /** The audio payload, base64-encoded (at most 1024 bytes decoded). Opaque to the server. */
+  audioData: Scalars['String']['output'];
+  /** The channel id (groups.group_id) the audio was sent to. */
+  channelId: Scalars['BigInt']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sender's sequence number for this packet (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The sending actor's UUID. */
+  uuid: Scalars['String']['output'];
+};
+
 /** Input for publishing a message to a channel. Delivered to every active member of the channel (regardless of location), not chunk-routed. The sender must have the channel send_messages permission. */
 export type ChannelMessageInput = {
   /** The channel id (groups.group_id) to publish to. */
@@ -9676,7 +9691,7 @@ export enum UdpErrorCode {
 }
 
 /** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version. */
-export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
+export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelAudioNotification | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
 
 /** UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md. */
 export type UdpProxyConnectionStatus = {

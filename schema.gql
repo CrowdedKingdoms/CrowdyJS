@@ -12434,7 +12434,7 @@ type Subscription {
 """
 All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version.
 """
-union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientVideoNotification | ActorLeftNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | ChannelMessageNotification | GenericErrorResponse | RealtimeConnectionEvent
+union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientVideoNotification | ActorLeftNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | ChannelMessageNotification | ChannelAudioNotification | GenericErrorResponse | RealtimeConnectionEvent
 
 """
 LEGACY — never emitted. The game server retired the dedicated actor-update response opcode (129); an applied update now arrives as your own ActorUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version.
@@ -12765,6 +12765,24 @@ type ChannelMessageNotification {
   """
   payload: String!
   """The sender's sequence number for this message (0-255)."""
+  sequenceNumber: Int!
+  """Server-generated epoch milliseconds timestamp."""
+  epochMillis: BigInt!
+}
+
+"""
+Channel audio from another member of a channel you belong to (party or guild voice), delivered over the udpNotifications subscription wherever you are. The payload is opaque to the server: your app (or an SDK voice helper) defines its format and codec.
+"""
+type ChannelAudioNotification {
+  """The channel id (groups.group_id) the audio was sent to."""
+  channelId: BigInt!
+  """The sending actor's UUID."""
+  uuid: String!
+  """
+  The audio payload, base64-encoded (at most 1024 bytes decoded). Opaque to the server.
+  """
+  audioData: String!
+  """The sender's sequence number for this packet (0-255)."""
   sequenceNumber: Int!
   """Server-generated epoch milliseconds timestamp."""
   epochMillis: BigInt!
