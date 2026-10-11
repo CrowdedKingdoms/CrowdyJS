@@ -30,6 +30,17 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.9.0: the input log says what it lost, and when to retry (2026-10-10).** Selects
+`InputLogSession.missingRecords`, so it needs the Game API release after v2.40.2 (cks-game-api
+#497 to #499) on the tier: merge it once that release is deployed on `dev`, with `schema.gql`
+re-synced from `dev`'s. Docs only otherwise: the end reasons `logging_off`, `shutdown` and
+`paused`, `INPUT_LOG_TEMPORARILY_UNAVAILABLE` and `INPUT_LOG_RATE_LIMITED` (retryable, same
+cursor; a read over its share waits for the earlier one first), cursors bound to their session,
+the funds refusal's amounts, the paging loop on `hasNextPage` with a back-off (MIGRATION.md; the
+18.6.0 example stopped early), and the README's server-compatibility table. No new method, so
+CrowdyCPP and CrowdyPy have no surface to mirror; they port `missingRecords` from this release's
+dev tag. (Drafted as 18.8.0, which #225 took for `ExecBuild.sdkVersion`.)
+
 **18.8.0: `ExecBuild.sdkVersion` (the Minecraft mod's updated asks, 2026-10-10).** The
 `ExecBuildFields` fragment selects `sdkVersion`, the SDK version the platform compiled a build
 against; the `ExecBuild` type and the mapper take it from the fragment. Needs ck-api v2.40.2

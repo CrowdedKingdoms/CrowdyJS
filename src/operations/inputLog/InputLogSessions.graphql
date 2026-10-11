@@ -18,6 +18,7 @@ query InputLogSessions(
         endReason
         messageCount
         byteCount
+        missingRecords
         messageTypes
       }
     }
