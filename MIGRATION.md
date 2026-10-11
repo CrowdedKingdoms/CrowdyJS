@@ -142,8 +142,15 @@ first on each tier.
   runs one read per user, and two per app and per org, at a time: a read over that share waits
   for an earlier one within its own few-second deadline, and `INPUT_LOG_RATE_LIMITED` means the
   wait ran out. Both carry `extensions.retryable`: retry with the same cursor after a short
-  back-off. A read whose request is closed (an aborted `fetch`) stops and frees its share. An
-  operation may select `inputLogMessages` only once.
+  back-off, a bounded number of times. A read whose request is closed stops and frees its
+  share: pass `signal` in the options of `sessions` / `messages` (new) and abort a read nobody
+  will see, say when the user opens another session. An operation may select
+  `inputLogMessages` only once.
+- **A `signal` keeps the request timeout.** A `signal` passed to a request
+  (`client.gql.request(document, variables, { signal })`, and the input log's new option) used
+  to replace the client's timeout, so a request with one could wait for ever, and an abort
+  rejected as `CrowdyTimeoutError`. It now runs alongside the timeout, and aborting rejects with
+  the signal's reason.
 - **A cursor belongs to its session.** `BAD_USER_INPUT` for a malformed cursor or one from another
   session (until this Game API, a cursor from another session was not detected and the read just
   returned fewer inputs).
@@ -158,18 +165,26 @@ Paging a session, the loop that does not stop early:
 import { CrowdyGraphQLError, decodeBase64 } from '@crowdedkingdoms/crowdyjs';
 
 const RETRY = new Set(['INPUT_LOG_TEMPORARILY_UNAVAILABLE', 'INPUT_LOG_RATE_LIMITED']);
+const MAX_RETRIES = 8; // in a row, about half a minute of back-off; then give up
+const reading = new AbortController(); // abort() when the user moves on
 let after: string | undefined;
-for (let backoffMs = 250; ; ) {
+for (let backoffMs = 250, retries = 0; ; ) {
   let page;
   try {
-    page = await game.inputLog.messages(appId, gameTokenId, { first: 200, after });
+    page = await game.inputLog.messages(appId, gameTokenId, {
+      first: 200,
+      after,
+      signal: reading.signal,
+    });
   } catch (err) {
     if (!(err instanceof CrowdyGraphQLError) || !RETRY.has(String(err.code))) throw err;
+    if (++retries > MAX_RETRIES) throw err;
     await new Promise((r) => setTimeout(r, backoffMs));
     backoffMs = Math.min(backoffMs * 2, 5_000);
     continue; // the same cursor: nothing is skipped
   }
   backoffMs = 250;
+  retries = 0;
   for (const { node } of page.edges) handle(node.messageType, decodeBase64(node.body));
   if (!page.pageInfo.hasNextPage) break;
   after = page.pageInfo.endCursor ?? after;

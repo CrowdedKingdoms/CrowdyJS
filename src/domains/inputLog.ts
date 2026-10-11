@@ -25,6 +25,13 @@ export interface InputLogPageOptions<Filter> {
   /** A previous page's `pageInfo.endCursor`; omit for the first page. */
   after?: string;
   filter?: Filter;
+  /**
+   * Abort the read: the call rejects with the signal's reason, and the server stops a
+   * `messages` read and frees its share at once (the Game API release after v2.40.2), so the
+   * next read, a different session's say, does not wait for it. Abort the one you no longer
+   * need when the user moves on.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -50,7 +57,7 @@ export interface InputLogPageOptions<Filter> {
  * org, at a time: a read over that share waits for an earlier one within its own few-second
  * deadline, and `INPUT_LOG_RATE_LIMITED` means the wait ran out. Both carry
  * `extensions.retryable`, so wait a moment and call again with the same cursor; a read
- * whose request is closed stops and frees its share. An operation may select
+ * whose request is closed (`opts.signal` aborted) stops and frees its share. An operation may select
  * `inputLogMessages` only once. The Game API release after v2.40.2 raises those two;
  * v2.39.0 to v2.40.2 answer `INPUT_LOG_UNAVAILABLE` instead, and an empty page when a read
  * could not start in time.
@@ -84,12 +91,11 @@ export class InputLogAPI {
     appId: string,
     opts: InputLogPageOptions<InputLogSessionFilter> = {},
   ): Promise<InputLogSessionPage> {
-    const data = await this.gql.request(InputLogSessionsDocument, {
-      appId,
-      first: opts.first,
-      after: opts.after,
-      filter: opts.filter,
-    });
+    const data = await this.gql.request(
+      InputLogSessionsDocument,
+      { appId, first: opts.first, after: opts.after, filter: opts.filter },
+      { signal: opts.signal },
+    );
     return data.inputLogSessions;
   }
 
@@ -105,7 +111,8 @@ export class InputLogAPI {
    * can hold fewer than `first` inputs, or none, when it reached the server's time or scan
    * limit, and its `endCursor` still moves the next page on. Keep the previous cursor if one
    * comes back null, and retry `INPUT_LOG_TEMPORARILY_UNAVAILABLE` / `INPUT_LOG_RATE_LIMITED`
-   * with it after a short back-off (MIGRATION.md, 18.9.0).
+   * with it after a short back-off, a bounded number of times (MIGRATION.md, 18.9.0). Pass
+   * `opts.signal` and abort a read nobody will see.
    *
    * @param appId - Numeric app id.
    * @param gameTokenId - The session: {@link InputLogSessionRecord.gameTokenId}.
@@ -123,13 +130,11 @@ export class InputLogAPI {
     gameTokenId: string,
     opts: InputLogPageOptions<InputLogMessageFilter> = {},
   ): Promise<InputLogMessagePage> {
-    const data = await this.gql.request(InputLogMessagesDocument, {
-      appId,
-      gameTokenId,
-      first: opts.first,
-      after: opts.after,
-      filter: opts.filter,
-    });
+    const data = await this.gql.request(
+      InputLogMessagesDocument,
+      { appId, gameTokenId, first: opts.first, after: opts.after, filter: opts.filter },
+      { signal: opts.signal },
+    );
     return data.inputLogMessages;
   }
 }
