@@ -39,6 +39,7 @@ export class GridsAPI {
    * Create a channel that belongs to a grid you own. The grid's player
    * modules may `emit_channel` into it; their messages carry the sender uuid
    * `grid:<gridId>`. Membership defaults to `open` so visitors can join.
+   * `membersCanSpeak: true` gives the default member role `send_voice` (channel audio).
    */
   async createChannel(
     input: CreateGridChannelMutationVariables['input'],

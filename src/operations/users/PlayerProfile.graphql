@@ -1,0 +1,15 @@
+query PlayerProfile($userId: BigInt!) {
+  playerProfile(userId: $userId) {
+    userId
+    gamertag
+    disambiguation
+  }
+}
+
+query PlayerProfiles($userIds: [BigInt!]!) {
+  playerProfiles(userIds: $userIds) {
+    userId
+    gamertag
+    disambiguation
+  }
+}

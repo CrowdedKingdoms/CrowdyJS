@@ -63,6 +63,7 @@ import { GameAppsAPI } from './domains/gameApps.js';
 import { VoxelsAPI } from './domains/voxels.js';
 import { ActorsAPI } from './domains/actors.js';
 import { TeleportAPI } from './domains/teleport.js';
+import { InputLogAPI } from './domains/inputLog.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
 import { ChannelsAPI } from './domains/channels.js';
@@ -289,6 +290,8 @@ export class CrowdyClient {
   readonly actors: ActorsAPI;
   /** Teleport: move an actor to a destination chunk/world. */
   readonly teleport: TeleportAPI;
+  /** The input log: recorded client inputs of an app with replay logging on. */
+  readonly inputLog: InputLogAPI;
   /** Per-user/per-app persisted state blobs. */
   readonly state: StateAPI;
   /** Server status + version discovery (UDP availability, version floors). */
@@ -488,6 +491,7 @@ export class CrowdyClient {
     this.voxels = new VoxelsAPI(this.graphql);
     this.actors = new ActorsAPI(this.graphql);
     this.teleport = new TeleportAPI(this.graphql);
+    this.inputLog = new InputLogAPI(this.graphql);
     this.state = new StateAPI(this.graphql);
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);

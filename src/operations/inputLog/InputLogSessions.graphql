@@ -1,0 +1,33 @@
+query InputLogSessions(
+  $appId: BigInt!
+  $first: Int
+  $after: String
+  $filter: InputLogSessionFilter
+) {
+  inputLogSessions(appId: $appId, first: $first, after: $after, filter: $filter) {
+    edges {
+      cursor
+      node {
+        appId
+        gameTokenId
+        userId
+        datacenter
+        startedAt
+        lastSeenAt
+        endedAt
+        endReason
+        messageCount
+        byteCount
+        missingRecords
+        messageTypes
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

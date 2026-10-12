@@ -168,6 +168,16 @@ export type ActorsConnection = {
   totalCount: Maybe<Scalars['Int']['output']>;
 };
 
+export type AddTierAccessRuleInput = {
+  /** When the listing ends (a contractor engagement). Omit for none. */
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  kind: TierAccessRuleKind;
+  /** Who this is and why, for the next operator. */
+  note?: InputMaybe<Scalars['String']['input']>;
+  /** An email address (EMAIL) or a domain (EMAIL_DOMAIN). */
+  value: Scalars['String']['input'];
+};
+
 export type AdmitAppCodeInput = {
   /** Numeric app id whose allow list receives this entry. */
   appId: Scalars['BigInt']['input'];
@@ -854,6 +864,8 @@ export type App = {
   __typename?: 'App';
   /** Unique numeric identifier of the app (primary key). */
   appId: Scalars['BigInt']['output'];
+  /** Grid permission keys a player's claim grants its owner on the claimed grid (claimGridOwnership), beside the player-code keys the owner's tier carries; for example update_voxel_data makes a claim buildable without a hub granting it. Never a player-code key; the grid's permission limits still cap them. Empty by default. Set with updateApp (manage_apps). */
+  claimOwnerKeys: Array<Scalars['String']['output']>;
   /** OAuth client type: "public" (browser/PKCE, no secret) or "confidential" (server-side, holds a secret). Defaults to "public". */
   clientType: Scalars['String']['output'];
   /** Player-code censorship mode: "implicit_allow" (default/off) or "allow_list" (strict admission of every running artifact, including self-authored code). */
@@ -886,6 +898,8 @@ export type App = {
   orgId: Scalars['BigInt']['output'];
   /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. */
   redirectUris: Array<Scalars['String']['output']>;
+  /** Whether replay logging is on: the realtime servers record every client message they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a wallet that covers the projected cost of one retention period, or a billing-exempt org. */
+  replayLoggingEnabled: Scalars['Boolean']['output'];
   /**
    * Reserved realtime (UDP) capacity in bytes/s for shared apps. Superseded by reservedUdpBytesPerSec.
    * @deprecated Renamed 2026-09-01 when reservations split by traffic type. Use reservedUdpBytesPerSec; this returns the same value for one release.
@@ -1121,6 +1135,15 @@ export type AppPlayerUsageRow = {
   userId: Scalars['BigInt']['output'];
 };
 
+/** The app's runtime gate as a player's client may read it. When status is not ACTIVE the app's realtime traffic and hubs are paused: replication delivers nothing and refuses sends with APP_PAUSED, and hub calls are refused. Clients should tell the player the world is paused rather than show an empty one. Readable with the player's own app token; carries no billing figures. */
+export type AppRuntimeGate = {
+  __typename?: 'AppRuntimeGate';
+  /** Why the app is paused: insufficient_funds, spend_cap or subscription_lapsed. Null while ACTIVE. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** ACTIVE when the app runs; anything else means paused. */
+  status: AppRuntimeStatus;
+};
+
 /** The shared-environment runtime gate + current billing-window usage for an app. */
 export type AppRuntimeState = {
   __typename?: 'AppRuntimeState';
@@ -1148,7 +1171,7 @@ export type AppRuntimeState = {
 export enum AppRuntimeStatus {
   /** Allowed to run; clients may connect. */
   Active = 'ACTIVE',
-  /** Blocked from running now (e.g. insufficient funds, spend cap hit, or free allowance exhausted); recoverable once the cause clears. */
+  /** Blocked from running now (insufficient funds or a spend cap hit); recoverable once the cause clears. */
   Denied = 'DENIED',
   /** Still running on a temporary allowance (e.g. low funds) but at risk of being denied soon. */
   Grace = 'GRACE',
@@ -1202,6 +1225,8 @@ export type AppTokenResponse = {
   gameTokenId: Scalars['String']['output'];
   /** Browser launch URL for this app (where the player's browser plays it), if configured. */
   launchUrl: Maybe<Scalars['String']['output']>;
+  /** The app's runtime gate when the token was minted. A token is issued for a paused app too, so a client can read status and reason and tell the player the world is paused; realtime sends and hub calls are refused until status is ACTIVE again. Null only when the gate could not be read. */
+  runtimeGate: Maybe<AppRuntimeGate>;
   /** Opaque app-scoped gameplay token. Send to the target app's Game API as `Authorization: Bearer <token>` (and in the realtime `connectionParams`). Do NOT send it to the Management API for anything other than `me`/`refreshAppToken`. */
   token: Scalars['String']['output'];
 };
@@ -1219,10 +1244,14 @@ export type AppUsageProjection = {
   daysElapsed: Scalars['Float']['output'];
   /** Per-app free monthly egress allowance in bytes (5 decimal GB). */
   freeAllowanceBytes: Scalars['String']['output'];
+  /** Stored input logs this calendar month so far, in byte-hours (input_log_storage_byte_hours, which has no free allowance). Recordings keep accruing after replay logging is turned off, until they age out at the end of the retention; 0 when nothing was held this month. */
+  inputLogByteHours: Scalars['String']['output'];
   /** True when projected egress exceeds the free allowance, or null when insufficient data. */
   onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
   /** Projected end-of-month egress bytes (linear extrapolation), or null when insufficient data. */
   projectedBytes: Maybe<Scalars['String']['output']>;
+  /** Projected end-of-month stored input logs in byte-hours (linear extrapolation), or null when insufficient data. */
+  projectedInputLogByteHours: Maybe<Scalars['String']['output']>;
   /** Projected usage as a percentage of the free allowance, or null when insufficient data. */
   projectedPctOfFree: Maybe<Scalars['Float']['output']>;
   /** True when at least 3 days have elapsed in the month (projection is meaningful). */
@@ -1244,6 +1273,10 @@ export type AppUsageSummary = {
   graphqlRecvBytes: Scalars['String']['output'];
   /** Total GraphQL bytes sent (string counter). */
   graphqlSendBytes: Scalars['String']['output'];
+  /** Stored input logs over the window, in byte-hours (string counter): the sum of the hourly samples, which is the quantity input_log_storage_byte_hours bills. Each recorded byte (InputLogMessage.sizeBytes) is held for the input log retention, one byte-hour per hour, so recordings keep accruing byte-hours after replay logging is turned off, until they age out. 0 when nothing was held during the window. */
+  inputLogByteHours: Scalars['String']['output'];
+  /** Recorded input-log bytes the app holds now (string counter): the latest hourly sample, the bytes recorded within the trailing retention. 0 when replay logging has never been on. */
+  inputLogRetainedBytes: Scalars['String']['output'];
   /** Total replication bytes received (string counter). */
   replicationRecvBytes: Scalars['String']['output'];
   /** Total replication bytes sent (string counter). */
@@ -1269,6 +1302,8 @@ export type AppUserAccess = {
   status: Scalars['String']['output'];
   /** External billing subscription id (e.g. Stripe/PayPal) backing a paid grant; null for free or manual grants. */
   subscriptionId: Maybe<Scalars['String']['output']>;
+  /** A timed suspension: while this time is in the future the player holds no access (a gameplay token is refused with ACCESS_SUSPENDED and realtime sessions end), and access returns by itself once it passes. Null when the player is not suspended. Set with suspendAppAccess, cleared with unsuspendAppAccess. */
+  suspendedUntil: Maybe<Scalars['DateTime']['output']>;
   /** The access tier granted by this record. Null if no tier is associated (tierId is null) or the tier could not be loaded. */
   tier: Maybe<AppAccessTier>;
   /** Numeric id of the access tier granting this access; null if access was granted without a specific tier. */
@@ -1553,6 +1588,21 @@ export type BuddyLiveRates = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** Channel audio from another member of a channel you belong to (party or guild voice), delivered over the udpNotifications subscription wherever you are. The payload is opaque to the server: your app (or an SDK voice helper) defines its format and codec. */
+export type ChannelAudioNotification = {
+  __typename?: 'ChannelAudioNotification';
+  /** The audio payload, base64-encoded (at most 1024 bytes decoded). Opaque to the server. */
+  audioData: Scalars['String']['output'];
+  /** The channel id (groups.group_id) the audio was sent to. */
+  channelId: Scalars['BigInt']['output'];
+  /** Server-generated epoch milliseconds timestamp. */
+  epochMillis: Scalars['BigInt']['output'];
+  /** The sender's sequence number for this packet (0-255). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The sending actor's UUID. */
+  uuid: Scalars['String']['output'];
+};
+
 /** Input for publishing a message to a channel. Delivered to every active member of the channel (regardless of location), not chunk-routed. The sender must have the channel send_messages permission. */
 export type ChannelMessageInput = {
   /** The channel id (groups.group_id) to publish to. */
@@ -1705,7 +1755,7 @@ export type CheckoutsPage = {
   pageInfo: PageInfo;
 };
 
-/** A persisted 16x16x16-voxel chunk (4096 voxels) of an app's voxel world. Holds the packed voxel-type grid (`voxels`), sparse per-voxel state overrides (`voxelStates`), an optional opaque chunk-level state blob (`chunkState`), and level-of-detail meshes (`lods`). Returned by getChunk/getChunksByDistance and written by updateChunk/updateChunkState/updateChunkLods. */
+/** A persisted chunk of an app's voxel world. Holds an optional packed voxel-type grid for 16x16x16 chunks (`voxels`, one byte per voxel), sparse per-voxel state overrides and recorded edits (`voxelStates`; voxel positions and types are app-defined signed 16-bit values, so an app may address its chunks however it likes), an optional opaque chunk-level state blob (`chunkState`), and level-of-detail meshes (`lods`). Returned by getChunk/getChunksByDistance and written by updateChunk/updateChunkState/updateChunkLods. */
 export type Chunk = {
   __typename?: 'Chunk';
   /** Id of the app that owns this chunk (decimal string). */
@@ -1726,8 +1776,10 @@ export type Chunk = {
   owner: Maybe<Scalars['ID']['output']>;
   /** Timestamp of the most recent write to this chunk. */
   updatedAt: Scalars['DateTime']['output'];
-  /** Sparse list of per-voxel overrides: the states stored with the chunk (e.g. rotation, atlas, flags) and every voxel edit recorded for it since (the voxel_updates log), each with its voxel type, which takes precedence over the type byte in `voxels`. Empty when the chunk has neither. */
+  /** Sparse list of per-voxel overrides: the states stored with the chunk (e.g. rotation, atlas, flags) and every voxel edit recorded for it since (the voxel_updates log), each with its voxel type, which takes precedence over the type byte in `voxels`. Positions and types are app-defined signed 16-bit values; an entry outside the 16x16x16 grid or the 0-255 type range lives only here. Empty when the chunk has neither. */
   voxelStates: Array<VoxelState>;
+  /** True when the chunk holds more recorded edits than one read applies (65,536 for getChunk; 262,144 across one getChunksByDistance call), so voxelStates stops short of the newest. Read the whole log with listVoxels, which pages. */
+  voxelStatesTruncated: Scalars['Boolean']['output'];
   /** BASE64-encoded binary blob of the dense voxel-type grid. When present, the DECODED buffer is exactly 4096 bytes: one unsigned byte (voxel type 0-255) per voxel, indexed as x + y*16 + z*256 with x,y,z in 0-15. Null when the chunk has no voxel grid yet. Decode from base64 before reading. */
   voxels: Maybe<Scalars['String']['output']>;
 };
@@ -2119,6 +2171,8 @@ export type CreateChannelInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   /** When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel). */
   membersCanSend?: InputMaybe<Scalars['Boolean']['input']>;
+  /** When true, new members are also auto-granted send_voice so they can send channel audio (party or guild voice, delivered to every member wherever they are). False (default): only roles you grant send_voice may speak. Voice also needs the player's use_voice_chat tier permission, and every member's downlink is billed as egress, so keep voice channels small. */
+  membersCanSpeak?: InputMaybe<Scalars['Boolean']['input']>;
   /** open | request | invite | admin. Defaults to the app policy. */
   membershipPolicy?: InputMaybe<Scalars['String']['input']>;
   /** Display name for the channel (max 128 chars; unique per app+type). */
@@ -2186,6 +2240,8 @@ export type CreateGridChannelInput = {
   gridId: Scalars['BigInt']['input'];
   /** When true (default), new members are auto-granted send_messages so they can post (open chat channel). When false, only roles you grant may post (announce/read-only channel). */
   membersCanSend?: InputMaybe<Scalars['Boolean']['input']>;
+  /** When true, new members are also auto-granted send_voice so they can send channel audio (party or guild voice, delivered to every member wherever they are). False (default): only roles you grant send_voice may speak. Voice also needs the player's use_voice_chat tier permission, and every member's downlink is billed as egress, so keep voice channels small. */
+  membersCanSpeak?: InputMaybe<Scalars['Boolean']['input']>;
   /** open | request | invite | admin. Defaults to the app policy. */
   membershipPolicy?: InputMaybe<Scalars['String']['input']>;
   /** Display name for the channel (max 128 chars; unique per app+type). */
@@ -2274,11 +2330,30 @@ export type CreateTeamInput = {
   name: Scalars['String']['input'];
 };
 
+export type CreateTierAccessProvisioningTokenInput = {
+  /** prefix*@domain patterns. The domain must be a reserved test domain (.invalid, .test, .example, .localhost, .local, example.com) or a company domain; the prefix is at least three characters. */
+  emailPatterns: Array<Scalars['String']['input']>;
+  /** Days until it expires (1-90). Accounts it created keep their grant. */
+  expiresInDays: Scalars['Int']['input'];
+  /** What uses it, e.g. identity-probe or bwf-loadtest. */
+  label: Scalars['String']['input'];
+  /** The most accounts it may ever create. */
+  maxAccounts: Scalars['Int']['input'];
+};
+
 export type CreateUserAppStateInput = {
   /** App (game) id to scope the state to. Required. BigInt sent as a decimal string. */
   appId: Scalars['BigInt']['input'];
   /** Per-app user state as base64-encoded binary, at most 1,048,576 base64 characters (~768 KiB binary); larger payloads draw a structured validation error. Omit or send null to clear it. */
   state?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** OPERATOR: a new provisioning token. `token` is shown this once. */
+export type CreatedTierAccessProvisioningToken = {
+  __typename?: 'CreatedTierAccessProvisioningToken';
+  provisioningToken: TierAccessProvisioningToken;
+  /** The secret. Store it now; it cannot be read again. */
+  token: Scalars['String']['output'];
 };
 
 /** Single-use human decision lifecycle for one canonical argument hash. */
@@ -3491,12 +3566,24 @@ export type ExecAppStatus = {
   __typename?: 'ExecAppStatus';
   /** The active version; null before the first deploy. */
   activeVersion: Maybe<Scalars['Int']['output']>;
-  /** Paused while the app is over its compute budget; it resumes by itself once a minute is back under it. */
+  /** Why the app is paused: insufficient_funds, spend_cap, subscription_lapsed or compute_budget. Null when it is not paused (or the manager predates reasons). */
+  budgetPauseReason: Maybe<Scalars['String']['output']>;
+  /** Paused while the app's runtime gate is not active (no funds, a spend cap, a lapsed subscription) or it is over its compute budget; it resumes by itself once the cause clears. */
   budgetPaused: Scalars['Boolean']['output'];
   /** The whole app is switched off (`execSetEnabled` without a node type). */
   disabled: Scalars['Boolean']['output'];
   /** Node types switched off one by one. */
   disabledTypes: Array<Scalars['String']['output']>;
+  /** The instance limit in force: maxInstances, or the manager’s default when that is null. Null from a manager older than ck-exec 0.15. */
+  instanceLimit: Maybe<Scalars['Int']['output']>;
+  /** Instances of the app placed and not yet stopped in this datacenter now, mods included. Null from a manager older than ck-exec 0.15. */
+  instances: Maybe<Scalars['Int']['output']>;
+  /** The most instances the app may have placed in this datacenter. The free hub tier (an organization that has not funded the app) allows 16; null means the manager's default. */
+  maxInstances: Maybe<Scalars['Int']['output']>;
+  /** The most memory, in MB, the app's placed instances may reserve in this datacenter (each instance reserves its type's memory). The free hub tier allows 1,024; null means no memory limit beyond the instance count. */
+  maxReservedMb: Maybe<Scalars['Int']['output']>;
+  /** Memory, in MB, those instances reserve now (what maxReservedMb limits). Null from a manager older than ck-exec 0.15. */
+  reservedMb: Maybe<Scalars['Int']['output']>;
 };
 
 /** One compiled module for a ck-exec deploy. */
@@ -3520,8 +3607,10 @@ export type ExecBuild = {
   finishedAt: Maybe<Scalars['DateTime']['output']>;
   /** What it builds: `exec` for ck-exec modules, `client` for the CLIENT half of a mod (`execModClientBuild`). */
   kind: Scalars['String']['output'];
-  /** The compiler’s output once the build finishes, at most 64 KB (the end is kept). */
+  /** The compiler’s output once the build finishes, at most 64 KB (the end is kept). Its first line names the toolchain the build ran with. */
   log: Maybe<Scalars['String']['output']>;
+  /** The SDK version the build compiled against, from the toolchain of the API instance that ran it: `ckx-sdk` for a ck-exec build, `crowdy-client-sdk` for a CLIENT half. A crate’s own version requirement for the SDK is not what decides this. Null until the build starts, and for builds from before it was recorded. */
+  sdkVersion: Maybe<Scalars['String']['output']>;
   /** When it started compiling. */
   startedAt: Maybe<Scalars['DateTime']['output']>;
   /** `queued`, `building`, `succeeded` or `failed`. */
@@ -3834,6 +3923,15 @@ export type ExecModSwitch = {
   target: Scalars['String']['output'];
 };
 
+/** The result of execRestartType: how many running instances were persisted and stopped. They start again on the app's active version at their next call. */
+export type ExecRestartResult = {
+  __typename?: 'ExecRestartResult';
+  /** The node type that was restarted. */
+  nodeType: Scalars['String']['output'];
+  /** Running instances persisted and stopped (0 when none ran). */
+  stopped: Scalars['Int']['output'];
+};
+
 /** A starter crate: a ckx-sdk hub to build with `execBuild` as it is, or to change first. */
 export type ExecStarter = {
   __typename?: 'ExecStarter';
@@ -3955,6 +4053,8 @@ export type GameClientBootstrap = {
   me: User;
   /** GraphQL WebSocket subprotocol expected by udpNotifications. */
   realtimeProtocol: Scalars['String']['output'];
+  /** The app's runtime gate. Bootstrap answers for a paused app too, so a client can tell the player the world is paused (status not ACTIVE, with the reason) instead of showing an empty one; realtime sends and hub calls are refused until it is ACTIVE again. */
+  runtimeGate: AppRuntimeGate;
   /** The modulus the per-message sequenceNumber wraps at (256), i.e. sequenceNumber is a uint8 in 0-255. sequenceNumber exists ONLY to correlate asynchronous responses/errors (delivered on udpNotifications) with the send that produced them — it is NOT an idempotency key, and the server does not dedupe replays. */
   sequenceNumberModulo: Scalars['Int']['output'];
   /** GraphQL subscription field that carries UDP proxy notifications. */
@@ -3963,6 +4063,8 @@ export type GameClientBootstrap = {
   udpProxyConnectionStatus: UdpProxyConnectionStatus;
   /** Current server version and the minimum client version the server accepts. Compare your build against minimumClientVersion before connecting; prompt the player to update if it is too old. */
   versionInfo: ServerVersionInfo;
+  /** Whether the app's wilderness (land no grid but the world grid covers) is open to players' voxel edits (App.wildernessWritesOpen). When false, edits there are refused, so a client can stop a player before sending one. */
+  wildernessWritesOpen: Scalars['Boolean']['output'];
 };
 
 /** The elected host user of a game (app). Election is deterministic across all game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy, the realtime runtime; liveness (updated_at) is owned by game-api's actorHeartbeat mutation. */
@@ -4077,6 +4179,16 @@ export type GrantGridPermissionsInput = {
   permissionKeys: Array<Scalars['String']['input']>;
   /** The user receiving the grant. Must already have active app access for this app. */
   userId: Scalars['BigInt']['input'];
+};
+
+/** OPERATOR: the result of a bulk grant by pattern. */
+export type GrantTierAccessByPatternResult = {
+  __typename?: 'GrantTierAccessByPatternResult';
+  dryRun: Scalars['Boolean']['output'];
+  /** Accounts granted (0 on a dry run). */
+  granted: Scalars['Int']['output'];
+  /** Accounts the pattern matches that lack a grant. */
+  matched: Scalars['Int']['output'];
 };
 
 /** Grant or revoke a feature key for an access tier. */
@@ -4474,6 +4586,132 @@ export type ImportCrowdyStudioProjectFileInput = {
   source: CrowdyStudioImportSource;
 };
 
+/** One recorded client input: the message exactly as the client sent it, without its trailing authentication bytes. */
+export type InputLogMessage = {
+  __typename?: 'InputLogMessage';
+  /** The 32-character actor uuid of a spatial message; null for other types. */
+  actorUuid: Maybe<Scalars['String']['output']>;
+  /** The message bytes, base64: the client message from its type byte up to, not including, its authentication tail. */
+  body: Scalars['String']['output'];
+  /** The channel of a channel message; null for other types. */
+  channelId: Maybe<Scalars['BigInt']['output']>;
+  /** Chunk x of a spatial message's target chunk; null for other types. */
+  chunkX: Maybe<Scalars['BigInt']['output']>;
+  /** Chunk y of a spatial message's target chunk; null for other types. */
+  chunkY: Maybe<Scalars['BigInt']['output']>;
+  /** Chunk z of a spatial message's target chunk; null for other types. */
+  chunkZ: Maybe<Scalars['BigInt']['output']>;
+  /** True when the message arrived inside a client message bundle. */
+  fromBundle: Scalars['Boolean']['output'];
+  /** The game token the message was sent on. */
+  gameTokenId: Scalars['BigInt']['output'];
+  /** The client message type (its first byte). */
+  messageType: Scalars['Int']['output'];
+  /** When the realtime server received the message. */
+  receivedAt: Scalars['DateTime']['output'];
+  /** The receive time in Unix microseconds (receivedAt at full precision). */
+  receivedAtMicros: Scalars['BigInt']['output'];
+  /** The message's sequence byte, as the client sent it. */
+  seq: Scalars['Int']['output'];
+  /** False when the message type is one accepted without a signature. */
+  signed: Scalars['Boolean']['output'];
+  /** Recorded size in bytes, record header included: what stored input logs are billed on. */
+  sizeBytes: Scalars['Int']['output'];
+  /** The user whose client sent the message. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A page of recorded inputs, oldest first. A page can hold fewer than `first` inputs when the read stopped at its time or scan limit; keep paging while hasNextPage is true. */
+export type InputLogMessageConnection = {
+  __typename?: 'InputLogMessageConnection';
+  /** Edges on this page. */
+  edges: Array<InputLogMessageEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** An edge in a InputLogMessage connection. */
+export type InputLogMessageEdge = {
+  __typename?: 'InputLogMessageEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: InputLogMessage;
+};
+
+/** Narrows inputLogMessages. All fields are optional and AND-combined. */
+export type InputLogMessageFilter = {
+  /** Only inputs received at or after this instant. */
+  from?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Only these client message types (each 0-255, at most 64 of them). */
+  messageTypes?: InputMaybe<Array<Scalars['Int']['input']>>;
+  /** Only inputs received at or before this instant. */
+  to?: InputMaybe<Scalars['DateTime']['input']>;
+};
+
+/** One recorded client session of an app with replay logging on: a game token's inputs, from the first one the realtime servers accepted to the last. Kept for the input log's published retention. */
+export type InputLogSession = {
+  __typename?: 'InputLogSession';
+  /** The app the session belongs to. */
+  appId: Scalars['BigInt']['output'];
+  /** Recorded bytes (the sum of every message sizeBytes): the quantity stored input logs are billed on. */
+  byteCount: Scalars['BigInt']['output'];
+  /** The datacenter that recorded the session, when known. */
+  datacenter: Maybe<Scalars['String']['output']>;
+  /** How the session ended: expired, revoked, reconnect or released, as the client saw it; logging_off, when the app turned replay logging off while the session was open; shutdown, when the realtime server recording it stopped (a deploy), after which the client reconnects elsewhere; paused, when recording paused because the app's logging setting could not be confirmed, which the client does not see (a later record reopens the session); or unrecorded, when its end was not recorded and it was closed an hour after its last record. Null while it may still be running. */
+  endReason: Maybe<Scalars['String']['output']>;
+  /** When the session ended; null while it may still be running. A session whose end was not recorded is closed at its last record once it has gone an hour without one. Later records reopen a session (endedAt returns to null). */
+  endedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The game token the session ran on; pass it to inputLogMessages to read the inputs. */
+  gameTokenId: Scalars['BigInt']['output'];
+  /** When the latest recorded input or marker arrived. */
+  lastSeenAt: Scalars['DateTime']['output'];
+  /** Inputs recorded in the session. */
+  messageCount: Scalars['BigInt']['output'];
+  /** The client message types the session contains, ascending. */
+  messageTypes: Array<Scalars['Int']['output']>;
+  /** Records the realtime servers numbered for this session that never reached the log: recording is best-effort, so an overloaded server or a broker outage can leave gaps, and this is how many. 0 when the recording is complete as far as it is known. A lost end of the recording cannot be counted (its session closes as unrecorded instead). Null for a session recorded before the realtime servers numbered their records. */
+  missingRecords: Maybe<Scalars['BigInt']['output']>;
+  /** When the first recorded input arrived. */
+  startedAt: Scalars['DateTime']['output'];
+  /** The user whose client sent the inputs. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A page of recorded sessions. */
+export type InputLogSessionConnection = {
+  __typename?: 'InputLogSessionConnection';
+  /** Edges on this page. */
+  edges: Array<InputLogSessionEdge>;
+  /** Pagination metadata. */
+  pageInfo: ConnectionPageInfo;
+  /** Total matching records across all pages, when known (null for sources that do not compute a total). */
+  totalCount: Maybe<Scalars['Int']['output']>;
+};
+
+/** An edge in a InputLogSession connection. */
+export type InputLogSessionEdge = {
+  __typename?: 'InputLogSessionEdge';
+  /** Opaque cursor for this edge. */
+  cursor: Scalars['String']['output'];
+  /** The node at the end of this edge. */
+  node: InputLogSession;
+};
+
+/** Narrows inputLogSessions. All fields are optional and AND-combined. */
+export type InputLogSessionFilter = {
+  /** Only sessions still active at or after this instant. */
+  from?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Only sessions containing this client message type (0-255). */
+  messageType?: InputMaybe<Scalars['Int']['input']>;
+  /** Only sessions started at or before this instant. */
+  to?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Only this user's sessions. Without manage_apps on the app, only your own user id is accepted (and is the default). */
+  userId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
 export type InviteOrgMemberInput = {
   /** Organization to add the user to (BigInt as string). */
   orgId: Scalars['BigInt']['input'];
@@ -4564,6 +4802,8 @@ export type Mutation = {
   addChannelMember: GroupMember;
   /** Add a user to a team, or approve their pending join request (upsert to active). Requires the 'manage_members' team permission (app admins bypass). Auto-assigns the team's default role if configured. */
   addTeamMember: GroupMember;
+  /** OPERATOR: allow an email address (a contractor or partner) or a domain on this tier, optionally until a date. The address must still be verified to count. Refused on prod. */
+  addTierAccessRule: TierAccessRule;
   /** Admit one player-code listing, author, or authoring org to an app's strict allow list. Requires 'manage_compute'. Idempotency is explicit: an identical active entry returns a conflict instead of silently creating duplicates. SIDE EFFECTS: audit row + replica sync. */
   admitAppCode: AppCodeAdmission;
   /** Soft-delete an access tier by setting its status to 'archived' (the row is retained, NOT hard-deleted) and notifies the game API. Requires the 'manage_access_tiers' permission on the app that owns the tier; super admins bypass. Existing user grants on this tier are NOT automatically revoked. Throws if the tier is not found. */
@@ -4618,7 +4858,7 @@ export type Mutation = {
   createApp: App;
   /** Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar". */
   createAvatar: Avatar;
-  /** Create a channel. Whether the caller may create one is governed by the per-app channel policy (app_group_policies: admin | member | anyone). The caller becomes the owner with a system 'leader' role. When membersCanSend is true (default) a default 'member' role granting send_messages is created and auto-assigned to joiners (open chat channel); when false only roles you grant may post (announce/read-only channel). */
+  /** Create a channel. Whether the caller may create one is governed by the per-app channel policy (app_group_policies: admin | member | anyone). The caller becomes the owner with a system 'leader' role. When membersCanSend is true (default) a default 'member' role granting send_messages is created and auto-assigned to joiners (open chat channel); when false only roles you grant may post (announce/read-only channel). membersCanSpeak (default false) adds send_voice to that role, so members may send channel audio (party or guild voice); voice also needs the player's use_voice_chat. */
   createChannel: Group;
   /** Create a custom (non-system) channel role granting the given channel permission keys (e.g. send_messages for posting rights). Requires the 'manage_roles' channel permission (app admins bypass). */
   createChannelRole: GroupRole;
@@ -4640,6 +4880,8 @@ export type Mutation = {
   createTeam: Group;
   /** Create a custom (non-system) team role granting the given team permission keys. Requires the 'manage_roles' team permission (app admins bypass). Permission keys must be valid team permission keys (group_permission_defs). */
   createTeamRole: GroupRole;
+  /** OPERATOR: mint a provisioning token for a test harness. The secret is returned once. Refused on prod. */
+  createTierAccessProvisioningToken: CreatedTierAccessProvisioningToken;
   /** OPERATOR ONLY. Credits an organization wallet without a payment provider, for seeding a test environment or making an operator adjustment, and records it in the wallet ledger as an "admin_credit" transaction. Use this instead of writing to org_wallets by hand: it creates the wallet if absent, repairs a missing wallet id, and moves the balance and the ledger row together in one transaction. Pass a referenceId to make retries idempotent. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so a credit that clears an insufficient_funds denial lifts it immediately instead of leaving the app refusing clients. */
   creditOrgWallet: WalletTransaction;
   /** Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
@@ -4700,6 +4942,8 @@ export type Mutation = {
   deleteUserAppState: UserAppState;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
+  /** OPERATOR: end the sessions and app tokens of these accounts (at most 1000), skipping any this tier admits. Returns how many had sessions ended. Refused on prod. */
+  endTierAccessSessions: Scalars['Int']['output'];
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
   exchangePortalCode: AppTokenResponse;
   /** Make an earlier ck-exec version active again, a rollback. Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission. */
@@ -4736,6 +4980,8 @@ export type Mutation = {
   execModSetSwitch: Array<ExecModSwitch>;
   /** Delist a listing you published: nobody installs it any more; installed copies keep running. */
   execModUnpublish: Scalars['Boolean']['output'];
+  /** Moves one node type's running instances to the app's active version: each is persisted and stopped, and starts again on the active version at its next call. A deploy (execDeploy, execActivateVersion) changes which version NEW instances run but leaves running ones on theirs until they stop; this is how to move them without switching the type off. Requires the org 'manage_compute' permission. */
+  execRestartType: ExecRestartResult;
   /** Stop trusting an author on a grid, and take back your consent to each of their CLIENT halves there, so none is served to you until you consent or trust again; true when anything was taken back. Works from anywhere, not only inside the grid. Needs only the app-scoped token of the app, not access to it. */
   execRevokeAuthorTrust: Scalars['Boolean']['output'];
   /** Take back your consent to a mod's CLIENT half, whatever hash you consented to; true when you had consented. While you trust the mod's author on its grid, their CLIENT halves there are still served to you: take that back with `execRevokeAuthorTrust`. Needs only the app-scoped token of the app, not access to it. */
@@ -4760,6 +5006,8 @@ export type Mutation = {
   grantGridPermissions: GridUserPermissions;
   /** Org dashboard shortcut: the authenticated caller grants themselves access to an app using its default active tier. Requires that the caller is an active member of the app's owning org OR holds the 'manage_access_tiers' permission on the app. ENTITLEMENT CHANGE: upserts an active grant and notifies the game API. Errors if the app has no active tier, or the caller is neither a member nor a manager. */
   grantMyAppAccess: AppUserAccess;
+  /** OPERATOR: grant every existing account a prefix*@domain pattern matches that has no grant -- for bot rosters created before the gate. The domain must be a reserved test domain or a company domain. Dry run by default. Refused on prod. */
+  grantTierAccessByPattern: GrantTierAccessByPatternResult;
   /** Adds a user to an organization as a member. Requires the 'manage_members' permission on the target org (super admins bypass). */
   inviteOrgMember: OrgMember;
   /** Issue a standing grid claim invite (claim policy INVITE). Callable by designated approvers or studio staff holding manage_compute; the invitee then calls claimGridOwnership to take ownership. */
@@ -4816,9 +5064,11 @@ export type Mutation = {
   resendConfirmationEmail: Scalars['Boolean']['output'];
   /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). EVERY existing session for the account is revoked (and every app token minted from one): a reset is what an owner does after losing control of the account, so whoever held a session loses it. The user signs in again with the new password. */
   resetPassword: Scalars['Boolean']['output'];
+  /** Re-apply every player's tier keys that follow onto the app's world grid (today use_video_chat) and rebuild the world grid's permissions. Tier changes (grantAppAccess with a tier, updateAccessTier with permissionKeys) already do this; call it after any change made another way. Requires the 'manage_access_tiers' permission on the app; super admins bypass. */
+  resyncTierGridPermissions: Scalars['Boolean']['output'];
   /** OPERATOR ONLY. Retires an organization: sets organizations.status to 'retired', stamps deleted_at, archives its apps, and writes a tombstone to org_retirements. RETIREMENT IS A STATE, NOT A DELETION — no wallet_transactions, org_billing_waivers, app_shared_usage_charges or other ledger row is altered or removed, so an auditor can still reconstruct exactly what this organization spent, with the same joins as before, indefinitely. There is no purge and no retention window, by decision rather than by omission: org ledger rows are retained forever (operator decision, 2026-08-21), so retirement is only ever a state. A retired organization's remaining wallet balance is FROZEN indefinitely by the same decision — held, not refunded and not forfeited — and the amount is recorded on the tombstone. AFTER RETIREMENT the org's API tokens stop authenticating, its members lose every org permission (super admins excepted, so this is reversible), and it is excluded from the caller's organization list — but it is still readable by id and slug, because a retired org that answers like a missing one is worse than one that says what it is. Refuses unless expectedSlug matches the org named by orgId, and refuses an organization holding money unless acknowledgeFrozenBalance is passed. Reverse it with reinstateOrganization. */
   retireOrganization: OrgRetirementType;
-  /** Revoke a user's access to an app by setting their app_user_access status to 'revoked', and notifies the game API so the user immediately loses runtime access in Buddy. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. */
+  /** Revoke a user's access to an app by setting their app_user_access status to 'revoked'. Their gameplay tokens for the app are deleted and their realtime sessions ended at once, and a new token is refused with ACCESS_REVOKED. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. For a ban that lifts by itself use suspendAppAccess. */
   revokeAppAccess: AppUserAccess;
   /** Withdraw consent for an app and immediately invalidate every app-scoped token the authenticated user holds for it, whichever session minted them — the tokens stop authenticating on their next request, not at their next refresh. Atomic: if the tokens cannot be invalidated, consent is left in place and this returns an error, so a successful response is the only state in which access has actually been withdrawn. Does NOT sign the user out: their identity session and their tokens for other apps are untouched. Returns false when there was nothing to revoke (no active grant and no live tokens), which makes a repeat call safe. Requires a SESSION token. */
   revokeAppAuthorization: Scalars['Boolean']['output'];
@@ -4830,7 +5080,11 @@ export type Mutation = {
   revokeGroupFromGrid: Array<GridGroupGrant>;
   /** Permanently deactivates an org token so it can no longer authenticate. Requires the 'manage_tokens' permission on the token's org (super admins bypass). DESTRUCTIVE and irreversible; the secret cannot be reactivated. Returns false if the token does not exist. */
   revokeOrgToken: Scalars['Boolean']['output'];
-  /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
+  /** OPERATOR: revoke a provisioning token. With revokeAccounts, also clear the grant of every account it created and end their sessions. Refused on prod. */
+  revokeTierAccessProvisioningToken: TierAccessProvisioningToken;
+  /** OPERATOR: remove an entry from the list. Accounts it was admitting are refused at their next request, and their sessions and app tokens are ended. Refused on prod. */
+  revokeTierAccessRule: TierAccessRule;
+  /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). A reverted voxel’s edit-log row takes the earlier edit’s type, state and author and the ROLLBACK’s time as its createdAt, so a client reading edits `since` its last sync sees the revert. Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
   /** OPERATOR ONLY. Runs the shared-usage billing tick once. It still bills only the last CLOSED clock hour — it will not charge an open hour. Use this to prove a closed-hour debit without waiting for the ~60s cron. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier. */
   runSharedUsageBillingTick: Scalars['Boolean']['output'];
@@ -4838,10 +5092,14 @@ export type Mutation = {
   sendActorUpdate: Scalars['Boolean']['output'];
   /** Send a spatial voice/audio packet, fanned out to nearby actors as a ClientAudioNotification. Requires a bearer game token; voice may additionally be gated by a runtime/grid permission for the region — if the caller lacks it the game server responds asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT that it was delivered; the sender receives no echo, only errors (GenericErrorResponse, correlated by sequenceNumber) on udpNotifications. sequenceNumber is correlation only, not an idempotency key. */
   sendAudioPacket: Scalars['Boolean']['output'];
+  /** Send audio to a channel: delivered to every active member of the channel, wherever they are (party or guild voice), as a ChannelAudioNotification on udpNotifications. The payload is opaque (at most 1024 bytes): your app or an SDK voice helper defines the format and codec. Requires a bearer game token, the channel send_voice permission and the player’s use_voice_chat; without either the server refuses it with UNAUTHORIZED (asynchronously, on udpNotifications). Opens a UDP proxy session automatically if none exists. The sender receives no echo. Every member’s downlink is billed as egress, so keep voice channels small. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING, not delivered; correlate failures by sequenceNumber (correlation only, not an idempotency key). */
+  sendChannelAudio: Scalars['Boolean']['output'];
   /** Publish a message to a channel, delivered to every active member of the channel (not chunk-routed) as a ChannelMessageNotification on udpNotifications. Requires a bearer game token and the channel send_messages permission; lacking the permission the server drops the message. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendChannelMessage: Scalars['Boolean']['output'];
   /** Send a custom, app-defined client event (identified by eventType, a uint16) for spatial replication to nearby chunks; nearby actors receive it as a ClientEventNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT that the world processed it. Failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendClientEvent: Scalars['Boolean']['output'];
+  /** Publish a message to a channel that only reaches members near an origin chunk: a member receives it, as an ordinary ChannelMessageNotification on udpNotifications, when one of its live actors is in the same app within maxDistance chunks of input.chunk (straight-line distance between chunk coordinates, boundary included). A member with no live actor does not receive it. Requires a bearer game token and the channel send_messages permission, as for sendChannelMessage; the origin app must be the token’s app. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications (UNAUTHORIZED without the send right, INVALID_APP_ID for another app), correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  sendRangedChannelMessage: Scalars['Boolean']['output'];
   /** Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (NOT broadcast to nearby actors). The sender must know the destination actor’s current chunk. Requires a bearer game token; opens a UDP proxy session automatically if none exists. The target receives a SingleActorMessageNotification on udpNotifications; the sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendSingleActorMessage: Scalars['Boolean']['output'];
   /** Operator only (is_operator). Sends a plain test message to one address and returns the SES message id. SIDE EFFECTS: a real outbound email billed to the shared SES identity, and a `send` row in email_events. Prefer the AWS mailbox simulator (success@ / bounce@ / complaint@simulator.amazonses.com), which exercises the whole path without touching a real inbox or a real reputation. `sent: true` with `simulated: true` means SEND_EMAILS is off and nothing left the building -- read both fields. */
@@ -4912,12 +5170,18 @@ export type Mutation = {
   setTeamMemberRoles: GroupMember;
   /** Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams. */
   setTeamPolicy: AppGroupPolicy;
+  /** SUPER ADMIN: set this tier to OBSERVE (log what would be refused) or ENFORCE. Refused on prod, where the gate is always off. */
+  setTierAccessMode: TierAccessSettings;
+  /** OPERATOR: grant one account access to this tier regardless of its email (a service account, an unverifiable address), optionally until a date, or clear the grant. Clearing ends its sessions if nothing else admits it. Refused on prod. */
+  setUserTierAccess: UserTierAccess;
   /** Begins vaulting a card for off-session auto-billing. Returns a Stripe SetupIntent client secret the browser confirms; no charge is made here. Requires the 'manage_billing' org permission. */
   setupSharedPaymentMethod: PaymentMethodSetup;
   /** Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   socialLoginComplete: AuthResponse;
   /** Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   socialLoginStart: SocialLoginStart;
+  /** Suspend a user's access to an app until a time: a timed ban that lifts by itself. Until then their gameplay tokens are refused with ACCESS_SUSPENDED (carrying suspendedUntil), and the tokens they hold for the app are deleted and their realtime sessions ended at once. The time must be in the future and at most 365 days away. The user must have an access record. Requires the 'manage_access_tiers' permission on the app; super admins bypass. REVERSIBLE early via unsuspendAppAccess. */
+  suspendAppAccess: AppUserAccess;
   /** OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false. */
   takeDownHostedGame: HostedGame;
   /** Checks whether the authenticated user is allowed to teleport an actor to a destination within an app and returns the authorization result. This is an authorization check only — it does NOT itself move the actor; the UDP runtime performs the actual movement. Requires a valid bearer game token plus the app-level "teleport" runtime permission. Returns success=false with errorCode INVALID_APP_ID (non-positive appId), UNAUTHORIZED (reserved sentinel destination -6,-6,-6 or missing permission), or success=true / NO_ERROR when allowed. */
@@ -4928,13 +5192,15 @@ export type Mutation = {
   transferPlayerCodeListing: PlayerCodeListing;
   /** Unlink a federated identity from the signed-in account by identityId. Refuses to remove your last remaining sign-in method. Requires a session token. */
   unlinkIdentity: Scalars['Boolean']['output'];
+  /** Lift a user's suspension (suspendAppAccess) before it lapses. A no-op for a user who is not suspended. Requires the 'manage_access_tiers' permission on the app; super admins bypass. */
+  unsuspendAppAccess: AppUserAccess;
   /** Update an existing access tier (name, ordering, pricing, permissions, etc.); only fields present in the input are changed. Requires the 'manage_access_tiers' permission on the app that owns the tier (resolved from tierId); super admins bypass. SIDE EFFECTS: re-syncs the tier's permissions to the game API. Throws if the tier is not found or the caller lacks permission. */
   updateAccessTier: AppAccessTier;
   /** Partially updates an actor (appId, avatarId, chunk, publicState, privateState); fields omitted from `input` are left unchanged. OWNER-EXCLUSIVE: only the actor’s owner may update (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id. */
   updateActor: Actor;
   /** Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary. */
   updateActorState: Actor;
-  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen); only fields present in the input are changed. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
+  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
   updateApp: App;
   /** Updates an avatar’s mutable fields (currently `name`) and returns it. OWNER-EXCLUSIVE: only the avatar’s owner may call this (throws Unauthorized otherwise). Requires a valid game token. To change state blobs use `updateAvatarState`. */
   updateAvatar: Avatar;
@@ -4995,6 +5261,11 @@ export type MutationAddChannelMemberArgs = {
 export type MutationAddTeamMemberArgs = {
   groupId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationAddTierAccessRuleArgs = {
+  input: AddTierAccessRuleInput;
 };
 
 
@@ -5188,6 +5459,11 @@ export type MutationCreateTeamRoleArgs = {
 };
 
 
+export type MutationCreateTierAccessProvisioningTokenArgs = {
+  input: CreateTierAccessProvisioningTokenInput;
+};
+
+
 export type MutationCreditOrgWalletArgs = {
   amountCents: Scalars['BigInt']['input'];
   orgId: Scalars['BigInt']['input'];
@@ -5333,6 +5609,11 @@ export type MutationDeleteUserAppStateArgs = {
 };
 
 
+export type MutationEndTierAccessSessionsArgs = {
+  userIds: Array<Scalars['BigInt']['input']>;
+};
+
+
 export type MutationExchangePortalCodeArgs = {
   input: ExchangePortalCodeInput;
 };
@@ -5457,6 +5738,12 @@ export type MutationExecModUnpublishArgs = {
 };
 
 
+export type MutationExecRestartTypeArgs = {
+  appId: Scalars['BigInt']['input'];
+  nodeType: Scalars['String']['input'];
+};
+
+
 export type MutationExecRevokeAuthorTrustArgs = {
   appId: Scalars['BigInt']['input'];
   authorId: Scalars['BigInt']['input'];
@@ -5522,6 +5809,12 @@ export type MutationGrantGridPermissionsArgs = {
 
 export type MutationGrantMyAppAccessArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationGrantTierAccessByPatternArgs = {
+  dryRun?: InputMaybe<Scalars['Boolean']['input']>;
+  emailPattern: Scalars['String']['input'];
 };
 
 
@@ -5671,6 +5964,11 @@ export type MutationResetPasswordArgs = {
 };
 
 
+export type MutationResyncTierGridPermissionsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationRetireOrganizationArgs = {
   input: RetireOrganizationInput;
 };
@@ -5710,6 +6008,17 @@ export type MutationRevokeOrgTokenArgs = {
 };
 
 
+export type MutationRevokeTierAccessProvisioningTokenArgs = {
+  revokeAccounts?: InputMaybe<Scalars['Boolean']['input']>;
+  tokenId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRevokeTierAccessRuleArgs = {
+  ruleId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationRollbackVoxelUpdatesArgs = {
   input: RollbackVoxelUpdatesInput;
 };
@@ -5725,6 +6034,11 @@ export type MutationSendAudioPacketArgs = {
 };
 
 
+export type MutationSendChannelAudioArgs = {
+  input: ChannelMessageInput;
+};
+
+
 export type MutationSendChannelMessageArgs = {
   input: ChannelMessageInput;
 };
@@ -5732,6 +6046,11 @@ export type MutationSendChannelMessageArgs = {
 
 export type MutationSendClientEventArgs = {
   input: ClientEventNotificationInput;
+};
+
+
+export type MutationSendRangedChannelMessageArgs = {
+  input: RangedChannelMessageInput;
 };
 
 
@@ -5944,6 +6263,18 @@ export type MutationSetTeamPolicyArgs = {
 };
 
 
+export type MutationSetTierAccessModeArgs = {
+  mode: TierAccessStoredMode;
+};
+
+
+export type MutationSetUserTierAccessArgs = {
+  expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
+  granted: Scalars['Boolean']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationSetupSharedPaymentMethodArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   orgId: Scalars['BigInt']['input'];
@@ -5957,6 +6288,14 @@ export type MutationSocialLoginCompleteArgs = {
 
 export type MutationSocialLoginStartArgs = {
   input: SocialLoginStartInput;
+};
+
+
+export type MutationSuspendAppAccessArgs = {
+  appId: Scalars['BigInt']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  until: Scalars['DateTime']['input'];
+  userId: Scalars['BigInt']['input'];
 };
 
 
@@ -5983,6 +6322,12 @@ export type MutationTransferPlayerCodeListingArgs = {
 
 export type MutationUnlinkIdentityArgs = {
   identityId: Scalars['String']['input'];
+};
+
+
+export type MutationUnsuspendAppAccessArgs = {
+  appId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
 };
 
 
@@ -6105,6 +6450,22 @@ export type MutationUpdateUserTypeArgs = {
 
 export type MutationUpdateVoxelArgs = {
   input: UpdateVoxelInput;
+};
+
+/** The signed-in account's access to this tier. Callable while access is pending or denied, so a client can say why it cannot continue. */
+export type MyTierAccess = {
+  __typename?: 'MyTierAccess';
+  /** True when refusals are enforced rather than only logged. */
+  enforced: Scalars['Boolean']['output'];
+  /** When the grant or listing ends, if it does. */
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** A sentence explaining the status. */
+  message: Scalars['String']['output'];
+  /** True on dev and test. */
+  restricted: Scalars['Boolean']['output'];
+  status: TierAccessStatus;
+  /** Why access is granted: platform_role, operator_grant, provisioning or verified_email. */
+  via: Maybe<Scalars['String']['output']>;
 };
 
 /** A grid overlapping a scanned region (returned by nearbyGrids). Bounds only — no permission keys. */
@@ -6710,6 +7071,17 @@ export type PlayerCodeVersion = {
   versionNo: Scalars['Int']['output'];
 };
 
+/** A player's public profile: what another player's client may show (a nametag, a friends list). Carries nothing private; for your own account read `me`. */
+export type PlayerProfile = {
+  __typename?: 'PlayerProfile';
+  /** Discriminator paired with gamertag to form a unique handle; null if unset. */
+  disambiguation: Maybe<Scalars['String']['output']>;
+  /** Public display name; null if unset or anonymized. */
+  gamertag: Maybe<Scalars['String']['output']>;
+  /** The user id. BigInt serialized as a decimal string. */
+  userId: Scalars['BigInt']['output'];
+};
+
 /** Live concurrent players for a studio vs its all-time peak, a percentile comparison against other studios, and the site-wide CKS total. */
 export type PlayerPulse = {
   __typename?: 'PlayerPulse';
@@ -7169,6 +7541,10 @@ export type Query = {
   hostedGamePublishes: Array<HostedGamePublish>;
   /** The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
   hostedGames: Array<HostedGame>;
+  /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`, the previous page's endCursor for this same session (a cursor from another session is BAD_USER_INPUT); a page can hold fewer than `first` inputs, or none, when it stopped at its time or scan limit, so keep paging while hasNextPage is true. An operation may select this field only once. A server runs one read per user (two per app and per org) at a time; a read over that share waits for the earlier one within its own few-second deadline, and a read whose request is closed stops. Errors: INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, or this server may not read its log (do not retry); INPUT_LOG_RATE_LIMITED (429) when the wait for an earlier read ran out or left too little time to read, and INPUT_LOG_TEMPORARILY_UNAVAILABLE (503) when the log cannot be read just now, both with extensions.retryable: retry shortly with the same cursor. A read whose request closed stops as INPUT_LOG_READ_ABORTED (499), which nobody receives. */
+  inputLogMessages: InputLogMessageConnection;
+  /** Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. With 'manage_apps' on the app you see every session and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment. */
+  inputLogSessions: InputLogSessionConnection;
   /** Lists recorded voxel edits for all chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance, paginated over chunks. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   /** Lists recorded voxel edits for a single chunk (optionally only those at/after `since`), newest first. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
@@ -7211,6 +7587,8 @@ export type Query = {
   myPropertyTokens: UserPropertyTokenData;
   /** The caller's teams in an app, with their roles and effective team permissions. Use this to discover which teams the current user belongs to and what they may do in each. */
   myTeams: Array<GroupMembership>;
+  /** The signed-in account's access to this tier: GRANTED, PENDING_VERIFICATION (confirm the email address), DENIED, or NOT_RESTRICTED on prod. Requires a session token, and stays callable while access is pending or denied. */
+  myTierAccess: MyTierAccess;
   /** List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps'). */
   nearbyGridPermissions: Array<NearbyGridPermissions>;
   /** List every grid overlapping a chunk-coordinate bounding box, returning gridId and bounds only. Player-safe: no permission keys and no impersonation userId. Requires an app-scoped token for the same app. */
@@ -7249,6 +7627,10 @@ export type Query = {
   playerAutoBilling: PlayerAutoBilling;
   /** Whether the signed-in account has stored the current required legal documents and the age-of-majority attestation. False means createPortalAuthorizationCode and mintAppToken will refuse with LEGAL_ACCEPTANCE_REQUIRED until recordPlayerConsents. Requires a session token. */
   playerLegalAcceptance: Scalars['Boolean']['output'];
+  /** A player's public profile (user id, gamertag, disambiguation), for a game client's nametags and lists. Requires a valid game token. Null when there is no such user. */
+  playerProfile: Maybe<PlayerProfile>;
+  /** Public profiles (user id, gamertag, disambiguation) for up to 100 user ids in one call, in no particular order; ids with no user are omitted. Requires a valid game token. Use it after batchLookupActors to name everyone in view at once. */
+  playerProfiles: Array<PlayerProfile>;
   /** Live concurrent players for the org vs its all-time peak, a percentile comparison against other studios, and the site-wide total. Requires the 'view_usage' org permission. */
   playerPulse: PlayerPulse;
   /** The app's player rate-card markup in basis points on the platform base price (06 §4): the studio's usage-revenue stream, shown to players as a separate spend-history component. 0 = no markup (the BWF posture). Requires 'view_billing'. */
@@ -7287,9 +7669,19 @@ export type Query = {
   teamRoles: Array<GroupRole>;
   /** List all active teams in an app (not just the caller's). */
   teams: Array<Group>;
+  /** OPERATOR: who on this tier would be refused -- counts, a page of refused accounts with what they hold, and organizations with no admitted member. Reads every account; for review, not for polling. Refused on prod. */
+  tierAccessInventory: TierAccessInventory;
+  /** Whether this tier is an internal environment (dev and test are: Crowded Kingdoms staff, approved contractors and test harnesses only), with a sentence for sign-in pages and the production Studio address. Public. */
+  tierAccessPolicy: TierAccessPolicy;
+  /** OPERATOR: the provisioning tokens of this tier (never their secrets). */
+  tierAccessProvisioningTokens: Array<TierAccessProvisioningToken>;
+  /** OPERATOR: the addresses and domains allowed on this tier besides the company domains. */
+  tierAccessRules: Array<TierAccessRule>;
+  /** OPERATOR: the tier-access mode and settings of this tier. */
+  tierAccessSettings: TierAccessSettings;
   /** UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy. */
   udpProxyConnectionStatus: UdpProxyConnectionStatus;
-  /** Looks up a single user by id. Requires a valid game token. */
+  /** Looks up a single user by id. Requires a valid game token. Another user's private fields (email, state, isConfirmed, early access, orgId, externalId, userType, isSuperAdmin, isOperator, hasPassword, permissionsForOrg) are null unless the caller is that user, a super-admin or an operator. A game client showing names should use playerProfile / playerProfiles. */
   user: Maybe<User>;
   /** Reads the authenticated user’s per-app state for `appId` (keyed by appId+userId). Requires a valid game token; only the caller’s own state is returned. Returns null when no row exists. `state` is base64-encoded binary. */
   userAppState: Maybe<UserAppState>;
@@ -7297,6 +7689,8 @@ export type Query = {
   userAppStates: Array<UserAppState>;
   /** Lists the avatars owned by `userId`. Requires a valid game token. Owner-aware: when the caller is NOT the owner, each avatar’s `privateState` is stripped (returned null); `publicState` is always included. State blobs are base64-encoded binary. */
   userAvatars: Array<Avatar>;
+  /** OPERATOR: one account's access to this tier and its stored grant. */
+  userTierAccess: UserTierAccess;
   /** Super admin only. Paginated user search across email, gamertag, disambiguation, and exact user_id. Relay cursor connection; prefer this over the offset-based usersPaginated. */
   usersConnection: UsersConnection;
   /** SUPER-ADMIN ONLY paginated user search; replaces the legacy `users`/`usersByGamertag`/`usersByEmail` queries. `query` is ILIKE-prefix matched against email, gamertag, and disambiguation, plus an exact user_id match. Requires a super-admin bearer game token. */
@@ -7894,6 +8288,23 @@ export type QueryHostedGamePublishesArgs = {
 };
 
 
+export type QueryInputLogMessagesArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  appId: Scalars['BigInt']['input'];
+  filter?: InputMaybe<InputLogMessageFilter>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  gameTokenId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryInputLogSessionsArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  appId: Scalars['BigInt']['input'];
+  filter?: InputMaybe<InputLogSessionFilter>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
 export type QueryListVoxelUpdatesByDistanceArgs = {
   input: ListVoxelUpdatesByDistanceInput;
 };
@@ -8014,6 +8425,16 @@ export type QueryPaymentEventsConnectionArgs = {
 };
 
 
+export type QueryPlayerProfileArgs = {
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPlayerProfilesArgs = {
+  userIds: Array<Scalars['BigInt']['input']>;
+};
+
+
 export type QueryPlayerPulseArgs = {
   orgId: Scalars['BigInt']['input'];
 };
@@ -8076,6 +8497,22 @@ export type QueryTeamsArgs = {
 };
 
 
+export type QueryTierAccessInventoryArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryTierAccessProvisioningTokensArgs = {
+  includeRevoked?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryTierAccessRulesArgs = {
+  includeRevoked?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
 export type QueryUserArgs = {
   id: Scalars['BigInt']['input'];
 };
@@ -8087,6 +8524,11 @@ export type QueryUserAppStateArgs = {
 
 
 export type QueryUserAvatarsArgs = {
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryUserTierAccessArgs = {
   userId: Scalars['BigInt']['input'];
 };
 
@@ -8143,6 +8585,24 @@ export type QueryWalletTransactionsConnectionArgs = {
   after?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   orgId: Scalars['BigInt']['input'];
+};
+
+/** Input for publishing a channel message that only reaches members near an origin chunk. A member receives it when one of its live actors is in the same app within maxDistance chunks of the origin, measured as the straight-line (Euclidean) distance between chunk coordinates, boundary included; a member with no live actor does not receive it. Members receive an ordinary ChannelMessageNotification. The sender must have the channel send_messages permission, exactly as for sendChannelMessage. */
+export type RangedChannelMessageInput = {
+  /** The app the origin chunk is in. Must be the app this token is scoped to (the game server answers INVALID_APP_ID otherwise). */
+  appId: Scalars['BigInt']['input'];
+  /** The channel id (groups.group_id) to publish to. */
+  channelId: Scalars['BigInt']['input'];
+  /** The origin chunk distance is measured from, usually the chunk of the sending actor. A chunk is a 16x16x16 voxel cube. */
+  chunk: ChunkCoordinatesInput;
+  /** Largest straight-line distance from the origin chunk, in chunks, at which a member still receives the message: 0 (the origin chunk only) to 2147483647. Not capped at 8 and not the Chebyshev ring count spatial sends use. */
+  maxDistance: Scalars['Int']['input'];
+  /** The message payload, base64-encoded. Opaque to the server; decode per your application protocol. Max 1024 bytes. */
+  payload: Scalars['String']['input'];
+  /** Client-assigned correlation id for this datagram: a uint8 (0-255) that wraps at gameClientBootstrap.sequenceNumberModulo (256); defaults to 0 if omitted. For CORRELATION ONLY — it is NOT an idempotency key and the server does not dedupe replays. Echoed on any GenericErrorResponse for this send, delivered on the udpNotifications subscription. */
+  sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
+  /** The sender's actor UUID (your own actor's UUID). Must be exactly 32 bytes when encoded as UTF-8. */
+  uuid: Scalars['String']['input'];
 };
 
 export type RateCardBandInput = {
@@ -8997,6 +9457,150 @@ export type TeleportResponse = {
   success: Scalars['Boolean']['output'];
 };
 
+export type TierAccessCount = {
+  __typename?: 'TierAccessCount';
+  count: Scalars['Int']['output'];
+  key: Scalars['String']['output'];
+};
+
+/** OPERATOR: who on this tier would be refused. */
+export type TierAccessInventory = {
+  __typename?: 'TierAccessInventory';
+  /** A page of the refused accounts, newest first. */
+  accounts: Array<TierAccessInventoryAccount>;
+  /** Refused (pending + denied) accounts in total. */
+  accountsTotal: Scalars['Int']['output'];
+  denied: Scalars['Int']['output'];
+  granted: Scalars['Int']['output'];
+  /** Granted accounts by reason. */
+  grantedByVia: Array<TierAccessCount>;
+  mode: TierAccessMode;
+  orgsWithoutGrantedMember: Array<TierAccessInventoryOrg>;
+  pending: Scalars['Int']['output'];
+  tier: Maybe<Scalars['String']['output']>;
+  totalAccounts: Scalars['Int']['output'];
+};
+
+/** OPERATOR: an account this tier would refuse, with what it holds. */
+export type TierAccessInventoryAccount = {
+  __typename?: 'TierAccessInventoryAccount';
+  activeAppTokens: Scalars['Int']['output'];
+  activeSessions: Scalars['Int']['output'];
+  appsCreated: Scalars['Int']['output'];
+  /** Holds app tokens, organizations or apps -- the accounts whose sessions a cutover should end. */
+  ckActivity: Scalars['Boolean']['output'];
+  createdAt: Maybe<Scalars['DateTime']['output']>;
+  /** Created through Crowd Altar (it carries a username). */
+  createdViaCrowdAltar: Scalars['Boolean']['output'];
+  email: Maybe<Scalars['String']['output']>;
+  isConfirmed: Scalars['Boolean']['output'];
+  /** Slugs of the organizations it belongs to. */
+  orgs: Array<Scalars['String']['output']>;
+  status: TierAccessStatus;
+  userId: Scalars['BigInt']['output'];
+  /** Set when the account was created through Crowd Altar. */
+  username: Maybe<Scalars['String']['output']>;
+};
+
+/** OPERATOR: an organization none of whose members may use this tier. */
+export type TierAccessInventoryOrg = {
+  __typename?: 'TierAccessInventoryOrg';
+  apps: Scalars['Int']['output'];
+  liveHostedGames: Scalars['Int']['output'];
+  members: Scalars['Int']['output'];
+  name: Scalars['String']['output'];
+  orgId: Scalars['BigInt']['output'];
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
+/** How the dev/test staff-only gate behaves on this tier. OFF on prod and on any tier that is not dev or test; OBSERVE logs what would be refused; ENFORCE refuses. */
+export enum TierAccessMode {
+  Enforce = 'ENFORCE',
+  Observe = 'OBSERVE',
+  Off = 'OFF'
+}
+
+/** Whether this tier is an internal (staff-only) environment, for the sign-in pages. Public. */
+export type TierAccessPolicy = {
+  __typename?: 'TierAccessPolicy';
+  /** True when refusals are enforced; false while a restricted tier only logs them (observe), and off the restricted tiers. Read by the control plane status check. */
+  enforced: Scalars['Boolean']['output'];
+  /** A sentence for the sign-in pages to show when restricted. */
+  message: Maybe<Scalars['String']['output']>;
+  /** Production Studio, where outside developers create accounts. */
+  publicStudioUrl: Scalars['String']['output'];
+  /** True on dev and test: accounts need a verified company address, an operator listing or a provisioning grant. */
+  restricted: Scalars['Boolean']['output'];
+};
+
+/** OPERATOR: a credential test harnesses send on register to create accounts that may use a restricted tier. The secret is never returned after creation. */
+export type TierAccessProvisioningToken = {
+  __typename?: 'TierAccessProvisioningToken';
+  accountsCreated: Scalars['Int']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  createdBy: Maybe<Scalars['BigInt']['output']>;
+  /** Addresses it may create, as prefix*@domain. */
+  emailPatterns: Array<Scalars['String']['output']>;
+  expiresAt: Scalars['DateTime']['output'];
+  label: Scalars['String']['output'];
+  lastUsedAt: Maybe<Scalars['DateTime']['output']>;
+  maxAccounts: Scalars['Int']['output'];
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  tokenId: Scalars['BigInt']['output'];
+};
+
+/** OPERATOR: one entry on a tier access list. */
+export type TierAccessRule = {
+  __typename?: 'TierAccessRule';
+  createdAt: Scalars['DateTime']['output'];
+  createdBy: Maybe<Scalars['BigInt']['output']>;
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  kind: TierAccessRuleKind;
+  note: Maybe<Scalars['String']['output']>;
+  revokedAt: Maybe<Scalars['DateTime']['output']>;
+  revokedBy: Maybe<Scalars['BigInt']['output']>;
+  ruleId: Scalars['BigInt']['output'];
+  /** The lowercased address or domain. */
+  value: Scalars['String']['output'];
+};
+
+/** An exact email address, or every address on one domain. */
+export enum TierAccessRuleKind {
+  Email = 'EMAIL',
+  EmailDomain = 'EMAIL_DOMAIN'
+}
+
+/** OPERATOR: the tier-access settings of this tier. */
+export type TierAccessSettings = {
+  __typename?: 'TierAccessSettings';
+  /** Domains whose verified addresses are always allowed. */
+  companyDomains: Array<Scalars['String']['output']>;
+  /** The effective mode. */
+  mode: TierAccessMode;
+  publicStudioUrl: Scalars['String']['output'];
+  /** The stored mode; null means none was set (a restricted tier then observes). */
+  storedMode: Maybe<TierAccessStoredMode>;
+  /** The tier this instance serves. */
+  tier: Maybe<Scalars['String']['output']>;
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
+  updatedBy: Maybe<Scalars['BigInt']['output']>;
+};
+
+/** An account on this tier: NOT_RESTRICTED (prod, or no gate), GRANTED, PENDING_VERIFICATION (a listed address that is not confirmed yet), or DENIED. */
+export enum TierAccessStatus {
+  Denied = 'DENIED',
+  Granted = 'GRANTED',
+  NotRestricted = 'NOT_RESTRICTED',
+  PendingVerification = 'PENDING_VERIFICATION'
+}
+
+/** The mode an operator can set on a restricted tier. */
+export enum TierAccessStoredMode {
+  Enforce = 'ENFORCE',
+  Observe = 'OBSERVE'
+}
+
 export type TransferGridOwnershipInput = {
   /** App that contains the grid. */
   appId: Scalars['BigInt']['input'];
@@ -9027,6 +9631,8 @@ export enum UdpErrorCode {
   AppNotFound = 'APP_NOT_FOUND',
   /** The app exists but is not currently loaded/active on this server. */
   AppNotLoaded = 'APP_NOT_LOADED',
+  /** The app's runtime gate is not ACTIVE (its organization has no funds, it hit its spend cap, or its subscription lapsed), so the server delivers nothing for it. Sent at most once per session every few seconds. Tell the player the world is paused; gameClientBootstrap.runtimeGate carries the reason, and sends work again within seconds of the owner fixing the cause. */
+  AppPaused = 'APP_PAUSED',
   /** The password did not match (login validation). */
   BadPassword = 'BAD_PASSWORD',
   CannotDeleteDefaultWorldGrid = 'CANNOT_DELETE_DEFAULT_WORLD_GRID',
@@ -9089,7 +9695,7 @@ export enum UdpErrorCode {
 }
 
 /** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version. */
-export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
+export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelAudioNotification | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
 
 /** UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md. */
 export type UdpProxyConnectionStatus = {
@@ -9152,12 +9758,16 @@ export type UpdateActorStateInput = {
 
 /** Input payload for updating an app. All fields are optional; only fields that are provided are changed. */
 export type UpdateAppInput = {
+  /** Grid permission keys a player's claim grants its owner on the claimed grid (at most 8; active grid keys; never a player-code key). An empty list grants none. Applies to claims made from now on. Omit to leave unchanged. */
+  claimOwnerKeys?: InputMaybe<Array<Scalars['String']['input']>>;
   /** New short description. Omit to leave unchanged. */
   description?: InputMaybe<Scalars['String']['input']>;
   /** New JSON-encoded marketplace metadata string, replacing the existing value (see App.metadata). Omit to leave unchanged. */
   metadata?: InputMaybe<Scalars['String']['input']>;
   /** New display name (1-256 chars). Omit to leave unchanged. */
   name?: InputMaybe<Scalars['String']['input']>;
+  /** Turn replay logging on (true) or off (false): record every client message the realtime servers accept for this app (keep-alives included), kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic, or the org is billing-exempt; turning it off always succeeds, and what was already recorded goes on billing until it ages out. Recording starts and stops within about 15 seconds. Omit to leave unchanged. */
+  replayLoggingEnabled?: InputMaybe<Scalars['Boolean']['input']>;
   /** New lifecycle status; set LIVE to publish, or DRAFT/LIVE to restore an archived app. Omit to leave unchanged. */
   status?: InputMaybe<AppStatus>;
   /** New visibility (PUBLIC/UNLISTED/PRIVATE). Omit to leave unchanged. */
@@ -9213,7 +9823,7 @@ export type UpdateChunkLodsInput = {
 export type UpdateChunkStateInput = {
   /** Id of the app that owns the chunk (decimal string). */
   appId: Scalars['BigInt']['input'];
-  /** BASE64-encoded binary chunk-level state blob to store. Omit/null to store no chunk state. */
+  /** BASE64-encoded binary chunk-level state blob to store, at most 65,536 bytes decoded. Omit/null to store no chunk state. */
   chunkState?: InputMaybe<Scalars['String']['input']>;
   /** Address of the chunk whose chunk-level state to set. */
   coordinates: ChunkCoordinatesInput;
@@ -9279,11 +9889,11 @@ export type UpdateVoxelInput = {
   appId: Scalars['BigInt']['input'];
   /** Address of the chunk that contains the voxel to edit. */
   coordinates: ChunkCoordinatesInput;
-  /** Local voxel position within the chunk, 0-15 per axis; anything else is refused. */
+  /** Local voxel position within the chunk. App-defined: any signed 16-bit integer per axis (-32768 to 32767); apps on the 16x16x16 dense grid use 0-15. */
   location: VoxelCoordinatesInput;
   /** Optional BASE64-encoded binary state blob for the voxel; omit for none. */
   state?: InputMaybe<Scalars['String']['input']>;
-  /** Voxel type id to write, 0-255; anything else is refused. */
+  /** Voxel type id to write. App-defined: any signed 16-bit integer (-32768 to 32767). */
   voxelType: Scalars['Float']['input'];
 };
 
@@ -9323,34 +9933,34 @@ export type User = {
   createdAt: Scalars['DateTime']['output'];
   /** Discriminator paired with `gamertag` to form a unique handle; null if unset. */
   disambiguation: Maybe<Scalars['String']['output']>;
-  /** Account email; null for anonymized/soft-deleted accounts. */
+  /** Account email. Private: null unless the caller is this user, a super-admin or an operator (and for anonymized/soft-deleted accounts). */
   email: Maybe<Scalars['String']['output']>;
-  /** External identity-provider id for federated accounts, or null. */
+  /** External identity-provider id for federated accounts, or null. Private: null unless the caller is this user, a super-admin or an operator. */
   externalId: Maybe<Scalars['String']['output']>;
   /** Public display name; null if unset or anonymized. Unique in combination with `disambiguation`. */
   gamertag: Maybe<Scalars['String']['output']>;
-  /** Whether the user qualifies for early access through normal eligibility (the free-play window/rollout). */
-  grantEarlyAccess: Scalars['Boolean']['output'];
-  /** Admin override forcing early access on/off regardless of normal eligibility (set via `setEarlyAccessOverride`). */
-  grantEarlyAccessOverride: Scalars['Boolean']['output'];
-  /** Whether this account has a password set. Studio reads it to say "set a password" only to accounts that have none (magic-link and OAuth sign-ups); it used to say so to everyone. The hash itself never leaves the process. */
-  hasPassword: Scalars['Boolean']['output'];
-  /** Whether the account email has been confirmed. */
-  isConfirmed: Scalars['Boolean']['output'];
-  /** Company-employee flag that grants access to control-plane / operator features. Independent from is_super_admin. */
-  isOperator: Scalars['Boolean']['output'];
-  /** Whether the user holds platform super-admin privileges (toggled via `setSuperAdmin`). */
-  isSuperAdmin: Scalars['Boolean']['output'];
-  /** Organization the user belongs to, or null. BigInt serialized as a decimal string. */
+  /** Whether the user qualifies for early access through normal eligibility (the free-play window/rollout). Private: null unless the caller is this user, a super-admin or an operator. */
+  grantEarlyAccess: Maybe<Scalars['Boolean']['output']>;
+  /** Admin override forcing early access on/off regardless of normal eligibility (set via `setEarlyAccessOverride`). Private: null unless the caller is this user, a super-admin or an operator. */
+  grantEarlyAccessOverride: Maybe<Scalars['Boolean']['output']>;
+  /** Whether this account has a password set. Studio reads it to say "set a password" only to accounts that have none (magic-link and OAuth sign-ups); it used to say so to everyone. The hash itself never leaves the process. Private: null unless the caller is this user, a super-admin or an operator. */
+  hasPassword: Maybe<Scalars['Boolean']['output']>;
+  /** Whether the account email has been confirmed. Private: null unless the caller is this user, a super-admin or an operator. */
+  isConfirmed: Maybe<Scalars['Boolean']['output']>;
+  /** Company-employee flag that grants access to control-plane / operator features. Independent from is_super_admin. Private: null unless the caller is this user, a super-admin or an operator. */
+  isOperator: Maybe<Scalars['Boolean']['output']>;
+  /** Whether the user holds platform super-admin privileges (toggled via `setSuperAdmin`). Private: null unless the caller is this user, a super-admin or an operator. */
+  isSuperAdmin: Maybe<Scalars['Boolean']['output']>;
+  /** Organization the user belongs to, or null. BigInt serialized as a decimal string. Private: null unless the caller is this user, a super-admin or an operator. */
   orgId: Maybe<Scalars['BigInt']['output']>;
-  /** The user's effective permission keys on the given org (empty if not a member; full set if super admin). Requires a valid bearer game token. */
-  permissionsForOrg: Array<Scalars['String']['output']>;
-  /** User-level state blob, base64-encoded binary (management-owned). Null when cleared. */
+  /** The user's effective permission keys on the given org (empty if not a member; full set if super admin). Requires a valid bearer game token. Private: null unless the caller is this user, a super-admin or an operator. */
+  permissionsForOrg: Maybe<Array<Scalars['String']['output']>>;
+  /** User-level state blob, base64-encoded binary (management-owned). Private: null unless the caller is this user, a super-admin or an operator; also null when cleared. */
   state: Maybe<Scalars['String']['output']>;
   /** Unique user id and primary key. BigInt serialized as a decimal string. */
   userId: Scalars['BigInt']['output'];
-  /** Account type, e.g. "direct" or "deleted". */
-  userType: Scalars['String']['output'];
+  /** Account type, e.g. "direct" or "deleted". Private: null unless the caller is this user, a super-admin or an operator. */
+  userType: Maybe<Scalars['String']['output']>;
 };
 
 
@@ -9414,6 +10024,24 @@ export type UserPropertyTokenData = {
   total: Scalars['String']['output'];
 };
 
+/** OPERATOR: one account's access to this tier. */
+export type UserTierAccess = {
+  __typename?: 'UserTierAccess';
+  email: Maybe<Scalars['String']['output']>;
+  expiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** When the stored grant ends. */
+  grantExpiresAt: Maybe<Scalars['DateTime']['output']>;
+  /** The stored grant: operator or provisioning, or null. */
+  grantSource: Maybe<Scalars['String']['output']>;
+  grantedAt: Maybe<Scalars['DateTime']['output']>;
+  /** Who granted it: operator:<user id>, token:<token id> or loadtest-mint:<label>. */
+  grantedBy: Maybe<Scalars['String']['output']>;
+  isConfirmed: Scalars['Boolean']['output'];
+  status: TierAccessStatus;
+  userId: Scalars['BigInt']['output'];
+  via: Maybe<Scalars['String']['output']>;
+};
+
 /** A Relay cursor connection over User records. Page with first/after; pass pageInfo.endCursor back as after for the next page. */
 export type UsersConnection = {
   __typename?: 'UsersConnection';
@@ -9457,34 +10085,34 @@ export type Voxel = {
   createdAt: Scalars['DateTime']['output'];
   /** Id of the user that made this edit (decimal string). */
   createdBy: Scalars['BigInt']['output'];
-  /** Local position of the edited voxel within its chunk (0-15 per axis). */
+  /** Position of the edited voxel within its chunk (signed 16-bit per axis, app-defined). */
   location: VoxelCoordinates;
   /** BASE64-encoded binary state blob for the voxel (decode from base64); null when no state was set. */
   state: Maybe<Scalars['String']['output']>;
-  /** New voxel type id written by this edit (0-255). */
+  /** New voxel type id written by this edit (signed 16-bit, app-defined). */
   voxelType: Scalars['Int']['output'];
   /** Unique id of this voxel-update row (decimal string). */
   voxelUpdateId: Scalars['BigInt']['output'];
 };
 
-/** Integer (x, y, z) position of a single voxel LOCAL to its chunk (not a world position). Stored as signed 16-bit smallints (-32,768..32,767), but a chunk is 16x16x16 = 4096 voxels, so valid in-bounds positions are 0-15 on each axis. */
+/** Integer (x, y, z) position of a single voxel LOCAL to its chunk (not a world position). App-defined: any signed 16-bit integer on each axis (-32,768..32,767). Apps that use the 16x16x16 dense grid (Chunk.voxels) use 0-15; other addressing lives in voxel states and the edit log. */
 export type VoxelCoordinates = {
   __typename?: 'VoxelCoordinates';
-  /** Local voxel X within the chunk (0-15 for in-bounds voxels). */
+  /** Local voxel X within the chunk (signed 16-bit, app-defined). */
   x: Scalars['Int']['output'];
-  /** Local voxel Y within the chunk (0-15 for in-bounds voxels). */
+  /** Local voxel Y within the chunk (signed 16-bit, app-defined). */
   y: Scalars['Int']['output'];
-  /** Local voxel Z within the chunk (0-15 for in-bounds voxels). */
+  /** Local voxel Z within the chunk (signed 16-bit, app-defined). */
   z: Scalars['Int']['output'];
 };
 
-/** Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). Each coordinate is 0-15 on a 16x16x16 chunk, and the voxel writes (updateVoxel, sendVoxelUpdate, updateChunk's voxelStates) refuse any other value. Teleport's voxelAddress, which is not a write, takes any signed 16-bit value. */
+/** Input form of a voxel position LOCAL to its chunk (see VoxelCoordinates). App-defined: each coordinate is any signed 16-bit integer, on every voxel write (updateVoxel, sendVoxelUpdate, updateChunk's voxelStates) and in teleport's voxelAddress; the platform checks no narrower range. Apps that use the 16x16x16 dense grid use 0-15. */
 export type VoxelCoordinatesInput = {
-  /** Local voxel X within the chunk, 0-15; voxel writes refuse other values. */
+  /** Local voxel X within the chunk. App-defined: any signed 16-bit integer (-32768 to 32767). Apps that use the 16x16x16 dense grid use 0-15. */
   x: Scalars['Int']['input'];
-  /** Local voxel Y within the chunk, 0-15; voxel writes refuse other values. */
+  /** Local voxel Y within the chunk. App-defined: any signed 16-bit integer (-32768 to 32767). Apps that use the 16x16x16 dense grid use 0-15. */
   y: Scalars['Int']['input'];
-  /** Local voxel Z within the chunk, 0-15; voxel writes refuse other values. */
+  /** Local voxel Z within the chunk. App-defined: any signed 16-bit integer (-32768 to 32767). Apps that use the 16x16x16 dense grid use 0-15. */
   z: Scalars['Int']['input'];
 };
 
@@ -9493,9 +10121,9 @@ export type VoxelState = {
   __typename?: 'VoxelState';
   /** BASE64-encoded binary state blob for this voxel (decode from base64); null/empty when the voxel has no extra state. */
   state: Maybe<Scalars['String']['output']>;
-  /** Local voxel position within the chunk (0-15 per axis). */
+  /** Voxel position within the chunk (signed 16-bit per axis, app-defined). */
   voxelCoord: VoxelCoordinates;
-  /** Voxel type id at this position (0-255). */
+  /** Voxel type id at this position (signed 16-bit, app-defined). */
   voxelType: Scalars['Int']['output'];
 };
 
@@ -9503,9 +10131,9 @@ export type VoxelState = {
 export type VoxelStateInput = {
   /** BASE64-encoded binary state blob for this voxel, at most 1 KiB decoded; omit/null for no extra state. */
   state?: InputMaybe<Scalars['String']['input']>;
-  /** Local voxel position within the chunk, 0-15 per axis; anything else is refused. */
+  /** Voxel position within the chunk. App-defined: any signed 16-bit integer per axis; a position outside the 16x16x16 dense grid lives only in voxel states. */
   voxelCoord: VoxelCoordinatesInput;
-  /** Voxel type id to set at this position, 0-255; anything else is refused. */
+  /** Voxel type id to set at this position. App-defined: any signed 16-bit integer (-32768 to 32767). The dense grid stores 0-255; a wider type lives in this voxel state. */
   voxelType: Scalars['Int']['input'];
 };
 
@@ -9597,11 +10225,11 @@ export type VoxelUpdateRequestInput = {
   sequenceNumber?: InputMaybe<Scalars['Int']['input']>;
   /** A unique identifier for this voxel update. Must be exactly 32 bytes when encoded as UTF-8. */
   uuid: Scalars['String']['input'];
-  /** The voxel coordinates within the chunk, 0-15 on each axis; anything else is refused. */
+  /** The voxel coordinates within the chunk. App-defined: any signed 16-bit integer on each axis (-32768 to 32767); apps on the 16x16x16 dense grid use 0-15. */
   voxel: VoxelCoordinatesInput;
   /** Optional voxel state data, base64-encoded. Omit (or send an empty string) when the voxel has no extra state — an empty payload is a type-only update. */
   voxelState?: InputMaybe<Scalars['String']['input']>;
-  /** The new voxel type ID, 0-255 (anything else is refused). This determines the appearance and properties of the voxel. */
+  /** The new voxel type ID. App-defined: any signed 16-bit integer (-32768 to 32767). This determines the appearance and properties of the voxel. */
   voxelType: Scalars['Int']['input'];
 };
 

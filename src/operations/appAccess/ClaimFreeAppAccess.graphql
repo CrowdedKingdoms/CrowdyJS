@@ -8,6 +8,7 @@ mutation ClaimFreeAppAccess($appId: BigInt!) {
     grantedBy
     subscriptionId
     expiresAt
+    suspendedUntil
     createdAt
     updatedAt
   }

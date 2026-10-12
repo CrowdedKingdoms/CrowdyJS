@@ -120,6 +120,243 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.9.0: the input log says what it lost, and when to retry
+
+Additive. **Needs the Game API release after v2.40.2** (`InputLogSession.missingRecords` is
+selected on every sessions read; an older Game API refuses the selection). Promote the Game API
+first on each tier.
+
+- **`missingRecords`** on every recorded session: inputs the replication server accepted that
+  never reached the log (an overloaded server or a broker outage). 0 when the recording is
+  complete as far as it is known: a lost end of the recording cannot be counted (its session
+  closes as `unrecorded` instead). Null on one recorded before the count existed. Recording is
+  best-effort, and this is how a gap shows.
+- **Three end reasons** in `endReason`: `logging_off` (replay logging was turned off during the
+  session), `shutdown` (the replication server recording it stopped, a deploy; the client
+  reconnects to another server, where the same session continues and its end is replaced), and
+  `paused` (recording paused because the app's logging setting could not be confirmed; the
+  client sees nothing, and a later record reopens the session). `unrecorded` (no end was
+  recorded; closed an hour after its last input) comes with the same Game API release.
+- **Reads say when to retry.** `messages` throws `INPUT_LOG_TEMPORARILY_UNAVAILABLE` when the log
+  cannot be read right now (it used to answer an empty page, or `INPUT_LOG_UNAVAILABLE`). A server
+  runs one read per user, and two per app and per org, at a time: a read over that share waits
+  for an earlier one within its own few-second deadline, and `INPUT_LOG_RATE_LIMITED` means the
+  wait ran out. Both carry `extensions.retryable`: retry with the same cursor after a short
+  back-off, a bounded number of times. A read whose request is closed stops and frees its
+  share: pass `signal` in the options of `sessions` / `messages` (new) and abort a read nobody
+  will see, say when the user opens another session. An operation may select
+  `inputLogMessages` only once.
+- **A `signal` keeps the request timeout.** A `signal` passed to a request
+  (`client.gql.request(document, variables, { signal })`, and the input log's new option) used
+  to replace the client's timeout, so a request with one could wait for ever, and an abort
+  rejected as `CrowdyTimeoutError`. It now runs alongside the timeout, and aborting rejects with
+  the signal's reason.
+- **A cursor belongs to its session.** `BAD_USER_INPUT` for a malformed cursor or one from another
+  session (until this Game API, a cursor from another session was not detected and the read just
+  returned fewer inputs).
+- **`apps.update(appId, { replayLoggingEnabled: true })`** needs a spendable balance that covers
+  the projected cost of keeping one retention period of the app's recent traffic; the
+  `INPUT_LOG_FUNDS_NEEDED` refusal's `extensions.requiredMicrousd` and `spendableMicrousd` say how
+  much. Recordings already kept go on billing after logging is turned off, until they age out.
+
+Paging a session, the loop that does not stop early:
+
+```ts
+import { CrowdyGraphQLError, decodeBase64 } from '@crowdedkingdoms/crowdyjs';
+
+const RETRY = new Set(['INPUT_LOG_TEMPORARILY_UNAVAILABLE', 'INPUT_LOG_RATE_LIMITED']);
+const MAX_RETRIES = 8; // in a row, about half a minute of back-off; then give up
+const reading = new AbortController(); // abort() when the user moves on
+let after: string | undefined;
+for (let backoffMs = 250, retries = 0; ; ) {
+  let page;
+  try {
+    page = await game.inputLog.messages(appId, gameTokenId, {
+      first: 200,
+      after,
+      signal: reading.signal,
+    });
+  } catch (err) {
+    if (!(err instanceof CrowdyGraphQLError) || !RETRY.has(String(err.code))) throw err;
+    if (++retries > MAX_RETRIES) throw err;
+    await new Promise((r) => setTimeout(r, backoffMs));
+    backoffMs = Math.min(backoffMs * 2, 5_000);
+    continue; // the same cursor: nothing is skipped
+  }
+  backoffMs = 250;
+  retries = 0;
+  for (const { node } of page.edges) handle(node.messageType, decodeBase64(node.body));
+  if (!page.pageInfo.hasNextPage) break;
+  after = page.pageInfo.endCursor ?? after;
+}
+```
+
+Nothing in the SDK changed shape; the regenerated types add `missingRecords` and the refreshed
+descriptions.
+
+## 18.8.0: builds report the SDK version they compiled against
+
+Additive, with one new floor: **the build documents select `ExecBuild.sdkVersion`, so 18.8.0
+needs ck-api v2.40.2 or later** for `exec.build`, `buildStatus`, `waitForBuild`, `modBuild`,
+`modClientBuild`, `modBuildStatus` and `waitForModBuild` (an older API refuses the selection).
+
+- **`sdkVersion`** on every build: the version of `ckx-sdk` the platform compiled the build
+  against (`crowdy-client-sdk` for a CLIENT half), from the toolchain of the API instance that
+  ran it. The platform points a crate at its own copy of the SDK whatever version the crate
+  names, so this, not your manifest, says what your code was checked against. `null` until the
+  build starts, and for builds from before the platform recorded it. The build log's first line
+  names the same toolchain.
+
+`schema.gql` and the generated types carry cks-game-api `dev`'s SDL at #494.
+
+## 18.7.0: voice helpers, channel audio, opcode 140 on the relay, wide voxels, self-echo, pause and access refusals
+
+Additive, with reads that change for values they used to get wrong (the wide-voxel item) and one
+new floor: **the token mutations (`portal.mintAppToken`, `exchangeCode`, `refresh`) select
+`runtimeGate` and the `udpNotifications` subscription selects `ChannelAudioNotification`, so
+18.7.0 needs the ck-api release after v2.39.0 that carries both** (an older one refuses the
+selections). Channel audio and the voxel echo need Buddy v0.37.0.
+
+- **Voice helpers** (`media/voice-frames.ts`, exported from the package entry): an optional
+  convention for what an audio payload carries. A 10-byte header, little-endian, goes in front of
+  each codec frame: version 1, codec (0 raw, 1 Opus 48 kHz mono, 2 G.711 µ-law 8 kHz), `u16` seq,
+  `u32` timestamp in codec samples (milliseconds for raw), the frame's duration in ms, and flags
+  (bit 0 the first packet after silence, bit 1 the last before it). `encodeVoiceHeader` /
+  `encodeVoicePacket` write it; `decodeVoicePacket` returns `null` for a packet shorter than
+  10 bytes or of another version and never throws. `VoicePacketizer` numbers one sender's frames
+  across the seq and timestamp wraps and sets the flags (`packetize(frame, { last })`, `skip()`
+  for silence). `VoiceJitterBuffer` takes `push(key, packet, nowMs)` per sender key and returns
+  the due frames from `pull(key, nowMs)` / `poll(nowMs)`: in seq order, `targetDelayMs` (60) after
+  a talk spurt's first packet, a gap (`frame: null`) for each one that never came, late packets
+  dropped, at most `maxFrames` (64) a sender, starting over on a talk spurt or `resetAfterMs`
+  (200) of silence. A spurt that starts while the one before still has frames waiting drops
+  them. CrowdyCPP 0.60.0 has the same helpers and replays `test/unit/fixtures/voice-frames.json`.
+  No codec ships: a browser encodes Opus with WebCodecs (the module doc has the settings). A game
+  with a voice format of its own keeps it; positioning a voice stays the game's.
+- **`genericSpatial`.** Opcode 140 (`GENERIC_SPATIAL_1`), an app-defined spatial payload such as
+  CrowdyCPP's `Connection::sendGenericSpatial`, reaches the new `genericSpatial` handler of
+  `udp.subscribe` (and `any`) as a `GenericSpatialNotification`: the spatial header fields and a
+  base64 `payload`. The World Stores bus has a `genericSpatial` key. **Binary relay only**
+  (`realtime: { binaryTransport: true }`): the GraphQL `udpNotifications` union has no member for
+  140, so the proxy drops it and a client on the GraphQL transport never sees one. `UdpNotification`
+  gains the member, so an exhaustive `switch` over `__typename` needs the new case.
+- **`ChunkStore` keeps wide voxel types and other addresses.** Positions and types are the app's
+  signed 16-bit values, which the platform does not check. An edit the 16×16×16 one-byte grid
+  cannot hold (a type outside 0-255, a position outside 0-15) — a realtime update, a hydrated
+  `voxelStates` entry, or a local `setVoxel` — is kept whole in the new `CachedChunk.overlay`
+  (`ChunkOverlayVoxel`: `x`, `y`, `z`, `voxelType`, `state`; keyed by `voxelKey(x, y, z)`), and
+  `voxelTypeAt` / `voxelStateAt` return it. What changes: a type outside 0-255 is no longer stored
+  truncated (300 used to read as 44, -1 as 255); a position outside 0-15 no longer lands on
+  another voxel (`(16, 0, 0)` used to overwrite `(0, 1, 0)`), and reading one returns the overlay's
+  or nothing; and code that walks `chunk.voxels` itself sees 0 where an in-grid voxel's type is in
+  the overlay. The store is a 16×16×16 helper; a game with other addressing reads the raw
+  `voxelUpdate` events and `chunks.get`'s `voxelStates`.
+- **`createGridHostCalls({ voxelBounds })`** sets the positions and types a CLIENT half's
+  `voxel_set` may write, for a world that uses other signed 16-bit values. The default,
+  `DEFAULT_GRID_VOXEL_BOUNDS`, is today's: positions 0-15, types 0-255. Bounds that are not
+  integer ranges within -32768 to 32767 throw `RangeError` when the host calls are created.
+- **Channel audio** (Buddy v0.37.0). `udp.sendChannelAudio({ channelId, uuid, payload,
+  sequenceNumber? })` sends opcode 35 (opcode 17's layout and signing) on the binary relay, else
+  the `sendChannelAudio` mutation; `payload` is base64, at most 1,024 bytes, and the server
+  refuses it with `UNAUTHORIZED` (7) without the channel's `send_voice` and the app's
+  `use_voice_chat`. There is no echo to the sender. Other members' frames arrive as opcode 36,
+  standalone or bundled, as a `ChannelAudioNotification` (`channelId`, `uuid`, `audioData`
+  base64, `sequenceNumber`, `epochMillis`) on the new `channelAudio` handler of `udp.subscribe`
+  (and `any`) and the World Stores bus key `channelAudio`, on the binary relay and on the GraphQL
+  transport alike (the `udpNotifications` subscription selects the union's
+  `ChannelAudioNotification`, so it too needs that ck-api release). `channels.create` /
+  `grids.createChannel` take `membersCanSpeak` (default false: the member role gets
+  `send_voice`); `GridScope.channels` has `sendAudio(channelId, uuid, audioBase64)`;
+  `serializeChannelAudio` is exported. The voice helpers are the payload: see the README.
+- **UDP error 33, `APP_PAUSED`**: the replication server refuses a paused app's sends.
+  `UDP_ERROR_NAMES[33]` and the generated `UdpErrorCode.AppPaused` name it.
+- **Voxel edits are int16 and their state at most 1,024 bytes.** `udp.sendVoxelUpdate` and
+  `ChunkStore.setVoxel` throw `RangeError` (nothing sent) for a position or type outside
+  -32768..32767 or a state over 1,024 bytes (`assertVoxelEdit`, `VOXEL_STATE_MAX_BYTES`); the
+  server answers those with `INVALID_REQUEST` (15). The 0-15 / 0-255 ranges in the docs were
+  never enforced and are gone.
+- **The echo of your own voxel edit.** Buddy v0.37.0 delivers every accepted edit back to its
+  sender as a `VoxelUpdateNotification`. `ChunkStore` records each `setVoxel` (uuid, sequence,
+  voxel) for 10 s and does not apply its echo again, so a local edit fires `onChunkChanged` once;
+  it applies the echo only when another client's edit of the voxel arrived in between (the server
+  ordered yours last) and no newer local edit of it is pending. A game reading `voxelUpdate`
+  itself sees its own edits there now: compare the `uuid` and `sequenceNumber` with the send's.
+- **Pause and access refusals.** `isAppPaused(gate)` reads `AppTokenResponse.runtimeGate` and
+  `GameClientBootstrap.runtimeGate` (`{ status, reason }`; anything but `ACTIVE` is paused; a
+  paused app still mints, so check before entering). `appPausedOf(err)` reads `APP_PAUSED`
+  (`reason`), `accessRefusalOf(err)` `ACCESS_REVOKED` / `ACCESS_SUSPENDED` (`suspendedUntil`) /
+  `ACCESS_NOT_GRANTED`, `actorExistsOf(err)` `ACTOR_EXISTS` (`ownedByCaller`), with their
+  `*_CODE` constants.
+- **New API wraps**: `users.playerProfile(userId)` and `users.playerProfiles(userIds)` (at most
+  `PLAYER_PROFILES_MAX`, 100; `RangeError` above) for public `{ userId, gamertag, disambiguation }`;
+  `users.get` documents that another user's private fields come back null.
+  `appAccess.suspend(appId, userId, until, idempotencyKey?)`, `unsuspend`,
+  `resyncTierGridPermissions` (`manage_access_tiers`); `suspendedUntil` on every access record.
+  `exec.restartType(appId, nodeType)` → `{ nodeType, stopped }` (`manage_compute`);
+  `exec.status` adds `budgetPauseReason`, `maxInstances`, `maxReservedMb`, `instanceLimit`,
+  `instances`, `reservedMb`. `apps.get` / `apps.update` carry `claimOwnerKeys`;
+  `chunks.get` / `getByDistance` carry `voxelStatesTruncated`; `gameClientBootstrap` carries
+  `runtimeGate` and `wildernessWritesOpen`.
+
+## 18.6.0: the input log
+
+Additive. An app with replay logging on has its client inputs recorded, and `client.inputLog`
+reads them back on the app-scoped client:
+
+```ts
+const { edges } = await game.inputLog.sessions(appId, { first: 20 });
+const gameTokenId = edges[0].node.gameTokenId;
+let after: string | undefined;
+for (;;) {
+  const page = await game.inputLog.messages(appId, gameTokenId, { first: 200, after });
+  for (const { node } of page.edges) handle(node.messageType, decodeBase64(node.body));
+  if (!page.pageInfo.hasNextPage) break;
+  after = page.pageInfo.endCursor ?? after;
+}
+```
+
+(Corrected in 18.9.0: the first version of this example stopped when `endCursor` came back null
+even with `hasNextPage` true, which a v2.39 Game API answers when a read cannot start in time.
+18.9.0's section has the loop with retries.)
+
+A player reads only the sessions and inputs they sent; a holder of `manage_apps` on the app reads
+every session. Keep paging while `hasNextPage` is true: a messages page can be short, or empty,
+when it stopped at the server's time or scan limit. Inputs are kept for the published retention,
+so an old session can still be listed after its inputs are gone. Both calls throw
+`INPUT_LOG_UNAVAILABLE` on a deployment without input logging, and `messages` throws it, retryable
+with the same cursor, when the log cannot be read right now.
+
+`App.replayLoggingEnabled` is selected on every app read and set with `apps.update(appId,
+{ replayLoggingEnabled: true })` (`manage_apps`). Turning it on is refused with
+`INPUT_LOG_FUNDS_NEEDED` unless the org's wallet has a spendable balance or the org is exempt from
+billing, because stored input logs are billed (crowdedkingdoms.com/pricing). It needs ck-api v2.39.0 or later: every app read selects
+`replayLoggingEnabled`, which an older Game API refuses.
+
+## 18.5.0: channel messages limited by distance
+
+Additive. `client.udp.sendRangedChannelMessage(input)` publishes to a channel like
+`sendChannelMessage`, but only members near an origin chunk receive it: a member gets it when one of
+its live actors is in `input.appId` within `input.maxDistance` chunks of `input.chunk`, measured as
+the straight-line distance between chunk coordinates, boundary included. `maxDistance` is an integer
+from 0 (the origin chunk only) to 2147483647; it is not the 0-8 Chebyshev ring count spatial sends
+take. A member with no live actor does not receive it.
+
+```ts
+await client.udp.sendRangedChannelMessage({
+  channelId,
+  uuid: self.uuid,
+  payload: encodeBase64(bytes),
+  appId,
+  chunk: { x: '10', y: '0', z: '-4' },
+  maxDistance: 6,
+});
+```
+
+Members receive the ordinary `channelMessage` notification, so receivers need no change and an older
+SDK receives these messages too. The send right is the channel's `send_messages`, as for
+`sendChannelMessage`; a refusal arrives as a `genericError` (`UNAUTHORIZED`, or `INVALID_APP_ID` when
+`appId` is not the token's app). It needs ck-api with `sendRangedChannelMessage` and Buddy v0.35.0.
+
 ## 18.4.1: the generated types come from graphql-codegen 7
 
 No call changes, and the GraphQL documents the SDK sends are byte-for-byte the same. Thirteen types

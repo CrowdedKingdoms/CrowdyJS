@@ -18,6 +18,7 @@ query AppUserAccessByApp(
     grantedBy
     subscriptionId
     expiresAt
+    suspendedUntil
     createdAt
     updatedAt
   }
@@ -46,6 +47,7 @@ query AppUserAccessConnection(
         grantedBy
         subscriptionId
         expiresAt
+        suspendedUntil
         createdAt
         updatedAt
       }

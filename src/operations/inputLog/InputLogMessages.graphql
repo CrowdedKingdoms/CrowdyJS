@@ -1,0 +1,43 @@
+query InputLogMessages(
+  $appId: BigInt!
+  $gameTokenId: BigInt!
+  $first: Int
+  $after: String
+  $filter: InputLogMessageFilter
+) {
+  inputLogMessages(
+    appId: $appId
+    gameTokenId: $gameTokenId
+    first: $first
+    after: $after
+    filter: $filter
+  ) {
+    edges {
+      cursor
+      node {
+        receivedAt
+        receivedAtMicros
+        userId
+        gameTokenId
+        messageType
+        seq
+        fromBundle
+        signed
+        sizeBytes
+        body
+        chunkX
+        chunkY
+        chunkZ
+        actorUuid
+        channelId
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

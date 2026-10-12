@@ -38,7 +38,7 @@ export interface RealtimeMetricsSnapshot {
    * method's message name (`actorUpdate`, `voxelUpdate`, `audio`, `text`,
    * `clientEvent`, `singleActorMessage`, `channelMessage`); received kinds use
    * the notification handler names (`actorUpdate`, `voxelUpdate`, `audio`,
-   * `text`, `clientEvent`, `serverEvent`, `singleActorMessage`,
+   * `text`, `clientEvent`, `serverEvent`, `genericSpatial`, `singleActorMessage`,
    * `channelMessage`, `genericError`, `connectionEvent`, ...).
    */
   perKind: Record<string, RealtimeMetricsKind>;
