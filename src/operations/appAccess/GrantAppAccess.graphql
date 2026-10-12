@@ -8,6 +8,7 @@ mutation GrantAppAccess($input: GrantAppAccessInput!) {
     grantedBy
     subscriptionId
     expiresAt
+    suspendedUntil
     createdAt
     updatedAt
   }

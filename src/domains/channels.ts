@@ -70,7 +70,9 @@ import {
  * `client.udp.sendChannelMessage(...)` over UDP. That call requires the
  * channel's `send_messages` permission and fans the payload out to every
  * active member (as a `ChannelMessageNotification` on `client.udp`
- * notifications) rather than chunk-routing it. The methods on this class never
+ * notifications) rather than chunk-routing it. Channel audio is the same:
+ * `client.udp.sendChannelAudio(...)` needs the channel's `send_voice` right and
+ * arrives as `channelAudio`. The methods on this class never
  * carry message payloads — they only manage who belongs to a channel and what
  * each member may do.
  *
@@ -206,12 +208,15 @@ export class ChannelsAPI {
    * `input.membersCanSend` is true (the default) a default `member` role
    * granting `send_messages` is created and auto-assigned to joiners (an open
    * chat channel); when false, only roles you explicitly grant may post (an
-   * announce / read-only channel).
+   * announce / read-only channel). `input.membersCanSpeak` (default false)
+   * also gives that default role `send_voice`, the right to send channel audio
+   * (`client.udp.sendChannelAudio`) for party or guild voice.
    *
    * @param input - {@link CreateChannelInput}: the owning `appId`, the channel
    *   `name` (max 128 chars, unique per app + type), and optional
    *   `description`, `membershipPolicy` (`open` | `request` | `invite` |
-   *   `admin`; defaults to the app policy), and `membersCanSend` flag.
+   *   `admin`; defaults to the app policy), and the `membersCanSend` and
+   *   `membersCanSpeak` flags.
    * @returns The newly created channel as a {@link Group}.
    * @throws {CrowdyGraphQLError} `BAD_USER_INPUT` (e.g. name too long or a
    *   duplicate name), `FORBIDDEN` if the channel policy disallows creation, or

@@ -55,6 +55,7 @@ import {
   ExecRevokeAuthorTrustDocument,
   ExecRevokeClientModConsentDocument,
   ExecSetEnabledDocument,
+  ExecRestartTypeDocument,
   ExecStartersDocument,
   ExecTrustAuthorDocument,
   ExecVersionsDocument,
@@ -994,6 +995,11 @@ export type ExecVersion = Omit<ExecVersionsQuery['execVersions'][number], '__typ
 export type ExecEndpointStat = Omit<ExecEndpointStatsQuery['execEndpointStats'][number], '__typename'>;
 /** An app's active version, kill switches and budget pause. */
 export type ExecAppStatus = Omit<ExecAppStatusFieldsFragment, '__typename'>;
+/** What {@link ExecAPI.restartType} did: the node type and how many running instances it stopped. */
+export interface ExecRestartResult {
+  nodeType: string;
+  stopped: number;
+}
 /**
  * A mod: a player's code on a grid they own, the node type `mod:<name>` keyed by the grid id
  * (call it with {@link execModType}). It runs as its owner while `enabled` and `blocked` is null.
@@ -1247,6 +1253,19 @@ export class ExecAPI {
   async setEnabled(appId: string, enabled: boolean, nodeType?: string): Promise<ExecAppStatus> {
     const data = await this.graphql.request(ExecSetEnabledDocument, { appId, enabled, nodeType });
     return strip(data.execSetEnabled);
+  }
+
+  /**
+   * Moves one node type's running instances to the app's active version: each is
+   * persisted and stopped, and starts again on the active version at its next
+   * call. A deploy changes what NEW instances run; this moves the running ones
+   * without switching the type off. Requires `manage_compute`.
+   *
+   * @returns The node type and how many instances were stopped.
+   */
+  async restartType(appId: string, nodeType: string): Promise<ExecRestartResult> {
+    const data = await this.graphql.request(ExecRestartTypeDocument, { appId, nodeType });
+    return strip(data.execRestartType);
   }
 
   /**

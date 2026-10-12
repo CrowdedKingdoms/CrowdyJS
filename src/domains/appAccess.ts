@@ -13,6 +13,11 @@ import {
   ArchiveAccessTierDocument,
   GrantAppAccessDocument,
   RevokeAppAccessDocument,
+  SuspendAppAccessDocument,
+  UnsuspendAppAccessDocument,
+  ResyncTierGridPermissionsDocument,
+  type SuspendAppAccessMutation,
+  type UnsuspendAppAccessMutation,
   DefineAppFeatureDocument,
   AppFeaturesDocument,
   GrantTierFeatureDocument,
@@ -280,6 +285,65 @@ export class AppAccessAPI {
       userId,
     });
     return data.revokeAppAccess;
+  }
+
+  /**
+   * Suspend a player's access to an app until `until`: a timed ban that lifts by
+   * itself. Until then their gameplay tokens are refused with `ACCESS_SUSPENDED`
+   * (carrying `suspendedUntil`, see `accessRefusalOf`), and the tokens they hold
+   * for the app are deleted and their realtime sessions ended at once. `until`
+   * must be in the future and at most 365 days away; the player must have an
+   * access record. Requires the `manage_access_tiers` app permission.
+   *
+   * @param appId - Numeric app id.
+   * @param userId - Numeric id of the player to suspend.
+   * @param until - When the suspension lapses (a `Date` or ISO-8601 string).
+   * @param idempotencyKey - Optional; a replay with the same key and arguments returns the first result.
+   * @returns The access record, with `suspendedUntil` set.
+   */
+  async suspend(
+    appId: string,
+    userId: string,
+    until: Date | string,
+    idempotencyKey?: string,
+  ): Promise<SuspendAppAccessMutation['suspendAppAccess']> {
+    const data = await this.api.request(SuspendAppAccessDocument, {
+      appId,
+      userId,
+      until: until instanceof Date ? until.toISOString() : until,
+      idempotencyKey,
+    });
+    return data.suspendAppAccess;
+  }
+
+  /**
+   * Lift a player's suspension before it lapses (a no-op for a player who is
+   * not suspended). Requires the `manage_access_tiers` app permission.
+   *
+   * @param appId - Numeric app id.
+   * @param userId - Numeric id of the player whose suspension to lift.
+   * @returns The access record, with `suspendedUntil` cleared.
+   */
+  async unsuspend(
+    appId: string,
+    userId: string,
+  ): Promise<UnsuspendAppAccessMutation['unsuspendAppAccess']> {
+    const data = await this.api.request(UnsuspendAppAccessDocument, {
+      appId,
+      userId,
+    });
+    return data.unsuspendAppAccess;
+  }
+
+  /**
+   * Re-apply every player's tier keys that follow onto the app's world grid and
+   * rebuild the world grid's permissions. Tier changes made through this API
+   * already do it; call it after a change made another way. Requires the
+   * `manage_access_tiers` app permission.
+   */
+  async resyncTierGridPermissions(appId: string): Promise<boolean> {
+    const data = await this.api.request(ResyncTierGridPermissionsDocument, { appId });
+    return data.resyncTierGridPermissions;
   }
 
   // -- Tier features -----------------------------------------------------------

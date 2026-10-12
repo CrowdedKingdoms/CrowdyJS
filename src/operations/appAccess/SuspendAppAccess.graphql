@@ -1,0 +1,45 @@
+mutation SuspendAppAccess(
+  $appId: BigInt!
+  $userId: BigInt!
+  $until: DateTime!
+  $idempotencyKey: String
+) {
+  suspendAppAccess(
+    appId: $appId
+    userId: $userId
+    until: $until
+    idempotencyKey: $idempotencyKey
+  ) {
+    appUserAccessId
+    appId
+    userId
+    tierId
+    status
+    grantedBy
+    subscriptionId
+    expiresAt
+    suspendedUntil
+    createdAt
+    updatedAt
+  }
+}
+
+mutation UnsuspendAppAccess($appId: BigInt!, $userId: BigInt!) {
+  unsuspendAppAccess(appId: $appId, userId: $userId) {
+    appUserAccessId
+    appId
+    userId
+    tierId
+    status
+    grantedBy
+    subscriptionId
+    expiresAt
+    suspendedUntil
+    createdAt
+    updatedAt
+  }
+}
+
+mutation ResyncTierGridPermissions($appId: BigInt!) {
+  resyncTierGridPermissions(appId: $appId)
+}

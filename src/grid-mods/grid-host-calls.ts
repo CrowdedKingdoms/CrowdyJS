@@ -73,7 +73,28 @@ export interface GridHostCallsOptions {
    * on this grid, so a mod never sends as the player's avatar or as anyone else's.
    */
   actorUuid?: string;
+  /**
+   * The voxels a CLIENT half's `voxel_set` may write. Default
+   * {@link DEFAULT_GRID_VOXEL_BOUNDS}: positions 0-15 on each axis and types 0-255, a chunk of
+   * the platform's 16×16×16 layout. Positions and types are the app's signed 16-bit values, so a
+   * game whose world uses others widens them; every other `voxel_set` is refused.
+   */
+  voxelBounds?: GridVoxelBounds;
 }
+
+/** Inclusive ranges a CLIENT half's `voxel_set` must stay within. */
+export interface GridVoxelBounds {
+  /** The within-chunk coordinate on each axis. Default 0-15. */
+  position?: { min: number; max: number };
+  /** The voxel type. Default 0-255. */
+  type?: { min: number; max: number };
+}
+
+/** `voxel_set`'s bounds when a game sets none: positions 0-15 and types 0-255. */
+export const DEFAULT_GRID_VOXEL_BOUNDS = Object.freeze({
+  position: Object.freeze({ min: 0, max: 15 }),
+  type: Object.freeze({ min: 0, max: 255 }),
+});
 
 /**
  * The permission keys `grid_permission_check` answers for: the player's code-permission keys,
@@ -114,12 +135,18 @@ const SPATIAL_KINDS = new Set(['actor', 'client_event', 'server_event', 'text'])
  * has already applied the allowlist, the player's consent, rate caps and chunk
  * clamps, and answers `grid_info`, `emit_event`, `hud_set` and `overlay_draw`
  * itself.
+ *
+ * @throws {RangeError} when `voxelBounds` is not integer ranges (`min` ≤ `max`) within
+ *   -32768 to 32767.
  */
 export function createGridHostCalls(
   options: GridHostCallsOptions,
 ): (call: PlayerCodeHostCall) => Promise<unknown> {
   const { scope, client, local } = options;
   const appId = scope.appId;
+  const bounds = options.voxelBounds;
+  const voxelPosition = voxelRange('position', bounds?.position, DEFAULT_GRID_VOXEL_BOUNDS.position);
+  const voxelTypes = voxelRange('type', bounds?.type, DEFAULT_GRID_VOXEL_BOUNDS.type);
   let gridChannels: Promise<Set<string>> | null = null;
   const ownChannels = () =>
     (gridChannels ??= scope.channels
@@ -183,12 +210,15 @@ export function createGridHostCalls(
       case 'voxel_set': {
         const chunk = coords(args.chunkX, args.chunkY, args.chunkZ);
         scope.assertContains({ x: chunk[0], y: chunk[1], z: chunk[2] });
-        const vx = intIn(args.voxelX ?? 0, 0, 15);
-        const vy = intIn(args.voxelY ?? 0, 0, 15);
-        const vz = intIn(args.voxelZ ?? 0, 0, 15);
-        const voxelType = intIn(args.voxelType ?? 0, 0, 255);
+        const vx = intIn(args.voxelX ?? 0, voxelPosition.min, voxelPosition.max);
+        const vy = intIn(args.voxelY ?? 0, voxelPosition.min, voxelPosition.max);
+        const vz = intIn(args.voxelZ ?? 0, voxelPosition.min, voxelPosition.max);
+        const voxelType = intIn(args.voxelType ?? 0, voxelTypes.min, voxelTypes.max);
         if (vx === null || vy === null || vz === null || voxelType === null) {
-          throw new GridHostCallRefused(fn, 'needs a voxel inside its chunk (0-15) and a voxel type 0-255');
+          throw new GridHostCallRefused(
+            fn,
+            `needs a voxel inside its chunk (${span(voxelPosition)}) and a voxel type ${span(voxelTypes)}`,
+          );
         }
         const voxel = { x: vx, y: vy, z: vz };
         const state = typeof args.stateBase64 === 'string' ? args.stateBase64 : undefined;
@@ -326,6 +356,26 @@ function decimalId(value: unknown): string | null {
 
 function coords(x: unknown, y: unknown, z: unknown): [bigint, bigint, bigint] {
   return [BigInt(x as string), BigInt(y as string), BigInt(z as string)];
+}
+
+/** A `voxelBounds` range, or the default; the wire carries both as signed 16-bit values. */
+function voxelRange(
+  name: string,
+  range: { min: number; max: number } | undefined,
+  fallback: { min: number; max: number },
+): { min: number; max: number } {
+  const min = range?.min ?? fallback.min;
+  const max = range?.max ?? fallback.max;
+  if (!Number.isInteger(min) || !Number.isInteger(max) || min > max || min < -0x8000 || max > 0x7fff) {
+    throw new RangeError(
+      `voxelBounds.${name} must be integers from -32768 to 32767 with min <= max, got ${min}..${max}`,
+    );
+  }
+  return { min, max };
+}
+
+function span(range: { min: number; max: number }): string {
+  return range.min < 0 ? `${range.min} to ${range.max}` : `${range.min}-${range.max}`;
 }
 
 /** An integer in [lo, hi] (a number, or a decimal string), else null. */

@@ -6,6 +6,10 @@ import {
   UserDocument,
   UpdateUserStateDocument,
   FreePlayWindowDocument,
+  PlayerProfileDocument,
+  PlayerProfilesDocument,
+  type PlayerProfileQuery,
+  type PlayerProfilesQuery,
   type MeQuery,
   type UpdateGamertagInput,
   type UpdateGamertagMutation,
@@ -14,6 +18,9 @@ import {
   type UpdateUserStateInput,
   type FreePlayWindowQuery,
 } from '../generated/graphql.js';
+
+/** Most ids {@link UsersAPI.playerProfiles} takes in one call. */
+export const PLAYER_PROFILES_MAX = 100;
 
 /**
  * User identity & account management — exposed as `client.users`.
@@ -95,7 +102,10 @@ export class UsersAPI {
   }
 
   /**
-   * Look up a user by id. Requires a valid session.
+   * Look up a user by id. Requires a valid session. The private fields
+   * (`email`, `state`, `isConfirmed`, the early-access grants, `orgId`,
+   * `externalId`, `userType`, `isSuperAdmin`) come back `null` for anyone but
+   * yourself; for another player's nametag use {@link playerProfile}.
    *
    * @param id - Numeric user id (`BigInt` as a decimal string).
    * @returns The {@link User}, or `null` if no such user.
@@ -103,6 +113,40 @@ export class UsersAPI {
   async get(id: string): Promise<UserQuery['user']> {
     const data = await this.graphql.request(UserDocument, { id });
     return data.user;
+  }
+
+  /**
+   * A player's public profile (`userId`, `gamertag`, `disambiguation`), for
+   * nametags and friends lists. Needs a game token; carries nothing private.
+   *
+   * @param userId - Numeric user id (`BigInt` as a decimal string).
+   * @returns The profile, or `null` when there is no such user.
+   */
+  async playerProfile(
+    userId: string,
+  ): Promise<PlayerProfileQuery['playerProfile']> {
+    const data = await this.graphql.request(PlayerProfileDocument, { userId });
+    return data.playerProfile;
+  }
+
+  /**
+   * Public profiles for up to 100 players in one call (duplicates are read
+   * once; unknown ids are left out).
+   *
+   * @param userIds - Numeric user ids (`BigInt` decimal strings), at most 100.
+   * @throws {RangeError} for more than 100 ids; nothing is sent.
+   */
+  async playerProfiles(
+    userIds: string[],
+  ): Promise<PlayerProfilesQuery['playerProfiles']> {
+    if (userIds.length > PLAYER_PROFILES_MAX) {
+      throw new RangeError(
+        `playerProfiles takes at most ${PLAYER_PROFILES_MAX} ids: ${userIds.length}`,
+      );
+    }
+    if (userIds.length === 0) return [];
+    const data = await this.graphql.request(PlayerProfilesDocument, { userIds });
+    return data.playerProfiles;
   }
 
   /**
