@@ -898,7 +898,7 @@ export type App = {
   orgId: Scalars['BigInt']['output'];
   /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. */
   redirectUris: Array<Scalars['String']['output']>;
-  /** Whether replay logging is on: the realtime servers record every client input they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a funded org wallet or a billing-exempt org. */
+  /** Whether replay logging is on: the realtime servers record every client message they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a wallet that covers the projected cost of one retention period, or a billing-exempt org. */
   replayLoggingEnabled: Scalars['Boolean']['output'];
   /**
    * Reserved realtime (UDP) capacity in bytes/s for shared apps. Superseded by reservedUdpBytesPerSec.
@@ -1244,7 +1244,7 @@ export type AppUsageProjection = {
   daysElapsed: Scalars['Float']['output'];
   /** Per-app free monthly egress allowance in bytes (5 decimal GB). */
   freeAllowanceBytes: Scalars['String']['output'];
-  /** Stored input logs this calendar month so far, in byte-hours (input_log_storage_byte_hours, which has no free allowance). 0 when replay logging was off all month. */
+  /** Stored input logs this calendar month so far, in byte-hours (input_log_storage_byte_hours, which has no free allowance). Recordings keep accruing after replay logging is turned off, until they age out at the end of the retention; 0 when nothing was held this month. */
   inputLogByteHours: Scalars['String']['output'];
   /** True when projected egress exceeds the free allowance, or null when insufficient data. */
   onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
@@ -1273,7 +1273,7 @@ export type AppUsageSummary = {
   graphqlRecvBytes: Scalars['String']['output'];
   /** Total GraphQL bytes sent (string counter). */
   graphqlSendBytes: Scalars['String']['output'];
-  /** Stored input logs over the window, in byte-hours (string counter): the sum of the hourly samples, which is the quantity input_log_storage_byte_hours bills. Each recorded byte (InputLogMessage.sizeBytes) is held for the input log retention, one byte-hour per hour. 0 when replay logging was off. */
+  /** Stored input logs over the window, in byte-hours (string counter): the sum of the hourly samples, which is the quantity input_log_storage_byte_hours bills. Each recorded byte (InputLogMessage.sizeBytes) is held for the input log retention, one byte-hour per hour, so recordings keep accruing byte-hours after replay logging is turned off, until they age out. 0 when nothing was held during the window. */
   inputLogByteHours: Scalars['String']['output'];
   /** Recorded input-log bytes the app holds now (string counter): the latest hourly sample, the bytes recorded within the trailing retention. 0 when replay logging has never been on. */
   inputLogRetainedBytes: Scalars['String']['output'];
@@ -4660,9 +4660,9 @@ export type InputLogSession = {
   byteCount: Scalars['BigInt']['output'];
   /** The datacenter that recorded the session, when known. */
   datacenter: Maybe<Scalars['String']['output']>;
-  /** How the session ended, as the client saw it: expired, revoked, reconnect or released. Null while it may still be running. */
+  /** How the session ended: expired, revoked, reconnect or released, as the client saw it; logging_off, when the app turned replay logging off while the session was open; shutdown, when the realtime server recording it stopped (a deploy), after which the client reconnects elsewhere; paused, when recording paused because the app's logging setting could not be confirmed, which the client does not see (a later record reopens the session); or unrecorded, when its end was not recorded and it was closed an hour after its last record. Null while it may still be running. */
   endReason: Maybe<Scalars['String']['output']>;
-  /** When the session ended, if its end was recorded; null while it may still be running. */
+  /** When the session ended; null while it may still be running. A session whose end was not recorded is closed at its last record once it has gone an hour without one. Later records reopen a session (endedAt returns to null). */
   endedAt: Maybe<Scalars['DateTime']['output']>;
   /** The game token the session ran on; pass it to inputLogMessages to read the inputs. */
   gameTokenId: Scalars['BigInt']['output'];
@@ -4672,6 +4672,8 @@ export type InputLogSession = {
   messageCount: Scalars['BigInt']['output'];
   /** The client message types the session contains, ascending. */
   messageTypes: Array<Scalars['Int']['output']>;
+  /** Records the realtime servers numbered for this session that never reached the log: recording is best-effort, so an overloaded server or a broker outage can leave gaps, and this is how many. 0 when the recording is complete as far as it is known. A lost end of the recording cannot be counted (its session closes as unrecorded instead). Null for a session recorded before the realtime servers numbered their records. */
+  missingRecords: Maybe<Scalars['BigInt']['output']>;
   /** When the first recorded input arrived. */
   startedAt: Scalars['DateTime']['output'];
   /** The user whose client sent the inputs. */
@@ -5198,7 +5200,7 @@ export type Mutation = {
   updateActor: Actor;
   /** Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary. */
   updateActorState: Actor;
-  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
+  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
   updateApp: App;
   /** Updates an avatar’s mutable fields (currently `name`) and returns it. OWNER-EXCLUSIVE: only the avatar’s owner may call this (throws Unauthorized otherwise). Requires a valid game token. To change state blobs use `updateAvatarState`. */
   updateAvatar: Avatar;
@@ -7539,7 +7541,7 @@ export type Query = {
   hostedGamePublishes: Array<HostedGamePublish>;
   /** The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
   hostedGames: Array<HostedGame>;
-  /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`; a page can hold fewer than `first` inputs when it stopped at its time or scan limit, so keep paging while hasNextPage is true. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, and also, retryable with the same cursor, when the log cannot be read right now. */
+  /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`, the previous page's endCursor for this same session (a cursor from another session is BAD_USER_INPUT); a page can hold fewer than `first` inputs, or none, when it stopped at its time or scan limit, so keep paging while hasNextPage is true. An operation may select this field only once. A server runs one read per user (two per app and per org) at a time; a read over that share waits for the earlier one within its own few-second deadline, and a read whose request is closed stops. Errors: INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, or this server may not read its log (do not retry); INPUT_LOG_RATE_LIMITED (429) when the wait for an earlier read ran out or left too little time to read, and INPUT_LOG_TEMPORARILY_UNAVAILABLE (503) when the log cannot be read just now, both with extensions.retryable: retry shortly with the same cursor. A read whose request closed stops as INPUT_LOG_READ_ABORTED (499), which nobody receives. */
   inputLogMessages: InputLogMessageConnection;
   /** Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. With 'manage_apps' on the app you see every session and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment. */
   inputLogSessions: InputLogSessionConnection;
@@ -9764,7 +9766,7 @@ export type UpdateAppInput = {
   metadata?: InputMaybe<Scalars['String']['input']>;
   /** New display name (1-256 chars). Omit to leave unchanged. */
   name?: InputMaybe<Scalars['String']['input']>;
-  /** Turn replay logging on (true) or off (false): record every client input the realtime servers accept for this app, kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet has a spendable balance or the org is billing-exempt; turning it off always succeeds. Recording starts and stops within about 15 seconds. Omit to leave unchanged. */
+  /** Turn replay logging on (true) or off (false): record every client message the realtime servers accept for this app (keep-alives included), kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic, or the org is billing-exempt; turning it off always succeeds, and what was already recorded goes on billing until it ages out. Recording starts and stops within about 15 seconds. Omit to leave unchanged. */
   replayLoggingEnabled?: InputMaybe<Scalars['Boolean']['input']>;
   /** New lifecycle status; set LIVE to publish, or DRAFT/LIVE to restore an archived app. Omit to leave unchanged. */
   status?: InputMaybe<AppStatus>;

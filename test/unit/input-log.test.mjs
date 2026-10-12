@@ -108,3 +108,48 @@ test('the refusals surface as CrowdyGraphQLError codes', async () => {
     }
   }
 });
+
+test('passes an AbortSignal through, and an aborted read rejects with its reason', async () => {
+  const seen = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (url, init) => {
+    seen.push(init.signal);
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(init.signal.reason));
+    });
+  };
+  try {
+    const client = await makeClient();
+    const reading = new AbortController();
+    const read = client.inputLog.messages('42', '9001', { first: 10, signal: reading.signal });
+    const why = new Error('the user opened another session');
+    reading.abort(why);
+    await assert.rejects(read, (err) => err === why);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].aborted, true);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('a signal passed with a read keeps the request timeout', async () => {
+  const { createCrowdyClient, CrowdyTimeoutError } = await import('../../dist/index.js');
+  const original = globalThis.fetch;
+  globalThis.fetch = (url, init) =>
+    new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () =>
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+      );
+    });
+  try {
+    const client = createCrowdyClient({ httpUrl: ENDPOINT, wsUrl: 'wss://ck.example/graphql', timeout: 50 });
+    client.setToken('app-token');
+    const never = new AbortController();
+    await assert.rejects(
+      client.inputLog.messages('42', '9001', { signal: never.signal }),
+      (err) => err instanceof CrowdyTimeoutError,
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});

@@ -120,6 +120,80 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.9.0: the input log says what it lost, and when to retry
+
+Additive. **Needs the Game API release after v2.40.2** (`InputLogSession.missingRecords` is
+selected on every sessions read; an older Game API refuses the selection). Promote the Game API
+first on each tier.
+
+- **`missingRecords`** on every recorded session: inputs the replication server accepted that
+  never reached the log (an overloaded server or a broker outage). 0 when the recording is
+  complete as far as it is known: a lost end of the recording cannot be counted (its session
+  closes as `unrecorded` instead). Null on one recorded before the count existed. Recording is
+  best-effort, and this is how a gap shows.
+- **Three end reasons** in `endReason`: `logging_off` (replay logging was turned off during the
+  session), `shutdown` (the replication server recording it stopped, a deploy; the client
+  reconnects to another server, where the same session continues and its end is replaced), and
+  `paused` (recording paused because the app's logging setting could not be confirmed; the
+  client sees nothing, and a later record reopens the session). `unrecorded` (no end was
+  recorded; closed an hour after its last input) comes with the same Game API release.
+- **Reads say when to retry.** `messages` throws `INPUT_LOG_TEMPORARILY_UNAVAILABLE` when the log
+  cannot be read right now (it used to answer an empty page, or `INPUT_LOG_UNAVAILABLE`). A server
+  runs one read per user, and two per app and per org, at a time: a read over that share waits
+  for an earlier one within its own few-second deadline, and `INPUT_LOG_RATE_LIMITED` means the
+  wait ran out. Both carry `extensions.retryable`: retry with the same cursor after a short
+  back-off, a bounded number of times. A read whose request is closed stops and frees its
+  share: pass `signal` in the options of `sessions` / `messages` (new) and abort a read nobody
+  will see, say when the user opens another session. An operation may select
+  `inputLogMessages` only once.
+- **A `signal` keeps the request timeout.** A `signal` passed to a request
+  (`client.gql.request(document, variables, { signal })`, and the input log's new option) used
+  to replace the client's timeout, so a request with one could wait for ever, and an abort
+  rejected as `CrowdyTimeoutError`. It now runs alongside the timeout, and aborting rejects with
+  the signal's reason.
+- **A cursor belongs to its session.** `BAD_USER_INPUT` for a malformed cursor or one from another
+  session (until this Game API, a cursor from another session was not detected and the read just
+  returned fewer inputs).
+- **`apps.update(appId, { replayLoggingEnabled: true })`** needs a spendable balance that covers
+  the projected cost of keeping one retention period of the app's recent traffic; the
+  `INPUT_LOG_FUNDS_NEEDED` refusal's `extensions.requiredMicrousd` and `spendableMicrousd` say how
+  much. Recordings already kept go on billing after logging is turned off, until they age out.
+
+Paging a session, the loop that does not stop early:
+
+```ts
+import { CrowdyGraphQLError, decodeBase64 } from '@crowdedkingdoms/crowdyjs';
+
+const RETRY = new Set(['INPUT_LOG_TEMPORARILY_UNAVAILABLE', 'INPUT_LOG_RATE_LIMITED']);
+const MAX_RETRIES = 8; // in a row, about half a minute of back-off; then give up
+const reading = new AbortController(); // abort() when the user moves on
+let after: string | undefined;
+for (let backoffMs = 250, retries = 0; ; ) {
+  let page;
+  try {
+    page = await game.inputLog.messages(appId, gameTokenId, {
+      first: 200,
+      after,
+      signal: reading.signal,
+    });
+  } catch (err) {
+    if (!(err instanceof CrowdyGraphQLError) || !RETRY.has(String(err.code))) throw err;
+    if (++retries > MAX_RETRIES) throw err;
+    await new Promise((r) => setTimeout(r, backoffMs));
+    backoffMs = Math.min(backoffMs * 2, 5_000);
+    continue; // the same cursor: nothing is skipped
+  }
+  backoffMs = 250;
+  retries = 0;
+  for (const { node } of page.edges) handle(node.messageType, decodeBase64(node.body));
+  if (!page.pageInfo.hasNextPage) break;
+  after = page.pageInfo.endCursor ?? after;
+}
+```
+
+Nothing in the SDK changed shape; the regenerated types add `missingRecords` and the refreshed
+descriptions.
+
 ## 18.8.0: builds report the SDK version they compiled against
 
 Additive, with one new floor: **the build documents select `ExecBuild.sdkVersion`, so 18.8.0
@@ -230,15 +304,20 @@ Additive. An app with replay logging on has its client inputs recorded, and `cli
 reads them back on the app-scoped client:
 
 ```ts
-const { edges, pageInfo } = await game.inputLog.sessions(appId, { first: 20 });
+const { edges } = await game.inputLog.sessions(appId, { first: 20 });
+const gameTokenId = edges[0].node.gameTokenId;
 let after: string | undefined;
-do {
-  const page = await game.inputLog.messages(appId, edges[0].node.gameTokenId, { first: 200, after });
+for (;;) {
+  const page = await game.inputLog.messages(appId, gameTokenId, { first: 200, after });
   for (const { node } of page.edges) handle(node.messageType, decodeBase64(node.body));
-  after = page.pageInfo.endCursor ?? undefined;
   if (!page.pageInfo.hasNextPage) break;
-} while (after);
+  after = page.pageInfo.endCursor ?? after;
+}
 ```
+
+(Corrected in 18.9.0: the first version of this example stopped when `endCursor` came back null
+even with `hasNextPage` true, which a v2.39 Game API answers when a read cannot start in time.
+18.9.0's section has the loop with retries.)
 
 A player reads only the sessions and inputs they sent; a holder of `manage_apps` on the app reads
 every session. Keep paging while `hasNextPage` is true: a messages page can be short, or empty,
@@ -250,8 +329,8 @@ with the same cursor, when the log cannot be read right now.
 `App.replayLoggingEnabled` is selected on every app read and set with `apps.update(appId,
 { replayLoggingEnabled: true })` (`manage_apps`). Turning it on is refused with
 `INPUT_LOG_FUNDS_NEEDED` unless the org's wallet has a spendable balance or the org is exempt from
-billing, because stored input logs are billed (crowdedkingdoms.com/pricing). It needs ck-api with
-the input log (`inputLogSessions`, `inputLogMessages`).
+billing, because stored input logs are billed (crowdedkingdoms.com/pricing). It needs ck-api v2.39.0 or later: every app read selects
+`replayLoggingEnabled`, which an older Game API refuses.
 
 ## 18.5.0: channel messages limited by distance
 
