@@ -8,6 +8,7 @@ mutation RevokeAppAccess($appId: BigInt!, $userId: BigInt!) {
     grantedBy
     subscriptionId
     expiresAt
+    suspendedUntil
     createdAt
     updatedAt
   }

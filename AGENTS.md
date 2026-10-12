@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.4.1** (18.0.0 was published only as
+**Current package:** `package.json` is **18.7.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,70 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.9.0: the input log says what it lost, and when to retry (2026-10-10).** Selects
+`InputLogSession.missingRecords`, so it needs the Game API release after v2.40.2 (cks-game-api
+#497 to #499) on the tier: merge it once that release is deployed on `dev`, with `schema.gql`
+re-synced from `dev`'s. Docs only otherwise: the end reasons `logging_off`, `shutdown` and
+`paused`, `INPUT_LOG_TEMPORARILY_UNAVAILABLE` and `INPUT_LOG_RATE_LIMITED` (retryable, same
+cursor; a read over its share waits for the earlier one first), cursors bound to their session,
+the funds refusal's amounts, the paging loop on `hasNextPage` with a back-off (MIGRATION.md; the
+18.6.0 example stopped early), and the README's server-compatibility table. No new method, so
+CrowdyCPP and CrowdyPy have no surface to mirror; they port `missingRecords` from this release's
+dev tag. (Drafted as 18.8.0, which #225 took for `ExecBuild.sdkVersion`.)
+
+**18.8.0: `ExecBuild.sdkVersion` (the Minecraft mod's updated asks, 2026-10-10).** The
+`ExecBuildFields` fragment selects `sdkVersion`, the SDK version the platform compiled a build
+against; the `ExecBuild` type and the mapper take it from the fragment. Needs ck-api v2.40.2
+(older APIs refuse the selection in every build call).
+
+**18.7.0: voice helpers, channel audio, opcode 140, wide voxels, self-echo, pause and access
+refusals (the Minecraft mod's platform asks, 2026-10-10).** Needs the ck-api release after v2.39.0
+(the token mutations select `runtimeGate`) and Buddy v0.37.0 for channel audio and the voxel echo.
+`media/voice-frames.ts` is an optional voice payload convention: a 10-byte
+header (version 1, codec 0 raw / 1 Opus 48 kHz / 2 µ-law 8 kHz, `u16` seq, `u32` timestamp,
+frameMs, talk-spurt flags), `VoicePacketizer` and `VoiceJitterBuffer` (per sender key; 60 ms
+target delay, gaps, late drops, 64 frames a sender, starts over on a talk spurt or 200 ms of
+silence). `test/unit/fixtures/voice-frames.json` is the case set CrowdyCPP copies byte for byte
+(`tools/parity/fixtures/voice-frames.json`, held to the pin by its parity test) and replays: a
+behaviour change edits the fixture and both replays. No codec ships; browsers use WebCodecs.
+Opcode 140 (`GENERIC_SPATIAL_1`) reaches `genericSpatial` (handler, bus key, metrics kind) on the
+**binary relay only**: the GraphQL union has no member for it and nothing was added to the schema.
+`ChunkStore` keeps an edit the one-byte 16³ grid cannot hold (type outside 0-255, position outside
+0-15) in `CachedChunk.overlay` instead of truncating or aliasing it, and `createGridHostCalls`
+takes `voxelBounds` (default 0-15 / 0-255). Channel audio: `udp.sendChannelAudio` (opcode 35 =
+opcode 17's builder with type 35, `serializeChannelFrame` in `binary-wire.ts`, else the mutation)
+and opcode 36 parsed like 18 into `ChannelAudioNotification` (handler / bus key `channelAudio`).
+`ChannelAudioNotification` is the generated union member (cks-game-api `feat/mc-platform-asks`
+added it to `udpNotifications`); `UdpNotifications.graphql` selects it, so the GraphQL transport
+reaches the same `channelAudio` handler and the subscription needs a game API that has it. UDP
+error 33 is `APP_PAUSED`.
+`assertVoxelEdit` is the one int16 / 1,024-byte state check for `sendVoxelUpdate` and
+`ChunkStore.setVoxel`. `ChunkStore` keeps pending local edits per voxel for 10 s and applies an
+echo of one only when a foreign edit came in between and no newer local edit is pending
+(`test/unit/chunk-store-echo.test.mjs`). `errors.ts` adds `actorExistsOf`, `accessRefusalOf`,
+`appPausedOf`, `isAppPaused`; `portal.ts` selects `runtimeGate` (identity path: security review
+before the PR). CrowdyCPP 0.60.0 mirrors all of it; its wire_test and
+`test/unit/channel-audio.test.mjs` pin the same opcode 35 bytes.
+
+**18.6.0: the input log (2026-10-09).** `client.inputLog.sessions` / `messages` wrap cks-game-api's
+`inputLogSessions` / `inputLogMessages`: the client inputs recorded for an app with replay logging on
+(`App.replayLoggingEnabled`, now selected on every app read and set with `apps.update`). Both are game
+plane (app-scoped token, the app's datacenter): a player reads their own, `manage_apps` reads every
+session. A messages page can be short while `hasNextPage` is true, so the docs say to keep paging.
+Turning logging on is refused with `INPUT_LOG_FUNDS_NEEDED` without a spendable wallet or a billing
+exemption. The schema is cks-game-api's input-log branch; release it only after that merges to `dev`
+and re-sync from `dev`'s `schema.gql`.
+
+**18.5.0: distance-limited channel messages (2026-10-09).** `udp.sendRangedChannelMessage` wraps
+cks-game-api's `sendRangedChannelMessage` and, on the binary relay, serializes Buddy's opcode 32
+(`serializeRangedChannelMessage`): a channel publish that only members with a live actor within
+`maxDistance` chunks of an origin chunk receive (Euclidean between chunk coordinates, boundary
+included, 0 to 2147483647). Members receive the ordinary `channelMessage` notification, so an older
+SDK on the receiving side needs nothing. It needs ck-api with the mutation and Buddy v0.35.0; an older
+Buddy drops opcode 32 silently. The uplink fixture comes from cks-game-api's generator, and the golden
+vector in `binary-wire.test.mjs` is the one Buddy, CrowdyCPP and CrowdyPy pin. The schema is the game
+API's branch with the mutation (it also carries `dev`'s rate-card bands).
 
 **18.4.1: graphql-codegen 7 (2026-10-09).** Dependabot #215's majors (codegen cli 7, typescript 6,
 typescript-operations 6, typed-document-node 7). Codegen writes two files now (see `codegen.ts`), and the
@@ -503,6 +567,7 @@ not a running service and is not a schema source; gameplay data lives in
   | `CROWDY_OWNER_EMAIL` / `_PASSWORD` | `infra-cp/<tier>/org-admin/crowdedkingdomstudios` |
   | `CROWDY_OPERATOR_EMAIL` / `_PASSWORD` | `infra-cp/<tier>/admin/ck-operator` |
   | `CROWDY_TEST_APP_ID` | a real app id — **never leave this unset** |
+  | `CROWDY_PROVISIONING_TOKEN` | dev and test only: the `harness` token, `infra-cp/<tier>/loadtest/provisioning-token-harness` (`.token`). Dev and test are staff-only, so the suite's new `crowdy-e2e-*@test.invalid` players are refused without it; sent on `register` only |
 
   plus the app's Studio-agent policy, which a rebuilt tier leaves fail-closed:
   `infra-control-plane/scripts/ops/enable-studio-agent.sh --tier <tier> --app-id <id>`.
@@ -636,7 +701,7 @@ reference consumer of the hosted flow.
 | Parties, guilds, chat rooms | `kit(appId).social` |
 | Client-side simulation authority | `host.heartbeat`; the hub decides from its caller |
 | Tier-gated features | `appAccess.defineFeature` / `grantTierFeature`; a hub reads `players.features` |
-| Voice / chat / guilds | `udp.sendAudioPacket`; `udp.sendTextPacket`; `channels.*`; `teams.*` |
+| Voice / chat / guilds | `udp.sendAudioPacket` (optionally framed with `VoicePacketizer`, played back through `VoiceJitterBuffer`); `udp.sendTextPacket`; `channels.*`; `teams.*` |
 | Land claims | `gameApps.createGrid` / `grantPermissions` |
 | Players' code on their grids | ck-exec mods (`exec.modBuild` / `modDeploy`) and their CLIENT halves (`exec.modClientBuild` / `modClientDeploy`); visitors run a grid's with `ExecClientHalves` (`PlayerCodeBroker`, `createGridHostCalls`) |
 | Direct player-to-player | `udp.sendSingleActorMessage` |

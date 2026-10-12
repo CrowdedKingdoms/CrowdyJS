@@ -9,6 +9,11 @@ query GameClientBootstrap($appId: BigInt!) {
     maxReplicationDistance
     maxDecayRate
     sequenceNumberModulo
+    runtimeGate {
+      status
+      reason
+    }
+    wildernessWritesOpen
     udpProxyConnectionStatus {
       connected
       serverIp6

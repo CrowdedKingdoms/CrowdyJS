@@ -8,6 +8,7 @@ query MyAppAccess($appId: BigInt!) {
     grantedBy
     subscriptionId
     expiresAt
+    suspendedUntil
     createdAt
     updatedAt
   }

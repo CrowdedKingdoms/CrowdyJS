@@ -26,6 +26,10 @@ import {
   type SendSingleActorMessageMutationVariables,
   SendChannelMessageDocument,
   type SendChannelMessageMutationVariables,
+  SendChannelAudioDocument,
+  type SendChannelAudioMutationVariables,
+  SendRangedChannelMessageDocument,
+  type SendRangedChannelMessageMutationVariables,
 } from '../generated/graphql.js';
 import type { RealtimeMetrics } from '../metrics.js';
 import { payloadBytesOf } from '../metrics.js';
@@ -34,12 +38,15 @@ import { SequenceAllocator } from '../utils.js';
 import {
   serializeActorUpdate,
   serializeAudioPacket,
+  serializeChannelAudio,
   serializeChannelMessage,
   serializeClientEvent,
+  serializeRangedChannelMessage,
   serializeSingleActorMessage,
   serializeTextPacket,
   serializeVideoPacket,
   serializeVoxelUpdate,
+  assertVoxelEdit,
   type RelaySignContext,
 } from '../binary-wire.js';
 import { fragmentFrame, type VideoCodec } from '../media/video-frames.js';
@@ -373,10 +380,10 @@ export class UdpAPI {
    *     chunk is a 16x16x16 voxel cube.
    *   - `uuid` — 32-ASCII-character actor/source id (not RFC-4122).
    *   - `voxel` — `{ x, y, z }` voxel coordinates within the chunk; each is an
-   *     int16 (-32768 to 32767).
-   *   - `voxelType` — the new voxel type id.
-   *   - `voxelState` — optional voxel state blob, base64-encoded. Omit
-   *     when the voxel has no state; do not send `''`.
+   *     app-defined int16 (-32768 to 32767).
+   *   - `voxelType` — the new voxel type id, an app-defined int16.
+   *   - `voxelState` — optional voxel state blob, base64-encoded, at most
+   *     1,024 bytes decoded. Omit when the voxel has no state; do not send `''`.
    *   - `distance` — replication radius in chunk units, 0-8 (clamped); defaults
    *     to 8 for voxel updates.
    *   - `decayRate` — decay algorithm 0-5 (see {@link sendActorUpdate});
@@ -384,6 +391,8 @@ export class UdpAPI {
    *   - `sequenceNumber` — optional uint8 (0-255) correlation id.
    * @returns `true` when accepted for sending — **not** confirmation the world
    *   applied the change.
+   * @throws {RangeError} when a position or the type is not an int16, or the
+   *   state is over 1,024 bytes; nothing is sent.
    * @throws {CrowdyGraphQLError} on auth/validation failures.
    */
   async sendVoxelUpdate(
@@ -391,6 +400,7 @@ export class UdpAPI {
       voxelState?: string;
     },
   ): Promise<boolean> {
+    assertVoxelEdit(input);
     await this.awaitGameplayTokenReady();
     const viaRelay = await this.sendViaRelay((ctx) =>
       serializeVoxelUpdate(ctx, input),
@@ -800,6 +810,81 @@ export class UdpAPI {
   }
 
   /**
+   * Send audio to a channel (opcode 35, Buddy v0.37.0): delivered to every
+   * active member of the channel wherever they are (party or guild voice) as
+   * a `channelAudio` notification. The sender receives no echo. Needs the
+   * channel's `send_voice` right (`createChannel({ membersCanSpeak: true })`
+   * gives the default member role it) and the player's `use_voice_chat`;
+   * without either the server answers `UNAUTHORIZED` on `genericError`.
+   * Every member's downlink is billed as egress, so keep voice channels small.
+   *
+   * @param input - {@link ChannelMessageInput}: `channelId`, the sender's own
+   *   32-character actor `uuid`, `payload` (base64, at most 1,024 bytes; one
+   *   `VoicePacketizer` packet with the SDK voice helpers)
+   *   and an optional uint8 `sequenceNumber` for correlating a refusal.
+   * @returns `true` when accepted for sending, not confirmation of delivery.
+   * @throws {CrowdyGraphQLError} on auth/validation failures.
+   */
+  async sendChannelAudio(
+    input: SendChannelAudioMutationVariables['input'],
+  ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeChannelAudio(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('channelAudio', input);
+      return viaRelay;
+    }
+    const data = await this.gql.request(SendChannelAudioDocument, { input });
+    this.record('channelAudio', input);
+    return data.sendChannelAudio;
+  }
+
+  /**
+   * Publish a message to a channel that only members near an origin chunk
+   * receive (needs ck-api with `sendRangedChannelMessage` and Buddy v0.35.0).
+   * A member receives it, through the same `channelMessage` handler as
+   * {@link sendChannelMessage}, when one of its live actors is in `appId`
+   * within `maxDistance` chunks of `chunk`, measured as the straight-line
+   * distance between chunk coordinates, boundary included. A member with no
+   * live actor does not receive it. Same send right as `sendChannelMessage`;
+   * the sender receives no echo.
+   *
+   * @param input - {@link RangedChannelMessageInput}:
+   *   - `channelId` — the channel id (`groups.group_id`) as a `BigInt` decimal
+   *     string.
+   *   - `uuid` — the sender's own actor id: exactly 32 ASCII characters.
+   *   - `payload` — message body, base64-encoded; opaque to the server, max
+   *     1024 bytes.
+   *   - `appId` — the origin's app; must be this token's app.
+   *   - `chunk` — the origin chunk `{ x, y, z }` (`BigInt` decimal strings),
+   *     usually the sender's own chunk.
+   *   - `maxDistance` — integer chunks, 0 (the origin chunk only) to
+   *     2147483647. Not the 0-8 Chebyshev ring count spatial sends take.
+   *   - `sequenceNumber` — optional uint8 (0-255) correlation id.
+   * @returns `true` when accepted for sending — **not** confirmation of
+   *   delivery. A refusal (no send right: `UNAUTHORIZED`; another app:
+   *   `INVALID_APP_ID`) arrives as a `genericError` notification.
+   * @throws {CrowdyGraphQLError} on auth/validation failures.
+   */
+  async sendRangedChannelMessage(
+    input: SendRangedChannelMessageMutationVariables['input'],
+  ): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
+    const viaRelay = await this.sendViaRelay((ctx) =>
+      serializeRangedChannelMessage(ctx, input),
+    );
+    if (viaRelay !== null) {
+      this.record('rangedChannelMessage', input);
+      return viaRelay;
+    }
+    const data = await this.gql.request(SendRangedChannelMessageDocument, { input });
+    this.record('rangedChannelMessage', input);
+    return data.sendRangedChannelMessage;
+  }
+
+  /**
    * Subscribe to udpNotifications for a single app. Pass any combination of
    * typename handlers; the returned function detaches all of them. The first
    * subscriber opens the shared WebSocket; the last one to leave closes it.
@@ -816,9 +901,9 @@ export class UdpAPI {
    *
    * @param handlers - {@link UdpNotificationHandlers}: optional per-typename
    *   callbacks (`actorUpdate`, `voxelUpdate`, `audio`, `text`, `clientEvent`,
-   *   `singleActorMessage`, `channelMessage`, `genericError`, `connectionEvent`,
-   *   etc.) plus `any` (every notification) and `error` (a
-   *   {@link CrowdyRealtimeError}).
+   *   `singleActorMessage`, `channelMessage`, `channelAudio`, `genericError`, `connectionEvent`,
+   *   etc.; `genericSpatial` fires on the binary relay only) plus `any` (every
+   *   notification) and `error` (a {@link CrowdyRealtimeError}).
    * @param appId - The app to scope delivery to (`BigInt` as a decimal string).
    *   Required.
    * @returns An unsubscribe function that detaches these handlers (and closes

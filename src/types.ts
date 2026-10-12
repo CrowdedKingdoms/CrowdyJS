@@ -126,7 +126,7 @@ export interface VoxelCoordinatesInput {
  * - `GamertagAlreadyExists` — the requested gamertag is already taken.
  */
 export { UdpErrorCode } from './generated/graphql.js';
-import type { UdpErrorCode } from './generated/graphql.js';
+import type { UdpErrorCode, UdpNotificationsSubscription } from './generated/graphql.js';
 
 // User types
 /**
@@ -735,6 +735,52 @@ export interface ServerEventNotification {
 }
 
 /**
+ * An app-defined spatial message (`GENERIC_SPATIAL_1`, opcode 140) from a nearby client or a
+ * hub: the server fans it out like any spatial message and never reads `payload` (CrowdyCPP
+ * sends one with `Connection::sendGenericSpatial`). Delivered on the binary relay only
+ * (`realtime: { binaryTransport: true }`): the GraphQL `udpNotifications` union has no member for
+ * it, so a client on the GraphQL transport does not receive these.
+ */
+export interface GenericSpatialNotification {
+  /** Discriminator for the {@link UdpNotification} union. */
+  __typename: 'GenericSpatialNotification';
+  /** Id of the app the message is in ({@link BigInt} decimal string). */
+  appId: BigInt;
+  /** X coordinate of the message's chunk ({@link BigInt} int64 decimal string). */
+  chunkX: BigInt;
+  /** Y coordinate of the message's chunk ({@link BigInt} int64 decimal string). */
+  chunkY: BigInt;
+  /** Z coordinate of the message's chunk ({@link BigInt} int64 decimal string). */
+  chunkZ: BigInt;
+  /** Chunk replication distance (`0`–`8`) from the original message. */
+  distance: number;
+  /** Decay algorithm (`0`–`5`) from the original message. */
+  decayRate: number;
+  /** The 32-ASCII-character actor id the sender put on the message. */
+  uuid: string;
+  /** The app-defined payload, base64-encoded (decode with {@link decodeBase64}). */
+  payload: string;
+  /** The sender's sequence number for this message (`0`–`255`). */
+  sequenceNumber: number;
+  /** Server-generated timestamp in epoch milliseconds ({@link BigInt} string). */
+  epochMillis: BigInt;
+}
+
+/**
+ * Channel audio from another member of a channel you belong to (opcode 36,
+ * Buddy v0.37.0), delivered wherever you are, on the binary relay and on the
+ * GraphQL `udpNotifications` subscription alike: `channelId`, the sender's
+ * `uuid`, `audioData` (base64, at most 1,024 bytes decoded), `sequenceNumber`
+ * and `epochMillis`. `audioData` is opaque to the server; with the SDK voice
+ * helpers it is one {@link VoicePacketizer} packet. The sender receives no echo.
+ * The generated member of the subscription's union.
+ */
+export type ChannelAudioNotification = Extract<
+  NonNullable<UdpNotificationsSubscription['udpNotifications']>,
+  { __typename?: 'ChannelAudioNotification' }
+>;
+
+/**
  * Asynchronous error for a previously sent datagram (e.g. a `send*` request).
  * Delivered as a member of the {@link UdpNotification} union on the
  * subscription — **not** as a GraphQL error on the mutation. Match it to the
@@ -773,6 +819,8 @@ export type UdpNotification =
   | ClientTextNotification
   | ClientEventNotification
   | ServerEventNotification
+  | GenericSpatialNotification
+  | ChannelAudioNotification
   | GenericErrorResponse;
 
 // Client Configuration
@@ -819,6 +867,10 @@ export type ClientTextHandler = (notification: ClientTextNotification) => void;
 export type ClientEventHandler = (notification: ClientEventNotification) => void;
 /** Callback for a {@link ServerEventNotification} (server-originated spatial event). */
 export type ServerEventHandler = (notification: ServerEventNotification) => void;
+/** Callback for a {@link GenericSpatialNotification} (an app-defined spatial message, opcode 140). */
+export type GenericSpatialHandler = (notification: GenericSpatialNotification) => void;
+/** Callback for a {@link ChannelAudioNotification} (channel audio, opcode 36). */
+export type ChannelAudioHandler = (notification: ChannelAudioNotification) => void;
 /** Callback for a {@link GenericErrorResponse} (async error for a prior send). */
 export type GenericErrorHandler = (response: GenericErrorResponse) => void;
 
