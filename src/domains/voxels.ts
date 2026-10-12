@@ -35,7 +35,8 @@ import {
  *
  * Coordinate & encoding conventions:
  * - **Chunk coordinates** are int64 **decimal strings**; **voxel positions**
- *   (`location`) are signed 16-bit ints, `0-15` per axis for in-bounds voxels.
+ *   (`location`) and voxel types are app-defined signed 16-bit ints; an app on
+ *   the 16x16x16 dense grid uses `0-15` per axis and types `0-255`.
  * - `appId` / `userId` are `BigInt` sent and received as decimal strings.
  * - Voxel `state` blobs are **base64-encoded** binary.
  *
@@ -98,8 +99,8 @@ export class VoxelsAPI {
    * grids cover the chunk, `update_voxel_data` on a covering grid).
    *
    * @param input - {@link UpdateVoxelInput}: `appId`, chunk `coordinates`, the
-   *   local voxel `location` (`0-15` per axis), the `voxelType` to write
-   *   (`0-255`), and an optional base64 `state` blob.
+   *   local voxel `location` and the `voxelType` to write (app-defined
+   *   int16s), and an optional base64 `state` blob (at most 1,024 bytes).
    * @returns The resulting {@link Voxel}.
    * @throws {CrowdyGraphQLError} `SCOPE_MISSING` / `FORBIDDEN` (missing
    *   `update_voxel_data`), `BAD_USER_INPUT`, or `UNAUTHENTICATED`.

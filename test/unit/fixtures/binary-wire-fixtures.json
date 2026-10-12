@@ -142,6 +142,23 @@
         "sequenceNumber": 33
       },
       "bytesHex": "11b168de3a000000006163746f722d30313233343536373839616263646566303132333435363738390f006368616e6e656c2d7061796c6f61640176952a1798cc0db90d09046029692bbfe5a9299aa6af2f4b8a33b8e00ff2b84115cd5b070000000021"
+    },
+    {
+      "kind": "rangedChannelMessage",
+      "input": {
+        "channelId": "987654321",
+        "uuid": "actor-0123456789abcdef0123456789",
+        "payload": "cmFuZ2VkLXBheWxvYWQ=",
+        "appId": "42",
+        "chunk": {
+          "x": "3",
+          "y": "-2",
+          "z": "7"
+        },
+        "maxDistance": 12,
+        "sequenceNumber": 34
+      },
+      "bytesHex": "20b168de3a000000006163746f722d30313233343536373839616263646566303132333435363738392a000000000000000300000000000000feffffffffffffff07000000000000000c0000000e0072616e6765642d7061796c6f616401d267f8843637856bc224a652a7eab03c8fbf5c9622ce941cc4051493e408623915cd5b070000000022"
     }
   ],
   "downlink": [

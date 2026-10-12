@@ -115,7 +115,12 @@ export class GridScope {
       this.clients.grids.channels(this.appId, this.gridId),
     create: (
       name: string,
-      options: { description?: string; membershipPolicy?: string; membersCanSend?: boolean } = {},
+      options: {
+        description?: string;
+        membershipPolicy?: string;
+        membersCanSend?: boolean;
+        membersCanSpeak?: boolean;
+      } = {},
     ) =>
       this.clients.grids.createChannel({
         appId: this.appId,
@@ -130,6 +135,13 @@ export class GridScope {
         channelId,
         uuid,
         payload: payloadBase64,
+      }),
+    /** Channel audio (opcode 35): needs `send_voice` on the channel and the player's `use_voice_chat`. */
+    sendAudio: (channelId: string, uuid: string, audioBase64: string) =>
+      this.clients.udp.sendChannelAudio({
+        channelId,
+        uuid,
+        payload: audioBase64,
       }),
   };
 

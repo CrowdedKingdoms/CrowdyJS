@@ -199,7 +199,8 @@ export class GraphQLClient {
    * @param variables - Variables for the operation; omit for operations that
    *   take none.
    * @param options - Optional `signal` to abort the request from your own
-   *   `AbortController` (in addition to the built-in timeout).
+   *   `AbortController` (in addition to the built-in timeout). Aborting it rejects
+   *   with the signal's reason, not a {@link CrowdyTimeoutError}.
    * @returns The operation's `data` payload.
    * @throws {CrowdyHttpError} on a non-2xx HTTP status.
    * @throws {CrowdyGraphQLError} when the response carries a non-empty
@@ -294,9 +295,18 @@ export class GraphQLClient {
     options: { signal?: AbortSignal },
   ): Promise<T> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.timeout);
+    // The caller's signal is followed as well as the timeout, never instead of it.
+    const caller = options.signal;
+    const followCaller = () => controller.abort(caller?.reason);
+    if (caller?.aborted) followCaller();
+    else caller?.addEventListener('abort', followCaller, { once: true });
     const token = this.session.getToken();
-    const signal = options.signal ?? controller.signal;
+    const signal = controller.signal;
     const lbCookie = this.lbCookieStore?.headerValue();
 
     try {
@@ -348,6 +358,7 @@ export class GraphQLClient {
       return result.data;
     } catch (error) {
       clearTimeout(timeoutId);
+      if (!timedOut && caller?.aborted) throw caller.reason ?? error;
       if (error instanceof Error && error.name === 'AbortError') {
         throw new CrowdyTimeoutError(this.timeout);
       }
@@ -359,6 +370,8 @@ export class GraphQLClient {
       }
       this.logger.error?.('GraphQL request failed', error);
       throw new CrowdyNetworkError(error);
+    } finally {
+      caller?.removeEventListener('abort', followCaller);
     }
   }
 }

@@ -1,10 +1,12 @@
 export {
   clientHalfActorUuid,
   createGridHostCalls,
+  DEFAULT_GRID_VOXEL_BOUNDS,
   GRID_PERMISSION_CHECK_KEYS,
   GridHostCallRefused,
   type GridHostCallsOptions,
   type GridHostLocal,
+  type GridVoxelBounds,
 } from './grid-host-calls.js';
 export {
   startGridMod,

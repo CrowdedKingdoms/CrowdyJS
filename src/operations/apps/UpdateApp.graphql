@@ -9,6 +9,8 @@ mutation UpdateApp($appId: BigInt!, $input: UpdateAppInput!) {
     status
     metadata
     wildernessWritesOpen
+    replayLoggingEnabled
+    claimOwnerKeys
     updatedAt
   }
 }

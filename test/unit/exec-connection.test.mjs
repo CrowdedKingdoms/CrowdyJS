@@ -332,8 +332,9 @@ test('starters, build and waitForBuild pass their arguments through and drop __t
     __typename: 'ExecBuildArtifact', crate: 'world-tick', digest: 'ab'.repeat(32), sizeBytes: 9,
     capabilitySummaryJson: null, capabilityHash: null, tickIntervalMs: null,
   }];
-  const fields = { __typename: 'ExecBuild', buildId: 'b1', kind: 'exec', log: null, createdAt: 't', startedAt: null, finishedAt: null };
+  const fields = { __typename: 'ExecBuild', buildId: 'b1', kind: 'exec', log: null, sdkVersion: null, createdAt: 't', startedAt: null, finishedAt: null };
   const statuses = ['queued', 'building', 'succeeded'];
+  const selected = new Map();
   const answers = {
     ExecStarters: () => ({
       execStarters: {
@@ -343,12 +344,14 @@ test('starters, build and waitForBuild pass their arguments through and drop __t
       },
     }),
     ExecBuild: () => ({ execBuild: { ...fields, status: 'queued', artifacts: [] } }),
-    ExecBuildStatus: () => ({ execBuildStatus: { ...fields, status: statuses.shift(), artifacts } }),
+    ExecBuildStatus: () => ({ execBuildStatus: { ...fields, sdkVersion: '0.9.0', status: statuses.shift(), artifacts } }),
   };
   const exec = new ExecAPI({
     request: async (doc, vars) => {
       const name = doc.definitions.find((d) => d.kind === 'OperationDefinition').name.value;
       seen.push([name, vars]);
+      const build = doc.definitions.find((d) => d.kind === 'FragmentDefinition' && d.name.value === 'ExecBuildFields');
+      if (build) selected.set(name, build.selectionSet.selections.map((s) => s.name.value));
       return answers[name]();
     },
   });
@@ -359,9 +362,13 @@ test('starters, build and waitForBuild pass their arguments through and drop __t
     { name: pack.starters[0].crate, files: pack.starters[0].files },
     { name: 'mine', files: { 'Cargo.toml': 'm', 'src/lib.rs': 'l' } },
   ]);
-  assert.deepEqual(queued, { buildId: 'b1', status: 'queued', kind: 'exec', log: null, createdAt: 't', startedAt: null, finishedAt: null, artifacts: [] });
+  assert.deepEqual(queued, { buildId: 'b1', status: 'queued', kind: 'exec', log: null, sdkVersion: null, createdAt: 't', startedAt: null, finishedAt: null, artifacts: [] });
   const done = await exec.waitForBuild('77', 'b1', { intervalMs: 1 });
   assert.equal(done.status, 'succeeded');
+  // The SDK the platform compiled against, which no version in the crate decides (ck-api v2.40.2).
+  assert.equal(done.sdkVersion, '0.9.0');
+  assert.ok(selected.get('ExecBuild').includes('sdkVersion'));
+  assert.ok(selected.get('ExecBuildStatus').includes('sdkVersion'));
   assert.deepEqual(done.artifacts, [{
     crate: 'world-tick', digest: 'ab'.repeat(32), sizeBytes: 9,
     capabilitySummaryJson: null, capabilitySummary: null, capabilityHash: null, tickIntervalMs: null,
