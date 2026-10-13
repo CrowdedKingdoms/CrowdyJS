@@ -34,6 +34,7 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.10.0 | the release after v2.43.1 (channel and team bans); the access-ended close needs ck-exec 0.16 |
 | 18.9.0 | the release after v2.40.2 (`InputLogSession.missingRecords`) |
 | 18.8.0 | v2.40.2 or later (`ExecBuild.sdkVersion`) |
 | 18.7.0 | v2.40.0 or later (`runtimeGate`, channel audio) |

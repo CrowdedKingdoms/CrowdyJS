@@ -1,0 +1,3 @@
+mutation UnbanTeamMember($groupId: BigInt!, $userId: BigInt!) {
+  unbanTeamMember(groupId: $groupId, userId: $userId)
+}
