@@ -120,6 +120,29 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.10.0: bans, the access-ended close, and the block and ban codes
+
+Additive. **Needs the Game API release after v2.43.1** for the ban operations (an older Game
+API refuses `banChannelMember` and the other three). The access-ended close needs ck-exec 0.16
+on the tier's hosts; against an older host nothing changes. Promote the Game API and ck-exec
+first on each tier.
+
+- **Bans.** `client.channels.ban(groupId, userId, reason?)` and `unban(groupId, userId)`, and
+  `client.teams.ban` / `unban` alike, take the `manage_members` permission on the group. A banned
+  player is removed, and joining, requesting to join or being added refuses with
+  `GROUP_MEMBER_BANNED` until a manager unbans them; leaving or being removed does not lift a
+  ban. Read the refusal with `groupMemberBannedOf(error)`.
+- **A blocked account.** A platform administrator can block an account across every app and
+  Crowd Altar; every call it makes then refuses with `ACCOUNT_BLOCKED` (HTTP 403), and sign-in
+  refuses after the password check. `accountBlockedOf(error)` answers `{ blockedUntil }` for a
+  timed block (null for an indefinite one). Show the player the refusal; retrying will not help
+  until the block ends.
+- **The access-ended close.** When a player's access to an app ends (suspended, revoked,
+  blocked, or an expired grant), ck-exec closes their sessions with `EXEC_CLOSE_ACCESS_ENDED`
+  (4403). `ExecConnection` treats it as final: it does not reconnect, pending calls fail
+  `Denied`, and `onAccessEnded(listener)` hears the reason the host gave. A token minted before
+  the cut is refused for 90 seconds even if the player regains access; mint a new one.
+
 ## 18.9.0: the input log says what it lost, and when to retry
 
 Additive. **Needs the Game API release after v2.40.2** (`InputLogSession.missingRecords` is

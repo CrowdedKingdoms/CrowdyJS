@@ -1,0 +1,3 @@
+mutation UnbanChannelMember($groupId: BigInt!, $userId: BigInt!) {
+  unbanChannelMember(groupId: $groupId, userId: $userId)
+}

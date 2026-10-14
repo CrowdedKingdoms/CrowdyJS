@@ -1,0 +1,16 @@
+mutation BanTeamMember($groupId: BigInt!, $userId: BigInt!, $reason: String) {
+  banTeamMember(groupId: $groupId, userId: $userId, reason: $reason) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}

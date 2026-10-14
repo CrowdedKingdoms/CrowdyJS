@@ -43,6 +43,10 @@ import {
   type AddTeamMemberMutationVariables,
   RemoveTeamMemberDocument,
   type RemoveTeamMemberMutationVariables,
+  BanTeamMemberDocument,
+  type BanTeamMemberMutationVariables,
+  UnbanTeamMemberDocument,
+  type UnbanTeamMemberMutationVariables,
   SetTeamMemberRolesDocument,
   type SetTeamMemberRolesMutation,
   type SetTeamMemberRolesMutationVariables,
@@ -381,6 +385,49 @@ export class TeamsAPI {
   ): Promise<boolean> {
     const data = await this.gql.request(RemoveTeamMemberDocument, { groupId, userId });
     return data.removeTeamMember;
+  }
+
+  /**
+   * Ban a user from this team: their membership (or a new one, for someone not yet in it)
+   * becomes `banned` and their roles go.
+   * Joining, requesting to join and being added are then refused with
+   * `GROUP_MEMBER_BANNED` until {@link unban}; leaving or being removed does not lift it.
+   * Requires the `manage_members` team permission (app admins bypass). Never the
+   * team's owner, never yourself.
+   *
+   * @param groupId - The team, as a decimal `BigInt` string.
+   * @param userId - The user to ban, as a decimal `BigInt` string.
+   * @param reason - Why, for the team's managers (at most 500 characters); not shown to
+   *   the banned user.
+   * @returns The banned membership (`status: 'banned'`).
+   * @throws {CrowdyGraphQLError} `FORBIDDEN` without `manage_members` (or for the owner),
+   *   `BAD_REQUEST` for yourself or a reason over 500 characters.
+   */
+  async ban(
+    groupId: BanTeamMemberMutationVariables['groupId'],
+    userId: BanTeamMemberMutationVariables['userId'],
+    reason?: string,
+  ) {
+    const data = await this.gql.request(BanTeamMemberDocument, {
+      groupId,
+      userId,
+      reason: reason ?? null,
+    });
+    return data.banTeamMember;
+  }
+
+  /**
+   * Lift a ban, so the user may join or be added again (nothing is restored). Requires the
+   * `manage_members` team permission (app admins bypass).
+   *
+   * @returns `true` if there was a ban.
+   */
+  async unban(
+    groupId: UnbanTeamMemberMutationVariables['groupId'],
+    userId: UnbanTeamMemberMutationVariables['userId'],
+  ): Promise<boolean> {
+    const data = await this.gql.request(UnbanTeamMemberDocument, { groupId, userId });
+    return data.unbanTeamMember;
   }
 
   /**
