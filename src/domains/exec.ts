@@ -426,12 +426,20 @@ export function execGatewayRefusal(gameApiUrl: string, gatewayUrl: string): stri
 }
 
 /**
+ * The close code a host ends a session with when the player's access ended: a suspension, a
+ * revoke, a logout or an account block (ck-exec 0.16). Final: the connection does not
+ * reconnect, and {@link ExecConnection.onAccessEnded} listeners hear the reason.
+ */
+export const EXEC_CLOSE_ACCESS_ENDED = 4403;
+
+/**
  * A gateway's close as an error. 4401 is how a gateway before ck-exec 0.10.0 refused a token:
- * it upgraded, then closed, so a call already in flight learns of it here.
+ * it upgraded, then closed, so a call already in flight learns of it here. 4403 is access
+ * ending, also `Denied`.
  */
 function closedError(ev: { code: number; reason?: string }): CrowdyExecError {
   return new CrowdyExecError(
-    ev.code === 4401 ? 'Denied' : 'Unavailable',
+    ev.code === 4401 || ev.code === EXEC_CLOSE_ACCESS_ENDED ? 'Denied' : 'Unavailable',
     `the gateway closed the connection (${ev.code}${ev.reason ? `: ${ev.reason}` : ''})`,
   );
 }
@@ -497,6 +505,7 @@ export class ExecConnection {
   private closed = false;
   private backoffMs = 250;
   private readonly reconnectListeners = new Set<(host: string) => void>();
+  private readonly accessEndedListeners = new Set<(reason: string) => void>();
   private readonly WS: ExecWebSocketCtor;
   private readonly callTimeoutMs: number;
 
@@ -543,6 +552,17 @@ export class ExecConnection {
   onReconnect(listener: (host: string) => void): () => void {
     this.reconnectListeners.add(listener);
     return () => this.reconnectListeners.delete(listener);
+  }
+
+  /**
+   * Called once, with the host's reason, when the host closes the connection because the
+   * player's access ended (close code {@link EXEC_CLOSE_ACCESS_ENDED}: suspended, revoked,
+   * signed out or blocked). The connection is closed for good then and does not reconnect;
+   * tell the player, and connect again only once they hold access again.
+   */
+  onAccessEnded(listener: (reason: string) => void): () => void {
+    this.accessEndedListeners.add(listener);
+    return () => this.accessEndedListeners.delete(listener);
   }
 
   /** @internal */
@@ -654,10 +674,26 @@ export class ExecConnection {
   }
 
   private onClosed(ws: WebSocket, ev?: CloseEvent): void {
-    this.rejectPending(ws, ev?.code === 4401 ? closedError(ev) : 'the connection to the execution host closed');
+    const ended = ev?.code === EXEC_CLOSE_ACCESS_ENDED;
+    this.rejectPending(
+      ws,
+      ev && (ev.code === 4401 || ended) ? closedError(ev) : 'the connection to the execution host closed',
+    );
     if (this.ws !== ws) return;
     this.ws = null;
     this.ready = null;
+    if (ended) {
+      // Final: reconnecting would only be refused again.
+      this.closed = true;
+      for (const l of this.accessEndedListeners) {
+        try {
+          l(ev?.reason ?? '');
+        } catch {
+          /* a listener's exception is its own */
+        }
+      }
+      return;
+    }
     if (!this.closed && this.options.reconnect !== false) void this.reconnect();
   }
 

@@ -452,3 +452,23 @@ test('deploy with a build names crates and uploads only the modules it was given
   );
   assert.equal(sent.length, 1, 'refused before any request');
 });
+
+test('a close with 4403 (access ended) is final: no reconnect, Denied, and onAccessEnded hears why', async (t) => {
+  const { EXEC_CLOSE_ACCESS_ENDED } = await import('../../dist/index.js');
+  assert.equal(EXEC_CLOSE_ACCESS_ENDED, 4403);
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  const { exec, dials } = api(gw);
+  const c = await exec.connect('7', opts);
+  t.after(() => c.close());
+  const reasons = [];
+  c.onAccessEnded((r) => reasons.push(r));
+  await until('the first connection', () => gw.sockets.length === 1);
+  gw.sockets[0].ws.close(4403, 'access ended: app access suspended for user 42');
+  await until('the access-ended listener', () => reasons.length === 1);
+  assert.equal(reasons[0], 'access ended: app access suspended for user 42');
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(dials.length, 1, 'it did not ask for a host again');
+  assert.equal(gw.sockets.length, 1, 'it did not reconnect');
+  await assert.rejects(c.call('arena', 'm1', 'state', {}), (e) => e instanceof CrowdyExecError);
+});

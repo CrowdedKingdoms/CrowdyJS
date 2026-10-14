@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.7.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.10.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,17 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.10.0: bans, the access-ended close, and the block and ban codes (2026-10-13).** The
+operator's rule: suspending or blocking a player cuts every access path in scope.
+`channels.ban` / `channels.unban` and `teams.ban` / `teams.unban` (the `manage_members`
+permission; a ban refuses join, request and add with `GROUP_MEMBER_BANNED` until unbanned) need
+the Game API release after v2.43.1 (cks-game-api #514) on the tier. `ExecConnection` treats a
+close with `EXEC_CLOSE_ACCESS_ENDED` (4403, ck-exec 0.16) as final: no reconnect, pending calls
+fail `Denied`, and `onAccessEnded(listener)` hears the host's reason. `accountBlockedOf`
+(`ACCOUNT_BLOCKED`, with `blockedUntil` for a timed block) and `groupMemberBannedOf` read the new
+refusals. `blockAccount`, `unblockAccount` and `accountBlock` are super-admin fields: on the
+platform-only list, not wrapped. CrowdyCPP mirrors the bans, the codes and the close.
 
 **18.9.0: the input log says what it lost, and when to retry (2026-10-10).** Selects
 `InputLogSession.missingRecords`, so it needs the Game API release after v2.40.2 (cks-game-api
