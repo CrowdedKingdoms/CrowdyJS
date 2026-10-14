@@ -93,3 +93,18 @@ test('udp.sendVoxelUpdate refuses an edit that does not fit before anything is s
   );
   assert.equal(sent, 1);
 });
+
+test('ACCOUNT_BLOCKED and GROUP_MEMBER_BANNED are read from an error or a raw payload', async () => {
+  const { accountBlockedOf, groupMemberBannedOf, ACCOUNT_BLOCKED_CODE, GROUP_MEMBER_BANNED_CODE } =
+    await import('../../dist/index.js');
+  assert.equal(ACCOUNT_BLOCKED_CODE, 'ACCOUNT_BLOCKED');
+  assert.equal(GROUP_MEMBER_BANNED_CODE, 'GROUP_MEMBER_BANNED');
+  assert.deepEqual(
+    accountBlockedOf({ extensions: { code: 'ACCOUNT_BLOCKED', blockedUntil: '2026-10-20T00:00:00.000Z' } }),
+    { blockedUntil: '2026-10-20T00:00:00.000Z' },
+  );
+  assert.deepEqual(accountBlockedOf({ extensions: { code: 'ACCOUNT_BLOCKED' } }), { blockedUntil: null });
+  assert.equal(accountBlockedOf({ extensions: { code: 'FORBIDDEN' } }), null);
+  assert.equal(groupMemberBannedOf({ extensions: { code: 'GROUP_MEMBER_BANNED' } }), true);
+  assert.equal(groupMemberBannedOf({ extensions: { code: 'ACCESS_SUSPENDED' } }), false);
+});

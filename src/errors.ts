@@ -388,6 +388,16 @@ export const ACCESS_SUSPENDED_CODE = 'ACCESS_SUSPENDED';
 export const ACCESS_NOT_GRANTED_CODE = 'ACCESS_NOT_GRANTED';
 /** `extensions.code` for "the app is paused" (HTTP 403); see {@link appPausedOf}. */
 export const APP_PAUSED_CODE = 'APP_PAUSED';
+/**
+ * `extensions.code` for "a platform operator has blocked this account" (HTTP 403), on every
+ * sign-in and every request of a blocked account; see {@link accountBlockedOf}.
+ */
+export const ACCOUNT_BLOCKED_CODE = 'ACCOUNT_BLOCKED';
+/**
+ * `extensions.code` for "this channel or team has banned the user" (HTTP 403), on a join, a
+ * request, an add or an invite; see {@link groupMemberBannedOf}.
+ */
+export const GROUP_MEMBER_BANNED_CODE = 'GROUP_MEMBER_BANNED';
 
 /**
  * Why an app is paused, as `extensions.reason` on `APP_PAUSED` and
@@ -451,6 +461,24 @@ export function accessRefusalOf(value: unknown): CrowdyAccessRefusal | null {
     return refusal;
   }
   return null;
+}
+
+/**
+ * An `ACCOUNT_BLOCKED` refusal (HTTP 403: a platform operator blocked the account), or
+ * `null`. `blockedUntil` is `extensions.blockedUntil` (ISO-8601) for a timed block, when it
+ * lapses by itself; `null` while it lasts until lifted. Not fixed by retrying; sign out and
+ * tell the player.
+ */
+export function accountBlockedOf(value: unknown): { blockedUntil: string | null } | null {
+  const entry = errorWithCode(value, ACCOUNT_BLOCKED_CODE);
+  if (!entry) return null;
+  const until = entry.extensions?.blockedUntil;
+  return { blockedUntil: typeof until === 'string' && until.length > 0 ? until : null };
+}
+
+/** Whether an error is a `GROUP_MEMBER_BANNED` refusal (HTTP 403); only an unban lifts it. */
+export function groupMemberBannedOf(value: unknown): boolean {
+  return errorWithCode(value, GROUP_MEMBER_BANNED_CODE) !== null;
 }
 
 /**

@@ -198,6 +198,132 @@ type GraphQLServer {
   updatedAt: DateTime!
 }
 
+"""
+A platform-wide block on an account, set by a super-admin. While it holds, every sign-in and every authenticated request is refused with ACCOUNT_BLOCKED, on CK and on Crowd Altar, and every session, realtime connection and ck-exec socket the account had was ended when it was set. The last block stays readable after it is lifted or lapses.
+"""
+type AccountBlock {
+  """The account."""
+  userId: BigInt!
+  """Whether the block holds now."""
+  blocked: Boolean!
+  """When the last block was set; null if the account was never blocked."""
+  blockedAt: DateTime
+  """When it lapses (or was lifted); null while it lasts until lifted."""
+  blockedUntil: DateTime
+  """Why, as the super-admin wrote it."""
+  reason: String
+  """The super-admin who set it."""
+  blockedBy: BigInt
+}
+
+"""
+A free or purchasable access tier for an app, bundling a price and the set of runtime permission keys that granted users receive.
+"""
+type AppAccessTier {
+  """Unique numeric id of the tier (primary key)."""
+  tierId: BigInt!
+  """Numeric id of the app this tier belongs to."""
+  appId: BigInt!
+  """Display name of the tier (e.g. "Free", "Pro")."""
+  name: String!
+  """
+  Sort order for displaying tiers (ascending); lower values appear first.
+  """
+  tierOrder: Float!
+  """True if the tier has no purchase cost."""
+  isFree: Boolean!
+  """
+  True if this is the app default tier (used for open-by-default / self-service grants). At most one default per app is expected.
+  """
+  isDefault: Boolean!
+  """
+  Price in the smallest currency unit (cents) for paid tiers; null for free tiers.
+  """
+  priceCents: BigInt
+  """ISO 4217 currency code for priceCents (e.g. "usd"); defaults to "usd"."""
+  currency: String
+  """
+  Billing cadence for recurring tiers (e.g. "month", "year"); null for one-time or free tiers.
+  """
+  billingPeriod: String
+  """Optional marketing description of what the tier includes."""
+  description: String
+  """
+  Runtime permission keys granted to users on this tier (a subset of runtimePermissions), e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat" (webcam; not granted by default).
+  """
+  permissionKeys: [String!]!
+  """
+  Tier lifecycle: "active" or "archived" (soft-deleted via archiveAccessTier). Defaults to "active".
+  """
+  status: String!
+  """Timestamp when the tier was created."""
+  createdAt: DateTime!
+  """Timestamp when the tier was last updated."""
+  updatedAt: DateTime!
+}
+
+"""
+A user's entitlement to a specific app: whether (and via which tier) they may access it. At most one row per (app, user).
+"""
+type AppUserAccess {
+  """Unique numeric id of this access record (primary key)."""
+  appUserAccessId: BigInt!
+  """Numeric id of the app this access applies to."""
+  appId: BigInt!
+  """Numeric id of the user this access belongs to."""
+  userId: BigInt!
+  """
+  Numeric id of the access tier granting this access; null if access was granted without a specific tier.
+  """
+  tierId: BigInt
+  """
+  Entitlement lifecycle: "active" (currently entitled) or "revoked" (access removed). Only active, non-expired rows grant runtime access. Defaults to "active".
+  """
+  status: String!
+  """
+  Who granted this access: the granting admin's numeric user id (as a string), or "system" for automatic/free-tier grants.
+  """
+  grantedBy: String!
+  """
+  External billing subscription id (e.g. Stripe/PayPal) backing a paid grant; null for free or manual grants.
+  """
+  subscriptionId: String
+  """
+  Optional expiry timestamp; access is treated as inactive once it has passed. Null means the grant does not expire.
+  """
+  expiresAt: DateTime
+  """
+  A timed suspension: while this time is in the future the player holds no access (a gameplay token is refused with ACCESS_SUSPENDED and realtime sessions end), and access returns by itself once it passes. Null when the player is not suspended. Set with suspendAppAccess, cleared with unsuspendAppAccess.
+  """
+  suspendedUntil: DateTime
+  """Timestamp when the access record was first created."""
+  createdAt: DateTime!
+  """
+  Timestamp when the access record was last updated (e.g. re-granted or revoked).
+  """
+  updatedAt: DateTime!
+  """
+  The user this access record belongs to. Null if the user could not be loaded.
+  """
+  user: User
+  """
+  The access tier granted by this record. Null if no tier is associated (tierId is null) or the tier could not be loaded.
+  """
+  tier: AppAccessTier
+}
+
+"""
+Org member eligible for app access grants. Scoped to the app org; requires manage_access_tiers.
+"""
+type AppGrantMemberCandidate {
+  """Numeric id of the candidate user (use with grantAppAccess)."""
+  userId: BigInt!
+  """Email of the candidate, if known."""
+  email: String
+  """Gamertag / display handle of the candidate, if set."""
+  gamertag: String
+}
+
 """The signed-in identity behind a bearer token."""
 type ActorType {
   """
@@ -549,114 +675,6 @@ type AvatarDTO {
   privateState: String
   """Server timestamp (ISO-8601) when the avatar was created."""
   createdAt: DateTime!
-}
-
-"""
-A free or purchasable access tier for an app, bundling a price and the set of runtime permission keys that granted users receive.
-"""
-type AppAccessTier {
-  """Unique numeric id of the tier (primary key)."""
-  tierId: BigInt!
-  """Numeric id of the app this tier belongs to."""
-  appId: BigInt!
-  """Display name of the tier (e.g. "Free", "Pro")."""
-  name: String!
-  """
-  Sort order for displaying tiers (ascending); lower values appear first.
-  """
-  tierOrder: Float!
-  """True if the tier has no purchase cost."""
-  isFree: Boolean!
-  """
-  True if this is the app default tier (used for open-by-default / self-service grants). At most one default per app is expected.
-  """
-  isDefault: Boolean!
-  """
-  Price in the smallest currency unit (cents) for paid tiers; null for free tiers.
-  """
-  priceCents: BigInt
-  """ISO 4217 currency code for priceCents (e.g. "usd"); defaults to "usd"."""
-  currency: String
-  """
-  Billing cadence for recurring tiers (e.g. "month", "year"); null for one-time or free tiers.
-  """
-  billingPeriod: String
-  """Optional marketing description of what the tier includes."""
-  description: String
-  """
-  Runtime permission keys granted to users on this tier (a subset of runtimePermissions), e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat" (webcam; not granted by default).
-  """
-  permissionKeys: [String!]!
-  """
-  Tier lifecycle: "active" or "archived" (soft-deleted via archiveAccessTier). Defaults to "active".
-  """
-  status: String!
-  """Timestamp when the tier was created."""
-  createdAt: DateTime!
-  """Timestamp when the tier was last updated."""
-  updatedAt: DateTime!
-}
-
-"""
-A user's entitlement to a specific app: whether (and via which tier) they may access it. At most one row per (app, user).
-"""
-type AppUserAccess {
-  """Unique numeric id of this access record (primary key)."""
-  appUserAccessId: BigInt!
-  """Numeric id of the app this access applies to."""
-  appId: BigInt!
-  """Numeric id of the user this access belongs to."""
-  userId: BigInt!
-  """
-  Numeric id of the access tier granting this access; null if access was granted without a specific tier.
-  """
-  tierId: BigInt
-  """
-  Entitlement lifecycle: "active" (currently entitled) or "revoked" (access removed). Only active, non-expired rows grant runtime access. Defaults to "active".
-  """
-  status: String!
-  """
-  Who granted this access: the granting admin's numeric user id (as a string), or "system" for automatic/free-tier grants.
-  """
-  grantedBy: String!
-  """
-  External billing subscription id (e.g. Stripe/PayPal) backing a paid grant; null for free or manual grants.
-  """
-  subscriptionId: String
-  """
-  Optional expiry timestamp; access is treated as inactive once it has passed. Null means the grant does not expire.
-  """
-  expiresAt: DateTime
-  """
-  A timed suspension: while this time is in the future the player holds no access (a gameplay token is refused with ACCESS_SUSPENDED and realtime sessions end), and access returns by itself once it passes. Null when the player is not suspended. Set with suspendAppAccess, cleared with unsuspendAppAccess.
-  """
-  suspendedUntil: DateTime
-  """Timestamp when the access record was first created."""
-  createdAt: DateTime!
-  """
-  Timestamp when the access record was last updated (e.g. re-granted or revoked).
-  """
-  updatedAt: DateTime!
-  """
-  The user this access record belongs to. Null if the user could not be loaded.
-  """
-  user: User
-  """
-  The access tier granted by this record. Null if no tier is associated (tierId is null) or the tier could not be loaded.
-  """
-  tier: AppAccessTier
-}
-
-"""
-Org member eligible for app access grants. Scoped to the app org; requires manage_access_tiers.
-"""
-type AppGrantMemberCandidate {
-  """Numeric id of the candidate user (use with grantAppAccess)."""
-  userId: BigInt!
-  """Email of the candidate, if known."""
-  email: String
-  """Gamertag / display handle of the candidate, if set."""
-  gamertag: String
 }
 
 type TeleportResponse {
@@ -6605,6 +6623,13 @@ type Query {
     query: String
   ): UsersConnection! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
+  ADMIN: the target account's platform-wide block: whether it holds now, and the last one set (who, when, why, until). Requires a super-admin bearer game token.
+  """
+  accountBlock(
+    """Target user id (BigInt as a decimal string)."""
+    userId: BigInt!
+  ): AccountBlock! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  """
   Lists the avatars owned by `userId`. Requires a valid game token. Owner-aware: when the caller is NOT the owner, each avatar’s `privateState` is stripped (returned null); `publicState` is always included. State blobs are base64-encoded binary.
   """
   userAvatars(
@@ -8383,6 +8408,28 @@ type Mutation {
     userId: BigInt!
   ): Boolean! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
+  ADMIN/DESTRUCTIVE: blocks an account platform-wide. Every session and app token it holds is revoked, its realtime sessions and ck-exec sockets (developer sessions too) end in every datacenter, its mods stop, and every later sign-in and request, on CK and on Crowd Altar, is refused with ACCOUNT_BLOCKED until `until` (or until unblockAccount when absent). Not yourself, not a super-admin. Requires a super-admin bearer game token.
+  """
+  blockAccount(
+    """Target user id (BigInt as a decimal string)."""
+    userId: BigInt!
+    """
+    Why (1 to 500 characters). Kept on the account; shown to super-admins, not to the account.
+    """
+    reason: String!
+    """
+    When the block lapses by itself (ISO-8601, in the future). Absent: until unblockAccount.
+    """
+    until: DateTime
+  ): AccountBlock! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  """
+  ADMIN: lifts an account block now. Nothing is restored; the account signs in again. The last block stays readable through accountBlock. Requires a super-admin bearer game token.
+  """
+  unblockAccount(
+    """Target user id (BigInt as a decimal string)."""
+    userId: BigInt!
+  ): AccountBlock! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
+  """
   DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token.
   """
   deleteMyAccount: Boolean!
@@ -9394,7 +9441,7 @@ type Mutation {
   """
   updateVoxel(input: UpdateVoxelInput!): Voxel! @requiresPermission(scope: "runtime", permission: "update_voxel_data", scopeArg: "input.appId")
   """
-  Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). A reverted voxel’s edit-log row takes the earlier edit’s type, state and author and the ROLLBACK’s time as its createdAt, so a client reading edits `since` its last sync sees the revert. Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass).
+  Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). A reverted voxel’s edit-log row takes the earlier edit’s type, state and author and the ROLLBACK’s time as its createdAt, so a client reading edits `since` its last sync sees the revert. When the app’s wilderness is closed (`wildernessOpen` false), an applied rollback that would write any chunk of closed, unclaimed wilderness is refused (403) before it writes anything; a dry run is not. Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass).
   """
   rollbackVoxelUpdates(input: RollbackVoxelUpdatesInput!): [RollbackVoxelEventResult!]! @requiresPermission(scope: "app", permission: "manage_apps", scopeArg: "input.appId")
   """
@@ -9568,6 +9615,28 @@ type Mutation {
     userId: BigInt!
   ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """
+  Ban a user from a team: their membership (or a new row, for someone not yet in it) becomes 'banned' and their roles go, and joining, requesting to join and being added are refused with GROUP_MEMBER_BANNED until unbanTeamMember. Leaving or removing does not lift a ban. Requires the 'manage_members' team permission (app admins bypass). Never the team's owner, never yourself.
+  """
+  banTeamMember(
+    """The team to ban the user from."""
+    groupId: BigInt!
+    """The user to ban."""
+    userId: BigInt!
+    """
+    Why, for the team managers (at most 500 characters). Not shown to the banned user.
+    """
+    reason: String
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  """
+  Lift a team ban, so the user may join or be added again (nothing is restored). Requires the 'manage_members' team permission (app admins bypass). Returns true if there was a ban.
+  """
+  unbanTeamMember(
+    """The team."""
+    groupId: BigInt!
+    """The banned user."""
+    userId: BigInt!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  """
   Replace a member's roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' team permission (app admins bypass).
   """
   setTeamMemberRoles(
@@ -9679,6 +9748,28 @@ type Mutation {
     """The channel to remove the user from."""
     groupId: BigInt!
     """The user to remove (may be the caller's own id to self-remove)."""
+    userId: BigInt!
+  ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  """
+  Ban a user from a channel: their membership (or a new row, for someone not yet in it) becomes 'banned', their roles go, Buddy stops routing the channel to and from them, and joining, requesting to join and being added are refused with GROUP_MEMBER_BANNED until unbanChannelMember. Leaving or removing does not lift a ban. Requires the 'manage_members' channel permission (app admins bypass). Never the channel's owner, never yourself.
+  """
+  banChannelMember(
+    """The channel to ban the user from."""
+    groupId: BigInt!
+    """The user to ban."""
+    userId: BigInt!
+    """
+    Why, for the channel managers (at most 500 characters). Not shown to the banned user.
+    """
+    reason: String
+  ): GroupMember! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
+  """
+  Lift a channel ban, so the user may join or be added again (nothing is restored). Requires the 'manage_members' channel permission (app admins bypass). Returns true if there was a ban.
+  """
+  unbanChannelMember(
+    """The channel."""
+    groupId: BigInt!
+    """The banned user."""
     userId: BigInt!
   ): Boolean! @requiresPermission(scope: "group", permission: "manage_members", scopeArg: "groupId")
   """

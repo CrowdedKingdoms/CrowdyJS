@@ -1,0 +1,16 @@
+mutation BanChannelMember($groupId: BigInt!, $userId: BigInt!, $reason: String) {
+  banChannelMember(groupId: $groupId, userId: $userId, reason: $reason) {
+    groupMemberId
+    groupId
+    userId
+    status
+    createdAt
+    roles {
+      groupRoleId
+      roleName
+      rank
+      isSystem
+      permissions
+    }
+  }
+}
