@@ -43,6 +43,10 @@ import {
   type AddChannelMemberMutationVariables,
   RemoveChannelMemberDocument,
   type RemoveChannelMemberMutationVariables,
+  BanChannelMemberDocument,
+  type BanChannelMemberMutationVariables,
+  UnbanChannelMemberDocument,
+  type UnbanChannelMemberMutationVariables,
   SetChannelMemberRolesDocument,
   type SetChannelMemberRolesMutation,
   type SetChannelMemberRolesMutationVariables,
@@ -384,6 +388,49 @@ export class ChannelsAPI {
   ): Promise<boolean> {
     const data = await this.gql.request(RemoveChannelMemberDocument, { groupId, userId });
     return data.removeChannelMember;
+  }
+
+  /**
+   * Ban a user from this channel: their membership (or a new one, for someone not yet in it)
+   * becomes `banned` and their roles go, and Buddy stops routing the channel to and from them.
+   * Joining, requesting to join and being added are then refused with
+   * `GROUP_MEMBER_BANNED` until {@link unban}; leaving or being removed does not lift it.
+   * Requires the `manage_members` channel permission (app admins bypass). Never the
+   * channel's owner, never yourself.
+   *
+   * @param groupId - The channel, as a decimal `BigInt` string.
+   * @param userId - The user to ban, as a decimal `BigInt` string.
+   * @param reason - Why, for the channel's managers (at most 500 characters); not shown to
+   *   the banned user.
+   * @returns The banned membership (`status: 'banned'`).
+   * @throws {CrowdyGraphQLError} `FORBIDDEN` without `manage_members` (or for the owner),
+   *   `BAD_REQUEST` for yourself or a reason over 500 characters.
+   */
+  async ban(
+    groupId: BanChannelMemberMutationVariables['groupId'],
+    userId: BanChannelMemberMutationVariables['userId'],
+    reason?: string,
+  ) {
+    const data = await this.gql.request(BanChannelMemberDocument, {
+      groupId,
+      userId,
+      reason: reason ?? null,
+    });
+    return data.banChannelMember;
+  }
+
+  /**
+   * Lift a ban, so the user may join or be added again (nothing is restored). Requires the
+   * `manage_members` channel permission (app admins bypass).
+   *
+   * @returns `true` if there was a ban.
+   */
+  async unban(
+    groupId: UnbanChannelMemberMutationVariables['groupId'],
+    userId: UnbanChannelMemberMutationVariables['userId'],
+  ): Promise<boolean> {
+    const data = await this.gql.request(UnbanChannelMemberDocument, { groupId, userId });
+    return data.unbanChannelMember;
   }
 
   /**

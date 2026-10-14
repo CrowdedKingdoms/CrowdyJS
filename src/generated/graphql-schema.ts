@@ -13,6 +13,23 @@ export type Scalars = {
   DateTime: { input: string; output: string; }
 };
 
+/** A platform-wide block on an account, set by a super-admin. While it holds, every sign-in and every authenticated request is refused with ACCOUNT_BLOCKED, on CK and on Crowd Altar, and every session, realtime connection and ck-exec socket the account had was ended when it was set. The last block stays readable after it is lifted or lapses. */
+export type AccountBlock = {
+  __typename?: 'AccountBlock';
+  /** Whether the block holds now. */
+  blocked: Scalars['Boolean']['output'];
+  /** When the last block was set; null if the account was never blocked. */
+  blockedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The super-admin who set it. */
+  blockedBy: Maybe<Scalars['BigInt']['output']>;
+  /** When it lapses (or was lifted); null while it lasts until lifted. */
+  blockedUntil: Maybe<Scalars['DateTime']['output']>;
+  /** Why, as the super-admin wrote it. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** The account. */
+  userId: Scalars['BigInt']['output'];
+};
+
 export type Actor = {
   __typename?: 'Actor';
   /** App (game) this actor belongs to. BigInt serialized as a decimal string. */
@@ -4816,10 +4833,16 @@ export type Mutation = {
   assignGroupToGrid: Array<GridGroupGrant>;
   /** Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the Overworld consent screen before createPortalAuthorizationCode. Idempotent. Requires a SESSION token. */
   authorizeApp: AppAuthorizationGrant;
+  /** Ban a user from a channel: their membership (or a new row, for someone not yet in it) becomes 'banned', their roles go, Buddy stops routing the channel to and from them, and joining, requesting to join and being added are refused with GROUP_MEMBER_BANNED until unbanChannelMember. Leaving or removing does not lift a ban. Requires the 'manage_members' channel permission (app admins bypass). Never the channel's owner, never yourself. */
+  banChannelMember: GroupMember;
+  /** Ban a user from a team: their membership (or a new row, for someone not yet in it) becomes 'banned' and their roles go, and joining, requesting to join and being added are refused with GROUP_MEMBER_BANNED until unbanTeamMember. Leaving or removing does not lift a ban. Requires the 'manage_members' team permission (app admins bypass). Never the team's owner, never yourself. */
+  banTeamMember: GroupMember;
   /** Declare a publish: the full manifest of the built bundle (path, size, SHA-256 per file; index.html at the root). Validates it as a whole (HOSTED_MANIFEST_INVALID names every problem), records a STAGING publish, and returns one presigned PUT per file. Upload every file with exactly the returned headers, then call completeGamePublish. Rate-limited per app. Requires manage_apps and a SESSION token. */
   beginGamePublish: BeginGamePublishResult;
   /** Begin vaulting a card on the caller's player wallet (P4b): returns a Stripe SetupIntent client secret + publishable key for the browser to confirm. On success the card is saved for wallet auto-recharge and rent auto-renew. Closes the P2 gap where players had no card-setup path. */
   beginPlayerCardSetup: PlayerCardSetup;
+  /** ADMIN/DESTRUCTIVE: blocks an account platform-wide. Every session and app token it holds is revoked, its realtime sessions and ck-exec sockets (developer sessions too) end in every datacenter, its mods stop, and every later sign-in and request, on CK and on Crowd Altar, is refused with ACCOUNT_BLOCKED until `until` (or until unblockAccount when absent). Not yourself, not a super-admin. Requires a super-admin bearer game token. */
+  blockAccount: AccountBlock;
   /** DESTRUCTIVE. Cancels an app's paid shared-environment subscription. The app loses its paid shared slot (typically at currentPeriodEnd) and may be denied runtime once the period lapses unless a free slot covers it. Returns the updated subscription. Requires the 'manage_billing' permission on the app's org. */
   cancelSharedSubscription: AppSharedSubscription;
   /** Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout. */
@@ -5190,6 +5213,12 @@ export type Mutation = {
   transferGridOwnership: GridOwnership;
   /** Transfer a listing between personal and org ownership (DN-9). The caller must be the current owner (user-owned) or hold manage_compute in the owning org; transfers to an org require manage_compute in the receiving org. SIDE EFFECTS: append-only ownership audit row + replica sync to game-api. Ownership moves listing control and source-access rights; from P4b it also moves proceeds. */
   transferPlayerCodeListing: PlayerCodeListing;
+  /** Lift a channel ban, so the user may join or be added again (nothing is restored). Requires the 'manage_members' channel permission (app admins bypass). Returns true if there was a ban. */
+  unbanChannelMember: Scalars['Boolean']['output'];
+  /** Lift a team ban, so the user may join or be added again (nothing is restored). Requires the 'manage_members' team permission (app admins bypass). Returns true if there was a ban. */
+  unbanTeamMember: Scalars['Boolean']['output'];
+  /** ADMIN: lifts an account block now. Nothing is restored; the account signs in again. The last block stays readable through accountBlock. Requires a super-admin bearer game token. */
+  unblockAccount: AccountBlock;
   /** Unlink a federated identity from the signed-in account by identityId. Refuses to remove your last remaining sign-in method. Requires a session token. */
   unlinkIdentity: Scalars['Boolean']['output'];
   /** Lift a user's suspension (suspendAppAccess) before it lapses. A no-op for a user who is not suspended. Requires the 'manage_access_tiers' permission on the app; super admins bypass. */
@@ -5301,8 +5330,29 @@ export type MutationAuthorizeAppArgs = {
 };
 
 
+export type MutationBanChannelMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationBanTeamMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationBeginGamePublishArgs = {
   input: BeginGamePublishInput;
+};
+
+
+export type MutationBlockAccountArgs = {
+  reason: Scalars['String']['input'];
+  until?: InputMaybe<Scalars['DateTime']['input']>;
+  userId: Scalars['BigInt']['input'];
 };
 
 
@@ -6320,6 +6370,23 @@ export type MutationTransferPlayerCodeListingArgs = {
 };
 
 
+export type MutationUnbanChannelMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationUnbanTeamMemberArgs = {
+  groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationUnblockAccountArgs = {
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationUnlinkIdentityArgs = {
   identityId: Scalars['String']['input'];
 };
@@ -7316,6 +7383,8 @@ export type PublishFileInput = {
 
 export type Query = {
   __typename?: 'Query';
+  /** ADMIN: the target account's platform-wide block: whether it holds now, and the last one set (who, when, why, until). Requires a super-admin bearer game token. */
+  accountBlock: AccountBlock;
   /** List only healthy GraphQL API servers (status = ReadyForClients) for client routing/discovery. No authentication required. */
   activeGraphQLServers: Array<GraphQlServer>;
   /** Fetches a single actor by its 32-character ASCII `uuid`. Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound, the same as a missing id). Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null). */
@@ -7707,6 +7776,11 @@ export type Query = {
   walletTransactions: Array<WalletTransaction>;
   /** Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission. Relay cursor connection; prefer this over the offset-based walletTransactions. */
   walletTransactionsConnection: WalletTransactionsConnection;
+};
+
+
+export type QueryAccountBlockArgs = {
+  userId: Scalars['BigInt']['input'];
 };
 
 

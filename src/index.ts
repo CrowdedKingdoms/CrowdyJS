@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.9.0';
+export const VERSION = '18.10.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -237,6 +237,10 @@ export {
   ACCESS_NOT_GRANTED_CODE,
   ACCESS_REVOKED_CODE,
   ACCESS_SUSPENDED_CODE,
+  ACCOUNT_BLOCKED_CODE,
+  GROUP_MEMBER_BANNED_CODE,
+  accountBlockedOf,
+  groupMemberBannedOf,
   ACTOR_EXISTS_CODE,
   APP_PAUSED_CODE,
   accessRefusalOf,
@@ -400,6 +404,7 @@ export { UdpAPI } from './domains/udp.js';
 export {
   ExecAPI,
   ExecConnection,
+  EXEC_CLOSE_ACCESS_ENDED,
   CrowdyExecError,
   EXEC_STATUSES,
   execStatus,
