@@ -223,6 +223,23 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.spectate, 'kit.spectate', ['observe']);
   assertMethods(kit.emotes, 'kit.emotes', ['send', 'parse']);
   assertMethods(kit.shards, 'kit.shards', ['key', 'around']);
+  // The genre starters' modules (18.12.0): one handle a key, mirrors on the hub's topic.
+  assertMethods(kit.leaderboards.board('weekly'), 'kit.leaderboards.board', [
+    'watch', 'unwatch', 'top', 'around', 'me', 'season', 'submit', 'configure', 'roll',
+  ]);
+  assert.equal(kit.leaderboards.board('weekly'), kit.leaderboards.board('weekly'), 'one board a name');
+  assertMethods(kit.tables.table('t1'), 'kit.tables.table', ['watch', 'unwatch', 'join', 'leave', 'start', 'play', 'draw', 'pass']);
+  assertMethods(kit.tables.table('t1').hand, 'kit.tables.table.hand', ['start', 'stop', 'refresh', 'get', 'subscribe']);
+  assertMethods(kit.tactics.battle('b1'), 'kit.tactics.battle', ['watch', 'unwatch', 'myUnits', 'join', 'start', 'move', 'attack', 'endTurn']);
+  assertMethods(kit.encounters.encounter('e1'), 'kit.encounters.encounter', ['watch', 'unwatch', 'join', 'start', 'build', 'hit']);
+  assertMethods(kit.minigames.duel('d1'), 'kit.minigames.duel', ['watch', 'unwatch', 'join', 'leave', 'throw', 'rematch']);
+  assertMethods(kit.instances.run('r1'), 'kit.instances.run', ['watch', 'unwatch', 'open', 'invite', 'join', 'enter', 'descend', 'abandon']);
+  assertMethods(kit.arenas.arena('a1'), 'kit.arenas.arena', ['watch', 'unwatch', 'join', 'leave', 'start', 'move', 'cast']);
+  assertMethods(kit.racing.race('r1'), 'kit.racing.race', ['watch', 'unwatch', 'join', 'leave', 'start', 'pos', 'ghost']);
+  assertMethods(kit.racing.ball('m1'), 'kit.racing.ball', ['watch', 'unwatch', 'join', 'start', 'pos', 'claim', 'pass', 'shoot']);
+  assertMethods(kit.territory.map('m1'), 'kit.territory.map', ['watch', 'unwatch', 'join', 'reset']);
+  assertMethods(kit.territory.zone('z1'), 'kit.territory.zone', ['watch', 'unwatch', 'join', 'start']);
+  assert.equal(client.kit('1', { nodes: { race: 'sprint' } }).racing.race('r1').nodeType, 'sprint', 'nodes renames a starter type');
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');
