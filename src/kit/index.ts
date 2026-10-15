@@ -167,3 +167,63 @@ export {
   type KitGroupWithChannel,
   type SocialKitOptions,
 } from './social.js';
+export {
+  LeaderboardHandle,
+  LeaderboardsKit,
+  type LeaderboardConfig,
+  type LeaderboardRank,
+  type LeaderboardSeason,
+  type LeaderboardView,
+} from './modules/leaderboards.js';
+export { CardTable, TablesKit, type CardHand, type CardPlayed, type CardTableView } from './modules/tables.js';
+export {
+  TacticsBattle,
+  TacticsKit,
+  type TacticsBattleView,
+  type TacticsUnit,
+  type TacticsUnitStats,
+} from './modules/tactics.js';
+export {
+  Encounter,
+  EncountersKit,
+  type EncounterEnemy,
+  type EncounterTower,
+  type EncounterView,
+} from './modules/encounters.js';
+export { Duel, MinigamesKit, type DuelReveal, type DuelSeat, type DuelView } from './modules/minigames.js';
+export {
+  InstanceRun,
+  InstancesKit,
+  type InstanceMember,
+  type InstanceRoom,
+  type InstanceRunView,
+} from './modules/instances.js';
+export {
+  ArenaMatch,
+  ArenasKit,
+  type ArenaBlast,
+  type ArenaFighter,
+  type ArenaShot,
+  type ArenaView,
+} from './modules/arenas.js';
+export {
+  BallMatch,
+  Race,
+  RacingKit,
+  type BallPlayer,
+  type BallState,
+  type BallView,
+  type RaceGate,
+  type RaceGhost,
+  type RaceRacer,
+  type RaceView,
+} from './modules/racing.js';
+export {
+  TerritoryKit,
+  TerritoryMap,
+  ZoneMatch,
+  type TerritoryPoint,
+  type TerritoryView,
+  type ZoneContender,
+  type ZoneView,
+} from './modules/territory.js';

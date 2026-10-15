@@ -120,6 +120,31 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.12.0: the genre starters
+
+Additive. **Needs a compute toolchain whose starter pack has the genre starters** (ckx-sdk
+0.11.0); `kit.topology` lists, builds and deploys them like the others. Against an app that does
+not run one, its module's calls are refused with `NotFound` (the app has no such node type).
+
+- **Nine more kit modules**, one per new starter hub: `leaderboards.board(name)` (the top
+  mirrored, `top`, `around`, `me`, `season`; hubs submit the scores they decided, a client never
+  does), `tables.table(key)` (cards: the table mirrored and the caller's hand as private state),
+  `tactics.battle(key)` (grid battles in phases), `encounters.encounter(key)` (waves, towers, a
+  boss with phases), `minigames.duel(key)` (hidden throws revealed together), `instances.run(key)`
+  (a party's private run: seeded floors, permadeath, expiry), `arenas.arena(key)` (classes and
+  abilities in real time), `racing.race(key)` and `racing.ball(key)` (races with laps, splits
+  and a ghost; ball games with possession), `territory.map(key)` and `territory.zone(key)`
+  (control points; a shrinking circle).
+- **The node types they talk to** are the starters' (`leaderboard`, `deck`, `tactics`,
+  `director`, `minigame`, `instance`, `arena`, `race`, `ball`, `territory`, `zone`); an app that
+  deploys one under another name passes it in `client.kit(appId, { nodes: { ... } })`.
+- **Positions a client reports are the hub's to keep**: `arenas`, `racing` and the ball game take
+  `move` / `pos` reports and answer with the position the hub's movement warden kept (a move too
+  fast is cut short, a jump refused); a client that keeps reporting what the warden refuses is
+  removed with a `violation` event. Send them a few times a second, without an action id.
+- **Event bodies never use the header's field names** (`v`, `epoch`, `seq`, `kind`): the race's
+  `timing` events carry their `stage`, the warden's `violation` events their `what`.
+
 ## 18.11.0: the Game Kit on ck-exec
 
 Additive, apart from one fix in `client.exec` (below). **Needs what 18.10.0 needs from the Game

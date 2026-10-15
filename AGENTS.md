@@ -30,6 +30,17 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.12.0: the genre starters (2026-10-15).** Nine more modules in `src/kit/modules/`, one per
+ck-exec genre starter (ckx-sdk 0.11.0): `leaderboards` (`leaderboard`), `tables` (`deck`, the
+hand as `PrivateState`), `tactics`, `encounters` (`director`), `minigames` (`minigame`),
+`instances` (`instance`), `arenas` (`arena`), `racing` (`race` and `ball`, one crate) and
+`territory` (`territory` and `zone`, one crate). Each is a `XxxKit(runtime, nodeType)` with a
+per-key handle holding a `HubState` on the hub's topic and calling changes with
+`{ action: true }`; `GameKitNodeTypes` names them for an app that deploys a starter under
+another type. Their scripts are in the record and replayed in `game-kit.test.mjs`
+(`replayOf(t, crate, nodeType)`). Positions (`arenas.move`, `race.pos`, `ball.pos`) go without an
+action id: the next report replaces a lost one.
+
 **18.11.0: the Game Kit on ck-exec (2026-10-15).** `client.kit(appId)` is the client half of
 the game kit whose server half is ck-exec's `ckx_sdk::kit` (ckx-sdk 0.10.0) and the starter
 packs; the operator chose both halves on ck-exec, and items and soft currency in hub state (not
@@ -740,7 +751,7 @@ reference consumer of the hosted flow.
 | Client-side bookkeeping | `createWorldSession` from `@crowdedkingdoms/crowdyjs/stores` |
 | Persistent terrain | `chunks.*` (durable) + `udp.sendVoxelUpdate` (realtime) |
 | Server-side rules and state (inventory, stats, NPCs, sessions) | ck-exec hubs: `exec.connect` + `call` / `subscribe`; built and deployed with `exec.starters` / `build` / `deploy` (`manage_compute`) |
-| The starter hubs, typed | `kit(appId)`: `world`, `matchmaking.queue`, `sessions.open`, `npcs.area`; `kit.topology` composes and deploys them; mirrors (`HubState`, `CollectionMirror`) for their topics |
+| The starter hubs, typed | `kit(appId)`: `world`, `matchmaking.queue`, `sessions.open`, `npcs.area`, `leaderboards.board`, `tables.table`, `tactics.battle`, `encounters.encounter`, `minigames.duel`, `instances.run`, `arenas.arena`, `racing.race` / `ball`, `territory.map` / `zone`; `kit.topology` composes and deploys them; mirrors (`HubState`, `CollectionMirror`, `PrivateState`) for their topics |
 | World life between requests | hub timers (`ctx.timer_every`, `ctx.timer_after`) — see the presence rule below |
 | Parties, guilds, chat rooms | `kit(appId).social` |
 | Client-side simulation authority | `host.heartbeat`; the hub decides from its caller |
