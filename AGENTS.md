@@ -30,6 +30,16 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.13.0: the economy (2026-10-15).** `src/kit/modules/player.ts`: `PlayerKit` (`kit.player`),
+the caller's own `player` hub, whose key is their player id (`runtime.playerId()`); its mirrors
+are made once the key is known, so its stores are relays that exist from the start. The views
+`InventoryKit`, `WalletKit`, `ProgressionKit`, `AchievementsKit`, `QuestsKit`, `CraftingKit`,
+`LootKit` and `ProductionKit` share it. `src/kit/modules/market.ts`: one `MarketCore` per market
+key behind `kit.market.at`, `kit.shops.at` and `kit.trades.at`. Calls send only the arguments
+given (`buy` without a count, `craft` without times): the replay compares arguments. A
+`KitError` coded `unavailable` is resent when the call has an action id (the hubs keep no
+receipt for it). The economy is not a ledger (HS-52).
+
 **18.12.0: the genre starters (2026-10-15).** Nine more modules in `src/kit/modules/`, one per
 ck-exec genre starter (ckx-sdk 0.11.0): `leaderboards` (`leaderboard`), `tables` (`deck`, the
 hand as `PrivateState`), `tactics`, `encounters` (`director`), `minigames` (`minigame`),

@@ -120,6 +120,30 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.13.0: the economy
+
+Additive. **Needs a compute toolchain whose starter pack has the `player` and `market`
+starters** (ckx-sdk 0.12.0). The economy lives in hub state and is not a ledger (the operator's
+decision HS-52): no double-entry book, no real money, transfers as steps each hub answers once.
+
+- **The caller's own `player` hub**, keyed by their player id (the kit needs it: `playerId` in
+  `client.kit()`'s options, or the identity it can ask): `kit.player` (`watch`, `me`, `rules`,
+  `profileOf`, `onEvent`) and its views `kit.inventory` (`items`, `count`, `discard`,
+  `takeMail`), `kit.wallet` (`balances`, `balance`), `kit.progression` (`progress`, `profile`,
+  `onLevel`), `kit.achievements` (`list`, `onUnlock`), `kit.quests` (`list`, `accept`, `claim`,
+  `step` for the counters the game lets a client report), `kit.crafting` (`recipes`, `craft`),
+  `kit.loot` (`tables`, `open`) and `kit.production` (`view`, `collect`). The inventory, wallet
+  and progress are read by calls only the player may make, and read again when the hub's
+  `changed` message names them; the profile is public.
+- **Markets** by name: `kit.shops.at(key)` (`vendors`, `buy`, `sell`), `kit.market.at(key)`
+  (`book`, `order`, `cancel`, `orders` mirrored) and `kit.trades.at(key)` (`open`, `offer`,
+  `accept`, `decline`, `mine` mirrored). An order or an offer holds what it puts up in the
+  player's own hub; a fill or an accepted trade moves it hub to hub.
+- **`unavailable`** (`KIT_CODES.UNAVAILABLE`): a hub refuses a change it could not finish
+  because another hub did not answer. The kit sends a call with an action id again, as it does
+  after a platform `Unavailable`; the hub keeps no receipt for it, so the resend finishes what
+  the first began.
+
 ## 18.12.0: the genre starters
 
 Additive. **Needs a compute toolchain whose starter pack has the genre starters** (ckx-sdk

@@ -5,7 +5,7 @@ import {
   type ExecConnection,
   type ExecPushHandler,
 } from '../domains/exec.js';
-import { KitError, newActionId, withActionId } from './protocol.js';
+import { KIT_CODES, KitError, newActionId, withActionId } from './protocol.js';
 
 /** Subscriptions one connection holds at most (the gateway refuses the next). */
 export const KIT_SUBSCRIPTIONS_MAX = 256;
@@ -184,6 +184,11 @@ export class KitRuntime {
         return await conn.call<T>(nodeType, key, method, sent, { timeoutMs: options.timeoutMs });
       } catch (e) {
         const err = KitError.from(e);
+        // A hub that could not hear from another one did not finish, and keeps no receipt.
+        if (attempt < this.retries && actionId && err instanceof KitError && err.code === KIT_CODES.UNAVAILABLE) {
+          await sleep(Math.min(2_000, 200 * 2 ** attempt) * (0.5 + Math.random() / 2));
+          continue;
+        }
         if (attempt < this.retries && err instanceof CrowdyExecError && !(err instanceof KitError)) {
           if (err.status === 'Busy' && err.rateLimited) {
             this.budget.hold(err.retryAfterMs ?? 1_000);

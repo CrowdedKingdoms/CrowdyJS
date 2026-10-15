@@ -8,8 +8,20 @@ import { ArenasKit } from './modules/arenas.js';
 import { EncountersKit } from './modules/encounters.js';
 import { InstancesKit } from './modules/instances.js';
 import { LeaderboardsKit } from './modules/leaderboards.js';
+import { MarketCore, MarketsKit, ShopsKit, TradesKit } from './modules/market.js';
 import { MatchmakingKit, type MatchmakingKitOptions } from './modules/matchmaking.js';
 import { MinigamesKit } from './modules/minigames.js';
+import {
+  AchievementsKit,
+  CraftingKit,
+  InventoryKit,
+  LootKit,
+  PlayerKit,
+  ProductionKit,
+  ProgressionKit,
+  QuestsKit,
+  WalletKit,
+} from './modules/player.js';
 import { NpcsKit, type NpcsKitOptions } from './modules/npcs.js';
 import { EmotesKit, SpectateKit } from './modules/presence.js';
 import { RacingKit } from './modules/racing.js';
@@ -56,6 +68,10 @@ export interface GameKitNodeTypes {
   /** Control points (`territory`) and shrinking circles (`zone`). */
   territory?: string;
   zone?: string;
+  /** Each player's own hub (`player`): inventory, wallet, progression, crafting, loot. */
+  player?: string;
+  /** Markets (`market`): vendors, order books, trades. */
+  market?: string;
 }
 
 /** Options for {@link GameKitClient}. */
@@ -100,7 +116,10 @@ export class ShardKit {
  * starter hubs (the root {@link world} with liveops, {@link matchmaking} queues with parties,
  * game {@link sessions}, areas of {@link npcs} with mobs and pets, {@link leaderboards}, card
  * {@link tables}, {@link tactics} battles, {@link encounters}, {@link minigames}, private
- * {@link instances}, {@link arenas}, {@link racing}, {@link territory}), the {@link topology}
+ * {@link instances}, {@link arenas}, {@link racing}, {@link territory}; the economy:
+ * {@link player}, {@link inventory}, {@link wallet}, {@link progression}, {@link achievements},
+ * {@link quests}, {@link crafting}, {@link loot}, {@link production}, {@link market},
+ * {@link shops}, {@link trades}), the {@link topology}
  * that deploys them, the client-side conventions ({@link spectate}, {@link emotes},
  * {@link shards}), and {@link social} (parties, guilds, chat over teams and channels).
  *
@@ -132,6 +151,9 @@ export class GameKitClient {
   private arenasKit: ArenasKit | null = null;
   private racingKit: RacingKit | null = null;
   private territoryKit: TerritoryKit | null = null;
+  private playerKit: PlayerKit | null = null;
+  private readonly economy = new Map<string, unknown>();
+  private readonly markets = new Map<string, MarketCore>();
 
   constructor(
     private readonly appId: Scalars['BigInt']['input'],
@@ -210,6 +232,81 @@ export class GameKitClient {
   /** Control points factions capture, and shrinking circles. */
   get territory(): TerritoryKit {
     return (this.territoryKit ??= new TerritoryKit(this.runtime, this.options.nodes?.territory, this.options.nodes?.zone));
+  }
+
+  /**
+   * The caller's own `player` hub: what they own and what they did. The economy lives in hub
+   * state and is not a ledger. The modules below are views of it.
+   */
+  get player(): PlayerKit {
+    return (this.playerKit ??= new PlayerKit(this.runtime, this.options.nodes?.player));
+  }
+
+  private view<T>(name: string, make: (player: PlayerKit) => T): T {
+    if (!this.economy.has(name)) this.economy.set(name, make(this.player));
+    return this.economy.get(name) as T;
+  }
+
+  /** The player's items: stacks in slots, and mail for what did not fit. */
+  get inventory(): InventoryKit {
+    return this.view('inventory', (p) => new InventoryKit(p));
+  }
+
+  /** The player's soft currencies. */
+  get wallet(): WalletKit {
+    return this.view('wallet', (p) => new WalletKit(p));
+  }
+
+  /** Experience, levels and public profiles. */
+  get progression(): ProgressionKit {
+    return this.view('progression', (p) => new ProgressionKit(p));
+  }
+
+  get achievements(): AchievementsKit {
+    return this.view('achievements', (p) => new AchievementsKit(p));
+  }
+
+  /** Quests, first-session tutorials among them. */
+  get quests(): QuestsKit {
+    return this.view('quests', (p) => new QuestsKit(p));
+  }
+
+  get crafting(): CraftingKit {
+    return this.view('crafting', (p) => new CraftingKit(p));
+  }
+
+  /** Loot tables with pity. */
+  get loot(): LootKit {
+    return this.view('loot', (p) => new LootKit(p));
+  }
+
+  /** Idle production that catches up on the time away. */
+  get production(): ProductionKit {
+    return this.view('production', (p) => new ProductionKit(p));
+  }
+
+  private marketCore = (key: string): MarketCore => {
+    let core = this.markets.get(key);
+    if (!core) {
+      core = new MarketCore(this.runtime, this.options.nodes?.market ?? 'market', key);
+      this.markets.set(key, core);
+    }
+    return core;
+  };
+
+  /** Markets' order books. */
+  get market(): MarketsKit {
+    return this.view('market', () => new MarketsKit(this.marketCore));
+  }
+
+  /** Markets' vendors. */
+  get shops(): ShopsKit {
+    return this.view('shops', () => new ShopsKit(this.marketCore));
+  }
+
+  /** Trades between two players at a market. */
+  get trades(): TradesKit {
+    return this.view('trades', () => new TradesKit(this.marketCore));
   }
 
   /** Composing and deploying the app's tree of starter hubs (developers). */

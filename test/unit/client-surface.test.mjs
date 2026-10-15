@@ -194,7 +194,7 @@ test('client exposes the full management + game sub-client surface', async () =>
   assert.equal(client.kit('1'), kit, 'an option-less kit is shared, so its modules share one connection');
   assert.notEqual(client.kit('1', {}), kit, 'a kit with options is its own');
   assert.equal(kit.deploy, undefined, 'kit.deploy was removed in 18.0.0 (kit.topology deploys starter hubs)');
-  assert.equal(kit.inventory, undefined, 'the model-backed kit helpers were removed in 18.0.0');
+  assert.equal(kit.engines, undefined, 'the model-backed kit helpers were removed in 18.0.0');
   assertMethods(kit.social.party, 'kit.social.party', [
     'create', 'find', 'invite', 'join', 'leave', 'members',
   ]);
@@ -240,6 +240,21 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.territory.map('m1'), 'kit.territory.map', ['watch', 'unwatch', 'join', 'reset']);
   assertMethods(kit.territory.zone('z1'), 'kit.territory.zone', ['watch', 'unwatch', 'join', 'start']);
   assert.equal(client.kit('1', { nodes: { race: 'sprint' } }).racing.race('r1').nodeType, 'sprint', 'nodes renames a starter type');
+  // The economy (18.13.0): the caller's own player hub, and the markets.
+  assertMethods(kit.player, 'kit.player', ['key', 'watch', 'unwatch', 'onEvent', 'call', 'me', 'rules', 'profileOf']);
+  assertMethods(kit.inventory, 'kit.inventory', ['watch', 'count', 'discard', 'takeMail']);
+  assertMethods(kit.wallet, 'kit.wallet', ['watch', 'balance']);
+  assertMethods(kit.progression, 'kit.progression', ['watch', 'profileOf', 'onLevel']);
+  assertMethods(kit.achievements, 'kit.achievements', ['watch', 'list', 'onUnlock']);
+  assertMethods(kit.quests, 'kit.quests', ['watch', 'list', 'accept', 'claim', 'step']);
+  assertMethods(kit.crafting, 'kit.crafting', ['recipes', 'craft']);
+  assertMethods(kit.loot, 'kit.loot', ['tables', 'open']);
+  assertMethods(kit.production, 'kit.production', ['view', 'collect']);
+  assertMethods(kit.market.at('town'), 'kit.market.at', ['watch', 'unwatch', 'book', 'order', 'cancel']);
+  assertMethods(kit.shops.at('town'), 'kit.shops.at', ['watch', 'unwatch', 'vendors', 'buy', 'sell']);
+  assertMethods(kit.trades.at('town'), 'kit.trades.at', ['watch', 'unwatch', 'open', 'offer', 'accept', 'decline']);
+  assert.equal(kit.inventory, kit.inventory, 'one view a kit');
+  assert.equal(kit.market.at('town').view, kit.shops.at('town').view, 'a market\'s handles share its mirror');
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

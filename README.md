@@ -759,6 +759,8 @@ modules are the tree's starter types:
 | `kit.arenas.arena(key)` | `arena` | real-time fights: `join` as a class, `move` (the hub's warden keeps what the speed allows), `cast` (cooldown, resource, range; projectiles and areas land on the hub's ticks) |
 | `kit.racing.race(key)` / `ball(key)` | `race`, `ball` (`racing`) | races (gates in order, laps, splits, places, the winner's `ghost`) and ball games (`claim`, `pass`, `shoot`, goals) on reported positions the warden keeps |
 | `kit.territory.map(key)` / `zone(key)` | `territory`, `zone` (`territory`) | control points a faction captures by standing on them (the hub reads where players are), and a circle that shrinks and wears down whoever is outside |
+| `kit.player` and its views: `kit.inventory`, `kit.wallet`, `kit.progression`, `kit.achievements`, `kit.quests`, `kit.crafting`, `kit.loot`, `kit.production` | `player` (keyed by the player's id) | the caller's own hub: stacks and mail, soft currencies, levels and public profiles, achievements, quests with tutorials (`step` for the counters a client may report), crafting, loot with pity, idle production; private parts read again when the hub says they changed (18.13.0) |
+| `kit.shops.at(key)`, `kit.market.at(key)`, `kit.trades.at(key)` | `market` | vendors with stock and restocks (`buy`, `sell`), order books (`order`, `cancel`, `book`), trades between two players (`open`, `offer`, `accept`, `decline`); what a player puts up is held in their own hub, and a call that could not reach it is refused `unavailable` and sent again |
 | `kit.topology` | — | composes a manifest from `exec.starters` (the types picked, what they hang under and call), checks the tree, builds and deploys (developers, `manage_compute`) |
 | `kit.spectate`, `kit.emotes`, `kit.shards` | — | a viewer's heartbeat so the world's messages reach it; emotes as client events every kit client reads; shard keys as the hubs compute them |
 | `kit.social` | — | parties, guilds and chat rooms over teams and channels |
@@ -791,7 +793,11 @@ await kit.sessions.open(key).act({ points: 2 });   // sent with an action id: pl
   shape React's `useSyncExternalStore` takes. `PrivateState` reads what only its player may
   see with a call, again whenever the hub says it changed for them.
 - **Refusals** are `KitError` (a `CrowdyExecError` with status `AppError`) with a `code` to
-  branch on: `not_your_turn`, `cooldown`, `full`, `forbidden`, ... (`KIT_CODES`).
+  branch on: `not_your_turn`, `cooldown`, `full`, `forbidden`, ... (`KIT_CODES`). A call with an
+  action id refused `unavailable` (a hub it needed did not answer) is sent again (18.13.0).
+- **The economy is not a ledger.** Items and soft currency are hub state; a transfer between
+  players is steps each hub answers once. See the Game Kit's economy page before you put
+  anything of real value in it.
 - **Kit types are the hubs' MessagePack maps as they arrive**, field names and all
   (`time_of_day`, `expires_in_ms`), the same in CrowdyCPP and CrowdyPy.
 - **Realtime**: hubs show server-driven actors through the realtime tier; `kitActorCodec`,
