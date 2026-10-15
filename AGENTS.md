@@ -37,7 +37,10 @@ hand as `PrivateState`), `tactics`, `encounters` (`director`), `minigames` (`min
 `territory` (`territory` and `zone`, one crate). Each is a `XxxKit(runtime, nodeType)` with a
 per-key handle holding a `HubState` on the hub's topic and calling changes with
 `{ action: true }`; `GameKitNodeTypes` names them for an app that deploys a starter under
-another type. Their scripts are in the record and replayed in `game-kit.test.mjs`
+another type. The embedded authoring index is cks-game-api's at its ckx-sdk 0.11.0 re-pin (1059
+symbols; `authoring-index:drift -- --source <cks-game-api>/compute-toolchain/browser-authoring-index.json
+--write`, then `authoring-index:generate`, then the pins in `live-coding-analysis.test.mjs`).
+Their scripts are in the record and replayed in `game-kit.test.mjs`
 (`replayOf(t, crate, nodeType)`). Positions (`arenas.move`, `race.pos`, `ball.pos`) go without an
 action id: the next report replaces a lost one.
 
