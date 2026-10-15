@@ -2,7 +2,8 @@
  * The Game Kit against the starter hubs on a tier, as a THROWAWAY org admin: the suite registers
  * its own owner, who makes an org and an app, composes the starters with `kit.topology` and
  * builds and deploys them on the platform (the world, matchmaking and sessions, npcs, a duel, a
- * private run and the leaderboard it posts to), and two players who play them. It needs nobody's
+ * private run and the leaderboard it posts to, each player's own hub and a market), and two
+ * players who play them. It needs nobody's
  * credential and never signs in as an existing account.
  *
  *   CROWDY_HTTP_URL=https://ck.dev.crowdedkingdoms.com CROWDY_E2E_THROWAWAY_OWNER=1 \
@@ -99,11 +100,17 @@ test('the kit composes, deploys and plays the starter pack on a tier', { skip, t
   const offered = await dev.topology.types();
   t.diagnostic(`the toolchain's starters: ${offered.join(', ')}`);
   const runConfig = { floors: 1, rooms_per_floor: 2, start_hp: 500, start_power: 40, board: 'deepest' };
-  const plan = await dev.topology.plan(['session', 'npcs', 'minigame', 'instance'], {
+  const plan = await dev.topology.plan(['session', 'npcs', 'minigame', 'instance', 'market'], {
     overrides: { instance: { seed_b64: Buffer.from(JSON.stringify(runConfig)).toString('base64') } },
   });
-  assert.deepEqual([...plan.crates].sort(), ['instance', 'leaderboard', 'matchmaker', 'minigame', 'npc-mobs', 'session', 'world-tick']);
-  assert.deepEqual(Object.keys(plan.types).sort(), ['instance', 'leaderboard', 'matchmaker', 'minigame', 'npcs', 'session', 'world']);
+  assert.deepEqual(
+    [...plan.crates].sort(),
+    ['instance', 'leaderboard', 'market', 'matchmaker', 'minigame', 'npc-mobs', 'player', 'session', 'world-tick'],
+  );
+  assert.deepEqual(
+    Object.keys(plan.types).sort(),
+    ['instance', 'leaderboard', 'market', 'matchmaker', 'minigame', 'npcs', 'player', 'session', 'world'],
+  );
   const started = Date.now();
   const deployed = await dev.topology.deploy(plan, { timeoutMs: 900_000, onBuild: (b) => t.diagnostic(`build ${b.buildId}: ${b.status}`) });
   t.diagnostic(`deployed version ${deployed.version} (build ${deployed.buildId}) in ${Math.round((Date.now() - started) / 1000)} s`);
@@ -211,4 +218,23 @@ test('the kit composes, deploys and plays the starter pack on a tier', { skip, t
   await until('both depths on the board', async () => (await board.top()).length === 2);
   assert.deepEqual((await board.top()).map((r) => String(r.player)).sort(), [a.userId, b.userId].sort());
   assert.equal(await code(board.submit(a.userId, 99)), 'forbidden', 'a player never submits a score');
+
+  // The economy: each player's own hub, and a market between them. Not a ledger.
+  await a.kit.player.watch();
+  assert.equal(a.kit.wallet.balance('gold'), 100, 'what a new player starts with');
+  assert.deepEqual((await a.kit.quests.step('tutorial:inventory')).quests, []);
+  const { roll } = await a.kit.loot.open('chest');
+  assert.ok(roll.count > 0);
+  await until('the gems spent', () => a.kit.wallet.balance('gems') === 10);
+  assert.deepEqual(await b.kit.shops.at('town').buy('smith', 'potion'), { items: { potion: 1 }, currency: {} });
+  await b.kit.player.watch('inventory', 'wallet');
+  const desk = a.kit.trades.at('town');
+  const trade = await desk.open(b.userId);
+  assert.equal(await desk.offer(trade, { currency: { gold: 10 } }), true);
+  assert.equal(await b.kit.trades.at('town').offer(trade, { items: { potion: 1 } }), true);
+  assert.equal(await desk.accept(trade), 'open');
+  assert.equal(await b.kit.trades.at('town').accept(trade), 'settling');
+  await until('the potion in a\'s bag', () => a.kit.inventory.count('potion') >= 1);
+  await until('the gold in b\'s wallet', () => b.kit.wallet.balance('gold') === 105);
+  assert.equal(await code(a.kit.runtime.call('player', b.userId, 'me')), 'forbidden', 'only its player reads it');
 });
