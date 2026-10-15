@@ -433,6 +433,273 @@ test('npcs: the area mirror holds mobs, NPCs and pets; pets are the owner\'s; hi
   gw.done();
 });
 
+/** A gateway for `crate`'s script (the `node_type` when a crate serves two), and kits for its callers. */
+async function replayOf(t, crate, nodeType) {
+  const script = record.starters.find((s) => s.crate === crate && (!nodeType || s.node_type === nodeType));
+  const gw = await replayGateway(script);
+  t.after(() => gw.wss.close());
+  const kits = new Map();
+  const kit = (caller) => {
+    const k = JSON.stringify(caller);
+    if (!kits.has(k)) kits.set(k, kitFor(gw, caller));
+    return kits.get(k);
+  };
+  t.after(() => [...kits.values()].forEach((k) => k.close()));
+  return { gw, script, kit, p: (n) => kit({ player: n }), dev: (n) => kit({ developer: n }) };
+}
+
+test('leaderboards: the board ranks what hubs submit; players read it, never write it', async (t) => {
+  const { gw, p, dev } = await replayOf(t, 'leaderboard');
+  const board = p(1).leaderboards.board('weekly');
+  assert.equal((await board.watch()).season, 1);
+  await rejectsWithCode(board.submit(1, 9), 'forbidden');
+  gw.serverStep(); // the hubs that decided the scores submit them
+  gw.serverStep();
+  gw.serverStep();
+  gw.serverStep(); // the board publishes
+  await until('the top', () => board.view.get()?.top.length === 2);
+  assert.deepEqual((await board.top({ limit: 10 })).map((r) => r.player), [2, 1]);
+  assert.deepEqual(await board.me(), { player: 1, rank: 2, score: 9 });
+  assert.equal((await p(2).leaderboards.board('weekly').around({ radius: 1 })).length, 2);
+  assert.equal((await board.season()).entries, 2);
+  await rejectsWithCode(board.roll(), 'forbidden');
+  assert.equal(await dev(9).leaderboards.board('weekly').roll(), 2);
+  assert.equal((await board.view.resync()).season, 2);
+  gw.done();
+});
+
+test('tables: the hand is private, read again when the hub says it changed; turns are the hub\'s', async (t) => {
+  const { gw, script, p } = await replayOf(t, 'deck');
+  const t1 = p(1).tables.table('t1');
+  const t2 = p(2).tables.table('t1');
+  assert.equal((await t1.table.start()).phase, 'lobby');
+  assert.equal(await t1.join(), true);
+  assert.equal(await t2.join(), true);
+  await rejectsWithCode(t2.start(), 'forbidden');
+  assert.equal(await t1.start(), true);
+  const view = await p(1).runtime.call('deck', 't1', 'state');
+  assert.equal(view.phase, 'playing');
+  const turn = view.turn;
+  const [mover, waiter] = turn === 1 ? [t1, t2] : [t2, t1];
+  const hand = await p(turn).runtime.call('deck', 't1', 'hand');
+  assert.equal(hand.cards.length, 5);
+  assert.equal((await p(turn === 1 ? 2 : 1).runtime.call('deck', 't1', 'hand')).cards.length, 5);
+  await rejectsWithCode(waiter.draw(), 'not_your_turn');
+  const play = script.steps.find((s) => s.call === 'play' || (s.call === 'draw' && s.ok));
+  if (play.call === 'play') {
+    assert.equal(await mover.play(play.args.card, play.args.suit), true);
+    assert.equal(await p(turn).runtime.call('deck', 't1', 'play', withoutActionIdArgs(play.args), { action: 'resent' }), true);
+  } else {
+    assert.equal(await mover.draw(), true);
+    assert.equal(await mover.pass(), true);
+  }
+  assert.ok((await t1.table.resync()).hand_counts);
+  gw.done();
+});
+
+const withoutActionIdArgs = (args) => {
+  const { action_id: _ignored, ...rest } = args;
+  return rest;
+};
+
+test('tactics: units move and strike in the players\' phase; the hub\'s act when every player ended it', async (t) => {
+  const { gw, script, p } = await replayOf(t, 'tactics');
+  const b1 = p(1).tactics.battle('b1');
+  const b2 = p(2).tactics.battle('b1');
+  assert.equal((await b1.watch()).phase, 'lobby');
+  assert.equal(await b1.join(), true);
+  assert.equal(await b2.join(), true);
+  await rejectsWithCode(b2.start(), 'forbidden');
+  assert.equal(await b1.start(), true);
+  await until('the players\' phase', () => b1.battle.get()?.phase === 'players');
+  assert.ok((await p(1).runtime.call('tactics', 'b1', 'state')).units.length > 0);
+  const [mine] = await b1.myUnits();
+  const move = script.steps.find((s) => s.call === 'move').args;
+  assert.deepEqual([move.x, move.z], [mine.x + 1, mine.z]);
+  assert.equal(await b1.move(move.x, move.z), true);
+  assert.equal(await p(1).runtime.call('tactics', 'b1', 'move', { x: move.x, z: move.z }, { action: 'resent' }), true);
+  const target = script.steps.find((s) => s.call === 'attack').args.target;
+  await rejectsWithCode(b1.attack(target), 'out_of_reach');
+  assert.equal(await b1.endTurn(), true);
+  assert.equal(await b2.endTurn(), true);
+  await b1.battle.resync();
+  assert.ok(b1.battle.get().log.length > 0);
+  gw.done();
+});
+
+test('encounters: towers may not cut the lane, waves come on the hub\'s clock, strikes have a cooldown', async (t) => {
+  const { gw, p } = await replayOf(t, 'director');
+  const e = p(1).encounters.encounter('gate');
+  const events = [];
+  e.view.onEvent((body) => events.push(body.type));
+  assert.equal((await e.watch()).phase, 'lobby');
+  assert.equal(await e.join(), true);
+  await rejectsWithCode(p(2).encounters.encounter('gate').start(), 'forbidden');
+  assert.equal(await e.start(), true);
+  assert.equal(await e.build(5, 3), 20);
+  assert.equal(await p(1).runtime.call('director', 'gate', 'build', { x: 5, z: 3 }, { action: 'resent' }), 20);
+  await rejectsWithCode(e.build(99, 0), 'bad_request');
+  gw.serverStep(); // the first wave
+  await until('the wave', () => events.includes('wave_started'));
+  const state = await p(1).runtime.call('director', 'gate', 'state');
+  const enemy = state.enemies[0].id;
+  assert.equal(await e.hit(enemy), 15);
+  await rejectsWithCode(e.hit(enemy), 'cooldown');
+  assert.equal((await e.view.resync()).enemies[0].hp, 15);
+  gw.done();
+});
+
+test('minigames: a throw stays hidden until both are in; a majority wins the duel', async (t) => {
+  const { gw, p } = await replayOf(t, 'minigame');
+  const d1 = p(1).minigames.duel('t1');
+  const d2 = p(2).minigames.duel('t1');
+  assert.equal((await d1.watch()).phase, 'waiting');
+  assert.equal(await d1.join(), false);
+  assert.equal(await d2.join(), true, 'the second seat starts the first round');
+  await rejectsWithCode(p(3).minigames.duel('t1').join(), 'full');
+  assert.equal(await d1.throw('rock'), false);
+  await rejectsWithCode(d1.throw('paper'), 'conflict');
+  await rejectsWithCode(d2.throw('lizard'), 'bad_request');
+  assert.equal(await d2.throw('scissors'), true);
+  await until('the reveal', () => d1.view.get()?.last?.round === 1);
+  assert.deepEqual(d1.view.get().last.hands, ['rock', 'scissors']);
+  assert.equal(await d1.throw('paper'), false);
+  assert.equal(await p(1).runtime.call('minigame', 't1', 'throw', { hand: 'paper' }, { action: 'resent' }), false);
+  assert.equal(await d2.throw('rock'), true);
+  await until('the winner', () => d1.view.get()?.winner === 1);
+  assert.equal(await d2.rematch(), true);
+  assert.equal((await d1.view.resync()).phase, 'playing');
+  gw.done();
+});
+
+test('instances: the owner opens and invites, the hub resolves each room, a cleared run is over', async (t) => {
+  const { gw, p } = await replayOf(t, 'instance');
+  const r1 = p(1).instances.run('run-a');
+  const r2 = p(2).instances.run('run-a');
+  assert.equal((await r1.watch()).phase, 'unopened');
+  assert.equal(await r1.open({ seed: 7 }), 7);
+  await rejectsWithCode(r2.join(), 'forbidden');
+  assert.equal(await r1.invite(2), true);
+  assert.equal(await r2.join(), true);
+  await rejectsWithCode(p(3).instances.run('run-a').enter(), 'not_member');
+  const first = await r2.enter();
+  assert.match(first, /won/u);
+  assert.equal(await p(2).runtime.call('instance', 'run-a', 'enter', null, { action: 'resent' }), first);
+  assert.match(await r1.enter(), /the boss: won/u);
+  await rejectsWithCode(r1.enter(), 'finished');
+  assert.equal((await r1.view.resync()).phase, 'cleared');
+  gw.done();
+});
+
+test('arenas: classes and casts the hub referees; the warden keeps a position the speed allows', async (t) => {
+  const { gw, p } = await replayOf(t, 'arena');
+  const a1 = p(1).arenas.arena('pit');
+  const a2 = p(2).arenas.arena('pit');
+  const events = [];
+  a1.view.onEvent((body) => events.push(body.type));
+  assert.equal((await a1.watch()).phase, 'waiting');
+  assert.equal(await a1.join('warrior'), true);
+  assert.equal(await a2.join('mage'), true);
+  await rejectsWithCode(p(3).arenas.arena('pit').join('bard'), 'bad_request');
+  await rejectsWithCode(a2.start(), 'forbidden');
+  assert.equal(await a1.start(), true);
+  assert.equal(await a1.cast('strike', 11, 10), true);
+  assert.equal(await p(1).runtime.call('arena', 'pit', 'cast', { ability: 'strike', x: 11, z: 10 }, { action: 'resent' }), true);
+  await rejectsWithCode(a1.cast('strike', 11, 10), 'cooldown');
+  assert.equal(await a2.cast('bolt', 10, 10), false, 'a projectile lands later');
+  gw.serverStep();
+  await until('the impact', () => events.filter((e) => e === 'impact').length >= 1);
+  assert.deepEqual(await a2.move(30, 10), [11, 10], 'a jump is refused');
+  assert.ok((await a1.view.resync()).fighters.length === 2);
+  gw.done();
+});
+
+test('racing: a race times the positions the warden kept and keeps the winner\'s ghost', async (t) => {
+  const { gw, p } = await replayOf(t, 'racing', 'race');
+  const r1 = p(1).racing.race('r1');
+  const events = [];
+  r1.view.onEvent((body) => events.push(body.type === 'timing' ? body.stage : body.type));
+  assert.equal((await r1.watch()).phase, 'lobby');
+  assert.equal(await r1.join(), true);
+  assert.equal(await p(2).racing.race('r1').join(), true);
+  await rejectsWithCode(p(2).racing.race('r1').start(), 'forbidden');
+  assert.equal(await r1.start(), true);
+  gw.serverStep(); // the countdown ends
+  await until('the start', () => events.includes('started'));
+  for (const x of [5, 10, 5, 0]) {
+    gw.serverStep();
+    assert.deepEqual(await r1.pos(x, 0), [x, 0]);
+  }
+  await until('the finish', () => events.includes('finished'));
+  const ghost = await p(2).racing.race('r1').ghost();
+  assert.equal(ghost.player, 1);
+  assert.ok(ghost.frames.length >= 4);
+  gw.serverStep(); // the rest's time runs out
+  const done = await r1.view.resync();
+  assert.equal(done.phase, 'finished');
+  assert.equal(done.racers.find((r) => r.player === 2).did_not_finish, true);
+  gw.done();
+});
+
+test('racing: the ball is claimed near it, shot by its holder, and a goal restarts play', async (t) => {
+  const { gw, p } = await replayOf(t, 'racing', 'ball');
+  const m1 = p(1).racing.ball('m1');
+  const m2 = p(2).racing.ball('m1');
+  const events = [];
+  m1.view.onEvent((body) => events.push(body.type));
+  assert.equal((await m1.watch()).phase, 'lobby');
+  assert.equal(await m1.join('red'), true);
+  assert.equal(await m2.join('blue'), true);
+  assert.equal(await m1.start(), true);
+  for (const x of [22, 29.5]) {
+    gw.serverStep();
+    assert.deepEqual(await m1.pos(x, 20), [x, 20]);
+  }
+  await rejectsWithCode(m2.claim(), 'out_of_reach');
+  assert.equal(await m1.claim(), true);
+  assert.equal(await m1.shoot(60, 20), true);
+  gw.serverStep();
+  await until('the goal', () => events.includes('goal'));
+  assert.deepEqual((await m1.view.resync()).score, [1, 0]);
+  gw.done();
+});
+
+test('territory: a faction captures the point its members stand on; a developer starts a new war', async (t) => {
+  const { gw, p, dev } = await replayOf(t, 'territory', 'territory');
+  const m = p(1).territory.map('valley');
+  const events = [];
+  m.view.onEvent((body) => events.push(body.type));
+  assert.equal((await m.watch()).phase, 'open');
+  assert.equal(await m.join('blue'), true);
+  await rejectsWithCode(m.join('red'), 'conflict');
+  await rejectsWithCode(p(2).territory.map('valley').join('green'), 'bad_request');
+  gw.serverStep(); // two scans
+  await until('the capture', () => events.includes('captured'));
+  const state = await p(1).runtime.call('territory', 'valley', 'state');
+  assert.equal(state.points.find((pt) => pt.id === 'tower').owner, 'blue');
+  await rejectsWithCode(m.reset(), 'forbidden');
+  assert.equal(await dev(9).territory.map('valley').reset(), true);
+  assert.equal((await m.view.resync()).points.find((pt) => pt.id === 'tower').owner, null);
+  gw.done();
+});
+
+test('territory: the circle wears down whoever is outside it', async (t) => {
+  const { gw, p } = await replayOf(t, 'territory', 'zone');
+  const z1 = p(1).territory.zone('match-1');
+  assert.equal((await z1.watch()).phase, 'lobby');
+  assert.equal(await z1.join(), true);
+  assert.equal(await p(2).territory.zone('match-1').join(), true);
+  await rejectsWithCode(p(2).territory.zone('match-1').start(), 'forbidden');
+  assert.equal(await z1.start(), true);
+  gw.serverStep(); // a scan
+  await until('the scan', () => z1.view.get()?.players.some((c) => c.outside));
+  const state = await p(1).runtime.call('zone', 'match-1', 'state');
+  assert.deepEqual(state.players.map((c) => c.outside), [false, true]);
+  await rejectsWithCode(p(3).territory.zone('match-1').join(), 'started');
+  assert.equal((await z1.view.resync()).alive, 2);
+  gw.done();
+});
+
 // ---- the runtime ----
 
 /** A gateway a test scripts call by call. */

@@ -750,6 +750,15 @@ modules are the tree's starter types:
 | `kit.matchmaking.queue(name)` | `matchmaker` | `join` with a rating, alone or as a party matched whole (the leader names the members; each confirms with `leader`); `accept` / `decline`; `place` and `onMatched` with the session key |
 | `kit.sessions.open(key)` | `session` | lobby, `ready`, the host's `startGame`, `act` in turn under a time limit; the hub scores and names the winner; `state` mirrored |
 | `kit.npcs.area(key)` / `areaAt(x, z)` | `npcs` (`npc-mobs`) | an area's mobs, NPCs and pets mirrored; `attack` (the hub decides reach, cooldown, damage), `talk`; pets: `adopt`, `rename`, `summon`, `dismiss`, `release`, `myPets` |
+| `kit.leaderboards.board(name)` | `leaderboard` | the top mirrored; `top`, `around`, `me`, `season`; scores come from the hubs that decided them (`submit` is for developers and hubs), seasons roll on a schedule (18.12.0) |
+| `kit.tables.table(key)` | `deck` | a card table: the table mirrored, the caller's hand as private state; `join`, `start`, `play`, `draw`, `pass` in the hub's turn order |
+| `kit.tactics.battle(key)` | `tactics` | a grid battle in phases: `move`, `attack`, `endTurn` for the player's units; the hub's units act when every player ended the phase |
+| `kit.encounters.encounter(key)` | `director` | waves down a lane on the hub's clock, `build` towers (the lane must stay open), `hit` with a cooldown, a boss with phases |
+| `kit.minigames.duel(key)` | `minigame` | two-player duels of hidden throws, revealed together; `throw`, `rematch` |
+| `kit.instances.run(key)` | `instance` | a private run for one party: `open` (seeded floors), `invite`, `join`, `enter` each room, `descend`; permadeath and expiry; depth to a leaderboard |
+| `kit.arenas.arena(key)` | `arena` | real-time fights: `join` as a class, `move` (the hub's warden keeps what the speed allows), `cast` (cooldown, resource, range; projectiles and areas land on the hub's ticks) |
+| `kit.racing.race(key)` / `ball(key)` | `race`, `ball` (`racing`) | races (gates in order, laps, splits, places, the winner's `ghost`) and ball games (`claim`, `pass`, `shoot`, goals) on reported positions the warden keeps |
+| `kit.territory.map(key)` / `zone(key)` | `territory`, `zone` (`territory`) | control points a faction captures by standing on them (the hub reads where players are), and a circle that shrinks and wears down whoever is outside |
 | `kit.topology` | — | composes a manifest from `exec.starters` (the types picked, what they hang under and call), checks the tree, builds and deploys (developers, `manage_compute`) |
 | `kit.spectate`, `kit.emotes`, `kit.shards` | — | a viewer's heartbeat so the world's messages reach it; emotes as client events every kit client reads; shard keys as the hubs compute them |
 | `kit.social` | — | parties, guilds and chat rooms over teams and channels |

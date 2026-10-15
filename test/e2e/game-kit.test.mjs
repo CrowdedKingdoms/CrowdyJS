@@ -1,7 +1,8 @@
 /**
  * The Game Kit against the starter hubs on a tier, as a THROWAWAY org admin: the suite registers
  * its own owner, who makes an org and an app, composes the starters with `kit.topology` and
- * builds and deploys them on the platform, and two players who play them. It needs nobody's
+ * builds and deploys them on the platform (the world, matchmaking and sessions, npcs, a duel, a
+ * private run and the leaderboard it posts to), and two players who play them. It needs nobody's
  * credential and never signs in as an existing account.
  *
  *   CROWDY_HTTP_URL=https://ck.dev.crowdedkingdoms.com CROWDY_E2E_THROWAWAY_OWNER=1 \
@@ -91,14 +92,18 @@ test('the kit composes, deploys and plays the starter pack on a tier', { skip, t
   closers.push(() => owner.client.apps.archive(appId));
   t.diagnostic(`org ${org.orgId}, app ${appId} in ${datacenter}`);
 
-  // The topology: the session and the npcs bring the hubs they hang under and call.
+  // The topology: the session, the npcs, a duel and a private run bring the hubs they hang under
+  // and call (the run posts to a leaderboard, named in its seed).
   const dev = owner.client.kit(appId, { developer: true, connect: { WebSocket, callTimeoutMs: 15_000 } });
   closers.push(() => dev.close());
   const offered = await dev.topology.types();
   t.diagnostic(`the toolchain's starters: ${offered.join(', ')}`);
-  const plan = await dev.topology.plan(['session', 'npcs']);
-  assert.deepEqual([...plan.crates].sort(), ['matchmaker', 'npc-mobs', 'session', 'world-tick']);
-  assert.deepEqual(Object.keys(plan.types).sort(), ['matchmaker', 'npcs', 'session', 'world']);
+  const runConfig = { floors: 1, rooms_per_floor: 2, start_hp: 500, start_power: 40, board: 'deepest' };
+  const plan = await dev.topology.plan(['session', 'npcs', 'minigame', 'instance'], {
+    overrides: { instance: { seed_b64: Buffer.from(JSON.stringify(runConfig)).toString('base64') } },
+  });
+  assert.deepEqual([...plan.crates].sort(), ['instance', 'leaderboard', 'matchmaker', 'minigame', 'npc-mobs', 'session', 'world-tick']);
+  assert.deepEqual(Object.keys(plan.types).sort(), ['instance', 'leaderboard', 'matchmaker', 'minigame', 'npcs', 'session', 'world']);
   const started = Date.now();
   const deployed = await dev.topology.deploy(plan, { timeoutMs: 900_000, onBuild: (b) => t.diagnostic(`build ${b.buildId}: ${b.status}`) });
   t.diagnostic(`deployed version ${deployed.version} (build ${deployed.buildId}) in ${Math.round((Date.now() - started) / 1000)} s`);
@@ -171,4 +176,39 @@ test('the kit composes, deploys and plays the starter pack on a tier', { skip, t
   assert.ok(area.mobs().length > 0 && area.npcs().length > 0);
   assert.equal(await code(area.attack(area.mobs()[0].id)), 'not_in_area', 'the area reads where players are; this one is not there');
   assert.equal((await area.talk(area.npcs()[0].id)).name, 'Warden');
+
+  // A duel: each throw hidden until both are in, two rounds of three won.
+  const [da, db] = [a.kit.minigames.duel(`e2e-${tag}`), b.kit.minigames.duel(`e2e-${tag}`)];
+  assert.equal((await da.watch()).phase, 'waiting');
+  assert.equal(await da.join(), false);
+  assert.equal(await db.join(), true, 'the second seat starts the first round');
+  for (let round = 1; round <= 2; round++) {
+    assert.equal(await da.throw('rock'), false);
+    assert.equal(da.view.get()?.last?.round ?? 0, round - 1, 'nothing is revealed with one throw in');
+    assert.equal(await db.throw('scissors'), true);
+    await until(`round ${round} revealed`, () => (da.view.get()?.last?.round ?? 0) >= round);
+  }
+  await until('the duel won', () => da.view.get()?.phase === 'finished');
+  assert.equal(String(da.view.get().winner), a.userId);
+
+  // A private run: the owner opens and invites; cleared, it posts each member's depth to the
+  // board, a hub calling a hub.
+  const runKey = `e2e-${tag}`;
+  const [ra, rb] = [a.kit.instances.run(runKey), b.kit.instances.run(runKey)];
+  assert.equal((await ra.watch()).phase, 'unopened');
+  assert.equal(await ra.open({ seed: 7 }), 7);
+  assert.equal(await code(rb.join()), 'forbidden', 'not invited yet');
+  assert.equal(await ra.invite(b.userId), true);
+  assert.equal(await rb.join(), true);
+  await until('the run open', () => ra.view.get()?.phase === 'running');
+  for (let i = 0; i < 6 && ra.view.get()?.phase === 'running'; i++) {
+    const before = ra.view.get().log.length;
+    t.diagnostic(`room: ${await ra.enter()}`);
+    await until('the room in the mirror', () => ra.view.get()?.log.length > before);
+  }
+  await until('the run cleared', () => ra.view.get()?.phase === 'cleared');
+  const board = a.kit.leaderboards.board('deepest');
+  await until('both depths on the board', async () => (await board.top()).length === 2);
+  assert.deepEqual((await board.top()).map((r) => String(r.player)).sort(), [a.userId, b.userId].sort());
+  assert.equal(await code(board.submit(a.userId, 99)), 'forbidden', 'a player never submits a score');
 });

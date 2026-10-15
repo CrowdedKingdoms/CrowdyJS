@@ -5107,7 +5107,7 @@ export type Mutation = {
   revokeTierAccessProvisioningToken: TierAccessProvisioningToken;
   /** OPERATOR: remove an entry from the list. Accounts it was admitting are refused at their next request, and their sessions and app tokens are ended. Refused on prod. */
   revokeTierAccessRule: TierAccessRule;
-  /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). A reverted voxel’s edit-log row takes the earlier edit’s type, state and author and the ROLLBACK’s time as its createdAt, so a client reading edits `since` its last sync sees the revert. Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
+  /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). A reverted voxel’s edit-log row takes the earlier edit’s type, state and author and the ROLLBACK’s time as its createdAt, so a client reading edits `since` its last sync sees the revert. When the app’s wilderness is closed (`wildernessOpen` false), an applied rollback that would write any chunk of closed, unclaimed wilderness is refused (403) before it writes anything; a dry run is not. Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
   /** OPERATOR ONLY. Runs the shared-usage billing tick once. It still bills only the last CLOSED clock hour — it will not charge an open hour. Use this to prove a closed-hour debit without waiting for the ~60s cron. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier. */
   runSharedUsageBillingTick: Scalars['Boolean']['output'];
@@ -7564,7 +7564,7 @@ export type Query = {
   execMods: Array<ExecMod>;
   /** Your mods in an app, on every grid. */
   execMyMods: Array<ExecMod>;
-  /** The starter packs, which replace the compute templates: a world tick (the root hub: clock, weather, resource nodes, liveops events), a matchmaker, game sessions (lobby, host, turns, scores) and an NPC and mob engine, as ckx-sdk crates to pass to `execBuild` and a manifest for `execDeploy`. Requires the org 'manage_compute' permission. */
+  /** The starter packs, which replace the compute templates: ckx-sdk hub crates for a root world, matchmaking, game sessions, NPCs and mobs, and game genres (leaderboards, cards, tactics, waves, duels, private runs, arenas, races, territory), to pass to `execBuild`, with a manifest for `execDeploy`. `starters` has one entry per node type, so a crate that serves two types appears twice: build it once. Requires the org 'manage_compute' permission. */
   execStarters: ExecStarterPack;
   /** An app's deployed ck-exec versions, newest first, and which is active. Requires the org 'view_compute_diagnostics' permission. */
   execVersions: Array<ExecVersion>;
