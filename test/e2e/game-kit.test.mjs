@@ -228,13 +228,14 @@ test('the kit composes, deploys and plays the starter pack on a tier', { skip, t
   await until('the gems spent', () => a.kit.wallet.balance('gems') === 10);
   assert.deepEqual(await b.kit.shops.at('town').buy('smith', 'potion'), { items: { potion: 1 }, currency: {} });
   await b.kit.player.watch('inventory', 'wallet');
+  const potions = a.kit.inventory.count('potion');
   const desk = a.kit.trades.at('town');
   const trade = await desk.open(b.userId);
   assert.equal(await desk.offer(trade, { currency: { gold: 10 } }), true);
   assert.equal(await b.kit.trades.at('town').offer(trade, { items: { potion: 1 } }), true);
   assert.equal(await desk.accept(trade), 'open');
   assert.equal(await b.kit.trades.at('town').accept(trade), 'settling');
-  await until('the potion in a\'s bag', () => a.kit.inventory.count('potion') >= 1);
+  await until('the potion in a\'s bag', () => a.kit.inventory.count('potion') === potions + 1);
   await until('the gold in b\'s wallet', () => b.kit.wallet.balance('gold') === 105);
   assert.equal(await code(a.kit.runtime.call('player', b.userId, 'me')), 'forbidden', 'only its player reads it');
 });

@@ -10791,9 +10791,9 @@
           "reply": {
             "fills": [],
             "open": 10,
-            "order": 3
+            "order": 1
           },
-          "reply_msgpack": "83a56f7264657203a566696c6c7390a46f70656e0a"
+          "reply_msgpack": "83a56f7264657201a566696c6c7390a46f70656e0a"
         },
         {
           "args": {
@@ -10834,9 +10834,9 @@
               ]
             ],
             "open": 0,
-            "order": 4
+            "order": 2
           },
-          "reply_msgpack": "83a56f7264657204a566696c6c7391920406a46f70656e00"
+          "reply_msgpack": "83a56f7264657202a566696c6c7391920406a46f70656e00"
         },
         {
           "args": {
@@ -10875,8 +10875,8 @@
           "reply": [
             {
               "count": 10,
-              "hold": "town:o:2:s-1",
-              "id": 3,
+              "hold": "town:o:1.4",
+              "id": 1,
               "item": "ore",
               "open": 4,
               "player": 2,
@@ -10884,13 +10884,13 @@
               "side": "sell"
             }
           ],
-          "reply_msgpack": "9188a2696403a6706c6179657202a46974656da36f7265a473696465a473656c6ca5707269636504a5636f756e740aa46f70656e04a4686f6c64ac746f776e3a6f3a323a732d31"
+          "reply_msgpack": "9188a2696401a6706c6179657202a46974656da36f7265a473696465a473656c6ca5707269636504a5636f756e740aa46f70656e04a4686f6c64aa746f776e3a6f3a312e34"
         },
         {
           "args": {
-            "order": 3
+            "order": 1
           },
-          "args_msgpack": "81a56f7264657203",
+          "args_msgpack": "81a56f7264657201",
           "call": "cancel",
           "caller": {
             "player": 2
@@ -10942,8 +10942,8 @@
               }
             }
           ],
-          "reply": 5,
-          "reply_msgpack": "05"
+          "reply": 3,
+          "reply_msgpack": "03"
         },
         {
           "args": {
@@ -10953,9 +10953,9 @@
                 "gold": 30
               }
             },
-            "trade": 5
+            "trade": 3
           },
-          "args_msgpack": "83a9616374696f6e5f6964a3742d61a662756e646c6581a863757272656e637981a4676f6c641ea5747261646505",
+          "args_msgpack": "83a9616374696f6e5f6964a3742d61a662756e646c6581a863757272656e637981a4676f6c641ea5747261646503",
           "call": "offer",
           "caller": {
             "player": 1
@@ -10989,9 +10989,9 @@
                 "ore": 2
               }
             },
-            "trade": 5
+            "trade": 3
           },
-          "args_msgpack": "83a9616374696f6e5f6964a3742d62a662756e646c6581a56974656d7381a36f726502a5747261646505",
+          "args_msgpack": "83a9616374696f6e5f6964a3742d62a662756e646c6581a56974656d7381a36f726502a5747261646503",
           "call": "offer",
           "caller": {
             "player": 2
@@ -11019,9 +11019,9 @@
         },
         {
           "args": {
-            "trade": 5
+            "trade": 3
           },
-          "args_msgpack": "81a5747261646505",
+          "args_msgpack": "81a5747261646503",
           "call": "accept",
           "caller": {
             "player": 1
@@ -11049,9 +11049,9 @@
         },
         {
           "args": {
-            "trade": 5
+            "trade": 3
           },
-          "args_msgpack": "81a5747261646505",
+          "args_msgpack": "81a5747261646503",
           "call": "accept",
           "caller": {
             "player": 2
@@ -11091,9 +11091,9 @@
         },
         {
           "args": {
-            "trade": 5
+            "trade": 3
           },
-          "args_msgpack": "81a5747261646505",
+          "args_msgpack": "81a5747261646503",
           "call": "decline",
           "caller": {
             "player": 3
