@@ -4,7 +4,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "rustVersion": "1.97.1",
   "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "58bdbf80b074a29748452ec5b5e26eb290f1cae7140f4ad4994c47c76a82a64d",
+  "contentHash": "3ad3d1cad5952bb91d39293eb15df98318906b7aa57f593960b002711aeb0174",
   "crates": [
     {
       "name": "alloc",
@@ -13,8 +13,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "ckx-sdk",
-      "version": "0.11.0",
-      "sourceHash": "eedafccbba1298498d7b2d827e91eeeb219001ef8d4a17cd490c80b2df416022"
+      "version": "0.12.0",
+      "sourceHash": "f593dfb80e4f41af72f2a3ec4051b428d009c56c074ab9efa9548eb29eeb7afd"
     },
     {
       "name": "core",
@@ -1384,7 +1384,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Receipts::record",
       "kind": "method",
       "signature": "pub fn record(&mut self, caller: Caller, action_id: Option<&str>, result: &Result<Vec<u8>>, now: u64)",
-      "docs": "Keeps what `caller` got for `action_id`; nothing without an action id."
+      "docs": "Keeps what `caller` got for `action_id`; nothing without an action id, and nothing for a refusal coded [`codes::UNAVAILABLE`], which says the action did not finish."
     },
     {
       "module": "ckx_sdk::kit",
@@ -1441,6 +1441,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "module",
       "signature": "pub mod codes",
       "docs": "The refusal codes kit hubs share. A hub may add its own: lowercase letters, digits and `_`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "econ",
+      "kind": "module",
+      "signature": "pub mod econ;",
+      "docs": ""
     },
     {
       "module": "ckx_sdk::kit",
@@ -2176,6 +2183,1462 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "const",
       "signature": "pub const STARTED: &str = \"started\";",
       "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "UNAVAILABLE",
+      "kind": "const",
+      "signature": "pub const UNAVAILABLE: &str = \"unavailable\";",
+      "docs": "Another hub this call needs did not answer in time, so the call did not finish: send it again with the same `action_id`. Receipts never keep it."
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "ID_MAX",
+      "kind": "const",
+      "signature": "pub const ID_MAX: usize = 64;",
+      "docs": "The longest item id, currency or reference the economy takes."
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "Wallet",
+      "kind": "reexport",
+      "signature": "pub use wallet::Wallet;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "holdings",
+      "kind": "module",
+      "signature": "pub mod holdings;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "holdings::{Bundle, Holdings}",
+      "kind": "reexport",
+      "signature": "pub use holdings::{Bundle, Holdings};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "holds",
+      "kind": "module",
+      "signature": "pub mod holds;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "holds::{Applied, Holds}",
+      "kind": "reexport",
+      "signature": "pub use holds::{Applied, Holds};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "items",
+      "kind": "module",
+      "signature": "pub mod items;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "items::{Catalog, Inventory, ItemDef, Stack}",
+      "kind": "reexport",
+      "signature": "pub use items::{Catalog, Inventory, ItemDef, Stack};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "loot",
+      "kind": "module",
+      "signature": "pub mod loot;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "orderbook",
+      "kind": "module",
+      "signature": "pub mod orderbook;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "production",
+      "kind": "module",
+      "signature": "pub mod production;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "progression",
+      "kind": "module",
+      "signature": "pub mod progression;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "recipes",
+      "kind": "module",
+      "signature": "pub mod recipes;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "vendor",
+      "kind": "module",
+      "signature": "pub mod vendor;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "wallet",
+      "kind": "module",
+      "signature": "pub mod wallet;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle",
+      "kind": "struct",
+      "signature": "pub struct Bundle { /// Item id to how many. pub items: BTreeMap<String, u64>, /// Currency to how much. pub currency: BTreeMap<String, i64>, }",
+      "docs": "Items and currency moved together: a price, a reward, a hold."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::check",
+      "kind": "method",
+      "signature": "pub fn check(&self) -> Result<()>",
+      "docs": "`bad_request` for an id the economy does not take or a negative amount."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::coins",
+      "kind": "method",
+      "signature": "pub fn coins(currency: &str, amount: i64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::currency",
+      "kind": "field",
+      "signature": "pub currency: BTreeMap<String, i64>",
+      "docs": "Currency to how much."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::item",
+      "kind": "method",
+      "signature": "pub fn item(id: &str, count: u64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::items",
+      "kind": "field",
+      "signature": "pub items: BTreeMap<String, u64>",
+      "docs": "Item id to how many."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::minus",
+      "kind": "method",
+      "signature": "pub fn minus(&self, part: &Bundle) -> Result<Bundle>",
+      "docs": "What is left of `self` once `part` is taken out of it; `insufficient` when it holds less."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::plus",
+      "kind": "method",
+      "signature": "pub fn plus(&self, other: &Bundle) -> Result<Bundle>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::times",
+      "kind": "method",
+      "signature": "pub fn times(&self, n: u64) -> Result<Bundle>",
+      "docs": "`n` of it."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::trimmed",
+      "kind": "method",
+      "signature": "pub fn trimmed(mut self) -> Bundle",
+      "docs": "Without its zero entries."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings",
+      "kind": "struct",
+      "signature": "pub struct Holdings { pub inventory: Inventory, pub wallet: Wallet, pub mail: BTreeMap<String, u64>, }",
+      "docs": "A player's inventory and wallet, and their mail: items given to them that did not fit, kept until they make room ([`Holdings::take_mail`])."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::give",
+      "kind": "method",
+      "signature": "pub fn give(&mut self, catalog: &Catalog, b: &Bundle) -> Result<()>",
+      "docs": "Gives `b`, or nothing: `full` when its items do not fit, `not_found` for an item the catalog lacks."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::give_or_mail",
+      "kind": "method",
+      "signature": "pub fn give_or_mail(&mut self, catalog: &Catalog, b: &Bundle) -> Result<()>",
+      "docs": "Gives `b`, its items as far as they fit and the rest to the mail. It fails only for a bundle the economy does not take: what another hub delivers always arrives."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::has",
+      "kind": "method",
+      "signature": "pub fn has(&self, b: &Bundle) -> bool",
+      "docs": "Whether `b` could be taken."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::inventory",
+      "kind": "field",
+      "signature": "pub inventory: Inventory",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::mail",
+      "kind": "field",
+      "signature": "pub mail: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::new",
+      "kind": "method",
+      "signature": "pub fn new(slots: u32) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::swap",
+      "kind": "method",
+      "signature": "pub fn swap(&mut self, catalog: &Catalog, pay: &Bundle, get: &Bundle) -> Result<()>",
+      "docs": "Takes `pay` and gives `get` together, or neither."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::take",
+      "kind": "method",
+      "signature": "pub fn take(&mut self, b: &Bundle) -> Result<()>",
+      "docs": "Takes `b`, or nothing: `insufficient`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::take_mail",
+      "kind": "method",
+      "signature": "pub fn take_mail(&mut self, catalog: &Catalog) -> Bundle",
+      "docs": "Moves what fits from the mail into the inventory; answers what moved."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::wallet",
+      "kind": "field",
+      "signature": "pub wallet: Wallet",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "APPLIED_MAX",
+      "kind": "const",
+      "signature": "pub const APPLIED_MAX: usize = 4_096;",
+      "docs": "How many references' answers are kept."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "APPLIED_TTL_MS",
+      "kind": "const",
+      "signature": "pub const APPLIED_TTL_MS: u64 = 7 * 24 * 3_600_000;",
+      "docs": "How long a reference's answer is kept."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied",
+      "kind": "struct",
+      "signature": "pub struct Applied { #[serde(default)] kept: VecDeque<Done>, }",
+      "docs": "The answer each reference got, so a step asked for again is answered as it was the first time. Keep it in the hub's state. A refusal coded `unavailable` is not kept: it says the step did not run."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::len",
+      "kind": "method",
+      "signature": "pub fn len(&self) -> usize",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::record",
+      "kind": "method",
+      "signature": "pub fn record(&mut self, reference: &str, result: &Result<Vec<u8>>, now: u64)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::replay",
+      "kind": "method",
+      "signature": "pub fn replay(&self, reference: &str, now: u64) -> Option<Result<Vec<u8>>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::run",
+      "kind": "method",
+      "signature": "pub fn run<H>( hub: &mut H, applied: fn(&mut H) -> &mut Applied, reference: &str, now: u64, act: impl FnOnce(&mut H) -> Result<Vec<u8>>, ) -> Result<Vec<u8>>",
+      "docs": "Runs `act` once per `reference`: asked again, it answers what it answered first."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds",
+      "kind": "struct",
+      "signature": "pub struct Holds { pub held: BTreeMap<String, Bundle>, }",
+      "docs": "Goods held under references, out of their owner's holdings until settled or released."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::held",
+      "kind": "field",
+      "signature": "pub held: BTreeMap<String, Bundle>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::hold",
+      "kind": "method",
+      "signature": "pub fn hold(&mut self, holdings: &mut Holdings, reference: &str, bundle: &Bundle) -> Result<()>",
+      "docs": "Moves `bundle` out of `holdings` into a hold under `reference`. The same reference with the same bundle again is the hold already made; with another, `conflict`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::release",
+      "kind": "method",
+      "signature": "pub fn release(&mut self, holdings: &mut Holdings, catalog: &Catalog, reference: &str) -> Result<Bundle>",
+      "docs": "Gives what the hold still has back to its owner (items that do not fit go to the mail); answers what came back, nothing for a reference not held."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::settle",
+      "kind": "method",
+      "signature": "pub fn settle(&mut self, reference: &str, part: &Bundle) -> Result<()>",
+      "docs": "Takes `part` out of the hold for good; the rest stays held, and an emptied hold is gone. `not_found` for a reference not held, `insufficient` when it holds less."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::total",
+      "kind": "method",
+      "signature": "pub fn total(&self) -> Bundle",
+      "docs": "Everything held, together."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog",
+      "kind": "struct",
+      "signature": "pub struct Catalog { items: BTreeMap<String, ItemDef>, }",
+      "docs": "The game's items, by id."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::from",
+      "kind": "method",
+      "signature": "fn from(items: Vec<ItemDef>) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::get",
+      "kind": "method",
+      "signature": "pub fn get(&self, id: &str) -> Option<&ItemDef>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::item",
+      "kind": "method",
+      "signature": "pub fn item(&self, id: &str) -> Result<&ItemDef>",
+      "docs": "The item, or `not_found`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::iter",
+      "kind": "method",
+      "signature": "pub fn iter(&self) -> impl Iterator<Item = &ItemDef>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::len",
+      "kind": "method",
+      "signature": "pub fn len(&self) -> usize",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory",
+      "kind": "struct",
+      "signature": "pub struct Inventory { pub slots: u32, pub stacks: Vec<Stack>, }",
+      "docs": "Stacks of items in a number of slots. Adding fills the item's stacks before starting new ones; a stack holds at most its item's `max_stack`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::add",
+      "kind": "method",
+      "signature": "pub fn add(&mut self, catalog: &Catalog, item: &str, count: u64) -> Result<()>",
+      "docs": "Adds `count` of `item`, or nothing: `not_found` for an item the catalog lacks, `full` when they do not fit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::add_what_fits",
+      "kind": "method",
+      "signature": "pub fn add_what_fits(&mut self, catalog: &Catalog, item: &str, count: u64) -> u64",
+      "docs": "Adds what fits; answers how many did not."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::count",
+      "kind": "method",
+      "signature": "pub fn count(&self, item: &str) -> u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::new",
+      "kind": "method",
+      "signature": "pub fn new(slots: u32) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::remove",
+      "kind": "method",
+      "signature": "pub fn remove(&mut self, item: &str, count: u64) -> Result<()>",
+      "docs": "Removes `count` of `item`, from its last stacks first, or nothing: `insufficient`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::room",
+      "kind": "method",
+      "signature": "pub fn room(&self, catalog: &Catalog, item: &str) -> u64",
+      "docs": "How many of `item` still fit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::slots",
+      "kind": "field",
+      "signature": "pub slots: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::stacks",
+      "kind": "field",
+      "signature": "pub stacks: Vec<Stack>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::totals",
+      "kind": "method",
+      "signature": "pub fn totals(&self) -> BTreeMap<String, u64>",
+      "docs": "Every item's total, by id."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef",
+      "kind": "struct",
+      "signature": "pub struct ItemDef { pub id: String, /// What one slot holds; 1 for an item that does not stack. #[serde(default = \"one\")] pub max_stack: u64, /// Whether it may change hands (a market's order book, a trade). #[serde(default = \"yes\")] pub tradable: bool, #[serde(default)] pub name: String, }",
+      "docs": "One kind of item."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef::max_stack",
+      "kind": "field",
+      "signature": "pub max_stack: u64",
+      "docs": "What one slot holds; 1 for an item that does not stack."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef::name",
+      "kind": "field",
+      "signature": "pub name: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef::tradable",
+      "kind": "field",
+      "signature": "pub tradable: bool",
+      "docs": "Whether it may change hands (a market's order book, a trade)."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Stack",
+      "kind": "struct",
+      "signature": "pub struct Stack { pub item: String, pub count: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Stack::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Stack::item",
+      "kind": "field",
+      "signature": "pub item: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Vec::from",
+      "kind": "method",
+      "signature": "fn from(c: Catalog) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootBook",
+      "kind": "struct",
+      "signature": "pub struct LootBook { pub rolls: u64, pub pity: BTreeMap<String, u32>, /// The last rolls: `(roll number, item)`. pub recent: Vec<(u64, String)>, }",
+      "docs": "What a player's rolls on one table have been."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootBook::pity",
+      "kind": "field",
+      "signature": "pub pity: BTreeMap<String, u32>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootBook::recent",
+      "kind": "field",
+      "signature": "pub recent: Vec<(u64, String)>",
+      "docs": "The last rolls: `(roll number, item)`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootBook::rolls",
+      "kind": "field",
+      "signature": "pub rolls: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry",
+      "kind": "struct",
+      "signature": "pub struct LootEntry { pub item: String, #[serde(default = \"one\")] pub count: u64, pub weight: u64, /// Entries in one pity group tick its counter together. #[serde(default)] pub pity_group: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry::item",
+      "kind": "field",
+      "signature": "pub item: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry::pity_group",
+      "kind": "field",
+      "signature": "pub pity_group: Option<String>",
+      "docs": "Entries in one pity group tick its counter together."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry::weight",
+      "kind": "field",
+      "signature": "pub weight: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll",
+      "kind": "struct",
+      "signature": "pub struct LootRoll { pub item: String, pub count: u64, /// Pity picked it. pub pity: bool, pub roll: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll::item",
+      "kind": "field",
+      "signature": "pub item: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll::pity",
+      "kind": "field",
+      "signature": "pub pity: bool",
+      "docs": "Pity picked it."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll::roll",
+      "kind": "field",
+      "signature": "pub roll: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootTable",
+      "kind": "struct",
+      "signature": "pub struct LootTable { pub entries: Vec<LootEntry>, /// A pity group, and the rolls within which it is guaranteed. pub pity_within: BTreeMap<String, u32>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootTable::entries",
+      "kind": "field",
+      "signature": "pub entries: Vec<LootEntry>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootTable::pity_within",
+      "kind": "field",
+      "signature": "pub pity_within: BTreeMap<String, u32>",
+      "docs": "A pity group, and the rolls within which it is guaranteed."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "RECENT_KEEP",
+      "kind": "const",
+      "signature": "pub const RECENT_KEEP: usize = 32;",
+      "docs": "How many of a book's rolls it keeps."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "roll",
+      "kind": "function",
+      "signature": "pub fn roll(table: &LootTable, book: &mut LootBook, rng: &mut Rng) -> Option<LootRoll>",
+      "docs": "Rolls once; `None` for a table with no weight. A due pity group picks its rarest entry."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill",
+      "kind": "struct",
+      "signature": "pub struct Fill { pub buyer: u64, pub seller: u64, pub buy_order: u64, pub sell_order: u64, pub price: i64, pub count: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::buy_order",
+      "kind": "field",
+      "signature": "pub buy_order: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::buyer",
+      "kind": "field",
+      "signature": "pub buyer: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::price",
+      "kind": "field",
+      "signature": "pub price: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::sell_order",
+      "kind": "field",
+      "signature": "pub sell_order: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::seller",
+      "kind": "field",
+      "signature": "pub seller: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order",
+      "kind": "struct",
+      "signature": "pub struct Order { pub id: u64, pub player: u64, pub side: Side, /// The limit, per unit. pub price: i64, /// What is still open. pub count: u64, pub at: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::at",
+      "kind": "field",
+      "signature": "pub at: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": "What is still open."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::id",
+      "kind": "field",
+      "signature": "pub id: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::player",
+      "kind": "field",
+      "signature": "pub player: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::price",
+      "kind": "field",
+      "signature": "pub price: i64",
+      "docs": "The limit, per unit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::side",
+      "kind": "field",
+      "signature": "pub side: Side",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook",
+      "kind": "struct",
+      "signature": "pub struct OrderBook { pub bids: Vec<Order>, pub asks: Vec<Order>, }",
+      "docs": "Bids best (highest) first, asks best (lowest) first, earlier first at a price."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::asks",
+      "kind": "field",
+      "signature": "pub asks: Vec<Order>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::bids",
+      "kind": "field",
+      "signature": "pub bids: Vec<Order>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::cancel",
+      "kind": "method",
+      "signature": "pub fn cancel(&mut self, id: u64, player: u64) -> Option<Order>",
+      "docs": "Takes `player`'s order `id` off the book."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::depth",
+      "kind": "method",
+      "signature": "pub fn depth(&self, side: Side, levels: usize) -> Vec<(i64, u64)>",
+      "docs": "`(price, count)` a level, best first."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::of",
+      "kind": "method",
+      "signature": "pub fn of(&self, player: u64) -> Vec<Order>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::order",
+      "kind": "method",
+      "signature": "pub fn order(&self, id: u64) -> Option<&Order>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::place",
+      "kind": "method",
+      "signature": "pub fn place(&mut self, id: u64, player: u64, side: Side, price: i64, count: u64, now: u64) -> Result<Vec<Fill>>",
+      "docs": "Places order `id` and matches it at once; whatever is left rests on the book."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Side",
+      "kind": "enum",
+      "signature": "pub enum Side { Buy, Sell, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Side::Buy",
+      "kind": "variant",
+      "signature": "Buy",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Side::Sell",
+      "kind": "variant",
+      "signature": "Sell",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain",
+      "kind": "struct",
+      "signature": "pub struct Chain { pub producers: Vec<Producer>, pub stock: BTreeMap<String, u64>, pub capacity: BTreeMap<String, u64>, /// When it last caught up; 0 before it starts. pub at: u64, }",
+      "docs": "Producers in order (an upstream producer before the ones it feeds), their stock, and how much of each resource the stock holds at most."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::advance",
+      "kind": "method",
+      "signature": "pub fn advance(&mut self, now: u64) -> BTreeMap<String, u64>",
+      "docs": "Catches up to `now`; answers what was made. A producer short of inputs or out of storage runs as many whole cycles as it can and loses the rest of the time."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::at",
+      "kind": "field",
+      "signature": "pub at: u64",
+      "docs": "When it last caught up; 0 before it starts."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::capacity",
+      "kind": "field",
+      "signature": "pub capacity: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::producers",
+      "kind": "field",
+      "signature": "pub producers: Vec<Producer>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::start",
+      "kind": "method",
+      "signature": "pub fn start(&mut self, now: u64)",
+      "docs": "Starts the clock."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::stock",
+      "kind": "field",
+      "signature": "pub stock: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::take",
+      "kind": "method",
+      "signature": "pub fn take(&mut self, resource: &str, count: u64) -> u64",
+      "docs": "Takes up to `count` of `resource` out of the stock; answers how many."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer",
+      "kind": "struct",
+      "signature": "pub struct Producer { pub id: String, /// What a cycle takes from the chain's stock. pub inputs: BTreeMap<String, u64>, /// What a cycle adds to it. pub outputs: BTreeMap<String, u64>, pub per_minute: f64, /// A cycle begun and not finished, from 0 to 1. pub progress: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::inputs",
+      "kind": "field",
+      "signature": "pub inputs: BTreeMap<String, u64>",
+      "docs": "What a cycle takes from the chain's stock."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::outputs",
+      "kind": "field",
+      "signature": "pub outputs: BTreeMap<String, u64>",
+      "docs": "What a cycle adds to it."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::per_minute",
+      "kind": "field",
+      "signature": "pub per_minute: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::progress",
+      "kind": "field",
+      "signature": "pub progress: f64",
+      "docs": "A cycle begun and not finished, from 0 to 1."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef",
+      "kind": "struct",
+      "signature": "pub struct AchievementDef { pub id: String, pub counter: String, pub target: u64, #[serde(default)] pub reward: Bundle, #[serde(default)] pub xp: u64, /// Not shown until unlocked. #[serde(default)] pub hidden: bool, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::counter",
+      "kind": "field",
+      "signature": "pub counter: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::hidden",
+      "kind": "field",
+      "signature": "pub hidden: bool",
+      "docs": "Not shown until unlocked."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::reward",
+      "kind": "field",
+      "signature": "pub reward: Bundle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::target",
+      "kind": "field",
+      "signature": "pub target: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::xp",
+      "kind": "field",
+      "signature": "pub xp: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels",
+      "kind": "struct",
+      "signature": "pub struct Levels { pub base: u64, pub growth: f64, pub max: u32, }",
+      "docs": "Experience to go from level `n` to `n + 1` is `base * growth^(n - 1)`, up to `max`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::base",
+      "kind": "field",
+      "signature": "pub base: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::growth",
+      "kind": "field",
+      "signature": "pub growth: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::max",
+      "kind": "field",
+      "signature": "pub max: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::to_next",
+      "kind": "method",
+      "signature": "pub fn to_next(&self, level: u32) -> Option<u64>",
+      "docs": "What level `level` takes to finish; `None` at the top."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Objective",
+      "kind": "struct",
+      "signature": "pub struct Objective { pub counter: String, pub target: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Objective::counter",
+      "kind": "field",
+      "signature": "pub counter: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Objective::target",
+      "kind": "field",
+      "signature": "pub target: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress",
+      "kind": "struct",
+      "signature": "pub struct Progress { pub level: u32, /// Toward the next level. pub xp: u64, pub total_xp: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::gain",
+      "kind": "method",
+      "signature": "pub fn gain(&mut self, levels: &Levels, xp: u64) -> u32",
+      "docs": "Adds experience; answers how many levels it gained."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::level",
+      "kind": "field",
+      "signature": "pub level: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::total_xp",
+      "kind": "field",
+      "signature": "pub total_xp: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::xp",
+      "kind": "field",
+      "signature": "pub xp: u64",
+      "docs": "Toward the next level."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef",
+      "kind": "struct",
+      "signature": "pub struct QuestDef { pub id: String, pub objectives: Vec<Objective>, #[serde(default)] pub reward: Bundle, #[serde(default)] pub xp: u64, /// Quests done first. #[serde(default)] pub requires: Vec<String>, #[serde(default)] pub level: u32, /// A first-session tutorial: taken on as the player starts. #[serde(default)] pub tutorial: bool, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::level",
+      "kind": "field",
+      "signature": "pub level: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::objectives",
+      "kind": "field",
+      "signature": "pub objectives: Vec<Objective>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::requires",
+      "kind": "field",
+      "signature": "pub requires: Vec<String>",
+      "docs": "Quests done first."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::reward",
+      "kind": "field",
+      "signature": "pub reward: Bundle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::tutorial",
+      "kind": "field",
+      "signature": "pub tutorial: bool",
+      "docs": "A first-session tutorial: taken on as the player starts."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::xp",
+      "kind": "field",
+      "signature": "pub xp: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record",
+      "kind": "struct",
+      "signature": "pub struct Record { pub counters: BTreeMap<String, u64>, /// Achievement to when it unlocked. pub unlocked: BTreeMap<String, u64>, /// Quest taken on, to each objective's count since. pub active: BTreeMap<String, Vec<u64>>, /// Done, waiting for its reward to be claimed. pub complete: BTreeSet<String>, /// Claimed, to when. pub done: BTreeMap<String, u64>, }",
+      "docs": "What a player did and what it earned them."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::accept",
+      "kind": "method",
+      "signature": "pub fn accept(&mut self, q: &QuestDef, level: u32) -> Result<()>",
+      "docs": "Takes on quest `q`: `conflict` when it is taken, done or waits for another, `forbidden` below its level."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::active",
+      "kind": "field",
+      "signature": "pub active: BTreeMap<String, Vec<u64>>",
+      "docs": "Quest taken on, to each objective's count since."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::claim",
+      "kind": "method",
+      "signature": "pub fn claim(&mut self, id: &str, now: u64) -> Result<()>",
+      "docs": "Claims quest `id`'s reward: `not_ready` until it is complete."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::complete",
+      "kind": "field",
+      "signature": "pub complete: BTreeSet<String>",
+      "docs": "Done, waiting for its reward to be claimed."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::count",
+      "kind": "method",
+      "signature": "pub fn count(&mut self, achievements: &[AchievementDef], quests: &[QuestDef], counter: &str, n: u64, now: u64) -> Unlocks",
+      "docs": "Counts `n` of `counter`: the achievements it unlocks and the quests it completes."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::counters",
+      "kind": "field",
+      "signature": "pub counters: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::done",
+      "kind": "field",
+      "signature": "pub done: BTreeMap<String, u64>",
+      "docs": "Claimed, to when."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::unlocked",
+      "kind": "field",
+      "signature": "pub unlocked: BTreeMap<String, u64>",
+      "docs": "Achievement to when it unlocked."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Unlocks",
+      "kind": "struct",
+      "signature": "pub struct Unlocks { pub achievements: Vec<String>, pub quests: Vec<String>, }",
+      "docs": "What one count changed."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Unlocks::achievements",
+      "kind": "field",
+      "signature": "pub achievements: Vec<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Unlocks::quests",
+      "kind": "field",
+      "signature": "pub quests: Vec<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "CRAFT_MAX",
+      "kind": "const",
+      "signature": "pub const CRAFT_MAX: u64 = 100;",
+      "docs": "The most crafts one call makes."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe",
+      "kind": "struct",
+      "signature": "pub struct Recipe { pub id: String, pub inputs: Bundle, pub outputs: Bundle, /// The level a player needs; 0 for none. #[serde(default)] pub level: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe::inputs",
+      "kind": "field",
+      "signature": "pub inputs: Bundle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe::level",
+      "kind": "field",
+      "signature": "pub level: u32",
+      "docs": "The level a player needs; 0 for none."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe::outputs",
+      "kind": "field",
+      "signature": "pub outputs: Bundle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "craft",
+      "kind": "function",
+      "signature": "pub fn craft(holdings: &mut Holdings, catalog: &Catalog, recipe: &Recipe, times: u64, level: u32) -> Result<Bundle>",
+      "docs": "Crafts `recipe` `times` times into `holdings`; answers what it made. `insufficient` without the inputs, `full` without room for the outputs (the inputs' room counts, since they go first), `forbidden` below the recipe's level."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer",
+      "kind": "struct",
+      "signature": "pub struct Offer { pub item: String, /// What one costs. pub price: Bundle, /// How many a restock puts on the shelf; none for no limit. #[serde(default)] pub stock: Option<u64>, /// How many one player may buy between restocks; none for no limit. #[serde(default)] pub per_player: Option<u64>, /// What the vendor pays for one; none when it does not buy them. #[serde(default)] pub buys_for: Option<Bundle>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::buys_for",
+      "kind": "field",
+      "signature": "pub buys_for: Option<Bundle>",
+      "docs": "What the vendor pays for one; none when it does not buy them."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::item",
+      "kind": "field",
+      "signature": "pub item: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::per_player",
+      "kind": "field",
+      "signature": "pub per_player: Option<u64>",
+      "docs": "How many one player may buy between restocks; none for no limit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::price",
+      "kind": "field",
+      "signature": "pub price: Bundle",
+      "docs": "What one costs."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::stock",
+      "kind": "field",
+      "signature": "pub stock: Option<u64>",
+      "docs": "How many a restock puts on the shelf; none for no limit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf",
+      "kind": "struct",
+      "signature": "pub struct Shelf { pub stock: BTreeMap<String, u64>, /// `\"<player>:<item>\"` to how many. pub bought: BTreeMap<String, u64>, pub restocked_at: u64, }",
+      "docs": "A vendor's shelf and who bought what since the last restock."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::bought",
+      "kind": "field",
+      "signature": "pub bought: BTreeMap<String, u64>",
+      "docs": "`\"<player>:<item>\"` to how many."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::check",
+      "kind": "method",
+      "signature": "pub fn check(&self, offer: &Offer, player: u64, count: u64) -> Result<()>",
+      "docs": "Whether `player` may buy `count` of `offer` now: `insufficient` (stock), `limit`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::restock",
+      "kind": "method",
+      "signature": "pub fn restock(&mut self, vendor: &Vendor, now: u64)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::restocked_at",
+      "kind": "field",
+      "signature": "pub restocked_at: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::sold",
+      "kind": "method",
+      "signature": "pub fn sold(&mut self, offer: &Offer, player: u64, count: u64)",
+      "docs": "Records a sale `check` allowed."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::stock",
+      "kind": "field",
+      "signature": "pub stock: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor",
+      "kind": "struct",
+      "signature": "pub struct Vendor { pub id: String, pub offers: Vec<Offer>, /// When it restocks (cron), or never. #[serde(default)] pub restock: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor::offer",
+      "kind": "method",
+      "signature": "pub fn offer(&self, item: &str) -> Result<&Offer>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor::offers",
+      "kind": "field",
+      "signature": "pub offers: Vec<Offer>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor::restock",
+      "kind": "field",
+      "signature": "pub restock: Option<String>",
+      "docs": "When it restocks (cron), or never."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet",
+      "kind": "struct",
+      "signature": "pub struct Wallet { pub balances: BTreeMap<String, i64>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet::balance",
+      "kind": "method",
+      "signature": "pub fn balance(&self, currency: &str) -> i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet::balances",
+      "kind": "field",
+      "signature": "pub balances: BTreeMap<String, i64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet::credit",
+      "kind": "method",
+      "signature": "pub fn credit(&mut self, currency: &str, amount: i64) -> Result<i64>",
+      "docs": "Adds `amount`; answers the balance. `bad_request` for a negative amount, `limit` past the largest balance."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet::debit",
+      "kind": "method",
+      "signature": "pub fn debit(&mut self, currency: &str, amount: i64) -> Result<i64>",
+      "docs": "Takes `amount`; answers the balance. `insufficient` when there is not that much."
     },
     {
       "module": "ckx_sdk::kit::play",
