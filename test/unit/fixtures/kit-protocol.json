@@ -1,0 +1,2360 @@
+{
+  "about": "The game kit protocol as the starter hubs speak it: kit messages, refusal codes, shard keys, realtime events and actor states, and each starter's calls with what they were answered and published. MessagePack is hex; `value` is the same decoded, with integer map keys as text.",
+  "actor_states": [
+    {
+      "msgpack": "88a46b696e64a36d6f62a2696404a178cb3ff8000000000000a179cb0000000000000000a17acbc002000000000000a2687028a66d61785f687064a46d6f6465a56368617365",
+      "value": {
+        "hp": 40,
+        "id": 4,
+        "kind": "mob",
+        "max_hp": 100,
+        "mode": "chase",
+        "x": 1.5,
+        "y": 0.0,
+        "z": -2.25
+      }
+    },
+    {
+      "msgpack": "88a46b696e64a3706574a2696409a178cb4024000000000000a179cb0000000000000000a17acb400c000000000000a26870c0a56f776e657207a46e616d65a34d6f67",
+      "value": {
+        "hp": null,
+        "id": 9,
+        "kind": "pet",
+        "name": "Mog",
+        "owner": 7,
+        "x": 10.0,
+        "y": 0.0,
+        "z": 3.5
+      }
+    },
+    {
+      "msgpack": "86a46b696e64a36e7063a2696402a178cb3fe0000000000000a179cb0000000000000000a17acb3fe0000000000000a26870c0",
+      "value": {
+        "hp": null,
+        "id": 2,
+        "kind": "npc",
+        "x": 0.5,
+        "y": 0.0,
+        "z": 0.5
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": "not_your_turn",
+      "message": "kit:not_your_turn: it is not your turn",
+      "text": "it is not your turn"
+    },
+    {
+      "code": "cooldown",
+      "message": "kit:cooldown: attacking too fast",
+      "text": "attacking too fast"
+    },
+    {
+      "code": "invalid_move",
+      "message": "kit:invalid_move: a move scores 0 to 3 points: really",
+      "text": "a move scores 0 to 3 points: really"
+    },
+    {
+      "code": null,
+      "message": "decode: invalid type: unit value",
+      "text": null
+    },
+    {
+      "code": null,
+      "message": "kit:Not A Code: x",
+      "text": null
+    },
+    {
+      "code": null,
+      "message": "unknown method `x`",
+      "text": null
+    }
+  ],
+  "events": [
+    {
+      "body": {
+        "damage": 5,
+        "mobId": "4",
+        "mobName": "wolf",
+        "targetUuid": "p1"
+      },
+      "bytes": "4d007b2264616d616765223a352c226d6f624964223a2234222c226d6f624e616d65223a22776f6c66222c2274617267657455756964223a227031227d",
+      "event_type": 77
+    },
+    {
+      "body": {
+        "night": true,
+        "sinceMs": 1000,
+        "timeOfDay": 0.9,
+        "untilMs": 9000,
+        "weather": "rain"
+      },
+      "bytes": "5a007b226e69676874223a747275652c2273696e63654d73223a313030302c2274696d654f66446179223a302e392c22756e74696c4d73223a393030302c2277656174686572223a227261696e227d",
+      "event_type": 90
+    },
+    {
+      "body": {
+        "actorId": "7",
+        "round": 2,
+        "turnInRound": 1
+      },
+      "bytes": "5b007b226163746f724964223a2237222c22726f756e64223a322c227475726e496e526f756e64223a317d",
+      "event_type": 91
+    },
+    {
+      "body": {
+        "standings": [
+          {
+            "actorId": "7",
+            "rank": 1,
+            "score": 12
+          }
+        ],
+        "winnerId": "7"
+      },
+      "bytes": "5c007b227374616e64696e6773223a5b7b226163746f724964223a2237222c2272616e6b223a312c2273636f7265223a31327d5d2c2277696e6e65724964223a2237227d",
+      "event_type": 92
+    },
+    {
+      "body": {
+        "mode": "ranked",
+        "players": [
+          "1",
+          "2"
+        ],
+        "proposalId": "3"
+      },
+      "bytes": "5d007b226d6f6465223a2272616e6b6564222c22706c6179657273223a5b2231222c2232225d2c2270726f706f73616c4964223a2233227d",
+      "event_type": 93
+    },
+    {
+      "body": {
+        "abilityId": "fireball",
+        "casterId": "1",
+        "damage": 30,
+        "kind": "impact",
+        "victimId": "2"
+      },
+      "bytes": "5e007b226162696c6974794964223a226669726562616c6c222c226361737465724964223a2231222c2264616d616765223a33302c226b696e64223a22696d70616374222c2276696374696d4964223a2232227d",
+      "event_type": 94
+    },
+    {
+      "body": {
+        "detail": "41 m/s",
+        "kind": "speed",
+        "userId": "1"
+      },
+      "bytes": "5f007b2264657461696c223a223431206d2f73222c226b696e64223a227370656564222c22757365724964223a2231227d",
+      "event_type": 95
+    },
+    {
+      "body": {
+        "owner": "red",
+        "pointId": "hill",
+        "previousOwner": "blue",
+        "progress": 1.0
+      },
+      "bytes": "60007b226f776e6572223a22726564222c22706f696e744964223a2268696c6c222c2270726576696f75734f776e6572223a22626c7565222c2270726f6772657373223a312e307d",
+      "event_type": 96
+    },
+    {
+      "body": {
+        "checkpoint": 3,
+        "courseId": "loop",
+        "elapsedMs": 61250,
+        "kind": "lap",
+        "lap": 1,
+        "userId": "1"
+      },
+      "bytes": "61007b22636865636b706f696e74223a332c22636f757273654964223a226c6f6f70222c22656c61707365644d73223a36313235302c226b696e64223a226c6170222c226c6170223a312c22757365724964223a2231227d",
+      "event_type": 97
+    },
+    {
+      "body": {
+        "centerX": 10.0,
+        "centerZ": -6.0,
+        "kind": "shrink",
+        "phase": 2,
+        "radiusNow": 40.5
+      },
+      "bytes": "62007b2263656e74657258223a31302e302c2263656e7465725a223a2d362e302c226b696e64223a22736872696e6b222c227068617365223a322c227261646975734e6f77223a34302e357d",
+      "event_type": 98
+    },
+    {
+      "body": {
+        "encounterId": "gate",
+        "kind": "wave_started",
+        "phase": 0,
+        "wave": 3
+      },
+      "bytes": "63007b22656e636f756e7465724964223a2267617465222c226b696e64223a22776176655f73746172746564222c227068617365223a302c2277617665223a337d",
+      "event_type": 99
+    },
+    {
+      "body": {
+        "holderId": "4",
+        "kind": "claimed",
+        "team": "red"
+      },
+      "bytes": "64007b22686f6c6465724964223a2234222c226b696e64223a22636c61696d6564222c227465616d223a22726564227d",
+      "event_type": 100
+    },
+    {
+      "body": {
+        "emote": "wave",
+        "targetUuid": null
+      },
+      "bytes": "65007b22656d6f7465223a2277617665222c2274617267657455756964223a6e756c6c7d",
+      "event_type": 101
+    }
+  ],
+  "messages": [
+    {
+      "msgpack": "86a17601a565706f636807a373657103a46b696e64a8736e617073686f74a563656c6c7393000102a47475726e01",
+      "name": "snapshot",
+      "value": {
+        "cells": [
+          0,
+          1,
+          2
+        ],
+        "epoch": 7,
+        "kind": "snapshot",
+        "seq": 3,
+        "turn": 1,
+        "v": 1
+      }
+    },
+    {
+      "msgpack": "87a17601a565706f636807a373657104a46b696e64a564656c7461a2696409a570726f707382a2687028a178cb3ff8000000000000a9747970655f6e616d65a34d6f62",
+      "name": "delta",
+      "value": {
+        "epoch": 7,
+        "id": 9,
+        "kind": "delta",
+        "props": {
+          "hp": 40,
+          "x": 1.5
+        },
+        "seq": 4,
+        "type_name": "Mob",
+        "v": 1
+      }
+    },
+    {
+      "msgpack": "86a17601a565706f636807a373657105a46b696e64a564656c7461a2696409a772656d6f766564c3",
+      "name": "removal",
+      "value": {
+        "epoch": 7,
+        "id": 9,
+        "kind": "delta",
+        "removed": true,
+        "seq": 5,
+        "v": 1
+      }
+    },
+    {
+      "msgpack": "86a17601a565706f636807a373657106a46b696e64a76368616e676564a477686174a468616e64a377686f920708",
+      "name": "changed",
+      "value": {
+        "epoch": 7,
+        "kind": "changed",
+        "seq": 6,
+        "v": 1,
+        "what": "hand",
+        "who": [
+          7,
+          8
+        ]
+      }
+    },
+    {
+      "msgpack": "86a17601a565706f636807a373657107a46b696e64a56576656e74a474797065a866696e6973686564a677696e6e657207",
+      "name": "event",
+      "value": {
+        "epoch": 7,
+        "kind": "event",
+        "seq": 7,
+        "type": "finished",
+        "v": 1,
+        "winner": 7
+      }
+    }
+  ],
+  "protocol": 1,
+  "shards": {
+    "around": [
+      {
+        "keys": [
+          "4,4",
+          "-4,-4",
+          "4,-4",
+          "12,-4",
+          "-4,4",
+          "12,4",
+          "-4,12",
+          "4,12",
+          "12,12"
+        ],
+        "radius": 1,
+        "size": 8,
+        "x": 0,
+        "z": 0
+      },
+      {
+        "keys": [
+          "-8,8"
+        ],
+        "radius": 0,
+        "size": 16,
+        "x": -5,
+        "z": 12
+      },
+      {
+        "keys": [
+          "30,30",
+          "22,22",
+          "26,22",
+          "30,22",
+          "34,22",
+          "38,22",
+          "22,26",
+          "26,26",
+          "30,26",
+          "34,26",
+          "38,26",
+          "22,30",
+          "26,30",
+          "34,30",
+          "38,30",
+          "22,34",
+          "26,34",
+          "30,34",
+          "34,34",
+          "38,34",
+          "22,38",
+          "26,38",
+          "30,38",
+          "34,38",
+          "38,38"
+        ],
+        "radius": 2,
+        "size": 4,
+        "x": 30,
+        "z": 30
+      }
+    ],
+    "keys": [
+      {
+        "key": "12,-4",
+        "size": 8,
+        "x": 10,
+        "z": -4
+      },
+      {
+        "key": "12,-4",
+        "size": 8,
+        "x": 8,
+        "z": -8
+      },
+      {
+        "key": "4,-12",
+        "size": 8,
+        "x": 7,
+        "z": -9
+      },
+      {
+        "key": "-8,8",
+        "size": 16,
+        "x": -1,
+        "z": 0
+      },
+      {
+        "key": "3,5",
+        "size": 1,
+        "x": 3,
+        "z": 5
+      },
+      {
+        "key": "-24,-40",
+        "size": 16,
+        "x": -17,
+        "z": -33
+      }
+    ]
+  },
+  "starters": [
+    {
+      "crate": "world-tick",
+      "key": "",
+      "node_type": "world",
+      "seed": "{\"nodes\": 2, \"node_amount\": 2, \"regrow_ms\": 1000}",
+      "steps": [
+        {
+          "args": {
+            "topic": "world"
+          },
+          "args_msgpack": "81a5746f706963a5776f726c64",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "epoch": 1,
+            "kind": "snapshot",
+            "modifiers": {},
+            "night": true,
+            "seq": 0,
+            "time_of_day": 0.0,
+            "v": 1,
+            "weather": "clear"
+          },
+          "reply_msgpack": "88a17601a565706f636801a373657100a46b696e64a8736e617073686f74ab74696d655f6f665f646179cb0000000000000000a56e69676874c3a777656174686572a5636c656172a96d6f6469666965727380"
+        },
+        {
+          "args": {
+            "topic": "nodes"
+          },
+          "args_msgpack": "81a5746f706963a56e6f646573",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "containers": [
+              {
+                "id": 0,
+                "props": {
+                  "amount": 2,
+                  "regrow_at": null
+                },
+                "type_name": "Node"
+              },
+              {
+                "id": 1,
+                "props": {
+                  "amount": 2,
+                  "regrow_at": null
+                },
+                "type_name": "Node"
+              }
+            ],
+            "epoch": 1,
+            "kind": "snapshot",
+            "seq": 0,
+            "v": 1
+          },
+          "reply_msgpack": "85a17601a565706f636801a373657100a46b696e64a8736e617073686f74aa636f6e7461696e6572739283a2696400a9747970655f6e616d65a44e6f6465a570726f707382a6616d6f756e7402a9726567726f775f6174c083a2696401a9747970655f6e616d65a44e6f6465a570726f707382a6616d6f756e7402a9726567726f775f6174c0"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "state",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "clock_ms": 0,
+            "conditions": {
+              "modifiers": {},
+              "night": true,
+              "time_of_day": 0.0,
+              "weather": "clear"
+            },
+            "events": [],
+            "nodes": [
+              {
+                "amount": 2,
+                "id": 0,
+                "regrow_at": null
+              },
+              {
+                "amount": 2,
+                "id": 1,
+                "regrow_at": null
+              }
+            ],
+            "online": 0
+          },
+          "reply_msgpack": "85aa636f6e646974696f6e7384ab74696d655f6f665f646179cb0000000000000000a56e69676874c3a777656174686572a5636c656172a96d6f6469666965727380a8636c6f636b5f6d7300a56e6f6465739283a2696400a6616d6f756e7402a9726567726f775f6174c083a2696401a6616d6f756e7402a9726567726f775f6174c0a66576656e747390a66f6e6c696e6500"
+        },
+        {
+          "args": {
+            "action_id": "h-1",
+            "node": 0
+          },
+          "args_msgpack": "82a9616374696f6e5f6964a3682d31a46e6f646500",
+          "call": "harvest",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "87a17601a565706f636801a373657101a46b696e64a564656c7461a2696400a9747970655f6e616d65a44e6f6465a570726f707382a6616d6f756e7401a9726567726f775f6174c0",
+              "topic": "nodes",
+              "value": {
+                "epoch": 1,
+                "id": 0,
+                "kind": "delta",
+                "props": {
+                  "amount": 1,
+                  "regrow_at": null
+                },
+                "seq": 1,
+                "type_name": "Node",
+                "v": 1
+              }
+            }
+          ],
+          "reply": 1,
+          "reply_msgpack": "01"
+        },
+        {
+          "args": {
+            "action_id": "h-1",
+            "node": 0
+          },
+          "args_msgpack": "82a9616374696f6e5f6964a3682d31a46e6f646500",
+          "call": "harvest",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": 1,
+          "reply_msgpack": "01"
+        },
+        {
+          "args": {
+            "action_id": "h-2",
+            "node": 0
+          },
+          "args_msgpack": "82a9616374696f6e5f6964a3682d32a46e6f646500",
+          "call": "harvest",
+          "caller": {
+            "player": 1
+          },
+          "code": "cooldown",
+          "error": "kit:cooldown: harvesting too fast",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "node": 7
+          },
+          "args_msgpack": "81a46e6f646507",
+          "call": "harvest",
+          "caller": {
+            "player": 2
+          },
+          "code": "not_found",
+          "error": "kit:not_found: no resource node 7",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "advance_ms": 1000,
+          "published": [
+            {
+              "msgpack": "88a17601a565706f636801a373657101a46b696e64a8736e617073686f74ab74696d655f6f665f646179cb3f4b4e81b4e81b4fa56e69676874c3a777656174686572a5636c656172a96d6f6469666965727380",
+              "topic": "world",
+              "value": {
+                "epoch": 1,
+                "kind": "snapshot",
+                "modifiers": {},
+                "night": true,
+                "seq": 1,
+                "time_of_day": 0.0008333333333333334,
+                "v": 1,
+                "weather": "clear"
+              }
+            }
+          ]
+        },
+        {
+          "args": {
+            "topic": "world"
+          },
+          "args_msgpack": "81a5746f706963a5776f726c64",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "epoch": 1,
+            "kind": "snapshot",
+            "modifiers": {},
+            "night": true,
+            "seq": 1,
+            "time_of_day": 0.0008333333333333334,
+            "v": 1,
+            "weather": "clear"
+          },
+          "reply_msgpack": "88a17601a565706f636801a373657101a46b696e64a8736e617073686f74ab74696d655f6f665f646179cb3f4b4e81b4e81b4fa56e69676874c3a777656174686572a5636c656172a96d6f6469666965727380"
+        },
+        {
+          "args": {
+            "topic": "nodes"
+          },
+          "args_msgpack": "81a5746f706963a56e6f646573",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "containers": [
+              {
+                "id": 0,
+                "props": {
+                  "amount": 1,
+                  "regrow_at": null
+                },
+                "type_name": "Node"
+              },
+              {
+                "id": 1,
+                "props": {
+                  "amount": 2,
+                  "regrow_at": null
+                },
+                "type_name": "Node"
+              }
+            ],
+            "epoch": 1,
+            "kind": "snapshot",
+            "seq": 1,
+            "v": 1
+          },
+          "reply_msgpack": "85a17601a565706f636801a373657101a46b696e64a8736e617073686f74aa636f6e7461696e6572739283a2696400a9747970655f6e616d65a44e6f6465a570726f707382a6616d6f756e7401a9726567726f775f6174c083a2696401a9747970655f6e616d65a44e6f6465a570726f707382a6616d6f756e7402a9726567726f775f6174c0"
+        },
+        {
+          "args": {
+            "end_ms": 1767226200000,
+            "name": "blood-moon",
+            "start_ms": 1767225600000
+          },
+          "args_msgpack": "83a6656e645f6d73cf0000019b76e3cfc0a46e616d65aa626c6f6f642d6d6f6f6ea873746172745f6d73cf0000019b76daa800",
+          "call": "schedule",
+          "caller": {
+            "player": 1
+          },
+          "code": "forbidden",
+          "error": "kit:forbidden: `schedule` is for the app's developers",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "end_ms": 1767226200000,
+            "modifiers": {
+              "aggro": 2.0
+            },
+            "name": "blood-moon",
+            "start_ms": 1767225600000
+          },
+          "args_msgpack": "84a6656e645f6d73cf0000019b76e3cfc0a96d6f6469666965727381a5616767726fcb4000000000000000a46e616d65aa626c6f6f642d6d6f6f6ea873746172745f6d73cf0000019b76daa800",
+          "call": "schedule",
+          "caller": {
+            "developer": 9
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "88a17601a565706f636801a373657102a46b696e64a8736e617073686f74ab74696d655f6f665f646179cb3f4b4e81b4e81b4fa56e69676874c3a777656174686572a5636c656172a96d6f6469666965727381a5616767726fcb4000000000000000",
+              "topic": "world",
+              "value": {
+                "epoch": 1,
+                "kind": "snapshot",
+                "modifiers": {
+                  "aggro": 2.0
+                },
+                "night": true,
+                "seq": 2,
+                "time_of_day": 0.0008333333333333334,
+                "v": 1,
+                "weather": "clear"
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        }
+      ]
+    },
+    {
+      "crate": "matchmaker",
+      "key": "ranked",
+      "node_type": "matchmaker",
+      "steps": [
+        {
+          "args": {
+            "topic": "queue"
+          },
+          "args_msgpack": "81a5746f706963a57175657565",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "epoch": 1,
+            "forming": 0,
+            "kind": "snapshot",
+            "proposals": 0,
+            "seq": 0,
+            "v": 1,
+            "waiting": 0
+          },
+          "reply_msgpack": "87a17601a565706f636801a373657100a46b696e64a8736e617073686f74a777616974696e6700a970726f706f73616c7300a7666f726d696e6700"
+        },
+        {
+          "args": {
+            "action_id": "j-1",
+            "rating": 1000
+          },
+          "args_msgpack": "82a9616374696f6e5f6964a36a2d31a6726174696e67cd03e8",
+          "call": "join",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "rating": 1000,
+            "state": "queued",
+            "waited_ms": 0,
+            "window": 100
+          },
+          "reply_msgpack": "84a57374617465a6717565756564a6726174696e67cd03e8a97761697465645f6d7300a677696e646f7764"
+        },
+        {
+          "args": {
+            "rating": 1020
+          },
+          "args_msgpack": "81a6726174696e67cd03fc",
+          "call": "join",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "rating": 1020,
+            "state": "queued",
+            "waited_ms": 0,
+            "window": 100
+          },
+          "reply_msgpack": "84a57374617465a6717565756564a6726174696e67cd03fca97761697465645f6d7300a677696e646f7764"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "status",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "rating": 1000,
+            "state": "queued",
+            "waited_ms": 0,
+            "window": 100
+          },
+          "reply_msgpack": "84a57374617465a6717565756564a6726174696e67cd03e8a97761697465645f6d7300a677696e646f7764"
+        },
+        {
+          "advance_ms": 1000,
+          "published": [
+            {
+              "msgpack": "87a17601a565706f636801a373657101a46b696e64a8736e617073686f74a777616974696e6700a970726f706f73616c7301a7666f726d696e6700",
+              "topic": "queue",
+              "value": {
+                "epoch": 1,
+                "forming": 0,
+                "kind": "snapshot",
+                "proposals": 1,
+                "seq": 1,
+                "v": 1,
+                "waiting": 0
+              }
+            }
+          ]
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "status",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "accepted": [],
+            "expires_in_ms": 15000,
+            "players": [
+              1,
+              2
+            ],
+            "state": "proposed"
+          },
+          "reply_msgpack": "84a57374617465a870726f706f736564a7706c6179657273920102a8616363657074656490ad657870697265735f696e5f6d73cd3a98"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "accept",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "accepted": [
+              1
+            ],
+            "expires_in_ms": 15000,
+            "players": [
+              1,
+              2
+            ],
+            "state": "proposed"
+          },
+          "reply_msgpack": "84a57374617465a870726f706f736564a7706c6179657273920102a861636365707465649101ad657870697265735f696e5f6d73cd3a98"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "accept",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "session": "ranked-1-1",
+            "state": "matched"
+          },
+          "reply_msgpack": "82a57374617465a76d617463686564a773657373696f6eaa72616e6b65642d312d31"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "status",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "session": "ranked-1-1",
+            "state": "matched"
+          },
+          "reply_msgpack": "82a57374617465a76d617463686564a773657373696f6eaa72616e6b65642d312d31"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "accept",
+          "caller": {
+            "player": 3
+          },
+          "code": "not_found",
+          "error": "kit:not_found: you have no match to accept",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "party": [
+              4
+            ],
+            "rating": 900
+          },
+          "args_msgpack": "82a570617274799104a6726174696e67cd0384",
+          "call": "join",
+          "caller": {
+            "player": 3
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "confirmed": [
+              3
+            ],
+            "expires_in_ms": 60000,
+            "leader": 3,
+            "members": [
+              3,
+              4
+            ],
+            "state": "party"
+          },
+          "reply_msgpack": "85a57374617465a57061727479a66c656164657203a76d656d62657273920304a9636f6e6669726d65649103ad657870697265735f696e5f6d73cdea60"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "status",
+          "caller": {
+            "player": 4
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "confirmed": [
+              3
+            ],
+            "expires_in_ms": 60000,
+            "leader": 3,
+            "members": [
+              3,
+              4
+            ],
+            "state": "party"
+          },
+          "reply_msgpack": "85a57374617465a57061727479a66c656164657203a76d656d62657273920304a9636f6e6669726d65649103ad657870697265735f696e5f6d73cdea60"
+        },
+        {
+          "args": {
+            "leader": 3,
+            "rating": 900
+          },
+          "args_msgpack": "82a66c656164657203a6726174696e67cd0384",
+          "call": "join",
+          "caller": {
+            "player": 5
+          },
+          "code": "forbidden",
+          "error": "kit:forbidden: you are not in that party",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "leader": 3,
+            "rating": 950
+          },
+          "args_msgpack": "82a66c656164657203a6726174696e67cd03b6",
+          "call": "join",
+          "caller": {
+            "player": 4
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "rating": 950,
+            "state": "queued",
+            "waited_ms": 0,
+            "window": 100
+          },
+          "reply_msgpack": "84a57374617465a6717565756564a6726174696e67cd03b6a97761697465645f6d7300a677696e646f7764"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "status",
+          "caller": {
+            "player": 4
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "rating": 950,
+            "state": "queued",
+            "waited_ms": 0,
+            "window": 100
+          },
+          "reply_msgpack": "84a57374617465a6717565756564a6726174696e67cd03b6a97761697465645f6d7300a677696e646f7764"
+        },
+        {
+          "args": {
+            "topic": "queue"
+          },
+          "args_msgpack": "81a5746f706963a57175657565",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "epoch": 1,
+            "forming": 0,
+            "kind": "snapshot",
+            "proposals": 0,
+            "seq": 1,
+            "v": 1,
+            "waiting": 2
+          },
+          "reply_msgpack": "87a17601a565706f636801a373657101a46b696e64a8736e617073686f74a777616974696e6702a970726f706f73616c7300a7666f726d696e6700"
+        }
+      ]
+    },
+    {
+      "crate": "session",
+      "key": "ranked-1-1",
+      "node_type": "session",
+      "steps": [
+        {
+          "args": {
+            "topic": "session"
+          },
+          "args_msgpack": "81a5746f706963a773657373696f6e",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "config": {
+              "lobby_idle_ms": 600000,
+              "max_players": 8,
+              "max_rounds": 20,
+              "min_players": 2,
+              "target_score": 10,
+              "turn_ms": 30000
+            },
+            "connected": [],
+            "epoch": 1,
+            "host": null,
+            "kind": "snapshot",
+            "moves": [],
+            "phase": "lobby",
+            "players": [],
+            "ready": [],
+            "reserved": [],
+            "round": 0,
+            "scores": {},
+            "seq": 0,
+            "turn": 0,
+            "v": 1,
+            "winner": null
+          },
+          "reply_msgpack": "de0010a17601a565706f636801a373657100a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a56c6f626279a8726573657276656490a7706c617965727390a5726561647990a9636f6e6e656374656490a4686f7374c0a47475726e00a5726f756e6400a673636f72657380a677696e6e6572c0a56d6f76657390"
+        },
+        {
+          "args": {
+            "players": [
+              1,
+              2
+            ]
+          },
+          "args_msgpack": "81a7706c6179657273920102",
+          "call": "reserve",
+          "caller": {
+            "instance": 5
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "de0010a17601a565706f636801a373657101a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a56c6f626279a87265736572766564920102a7706c617965727390a5726561647990a9636f6e6e656374656490a4686f7374c0a47475726e00a5726f756e6400a673636f72657380a677696e6e6572c0a56d6f76657390",
+              "topic": "session",
+              "value": {
+                "config": {
+                  "lobby_idle_ms": 600000,
+                  "max_players": 8,
+                  "max_rounds": 20,
+                  "min_players": 2,
+                  "target_score": 10,
+                  "turn_ms": 30000
+                },
+                "connected": [],
+                "epoch": 1,
+                "host": null,
+                "kind": "snapshot",
+                "moves": [],
+                "phase": "lobby",
+                "players": [],
+                "ready": [],
+                "reserved": [
+                  1,
+                  2
+                ],
+                "round": 0,
+                "scores": {},
+                "seq": 1,
+                "turn": 0,
+                "v": 1,
+                "winner": null
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "join",
+          "caller": {
+            "player": 3
+          },
+          "code": "reserved",
+          "error": "kit:reserved: this session is reserved for other players",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "action_id": "j-1"
+          },
+          "args_msgpack": "81a9616374696f6e5f6964a36a2d31",
+          "call": "join",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "de0010a17601a565706f636801a373657102a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a56c6f626279a87265736572766564920102a7706c61796572739101a5726561647990a9636f6e6e656374656490a4686f737401a47475726e00a5726f756e6400a673636f726573810100a677696e6e6572c0a56d6f76657390",
+              "topic": "session",
+              "value": {
+                "config": {
+                  "lobby_idle_ms": 600000,
+                  "max_players": 8,
+                  "max_rounds": 20,
+                  "min_players": 2,
+                  "target_score": 10,
+                  "turn_ms": 30000
+                },
+                "connected": [],
+                "epoch": 1,
+                "host": 1,
+                "kind": "snapshot",
+                "moves": [],
+                "phase": "lobby",
+                "players": [
+                  1
+                ],
+                "ready": [],
+                "reserved": [
+                  1,
+                  2
+                ],
+                "round": 0,
+                "scores": {
+                  "1": 0
+                },
+                "seq": 2,
+                "turn": 0,
+                "v": 1,
+                "winner": null
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "join",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "de0010a17601a565706f636801a373657103a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a56c6f626279a87265736572766564920102a7706c6179657273920102a5726561647990a9636f6e6e656374656490a4686f737401a47475726e00a5726f756e6400a673636f7265738201000200a677696e6e6572c0a56d6f76657390",
+              "topic": "session",
+              "value": {
+                "config": {
+                  "lobby_idle_ms": 600000,
+                  "max_players": 8,
+                  "max_rounds": 20,
+                  "min_players": 2,
+                  "target_score": 10,
+                  "turn_ms": 30000
+                },
+                "connected": [],
+                "epoch": 1,
+                "host": 1,
+                "kind": "snapshot",
+                "moves": [],
+                "phase": "lobby",
+                "players": [
+                  1,
+                  2
+                ],
+                "ready": [],
+                "reserved": [
+                  1,
+                  2
+                ],
+                "round": 0,
+                "scores": {
+                  "1": 0,
+                  "2": 0
+                },
+                "seq": 3,
+                "turn": 0,
+                "v": 1,
+                "winner": null
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "ready": true
+          },
+          "args_msgpack": "81a57265616479c3",
+          "call": "ready",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "de0010a17601a565706f636801a373657104a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a56c6f626279a87265736572766564920102a7706c6179657273920102a572656164799101a9636f6e6e656374656490a4686f737401a47475726e00a5726f756e6400a673636f7265738201000200a677696e6e6572c0a56d6f76657390",
+              "topic": "session",
+              "value": {
+                "config": {
+                  "lobby_idle_ms": 600000,
+                  "max_players": 8,
+                  "max_rounds": 20,
+                  "min_players": 2,
+                  "target_score": 10,
+                  "turn_ms": 30000
+                },
+                "connected": [],
+                "epoch": 1,
+                "host": 1,
+                "kind": "snapshot",
+                "moves": [],
+                "phase": "lobby",
+                "players": [
+                  1,
+                  2
+                ],
+                "ready": [
+                  1
+                ],
+                "reserved": [
+                  1,
+                  2
+                ],
+                "round": 0,
+                "scores": {
+                  "1": 0,
+                  "2": 0
+                },
+                "seq": 4,
+                "turn": 0,
+                "v": 1,
+                "winner": null
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "start",
+          "caller": {
+            "player": 2
+          },
+          "code": "forbidden",
+          "error": "kit:forbidden: only the host starts the session",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "ready": true
+          },
+          "args_msgpack": "81a57265616479c3",
+          "call": "ready",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "de0010a17601a565706f636801a373657105a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a56c6f626279a87265736572766564920102a7706c6179657273920102a57265616479920102a9636f6e6e656374656490a4686f737401a47475726e00a5726f756e6400a673636f7265738201000200a677696e6e6572c0a56d6f76657390",
+              "topic": "session",
+              "value": {
+                "config": {
+                  "lobby_idle_ms": 600000,
+                  "max_players": 8,
+                  "max_rounds": 20,
+                  "min_players": 2,
+                  "target_score": 10,
+                  "turn_ms": 30000
+                },
+                "connected": [],
+                "epoch": 1,
+                "host": 1,
+                "kind": "snapshot",
+                "moves": [],
+                "phase": "lobby",
+                "players": [
+                  1,
+                  2
+                ],
+                "ready": [
+                  1,
+                  2
+                ],
+                "reserved": [
+                  1,
+                  2
+                ],
+                "round": 0,
+                "scores": {
+                  "1": 0,
+                  "2": 0
+                },
+                "seq": 5,
+                "turn": 0,
+                "v": 1,
+                "winner": null
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "start",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "de0010a17601a565706f636801a373657106a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a7706c6179696e67a87265736572766564920102a7706c6179657273920102a57265616479920102a9636f6e6e656374656490a4686f737401a47475726e00a5726f756e6401a673636f7265738201000200a677696e6e6572c0a56d6f76657390",
+              "topic": "session",
+              "value": {
+                "config": {
+                  "lobby_idle_ms": 600000,
+                  "max_players": 8,
+                  "max_rounds": 20,
+                  "min_players": 2,
+                  "target_score": 10,
+                  "turn_ms": 30000
+                },
+                "connected": [],
+                "epoch": 1,
+                "host": 1,
+                "kind": "snapshot",
+                "moves": [],
+                "phase": "playing",
+                "players": [
+                  1,
+                  2
+                ],
+                "ready": [
+                  1,
+                  2
+                ],
+                "reserved": [
+                  1,
+                  2
+                ],
+                "round": 1,
+                "scores": {
+                  "1": 0,
+                  "2": 0
+                },
+                "seq": 6,
+                "turn": 0,
+                "v": 1,
+                "winner": null
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "points": 1
+          },
+          "args_msgpack": "81a6706f696e747301",
+          "call": "act",
+          "caller": {
+            "player": 2
+          },
+          "code": "not_your_turn",
+          "error": "kit:not_your_turn: it is not your turn",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "action_id": "a-1",
+            "points": 3
+          },
+          "args_msgpack": "82a9616374696f6e5f6964a3612d31a6706f696e747303",
+          "call": "act",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "de0010a17601a565706f636801a373657107a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a7706c6179696e67a87265736572766564920102a7706c6179657273920102a57265616479920102a9636f6e6e656374656490a4686f737401a47475726e01a5726f756e6401a673636f7265738201030200a677696e6e6572c0a56d6f7665739183a6706c6179657201a5726f756e6401a6706f696e747303",
+              "topic": "session",
+              "value": {
+                "config": {
+                  "lobby_idle_ms": 600000,
+                  "max_players": 8,
+                  "max_rounds": 20,
+                  "min_players": 2,
+                  "target_score": 10,
+                  "turn_ms": 30000
+                },
+                "connected": [],
+                "epoch": 1,
+                "host": 1,
+                "kind": "snapshot",
+                "moves": [
+                  {
+                    "player": 1,
+                    "points": 3,
+                    "round": 1
+                  }
+                ],
+                "phase": "playing",
+                "players": [
+                  1,
+                  2
+                ],
+                "ready": [
+                  1,
+                  2
+                ],
+                "reserved": [
+                  1,
+                  2
+                ],
+                "round": 1,
+                "scores": {
+                  "1": 3,
+                  "2": 0
+                },
+                "seq": 7,
+                "turn": 1,
+                "v": 1,
+                "winner": null
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "action_id": "a-1",
+            "points": 3
+          },
+          "args_msgpack": "82a9616374696f6e5f6964a3612d31a6706f696e747303",
+          "call": "act",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "points": 9
+          },
+          "args_msgpack": "81a6706f696e747309",
+          "call": "act",
+          "caller": {
+            "player": 2
+          },
+          "code": "invalid_move",
+          "error": "kit:invalid_move: a move scores 0 to 3 points",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "advance_ms": 30000,
+          "published": [
+            {
+              "msgpack": "de0010a17601a565706f636801a373657108a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a7706c6179696e67a87265736572766564920102a7706c6179657273920102a57265616479920102a9636f6e6e656374656490a4686f737401a47475726e00a5726f756e6402a673636f7265738201030200a677696e6e6572c0a56d6f7665739283a6706c6179657201a5726f756e6401a6706f696e74730383a6706c6179657202a5726f756e6401a6706f696e7473c0",
+              "topic": "session",
+              "value": {
+                "config": {
+                  "lobby_idle_ms": 600000,
+                  "max_players": 8,
+                  "max_rounds": 20,
+                  "min_players": 2,
+                  "target_score": 10,
+                  "turn_ms": 30000
+                },
+                "connected": [],
+                "epoch": 1,
+                "host": 1,
+                "kind": "snapshot",
+                "moves": [
+                  {
+                    "player": 1,
+                    "points": 3,
+                    "round": 1
+                  },
+                  {
+                    "player": 2,
+                    "points": null,
+                    "round": 1
+                  }
+                ],
+                "phase": "playing",
+                "players": [
+                  1,
+                  2
+                ],
+                "ready": [
+                  1,
+                  2
+                ],
+                "reserved": [
+                  1,
+                  2
+                ],
+                "round": 2,
+                "scores": {
+                  "1": 3,
+                  "2": 0
+                },
+                "seq": 8,
+                "turn": 0,
+                "v": 1,
+                "winner": null
+              }
+            }
+          ]
+        },
+        {
+          "args": {
+            "topic": "session"
+          },
+          "args_msgpack": "81a5746f706963a773657373696f6e",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "config": {
+              "lobby_idle_ms": 600000,
+              "max_players": 8,
+              "max_rounds": 20,
+              "min_players": 2,
+              "target_score": 10,
+              "turn_ms": 30000
+            },
+            "connected": [],
+            "epoch": 1,
+            "host": 1,
+            "kind": "snapshot",
+            "moves": [
+              {
+                "player": 1,
+                "points": 3,
+                "round": 1
+              },
+              {
+                "player": 2,
+                "points": null,
+                "round": 1
+              }
+            ],
+            "phase": "playing",
+            "players": [
+              1,
+              2
+            ],
+            "ready": [
+              1,
+              2
+            ],
+            "reserved": [
+              1,
+              2
+            ],
+            "round": 2,
+            "scores": {
+              "1": 3,
+              "2": 0
+            },
+            "seq": 8,
+            "turn": 0,
+            "v": 1,
+            "winner": null
+          },
+          "reply_msgpack": "de0010a17601a565706f636801a373657108a46b696e64a8736e617073686f74a6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a7706c6179696e67a87265736572766564920102a7706c6179657273920102a57265616479920102a9636f6e6e656374656490a4686f737401a47475726e00a5726f756e6402a673636f7265738201030200a677696e6e6572c0a56d6f7665739283a6706c6179657201a5726f756e6401a6706f696e74730383a6706c6179657202a5726f756e6401a6706f696e7473c0"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "state",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "config": {
+              "lobby_idle_ms": 600000,
+              "max_players": 8,
+              "max_rounds": 20,
+              "min_players": 2,
+              "target_score": 10,
+              "turn_ms": 30000
+            },
+            "connected": [],
+            "host": 1,
+            "moves": [
+              {
+                "player": 1,
+                "points": 3,
+                "round": 1
+              },
+              {
+                "player": 2,
+                "points": null,
+                "round": 1
+              }
+            ],
+            "phase": "playing",
+            "players": [
+              1,
+              2
+            ],
+            "ready": [
+              1,
+              2
+            ],
+            "reserved": [
+              1,
+              2
+            ],
+            "round": 2,
+            "scores": {
+              "1": 3,
+              "2": 0
+            },
+            "turn": 0,
+            "winner": null
+          },
+          "reply_msgpack": "8ca6636f6e66696786ab6d696e5f706c617965727302ab6d61785f706c617965727308a77475726e5f6d73cd7530ac7461726765745f73636f72650aaa6d61785f726f756e647314ad6c6f6262795f69646c655f6d73ce000927c0a57068617365a7706c6179696e67a87265736572766564920102a7706c6179657273920102a57265616479920102a9636f6e6e656374656490a4686f737401a47475726e00a5726f756e6402a673636f7265738201030200a677696e6e6572c0a56d6f7665739283a6706c6179657201a5726f756e6401a6706f696e74730383a6706c6179657202a5726f756e6401a6706f696e7473c0"
+        }
+      ]
+    },
+    {
+      "crate": "npc-mobs",
+      "key": "0,0",
+      "node_type": "npcs",
+      "steps": [
+        {
+          "args": {
+            "topic": "area"
+          },
+          "args_msgpack": "81a5746f706963a461726561",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "containers": [
+              {
+                "id": 1,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 3.5,
+                  "z": 0.5
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 2,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 2.0000000000000004,
+                  "z": 3.098076211353316
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 3,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -0.9999999999999993,
+                  "z": 3.098076211353316
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 4,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -2.5,
+                  "z": 0.5000000000000003
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 5,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -1.0000000000000013,
+                  "z": -2.098076211353315
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 6,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 2.0000000000000004,
+                  "z": -2.098076211353316
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 7,
+                "props": {
+                  "line": "Mind the wolves after dark.",
+                  "name": "Warden",
+                  "x": -1.5,
+                  "z": -1.5
+                },
+                "type_name": "Npc"
+              },
+              {
+                "id": 8,
+                "props": {
+                  "line": "Fair prices, mostly.",
+                  "name": "Trader",
+                  "x": -0.5,
+                  "z": 0.5
+                },
+                "type_name": "Npc"
+              }
+            ],
+            "epoch": 1,
+            "kind": "snapshot",
+            "seq": 0,
+            "v": 1
+          },
+          "reply_msgpack": "85a17601a565706f636801a373657100a46b696e64a8736e617073686f74aa636f6e7461696e6572739883a2696401a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb400c000000000000a17acb3fe000000000000083a2696402a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb4000000000000001a17acb4008c8dc2e42398083a2696403a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbbfeffffffffffffaa17acb4008c8dc2e42398083a2696404a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbc004000000000000a17acb3fe000000000000383a2696405a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbbff0000000000006a17acbc000c8dc2e42397e83a2696406a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb4000000000000001a17acbc000c8dc2e42398083a2696407a9747970655f6e616d65a34e7063a570726f707384a46c696e65bb4d696e642074686520776f6c766573206166746572206461726b2ea46e616d65a657617264656ea178cbbff8000000000000a17acbbff800000000000083a2696408a9747970655f6e616d65a34e7063a570726f707384a46c696e65b446616972207072696365732c206d6f73746c792ea46e616d65a6547261646572a178cbbfe0000000000000a17acb3fe0000000000000"
+        },
+        {
+          "advance_ms": 1000,
+          "published": [
+            {
+              "msgpack": "87a17601a565706f636801a373657101a46b696e64a564656c7461a2696401a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb400df5bd840474b8a17acb3fedf072a4926ab8",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 1,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 3.744990378747925,
+                  "z": 0.9356015409751626
+                },
+                "seq": 1,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657102a46b696e64a564656c7461a2696402a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb3ffc40cf6aeb0ebfa17acb400c5111f3f01718",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 2,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 1.765822808884806,
+                  "z": 3.5395850236553876
+                },
+                "seq": 2,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657103a46b696e64a564656c7461a2696403a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbbff7f7fc48c7c13fa17acb40091dd777d6b551",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 3,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -1.4980433314304518,
+                  "z": 3.1395711290739787
+                },
+                "seq": 3,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657104a46b696e64a564656c7461a2696404a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbc0066e9d2d6ca180a17acb3fba73e2ef7b3761",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 4,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -2.8040107296730525,
+                  "z": 0.10333078715049517
+                },
+                "seq": 4,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657105a46b696e64a564656c7461a2696405a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbbfea933a26f72a81a17acbc0048bb3a12648a4",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 5,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -0.830472065071561,
+                  "z": -2.5682137098129534
+                },
+                "seq": 5,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657106a46b696e64a564656c7461a2696406a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb4003e5cae5266aa3a17acbc001aceebf0f98fe",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 6,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 2.4872033979748536,
+                  "z": -2.209439747489454
+                },
+                "seq": 6,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657107a46b696e64a564656c7461a2696407a9747970655f6e616d65a34e7063a570726f707384a46c696e65bb4d696e642074686520776f6c766573206166746572206461726b2ea46e616d65a657617264656ea178cbbff5000000000000a17acbbff8000000000000",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 7,
+                "kind": "delta",
+                "props": {
+                  "line": "Mind the wolves after dark.",
+                  "name": "Warden",
+                  "x": -1.3125,
+                  "z": -1.5
+                },
+                "seq": 7,
+                "type_name": "Npc",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657108a46b696e64a564656c7461a2696408a9747970655f6e616d65a34e7063a570726f707384a46c696e65b446616972207072696365732c206d6f73746c792ea46e616d65a6547261646572a178cbbfd4000000000000a17acb3fe0000000000000",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 8,
+                "kind": "delta",
+                "props": {
+                  "line": "Fair prices, mostly.",
+                  "name": "Trader",
+                  "x": -0.3125,
+                  "z": 0.5
+                },
+                "seq": 8,
+                "type_name": "Npc",
+                "v": 1
+              }
+            }
+          ]
+        },
+        {
+          "args": {
+            "topic": "area"
+          },
+          "args_msgpack": "81a5746f706963a461726561",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "containers": [
+              {
+                "id": 1,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 3.744990378747925,
+                  "z": 0.9356015409751626
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 2,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 1.765822808884806,
+                  "z": 3.5395850236553876
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 3,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -1.4980433314304518,
+                  "z": 3.1395711290739787
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 4,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -2.8040107296730525,
+                  "z": 0.10333078715049517
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 5,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -0.830472065071561,
+                  "z": -2.5682137098129534
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 6,
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 2.4872033979748536,
+                  "z": -2.209439747489454
+                },
+                "type_name": "Mob"
+              },
+              {
+                "id": 7,
+                "props": {
+                  "line": "Mind the wolves after dark.",
+                  "name": "Warden",
+                  "x": -1.3125,
+                  "z": -1.5
+                },
+                "type_name": "Npc"
+              },
+              {
+                "id": 8,
+                "props": {
+                  "line": "Fair prices, mostly.",
+                  "name": "Trader",
+                  "x": -0.3125,
+                  "z": 0.5
+                },
+                "type_name": "Npc"
+              }
+            ],
+            "epoch": 1,
+            "kind": "snapshot",
+            "seq": 8,
+            "v": 1
+          },
+          "reply_msgpack": "85a17601a565706f636801a373657108a46b696e64a8736e617073686f74aa636f6e7461696e6572739883a2696401a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb400df5bd840474b8a17acb3fedf072a4926ab883a2696402a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb3ffc40cf6aeb0ebfa17acb400c5111f3f0171883a2696403a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbbff7f7fc48c7c13fa17acb40091dd777d6b55183a2696404a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbc0066e9d2d6ca180a17acb3fba73e2ef7b376183a2696405a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbbfea933a26f72a81a17acbc0048bb3a12648a483a2696406a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb4003e5cae5266aa3a17acbc001aceebf0f98fe83a2696407a9747970655f6e616d65a34e7063a570726f707384a46c696e65bb4d696e642074686520776f6c766573206166746572206461726b2ea46e616d65a657617264656ea178cbbff5000000000000a17acbbff800000000000083a2696408a9747970655f6e616d65a34e7063a570726f707384a46c696e65b446616972207072696365732c206d6f73746c792ea46e616d65a6547261646572a178cbbfd4000000000000a17acb3fe0000000000000"
+        },
+        {
+          "args": {
+            "action_id": "x-1",
+            "mob": 1
+          },
+          "args_msgpack": "82a9616374696f6e5f6964a3782d31a36d6f6201",
+          "call": "attack",
+          "caller": {
+            "player": 1
+          },
+          "code": "out_of_reach",
+          "error": "kit:out_of_reach: out of reach",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "npc": 7
+          },
+          "args_msgpack": "81a36e706307",
+          "call": "talk",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "line": "Mind the wolves after dark.",
+            "name": "Warden",
+            "x": -1.3125,
+            "z": -1.5
+          },
+          "reply_msgpack": "84a46c696e65bb4d696e642074686520776f6c766573206166746572206461726b2ea46e616d65a657617264656ea178cbbff5000000000000a17acbbff8000000000000"
+        },
+        {
+          "args": {
+            "action_id": "p-1",
+            "name": "Mog",
+            "species": "cat"
+          },
+          "args_msgpack": "83a9616374696f6e5f6964a3702d31a46e616d65a34d6f67a773706563696573a3636174",
+          "call": "adopt",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": 9,
+          "reply_msgpack": "09"
+        },
+        {
+          "args": {
+            "pet": 9
+          },
+          "args_msgpack": "81a370657409",
+          "call": "summon",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "pet": 9
+          },
+          "args_msgpack": "81a370657409",
+          "call": "summon",
+          "caller": {
+            "player": 2
+          },
+          "code": "forbidden",
+          "error": "kit:forbidden: that is someone else's pet",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "pets",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": [
+            {
+              "bond": 1,
+              "id": 9,
+              "mode": "follow",
+              "name": "Mog",
+              "species": "cat",
+              "x": 0.5,
+              "z": 0.5
+            }
+          ],
+          "reply_msgpack": "9187a4626f6e6401a2696409a46d6f6465a6666f6c6c6f77a46e616d65a34d6f67a773706563696573a3636174a178cb3fe0000000000000a17acb3fe0000000000000"
+        },
+        {
+          "advance_ms": 1000,
+          "published": [
+            {
+              "msgpack": "87a17601a565706f636801a373657109a46b696e64a564656c7461a2696401a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb400f2f58d8b30f22a17acb3ff689c1382b3bf0",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 1,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 3.8981186799664025,
+                  "z": 1.4086315340134625
+                },
+                "seq": 9,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a37365710aa46b696e64a564656c7461a2696402a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb3ff73551b364fdc6a17acb400f646326dcf1cd",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 2,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 1.4505173690412092,
+                  "z": 3.9240172420670434
+                },
+                "seq": 10,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a37365710ba46b696e64a564656c7461a2696403a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbbfffdeca4c4258e1a17acb4008a7dad5dcc914",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 3,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -1.9918921450494553,
+                  "z": 3.081960364151323
+                },
+                "seq": 11,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a37365710ca46b696e64a564656c7461a2696404a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbc0082dcb644d2d17a17acbbfd5f98afb18c49a",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 4,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -3.0223605953266417,
+                  "z": -0.3433558895222376
+                },
+                "seq": 12,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a37365710da46b696e64a564656c7461a2696405a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cbbfe25284dedda66fa17acbc007f244742a3fe3",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 5,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": -0.5725731232498229,
+                  "z": -2.9932946277040045
+                },
+                "seq": 13,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a37365710ea46b696e64a564656c7461a2696406a9747970655f6e616d65a34d6f62a570726f707386a2687064a46b696e64a4776f6c66a66d61785f687064a46d6f6465a469646c65a178cb4007dfb93f40ea34a17acbc001c6db09f580b4",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 6,
+                "kind": "delta",
+                "props": {
+                  "hp": 100,
+                  "kind": "wolf",
+                  "max_hp": 100,
+                  "mode": "idle",
+                  "x": 2.984240049522919,
+                  "z": -2.2220974710508816
+                },
+                "seq": 14,
+                "type_name": "Mob",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a37365710fa46b696e64a564656c7461a2696407a9747970655f6e616d65a34e7063a570726f707384a46c696e65bb4d696e642074686520776f6c766573206166746572206461726b2ea46e616d65a657617264656ea178cbbff1000000000000a17acbbff8000000000000",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 7,
+                "kind": "delta",
+                "props": {
+                  "line": "Mind the wolves after dark.",
+                  "name": "Warden",
+                  "x": -1.0625,
+                  "z": -1.5
+                },
+                "seq": 15,
+                "type_name": "Npc",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657110a46b696e64a564656c7461a2696408a9747970655f6e616d65a34e7063a570726f707384a46c696e65b446616972207072696365732c206d6f73746c792ea46e616d65a6547261646572a178cbbfb0000000000000a17acb3fe0000000000000",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 8,
+                "kind": "delta",
+                "props": {
+                  "line": "Fair prices, mostly.",
+                  "name": "Trader",
+                  "x": -0.0625,
+                  "z": 0.5
+                },
+                "seq": 16,
+                "type_name": "Npc",
+                "v": 1
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657111a46b696e64a564656c7461a2696409a9747970655f6e616d65a3506574a570726f707385a46d6f6465a6666f6c6c6f77a46e616d65a34d6f67a773706563696573a3636174a178cb3fe0000000000000a17acb3fe0000000000000",
+              "topic": "area",
+              "value": {
+                "epoch": 1,
+                "id": 9,
+                "kind": "delta",
+                "props": {
+                  "mode": "follow",
+                  "name": "Mog",
+                  "species": "cat",
+                  "x": 0.5,
+                  "z": 0.5
+                },
+                "seq": 17,
+                "type_name": "Pet",
+                "v": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

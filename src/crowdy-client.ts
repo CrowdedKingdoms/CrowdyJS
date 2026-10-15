@@ -309,6 +309,8 @@ export class CrowdyClient {
    * deploy, operate) and players' mods on the grids they own.
    */
   readonly exec: ExecAPI;
+  /** The option-less kit of each app, so its modules share one connection. */
+  private readonly kits = new Map<string, GameKitClient>();
   /** Crowdy Studio cloud projects, libraries, and common source files. */
   readonly crowdyStudio: CrowdyStudioAPI;
   /** GitHub repository loop for Crowdy Studio projects (same session; the API resolves the repo from the bind). */
@@ -631,18 +633,32 @@ export class CrowdyClient {
   }
 
   /**
-   * App-scoped **Game Kit**: parties, guilds and chat rooms over teams and channels
-   * (`kit.social`). See {@link GameKitClient}.
+   * App-scoped **Game Kit**: typed clients for the ck-exec starter hubs (world, matchmaking,
+   * sessions, NPCs and pets), their topology, the realtime conventions (spectate, emotes,
+   * shards), and parties, guilds and chat over teams and channels (`kit.social`). See
+   * {@link GameKitClient}.
+   *
+   * Without options, every call for one app returns the same kit, so its modules share one
+   * connection to the app's hubs. With options, each call makes a kit of its own (close it
+   * with `close()`).
    *
    * @param appId - The app (BigInt as a decimal string).
-   * @param options - Optional name prefixes and the chat sender's actor uuid.
+   * @param options - The kit's connection, node type names, and social name prefixes.
    */
   kit(appId: string, options?: GameKitOptions): GameKitClient {
-    return new GameKitClient(appId, this.gameApps, options, {
+    if (!options) {
+      const held = this.kits.get(appId);
+      if (held) return held;
+    }
+    const kit = new GameKitClient(appId, this.gameApps, options, {
       channels: this.channels,
       teams: this.teams,
       udp: this.udp,
+      exec: this.exec,
+      whoAmI: () => this.users.me().then((me) => me?.userId ?? null),
     });
+    if (!options) this.kits.set(appId, kit);
+    return kit;
   }
 
   /** Closes the WebSocket and clears the in-memory auth token. */
@@ -650,6 +666,8 @@ export class CrowdyClient {
     this.realtime.close();
     this.session.setToken(null);
     this.embeddedHost?.close();
+    for (const kit of this.kits.values()) kit.close();
+    this.kits.clear();
   }
 
   /** The configured or discovered GraphQL endpoint URL. */

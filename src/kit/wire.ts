@@ -1,9 +1,11 @@
 /**
- * Engine wire registry — the client mirror of `crowdy-game-kit-core::wire`
- * (the actor pose layout and flag-bit registry the game engines emit, and
- * hubs that keep a game's client parsers still send). Parity with the Rust
- * crate is checked by the kit wire unit suite: any change here must land in
- * kit-core first.
+ * The kit's realtime wire: the server-event registry kit hubs emit through
+ * the realtime tier (`ckx_sdk::kit::wire` is its source: ids 77 and 90-101,
+ * JSON bodies with camelCase keys, an app's own from 1000), and the 48-byte
+ * engine pose layout with its flag bits, for hubs that show actors with it
+ * rather than with `KitActorState` (`realtime.ts`). The registry's bodies are
+ * held to ck-exec's `kit-protocol.json` by the kit protocol unit suite: a
+ * change lands in `ckx_sdk::kit::wire` first.
  *
  * 48-byte little-endian pose: pos f32 x3 (0..11), yaw/pitch f32 (12..19),
  * velocity f32 x3 (20..31), flags u8 (32), held u8 (33), 34-35 reserved,
@@ -156,6 +158,14 @@ export const EVENT_CONTROL_POINT = 96;
 export const EVENT_RACE_TIMING = 97;
 /** Zone change: shrinking circles, event areas (kit-sim zones). */
 export const EVENT_ZONE_CHANGE = 98;
+/** Encounter: a wave began or was cleared, a boss changed phase (directors). */
+export const EVENT_ENCOUNTER = 99;
+/** Possession: the contested object (a ball) changed hands, or a goal was scored. */
+export const EVENT_POSSESSION = 100;
+/** An emote: a client event players send, the kit's convention ({@link EmotesKit}). */
+export const EVENT_EMOTE = 101;
+/** The first event type an app's own events may use. */
+export const EVENT_APP_FIRST = 1000;
 
 /** Split an engine server-event payload into its type + JSON body. */
 export function parseEngineEvent(
@@ -390,6 +400,69 @@ export function parseZoneChangeEvent(bytes: Uint8Array): ZoneChangeEvent | null 
     radiusNow: Number(parsed.body.radiusNow ?? 0),
     centerX: Number(parsed.body.centerX ?? 0),
     centerZ: Number(parsed.body.centerZ ?? 0),
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-99 encounter event (a wave began or was cleared, a boss changed phase). */
+export interface EncounterEvent {
+  /** `'wave_started'`, `'wave_cleared'`, `'boss_phase'` or `'finished'`. */
+  kind: string;
+  encounterId: string;
+  wave: number;
+  phase: number;
+  body: Record<string, unknown>;
+}
+
+/** Parse an encounter event; null when the payload is another type. */
+export function parseEncounterEvent(bytes: Uint8Array): EncounterEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_ENCOUNTER) return null;
+  return {
+    kind: String(parsed.body.kind ?? ''),
+    encounterId: String(parsed.body.encounterId ?? ''),
+    wave: Number(parsed.body.wave ?? 0),
+    phase: Number(parsed.body.phase ?? 0),
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-100 possession event (the contested object changed hands, or a goal). */
+export interface PossessionEvent {
+  /** `'claimed'`, `'passed'`, `'loose'` or `'goal'`. */
+  kind: string;
+  holderId: string | null;
+  team: string | null;
+  body: Record<string, unknown>;
+}
+
+/** Parse a possession event; null when the payload is another type. */
+export function parsePossessionEvent(bytes: Uint8Array): PossessionEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_POSSESSION) return null;
+  return {
+    kind: String(parsed.body.kind ?? ''),
+    holderId: parsed.body.holderId != null ? String(parsed.body.holderId) : null,
+    team: parsed.body.team != null ? String(parsed.body.team) : null,
+    body: parsed.body,
+  };
+}
+
+/** A parsed type-101 emote (a client event, the kit's convention). */
+export interface EmoteEvent {
+  emote: string;
+  /** The actor the emote is aimed at, if any. */
+  targetUuid: string | null;
+  body: Record<string, unknown>;
+}
+
+/** Parse an emote; null when the payload is another type. */
+export function parseEmoteEvent(bytes: Uint8Array): EmoteEvent | null {
+  const parsed = parseEngineEvent(bytes);
+  if (!parsed || parsed.eventType !== EVENT_EMOTE) return null;
+  return {
+    emote: String(parsed.body.emote ?? ''),
+    targetUuid: parsed.body.targetUuid != null ? String(parsed.body.targetUuid) : null,
     body: parsed.body,
   };
 }
