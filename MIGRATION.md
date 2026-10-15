@@ -140,8 +140,9 @@ not run one, its module's calls are refused with `NotFound` (the app has no such
   deploys one under another name passes it in `client.kit(appId, { nodes: { ... } })`.
 - **Positions a client reports are the hub's to keep**: `arenas`, `racing` and the ball game take
   `move` / `pos` reports and answer with the position the hub's movement warden kept (a move too
-  fast is cut short, a jump refused); a client that keeps reporting what the warden refuses is
-  removed with a `violation` event. Send them a few times a second, without an action id.
+  fast is cut short, a jump refused). Each refused report is a `violation` event, and an arena
+  removes a player after a run of them (`removed`). Send them a few times a second, without an
+  action id.
 - **Event bodies never use the header's field names** (`v`, `epoch`, `seq`, `kind`): the race's
   `timing` events carry their `stage`, the warden's `violation` events their `what`.
 
