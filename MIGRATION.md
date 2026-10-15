@@ -120,6 +120,45 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.11.0: the Game Kit on ck-exec
+
+Additive, apart from one fix in `client.exec` (below). **Needs what 18.10.0 needs from the Game
+API.** The kit's hub modules need the app to run the starter pack of a compute toolchain with
+ckx-sdk 0.10.0 (the starters that speak the kit protocol); `kit.topology` builds and deploys
+it. Against an app that runs nothing, or an older starter, a module's calls are refused as the
+hub refuses them.
+
+- **`client.kit(appId)` gains the hub modules**, all on one shared connection (`kit.runtime`):
+  `world` (conditions and resource nodes mirrored, `harvest`, liveops `schedule` / `cancel` for
+  developers), `matchmaking.queue(name)` (parties matched whole, `place`, `onMatched`),
+  `sessions.open(key)` (lobby to result, `state` mirrored), `npcs.area(key)` / `areaAt(x, z)`
+  (mobs, NPCs, players' pets), `topology` (compose, check, build and deploy the tree of
+  starter hubs), `spectate`, `emotes` and `shards`. `kit.social` is unchanged.
+- **Without options, `client.kit(appId)` returns the same kit for an app** (it made a new one
+  each call), so its modules share one connection. With options each call makes its own; close
+  it with `kit.close()`. `client.close()` closes the shared ones.
+- **The kit protocol** (`KIT_PROTOCOL`): hub topics carry snapshot, delta, changed and event
+  messages with an instance `epoch` and a per-topic `seq`; `HubState`, `CollectionMirror` and
+  `PrivateState` mirror them, taking a fresh snapshot on a new epoch, a gap in a collection's
+  deltas, and a reconnect. A change sent with an action id (`{ action: true }` on
+  `kit.runtime.call`, which every module change uses) is answered once by the hub when sent
+  again. A hub's coded refusal is a `KitError` (`code`, `text`), a `CrowdyExecError` with status
+  `AppError`.
+- **The realtime registry** (`wire.ts`) gains `EVENT_ENCOUNTER` (99), `EVENT_POSSESSION` (100),
+  `EVENT_EMOTE` (101) and `EVENT_APP_FIRST` (1000) with their parsers; its source is now
+  `ckx_sdk::kit::wire`. `kitActorCodec`, `withKitActors` and `kitActorLanes` read the actors kit
+  hubs show; `kitEventCodecs` and `parseKitServerEvent` their server events.
+- **The starters changed with it** (ck-exec, ckx-sdk 0.10.0): each answers
+  `snapshot { topic }`, refuses with `kit:<code>:` messages, and takes `action_id`. The
+  matchmaker's `queue` topic is now a map of counts (`waiting`, `proposals`, `forming`) where
+  it was a 2-tuple, `world-tick` adds a `nodes` topic, and `npc-mobs` adds pets. Code that calls
+  the starters with `client.exec` keeps working: their replies are the same.
+- **Fix: a call's whole numbers outside 32 bits go out as 64-bit integers.** `ExecConnection.call`
+  encoded with `useBigInt64`, under which the MessagePack encoder writes a `number` of 2^32 or
+  more as a float, which a hub's integer fields refuse (`invalid type: floating point, expected
+  u64`): a timestamp in milliseconds, a player id. They are 64-bit integers now
+  (`execWireIntegers`). A hub field that wants a float still reads an integer.
+
 ## 18.10.0: bans, the access-ended close, and the block and ban codes
 
 Additive. **Needs the Game API release after v2.43.1** for the ban operations (an older Game

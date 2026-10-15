@@ -189,9 +189,11 @@ test('client exposes the full management + game sub-client surface', async () =>
     'myAuthorizedApps', 'setAppClientSettings',
   ]);
 
-  // Game Kit: only the social helpers outlived the game model (18.0.0).
+  // Game Kit: the social helpers, and since 18.11.0 typed clients for the ck-exec starter hubs.
   const kit = client.kit('1');
-  assert.equal(kit.deploy, undefined, 'kit.deploy was removed in 18.0.0');
+  assert.equal(client.kit('1'), kit, 'an option-less kit is shared, so its modules share one connection');
+  assert.notEqual(client.kit('1', {}), kit, 'a kit with options is its own');
+  assert.equal(kit.deploy, undefined, 'kit.deploy was removed in 18.0.0 (kit.topology deploys starter hubs)');
   assert.equal(kit.inventory, undefined, 'the model-backed kit helpers were removed in 18.0.0');
   assertMethods(kit.social.party, 'kit.social.party', [
     'create', 'find', 'invite', 'join', 'leave', 'members',
@@ -202,6 +204,25 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.social.chat, 'kit.social.chat', [
     'room', 'join', 'send', 'onMessage',
   ]);
+  assertMethods(kit.runtime, 'kit.runtime', ['connection', 'call', 'subscribe', 'playerId', 'onReconnect', 'onAccessEnded', 'close']);
+  assertMethods(kit.world, 'kit.world', ['state', 'harvest', 'schedule', 'cancel']);
+  assertMethods(kit.world.conditions, 'kit.world.conditions', ['start', 'stop', 'resync', 'get', 'subscribe', 'onEvent', 'onChanged']);
+  assertMethods(kit.world.nodes, 'kit.world.nodes', ['start', 'stop', 'resync', 'get', 'subscribe', 'list', 'member']);
+  assertMethods(kit.matchmaking.queue('ranked'), 'kit.matchmaking.queue', [
+    'join', 'leave', 'accept', 'decline', 'status', 'configure', 'watch', 'unwatch', 'onMatched',
+  ]);
+  assert.equal(kit.matchmaking.queue('ranked'), kit.matchmaking.queue('ranked'), 'one queue a name');
+  assertMethods(kit.sessions.open('s1'), 'kit.sessions.open', [
+    'watch', 'unwatch', 'currentTurn', 'isMyTurn', 'join', 'leave', 'ready', 'startGame', 'act', 'configure',
+  ]);
+  assertMethods(kit.npcs, 'kit.npcs', ['keyAt', 'areaAt', 'area']);
+  assertMethods(kit.npcs.area('0,0'), 'kit.npcs.area', [
+    'watch', 'unwatch', 'mobs', 'npcs', 'pets', 'attack', 'talk', 'adopt', 'rename', 'summon', 'dismiss', 'release', 'myPets',
+  ]);
+  assertMethods(kit.topology, 'kit.topology', ['pack', 'types', 'plan', 'deploy']);
+  assertMethods(kit.spectate, 'kit.spectate', ['observe']);
+  assertMethods(kit.emotes, 'kit.emotes', ['send', 'parse']);
+  assertMethods(kit.shards, 'kit.shards', ['key', 'around']);
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');

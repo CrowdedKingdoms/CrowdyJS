@@ -815,7 +815,7 @@ export class ExecConnection {
     args?: unknown,
     options: { timeoutMs?: number } = {},
   ): Promise<T> {
-    const payload = encode(args ?? null, { useBigInt64: true });
+    const payload = encode(execWireIntegers(args ?? null), { useBigInt64: true });
     const reply = await this.callRaw(nodeType, key, method, payload, options);
     return decode(reply, this.options.decode) as T;
   }
@@ -877,6 +877,27 @@ export class ExecConnection {
 
 function fromUtf8Lossy(b: Uint8Array): string {
   return new TextDecoder().decode(b);
+}
+
+/**
+ * `value` with every whole number outside 32 bits as a bigint. MessagePack's encoder, set to
+ * write bigints as 64-bit integers, writes such a number as a float, which a hub's integer
+ * fields refuse: a timestamp in milliseconds, a player id.
+ */
+export function execWireIntegers(value: unknown, depth = 0): unknown {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && (value > 0xffffffff || value < -0x80000000) ? BigInt(value) : value;
+  }
+  if (depth > 64 || value === null || typeof value !== 'object' || ArrayBuffer.isView(value)) return value;
+  if (Array.isArray(value)) return value.map((v) => execWireIntegers(v, depth + 1));
+  if (value instanceof Map) {
+    return new Map([...value].map(([k, v]) => [execWireIntegers(k, depth + 1), execWireIntegers(v, depth + 1)]));
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) out[k] = execWireIntegers(v, depth + 1);
+  return out;
 }
 
 // ---- the domain ----
