@@ -158,6 +158,8 @@ hub refuses them.
   more as a float, which a hub's integer fields refuse (`invalid type: floating point, expected
   u64`): a timestamp in milliseconds, a player id. They are 64-bit integers now
   (`execWireIntegers`). A hub field that wants a float still reads an integer.
+- **`ExecConnection` reconnects with jitter**: each wait is half its backoff plus up to as much
+  again at random, so the players of a host that went away do not all dial at once.
 - **Crowdy Studio's editor completes ckx-sdk 0.10.0**, `kit` included: the embedded authoring
   index is the compute toolchain's again (it had last been synced at ckx-sdk 0.7.0).
 

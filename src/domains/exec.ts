@@ -705,7 +705,9 @@ export class ExecConnection {
         for (const l of this.reconnectListeners) l(this.host);
         return;
       } catch {
-        await new Promise((r) => setTimeout(r, this.backoffMs));
+        // Half the backoff, plus up to as much again at random: the players of a host that
+        // went away do not all dial its replacement at once.
+        await new Promise((r) => setTimeout(r, this.backoffMs / 2 + Math.random() * (this.backoffMs / 2)));
         this.backoffMs = Math.min(this.backoffMs * 2, MAX_BACKOFF_MS);
       }
     }
