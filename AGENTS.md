@@ -48,7 +48,10 @@ through a gateway that answers only the next recorded step, so a module's call m
 step's method and arguments from that step's player. A starter change rewrites the record in
 ck-exec; copy it here on the same tier, and CrowdyCPP and CrowdyPy copy it too.
 `test/e2e/game-kit-local.test.mjs` runs the kit against a ck-exec local cluster
-(`CROWDY_KIT_LOCAL_*`, `CKX_BIN`, `CKX_CONNECT_SEED`). Kit types are the hubs' MessagePack
+(`CROWDY_KIT_LOCAL_*`, `CKX_BIN`, `CKX_CONNECT_SEED`), and `test/e2e/game-kit.test.mjs` against
+a tier as a throwaway org admin (`CROWDY_E2E_THROWAWAY_OWNER=1`, `CROWDY_PROVISIONING_TOKEN`):
+`kit.topology` composes the session and npcs starters, builds them on the platform (81 s on dev,
+2026-10-15) and deploys them, and two players play them. Kit types are the hubs' MessagePack
 maps as they arrive (snake_case fields), the same in all three SDKs. Without options
 `client.kit(appId)` now returns one kit per app. **Also a fix in `ExecConnection.call`:**
 under `useBigInt64` the MessagePack encoder wrote a `number` of 2^32 or more as a float, which

@@ -1227,6 +1227,9 @@ is why the mint also returns `discoveryUrl`.
 `CROWDY_HTTP_URL` and `CROWDY_E2E_THROWAWAY_OWNER=1` it registers a throwaway org admin (its own
 org and app) and a player, opens and closes a grid, and checks the tier's ck-exec gateway. It
 leaves the org behind and archives the app, so it runs only when asked to.
+`test/e2e/game-kit.test.mjs` does the same for the Game Kit: the throwaway owner composes the
+starter hubs with `kit.topology`, builds and deploys them, and two players play them (on dev and
+test it also needs `CROWDY_PROVISIONING_TOKEN`, which their staff-only sign-up asks for).
 
 ## Maintainers: schema artifacts and fixtures
 
