@@ -171,7 +171,7 @@ test('platform index loader is strict and bounded', () => {
   );
   assert.equal(
     EMBEDDED_PLATFORM_INDEX.contentHash,
-    '73208692cde4e03d61305fa19734b9add501eec39b7c0d57b86c388584566326',
+    '58bdbf80b074a29748452ec5b5e26eb290f1cae7140f4ad4994c47c76a82a64d',
   );
   assert.throws(
     () => loadPlatformIndex({ ...EMBEDDED_PLATFORM_INDEX, token: 'secret' }),

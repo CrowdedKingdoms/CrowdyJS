@@ -4,7 +4,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "rustVersion": "1.97.1",
   "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "73208692cde4e03d61305fa19734b9add501eec39b7c0d57b86c388584566326",
+  "contentHash": "58bdbf80b074a29748452ec5b5e26eb290f1cae7140f4ad4994c47c76a82a64d",
   "crates": [
     {
       "name": "alloc",
@@ -14,7 +14,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     {
       "name": "ckx-sdk",
       "version": "0.11.0",
-      "sourceHash": "168a46abe582b59525b76ae334cdc8ea24b44c3d8b854dd1b9fca04ac7a967c8"
+      "sourceHash": "eedafccbba1298498d7b2d827e91eeeb219001ef8d4a17cd490c80b2df416022"
     },
     {
       "name": "core",
