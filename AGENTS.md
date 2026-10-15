@@ -38,7 +38,8 @@ are made once the key is known, so its stores are relays that exist from the sta
 key behind `kit.market.at`, `kit.shops.at` and `kit.trades.at`. Calls send only the arguments
 given (`buy` without a count, `craft` without times): the replay compares arguments. A
 `KitError` coded `unavailable` is resent when the call has an action id (the hubs keep no
-receipt for it). The economy is not a ledger (HS-52).
+receipt for it). The economy is not a ledger (HS-52). The embedded authoring index is
+cks-game-api's at its ckx-sdk 0.12.0 re-pin (1268 symbols).
 
 **18.12.0: the genre starters (2026-10-15).** Nine more modules in `src/kit/modules/`, one per
 ck-exec genre starter (ckx-sdk 0.11.0): `leaderboards` (`leaderboard`), `tables` (`deck`, the
