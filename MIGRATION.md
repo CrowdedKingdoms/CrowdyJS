@@ -158,6 +158,8 @@ hub refuses them.
   more as a float, which a hub's integer fields refuse (`invalid type: floating point, expected
   u64`): a timestamp in milliseconds, a player id. They are 64-bit integers now
   (`execWireIntegers`). A hub field that wants a float still reads an integer.
+- **Crowdy Studio's editor completes ckx-sdk 0.10.0**, `kit` included: the embedded authoring
+  index is the compute toolchain's again (it had last been synced at ckx-sdk 0.7.0).
 
 ## 18.10.0: bans, the access-ended close, and the block and ban codes
 

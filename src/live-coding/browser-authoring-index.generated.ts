@@ -4,7 +4,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "rustVersion": "1.97.1",
   "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "c219690850999e82f66ce369a7aa13a65b48e3fcd6bfa786f0c05011650ed020",
+  "contentHash": "70df75c058b2550cfcb558ba28307b38689af8db7985f95fd83d38d42516f78b",
   "crates": [
     {
       "name": "alloc",
@@ -13,8 +13,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "ckx-sdk",
-      "version": "0.7.0",
-      "sourceHash": "b4583d898c102c2ff1ea677470cc41b1c72dc49dd5f14c1e9c17d13da1bb0733"
+      "version": "0.10.0",
+      "sourceHash": "df1f3eabc835576f266a28d879419c4f7d0e871c063f2238097ebfa81b05796c"
     },
     {
       "name": "core",
@@ -24,7 +24,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     {
       "name": "crowdy-client-sdk",
       "version": "0.1.0",
-      "sourceHash": "2d21f7c4f1fee650437edbce435b3c50609be4ee49c646916be504ac2be8f6e9"
+      "sourceHash": "f176bc8c68bcb60dda2104b2270ca2b41ec33c299b03c9eec1c4cd1d1a479098"
     }
   ],
   "symbols": [
@@ -184,6 +184,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "Ctx::access",
+      "kind": "method",
+      "signature": "pub fn access(&self) -> node::Access<'_>",
+      "docs": "Players' access to this app: read, grant, revoke, suspend (scopes `access.read`, `access.write`)."
+    },
+    {
+      "module": "ckx_sdk",
       "name": "Ctx::app",
       "kind": "field",
       "signature": "pub app: u64",
@@ -250,7 +257,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Ctx::grids",
       "kind": "method",
       "signature": "pub fn grids(&self) -> node::Grids<'_>",
-      "docs": "This app's grids and their permissions (scope `grids.read`)."
+      "docs": "This app's grids and their permissions (scopes `grids.read`, `grids.write`)."
     },
     {
       "module": "ckx_sdk",
@@ -285,7 +292,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Ctx::node",
       "kind": "method",
       "signature": "pub fn node(&self, op: &str, payload: &[u8]) -> Result<Vec<u8>, CallError>",
-      "docs": "A raw node API request: `op` and a JSON body, answered with JSON. The typed operations behind [`Ctx::world`], [`Ctx::grids`], [`Ctx::players`] and [`Ctx::permissions`] use it."
+      "docs": "A raw node API request: `op` and a JSON body, answered with JSON. The typed operations behind [`Ctx::world`], [`Ctx::grids`], [`Ctx::players`], [`Ctx::permissions`] and [`Ctx::access`] use it."
     },
     {
       "module": "ckx_sdk",
@@ -772,6 +779,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "Status::as_u8",
+      "kind": "method",
+      "signature": "pub fn as_u8(self) -> u8",
+      "docs": "The wire status code: [`Status::from_u8`] reversed."
+    },
+    {
+      "module": "ckx_sdk",
       "name": "Status::from_u8",
       "kind": "method",
       "signature": "pub fn from_u8(v: u8) -> Self",
@@ -912,6 +926,20 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "kit",
+      "kind": "module",
+      "signature": "pub mod kit;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "limits",
+      "kind": "module",
+      "signature": "pub mod limits;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
       "name": "model",
       "kind": "module",
       "signature": "pub mod model;",
@@ -1026,7 +1054,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::emit",
       "name": "Spatial",
       "kind": "enum",
-      "signature": "pub enum Spatial<'a> { /// An actor's state: a server-driven actor appears and moves like a player's. Actor { state: &'a [u8] }, /// A voxel edit at `(x, y, z)` within the chunk, folded into the live mesh. The durable /// write is `ctx.world().set_voxels`, which already shows it; this is for effects. Voxel { x: i16, y: i16, z: i16, voxel_type: u16, state: &'a [u8] }, /// A server event (`event_type`, then `state`), as games route server events. Event { event_type: u16, state: &'a [u8] }, /// An app-defined payload. Generic { payload: &'a [u8] }, /// A message to the one actor named as the event's actor. ActorMessage { payload: &'a [u8] }, }",
+      "signature": "pub enum Spatial<'a> { /// An actor's state: a server-driven actor appears and moves like a player's. Actor { state: &'a [u8] }, /// A voxel edit at `(x, y, z)` within the chunk, folded into the live mesh. The durable /// write is `ctx.world().set_voxels`, which already shows it; this is for effects. Voxel { x: i16, y: i16, z: i16, voxel_type: i16, state: &'a [u8] }, /// A server event (`event_type`, then `state`), as games route server events. Event { event_type: u16, state: &'a [u8] }, /// An app-defined payload. Generic { payload: &'a [u8] }, /// A message to the one actor named as the event's actor. ActorMessage { payload: &'a [u8] }, }",
       "docs": "What a spatial event is to the players who receive it."
     },
     {
@@ -1061,7 +1089,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::emit",
       "name": "Spatial::Voxel",
       "kind": "variant",
-      "signature": "Voxel { x: i16, y: i16, z: i16, voxel_type: u16, state: &'a [u8] }",
+      "signature": "Voxel { x: i16, y: i16, z: i16, voxel_type: i16, state: &'a [u8] }",
       "docs": "A voxel edit at `(x, y, z)` within the chunk, folded into the live mesh. The durable write is `ctx.world().set_voxels`, which already shows it; this is for effects."
     },
     {
@@ -1070,6 +1098,1497 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "function",
       "signature": "pub fn actor_id(uuid: &str) -> [u8; 32]",
       "docs": "A 32-byte actor id, as the realtime tier addresses actors. Players' actors use their 32-character uuid; a server-driven actor (an NPC, a mob) can use any 32 bytes."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "ACTION_ID_MAX",
+      "kind": "const",
+      "signature": "pub const ACTION_ID_MAX: usize = 64;",
+      "docs": "The longest `action_id` a call may carry, in bytes."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Changed",
+      "kind": "struct",
+      "signature": "pub struct Changed { /// The players who should read again. pub who: Vec<u64>, /// What changed for them, as the hub's endpoints name it. pub what: String, }",
+      "docs": "The body of a `changed` message."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Changed::what",
+      "kind": "field",
+      "signature": "pub what: String",
+      "docs": "What changed for them, as the hub's endpoints name it."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Changed::who",
+      "kind": "field",
+      "signature": "pub who: Vec<u64>",
+      "docs": "The players who should read again."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Containers",
+      "kind": "struct",
+      "signature": "pub struct Containers { pub containers: Vec<Published>, }",
+      "docs": "The body of a collection's snapshot: every member as a `delta` would show it."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Containers::containers",
+      "kind": "field",
+      "signature": "pub containers: Vec<Published>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header",
+      "kind": "struct",
+      "signature": "pub struct Header { pub v: u8, pub epoch: u64, pub seq: u64, pub kind: MessageKind, }",
+      "docs": "The reserved fields of every kit message."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header::epoch",
+      "kind": "field",
+      "signature": "pub epoch: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header::kind",
+      "kind": "field",
+      "signature": "pub kind: MessageKind",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header::seq",
+      "kind": "field",
+      "signature": "pub seq: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header::v",
+      "kind": "field",
+      "signature": "pub v: u8",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Message",
+      "kind": "struct",
+      "signature": "pub struct Message<T> { #[serde(flatten)] pub header: Header, #[serde(flatten)] pub body: T, }",
+      "docs": "A kit message as it is read back: its header, and the body's own fields beside it."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Message::body",
+      "kind": "field",
+      "signature": "pub body: T",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Message::header",
+      "kind": "field",
+      "signature": "pub header: Header",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind",
+      "kind": "enum",
+      "signature": "pub enum MessageKind { Snapshot, Delta, Changed, Event, }",
+      "docs": "What a [`Message`] is."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind::Changed",
+      "kind": "variant",
+      "signature": "Changed",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind::Delta",
+      "kind": "variant",
+      "signature": "Delta",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind::Event",
+      "kind": "variant",
+      "signature": "Event",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind::Snapshot",
+      "kind": "variant",
+      "signature": "Snapshot",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "PROTOCOL",
+      "kind": "const",
+      "signature": "pub const PROTOCOL: u8 = 1;",
+      "docs": "The protocol version kit messages carry in `v`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher",
+      "kind": "struct",
+      "signature": "pub struct Publisher { #[serde(default)] seqs: BTreeMap<String, u64>, }",
+      "docs": "A hub's topics and how far each has got. Keep it in the hub's state, so `seq` carries on after a snapshot; a client that sees another `epoch` asks for a snapshot again anyway."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::changed",
+      "kind": "method",
+      "signature": "pub fn changed(&mut self, ctx: &Ctx, topic: &str, who: &[u64], what: &str) -> Result<()>",
+      "docs": "Tells `who` that `what` changed for them; nothing private goes on the topic. Does nothing when `who` is empty."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::delta",
+      "kind": "method",
+      "signature": "pub fn delta<T: Serialize + ?Sized>(&mut self, ctx: &Ctx, topic: &str, body: &T) -> Result<()>",
+      "docs": "Publishes one change to the topic's collection."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::event",
+      "kind": "method",
+      "signature": "pub fn event<T: Serialize + ?Sized>(&mut self, ctx: &Ctx, topic: &str, body: &T) -> Result<()>",
+      "docs": "Publishes something that happened."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::model_changes",
+      "kind": "method",
+      "signature": "pub fn model_changes(&mut self, ctx: &Ctx, model: &mut Model, schema: &Schema, topic: &str) -> Result<usize>",
+      "docs": "Publishes the model's public changes since the last call ([`Model::public_changes`]) as deltas on `topic`, one container each, and returns how many went out. Owner and hidden properties are never published."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::model_snapshot_reply",
+      "kind": "method",
+      "signature": "pub fn model_snapshot_reply(&self, ctx: &Ctx, model: &Model, schema: &Schema, topic: &str) -> Result<Vec<u8>>",
+      "docs": "The reply to [`SNAPSHOT_METHOD`] for a topic [`Publisher::model_changes`] feeds: every container's public view, as [`Containers`]."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::new",
+      "kind": "method",
+      "signature": "pub fn new() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::publish",
+      "kind": "method",
+      "signature": "pub fn publish<T: Serialize + ?Sized>(&mut self, ctx: &Ctx, topic: &str, kind: MessageKind, body: &T) -> Result<()>",
+      "docs": "Publishes one message on `topic`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::seq",
+      "kind": "method",
+      "signature": "pub fn seq(&self, topic: &str) -> u64",
+      "docs": "The topic's last `seq`; 0 before its first message."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::snapshot",
+      "kind": "method",
+      "signature": "pub fn snapshot<T: Serialize + ?Sized>(&mut self, ctx: &Ctx, topic: &str, body: &T) -> Result<()>",
+      "docs": "Publishes the topic's whole state."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::snapshot_reply",
+      "kind": "method",
+      "signature": "pub fn snapshot_reply<T: Serialize + ?Sized>(&self, ctx: &Ctx, topic: &str, body: &T) -> Result<Vec<u8>>",
+      "docs": "The reply to [`SNAPSHOT_METHOD`] for `topic`: its state now, at its last `seq`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "RECEIPTS_MAX",
+      "kind": "const",
+      "signature": "pub const RECEIPTS_MAX: usize = 256;",
+      "docs": "Receipts a hub keeps at most; the oldest go first."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "RECEIPT_REPLY_MAX",
+      "kind": "const",
+      "signature": "pub const RECEIPT_REPLY_MAX: usize = 1024;",
+      "docs": "The largest reply a receipt keeps. A call sent again whose first reply was larger is refused with [`codes::ALREADY_DONE`]: it ran, and the hub's state has its result."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "RECEIPT_TTL_MS",
+      "kind": "const",
+      "signature": "pub const RECEIPT_TTL_MS: u64 = 10 * 60 * 1000;",
+      "docs": "How long a receipt is kept."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts",
+      "kind": "struct",
+      "signature": "pub struct Receipts { #[serde(default)] kept: VecDeque<Receipt>, }",
+      "docs": "What each caller's recent actions were answered, by `action_id`. Keep it in the hub's state: an action sent again after the hub restarted from its last snapshot is answered from it, if that snapshot came after the action."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::action_id",
+      "kind": "method",
+      "signature": "pub fn action_id(payload: &[u8]) -> Result<Option<String>>",
+      "docs": "The `action_id` a call's arguments carry: a map's `action_id` string. `None` when the arguments are not a map or carry none; refused when it is empty or too long."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::len",
+      "kind": "method",
+      "signature": "pub fn len(&self) -> usize",
+      "docs": "How many receipts are kept."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::new",
+      "kind": "method",
+      "signature": "pub fn new() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::record",
+      "kind": "method",
+      "signature": "pub fn record(&mut self, caller: Caller, action_id: Option<&str>, result: &Result<Vec<u8>>, now: u64)",
+      "docs": "Keeps what `caller` got for `action_id`; nothing without an action id."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::replay",
+      "kind": "method",
+      "signature": "pub fn replay(&self, caller: Caller, action_id: Option<&str>, now: u64) -> Option<Result<Vec<u8>>>",
+      "docs": "The answer `caller` got for `action_id`, if it is kept."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::run",
+      "kind": "method",
+      "signature": "pub fn run<H>( hub: &mut H, receipts: fn(&mut H) -> &mut Receipts, call: &Call<'_>, now: u64, act: impl FnOnce(&mut H) -> Result<Vec<u8>>, ) -> Result<Vec<u8>>",
+      "docs": "Runs `act` on `hub` once per (caller, `action_id`): a call sent again gets the first answer. `receipts` finds the hub's receipts; a call without an action id just runs."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Rng",
+      "kind": "reexport",
+      "signature": "pub use rng::Rng;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "SNAPSHOT_METHOD",
+      "kind": "const",
+      "signature": "pub const SNAPSHOT_METHOD: &str = \"snapshot\";",
+      "docs": "The method every kit hub answers with a topic's snapshot."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "args",
+      "kind": "function",
+      "signature": "pub fn args<T: DeserializeOwned>(call: &Call<'_>) -> Result<T>",
+      "docs": "A call's arguments, refused with [`codes::BAD_REQUEST`] when they do not decode."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "codes",
+      "kind": "module",
+      "signature": "pub mod codes",
+      "docs": "The refusal codes kit hubs share. A hub may add its own: lowercase letters, digits and `_`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "error",
+      "kind": "function",
+      "signature": "pub fn error(code: &str, text: impl std::fmt::Display) -> Error",
+      "docs": "A refusal with a code: its message is `kit:<code>: <text>`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "error_code",
+      "kind": "function",
+      "signature": "pub fn error_code(message: &str) -> Option<(&str, &str)>",
+      "docs": "The code and text of a refusal [`error`] made, or `None` for any other message."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "message",
+      "kind": "function",
+      "signature": "pub fn message<T: Serialize + ?Sized>(ctx: &Ctx, kind: MessageKind, seq: u64, body: &T) -> Result<Vec<u8>>",
+      "docs": "Encodes one kit message from this instance. `body` must serialize as a struct or a map."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "public_containers",
+      "kind": "function",
+      "signature": "pub fn public_containers(model: &Model, schema: &Schema) -> Result<Containers>",
+      "docs": "Every container's public view, as a collection snapshot carries it."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "rng",
+      "kind": "module",
+      "signature": "pub mod rng;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "shard",
+      "kind": "module",
+      "signature": "pub mod shard;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "snapshot_topic",
+      "kind": "function",
+      "signature": "pub fn snapshot_topic(call: &Call<'_>, default: &str) -> String",
+      "docs": "The `topic` a [`SNAPSHOT_METHOD`] call names, or `default` when it names none."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "wire",
+      "kind": "module",
+      "signature": "pub mod wire;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "ALREADY_DONE",
+      "kind": "const",
+      "signature": "pub const ALREADY_DONE: &str = \"already_done\";",
+      "docs": "The action already ran; its reply was too large to keep ([`super::RECEIPT_REPLY_MAX`])."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "BAD_REQUEST",
+      "kind": "const",
+      "signature": "pub const BAD_REQUEST: &str = \"bad_request\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "CONFLICT",
+      "kind": "const",
+      "signature": "pub const CONFLICT: &str = \"conflict\";",
+      "docs": "The state does not allow it now."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "COOLDOWN",
+      "kind": "const",
+      "signature": "pub const COOLDOWN: &str = \"cooldown\";",
+      "docs": "Too soon after the last time."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "EMPTY",
+      "kind": "const",
+      "signature": "pub const EMPTY: &str = \"empty\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "EXPIRED",
+      "kind": "const",
+      "signature": "pub const EXPIRED: &str = \"expired\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "FINISHED",
+      "kind": "const",
+      "signature": "pub const FINISHED: &str = \"finished\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "FORBIDDEN",
+      "kind": "const",
+      "signature": "pub const FORBIDDEN: &str = \"forbidden\";",
+      "docs": "The caller may not do this."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "FULL",
+      "kind": "const",
+      "signature": "pub const FULL: &str = \"full\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "INSUFFICIENT",
+      "kind": "const",
+      "signature": "pub const INSUFFICIENT: &str = \"insufficient\";",
+      "docs": "Not enough of something the caller spends."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "LIMIT",
+      "kind": "const",
+      "signature": "pub const LIMIT: &str = \"limit\";",
+      "docs": "A bound the hub keeps (how many, how large)."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "NOT_FOUND",
+      "kind": "const",
+      "signature": "pub const NOT_FOUND: &str = \"not_found\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "NOT_MEMBER",
+      "kind": "const",
+      "signature": "pub const NOT_MEMBER: &str = \"not_member\";",
+      "docs": "The caller has not joined."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "NOT_READY",
+      "kind": "const",
+      "signature": "pub const NOT_READY: &str = \"not_ready\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "NOT_YOUR_TURN",
+      "kind": "const",
+      "signature": "pub const NOT_YOUR_TURN: &str = \"not_your_turn\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "OUT_OF_REACH",
+      "kind": "const",
+      "signature": "pub const OUT_OF_REACH: &str = \"out_of_reach\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "RESERVED",
+      "kind": "const",
+      "signature": "pub const RESERVED: &str = \"reserved\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "STARTED",
+      "kind": "const",
+      "signature": "pub const STARTED: &str = \"started\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng",
+      "kind": "struct",
+      "signature": "pub struct Rng { state: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::below",
+      "kind": "method",
+      "signature": "pub fn below(&mut self, n: u64) -> u64",
+      "docs": "Uniform in `[0, n)`; 0 when `n` is 0."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::chance",
+      "kind": "method",
+      "signature": "pub fn chance(&mut self, p: f64) -> bool",
+      "docs": "True with probability `p` (clamped to `[0, 1]`)."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::f64",
+      "kind": "method",
+      "signature": "pub fn f64(&mut self) -> f64",
+      "docs": "Uniform in `[0, 1)`."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::next_u64",
+      "kind": "method",
+      "signature": "pub fn next_u64(&mut self) -> u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::pick",
+      "kind": "method",
+      "signature": "pub fn pick<'a, T>(&mut self, items: &'a [T]) -> Option<&'a T>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::range",
+      "kind": "method",
+      "signature": "pub fn range(&mut self, lo: i64, hi: i64) -> i64",
+      "docs": "Uniform in `[lo, hi]`, both included; `lo` when `hi` is not above it."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::seed_from",
+      "kind": "method",
+      "signature": "pub fn seed_from(text: &str) -> u64",
+      "docs": "A seed from text: a key, a name."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::seeded",
+      "kind": "method",
+      "signature": "pub fn seeded(seed: u64) -> Self",
+      "docs": "A generator seeded with `seed`; 0 counts as 1, which xorshift needs."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::shuffle",
+      "kind": "method",
+      "signature": "pub fn shuffle<T>(&mut self, items: &mut [T])",
+      "docs": "Shuffles in place (Fisher-Yates)."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::weighted",
+      "kind": "method",
+      "signature": "pub fn weighted(&mut self, weights: &[u64]) -> Option<usize>",
+      "docs": "The index of one weight, chosen in proportion to the weights; `None` when they sum to nothing."
+    },
+    {
+      "module": "ckx_sdk::kit::shard",
+      "name": "around",
+      "kind": "function",
+      "signature": "pub fn around(x: i64, z: i64, size: i64, radius: i64) -> Vec<String>",
+      "docs": "The keys of the shards within `radius` shards of the one holding `(x, z)`, its own first, then row by row."
+    },
+    {
+      "module": "ckx_sdk::kit::shard",
+      "name": "centre",
+      "kind": "function",
+      "signature": "pub fn centre(x: i64, z: i64, size: i64) -> (i64, i64)",
+      "docs": "The shard's centre chunk for chunk `(x, z)`. `size` is at least 1."
+    },
+    {
+      "module": "ckx_sdk::kit::shard",
+      "name": "key",
+      "kind": "function",
+      "signature": "pub fn key(x: i64, z: i64, size: i64) -> String",
+      "docs": "The key of the shard that holds chunk `(x, z)`."
+    },
+    {
+      "module": "ckx_sdk::kit::shard",
+      "name": "parse",
+      "kind": "function",
+      "signature": "pub fn parse(key: &str) -> Option<(i64, i64)>",
+      "docs": "The centre chunk a key names, or `None` when it is not `\"<x>,<z>\"`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ABILITY",
+      "kind": "const",
+      "signature": "pub const ABILITY: u16 = 94;",
+      "docs": "An ability was cast, or landed."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "APP_EVENTS",
+      "kind": "const",
+      "signature": "pub const APP_EVENTS: u16 = 1000;",
+      "docs": "The first number an app's own events may use."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse",
+      "kind": "struct",
+      "signature": "pub struct AbilityUse { /// `cast` or `impact`. pub kind: String, pub ability_id: String, pub caster_id: String, pub victim_id: Option<String>, pub damage: i64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::ability_id",
+      "kind": "field",
+      "signature": "pub ability_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::caster_id",
+      "kind": "field",
+      "signature": "pub caster_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::damage",
+      "kind": "field",
+      "signature": "pub damage: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`cast` or `impact`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::victim_id",
+      "kind": "field",
+      "signature": "pub victim_id: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState",
+      "kind": "struct",
+      "signature": "pub struct ActorState { /// What it is: `mob`, `npc`, `pet`, `ball`, `ghost`, a game's own word. pub kind: String, /// Its id within the hub that shows it. pub id: u64, /// Where it is, in chunks. pub x: f64, #[serde(default)] pub y: f64, pub z: f64, /// Its health, when it has any. pub hp: Option<i64>, #[serde(default, skip_serializing_if = \"Option::is_none\")] pub max_hp: Option<i64>, /// What it is doing: `idle`, `chase`, `follow`, ... #[serde(default, skip_serializing_if = \"Option::is_none\")] pub mode: Option<String>, /// The player it belongs to (a pet, a summon). #[serde(default, skip_serializing_if = \"Option::is_none\")] pub owner: Option<u64>, /// Facing, in radians. #[serde(default, skip_serializing_if = \"Option::is_none\")] pub yaw: Option<f64>, #[serde(default, skip_serializing_if = \"Option::is_none\")] pub name: Option<String>, }",
+      "docs": "A server-driven actor as players near it see it."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::chunk",
+      "kind": "method",
+      "signature": "pub fn chunk(&self) -> ChunkPos",
+      "docs": "The chunk it stands in."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::hp",
+      "kind": "field",
+      "signature": "pub hp: Option<i64>",
+      "docs": "Its health, when it has any."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::id",
+      "kind": "field",
+      "signature": "pub id: u64",
+      "docs": "Its id within the hub that shows it."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "What it is: `mob`, `npc`, `pet`, `ball`, `ghost`, a game's own word."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::max_hp",
+      "kind": "field",
+      "signature": "pub max_hp: Option<i64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::mode",
+      "kind": "field",
+      "signature": "pub mode: Option<String>",
+      "docs": "What it is doing: `idle`, `chase`, `follow`, ..."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::name",
+      "kind": "field",
+      "signature": "pub name: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::new",
+      "kind": "method",
+      "signature": "pub fn new(kind: &str, id: u64, x: f64, z: f64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::owner",
+      "kind": "field",
+      "signature": "pub owner: Option<u64>",
+      "docs": "The player it belongs to (a pet, a summon)."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::x",
+      "kind": "field",
+      "signature": "pub x: f64",
+      "docs": "Where it is, in chunks."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::y",
+      "kind": "field",
+      "signature": "pub y: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::yaw",
+      "kind": "field",
+      "signature": "pub yaw: Option<f64>",
+      "docs": "Facing, in radians."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::z",
+      "kind": "field",
+      "signature": "pub z: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "CONTACT_DAMAGE",
+      "kind": "const",
+      "signature": "pub const CONTACT_DAMAGE: u16 = 77;",
+      "docs": "A mob or a trap hit a player."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "CONTROL_POINT",
+      "kind": "const",
+      "signature": "pub const CONTROL_POINT: u16 = 96;",
+      "docs": "A control point changed hands, or its capture moved."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage",
+      "kind": "struct",
+      "signature": "pub struct ContactDamage { pub target_uuid: String, pub damage: i64, pub mob_id: String, pub mob_name: String, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage::damage",
+      "kind": "field",
+      "signature": "pub damage: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage::mob_id",
+      "kind": "field",
+      "signature": "pub mob_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage::mob_name",
+      "kind": "field",
+      "signature": "pub mob_name: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage::target_uuid",
+      "kind": "field",
+      "signature": "pub target_uuid: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange",
+      "kind": "struct",
+      "signature": "pub struct ControlPointChange { pub point_id: String, pub owner: String, pub previous_owner: String, /// Capture progress toward the attacker, 0 to 1. pub progress: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange::owner",
+      "kind": "field",
+      "signature": "pub owner: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange::point_id",
+      "kind": "field",
+      "signature": "pub point_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange::previous_owner",
+      "kind": "field",
+      "signature": "pub previous_owner: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange::progress",
+      "kind": "field",
+      "signature": "pub progress: f64",
+      "docs": "Capture progress toward the attacker, 0 to 1."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EMOTE",
+      "kind": "const",
+      "signature": "pub const EMOTE: u16 = 101;",
+      "docs": "An emote: a client event players send each other (the kit clients' convention); a hub may send one too, for a server-driven actor."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ENCOUNTER",
+      "kind": "const",
+      "signature": "pub const ENCOUNTER: u16 = 99;",
+      "docs": "A wave began or ended, or a boss changed phase."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Emote",
+      "kind": "struct",
+      "signature": "pub struct Emote { /// The emote's name, as the game knows it: `wave`, `cheer`, ... pub emote: String, /// The actor it is aimed at, if any. pub target_uuid: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Emote::emote",
+      "kind": "field",
+      "signature": "pub emote: String",
+      "docs": "The emote's name, as the game knows it: `wave`, `cheer`, ..."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Emote::target_uuid",
+      "kind": "field",
+      "signature": "pub target_uuid: Option<String>",
+      "docs": "The actor it is aimed at, if any."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange",
+      "kind": "struct",
+      "signature": "pub struct EncounterChange { /// `wave_started`, `wave_cleared`, `boss_phase` or `finished`. pub kind: String, pub encounter_id: String, pub wave: u32, pub phase: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange::encounter_id",
+      "kind": "field",
+      "signature": "pub encounter_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`wave_started`, `wave_cleared`, `boss_phase` or `finished`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange::phase",
+      "kind": "field",
+      "signature": "pub phase: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange::wave",
+      "kind": "field",
+      "signature": "pub wave: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MOVEMENT_VIOLATION",
+      "kind": "const",
+      "signature": "pub const MOVEMENT_VIOLATION: u16 = 95;",
+      "docs": "A movement the warden flagged."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MovementViolation",
+      "kind": "struct",
+      "signature": "pub struct MovementViolation { /// `speed`, `teleport` or `bounds`. pub kind: String, pub user_id: String, pub detail: String, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MovementViolation::detail",
+      "kind": "field",
+      "signature": "pub detail: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MovementViolation::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`speed`, `teleport` or `bounds`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MovementViolation::user_id",
+      "kind": "field",
+      "signature": "pub user_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "POSSESSION",
+      "kind": "const",
+      "signature": "pub const POSSESSION: u16 = 100;",
+      "docs": "The contested object (a ball) changed hands, or a goal was scored."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PROPOSAL",
+      "kind": "const",
+      "signature": "pub const PROPOSAL: u16 = 93;",
+      "docs": "A match was proposed to the players in it."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PossessionChange",
+      "kind": "struct",
+      "signature": "pub struct PossessionChange { /// `claimed`, `passed`, `loose` or `goal`. pub kind: String, pub holder_id: Option<String>, pub team: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PossessionChange::holder_id",
+      "kind": "field",
+      "signature": "pub holder_id: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PossessionChange::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`claimed`, `passed`, `loose` or `goal`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PossessionChange::team",
+      "kind": "field",
+      "signature": "pub team: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ProposalMade",
+      "kind": "struct",
+      "signature": "pub struct ProposalMade { pub proposal_id: String, pub mode: String, pub players: Vec<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ProposalMade::mode",
+      "kind": "field",
+      "signature": "pub mode: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ProposalMade::players",
+      "kind": "field",
+      "signature": "pub players: Vec<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ProposalMade::proposal_id",
+      "kind": "field",
+      "signature": "pub proposal_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RACE_TIMING",
+      "kind": "const",
+      "signature": "pub const RACE_TIMING: u16 = 97;",
+      "docs": "A racer started, passed a checkpoint, finished a lap or the race."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming",
+      "kind": "struct",
+      "signature": "pub struct RaceTiming { /// `started`, `checkpoint`, `lap` or `finished`. pub kind: String, pub course_id: String, pub user_id: String, pub checkpoint: u32, pub lap: u32, pub elapsed_ms: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::checkpoint",
+      "kind": "field",
+      "signature": "pub checkpoint: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::course_id",
+      "kind": "field",
+      "signature": "pub course_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::elapsed_ms",
+      "kind": "field",
+      "signature": "pub elapsed_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`started`, `checkpoint`, `lap` or `finished`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::lap",
+      "kind": "field",
+      "signature": "pub lap: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::user_id",
+      "kind": "field",
+      "signature": "pub user_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "SCORE",
+      "kind": "const",
+      "signature": "pub const SCORE: u16 = 92;",
+      "docs": "Scores or a result."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ScoreUpdate",
+      "kind": "struct",
+      "signature": "pub struct ScoreUpdate { pub standings: Vec<Standing>, pub winner_id: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ScoreUpdate::standings",
+      "kind": "field",
+      "signature": "pub standings: Vec<Standing>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ScoreUpdate::winner_id",
+      "kind": "field",
+      "signature": "pub winner_id: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Standing",
+      "kind": "struct",
+      "signature": "pub struct Standing { pub actor_id: String, pub score: i64, pub rank: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Standing::actor_id",
+      "kind": "field",
+      "signature": "pub actor_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Standing::rank",
+      "kind": "field",
+      "signature": "pub rank: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Standing::score",
+      "kind": "field",
+      "signature": "pub score: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TURN",
+      "kind": "const",
+      "signature": "pub const TURN: u16 = 91;",
+      "docs": "A turn passed to the next player."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TurnChange",
+      "kind": "struct",
+      "signature": "pub struct TurnChange { /// Whose turn it is now: a player id, or a unit's id. pub actor_id: String, pub round: u32, pub turn_in_round: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TurnChange::actor_id",
+      "kind": "field",
+      "signature": "pub actor_id: String",
+      "docs": "Whose turn it is now: a player id, or a unit's id."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TurnChange::round",
+      "kind": "field",
+      "signature": "pub round: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TurnChange::turn_in_round",
+      "kind": "field",
+      "signature": "pub turn_in_round: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WEATHER",
+      "kind": "const",
+      "signature": "pub const WEATHER: u16 = 90;",
+      "docs": "The weather or the time of day turned."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange",
+      "kind": "struct",
+      "signature": "pub struct WeatherChange { pub weather: String, pub since_ms: u64, pub until_ms: u64, pub night: bool, pub time_of_day: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::night",
+      "kind": "field",
+      "signature": "pub night: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::since_ms",
+      "kind": "field",
+      "signature": "pub since_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::time_of_day",
+      "kind": "field",
+      "signature": "pub time_of_day: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::until_ms",
+      "kind": "field",
+      "signature": "pub until_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::weather",
+      "kind": "field",
+      "signature": "pub weather: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZONE_CHANGE",
+      "kind": "const",
+      "signature": "pub const ZONE_CHANGE: u16 = 98;",
+      "docs": "A play zone moved or shrank."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange",
+      "kind": "struct",
+      "signature": "pub struct ZoneChange { /// `hold`, `shrink` or `closed`. pub kind: String, pub phase: Option<u32>, pub radius_now: f64, pub center_x: f64, pub center_z: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::center_x",
+      "kind": "field",
+      "signature": "pub center_x: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::center_z",
+      "kind": "field",
+      "signature": "pub center_z: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`hold`, `shrink` or `closed`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::phase",
+      "kind": "field",
+      "signature": "pub phase: Option<u32>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::radius_now",
+      "kind": "field",
+      "signature": "pub radius_now: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "emit_actor_state",
+      "kind": "function",
+      "signature": "pub fn emit_actor_state(ctx: &Ctx, actor: &[u8; 32], distance: u8, state: &ActorState) -> Result<()>",
+      "docs": "Shows a server-driven actor to the players within `distance` chunks of where it stands."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "emit_event",
+      "kind": "function",
+      "signature": "pub fn emit_event<T: Serialize + ?Sized>(ctx: &Ctx, at: ChunkPos, distance: u8, actor: &[u8; 32], event_type: u16, body: &T) -> Result<()>",
+      "docs": "Sends a server event to the players within `distance` chunks of `at` (at most [`MAX_DISTANCE`]). `actor` is the event's actor: the one it is about, or the hub's own."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "event_bytes",
+      "kind": "function",
+      "signature": "pub fn event_bytes<T: Serialize + ?Sized>(event_type: u16, body: &T) -> Result<Vec<u8>>",
+      "docs": "A server event's payload: its type, then its body as JSON."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "ARTIFACT_MAX_BYTES",
+      "kind": "const",
+      "signature": "pub const ARTIFACT_MAX_BYTES: usize = 16 << 20;",
+      "docs": "The largest module an app's node type may deploy."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "LOGS_PER_CALL",
+      "kind": "const",
+      "signature": "pub const LOGS_PER_CALL: u32 = 32;",
+      "docs": "Log lines one call may write (the rest are dropped), and the bytes of a line that are kept."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "MAX_EMIT_BYTES",
+      "kind": "const",
+      "signature": "pub const MAX_EMIT_BYTES: usize = 70 + crate::emit::MAX_PAYLOAD;",
+      "docs": "The largest realtime inject a node may emit: a spatial event's header and its payload."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "MAX_LOG_BYTES",
+      "kind": "const",
+      "signature": "pub const MAX_LOG_BYTES: usize = 4 << 10;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "MAX_PAYLOAD",
+      "kind": "const",
+      "signature": "pub const MAX_PAYLOAD: usize = 4 << 20;",
+      "docs": "The largest payload a node may send in one message, and the largest reply it may return. A larger reply is answered `Internal`."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "MAX_SNAPSHOT_BYTES",
+      "kind": "const",
+      "signature": "pub const MAX_SNAPSHOT_BYTES: usize = 8 << 20;",
+      "docs": "The largest snapshot a hub may persist. A larger one fails to save, and the last one stands."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "OUT_BYTES_PER_CALL",
+      "kind": "const",
+      "signature": "pub const OUT_BYTES_PER_CALL: u64 = 32 << 20;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "OUT_MSGS_PER_CALL",
+      "kind": "const",
+      "signature": "pub const OUT_MSGS_PER_CALL: u32 = 16_384;",
+      "docs": "What one call into a node may send on, in all: messages (calls, sends, publishes, emits, node API requests, subscriptions) and bytes of their payloads. Past either, calls and node API requests answer `Busy` and publishes are dropped."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "crate::node::{MAX_CHUNK_STATE, MAX_VOXEL_STATE, MAX_VOXEL_WRITES}",
+      "kind": "reexport",
+      "signature": "pub use crate::node::{MAX_CHUNK_STATE, MAX_VOXEL_STATE, MAX_VOXEL_WRITES};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "crate::rt::{MAX_TIMERS, MAX_WATCHES, MIN_TIMER_MS}",
+      "kind": "reexport",
+      "signature": "pub use crate::rt::{MAX_TIMERS, MAX_WATCHES, MIN_TIMER_MS};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "manifest",
+      "kind": "module",
+      "signature": "pub mod manifest",
+      "docs": "What a manifest may ask for a node type, and what it gets when it asks for nothing."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "mods",
+      "kind": "module",
+      "signature": "pub mod mods",
+      "docs": "What the platform gives every mod, in place of a manifest's limits."
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "DEADLINE_DEFAULT_MS",
+      "kind": "const",
+      "signature": "pub const DEADLINE_DEFAULT_MS: u32 = 2_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "DEADLINE_MAX_MS",
+      "kind": "const",
+      "signature": "pub const DEADLINE_MAX_MS: u32 = 10_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "FUEL_DEFAULT",
+      "kind": "const",
+      "signature": "pub const FUEL_DEFAULT: u64 = 50_000_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "FUEL_MAX",
+      "kind": "const",
+      "signature": "pub const FUEL_MAX: u64 = 1_000_000_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "MEMORY_DEFAULT_MB",
+      "kind": "const",
+      "signature": "pub const MEMORY_DEFAULT_MB: u32 = 64;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "MEMORY_MAX_MB",
+      "kind": "const",
+      "signature": "pub const MEMORY_MAX_MB: u32 = 512;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "ARTIFACT_MAX_BYTES",
+      "kind": "const",
+      "signature": "pub const ARTIFACT_MAX_BYTES: usize = 4 << 20;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "DEADLINE_MS",
+      "kind": "const",
+      "signature": "pub const DEADLINE_MS: u32 = 2_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "FUEL_PER_CALL",
+      "kind": "const",
+      "signature": "pub const FUEL_PER_CALL: u64 = 20_000_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "MEMORY_MB",
+      "kind": "const",
+      "signature": "pub const MEMORY_MB: u32 = 32;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "PER_GRID_MAX",
+      "kind": "const",
+      "signature": "pub const PER_GRID_MAX: usize = 8;",
+      "docs": "Mods one grid may run, and one owner may hold."
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "PER_OWNER_MAX",
+      "kind": "const",
+      "signature": "pub const PER_OWNER_MAX: usize = 64;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "RATE_PER_SEC",
+      "kind": "const",
+      "signature": "pub const RATE_PER_SEC: u32 = 20;",
+      "docs": "Handler calls per second, per mod instance."
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "SCOPES",
+      "kind": "const",
+      "signature": "pub const SCOPES: [&str; 3] = [\"grids.read\", \"world.read\", \"world.write\"];",
+      "docs": "The node API scopes every mod holds, each confined to its grid."
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "TYPE_PREFIX",
+      "kind": "const",
+      "signature": "pub const TYPE_PREFIX: &str = \"mod:\";",
+      "docs": "A mod is the hub `(\"mod:<name>\", \"<grid id>\")`."
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "WORLD_BATCH_MAX",
+      "kind": "const",
+      "signature": "pub const WORLD_BATCH_MAX: usize = 512;",
+      "docs": "World events in one `$world` call, at most."
     },
     {
       "module": "ckx_sdk::model",
@@ -1252,6 +2771,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "method",
       "signature": "pub fn get_str(&self, schema: &Schema, id: u64, key: &str) -> Result<String>",
       "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::ids",
+      "kind": "method",
+      "signature": "pub fn ids(&self) -> impl Iterator<Item = u64> + '_",
+      "docs": "Every container's id, oldest first."
     },
     {
       "module": "ckx_sdk::model",
@@ -1514,6 +3040,48 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "Access",
+      "kind": "struct",
+      "signature": "pub struct Access<'a>(pub(crate) &'a Ctx);",
+      "docs": "Players' access to this app: [`Ctx::access`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::get",
+      "kind": "method",
+      "signature": "pub fn get(&self, player: u64) -> Result<Option<PlayerAccess>, CallError>",
+      "docs": "The player's access to the app, or `None` when they never had any. Scope `access.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::grant",
+      "kind": "method",
+      "signature": "pub fn grant(&self, player: u64, tier: Option<u64>) -> Result<PlayerAccess, CallError>",
+      "docs": "Gives the player access to the app, in access tier `tier` when one is named. Scope `access.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::revoke",
+      "kind": "method",
+      "signature": "pub fn revoke(&self, player: u64) -> Result<(), CallError>",
+      "docs": "Takes the player's access away. Scope `access.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::suspend",
+      "kind": "method",
+      "signature": "pub fn suspend(&self, player: u64, seconds: u32) -> Result<String, CallError>",
+      "docs": "Suspends the player's access for `seconds`. Returns until when (RFC 3339). Scope `access.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::unsuspend",
+      "kind": "method",
+      "signature": "pub fn unsuspend(&self, player: u64) -> Result<(), CallError>",
+      "docs": "Ends the player's suspension. Scope `access.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Actor",
       "kind": "struct",
       "signature": "pub struct Actor { /// The 32-character actor id. pub uuid: String, pub player: Option<u64>, pub chunk: ChunkPos, /// The actor's persisted public state, where the game keeps one. pub state: Option<Vec<u8>>, }",
@@ -1628,7 +3196,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "Grid",
       "kind": "struct",
-      "signature": "pub struct Grid { pub id: u64, pub low: ChunkPos, pub high: ChunkPos, }",
+      "signature": "pub struct Grid { pub id: u64, pub low: ChunkPos, pub high: ChunkPos, /// Who holds it, where the platform records an owner. pub owner: Option<GridOwner>, /// Permission keys every player holds on it, granted or not. pub open_permissions: Vec<String>, }",
       "docs": "A grid: a box of chunks with its own permissions."
     },
     {
@@ -1636,6 +3204,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Grid::contains",
       "kind": "method",
       "signature": "pub fn contains(&self, at: ChunkPos) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::from",
+      "kind": "method",
+      "signature": "fn from(g: WireGrid) -> Self",
       "docs": ""
     },
     {
@@ -1657,6 +3232,41 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Grid::low",
       "kind": "field",
       "signature": "pub low: ChunkPos",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::open_permissions",
+      "kind": "field",
+      "signature": "pub open_permissions: Vec<String>",
+      "docs": "Permission keys every player holds on it, granted or not."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::owner",
+      "kind": "field",
+      "signature": "pub owner: Option<GridOwner>",
+      "docs": "Who holds it, where the platform records an owner."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridOwner",
+      "kind": "struct",
+      "signature": "pub struct GridOwner { pub kind: String, #[serde(rename = \"ref\")] pub ref_: String, }",
+      "docs": "A grid's owner: what kind of party it is, and which."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridOwner::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridOwner::ref_",
+      "kind": "field",
+      "signature": "pub ref_: String",
       "docs": ""
     },
     {
@@ -1689,10 +3299,31 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "GridSettings",
+      "kind": "struct",
+      "signature": "pub struct GridSettings { /// Players may write voxels outside every grid. pub wilderness_writes_open: bool, }",
+      "docs": "The app's grid rules, from [`Grids::settings`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridSettings::wilderness_writes_open",
+      "kind": "field",
+      "signature": "pub wilderness_writes_open: bool",
+      "docs": "Players may write voxels outside every grid."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Grids",
       "kind": "struct",
       "signature": "pub struct Grids<'a>(pub(crate) &'a Ctx);",
-      "docs": "Grid lookups: [`Ctx::grids`]."
+      "docs": "Grids and their permissions: [`Ctx::grids`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::assign_group",
+      "kind": "method",
+      "signature": "pub fn assign_group(&self, grid: u64, group: u64, permissions: &[&str]) -> Result<(), CallError>",
+      "docs": "Gives the members of one of the app's groups `permissions` on `grid`. Scope `grids.write`."
     },
     {
       "module": "ckx_sdk::node",
@@ -1710,10 +3341,52 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "Grids::create",
+      "kind": "method",
+      "signature": "pub fn create(&self, low: ChunkPos, high: ChunkPos) -> Result<Grid, CallError>",
+      "docs": "A new grid of the app from chunk `low` to chunk `high`, both included. Scope `grids.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::delete",
+      "kind": "method",
+      "signature": "pub fn delete(&self, grid: u64) -> Result<(), CallError>",
+      "docs": "Removes one of the app's grids. Scope `grids.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Grids::get",
       "kind": "method",
       "signature": "pub fn get(&self, grid: u64) -> Result<Option<Grid>, CallError>",
       "docs": "One of this app's grids. Scope `grids.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::set_open_permissions",
+      "kind": "method",
+      "signature": "pub fn set_open_permissions(&self, grid: u64, permissions: &[&str]) -> Result<(), CallError>",
+      "docs": "Replaces the permission keys every player holds on `grid` ([`Grid::open_permissions`]). Scope `grids.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::settings",
+      "kind": "method",
+      "signature": "pub fn settings(&self) -> Result<GridSettings, CallError>",
+      "docs": "The app's grid rules. Scope `grids.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::unassign_group",
+      "kind": "method",
+      "signature": "pub fn unassign_group(&self, grid: u64, group: u64) -> Result<(), CallError>",
+      "docs": "Takes back what [`Grids::assign_group`] gave the group on `grid`. Scope `grids.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "MAX_CHUNK_STATE",
+      "kind": "const",
+      "signature": "pub const MAX_CHUNK_STATE: usize = 65_536;",
+      "docs": "A chunk's state bytes ([`World::set_chunk_state`])."
     },
     {
       "module": "ckx_sdk::node",
@@ -1754,15 +3427,15 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "Player",
       "kind": "struct",
-      "signature": "pub struct Player { #[serde(deserialize_with = \"de_u64\")] pub player: u64, pub gamertag: String, pub disambiguation: String, }",
+      "signature": "pub struct Player { #[serde(deserialize_with = \"de_u64\")] pub player: u64, pub gamertag: String, /// What tells players with the same gamertag apart; most players have none. #[serde(default)] pub disambiguation: Option<String>, }",
       "docs": "A player's public identity."
     },
     {
       "module": "ckx_sdk::node",
       "name": "Player::disambiguation",
       "kind": "field",
-      "signature": "pub disambiguation: String",
-      "docs": ""
+      "signature": "pub disambiguation: Option<String>",
+      "docs": "What tells players with the same gamertag apart; most players have none."
     },
     {
       "module": "ckx_sdk::node",
@@ -1777,6 +3450,41 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "field",
       "signature": "pub player: u64",
       "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess",
+      "kind": "struct",
+      "signature": "pub struct PlayerAccess { /// `active`, `revoked`, or another state the platform names. pub status: String, /// The access tier, if any. #[serde(default, rename = \"tierId\", deserialize_with = \"de_opt_u64\")] pub tier: Option<u64>, /// When it ends (RFC 3339), if it does. #[serde(default)] pub expires_at: Option<String>, /// Until when the player is suspended (RFC 3339), while they are. #[serde(default)] pub suspended_until: Option<String>, }",
+      "docs": "A player's access to the app, from [`Access::get`] and [`Access::grant`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess::expires_at",
+      "kind": "field",
+      "signature": "pub expires_at: Option<String>",
+      "docs": "When it ends (RFC 3339), if it does."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess::status",
+      "kind": "field",
+      "signature": "pub status: String",
+      "docs": "`active`, `revoked`, or another state the platform names."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess::suspended_until",
+      "kind": "field",
+      "signature": "pub suspended_until: Option<String>",
+      "docs": "Until when the player is suspended (RFC 3339), while they are."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess::tier",
+      "kind": "field",
+      "signature": "pub tier: Option<u64>",
+      "docs": "The access tier, if any."
     },
     {
       "module": "ckx_sdk::node",
@@ -1831,8 +3539,22 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "Voxel",
       "kind": "struct",
-      "signature": "pub struct Voxel { pub x: i16, pub y: i16, pub z: i16, pub voxel_type: u16, pub state: Option<Vec<u8>>, }",
-      "docs": "A voxel written into a chunk (the edits on top of its dense grid)."
+      "signature": "pub struct Voxel { pub x: i16, pub y: i16, pub z: i16, /// What a type means is up to the app. pub voxel_type: i16, pub state: Option<Vec<u8>>, /// Who wrote it: a user id in decimal, `\"0\"` when the app's own code did. `None` from a /// platform that does not say. pub created_by: Option<String>, /// When it was written (RFC 3339). pub updated_at: Option<String>, }",
+      "docs": "A voxel written into a chunk (the edits on top of its dense grid), with who wrote it and when."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::created_by",
+      "kind": "field",
+      "signature": "pub created_by: Option<String>",
+      "docs": "Who wrote it: a user id in decimal, `\"0\"` when the app's own code did. `None` from a platform that does not say."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::from",
+      "kind": "method",
+      "signature": "fn from(v: WireVoxel) -> Self",
+      "docs": ""
     },
     {
       "module": "ckx_sdk::node",
@@ -1843,10 +3565,17 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "Voxel::updated_at",
+      "kind": "field",
+      "signature": "pub updated_at: Option<String>",
+      "docs": "When it was written (RFC 3339)."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Voxel::voxel_type",
       "kind": "field",
-      "signature": "pub voxel_type: u16",
-      "docs": ""
+      "signature": "pub voxel_type: i16",
+      "docs": "What a type means is up to the app."
     },
     {
       "module": "ckx_sdk::node",
@@ -1873,7 +3602,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "VoxelWrite",
       "kind": "struct",
-      "signature": "pub struct VoxelWrite { pub chunk: ChunkPos, pub voxel: (i16, i16, i16), pub voxel_type: u16, pub state: Option<Vec<u8>>, }",
+      "signature": "pub struct VoxelWrite { pub chunk: ChunkPos, /// `(x, y, z)` within the chunk. Positions are the app's to define; an app on the 16×16×16 /// dense grid keeps to 0 to 15 on each axis. pub voxel: (i16, i16, i16), /// What a type means is up to the app. pub voxel_type: i16, pub state: Option<Vec<u8>>, }",
       "docs": "One voxel to write: `voxel` is its position within `chunk`."
     },
     {
@@ -1895,14 +3624,14 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "VoxelWrite::voxel",
       "kind": "field",
       "signature": "pub voxel: (i16, i16, i16)",
-      "docs": ""
+      "docs": "`(x, y, z)` within the chunk. Positions are the app's to define; an app on the 16×16×16 dense grid keeps to 0 to 15 on each axis."
     },
     {
       "module": "ckx_sdk::node",
       "name": "VoxelWrite::voxel_type",
       "kind": "field",
-      "signature": "pub voxel_type: u16",
-      "docs": ""
+      "signature": "pub voxel_type: i16",
+      "docs": "What a type means is up to the app."
     },
     {
       "module": "ckx_sdk::node",
@@ -1931,6 +3660,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "method",
       "signature": "pub fn chunk(&self, at: ChunkPos) -> Result<Option<Chunk>, CallError>",
       "docs": "The chunk at `at`, or `None` when the app never stored it. Scope `world.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "World::set_chunk_state",
+      "kind": "method",
+      "signature": "pub fn set_chunk_state(&self, chunk: ChunkPos, state: Option<&[u8]>) -> Result<(), CallError>",
+      "docs": "Replaces the chunk's own state blob, the one [`Chunk::chunk_state`] reads (at most [`MAX_CHUNK_STATE`] bytes; `None` clears it). Scope `world.write`."
     },
     {
       "module": "ckx_sdk::node",
@@ -2242,6 +3978,27 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "actor_despawn",
+      "kind": "function",
+      "signature": "pub fn actor_despawn(actor_id: &str) -> Result<Value, HostError>",
+      "docs": "Removes a mod-owned actor of this session."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "actor_pose",
+      "kind": "function",
+      "signature": "pub fn actor_pose(actor_id: &str, pose: Value) -> Result<Value, HostError>",
+      "docs": "Moves a mod-owned actor of this session. A position outside the grid is refused."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "actor_spawn",
+      "kind": "function",
+      "signature": "pub fn actor_spawn(actor: Value) -> Result<Value, HostError>",
+      "docs": "Places a mod-owned actor inside the grid. A live player's id is refused."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "actors_list",
       "kind": "function",
       "signature": "pub fn actors_list(x: i64, y: i64, z: i64) -> Result<Value, HostError>",
@@ -2256,6 +4013,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "avatar_appearance",
+      "kind": "function",
+      "signature": "pub fn avatar_appearance(appearance: Value) -> Result<Value, HostError>",
+      "docs": "The visiting player's avatar tint."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "avatar_state_get",
       "kind": "function",
       "signature": "pub fn avatar_state_get(avatar_id: &str) -> Result<Value, HostError>",
@@ -2263,10 +4027,24 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "avatar_state_set",
+      "kind": "function",
+      "signature": "pub fn avatar_state_set(avatar_id: &str, state_base64: &str) -> Result<Value, HostError>",
+      "docs": "The visiting player's own avatar state blob."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "chunk_get",
       "kind": "function",
       "signature": "pub fn chunk_get(x: i64, y: i64, z: i64) -> Result<Value, HostError>",
       "docs": "One chunk inside the grid: `{ voxelsBase64 }`."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "clock",
+      "kind": "function",
+      "signature": "pub fn clock() -> Result<Value, HostError>",
+      "docs": "The page's wall clock, milliseconds."
     },
     {
       "module": "crowdy_client_sdk::api",
@@ -2298,6 +4076,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "events_poll",
+      "kind": "function",
+      "signature": "pub fn events_poll() -> Result<Value, HostError>",
+      "docs": "ClientEvents the visiting player's session has received since the last poll."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "grid_info",
       "kind": "function",
       "signature": "pub fn grid_info() -> Result<Value, HostError>",
@@ -2319,6 +4104,27 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "input_axes",
+      "kind": "function",
+      "signature": "pub fn input_axes() -> Result<Value, HostError>",
+      "docs": "The visiting player's movement axes, drained by the page: `{ x, y }`."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "input_key",
+      "kind": "function",
+      "signature": "pub fn input_key(code: &str) -> Result<Value, HostError>",
+      "docs": "Whether the visiting player is holding `code` (a `KeyboardEvent.code`)."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "input_look",
+      "kind": "function",
+      "signature": "pub fn input_look() -> Result<Value, HostError>",
+      "docs": "Pointer-look delta since the last poll: `{ dx, dy }`."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "overlay_draw",
       "kind": "function",
       "signature": "pub fn overlay_draw(payload: Value) -> Result<Value, HostError>",
@@ -2333,6 +4139,76 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "pose_get",
+      "kind": "function",
+      "signature": "pub fn pose_get() -> Result<Value, HostError>",
+      "docs": "The visiting player's body. The page answers from the mod's hold, or the walker."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "pose_release",
+      "kind": "function",
+      "signature": "pub fn pose_release() -> Result<Value, HostError>",
+      "docs": "Hands the visiting player's body back to the walker."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "pose_set",
+      "kind": "function",
+      "signature": "pub fn pose_set(pose: Value) -> Result<Value, HostError>",
+      "docs": "Moves the visiting player's body. A position outside the grid is refused."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "scene_catalog",
+      "kind": "function",
+      "signature": "pub fn scene_catalog(catalog: Value) -> Result<Value, HostError>",
+      "docs": "The mod's scene templates, kept in the page."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "scene_instances",
+      "kind": "function",
+      "signature": "pub fn scene_instances(instances: Value) -> Result<Value, HostError>",
+      "docs": "Template instances drawn in the page, inside the grid."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "send_actor_message",
+      "kind": "function",
+      "signature": "pub fn send_actor_message(actor_id: &str, payload: Value) -> Result<Value, HostError>",
+      "docs": "A message from this session to one actor inside the grid."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "send_channel_message",
+      "kind": "function",
+      "signature": "pub fn send_channel_message(channel_id: &str, payload: Value) -> Result<Value, HostError>",
+      "docs": "A channel message as the visiting player, on a channel they may send on."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "send_client_event",
+      "kind": "function",
+      "signature": "pub fn send_client_event(chunk: (i64, i64, i64), payload: Value) -> Result<Value, HostError>",
+      "docs": "A ClientEvent from the visiting player's chunk, inside the grid."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "send_text",
+      "kind": "function",
+      "signature": "pub fn send_text(chunk: (i64, i64, i64), text: &str) -> Result<Value, HostError>",
+      "docs": "A spatial text packet from the visiting player's chunk."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "teleport_request",
+      "kind": "function",
+      "signature": "pub fn teleport_request(destination: Value) -> Result<Value, HostError>",
+      "docs": "Asks the page to move the visiting player to a destination inside the grid."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "user_state_get",
       "kind": "function",
       "signature": "pub fn user_state_get(user_id: &str) -> Result<Value, HostError>",
@@ -2344,6 +4220,20 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "function",
       "signature": "pub fn user_state_set(user_id: &str, state_base64: &str) -> Result<Value, HostError>",
       "docs": "Replaces the visiting player's app state; `state_base64` is the new bytes."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "video_set",
+      "kind": "function",
+      "signature": "pub fn video_set(enabled: bool) -> Result<Value, HostError>",
+      "docs": "Starts or stops the visiting player's camera. The page still asks the browser."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "voice_set",
+      "kind": "function",
+      "signature": "pub fn voice_set(enabled: bool) -> Result<Value, HostError>",
+      "docs": "Starts or stops the visiting player's microphone. The page still asks the browser."
     },
     {
       "module": "crowdy_client_sdk::api",

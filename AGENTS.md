@@ -54,7 +54,9 @@ maps as they arrive (snake_case fields), the same in all three SDKs. Without opt
 under `useBigInt64` the MessagePack encoder wrote a `number` of 2^32 or more as a float, which
 hubs' integer fields refuse (timestamps, player ids); `execWireIntegers` sends them as 64-bit
 integers. Found by the kit's local-cluster run. CrowdyCPP and CrowdyPy mirror the kit (their
-parity gates scan `src/kit/**`).
+parity gates scan `src/kit/**`). The embedded authoring index is cks-game-api `dev`'s after its
+ckx-sdk 0.10.0 re-pin (#532: 608 symbols, `core` and `alloc` included); the copy here had last
+been synced at ckx-sdk 0.7.0, so Studio's editor completed neither `kit`, `testing` nor `limits`.
 
 **18.10.0: bans, the access-ended close, and the block and ban codes (2026-10-13).** The
 operator's rule: suspending or blocking a player cuts every access path in scope.
