@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.10.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.11.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,63 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.13.0: the economy (2026-10-15).** `src/kit/modules/player.ts`: `PlayerKit` (`kit.player`),
+the caller's own `player` hub, whose key is their player id (`runtime.playerId()`); its mirrors
+are made once the key is known, so its stores are relays that exist from the start. The views
+`InventoryKit`, `WalletKit`, `ProgressionKit`, `AchievementsKit`, `QuestsKit`, `CraftingKit`,
+`LootKit` and `ProductionKit` share it. `src/kit/modules/market.ts`: one `MarketCore` per market
+key behind `kit.market.at`, `kit.shops.at` and `kit.trades.at`. Calls send only the arguments
+given (`buy` without a count, `craft` without times): the replay compares arguments. A
+`KitError` coded `unavailable` is resent when the call has an action id (the hubs keep no
+receipt for it). The economy is not a ledger (HS-52). The embedded authoring index is
+cks-game-api's at its ckx-sdk 0.12.1 re-pin (1269 symbols).
+
+**18.12.0: the genre starters (2026-10-15).** Nine more modules in `src/kit/modules/`, one per
+ck-exec genre starter (ckx-sdk 0.11.0): `leaderboards` (`leaderboard`), `tables` (`deck`, the
+hand as `PrivateState`), `tactics`, `encounters` (`director`), `minigames` (`minigame`),
+`instances` (`instance`), `arenas` (`arena`), `racing` (`race` and `ball`, one crate) and
+`territory` (`territory` and `zone`, one crate). Each is a `XxxKit(runtime, nodeType)` with a
+per-key handle holding a `HubState` on the hub's topic and calling changes with
+`{ action: true }`; `GameKitNodeTypes` names them for an app that deploys a starter under
+another type. Their scripts are in the record and replayed in `game-kit.test.mjs`
+(`replayOf(t, crate, nodeType)`). Positions (`arenas.move`, `race.pos`, `ball.pos`) go without an
+action id: the next report replaces a lost one. The embedded authoring index is cks-game-api's at
+its ckx-sdk 0.11.0 re-pin (1059 symbols). A re-embed is `npm run authoring-index:drift -- --source
+<cks-game-api>/compute-toolchain/browser-authoring-index.json --write`, then `npm run
+authoring-index:generate`, then the hash, count and version pins in
+`live-coding-analysis.test.mjs`.
+
+**18.11.0: the Game Kit on ck-exec (2026-10-15).** `client.kit(appId)` is the client half of
+the game kit whose server half is ck-exec's `ckx_sdk::kit` (ckx-sdk 0.10.0) and the starter
+packs; the operator chose both halves on ck-exec, and items and soft currency in hub state (not
+a ledger, HS-52) for the economy modules to come. `src/kit/`: `protocol.ts` (kit messages with
+`epoch` and `seq`, `KitError` from `kit:<code>:` refusals, action ids, shard keys),
+`runtime.ts` (`KitRuntime`: one shared `ExecConnection`, a call budget under the gateway's 120
+per 10 s, resends only when a call did not run or carries an action id the hub answers once,
+the 256-subscription cap), `mirror.ts` (`HubState`, `CollectionMirror`, `PrivateState`: subscribe,
+snapshot, apply in order, resync on a new epoch, a delta gap or a reconnect), `realtime.ts`
+(actor and event codecs for World Stores), `topology.ts` (compose a manifest from `exec.starters`,
+check it as the manager would, build, deploy) and `modules/` (`world`, `matchmaking`,
+`sessions`, `npcs`, `presence` for spectate and emotes). **The protocol is held to ck-exec's
+golden record**, `test/unit/fixtures/kit-protocol.json` (a copy of ck-exec
+`crates/ckx-kit-protocol/kit-protocol.json`): `game-kit.test.mjs` replays every starter script
+through a gateway that answers only the next recorded step, so a module's call must be that
+step's method and arguments from that step's player. A starter change rewrites the record in
+ck-exec; copy it here on the same tier, and CrowdyCPP and CrowdyPy copy it too.
+`test/e2e/game-kit-local.test.mjs` runs the kit against a ck-exec local cluster
+(`CROWDY_KIT_LOCAL_*`, `CKX_BIN`, `CKX_CONNECT_SEED`), and `test/e2e/game-kit.test.mjs` against
+a tier as a throwaway org admin (`CROWDY_E2E_THROWAWAY_OWNER=1`, `CROWDY_PROVISIONING_TOKEN`):
+`kit.topology` composes the session and npcs starters, builds them on the platform (81 s on dev,
+2026-10-15) and deploys them, and two players play them. Kit types are the hubs' MessagePack
+maps as they arrive (snake_case fields), the same in all three SDKs. Without options
+`client.kit(appId)` now returns one kit per app. **Also a fix in `ExecConnection.call`:**
+under `useBigInt64` the MessagePack encoder wrote a `number` of 2^32 or more as a float, which
+hubs' integer fields refuse (timestamps, player ids); `execWireIntegers` sends them as 64-bit
+integers. Found by the kit's local-cluster run. CrowdyCPP and CrowdyPy mirror the kit (their
+parity gates scan `src/kit/**`). The embedded authoring index is cks-game-api `dev`'s after its
+ckx-sdk 0.10.0 re-pin (#532: 608 symbols, `core` and `alloc` included); the copy here had last
+been synced at ckx-sdk 0.7.0, so Studio's editor completed neither `kit`, `testing` nor `limits`.
 
 **18.10.0: bans, the access-ended close, and the block and ban codes (2026-10-13).** The
 operator's rule: suspending or blocking a player cuts every access path in scope.
@@ -553,7 +610,8 @@ not a running service and is not a schema source; gameplay data lives in
 - `src/world.ts` — `client.world(appId)` facade.
 - `src/stores/` — World Stores (`@crowdedkingdoms/crowdyjs/stores`); the core
   client never imports it. See the README.
-- `src/kit/` — `client.kit(appId).social`, the wire codecs (`kit/wire.ts`) and
+- `src/kit/` — the Game Kit: the kit protocol, runtime, mirrors, topology and the starter
+  hubs' modules (`modules/`, 18.11.0), `social`, the wire codecs (`kit/wire.ts`) and
   `runOptimisticAction`. The model-backed kit went in 18.0.0.
 - `schema.gql` + `src/generated/graphql.ts` + `src/generated/graphql-schema.ts` — committed artifacts. Refresh from
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
@@ -708,6 +766,7 @@ reference consumer of the hosted flow.
 | Client-side bookkeeping | `createWorldSession` from `@crowdedkingdoms/crowdyjs/stores` |
 | Persistent terrain | `chunks.*` (durable) + `udp.sendVoxelUpdate` (realtime) |
 | Server-side rules and state (inventory, stats, NPCs, sessions) | ck-exec hubs: `exec.connect` + `call` / `subscribe`; built and deployed with `exec.starters` / `build` / `deploy` (`manage_compute`) |
+| The starter hubs, typed | `kit(appId)`: `world`, `matchmaking.queue`, `sessions.open`, `npcs.area`, `leaderboards.board`, `tables.table`, `tactics.battle`, `encounters.encounter`, `minigames.duel`, `instances.run`, `arenas.arena`, `racing.race` / `ball`, `territory.map` / `zone`; `kit.topology` composes and deploys them; mirrors (`HubState`, `CollectionMirror`, `PrivateState`) for their topics |
 | World life between requests | hub timers (`ctx.timer_every`, `ctx.timer_after`) — see the presence rule below |
 | Parties, guilds, chat rooms | `kit(appId).social` |
 | Client-side simulation authority | `host.heartbeat`; the hub decides from its caller |

@@ -30,6 +30,7 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.11.0 | what 18.10.0 needs; the Game Kit's hub modules need the app to run the starter pack of a compute toolchain with ckx-sdk 0.10.0 (`kit.topology` deploys it) |
 | 18.10.0 | the release after v2.43.1 (channel and team bans); the access-ended close needs ck-exec 0.16 |
 | 18.9.0 | the release after v2.40.2 (`InputLogSession.missingRecords`) |
 | 18.8.0 | v2.40.2 or later (`ExecBuild.sdkVersion`) |
@@ -261,7 +262,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token (see [Token refresh](#token-refresh-during-gameplay)). |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`, `actor.sendToActor`). |
-| `client.kit(appId)` | Game Kit: parties, guilds and chat over teams and channels (`kit.social`) — see [Game Kit](#game-kit). |
+| `client.kit(appId)` | Game Kit: typed clients for the ck-exec starter hubs (world, matchmaking, sessions, NPCs and pets) on one shared connection, their topology, realtime conventions, and parties, guilds and chat (`kit.social`) — see [Game Kit](#game-kit). |
 | `createWorldSession(client, appId, config)` | World Stores: opt-in, SDK-managed game state from the `@crowdedkingdoms/crowdyjs/stores` subpath — see [World Stores](#world-stores). |
 
 **Studio-admin surface** (privileged; drive with a server-side / studio token,
@@ -734,25 +735,82 @@ keep timer-driven sends at full rate while hidden. See the
 
 ## Game Kit
 
-`client.kit(appId).social` gives parties, guilds and chat rooms in familiar
-words over teams (membership and roles) and channels (messaging), with
-realtime delivery on the UDP notification subscription:
+`client.kit(appId)` (18.11.0) is the client half of the game kit: typed clients for the
+ck-exec **starter hubs**, the server half (`ckx_sdk::kit` and the starter packs, which an
+app deploys with `kit.topology`). An app's code is a tree under its root hub; the kit's
+modules are the tree's starter types:
+
+| Module | Hub (starter) | What it does |
+| --- | --- | --- |
+| `kit.world` | `world` (`world-tick`, the root) | `conditions` (time of day, night, weather, liveops modifiers) and `nodes` (resource nodes) mirrored; `harvest`; for developers `schedule` / `cancel` liveops events |
+| `kit.matchmaking.queue(name)` | `matchmaker` | `join` with a rating, alone or as a party matched whole (the leader names the members; each confirms with `leader`); `accept` / `decline`; `place` and `onMatched` with the session key |
+| `kit.sessions.open(key)` | `session` | lobby, `ready`, the host's `startGame`, `act` in turn under a time limit; the hub scores and names the winner; `state` mirrored |
+| `kit.npcs.area(key)` / `areaAt(x, z)` | `npcs` (`npc-mobs`) | an area's mobs, NPCs and pets mirrored; `attack` (the hub decides reach, cooldown, damage), `talk`; pets: `adopt`, `rename`, `summon`, `dismiss`, `release`, `myPets` |
+| `kit.leaderboards.board(name)` | `leaderboard` | the top mirrored; `top`, `around`, `me`, `season`; scores come from the hubs that decided them (`submit` is for developers and hubs), seasons roll on a schedule (18.12.0) |
+| `kit.tables.table(key)` | `deck` | a card table: the table mirrored, the caller's hand as private state; `join`, `start`, `play`, `draw`, `pass` in the hub's turn order |
+| `kit.tactics.battle(key)` | `tactics` | a grid battle in phases: `move`, `attack`, `endTurn` for the player's units; the hub's units act when every player ended the phase |
+| `kit.encounters.encounter(key)` | `director` | waves down a lane on the hub's clock, `build` towers (the lane must stay open), `hit` with a cooldown, a boss with phases |
+| `kit.minigames.duel(key)` | `minigame` | two-player duels of hidden throws, revealed together; `throw`, `rematch` |
+| `kit.instances.run(key)` | `instance` | a private run for one party: `open` (seeded floors), `invite`, `join`, `enter` each room, `descend`; permadeath and expiry; depth to a leaderboard |
+| `kit.arenas.arena(key)` | `arena` | real-time fights: `join` as a class, `move` (the hub's warden keeps what the speed allows), `cast` (cooldown, resource, range; projectiles and areas land on the hub's ticks) |
+| `kit.racing.race(key)` / `ball(key)` | `race`, `ball` (`racing`) | races (gates in order, laps, splits, places, the winner's `ghost`) and ball games (`claim`, `pass`, `shoot`, goals) on reported positions the warden keeps |
+| `kit.territory.map(key)` / `zone(key)` | `territory`, `zone` (`territory`) | control points a faction captures by standing on them (the hub reads where players are), and a circle that shrinks and wears down whoever is outside |
+| `kit.player` and its views: `kit.inventory`, `kit.wallet`, `kit.progression`, `kit.achievements`, `kit.quests`, `kit.crafting`, `kit.loot`, `kit.production` | `player` (keyed by the player's id) | the caller's own hub: stacks and mail, soft currencies, levels and public profiles, achievements, quests with tutorials (`step` for the counters a client may report), crafting, loot with pity, idle production; private parts read again when the hub says they changed (18.13.0) |
+| `kit.shops.at(key)`, `kit.market.at(key)`, `kit.trades.at(key)` | `market` | vendors with stock and restocks (`buy`, `sell`), order books (`order`, `cancel`, `book`), trades between two players (`open`, `offer`, `accept`, `decline`); what a player puts up is held in their own hub, and a call that could not reach it is refused `unavailable` and sent again |
+| `kit.topology` | — | composes a manifest from `exec.starters` (the types picked, what they hang under and call), checks the tree, builds and deploys (developers, `manage_compute`) |
+| `kit.spectate`, `kit.emotes`, `kit.shards` | — | a viewer's heartbeat so the world's messages reach it; emotes as client events every kit client reads; shard keys as the hubs compute them |
+| `kit.social` | — | parties, guilds and chat rooms over teams and channels |
 
 ```ts
-const kit = game.kit(appId, { social: { actorUuid: me.uuid } });
-const party = await kit.social.party.create('raid');   // team + paired channel
-const room = await kit.social.chat.room('lobby');
-kit.social.chat.onMessage(room.groupId, (m) => log(m.senderUuid, m.text));
+const kit = game.kit(appId);                       // one per app, one shared connection
+const q = kit.matchmaking.queue('ranked');
+q.onMatched(async (key) => {
+  const match = kit.sessions.open(key);
+  match.state.subscribe((s) => render(s));         // mirrored: snapshot, then each change
+  await match.watch();
+  await match.join();
+  await match.ready();
+});
+await q.join({ rating: 1200 });
+q.watch();                                          // the queue never names who waits; ask
+// ...on the player's turn:
+await kit.sessions.open(key).act({ points: 2 });   // sent with an action id: played once
 ```
 
-Game rules and state are ck-exec hubs (`client.exec`, below). Two kit pieces
-stand alone: the wire codecs (`encodeEnginePose` / `decodeEnginePose`, the
-48-byte engine pose, `engineLanes`, and `parseEngineEvent` with the typed
-parsers for server events 77 and 90-98) for games whose hubs keep that wire,
-and `runOptimisticAction`, which applies an action locally, asks a referee
-(a hub endpoint, say) and rolls back on a denial. The blueprints,
-`kit.deploy`, the engines and the model-backed helpers went with the game
-model in 18.0.0; see [MIGRATION.md](MIGRATION.md).
+- **One connection** (`kit.runtime`) carries every module's calls and subscriptions, opened
+  when first needed (`{ connect }` for affinity or a WebSocket on Node, `{ developer: true }`
+  for admin endpoints, `{ connection }` to bring your own). It paces what it sends under the
+  gateway's 120 per 10 s (`callBudget`), waits out a rate-limited refusal, and sends a call
+  again when it did not run, or, when it carries an action id, after an unknown outcome; the
+  hub answers a resent action once.
+- **Mirrors** (`HubState`, `CollectionMirror`) subscribe, then ask the hub for a snapshot, and
+  apply what follows in order; a new instance epoch or a gap in a collection's deltas takes a
+  fresh snapshot, and so does a reconnect. Each is a store: `get()` and `subscribe(fn)`, the
+  shape React's `useSyncExternalStore` takes. `PrivateState` reads what only its player may
+  see with a call, again whenever the hub says it changed for them.
+- **Refusals** are `KitError` (a `CrowdyExecError` with status `AppError`) with a `code` to
+  branch on: `not_your_turn`, `cooldown`, `full`, `forbidden`, ... (`KIT_CODES`). A call with an
+  action id refused `unavailable` (a hub it needed did not answer) is sent again (18.13.0).
+- **The economy is not a ledger.** Items and soft currency are hub state; a transfer between
+  players is steps each hub answers once. See the Game Kit's economy page before you put
+  anything of real value in it.
+- **Kit types are the hubs' MessagePack maps as they arrive**, field names and all
+  (`time_of_day`, `expires_in_ms`), the same in CrowdyCPP and CrowdyPy.
+- **Realtime**: hubs show server-driven actors through the realtime tier; `kitActorCodec`,
+  `withKitActors(playerCodec)` and `kitActorLanes()` plug them into World Stores' `actors`
+  beside players, and `kitEventCodecs()` / `parseKitServerEvent` read server events. The
+  registry (`wire.ts`, from `ckx_sdk::kit::wire`) numbers them 77 and 90-101 with camelCase JSON
+  bodies; an app's own start at 1000. The 48-byte engine pose (`enginePoseCodec`,
+  `engineLanes`) stays for hubs that show actors with it.
+- `runOptimisticAction` applies an action locally, asks a referee (a hub endpoint) and rolls
+  back on a denial; pass `kit.runtime.call(..., { action: actionId })` its id.
+
+The protocol is held to ck-exec's golden record of the starters
+(`test/unit/fixtures/kit-protocol.json`): every module call and topic in it is replayed in
+`test/unit/game-kit.test.mjs`. The blueprints, `kit.deploy`, the engines and the model-backed
+helpers went with the game model in 18.0.0; the hub modules replace them. See the
+[Game Kit docs](https://docs.crowdedkingdoms.com/game-kit/intro) and
+[MIGRATION.md](MIGRATION.md).
 
 ## ck-exec
 
@@ -812,7 +870,9 @@ exec.onReconnect((host) => console.log('moved to', host));
   `timedCalls` (default the last 60 minutes, at most 7 days).
 
 Integers above 2^53 decode as `number` and lose precision unless you pass
-`{ decode: { useBigInt64: true } }`. The wire format is in the
+`{ decode: { useBigInt64: true } }`. A call's whole numbers outside 32 bits (a timestamp in
+milliseconds, a player id) go out as 64-bit integers (18.11.0; before, as floats, which a
+hub's integer fields refuse). The wire format is in the
 [ck-exec docs](https://docs.crowdedkingdoms.com/exec/intro).
 
 ### A mod's CLIENT half
@@ -1178,6 +1238,9 @@ is why the mint also returns `discoveryUrl`.
 `CROWDY_HTTP_URL` and `CROWDY_E2E_THROWAWAY_OWNER=1` it registers a throwaway org admin (its own
 org and app) and a player, opens and closes a grid, and checks the tier's ck-exec gateway. It
 leaves the org behind and archives the app, so it runs only when asked to.
+`test/e2e/game-kit.test.mjs` does the same for the Game Kit: the throwaway owner composes the
+starter hubs with `kit.topology`, builds and deploys them, and two players play them (on dev and
+test it also needs `CROWDY_PROVISIONING_TOKEN`, which their staff-only sign-up asks for).
 
 ## Maintainers: schema artifacts and fixtures
 

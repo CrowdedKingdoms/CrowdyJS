@@ -120,6 +120,100 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.13.0: the economy
+
+Additive. **Needs a compute toolchain whose starter pack has the `player` and `market`
+starters** (ckx-sdk 0.12.1; dev's toolchain v1.15.0). The economy lives in hub state and is
+not a ledger (the operator's decision HS-52): no double-entry book, no real money, transfers as
+steps each hub answers once.
+
+- **The caller's own `player` hub**, keyed by their player id (the kit needs it: `playerId` in
+  `client.kit()`'s options, or the identity it can ask): `kit.player` (`watch`, `me`, `rules`,
+  `profileOf`, `onEvent`) and its views `kit.inventory` (`items`, `count`, `discard`,
+  `takeMail`), `kit.wallet` (`balances`, `balance`), `kit.progression` (`progress`, `profile`,
+  `onLevel`), `kit.achievements` (`list`, `onUnlock`), `kit.quests` (`list`, `accept`, `claim`,
+  `step` for the counters the game lets a client report), `kit.crafting` (`recipes`, `craft`),
+  `kit.loot` (`tables`, `open`) and `kit.production` (`view`, `collect`). The inventory, wallet
+  and progress are read by calls only the player may make, and read again when the hub's
+  `changed` message names them; the profile is public.
+- **Markets** by name: `kit.shops.at(key)` (`vendors`, `buy`, `sell`), `kit.market.at(key)`
+  (`book`, `order`, `cancel`, `orders` mirrored) and `kit.trades.at(key)` (`open`, `offer`,
+  `accept`, `decline`, `mine` mirrored). An order or an offer holds what it puts up in the
+  player's own hub; a fill or an accepted trade moves it hub to hub.
+- **`unavailable`** (`KIT_CODES.UNAVAILABLE`): a hub refuses a change it could not finish
+  because another hub did not answer. The kit sends a call with an action id again, as it does
+  after a platform `Unavailable`; the hub keeps no receipt for it, so the resend finishes what
+  the first began.
+
+## 18.12.0: the genre starters
+
+Additive. **Needs a compute toolchain whose starter pack has the genre starters** (ckx-sdk
+0.11.0); `kit.topology` lists, builds and deploys them like the others. Against an app that does
+not run one, its module's calls are refused with `NotFound` (the app has no such node type).
+
+- **Nine more kit modules**, one per new starter hub: `leaderboards.board(name)` (the top
+  mirrored, `top`, `around`, `me`, `season`; hubs submit the scores they decided, a client never
+  does), `tables.table(key)` (cards: the table mirrored and the caller's hand as private state),
+  `tactics.battle(key)` (grid battles in phases), `encounters.encounter(key)` (waves, towers, a
+  boss with phases), `minigames.duel(key)` (hidden throws revealed together), `instances.run(key)`
+  (a party's private run: seeded floors, permadeath, expiry), `arenas.arena(key)` (classes and
+  abilities in real time), `racing.race(key)` and `racing.ball(key)` (races with laps, splits
+  and a ghost; ball games with possession), `territory.map(key)` and `territory.zone(key)`
+  (control points; a shrinking circle).
+- **The node types they talk to** are the starters' (`leaderboard`, `deck`, `tactics`,
+  `director`, `minigame`, `instance`, `arena`, `race`, `ball`, `territory`, `zone`); an app that
+  deploys one under another name passes it in `client.kit(appId, { nodes: { ... } })`.
+- **Positions a client reports are the hub's to keep**: `arenas`, `racing` and the ball game take
+  `move` / `pos` reports and answer with the position the hub's movement warden kept (a move too
+  fast is cut short, a jump refused). Each refused report is a `violation` event, and an arena
+  removes a player after a run of them (`removed`). Send them a few times a second, without an
+  action id.
+- **Event bodies never use the header's field names** (`v`, `epoch`, `seq`, `kind`): the race's
+  `timing` events carry their `stage`, the warden's `violation` events their `what`.
+
+## 18.11.0: the Game Kit on ck-exec
+
+Additive, apart from one fix in `client.exec` (below). **Needs what 18.10.0 needs from the Game
+API.** The kit's hub modules need the app to run the starter pack of a compute toolchain with
+ckx-sdk 0.10.0 (the starters that speak the kit protocol); `kit.topology` builds and deploys
+it. Against an app that runs nothing, or an older starter, a module's calls are refused as the
+hub refuses them.
+
+- **`client.kit(appId)` gains the hub modules**, all on one shared connection (`kit.runtime`):
+  `world` (conditions and resource nodes mirrored, `harvest`, liveops `schedule` / `cancel` for
+  developers), `matchmaking.queue(name)` (parties matched whole, `place`, `onMatched`),
+  `sessions.open(key)` (lobby to result, `state` mirrored), `npcs.area(key)` / `areaAt(x, z)`
+  (mobs, NPCs, players' pets), `topology` (compose, check, build and deploy the tree of
+  starter hubs), `spectate`, `emotes` and `shards`. `kit.social` is unchanged.
+- **Without options, `client.kit(appId)` returns the same kit for an app** (it made a new one
+  each call), so its modules share one connection. With options each call makes its own; close
+  it with `kit.close()`. `client.close()` closes the shared ones.
+- **The kit protocol** (`KIT_PROTOCOL`): hub topics carry snapshot, delta, changed and event
+  messages with an instance `epoch` and a per-topic `seq`; `HubState`, `CollectionMirror` and
+  `PrivateState` mirror them, taking a fresh snapshot on a new epoch, a gap in a collection's
+  deltas, and a reconnect. A change sent with an action id (`{ action: true }` on
+  `kit.runtime.call`, which every module change uses) is answered once by the hub when sent
+  again. A hub's coded refusal is a `KitError` (`code`, `text`), a `CrowdyExecError` with status
+  `AppError`.
+- **The realtime registry** (`wire.ts`) gains `EVENT_ENCOUNTER` (99), `EVENT_POSSESSION` (100),
+  `EVENT_EMOTE` (101) and `EVENT_APP_FIRST` (1000) with their parsers; its source is now
+  `ckx_sdk::kit::wire`. `kitActorCodec`, `withKitActors` and `kitActorLanes` read the actors kit
+  hubs show; `kitEventCodecs` and `parseKitServerEvent` their server events.
+- **The starters changed with it** (ck-exec, ckx-sdk 0.10.0): each answers
+  `snapshot { topic }`, refuses with `kit:<code>:` messages, and takes `action_id`. The
+  matchmaker's `queue` topic is now a map of counts (`waiting`, `proposals`, `forming`) where
+  it was a 2-tuple, `world-tick` adds a `nodes` topic, and `npc-mobs` adds pets. Code that calls
+  the starters with `client.exec` keeps working: their replies are the same.
+- **Fix: a call's whole numbers outside 32 bits go out as 64-bit integers.** `ExecConnection.call`
+  encoded with `useBigInt64`, under which the MessagePack encoder writes a `number` of 2^32 or
+  more as a float, which a hub's integer fields refuse (`invalid type: floating point, expected
+  u64`): a timestamp in milliseconds, a player id. They are 64-bit integers now
+  (`execWireIntegers`). A hub field that wants a float still reads an integer.
+- **`ExecConnection` reconnects with jitter**: each wait is half its backoff plus up to as much
+  again at random, so the players of a host that went away do not all dial at once.
+- **Crowdy Studio's editor completes ckx-sdk 0.10.0**, `kit` included: the embedded authoring
+  index is the compute toolchain's again (it had last been synced at ckx-sdk 0.7.0).
+
 ## 18.10.0: bans, the access-ended close, and the block and ban codes
 
 Additive. **Needs the Game API release after v2.43.1** for the ban operations (an older Game
