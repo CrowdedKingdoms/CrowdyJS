@@ -700,6 +700,87 @@ test('territory: the circle wears down whoever is outside it', async (t) => {
   gw.done();
 });
 
+test('player: the hub keeps what the player owns; only they read it, and a change is told to them', async (t) => {
+  const { gw, p, dev } = await replayOf(t, 'player');
+  const kit = p(1);
+  const earned = [];
+  kit.player.onEvent((e) => earned.push(e.type));
+  await kit.player.watch('profile');
+  assert.equal(kit.progression.profile.get().level, 1);
+  const me = await kit.player.me();
+  assert.equal(me.wallet.balances.gold, 100);
+  assert.equal(me.progress.quests.find((q) => q.id === 'welcome').state, 'active', 'a tutorial is taken on at once');
+  await rejectsWithCode(p(2).runtime.call('player', '1', 'me'), 'forbidden');
+  assert.equal((await p(2).progression.profileOf(1)).player, 1);
+  assert.ok((await kit.crafting.recipes()).some((r) => r.id === 'plank'));
+  assert.equal(await dev(9).runtime.call('player', '1', 'deposit', { ref: 'seed-wood', bundle: { items: { wood: 4 } } }), true);
+  const crafted = await kit.crafting.craft('plank', 2);
+  assert.deepEqual(crafted.made.items, { plank: 2 });
+  assert.deepEqual(crafted.earned.achievements, ['first_craft']);
+  assert.deepEqual(await kit.runtime.call('player', '1', 'craft', { recipe: 'plank', times: 2 }, { action: 'resent' }), crafted);
+  await rejectsWithCode(kit.crafting.craft('plank'), 'insufficient');
+  await rejectsWithCode(kit.quests.step('crafted'), 'forbidden');
+  assert.deepEqual((await kit.quests.step('tutorial:inventory')).quests, ['welcome']);
+  assert.deepEqual(await kit.quests.claim('welcome'), { items: {}, currency: { gold: 25 } });
+  await rejectsWithCode(kit.quests.claim('welcome'), 'not_ready');
+  const opened = await kit.loot.open('chest');
+  assert.ok(opened.roll.count > 0);
+  gw.serverStep(); // half an hour away
+  const collected = await kit.production.collect();
+  assert.deepEqual(collected.items, { ore: 30, wood: 60 });
+  for (let i = 0; i < 4; i++) gw.serverStep(); // a market holds, settles, releases and sells
+  await rejectsWithCode(kit.runtime.call('player', '1', 'grant', { ref: 'nope', bundle: { currency: { gold: 1 } } }), 'forbidden');
+  gw.serverStep(); // a run's reward: three levels
+  await until('the level events', () => earned.filter((e) => e === 'level').length >= 1);
+  assert.deepEqual(await kit.inventory.takeMail(), { items: {}, currency: {} });
+  assert.equal((await kit.wallet.watch()).balances.gold, 80);
+  assert.equal(kit.wallet.balance('gems'), 10);
+  await kit.inventory.watch();
+  assert.equal(kit.inventory.count('plank'), 2);
+  const progress = await kit.progression.watch();
+  assert.equal(progress.level, 4);
+  assert.equal(kit.achievements.list().find((a) => a.id === 'first_craft').unlocked_at !== null, true);
+  assert.equal(kit.quests.list().find((q) => q.id === 'welcome').state, 'done');
+  gw.serverStep();
+  await until('the profile at level 4', () => kit.progression.profile.get()?.level === 4);
+  assert.equal((await kit.runtime.call('player', '1', 'snapshot', { topic: 'player' })).level, 4);
+  gw.done();
+});
+
+test('market: vendors sell from stock, orders fill between two players, a trade settles when both accept', async (t) => {
+  const { gw, p } = await replayOf(t, 'market');
+  const shop = p(1).shops.at('town');
+  assert.equal((await shop.watch()).currency, 'gold');
+  assert.equal((await shop.vendors())[0].id, 'smith');
+  assert.deepEqual(await shop.buy('smith', 'sword'), { items: { sword: 1 }, currency: {} });
+  assert.deepEqual(await p(1).runtime.call('market', 'town', 'buy', { vendor: 'smith', item: 'sword' }, { action: 'resent' }), {
+    items: { sword: 1 },
+    currency: {},
+  });
+  await rejectsWithCode(shop.buy('smith', 'sword'), 'limit');
+  await rejectsWithCode(p(3).shops.at('town').buy('smith', 'potion', 2), 'insufficient');
+  assert.deepEqual(await shop.sell('smith', 'sword'), { items: {}, currency: { gold: 20 } });
+  const sell = await p(2).market.at('town').order({ item: 'ore', side: 'sell', price: 4, count: 10 });
+  assert.equal(sell.open, 10);
+  const buy = await p(1).market.at('town').order({ item: 'ore', side: 'buy', price: 5, count: 6 });
+  assert.deepEqual([buy.fills, buy.open], [[[4, 6]], 0]);
+  assert.deepEqual((await p(1).market.at('town').book('ore')).asks, [[4, 4]]);
+  const [mine] = await p(2).runtime.call('market', 'town', 'orders');
+  assert.equal(mine.open, 4);
+  assert.equal(await p(2).market.at('town').cancel(mine.id), true);
+  const desk = p(1).trades.at('town');
+  const trade = await desk.open(2);
+  assert.equal(await desk.offer(trade, { currency: { gold: 30 } }), true);
+  assert.equal(await p(2).trades.at('town').offer(trade, { items: { ore: 2 } }), true);
+  assert.equal(await desk.accept(trade), 'open');
+  assert.equal(await p(2).trades.at('town').accept(trade), 'settling');
+  assert.deepEqual(await p(1).runtime.call('market', 'town', 'trades'), []);
+  await rejectsWithCode(p(3).trades.at('town').decline(trade), 'forbidden');
+  gw.serverStep();
+  assert.equal((await shop.view.resync()).open_trades, 0);
+  gw.done();
+});
+
 // ---- the runtime ----
 
 /** A gateway a test scripts call by call. */
@@ -747,6 +828,26 @@ test('a call with an action id is sent again with the same id after an unknown o
   t.after(() => rt2.close());
   await assert.rejects(rt2.call('h', 'k', 'plain', { x: 1 }), (e) => e.status === 'DeadlineExceeded');
   assert.equal(once.calls.length, 1, 'no id, no resend: it may have run');
+});
+
+test('a refusal coded unavailable is sent again with its action id, and not without one', async (t) => {
+  const gw = await scriptedGateway((f, args, n) => {
+    if (n === 1) return reply(f.rid, STATUS.AppError, Buffer.from("kit:unavailable: the player's hub did not answer; send it again"));
+    return reply(f.rid, 0, encode(args));
+  });
+  t.after(() => gw.wss.close());
+  const rt = runtimeFor(gw);
+  t.after(() => rt.close());
+  const out = await rt.call('market', 'town', 'buy', { item: 'potion' }, { action: true });
+  assert.equal(out.item, 'potion');
+  assert.equal(gw.calls.length, 2);
+  assert.equal(gw.calls[0].args.action_id, gw.calls[1].args.action_id, 'the same action, sent again');
+  const plain = await scriptedGateway((f) => reply(f.rid, STATUS.AppError, Buffer.from('kit:unavailable: no answer')));
+  t.after(() => plain.wss.close());
+  const rt2 = runtimeFor(plain);
+  t.after(() => rt2.close());
+  await rejectsWithCode(rt2.call('market', 'town', 'buy', { item: 'potion' }), 'unavailable');
+  assert.equal(plain.calls.length, 1, 'without an action id the caller decides');
 });
 
 test('a rate-limited call waits as the gateway says and goes through; busy refusals are retried', async (t) => {

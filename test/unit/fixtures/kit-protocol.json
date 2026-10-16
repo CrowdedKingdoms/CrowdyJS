@@ -51,6 +51,11 @@
       "text": "attacking too fast"
     },
     {
+      "code": "unavailable",
+      "message": "kit:unavailable: the player's hub did not answer; send it again",
+      "text": "the player's hub did not answer; send it again"
+    },
+    {
       "code": "invalid_move",
       "message": "kit:invalid_move: a move scores 0 to 3 points: really",
       "text": "a move scores 0 to 3 points: really"
@@ -9079,6 +9084,2193 @@
             "winner": null
           },
           "reply_msgpack": "8ca17601a565706f636801a373657105a46b696e64a8736e617073686f74a57068617365a772756e6e696e67a663656e74657292cb3fe0000000000000cb3fe0000000000000a6726164697573cb4024000000000000a5737461676500ab6e6578745f726164697573cb4018000000000000a7706c61796572739284a6706c6179657201a2687064a76f757473696465c2a5706c616365c084a6706c6179657202a268705fa76f757473696465c3a5706c616365c0a5616c69766502a677696e6e6572c0"
+        }
+      ]
+    },
+    {
+      "crate": "player",
+      "key": "1",
+      "node_type": "player",
+      "steps": [
+        {
+          "args": {
+            "topic": "player"
+          },
+          "args_msgpack": "81a5746f706963a6706c61796572",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "achievements": [],
+            "epoch": 1,
+            "kind": "snapshot",
+            "level": 1,
+            "player": 1,
+            "quests_done": 0,
+            "seq": 0,
+            "v": 1
+          },
+          "reply_msgpack": "88a17601a565706f636801a373657100a46b696e64a8736e617073686f74a6706c6179657201a56c6576656c01ac616368696576656d656e747390ab7175657374735f646f6e6500"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "me",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "inventory": {
+              "held": {},
+              "mail": {},
+              "slots": 30,
+              "stacks": []
+            },
+            "production": {
+              "capacity": {
+                "ore": 60,
+                "wood": 120
+              },
+              "producers": [
+                [
+                  "lumber",
+                  2.0
+                ],
+                [
+                  "mine",
+                  1.0
+                ]
+              ],
+              "stock": {}
+            },
+            "profile": {
+              "achievements": [],
+              "level": 1,
+              "player": 1,
+              "quests_done": 0
+            },
+            "progress": {
+              "achievements": [
+                {
+                  "count": 0,
+                  "counter": "crafted",
+                  "id": "first_craft",
+                  "target": 1,
+                  "unlocked_at": null
+                },
+                {
+                  "count": 0,
+                  "counter": "crafted:sword",
+                  "id": "smith",
+                  "target": 3,
+                  "unlocked_at": null
+                }
+              ],
+              "level": 1,
+              "next": 100,
+              "quests": [
+                {
+                  "id": "welcome",
+                  "objectives": [
+                    {
+                      "count": 0,
+                      "counter": "tutorial:inventory",
+                      "target": 1
+                    },
+                    {
+                      "count": 0,
+                      "counter": "crafted",
+                      "target": 1
+                    }
+                  ],
+                  "reward": {
+                    "currency": {
+                      "gold": 25
+                    },
+                    "items": {}
+                  },
+                  "state": "active",
+                  "tutorial": true,
+                  "xp": 50
+                },
+                {
+                  "id": "gatherer",
+                  "objectives": [
+                    {
+                      "count": 0,
+                      "counter": "collected",
+                      "target": 20
+                    }
+                  ],
+                  "reward": {
+                    "currency": {},
+                    "items": {
+                      "potion": 3
+                    }
+                  },
+                  "state": "locked",
+                  "tutorial": false,
+                  "xp": 100
+                }
+              ],
+              "total_xp": 0,
+              "xp": 0
+            },
+            "wallet": {
+              "balances": {
+                "gems": 20,
+                "gold": 100
+              },
+              "held": {}
+            }
+          },
+          "reply_msgpack": "85a770726f66696c6584a6706c6179657201a56c6576656c01ac616368696576656d656e747390ab7175657374735f646f6e6500a9696e76656e746f727984a5736c6f74731ea6737461636b7390a46d61696c80a468656c6480a677616c6c657482a862616c616e63657382a467656d7314a4676f6c6464a468656c6480a870726f677265737386a56c6576656c01a2787000a46e65787464a8746f74616c5f787000ac616368696576656d656e74739285a26964ab66697273745f6372616674a7636f756e746572a763726166746564a674617267657401a5636f756e7400ab756e6c6f636b65645f6174c085a26964a5736d697468a7636f756e746572ad637261667465643a73776f7264a674617267657403a5636f756e7400ab756e6c6f636b65645f6174c0a67175657374739286a26964a777656c636f6d65a57374617465a6616374697665aa6f626a656374697665739283a7636f756e746572b27475746f7269616c3a696e76656e746f7279a674617267657401a5636f756e740083a7636f756e746572a763726166746564a674617267657401a5636f756e7400a672657761726482a56974656d7380a863757272656e637981a4676f6c6419a2787032a87475746f7269616cc386a26964a86761746865726572a57374617465a66c6f636b6564aa6f626a656374697665739183a7636f756e746572a9636f6c6c6563746564a674617267657414a5636f756e7400a672657761726482a56974656d7381a6706f74696f6e03a863757272656e637980a2787064a87475746f7269616cc2aa70726f64756374696f6e83a970726f6475636572739292a66c756d626572cb400000000000000092a46d696e65cb3ff0000000000000a573746f636b80a8636170616369747982a36f72653ca4776f6f6478"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "me",
+          "caller": {
+            "player": 2
+          },
+          "code": "forbidden",
+          "error": "kit:forbidden: this is another player's",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "profile",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "achievements": [],
+            "level": 1,
+            "player": 1,
+            "quests_done": 0
+          },
+          "reply_msgpack": "84a6706c6179657201a56c6576656c01ac616368696576656d656e747390ab7175657374735f646f6e6500"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "rules",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "achievements": [
+              {
+                "counter": "crafted",
+                "hidden": false,
+                "id": "first_craft",
+                "reward": {
+                  "currency": {
+                    "gold": 10
+                  },
+                  "items": {}
+                },
+                "target": 1,
+                "xp": 25
+              },
+              {
+                "counter": "crafted:sword",
+                "hidden": false,
+                "id": "smith",
+                "reward": {
+                  "currency": {
+                    "gems": 5
+                  },
+                  "items": {}
+                },
+                "target": 3,
+                "xp": 100
+              }
+            ],
+            "client_counters": [
+              "tutorial:inventory",
+              "tutorial:map"
+            ],
+            "currencies": [
+              "gold",
+              "gems"
+            ],
+            "items": [
+              {
+                "id": "ingot",
+                "max_stack": 99,
+                "name": "",
+                "tradable": true
+              },
+              {
+                "id": "ore",
+                "max_stack": 99,
+                "name": "",
+                "tradable": true
+              },
+              {
+                "id": "plank",
+                "max_stack": 99,
+                "name": "",
+                "tradable": true
+              },
+              {
+                "id": "potion",
+                "max_stack": 20,
+                "name": "",
+                "tradable": true
+              },
+              {
+                "id": "relic",
+                "max_stack": 1,
+                "name": "",
+                "tradable": false
+              },
+              {
+                "id": "sword",
+                "max_stack": 1,
+                "name": "",
+                "tradable": true
+              },
+              {
+                "id": "wood",
+                "max_stack": 99,
+                "name": "",
+                "tradable": true
+              }
+            ],
+            "loot": [
+              {
+                "cost": {
+                  "currency": {
+                    "gems": 10
+                  },
+                  "items": {}
+                },
+                "entries": [
+                  {
+                    "count": 3,
+                    "item": "potion",
+                    "pity_group": null,
+                    "weight": 70
+                  },
+                  {
+                    "count": 2,
+                    "item": "ingot",
+                    "pity_group": null,
+                    "weight": 25
+                  },
+                  {
+                    "count": 1,
+                    "item": "relic",
+                    "pity_group": "rare",
+                    "weight": 5
+                  }
+                ],
+                "id": "chest",
+                "pity_within": {
+                  "rare": 10
+                }
+              }
+            ],
+            "quests": [
+              {
+                "id": "welcome",
+                "level": 0,
+                "objectives": [
+                  {
+                    "counter": "tutorial:inventory",
+                    "target": 1
+                  },
+                  {
+                    "counter": "crafted",
+                    "target": 1
+                  }
+                ],
+                "requires": [],
+                "reward": {
+                  "currency": {
+                    "gold": 25
+                  },
+                  "items": {}
+                },
+                "tutorial": true,
+                "xp": 50
+              },
+              {
+                "id": "gatherer",
+                "level": 0,
+                "objectives": [
+                  {
+                    "counter": "collected",
+                    "target": 20
+                  }
+                ],
+                "requires": [
+                  "welcome"
+                ],
+                "reward": {
+                  "currency": {},
+                  "items": {
+                    "potion": 3
+                  }
+                },
+                "tutorial": false,
+                "xp": 100
+              }
+            ],
+            "recipes": [
+              {
+                "id": "plank",
+                "inputs": {
+                  "currency": {},
+                  "items": {
+                    "wood": 2
+                  }
+                },
+                "level": 0,
+                "outputs": {
+                  "currency": {},
+                  "items": {
+                    "plank": 1
+                  }
+                }
+              },
+              {
+                "id": "ingot",
+                "inputs": {
+                  "currency": {
+                    "gold": 1
+                  },
+                  "items": {
+                    "ore": 3
+                  }
+                },
+                "level": 0,
+                "outputs": {
+                  "currency": {},
+                  "items": {
+                    "ingot": 1
+                  }
+                }
+              },
+              {
+                "id": "sword",
+                "inputs": {
+                  "currency": {},
+                  "items": {
+                    "ingot": 2,
+                    "plank": 1
+                  }
+                },
+                "level": 2,
+                "outputs": {
+                  "currency": {},
+                  "items": {
+                    "sword": 1
+                  }
+                }
+              }
+            ],
+            "slots": 30
+          },
+          "reply_msgpack": "88ac616368696576656d656e74739286a7636f756e746572a763726166746564a668696464656ec2a26964ab66697273745f6372616674a672657761726482a863757272656e637981a4676f6c640aa56974656d7380a674617267657401a278701986a7636f756e746572ad637261667465643a73776f7264a668696464656ec2a26964a5736d697468a672657761726482a863757272656e637981a467656d7305a56974656d7380a674617267657403a2787064af636c69656e745f636f756e7465727392b27475746f7269616c3a696e76656e746f7279ac7475746f7269616c3a6d6170aa63757272656e6369657392a4676f6c64a467656d73a56974656d739784a26964a5696e676f74a96d61785f737461636b63a46e616d65a0a87472616461626c65c384a26964a36f7265a96d61785f737461636b63a46e616d65a0a87472616461626c65c384a26964a5706c616e6ba96d61785f737461636b63a46e616d65a0a87472616461626c65c384a26964a6706f74696f6ea96d61785f737461636b14a46e616d65a0a87472616461626c65c384a26964a572656c6963a96d61785f737461636b01a46e616d65a0a87472616461626c65c284a26964a573776f7264a96d61785f737461636b01a46e616d65a0a87472616461626c65c384a26964a4776f6f64a96d61785f737461636b63a46e616d65a0a87472616461626c65c3a46c6f6f749184a4636f737482a863757272656e637981a467656d730aa56974656d7380a7656e74726965739384a5636f756e7403a46974656da6706f74696f6eaa706974795f67726f7570c0a67765696768744684a5636f756e7402a46974656da5696e676f74aa706974795f67726f7570c0a67765696768741984a5636f756e7401a46974656da572656c6963aa706974795f67726f7570a472617265a677656967687405a26964a56368657374ab706974795f77697468696e81a4726172650aa67175657374739287a26964a777656c636f6d65a56c6576656c00aa6f626a656374697665739282a7636f756e746572b27475746f7269616c3a696e76656e746f7279a67461726765740182a7636f756e746572a763726166746564a674617267657401a8726571756972657390a672657761726482a863757272656e637981a4676f6c6419a56974656d7380a87475746f7269616cc3a278703287a26964a86761746865726572a56c6576656c00aa6f626a656374697665739182a7636f756e746572a9636f6c6c6563746564a674617267657414a8726571756972657391a777656c636f6d65a672657761726482a863757272656e637980a56974656d7381a6706f74696f6e03a87475746f7269616cc2a2787064a7726563697065739384a26964a5706c616e6ba6696e7075747382a863757272656e637980a56974656d7381a4776f6f6402a56c6576656c00a76f75747075747382a863757272656e637980a56974656d7381a5706c616e6b0184a26964a5696e676f74a6696e7075747382a863757272656e637981a4676f6c6401a56974656d7381a36f726503a56c6576656c00a76f75747075747382a863757272656e637980a56974656d7381a5696e676f740184a26964a573776f7264a6696e7075747382a863757272656e637980a56974656d7382a5696e676f7402a5706c616e6b01a56c6576656c02a76f75747075747382a863757272656e637980a56974656d7381a573776f726401a5736c6f74731e"
+        },
+        {
+          "args": {
+            "bundle": {
+              "items": {
+                "wood": 4
+              }
+            },
+            "ref": "seed-wood"
+          },
+          "args_msgpack": "82a662756e646c6581a56974656d7381a4776f6f6404a3726566a9736565642d776f6f64",
+          "call": "deposit",
+          "caller": {
+            "developer": 9
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657101a46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 1,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657102a46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 2,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "action_id": "c-1",
+            "recipe": "plank",
+            "times": 2
+          },
+          "args_msgpack": "83a9616374696f6e5f6964a3632d31a6726563697065a5706c616e6ba574696d657302",
+          "call": "craft",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657103a46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 3,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657104a46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 4,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657105a46b696e64a76368616e676564a377686f9101a477686174a870726f6772657373",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 5,
+                "v": 1,
+                "what": "progress",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657106a46b696e64a56576656e74ab616368696576656d656e74ab66697273745f6372616674a6706c6179657201a474797065ab616368696576656d656e74",
+              "topic": "player",
+              "value": {
+                "achievement": "first_craft",
+                "epoch": 1,
+                "kind": "event",
+                "player": 1,
+                "seq": 6,
+                "type": "achievement",
+                "v": 1
+              }
+            }
+          ],
+          "reply": {
+            "earned": {
+              "achievements": [
+                "first_craft"
+              ],
+              "levels": 0,
+              "quests": []
+            },
+            "made": {
+              "currency": {},
+              "items": {
+                "plank": 2
+              }
+            }
+          },
+          "reply_msgpack": "82a46d61646582a56974656d7381a5706c616e6b02a863757272656e637980a66561726e656483a66c6576656c7300ac616368696576656d656e747391ab66697273745f6372616674a671756573747390"
+        },
+        {
+          "args": {
+            "action_id": "c-1",
+            "recipe": "plank",
+            "times": 2
+          },
+          "args_msgpack": "83a9616374696f6e5f6964a3632d31a6726563697065a5706c616e6ba574696d657302",
+          "call": "craft",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657107a46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 7,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657108a46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 8,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657109a46b696e64a76368616e676564a377686f9101a477686174a870726f6772657373",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 9,
+                "v": 1,
+                "what": "progress",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "earned": {
+              "achievements": [
+                "first_craft"
+              ],
+              "levels": 0,
+              "quests": []
+            },
+            "made": {
+              "currency": {},
+              "items": {
+                "plank": 2
+              }
+            }
+          },
+          "reply_msgpack": "82a46d61646582a56974656d7381a5706c616e6b02a863757272656e637980a66561726e656483a66c6576656c7300ac616368696576656d656e747391ab66697273745f6372616674a671756573747390"
+        },
+        {
+          "args": {
+            "recipe": "plank"
+          },
+          "args_msgpack": "81a6726563697065a5706c616e6b",
+          "call": "craft",
+          "caller": {
+            "player": 1
+          },
+          "code": "insufficient",
+          "error": "kit:insufficient: not enough",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "counter": "crafted"
+          },
+          "args_msgpack": "81a7636f756e746572a763726166746564",
+          "call": "step",
+          "caller": {
+            "player": 1
+          },
+          "code": "forbidden",
+          "error": "kit:forbidden: `crafted` is counted by the game's hubs, not by a client",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "counter": "tutorial:inventory"
+          },
+          "args_msgpack": "81a7636f756e746572b27475746f7269616c3a696e76656e746f7279",
+          "call": "step",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a37365710aa46b696e64a76368616e676564a377686f9101a477686174a870726f6772657373",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 10,
+                "v": 1,
+                "what": "progress",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a37365710ba46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 11,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a37365710ca46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 12,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "achievements": [],
+            "levels": 0,
+            "quests": [
+              "welcome"
+            ]
+          },
+          "reply_msgpack": "83a66c6576656c7300ac616368696576656d656e747390a671756573747391a777656c636f6d65"
+        },
+        {
+          "args": {
+            "quest": "welcome"
+          },
+          "args_msgpack": "81a57175657374a777656c636f6d65",
+          "call": "claim",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a37365710da46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 13,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a37365710ea46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 14,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a37365710fa46b696e64a76368616e676564a377686f9101a477686174a870726f6772657373",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 15,
+                "v": 1,
+                "what": "progress",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "currency": {
+              "gold": 25
+            },
+            "items": {}
+          },
+          "reply_msgpack": "82a56974656d7380a863757272656e637981a4676f6c6419"
+        },
+        {
+          "args": {
+            "quest": "welcome"
+          },
+          "args_msgpack": "81a57175657374a777656c636f6d65",
+          "call": "claim",
+          "caller": {
+            "player": 1
+          },
+          "code": "not_ready",
+          "error": "kit:not_ready: `welcome` is not complete",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "action_id": "o-1",
+            "table": "chest"
+          },
+          "args_msgpack": "82a9616374696f6e5f6964a36f2d31a57461626c65a56368657374",
+          "call": "open",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657110a46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 16,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657111a46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 17,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657112a46b696e64a76368616e676564a377686f9101a477686174a870726f6772657373",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 18,
+                "v": 1,
+                "what": "progress",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "earned": {
+              "achievements": [],
+              "levels": 0,
+              "quests": []
+            },
+            "roll": {
+              "count": 3,
+              "item": "potion",
+              "pity": false,
+              "roll": 1
+            }
+          },
+          "reply_msgpack": "82a4726f6c6c84a46974656da6706f74696f6ea5636f756e7403a470697479c2a4726f6c6c01a66561726e656483a66c6576656c7300ac616368696576656d656e747390a671756573747390"
+        },
+        {
+          "advance_ms": 1800000,
+          "published": [
+            {
+              "msgpack": "88a17601a565706f636801a373657113a46b696e64a8736e617073686f74a6706c6179657201a56c6576656c01ac616368696576656d656e747391ab66697273745f6372616674ab7175657374735f646f6e6501",
+              "topic": "player",
+              "value": {
+                "achievements": [
+                  "first_craft"
+                ],
+                "epoch": 1,
+                "kind": "snapshot",
+                "level": 1,
+                "player": 1,
+                "quests_done": 1,
+                "seq": 19,
+                "v": 1
+              }
+            }
+          ]
+        },
+        {
+          "args": {
+            "action_id": "k-1"
+          },
+          "args_msgpack": "81a9616374696f6e5f6964a36b2d31",
+          "call": "collect",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657114a46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 20,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657115a46b696e64a76368616e676564a377686f9101a477686174a870726f6772657373",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 21,
+                "v": 1,
+                "what": "progress",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "currency": {},
+            "items": {
+              "ore": 30,
+              "wood": 60
+            }
+          },
+          "reply_msgpack": "82a56974656d7382a36f72651ea4776f6f643ca863757272656e637980"
+        },
+        {
+          "args": {
+            "bundle": {
+              "currency": {
+                "gold": 30
+              }
+            },
+            "ref": "town:o:1:a"
+          },
+          "args_msgpack": "82a662756e646c6581a863757272656e637981a4676f6c641ea3726566aa746f776e3a6f3a313a61",
+          "call": "hold",
+          "caller": {
+            "instance": 5
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657116a46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 22,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657117a46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 23,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "bundle": {
+              "currency": {
+                "gold": 10
+              }
+            },
+            "hold": "town:o:1:a",
+            "ref": "town:f:1:s"
+          },
+          "args_msgpack": "83a662756e646c6581a863757272656e637981a4676f6c640aa4686f6c64aa746f776e3a6f3a313a61a3726566aa746f776e3a663a313a73",
+          "call": "settle",
+          "caller": {
+            "instance": 5
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657118a46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 24,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657119a46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 25,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "hold": "town:o:1:a",
+            "ref": "town:o:1:a:r"
+          },
+          "args_msgpack": "82a4686f6c64aa746f776e3a6f3a313a61a3726566ac746f776e3a6f3a313a613a72",
+          "call": "release",
+          "caller": {
+            "instance": 5
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a37365711aa46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 26,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a37365711ba46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 27,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "currency": {
+              "gold": 20
+            },
+            "items": {}
+          },
+          "reply_msgpack": "82a56974656d7380a863757272656e637981a4676f6c6414"
+        },
+        {
+          "args": {
+            "get": {
+              "items": {
+                "sword": 1
+              }
+            },
+            "pay": {
+              "currency": {
+                "gold": 50
+              }
+            },
+            "ref": "town:b:1:x"
+          },
+          "args_msgpack": "83a367657481a56974656d7381a573776f726401a370617981a863757272656e637981a4676f6c6432a3726566aa746f776e3a623a313a78",
+          "call": "exchange",
+          "caller": {
+            "instance": 5
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a37365711ca46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 28,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a37365711da46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 29,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "bundle": {
+              "currency": {
+                "gold": 1
+              }
+            },
+            "ref": "nope"
+          },
+          "args_msgpack": "82a662756e646c6581a863757272656e637981a4676f6c6401a3726566a46e6f7065",
+          "call": "grant",
+          "caller": {
+            "player": 1
+          },
+          "code": "forbidden",
+          "error": "kit:forbidden: `grant` comes from the game's hubs",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "bundle": {
+              "currency": {
+                "gold": 5
+              }
+            },
+            "counters": {
+              "won": 1
+            },
+            "ref": "run-a:1",
+            "xp": 500
+          },
+          "args_msgpack": "84a662756e646c6581a863757272656e637981a4676f6c6405a8636f756e7465727381a3776f6e01a3726566a772756e2d613a31a27870cd01f4",
+          "call": "grant",
+          "caller": {
+            "instance": 6
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a37365711ea46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 30,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a37365711fa46b696e64a76368616e676564a377686f9101a477686174a677616c6c6574",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 31,
+                "v": 1,
+                "what": "wallet",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "86a17601a565706f636801a373657120a46b696e64a76368616e676564a377686f9101a477686174a870726f6772657373",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 32,
+                "v": 1,
+                "what": "progress",
+                "who": [
+                  1
+                ]
+              }
+            },
+            {
+              "msgpack": "87a17601a565706f636801a373657121a46b696e64a56576656e74a56c6576656c04a6706c6179657201a474797065a56c6576656c",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "event",
+                "level": 4,
+                "player": 1,
+                "seq": 33,
+                "type": "level",
+                "v": 1
+              }
+            }
+          ],
+          "reply": {
+            "achievements": [],
+            "levels": 3,
+            "quests": []
+          },
+          "reply_msgpack": "83a66c6576656c7303ac616368696576656d656e747390a671756573747390"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "take_mail",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657122a46b696e64a76368616e676564a377686f9101a477686174a9696e76656e746f7279",
+              "topic": "player",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 34,
+                "v": 1,
+                "what": "inventory",
+                "who": [
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "currency": {},
+            "items": {}
+          },
+          "reply_msgpack": "82a56974656d7380a863757272656e637980"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "wallet",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "balances": {
+              "gems": 10,
+              "gold": 80
+            },
+            "held": {}
+          },
+          "reply_msgpack": "82a862616c616e63657382a467656d730aa4676f6c6450a468656c6480"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "inventory",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "held": {},
+            "mail": {},
+            "slots": 30,
+            "stacks": [
+              {
+                "count": 2,
+                "item": "plank"
+              },
+              {
+                "count": 3,
+                "item": "potion"
+              },
+              {
+                "count": 30,
+                "item": "ore"
+              },
+              {
+                "count": 60,
+                "item": "wood"
+              },
+              {
+                "count": 1,
+                "item": "sword"
+              }
+            ]
+          },
+          "reply_msgpack": "84a5736c6f74731ea6737461636b739582a46974656da5706c616e6ba5636f756e740282a46974656da6706f74696f6ea5636f756e740382a46974656da36f7265a5636f756e741e82a46974656da4776f6f64a5636f756e743c82a46974656da573776f7264a5636f756e7401a46d61696c80a468656c6480"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "progress",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "achievements": [
+              {
+                "count": 1,
+                "counter": "crafted",
+                "id": "first_craft",
+                "target": 1,
+                "unlocked_at": 1767225600000
+              },
+              {
+                "count": 0,
+                "counter": "crafted:sword",
+                "id": "smith",
+                "target": 3,
+                "unlocked_at": null
+              }
+            ],
+            "level": 4,
+            "next": 338,
+            "quests": [
+              {
+                "id": "welcome",
+                "objectives": [
+                  {
+                    "count": 1,
+                    "counter": "tutorial:inventory",
+                    "target": 1
+                  },
+                  {
+                    "count": 1,
+                    "counter": "crafted",
+                    "target": 1
+                  }
+                ],
+                "reward": {
+                  "currency": {
+                    "gold": 25
+                  },
+                  "items": {}
+                },
+                "state": "done",
+                "tutorial": true,
+                "xp": 50
+              },
+              {
+                "id": "gatherer",
+                "objectives": [
+                  {
+                    "count": 0,
+                    "counter": "collected",
+                    "target": 20
+                  }
+                ],
+                "reward": {
+                  "currency": {},
+                  "items": {
+                    "potion": 3
+                  }
+                },
+                "state": "available",
+                "tutorial": false,
+                "xp": 100
+              }
+            ],
+            "total_xp": 575,
+            "xp": 100
+          },
+          "reply_msgpack": "86a56c6576656c04a2787064a46e657874cd0152a8746f74616c5f7870cd023fac616368696576656d656e74739285a26964ab66697273745f6372616674a7636f756e746572a763726166746564a674617267657401a5636f756e7401ab756e6c6f636b65645f6174cf0000019b76daa80085a26964a5736d697468a7636f756e746572ad637261667465643a73776f7264a674617267657403a5636f756e7400ab756e6c6f636b65645f6174c0a67175657374739286a26964a777656c636f6d65a57374617465a4646f6e65aa6f626a656374697665739283a7636f756e746572b27475746f7269616c3a696e76656e746f7279a674617267657401a5636f756e740183a7636f756e746572a763726166746564a674617267657401a5636f756e7401a672657761726482a56974656d7380a863757272656e637981a4676f6c6419a2787032a87475746f7269616cc386a26964a86761746865726572a57374617465a9617661696c61626c65aa6f626a656374697665739183a7636f756e746572a9636f6c6c6563746564a674617267657414a5636f756e7400a672657761726482a56974656d7381a6706f74696f6e03a863757272656e637980a2787064a87475746f7269616cc2"
+        },
+        {
+          "advance_ms": 1000,
+          "published": [
+            {
+              "msgpack": "88a17601a565706f636801a373657123a46b696e64a8736e617073686f74a6706c6179657201a56c6576656c04ac616368696576656d656e747391ab66697273745f6372616674ab7175657374735f646f6e6501",
+              "topic": "player",
+              "value": {
+                "achievements": [
+                  "first_craft"
+                ],
+                "epoch": 1,
+                "kind": "snapshot",
+                "level": 4,
+                "player": 1,
+                "quests_done": 1,
+                "seq": 35,
+                "v": 1
+              }
+            }
+          ]
+        },
+        {
+          "args": {
+            "topic": "player"
+          },
+          "args_msgpack": "81a5746f706963a6706c61796572",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "achievements": [
+              "first_craft"
+            ],
+            "epoch": 1,
+            "kind": "snapshot",
+            "level": 4,
+            "player": 1,
+            "quests_done": 1,
+            "seq": 35,
+            "v": 1
+          },
+          "reply_msgpack": "88a17601a565706f636801a373657123a46b696e64a8736e617073686f74a6706c6179657201a56c6576656c04ac616368696576656d656e747391ab66697273745f6372616674ab7175657374735f646f6e6501"
+        }
+      ]
+    },
+    {
+      "crate": "market",
+      "key": "town",
+      "node_type": "market",
+      "steps": [
+        {
+          "args": {
+            "topic": "market"
+          },
+          "args_msgpack": "81a5746f706963a66d61726b6574",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "currency": "gold",
+            "epoch": 1,
+            "kind": "snapshot",
+            "open_trades": 0,
+            "pending_steps": 0,
+            "quotes": {
+              "ingot": {
+                "ask": null,
+                "bid": null,
+                "last": null
+              },
+              "ore": {
+                "ask": null,
+                "bid": null,
+                "last": null
+              },
+              "plank": {
+                "ask": null,
+                "bid": null,
+                "last": null
+              },
+              "wood": {
+                "ask": null,
+                "bid": null,
+                "last": null
+              }
+            },
+            "seq": 0,
+            "v": 1,
+            "vendors": [
+              {
+                "id": "smith",
+                "offers": [
+                  {
+                    "buys_for": {
+                      "currency": {
+                        "gold": 20
+                      },
+                      "items": {}
+                    },
+                    "item": "sword",
+                    "per_player": 1,
+                    "price": {
+                      "currency": {
+                        "gold": 50
+                      },
+                      "items": {}
+                    },
+                    "stock": 5
+                  },
+                  {
+                    "buys_for": {
+                      "currency": {
+                        "gold": 2
+                      },
+                      "items": {}
+                    },
+                    "item": "potion",
+                    "per_player": null,
+                    "price": {
+                      "currency": {
+                        "gold": 5
+                      },
+                      "items": {}
+                    },
+                    "stock": null
+                  }
+                ],
+                "restocked_at": 1767225600000
+              }
+            ]
+          },
+          "reply_msgpack": "89a17601a565706f636801a373657100a46b696e64a8736e617073686f74a776656e646f72739183a26964a5736d697468a66f66666572739285a46974656da573776f7264a5707269636582a56974656d7380a863757272656e637981a4676f6c6432a573746f636b05aa7065725f706c6179657201a8627579735f666f7282a56974656d7380a863757272656e637981a4676f6c641485a46974656da6706f74696f6ea5707269636582a56974656d7380a863757272656e637981a4676f6c6405a573746f636bc0aa7065725f706c61796572c0a8627579735f666f7282a56974656d7380a863757272656e637981a4676f6c6402ac726573746f636b65645f6174cf0000019b76daa800a863757272656e6379a4676f6c64a671756f74657384a5696e676f7483a3626964c0a361736bc0a46c617374c0a36f726583a3626964c0a361736bc0a46c617374c0a5706c616e6b83a3626964c0a361736bc0a46c617374c0a4776f6f6483a3626964c0a361736bc0a46c617374c0ab6f70656e5f74726164657300ad70656e64696e675f737465707300"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "vendors",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": [
+            {
+              "id": "smith",
+              "offers": [
+                {
+                  "buys_for": {
+                    "currency": {
+                      "gold": 20
+                    },
+                    "items": {}
+                  },
+                  "item": "sword",
+                  "per_player": 1,
+                  "price": {
+                    "currency": {
+                      "gold": 50
+                    },
+                    "items": {}
+                  },
+                  "stock": 5
+                },
+                {
+                  "buys_for": {
+                    "currency": {
+                      "gold": 2
+                    },
+                    "items": {}
+                  },
+                  "item": "potion",
+                  "per_player": null,
+                  "price": {
+                    "currency": {
+                      "gold": 5
+                    },
+                    "items": {}
+                  },
+                  "stock": null
+                }
+              ],
+              "restocked_at": 1767225600000
+            }
+          ],
+          "reply_msgpack": "9183a26964a5736d697468a66f66666572739285a46974656da573776f7264a5707269636582a56974656d7380a863757272656e637981a4676f6c6432a573746f636b05aa7065725f706c6179657201a8627579735f666f7282a56974656d7380a863757272656e637981a4676f6c641485a46974656da6706f74696f6ea5707269636582a56974656d7380a863757272656e637981a4676f6c6405a573746f636bc0aa7065725f706c61796572c0a8627579735f666f7282a56974656d7380a863757272656e637981a4676f6c6402ac726573746f636b65645f6174cf0000019b76daa800"
+        },
+        {
+          "args": {
+            "action_id": "b-1",
+            "item": "sword",
+            "vendor": "smith"
+          },
+          "args_msgpack": "83a9616374696f6e5f6964a3622d31a46974656da573776f7264a676656e646f72a5736d697468",
+          "call": "buy",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "currency": {},
+            "items": {
+              "sword": 1
+            }
+          },
+          "reply_msgpack": "82a56974656d7381a573776f726401a863757272656e637980"
+        },
+        {
+          "args": {
+            "action_id": "b-1",
+            "item": "sword",
+            "vendor": "smith"
+          },
+          "args_msgpack": "83a9616374696f6e5f6964a3622d31a46974656da573776f7264a676656e646f72a5736d697468",
+          "call": "buy",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "currency": {},
+            "items": {
+              "sword": 1
+            }
+          },
+          "reply_msgpack": "82a56974656d7381a573776f726401a863757272656e637980"
+        },
+        {
+          "args": {
+            "item": "sword",
+            "vendor": "smith"
+          },
+          "args_msgpack": "82a46974656da573776f7264a676656e646f72a5736d697468",
+          "call": "buy",
+          "caller": {
+            "player": 1
+          },
+          "code": "limit",
+          "error": "kit:limit: 1 sword a player until the restock",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "count": 2,
+            "item": "potion",
+            "vendor": "smith"
+          },
+          "args_msgpack": "83a5636f756e7402a46974656da6706f74696f6ea676656e646f72a5736d697468",
+          "call": "buy",
+          "caller": {
+            "player": 3
+          },
+          "code": "insufficient",
+          "error": "kit:insufficient: not enough",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "args": {
+            "item": "sword",
+            "vendor": "smith"
+          },
+          "args_msgpack": "82a46974656da573776f7264a676656e646f72a5736d697468",
+          "call": "sell",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "currency": {
+              "gold": 20
+            },
+            "items": {}
+          },
+          "reply_msgpack": "82a56974656d7380a863757272656e637981a4676f6c6414"
+        },
+        {
+          "args": {
+            "action_id": "s-1",
+            "count": 10,
+            "item": "ore",
+            "price": 4,
+            "side": "sell"
+          },
+          "args_msgpack": "85a9616374696f6e5f6964a3732d31a5636f756e740aa46974656da36f7265a5707269636504a473696465a473656c6c",
+          "call": "order",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657101a46b696e64a76368616e676564a377686f9102a477686174a66f7264657273",
+              "topic": "market",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 1,
+                "v": 1,
+                "what": "orders",
+                "who": [
+                  2
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "fills": [],
+            "open": 10,
+            "order": 1
+          },
+          "reply_msgpack": "83a56f7264657201a566696c6c7390a46f70656e0a"
+        },
+        {
+          "args": {
+            "action_id": "o-1",
+            "count": 6,
+            "item": "ore",
+            "price": 5,
+            "side": "buy"
+          },
+          "args_msgpack": "85a9616374696f6e5f6964a36f2d31a5636f756e7406a46974656da36f7265a5707269636505a473696465a3627579",
+          "call": "order",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657102a46b696e64a76368616e676564a377686f920102a477686174a66f7264657273",
+              "topic": "market",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 2,
+                "v": 1,
+                "what": "orders",
+                "who": [
+                  1,
+                  2
+                ]
+              }
+            }
+          ],
+          "reply": {
+            "fills": [
+              [
+                4,
+                6
+              ]
+            ],
+            "open": 0,
+            "order": 2
+          },
+          "reply_msgpack": "83a56f7264657202a566696c6c7391920406a46f70656e00"
+        },
+        {
+          "args": {
+            "item": "ore"
+          },
+          "args_msgpack": "81a46974656da36f7265",
+          "call": "book",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "asks": [
+              [
+                4,
+                4
+              ]
+            ],
+            "bids": [],
+            "currency": "gold",
+            "item": "ore",
+            "last": 4
+          },
+          "reply_msgpack": "85a46974656da36f7265a863757272656e6379a4676f6c64a46269647390a461736b7391920404a46c61737404"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "orders",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [],
+          "reply": [
+            {
+              "count": 10,
+              "hold": "town:o:1.4",
+              "id": 1,
+              "item": "ore",
+              "open": 4,
+              "player": 2,
+              "price": 4,
+              "side": "sell"
+            }
+          ],
+          "reply_msgpack": "9188a2696401a6706c6179657202a46974656da36f7265a473696465a473656c6ca5707269636504a5636f756e740aa46f70656e04a4686f6c64aa746f776e3a6f3a312e34"
+        },
+        {
+          "args": {
+            "order": 1
+          },
+          "args_msgpack": "81a56f7264657201",
+          "call": "cancel",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657103a46b696e64a76368616e676564a377686f9102a477686174a66f7264657273",
+              "topic": "market",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 3,
+                "v": 1,
+                "what": "orders",
+                "who": [
+                  2
+                ]
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "with": 2
+          },
+          "args_msgpack": "81a47769746802",
+          "call": "trade",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657104a46b696e64a76368616e676564a377686f920102a477686174a6747261646573",
+              "topic": "market",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 4,
+                "v": 1,
+                "what": "trades",
+                "who": [
+                  1,
+                  2
+                ]
+              }
+            }
+          ],
+          "reply": 3,
+          "reply_msgpack": "03"
+        },
+        {
+          "args": {
+            "action_id": "t-a",
+            "bundle": {
+              "currency": {
+                "gold": 30
+              }
+            },
+            "trade": 3
+          },
+          "args_msgpack": "83a9616374696f6e5f6964a3742d61a662756e646c6581a863757272656e637981a4676f6c641ea5747261646503",
+          "call": "offer",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657105a46b696e64a76368616e676564a377686f920102a477686174a6747261646573",
+              "topic": "market",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 5,
+                "v": 1,
+                "what": "trades",
+                "who": [
+                  1,
+                  2
+                ]
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "action_id": "t-b",
+            "bundle": {
+              "items": {
+                "ore": 2
+              }
+            },
+            "trade": 3
+          },
+          "args_msgpack": "83a9616374696f6e5f6964a3742d62a662756e646c6581a56974656d7381a36f726502a5747261646503",
+          "call": "offer",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657106a46b696e64a76368616e676564a377686f920201a477686174a6747261646573",
+              "topic": "market",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 6,
+                "v": 1,
+                "what": "trades",
+                "who": [
+                  2,
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": true,
+          "reply_msgpack": "c3"
+        },
+        {
+          "args": {
+            "trade": 3
+          },
+          "args_msgpack": "81a5747261646503",
+          "call": "accept",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657107a46b696e64a76368616e676564a377686f920102a477686174a6747261646573",
+              "topic": "market",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 7,
+                "v": 1,
+                "what": "trades",
+                "who": [
+                  1,
+                  2
+                ]
+              }
+            }
+          ],
+          "reply": "open",
+          "reply_msgpack": "a46f70656e"
+        },
+        {
+          "args": {
+            "trade": 3
+          },
+          "args_msgpack": "81a5747261646503",
+          "call": "accept",
+          "caller": {
+            "player": 2
+          },
+          "ok": true,
+          "published": [
+            {
+              "msgpack": "86a17601a565706f636801a373657108a46b696e64a76368616e676564a377686f920201a477686174a6747261646573",
+              "topic": "market",
+              "value": {
+                "epoch": 1,
+                "kind": "changed",
+                "seq": 8,
+                "v": 1,
+                "what": "trades",
+                "who": [
+                  2,
+                  1
+                ]
+              }
+            }
+          ],
+          "reply": "settling",
+          "reply_msgpack": "a8736574746c696e67"
+        },
+        {
+          "args": null,
+          "args_msgpack": "c0",
+          "call": "trades",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": [],
+          "reply_msgpack": "90"
+        },
+        {
+          "args": {
+            "trade": 3
+          },
+          "args_msgpack": "81a5747261646503",
+          "call": "decline",
+          "caller": {
+            "player": 3
+          },
+          "code": "forbidden",
+          "error": "kit:forbidden: it is not your trade",
+          "ok": false,
+          "published": [],
+          "status": "AppError"
+        },
+        {
+          "advance_ms": 1000,
+          "published": [
+            {
+              "msgpack": "89a17601a565706f636801a373657109a46b696e64a8736e617073686f74a776656e646f72739183a26964a5736d697468a66f66666572739285a46974656da573776f7264a5707269636582a56974656d7380a863757272656e637981a4676f6c6432a573746f636b04aa7065725f706c6179657201a8627579735f666f7282a56974656d7380a863757272656e637981a4676f6c641485a46974656da6706f74696f6ea5707269636582a56974656d7380a863757272656e637981a4676f6c6405a573746f636bc0aa7065725f706c61796572c0a8627579735f666f7282a56974656d7380a863757272656e637981a4676f6c6402ac726573746f636b65645f6174cf0000019b76daa800a863757272656e6379a4676f6c64a671756f74657384a5696e676f7483a3626964c0a361736bc0a46c617374c0a36f726583a3626964c0a361736bc0a46c61737404a5706c616e6b83a3626964c0a361736bc0a46c617374c0a4776f6f6483a3626964c0a361736bc0a46c617374c0ab6f70656e5f74726164657300ad70656e64696e675f737465707300",
+              "topic": "market",
+              "value": {
+                "currency": "gold",
+                "epoch": 1,
+                "kind": "snapshot",
+                "open_trades": 0,
+                "pending_steps": 0,
+                "quotes": {
+                  "ingot": {
+                    "ask": null,
+                    "bid": null,
+                    "last": null
+                  },
+                  "ore": {
+                    "ask": null,
+                    "bid": null,
+                    "last": 4
+                  },
+                  "plank": {
+                    "ask": null,
+                    "bid": null,
+                    "last": null
+                  },
+                  "wood": {
+                    "ask": null,
+                    "bid": null,
+                    "last": null
+                  }
+                },
+                "seq": 9,
+                "v": 1,
+                "vendors": [
+                  {
+                    "id": "smith",
+                    "offers": [
+                      {
+                        "buys_for": {
+                          "currency": {
+                            "gold": 20
+                          },
+                          "items": {}
+                        },
+                        "item": "sword",
+                        "per_player": 1,
+                        "price": {
+                          "currency": {
+                            "gold": 50
+                          },
+                          "items": {}
+                        },
+                        "stock": 4
+                      },
+                      {
+                        "buys_for": {
+                          "currency": {
+                            "gold": 2
+                          },
+                          "items": {}
+                        },
+                        "item": "potion",
+                        "per_player": null,
+                        "price": {
+                          "currency": {
+                            "gold": 5
+                          },
+                          "items": {}
+                        },
+                        "stock": null
+                      }
+                    ],
+                    "restocked_at": 1767225600000
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "args": {
+            "topic": "market"
+          },
+          "args_msgpack": "81a5746f706963a66d61726b6574",
+          "call": "snapshot",
+          "caller": {
+            "player": 1
+          },
+          "ok": true,
+          "published": [],
+          "reply": {
+            "currency": "gold",
+            "epoch": 1,
+            "kind": "snapshot",
+            "open_trades": 0,
+            "pending_steps": 0,
+            "quotes": {
+              "ingot": {
+                "ask": null,
+                "bid": null,
+                "last": null
+              },
+              "ore": {
+                "ask": null,
+                "bid": null,
+                "last": 4
+              },
+              "plank": {
+                "ask": null,
+                "bid": null,
+                "last": null
+              },
+              "wood": {
+                "ask": null,
+                "bid": null,
+                "last": null
+              }
+            },
+            "seq": 9,
+            "v": 1,
+            "vendors": [
+              {
+                "id": "smith",
+                "offers": [
+                  {
+                    "buys_for": {
+                      "currency": {
+                        "gold": 20
+                      },
+                      "items": {}
+                    },
+                    "item": "sword",
+                    "per_player": 1,
+                    "price": {
+                      "currency": {
+                        "gold": 50
+                      },
+                      "items": {}
+                    },
+                    "stock": 4
+                  },
+                  {
+                    "buys_for": {
+                      "currency": {
+                        "gold": 2
+                      },
+                      "items": {}
+                    },
+                    "item": "potion",
+                    "per_player": null,
+                    "price": {
+                      "currency": {
+                        "gold": 5
+                      },
+                      "items": {}
+                    },
+                    "stock": null
+                  }
+                ],
+                "restocked_at": 1767225600000
+              }
+            ]
+          },
+          "reply_msgpack": "89a17601a565706f636801a373657109a46b696e64a8736e617073686f74a776656e646f72739183a26964a5736d697468a66f66666572739285a46974656da573776f7264a5707269636582a56974656d7380a863757272656e637981a4676f6c6432a573746f636b04aa7065725f706c6179657201a8627579735f666f7282a56974656d7380a863757272656e637981a4676f6c641485a46974656da6706f74696f6ea5707269636582a56974656d7380a863757272656e637981a4676f6c6405a573746f636bc0aa7065725f706c61796572c0a8627579735f666f7282a56974656d7380a863757272656e637981a4676f6c6402ac726573746f636b65645f6174cf0000019b76daa800a863757272656e6379a4676f6c64a671756f74657384a5696e676f7483a3626964c0a361736bc0a46c617374c0a36f726583a3626964c0a361736bc0a46c61737404a5706c616e6b83a3626964c0a361736bc0a46c617374c0a4776f6f6483a3626964c0a361736bc0a46c617374c0ab6f70656e5f74726164657300ad70656e64696e675f737465707300"
         }
       ]
     }
