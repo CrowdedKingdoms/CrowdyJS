@@ -472,3 +472,31 @@ test('a close with 4403 (access ended) is final: no reconnect, Denied, and onAcc
   assert.equal(gw.sockets.length, 1, 'it did not reconnect');
   await assert.rejects(c.call('arena', 'm1', 'state', {}), (e) => e instanceof CrowdyExecError);
 });
+
+test('whole numbers past 32 bits go out as 64-bit integers, which a hub\'s integer fields take', async (t) => {
+  const payloads = [];
+  const gw = await fakeGateway((f, conn) => {
+    if (f.kind === 'call') {
+      payloads.push(Buffer.from(f.payload));
+      conn.ws.send(reply(f.rid, 0, encode(true)));
+    }
+  });
+  t.after(() => gw.wss.close());
+  const { exec } = api(gw);
+  const c = await exec.connect('77', opts);
+  t.after(() => c.close());
+  const at = 1_792_087_035_490;
+  await c.call('world', '', 'schedule', { start_ms: at, players: [1_234_567_890_123_456, 2], small: 7, ratio: 0.5, back: -5_000_000_000 });
+  const p = payloads[0];
+  const after = (key) => p[p.indexOf(Buffer.from(key)) + key.length];
+  assert.equal(after('start_ms'), 0xcf, 'uint 64, not float 64 (0xcb)');
+  assert.equal(after('back'), 0xd3, 'int 64');
+  assert.equal(after('ratio'), 0xcb, 'a fraction stays a float');
+  assert.deepEqual(decode(p, { useBigInt64: true }), {
+    start_ms: BigInt(at),
+    players: [1_234_567_890_123_456n, 2],
+    small: 7,
+    ratio: 0.5,
+    back: -5_000_000_000n,
+  });
+});

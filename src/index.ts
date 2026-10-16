@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.10.0';
+export const VERSION = '18.13.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -164,60 +164,9 @@ export {
   type RealtimeMetricsSnapshot,
 } from './metrics.js';
 export { WorldClient, ActorClient, type ActorOptions } from './world.js';
-export {
-  GameKitClient,
-  SocialKit,
-  EVENT_CONTACT_DAMAGE,
-  EVENT_ABILITY,
-  EVENT_CONTROL_POINT,
-  EVENT_MOVEMENT_VIOLATION,
-  EVENT_PROPOSAL,
-  EVENT_RACE_TIMING,
-  EVENT_ZONE_CHANGE,
-  EVENT_SCORE,
-  EVENT_TURN,
-  EVENT_WEATHER,
-  FLAG_GROUNDED,
-  FLAG_MOB,
-  FLAG_NPC,
-  FLAG_RESERVED3,
-  POSE_BYTES,
-  decodeEnginePose,
-  encodeEnginePose,
-  engineLanes,
-  enginePoseCodec,
-  parseContactDamage,
-  parseEngineEvent,
-  parseAbilityEvent,
-  parseControlPointEvent,
-  parseMovementViolation,
-  parseProposalEvent,
-  parseRaceTimingEvent,
-  parseScoreEvent,
-  parseTurnEvent,
-  parseWeatherEvent,
-  parseZoneChangeEvent,
-  poseSuffix,
-  runOptimisticAction,
-  type OptimisticActionOutcome,
-  type OptimisticActionSpec,
-  type ContactDamageEvent,
-  type EnginePose,
-  type GameKitDomains,
-  type GameKitOptions,
-  type KitChatMessage,
-  type KitGroupWithChannel,
-  type SocialKitOptions,
-  type AbilityEvent,
-  type ControlPointEvent,
-  type MovementViolationEvent,
-  type ProposalEvent,
-  type RaceTimingEvent,
-  type ZoneChangeEvent,
-  type ScoreEvent,
-  type TurnEvent,
-  type WeatherEvent,
-} from './kit/index.js';
+// The Game Kit: typed clients for the ck-exec starter hubs, their protocol, mirrors and
+// topology, the realtime wire and conventions, and social.
+export * from './kit/index.js';
 // -----------------------------------------------------------------------------
 // World Stores (opt-in SDK-managed game state). IMPLEMENTATIONS live behind
 // the `@crowdedkingdoms/crowdyjs/stores` subpath so the core bundle never
@@ -409,6 +358,7 @@ export {
   EXEC_STATUSES,
   execStatus,
   execGatewayRefusal,
+  execWireIntegers,
   encodeExecFrame,
   decodeExecFrame,
   type ExecStatus,

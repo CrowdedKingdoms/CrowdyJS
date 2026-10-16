@@ -3971,14 +3971,14 @@ export type ExecStarterFile = {
   path: Scalars['String']['output'];
 };
 
-/** The starter packs: four crates and a manifest that deploys them as one app. */
+/** The starter packs: the starter crates, and a manifest that deploys them as one app. */
 export type ExecStarterPack = {
   __typename?: 'ExecStarterPack';
-  /** The manifest for `execDeploy` with the build’s id: the root `world` hub, and `matchmaker`, `session` and `npcs` under it, each naming its crate. */
+  /** The manifest for `execDeploy` with the build’s id: the root `world` hub and the types under it, each naming its crate. */
   manifestJson: Scalars['String']['output'];
   /** The mod starter: a player’s code on a grid they own, built with `execModBuild` and deployed with `execModDeploy` rather than in the manifest. Null on a toolchain without it. */
   mod: Maybe<ExecStarter>;
-  /** The crates. */
+  /** One entry per node type of the manifest: a crate that serves two types appears twice, so build each crate once. */
   starters: Array<ExecStarter>;
 };
 
@@ -7564,7 +7564,7 @@ export type Query = {
   execMods: Array<ExecMod>;
   /** Your mods in an app, on every grid. */
   execMyMods: Array<ExecMod>;
-  /** The starter packs, which replace the compute templates: a world tick (the root hub: clock, weather, resource nodes, liveops events), a matchmaker, game sessions (lobby, host, turns, scores) and an NPC and mob engine, as ckx-sdk crates to pass to `execBuild` and a manifest for `execDeploy`. Requires the org 'manage_compute' permission. */
+  /** The starter packs, which replace the compute templates: ckx-sdk hub crates for a root world, matchmaking, game sessions, NPCs and mobs, game genres (leaderboards, cards, tactics, waves, duels, private runs, arenas, races, territory), and the economy (a player's own hub, markets), to pass to `execBuild`, with a manifest for `execDeploy`. `starters` has one entry per node type, so a crate that serves two types appears twice: build it once. Requires the org 'manage_compute' permission. */
   execStarters: ExecStarterPack;
   /** An app's deployed ck-exec versions, newest first, and which is active. Requires the org 'view_compute_diagnostics' permission. */
   execVersions: Array<ExecVersion>;

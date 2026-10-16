@@ -189,10 +189,12 @@ test('client exposes the full management + game sub-client surface', async () =>
     'myAuthorizedApps', 'setAppClientSettings',
   ]);
 
-  // Game Kit: only the social helpers outlived the game model (18.0.0).
+  // Game Kit: the social helpers, and since 18.11.0 typed clients for the ck-exec starter hubs.
   const kit = client.kit('1');
-  assert.equal(kit.deploy, undefined, 'kit.deploy was removed in 18.0.0');
-  assert.equal(kit.inventory, undefined, 'the model-backed kit helpers were removed in 18.0.0');
+  assert.equal(client.kit('1'), kit, 'an option-less kit is shared, so its modules share one connection');
+  assert.notEqual(client.kit('1', {}), kit, 'a kit with options is its own');
+  assert.equal(kit.deploy, undefined, 'kit.deploy was removed in 18.0.0 (kit.topology deploys starter hubs)');
+  assert.equal(kit.engines, undefined, 'the model-backed kit helpers were removed in 18.0.0');
   assertMethods(kit.social.party, 'kit.social.party', [
     'create', 'find', 'invite', 'join', 'leave', 'members',
   ]);
@@ -202,6 +204,57 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(kit.social.chat, 'kit.social.chat', [
     'room', 'join', 'send', 'onMessage',
   ]);
+  assertMethods(kit.runtime, 'kit.runtime', ['connection', 'call', 'subscribe', 'playerId', 'onReconnect', 'onAccessEnded', 'close']);
+  assertMethods(kit.world, 'kit.world', ['state', 'harvest', 'schedule', 'cancel']);
+  assertMethods(kit.world.conditions, 'kit.world.conditions', ['start', 'stop', 'resync', 'get', 'subscribe', 'onEvent', 'onChanged']);
+  assertMethods(kit.world.nodes, 'kit.world.nodes', ['start', 'stop', 'resync', 'get', 'subscribe', 'list', 'member']);
+  assertMethods(kit.matchmaking.queue('ranked'), 'kit.matchmaking.queue', [
+    'join', 'leave', 'accept', 'decline', 'status', 'configure', 'watch', 'unwatch', 'onMatched',
+  ]);
+  assert.equal(kit.matchmaking.queue('ranked'), kit.matchmaking.queue('ranked'), 'one queue a name');
+  assertMethods(kit.sessions.open('s1'), 'kit.sessions.open', [
+    'watch', 'unwatch', 'currentTurn', 'isMyTurn', 'join', 'leave', 'ready', 'startGame', 'act', 'configure',
+  ]);
+  assertMethods(kit.npcs, 'kit.npcs', ['keyAt', 'areaAt', 'area']);
+  assertMethods(kit.npcs.area('0,0'), 'kit.npcs.area', [
+    'watch', 'unwatch', 'mobs', 'npcs', 'pets', 'attack', 'talk', 'adopt', 'rename', 'summon', 'dismiss', 'release', 'myPets',
+  ]);
+  assertMethods(kit.topology, 'kit.topology', ['pack', 'types', 'plan', 'deploy']);
+  assertMethods(kit.spectate, 'kit.spectate', ['observe']);
+  assertMethods(kit.emotes, 'kit.emotes', ['send', 'parse']);
+  assertMethods(kit.shards, 'kit.shards', ['key', 'around']);
+  // The genre starters' modules (18.12.0): one handle a key, mirrors on the hub's topic.
+  assertMethods(kit.leaderboards.board('weekly'), 'kit.leaderboards.board', [
+    'watch', 'unwatch', 'top', 'around', 'me', 'season', 'submit', 'configure', 'roll',
+  ]);
+  assert.equal(kit.leaderboards.board('weekly'), kit.leaderboards.board('weekly'), 'one board a name');
+  assertMethods(kit.tables.table('t1'), 'kit.tables.table', ['watch', 'unwatch', 'join', 'leave', 'start', 'play', 'draw', 'pass']);
+  assertMethods(kit.tables.table('t1').hand, 'kit.tables.table.hand', ['start', 'stop', 'refresh', 'get', 'subscribe']);
+  assertMethods(kit.tactics.battle('b1'), 'kit.tactics.battle', ['watch', 'unwatch', 'myUnits', 'join', 'start', 'move', 'attack', 'endTurn']);
+  assertMethods(kit.encounters.encounter('e1'), 'kit.encounters.encounter', ['watch', 'unwatch', 'join', 'start', 'build', 'hit']);
+  assertMethods(kit.minigames.duel('d1'), 'kit.minigames.duel', ['watch', 'unwatch', 'join', 'leave', 'throw', 'rematch']);
+  assertMethods(kit.instances.run('r1'), 'kit.instances.run', ['watch', 'unwatch', 'open', 'invite', 'join', 'enter', 'descend', 'abandon']);
+  assertMethods(kit.arenas.arena('a1'), 'kit.arenas.arena', ['watch', 'unwatch', 'join', 'leave', 'start', 'move', 'cast']);
+  assertMethods(kit.racing.race('r1'), 'kit.racing.race', ['watch', 'unwatch', 'join', 'leave', 'start', 'pos', 'ghost']);
+  assertMethods(kit.racing.ball('m1'), 'kit.racing.ball', ['watch', 'unwatch', 'join', 'start', 'pos', 'claim', 'pass', 'shoot']);
+  assertMethods(kit.territory.map('m1'), 'kit.territory.map', ['watch', 'unwatch', 'join', 'reset']);
+  assertMethods(kit.territory.zone('z1'), 'kit.territory.zone', ['watch', 'unwatch', 'join', 'start']);
+  assert.equal(client.kit('1', { nodes: { race: 'sprint' } }).racing.race('r1').nodeType, 'sprint', 'nodes renames a starter type');
+  // The economy (18.13.0): the caller's own player hub, and the markets.
+  assertMethods(kit.player, 'kit.player', ['key', 'watch', 'unwatch', 'onEvent', 'call', 'me', 'rules', 'profileOf']);
+  assertMethods(kit.inventory, 'kit.inventory', ['watch', 'count', 'discard', 'takeMail']);
+  assertMethods(kit.wallet, 'kit.wallet', ['watch', 'balance']);
+  assertMethods(kit.progression, 'kit.progression', ['watch', 'profileOf', 'onLevel']);
+  assertMethods(kit.achievements, 'kit.achievements', ['watch', 'list', 'onUnlock']);
+  assertMethods(kit.quests, 'kit.quests', ['watch', 'list', 'accept', 'claim', 'step']);
+  assertMethods(kit.crafting, 'kit.crafting', ['recipes', 'craft']);
+  assertMethods(kit.loot, 'kit.loot', ['tables', 'open']);
+  assertMethods(kit.production, 'kit.production', ['view', 'collect']);
+  assertMethods(kit.market.at('town'), 'kit.market.at', ['watch', 'unwatch', 'book', 'order', 'cancel']);
+  assertMethods(kit.shops.at('town'), 'kit.shops.at', ['watch', 'unwatch', 'vendors', 'buy', 'sell']);
+  assertMethods(kit.trades.at('town'), 'kit.trades.at', ['watch', 'unwatch', 'open', 'offer', 'accept', 'decline']);
+  assert.equal(kit.inventory, kit.inventory, 'one view a kit');
+  assert.equal(kit.market.at('town').view, kit.shops.at('town').view, 'a market\'s handles share its mirror');
 
   // Admin grouping facade points at the same instances.
   assert.equal(client.admin.organizations, client.organizations, 'admin.organizations aliases client.organizations');
