@@ -2,6 +2,7 @@ import {
   AbstractMessageReader,
   AbstractMessageWriter,
   CancellationTokenSource,
+  RAL,
   type DataCallback,
   type Disposable,
   type Message,
@@ -32,6 +33,60 @@ export interface LanguageWorkerLike {
     listener: EventListener,
   ): void;
   terminate(): void;
+}
+
+/**
+ * vscode-jsonrpc 9 does not install a runtime when imported from its main
+ * entry. The protocol connection schedules incoming messages through that
+ * runtime, so the first message throws and the request waits out its timeout.
+ * The browser runtime is the one this worker transport can run: it only needs
+ * timers and text encoding, which exist in a page and under Node's test runner.
+ */
+function installJsonRpcRuntime(): void {
+  try {
+    RAL();
+    return;
+  } catch {
+    // Not installed yet.
+  }
+  RAL.install({
+    applicationJson: {
+      encoder: {
+        name: 'application/json',
+        encode: (msg) => Promise.resolve(new TextEncoder().encode(JSON.stringify(msg))),
+      },
+      decoder: {
+        name: 'application/json',
+        decode: (buffer) => {
+          const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+          return Promise.resolve(JSON.parse(new TextDecoder().decode(bytes)));
+        },
+      },
+    },
+    messageBuffer: {
+      create: () => {
+        throw new Error('Worker language transport does not frame byte streams');
+      },
+    },
+    console,
+    timer: {
+      setTimeout(callback, ms, ...args) {
+        const handle = setTimeout(callback, ms, ...args);
+        return { dispose: () => clearTimeout(handle) };
+      },
+      setImmediate(callback, ...args) {
+        let cancelled = false;
+        queueMicrotask(() => {
+          if (!cancelled) callback(...args);
+        });
+        return { dispose: () => { cancelled = true; } };
+      },
+      setInterval(callback, ms, ...args) {
+        const handle = setInterval(callback, ms, ...args);
+        return { dispose: () => clearInterval(handle) };
+      },
+    },
+  });
 }
 
 /** Standard vscode-jsonrpc MessageReader over structured-clone worker messages. */
@@ -122,7 +177,7 @@ export interface WorkerLanguageClientOptions {
 }
 
 /**
- * LSP 3.17 JSON-RPC client over a real vscode-jsonrpc MessageConnection.
+ * LSP JSON-RPC client over a real vscode-jsonrpc MessageConnection.
  * Monaco providers adapt editor calls to this connection; transport framing,
  * request ids, cancellation, errors, and notifications are standard JSON-RPC.
  */
@@ -140,6 +195,7 @@ export class WorkerLanguageClient {
     private readonly worker: LanguageWorkerLike,
     private readonly options: WorkerLanguageClientOptions = {},
   ) {
+    installJsonRpcRuntime();
     this.reader = new WorkerMessageReader(worker);
     this.writer = new WorkerMessageWriter(worker);
     this.readerErrorDisposable = this.reader.onError((error) => {
