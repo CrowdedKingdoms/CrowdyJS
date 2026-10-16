@@ -99,6 +99,9 @@ export const EXEC_STATUSES = [
   'Internal',
   'Trapped',
   'BadRequest',
+  'AppPaused',
+  'AppDisabled',
+  'TypeDisabled',
 ] as const;
 
 export type ExecStatus = (typeof EXEC_STATUSES)[number] | 'Unknown';
