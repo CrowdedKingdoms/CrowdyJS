@@ -105,7 +105,7 @@ test('completion and hover merge workspace and generated platform symbols', () =
     )
     .find((item) => item.label === 'message');
   assert.equal(fieldCompletion?.kind, 5);
-  assert.match(fieldCompletion?.detail ?? '', /(ckx-sdk@0\.12\.0|crowdy-client-sdk@0\.1\.0)/u);
+  assert.match(fieldCompletion?.detail ?? '', /(ckx-sdk@0\.12\.1|crowdy-client-sdk@0\.1\.0)/u);
   const fieldHover = analysis.hover(
     fieldDocument,
     { line: 0, character: 12 },
@@ -157,7 +157,7 @@ test('target-prefixed workspaces expose cross-file symbols and lifecycle guidanc
 });
 
 test('platform index loader is strict and bounded', () => {
-  assert.equal(loadPlatformIndex(EMBEDDED_PLATFORM_INDEX).symbols.length, 1268);
+  assert.equal(loadPlatformIndex(EMBEDDED_PLATFORM_INDEX).symbols.length, 1269);
   assert.equal(EMBEDDED_PLATFORM_INDEX.schemaVersion, 2);
   assert.equal(EMBEDDED_PLATFORM_INDEX.crates.length, 4);
   assert.deepEqual(
@@ -171,7 +171,7 @@ test('platform index loader is strict and bounded', () => {
   );
   assert.equal(
     EMBEDDED_PLATFORM_INDEX.contentHash,
-    '3ad3d1cad5952bb91d39293eb15df98318906b7aa57f593960b002711aeb0174',
+    'ee2ede452d216671472b089bc9d6e43b5afcc9debe4d8e9ea2be4f041a282485',
   );
   assert.throws(
     () => loadPlatformIndex({ ...EMBEDDED_PLATFORM_INDEX, token: 'secret' }),

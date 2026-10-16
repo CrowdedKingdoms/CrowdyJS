@@ -123,8 +123,9 @@ super-admin's session). There is no SDK replacement.
 ## 18.13.0: the economy
 
 Additive. **Needs a compute toolchain whose starter pack has the `player` and `market`
-starters** (ckx-sdk 0.12.0). The economy lives in hub state and is not a ledger (the operator's
-decision HS-52): no double-entry book, no real money, transfers as steps each hub answers once.
+starters** (ckx-sdk 0.12.1; dev's toolchain v1.15.0). The economy lives in hub state and is
+not a ledger (the operator's decision HS-52): no double-entry book, no real money, transfers as
+steps each hub answers once.
 
 - **The caller's own `player` hub**, keyed by their player id (the kit needs it: `playerId` in
   `client.kit()`'s options, or the identity it can ask): `kit.player` (`watch`, `me`, `rules`,

@@ -4,7 +4,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "rustVersion": "1.97.1",
   "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "3ad3d1cad5952bb91d39293eb15df98318906b7aa57f593960b002711aeb0174",
+  "contentHash": "ee2ede452d216671472b089bc9d6e43b5afcc9debe4d8e9ea2be4f041a282485",
   "crates": [
     {
       "name": "alloc",
@@ -13,8 +13,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "ckx-sdk",
-      "version": "0.12.0",
-      "sourceHash": "f593dfb80e4f41af72f2a3ec4051b428d009c56c074ab9efa9548eb29eeb7afd"
+      "version": "0.12.1",
+      "sourceHash": "d286cb4b12326cbaf7c78c10a593f393d28cbdaa248a3507a179c5c4843ce5aa"
     },
     {
       "name": "core",
@@ -2196,7 +2196,14 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "ID_MAX",
       "kind": "const",
       "signature": "pub const ID_MAX: usize = 64;",
-      "docs": "The longest item id, currency or reference the economy takes."
+      "docs": "The longest item id or currency the economy takes."
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "REFERENCE_MAX",
+      "kind": "const",
+      "signature": "pub const REFERENCE_MAX: usize = 128;",
+      "docs": "The longest reference [`Holds`] and [`Applied`] take: room for a driver's key, a counter and the suffixes of the steps it derives from one."
     },
     {
       "module": "ckx_sdk::kit::econ",
