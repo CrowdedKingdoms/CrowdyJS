@@ -51,9 +51,12 @@ test('a truncated or unknown gateway frame is an error', () => {
 });
 
 test('statuses are named by their wire values', () => {
-  assert.equal(EXEC_STATUSES.length, 12);
+  assert.equal(EXEC_STATUSES.length, 15);
   assert.equal(execStatus(0), 'Ok');
   assert.equal(execStatus(3), 'Moved');
   assert.equal(execStatus(11), 'BadRequest');
+  assert.equal(execStatus(12), 'AppPaused');
+  assert.equal(execStatus(13), 'AppDisabled');
+  assert.equal(execStatus(14), 'TypeDisabled');
   assert.equal(execStatus(200), 'Unknown');
 });
